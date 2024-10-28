@@ -198,12 +198,12 @@ func (ss *stateManager) labelSetFor(schema components.Schema) *trackingLabelSet 
 	return &tls
 }
 
-func (ss *stateManager) FindContractStates(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, query *query.QueryJSON, status StateStatusQualifier) (s []*pldapi.State, err error) {
+func (ss *stateManager) FindContractStates(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (s []*pldapi.State, err error) {
 	_, s, err = ss.findStates(ctx, dbTX, domainName, &contractAddress, schemaID, query, status)
 	return s, err
 }
 
-func (ss *stateManager) FindStates(ctx context.Context, dbTX *gorm.DB, domainName string, schemaID tktypes.Bytes32, query *query.QueryJSON, status StateStatusQualifier) (s []*pldapi.State, err error) {
+func (ss *stateManager) FindStates(ctx context.Context, dbTX *gorm.DB, domainName string, schemaID tktypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (s []*pldapi.State, err error) {
 	_, s, err = ss.findStates(ctx, dbTX, domainName, nil, schemaID, query, status)
 	return s, err
 }
@@ -215,10 +215,10 @@ func (ss *stateManager) findStates(
 	contractAddress *tktypes.EthAddress,
 	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
-	status StateStatusQualifier,
+	status pldapi.StateStatusQualifier,
 	excluded ...tktypes.HexBytes,
 ) (schema components.Schema, s []*pldapi.State, err error) {
-	whereClause, isPlainDB := status.whereClause(dbTX)
+	whereClause, isPlainDB := whereClauseForQual(dbTX, status)
 	if isPlainDB {
 		return ss.findStatesCommon(ctx, dbTX, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
 			q = q.Joins("Confirmed", dbTX.Select("transaction")).

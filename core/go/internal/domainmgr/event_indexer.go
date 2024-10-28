@@ -34,16 +34,23 @@ import (
 )
 
 // only safe to use this sorter when you know all receipts have a non-nil on-chain
-type receiptsByOnChainOrder []*components.ReceiptInput
+type txCompletionsOrdered []*components.TxCompletion
 
-func (r receiptsByOnChainOrder) Len() int           { return len(r) }
-func (r receiptsByOnChainOrder) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
-func (r receiptsByOnChainOrder) Less(i, j int) bool { return r[i].OnChain.Compare(&r[j].OnChain) < 0 }
+func (r txCompletionsOrdered) Len() int      { return len(r) }
+func (r txCompletionsOrdered) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r txCompletionsOrdered) Less(i, j int) bool {
+	return r[i].OnChain.Compare(&r[j].OnChain) < 0
+}
 
-func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) ([]*pldapi.EventWithData, receiptsByOnChainOrder, error) {
+type pscEventBatch struct {
+	prototk.HandleEventBatchRequest
+	psc *domainContract
+}
+
+func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) ([]*pldapi.EventWithData, txCompletionsOrdered, error) {
 
 	var contracts []*PrivateSmartContract
-	var txCompletions receiptsByOnChainOrder
+	var txCompletions txCompletionsOrdered
 	unprocessedEvents := make([]*pldapi.EventWithData, 0, len(batch.Events))
 
 	for _, ev := range batch.Events {
@@ -64,18 +71,21 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 				})
 				// We don't know if the private transaction will match, but we need to pass it over
 				// to the private TX manager within our DB transaction to allow it to check
-				txCompletions = append(txCompletions, &components.ReceiptInput{
-					ReceiptType:   components.RT_Success,
-					TransactionID: txID,
-					OnChain: tktypes.OnChainLocation{
-						Type:             tktypes.OnChainEvent,
-						TransactionHash:  ev.TransactionHash,
-						BlockNumber:      ev.BlockNumber,
-						TransactionIndex: ev.TransactionIndex,
-						LogIndex:         ev.LogIndex,
-						Source:           &ev.Address,
+				txCompletions = append(txCompletions, &components.TxCompletion{
+					ReceiptInput: components.ReceiptInput{
+						ReceiptType:   components.RT_Success,
+						TransactionID: txID,
+						OnChain: tktypes.OnChainLocation{
+							Type:             tktypes.OnChainEvent,
+							TransactionHash:  ev.TransactionHash,
+							BlockNumber:      ev.BlockNumber,
+							TransactionIndex: ev.TransactionIndex,
+							LogIndex:         ev.LogIndex,
+							Source:           &ev.Address,
+						},
+						ContractAddress: &parsedEvent.Instance,
 					},
-					ContractAddress: &parsedEvent.Instance,
+					PSC: nil, // currently unset for deployments (rather than fluffing up the domainContract at this point)
 				})
 			}
 		}
@@ -103,19 +113,24 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 	return unprocessedEvents, txCompletions, nil
 }
 
-func (dm *domainManager) notifyTransactions(txCompletions receiptsByOnChainOrder) {
-	for _, receipt := range txCompletions {
-		inflight := dm.privateTxWaiter.GetInflight(receipt.TransactionID)
-		log.L(dm.bgCtx).Infof("Notifying for private deployment TransactionID %s (waiter=%t)", receipt.TransactionID, inflight != nil)
+func (dm *domainManager) notifyTransactions(txCompletions txCompletionsOrdered) {
+	for _, completion := range txCompletions {
+		// Private transaction manager needs to know about these to update its in-memory state
+		dm.privateTxManager.PrivateTransactionConfirmed(dm.bgCtx, completion)
+
+		// We also provide a direct waiter that's used by the testbed
+		inflight := dm.privateTxWaiter.GetInflight(completion.TransactionID)
+		log.L(dm.bgCtx).Infof("Notifying for private deployment TransactionID %s (waiter=%t)", completion.TransactionID, inflight != nil)
 		if inflight != nil {
-			inflight.Complete(receipt)
+			inflight.Complete(&completion.ReceiptInput)
 		}
 	}
+
 }
 
-func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID string, events []*pldapi.EventWithData) (map[tktypes.EthAddress]*prototk.HandleEventBatchRequest, error) {
+func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID string, events []*pldapi.EventWithData) (map[tktypes.EthAddress]*pscEventBatch, error) {
 
-	batches := make(map[tktypes.EthAddress]*prototk.HandleEventBatchRequest)
+	batches := make(map[tktypes.EthAddress]*pscEventBatch)
 
 	for _, ev := range events {
 		batch := batches[ev.Address]
@@ -131,11 +146,14 @@ func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID 
 				log.L(ctx).Debugf("Discarding %s event for unregistered address %s", ev.SoliditySignature, ev.Address)
 				continue
 			}
-			batch = &prototk.HandleEventBatchRequest{
-				BatchId: batchID,
-				ContractInfo: &prototk.ContractInfo{
-					ContractAddress: psc.Address().String(),
-					ContractConfig:  psc.ConfigBytes(),
+			batch = &pscEventBatch{
+				psc: psc,
+				HandleEventBatchRequest: prototk.HandleEventBatchRequest{
+					BatchId: batchID,
+					ContractInfo: &prototk.ContractInfo{
+						ContractAddress: psc.Address().String(),
+						ContractConfig:  psc.ConfigBytes(),
+					},
 				},
 			}
 			batches[ev.Address] = batch
@@ -184,16 +202,19 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 				return nil, err
 			}
 			log.L(ctx).Infof("Domain transaction completion: %s", txID)
-			txCompletions = append(txCompletions, &components.ReceiptInput{
-				TransactionID: *txID,
-				ReceiptType:   components.RT_Success,
-				OnChain: tktypes.OnChainLocation{
-					Type:             tktypes.OnChainEvent, // the on-chain confirmation is an event (even though it's a private transaction we're confirming)
-					TransactionHash:  txHash,
-					BlockNumber:      txCompletionEvent.Location.BlockNumber,
-					TransactionIndex: txCompletionEvent.Location.TransactionIndex,
-					LogIndex:         txCompletionEvent.Location.LogIndex,
-					Source:           &addr,
+			txCompletions = append(txCompletions, &components.TxCompletion{
+				PSC: batch.psc,
+				ReceiptInput: components.ReceiptInput{
+					TransactionID: *txID,
+					ReceiptType:   components.RT_Success,
+					OnChain: tktypes.OnChainLocation{
+						Type:             tktypes.OnChainEvent, // the on-chain confirmation is an event (even though it's a private transaction we're confirming)
+						TransactionHash:  txHash,
+						BlockNumber:      txCompletionEvent.Location.BlockNumber,
+						TransactionIndex: txCompletionEvent.Location.TransactionIndex,
+						LogIndex:         txCompletionEvent.Location.LogIndex,
+						Source:           &addr,
+					},
 				},
 			})
 		}
@@ -232,7 +253,7 @@ func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*
 	return &txUUID, nil
 }
 
-func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB, addr tktypes.EthAddress, batch *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB, addr tktypes.EthAddress, batch *pscEventBatch) (*prototk.HandleEventBatchResponse, error) {
 
 	// We have a domain context for queries, but we never flush it to DB - as the only updates
 	// we allow in this function are those performed within our dbTX.
@@ -242,7 +263,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 	batch.StateQueryContext = c.id
 
 	var res *prototk.HandleEventBatchResponse
-	res, err := d.api.HandleEventBatch(ctx, batch)
+	res, err := d.api.HandleEventBatch(ctx, &batch.HandleEventBatchRequest)
 	if err != nil {
 		return nil, err
 	}

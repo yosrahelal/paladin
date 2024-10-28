@@ -11,6 +11,17 @@ title: ptx_*
 
 0. `result`: [`RawJSON`](../types/simpletypes.md#rawjson)
 
+## `ptx_decodeError`
+
+### Parameters
+
+0. `revertData`: [`HexBytes`](../types/simpletypes.md#hexbytes)
+1. `dataFormat`: [`JSONFormatOptions`](../types/jsonformatoptions.md#jsonformatoptions)
+
+### Returns
+
+0. `decodedError`: `DecodedError`
+
 ## `ptx_getTransaction`
 
 ### Parameters

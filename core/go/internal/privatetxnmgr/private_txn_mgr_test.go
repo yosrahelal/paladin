@@ -330,6 +330,9 @@ func newPartyForTesting(ctx context.Context, name, node string, mocks *dependenc
 		resolveFn(ctx, party.verifier)
 	}).Return(nil).Maybe()
 
+	mocks.identityResolver.On("ResolveVerifier", mock.Anything, party.identityLocator, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return(party.verifier, nil).Maybe()
+
 	keyMapping := &pldapi.KeyMappingAndVerifier{
 		KeyMappingWithPath: &pldapi.KeyMappingWithPath{KeyMapping: &pldapi.KeyMapping{
 			Identifier: party.identity,
@@ -671,7 +674,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("alice-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:       alice.keyHandle,
+			Lookup:       alice.identityLocator,
 			Verifier:     alice.verifier,
 			Algorithm:    algorithms.ECDSA_SECP256K1,
 			VerifierType: verifiers.ETH_ADDRESS,
@@ -684,7 +687,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("bob-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:       bob.keyHandle,
+			Lookup:       bob.identityLocator,
 			Verifier:     bob.verifier,
 			Algorithm:    algorithms.ECDSA_SECP256K1,
 			VerifierType: verifiers.ETH_ADDRESS,
@@ -697,7 +700,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("carol-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:       carol.keyHandle,
+			Lookup:       carol.identityLocator,
 			Verifier:     carol.verifier,
 			Algorithm:    algorithms.ECDSA_SECP256K1,
 			VerifierType: verifiers.ETH_ADDRESS,
@@ -929,7 +932,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("alice-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:       alice.keyHandle,
+			Lookup:       alice.identityLocator,
 			Verifier:     alice.verifier,
 			Algorithm:    algorithms.ECDSA_SECP256K1,
 			VerifierType: verifiers.ETH_ADDRESS,
@@ -1021,7 +1024,10 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		AttestationType: prototk.AttestationType_ENDORSE,
 		Payload:         tktypes.RandBytes(32),
 		Verifier: &prototk.ResolvedVerifier{
-			Verifier: bob.verifier,
+			Lookup:       bob.identityLocator,
+			Verifier:     bob.verifier,
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
 		},
 	}
 
@@ -1113,7 +1119,7 @@ func TestPrivateTxManagerDeploy(t *testing.T) {
 	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
 		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       notary.identity,
+				Lookup:       notary.identityLocator,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -1218,7 +1224,7 @@ func TestPrivateTxManagerDeployFailPrepare(t *testing.T) {
 	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
 		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       notary.identity,
+				Lookup:       notary.identityLocator,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -1271,7 +1277,7 @@ func TestPrivateTxManagerFailSignerResolve(t *testing.T) {
 	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
 		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       notary.identity,
+				Lookup:       notary.identityLocator,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -1342,7 +1348,7 @@ func TestPrivateTxManagerDeployFailNoInvokeOrDeploy(t *testing.T) {
 	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
 		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       notary.identity,
+				Lookup:       notary.identityLocator,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},

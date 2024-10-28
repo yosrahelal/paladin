@@ -109,7 +109,7 @@ func (t *transport) send(ctx context.Context, msg *prototk.Message) error {
 	if msg.CorrelationId != nil {
 		correlIDStr = *msg.CorrelationId
 	}
-	log.L(ctx).Debugf("transport %s message sent id=%s (cid=%s)", t.name, msg.MessageId, correlIDStr)
+	log.L(ctx).Debugf("transport %s message sent id=%s (cid=%s) node=%s component=%s type=%s", t.name, msg.MessageId, correlIDStr, msg.Node, msg.Component, msg.MessageType)
 	if log.IsTraceEnabled() {
 		log.L(ctx).Tracef("transport %s message sent: %s", t.name, protoToJSON(msg))
 	}

@@ -39,6 +39,7 @@ type PTX interface {
 
 	GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceipt, err error)
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error)
+	DecodeError(ctx context.Context, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedError *pldapi.DecodedError, err error)
 
 	ResolveVerifier(ctx context.Context, keyIdentifier string, algorithm string, verifierType string) (verifier string, err error)
 }
@@ -86,6 +87,10 @@ var ptxInfo = &rpcModuleInfo{
 		"ptx_queryTransactionReceipts": {
 			Inputs: []string{"query"},
 			Output: "receipts",
+		},
+		"ptx_decodeError": {
+			Inputs: []string{"revertData", "dataFormat"},
+			Output: "decodedError",
 		},
 		"ptx_resolveVerifier": {
 			Inputs: []string{"keyIdentifier", "algorithm", "verifierType"},
@@ -150,6 +155,11 @@ func (p *ptx) GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receip
 
 func (p *ptx) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error) {
 	err = p.c.CallRPC(ctx, &receipts, "ptx_queryTransactionReceipts", jq)
+	return
+}
+
+func (p *ptx) DecodeError(ctx context.Context, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedError *pldapi.DecodedError, err error) {
+	err = p.c.CallRPC(ctx, &decodedError, "ptx_decodeError", revertData, dataFormat)
 	return
 }
 

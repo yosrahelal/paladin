@@ -253,7 +253,7 @@ func (r *BesuReconciler) generateBesuConfigTOML(node *corev1alpha1.Besu) (string
 	tomlConfig["genesis-file"] = "/genesis/genesis.json"
 
 	// Set up the networking, as that's always in our control (we wire it up to the service)
-	comprehensiveRPCSet := []string{"ETH", "NET", "QBFT", "WEB3", "ADMIN", "DEBUG"}
+	comprehensiveRPCSet := []string{"ETH", "NET", "QBFT", "WEB3", "ADMIN", "DEBUG", "TXPOOL"}
 	tomlConfig["rpc-http-enabled"] = true
 	tomlConfig["rpc-http-host"] = localhost
 	tomlConfig["rpc-http-port"] = "8545"
@@ -265,6 +265,7 @@ func (r *BesuReconciler) generateBesuConfigTOML(node *corev1alpha1.Besu) (string
 	tomlConfig["graphql-http-enabled"] = true
 	tomlConfig["graphql-http-host"] = localhost
 	tomlConfig["graphql-http-port"] = "8547"
+	tomlConfig["min-gas-price"] = 0
 	tomlConfig["p2p-host"] = localhost
 	tomlConfig["p2p-port"] = "30303"
 	setIfUnset("host-allowlist", []string{"*"})

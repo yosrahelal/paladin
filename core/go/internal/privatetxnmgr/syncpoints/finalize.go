@@ -29,8 +29,9 @@ import (
 // to record a failed transaction.  nothing gets written to any tables owned by the private transaction manager
 // but the write is coordinated by our flush writer to minimize the number of database transactions
 type finalizeOperation struct {
-	TransactionID  uuid.UUID
-	FailureMessage string
+	TransactionID   uuid.UUID
+	ContractAddress tktypes.EthAddress
+	FailureMessage  string
 }
 
 // QueueTransactionFinalize
@@ -40,8 +41,9 @@ func (s *syncPoints) QueueTransactionFinalize(ctx context.Context, contractAddre
 		domainContext:   nil, // finalize does not depend on the flushing of any states
 		contractAddress: contractAddress,
 		finalizeOperation: &finalizeOperation{
-			TransactionID:  transactionID,
-			FailureMessage: failureMessage,
+			TransactionID:   transactionID,
+			ContractAddress: contractAddress,
+			FailureMessage:  failureMessage,
 		},
 	})
 	go func() {
@@ -54,23 +56,27 @@ func (s *syncPoints) QueueTransactionFinalize(ctx context.Context, contractAddre
 
 }
 
-func (s *syncPoints) writeFinalizeOperations(ctx context.Context, dbTX *gorm.DB, finalizeOperationsByContractAddress map[tktypes.EthAddress][]*finalizeOperation) error {
+func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX *gorm.DB, finalizeOperations []*finalizeOperation) error {
 
-	for contractAddress, finalizeOperations := range finalizeOperationsByContractAddress {
-		receipts := make([]*components.ReceiptInput, len(finalizeOperations))
-		for i, op := range finalizeOperations {
-			receipts[i] = &components.ReceiptInput{
+	// We are only responsible for failures. Success receipts are written on the DB transaction of the event handler,
+	// so they are guaranteed to be written in sequence for each confirmed domain private transaction.
+	//
+	// However, a syncpoint gets triggered for every finalize so that we can flush the Domain Context to the DB
+	// so that all states are stored, before we clear out the transaction from the in-memory Domain Context.
+	failureReceipts := make([]*components.ReceiptInput, 0)
+	for _, op := range finalizeOperations {
+		if op.FailureMessage != "" {
+			failureReceipts = append(failureReceipts, &components.ReceiptInput{
 				ReceiptType:     components.RT_FailedWithMessage,
-				ContractAddress: &contractAddress,
+				ContractAddress: &op.ContractAddress,
 				TransactionID:   op.TransactionID,
 				FailureMessage:  op.FailureMessage,
-			}
-		}
-
-		err := s.txMgr.FinalizeTransactions(ctx, dbTX, receipts)
-		if err != nil {
-			return err
+			})
 		}
 	}
+	if len(failureReceipts) > 0 {
+		return s.txMgr.FinalizeTransactions(ctx, dbTX, failureReceipts)
+	}
 	return nil
+
 }

@@ -28,8 +28,8 @@ type StateStore interface {
 
 	ListSchemas(ctx context.Context, domain string) (schemas []*pldapi.Schema, err error)
 	StoreState(ctx context.Context, domain string, contractAddress tktypes.EthAddress, schemaRef tktypes.Bytes32, data tktypes.RawJSON) (state *pldapi.State, err error)
-	QueryStates(ctx context.Context, domain string, schemaRef tktypes.Bytes32, query *query.QueryJSON) (states []*pldapi.State, err error)
-	QueryContractStates(ctx context.Context, domain string, contractAddress tktypes.EthAddress, schemaRef tktypes.Bytes32, query *query.QueryJSON) (states []*pldapi.State, err error)
+	QueryStates(ctx context.Context, domain string, schemaRef tktypes.Bytes32, query *query.QueryJSON, qualifier pldapi.StateStatusQualifier) (states []*pldapi.State, err error)
+	QueryContractStates(ctx context.Context, domain string, contractAddress tktypes.EthAddress, schemaRef tktypes.Bytes32, query *query.QueryJSON, qualifier pldapi.StateStatusQualifier) (states []*pldapi.State, err error)
 }
 
 // This is necessary because there's no way to introspect function parameter names via reflection
@@ -45,11 +45,11 @@ var stateStoreInfo = &rpcModuleInfo{
 			Output: "state",
 		},
 		"pstate_queryStates": {
-			Inputs: []string{"domain", "schemaRef", "query"},
+			Inputs: []string{"domain", "schemaRef", "query", "qualifier"},
 			Output: "states",
 		},
 		"pstate_queryContractStates": {
-			Inputs: []string{"domain", "contractAddress", "schemaRef", "query"},
+			Inputs: []string{"domain", "contractAddress", "schemaRef", "query", "qualifier"},
 			Output: "states",
 		},
 	},
@@ -74,12 +74,12 @@ func (r *stateStore) StoreState(ctx context.Context, domain string, contractAddr
 	return
 }
 
-func (r *stateStore) QueryStates(ctx context.Context, domain string, schemaRef tktypes.Bytes32, query *query.QueryJSON) (states []*pldapi.State, err error) {
+func (r *stateStore) QueryStates(ctx context.Context, domain string, schemaRef tktypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (states []*pldapi.State, err error) {
 	err = r.c.CallRPC(ctx, &states, "pstate_queryStates", domain, schemaRef, query)
 	return
 }
 
-func (r *stateStore) QueryContractStates(ctx context.Context, domain string, contractAddress tktypes.EthAddress, schemaRef tktypes.Bytes32, query *query.QueryJSON) (states []*pldapi.State, err error) {
+func (r *stateStore) QueryContractStates(ctx context.Context, domain string, contractAddress tktypes.EthAddress, schemaRef tktypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (states []*pldapi.State, err error) {
 	err = r.c.CallRPC(ctx, &states, "pstate_queryContractStates", domain, contractAddress, schemaRef, query)
 	return
 }

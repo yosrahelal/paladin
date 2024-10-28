@@ -73,7 +73,7 @@ func (ss *stateManager) rpcQueryStates() rpcserver.RPCHandler {
 		domain string,
 		schema tktypes.Bytes32,
 		query query.QueryJSON,
-		status StateStatusQualifier,
+		status pldapi.StateStatusQualifier,
 	) ([]*pldapi.State, error) {
 		return ss.FindStates(ctx, ss.p.DB(), domain, schema, &query, status)
 	})
@@ -85,7 +85,7 @@ func (ss *stateManager) rpcQueryContractStates() rpcserver.RPCHandler {
 		contractAddress tktypes.EthAddress,
 		schema tktypes.Bytes32,
 		query query.QueryJSON,
-		status StateStatusQualifier,
+		status pldapi.StateStatusQualifier,
 	) ([]*pldapi.State, error) {
 		return ss.FindContractStates(ctx, ss.p.DB(), domain, contractAddress, schema, &query, status)
 	})
