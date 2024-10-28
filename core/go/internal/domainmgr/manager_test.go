@@ -48,6 +48,7 @@ type mockComponents struct {
 	keyManager       *componentmocks.KeyManager
 	txManager        *componentmocks.TXManager
 	privateTxManager *componentmocks.PrivateTxManager
+	transportMgr     *componentmocks.TransportManager
 }
 
 func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *mockComponents, func()) {
@@ -62,6 +63,7 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 		keyManager:       componentmocks.NewKeyManager(t),
 		txManager:        componentmocks.NewTXManager(t),
 		privateTxManager: componentmocks.NewPrivateTxManager(t),
+		transportMgr:     componentmocks.NewTransportManager(t),
 	}
 
 	// Blockchain stuff is always mocked
@@ -74,6 +76,7 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 	componentMocks.On("KeyManager").Return(mc.keyManager)
 	componentMocks.On("TxManager").Return(mc.txManager)
 	componentMocks.On("PrivateTxManager").Return(mc.privateTxManager)
+	componentMocks.On("TransportManager").Return(mc.transportMgr)
 
 	var p persistence.Persistence
 	var err error
@@ -178,6 +181,7 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 		keyManager:       componentmocks.NewKeyManager(t),
 		txManager:        componentmocks.NewTXManager(t),
 		privateTxManager: componentmocks.NewPrivateTxManager(t),
+		transportMgr:     componentmocks.NewTransportManager(t),
 	}
 	componentMocks := componentmocks.NewAllComponents(t)
 	componentMocks.On("EthClientFactory").Return(mc.ethClientFactory)
@@ -189,6 +193,7 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 	componentMocks.On("KeyManager").Return(mc.keyManager)
 	componentMocks.On("TxManager").Return(mc.txManager)
 	componentMocks.On("PrivateTxManager").Return(mc.privateTxManager)
+	componentMocks.On("TransportManager").Return(mc.transportMgr)
 
 	mp, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)

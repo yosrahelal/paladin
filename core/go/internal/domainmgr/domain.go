@@ -413,9 +413,18 @@ func (d *domain) inlineEthSign(ctx context.Context, payload []byte, keyIdentifie
 	sigPayloadHash := sha3.NewLegacyKeccak256()
 	_, err = sigPayloadHash.Write(payload)
 
+	var localKeyIdentifier, nodeName string
+	if err == nil {
+		localKeyIdentifier, nodeName, err = tktypes.PrivateIdentityLocator(keyIdentifier).Validate(ctx, "", true)
+	}
+
+	if err == nil && nodeName != "" && nodeName != d.dm.transportMgr.LocalNodeName() {
+		return nil, i18n.NewError(ctx, msgs.MsgDomainSingingKeyMustBeLocalEthSign)
+	}
+
 	var resolvedKey *pldapi.KeyMappingAndVerifier
 	if err == nil {
-		resolvedKey, err = d.dm.keyManager.ResolveKeyNewDatabaseTX(ctx, keyIdentifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+		resolvedKey, err = d.dm.keyManager.ResolveKeyNewDatabaseTX(ctx, localKeyIdentifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	}
 
 	var signatureRSV []byte

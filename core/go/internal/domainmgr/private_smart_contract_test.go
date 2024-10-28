@@ -356,6 +356,24 @@ func initRealKeyManagerForTest(t *testing.T) (components.KeyManager, func(mc *mo
 	}
 }
 
+func TestAttemptSignRemoteAddress(t *testing.T) {
+	td, done := newTestDomain(t, true, goodDomainConf(), func(mc *mockComponents) {
+		mc.transportMgr.On("LocalNodeName").Return("localnode")
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	_, err := td.d.EncodeData(td.ctx, &prototk.EncodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION_SIGNED,
+		Definition:   "eip1559",
+		Body: `{
+		  "to": "0x05d936207F04D81a85881b72A0D17854Ee8BE45A"
+		}`,
+		KeyIdentifier: "key1@remote1",
+	})
+	assert.Regexp(t, "PD011656", err)
+}
+
 func TestEncodeDecodeABIDataWithSigningEIP1559(t *testing.T) {
 	keymgr, setupKeyManager := initRealKeyManagerForTest(t)
 
