@@ -44,6 +44,7 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
     protected abstract CompletableFuture<ToDomain.ValidateStateHashesResponse> validateStateHashes(ToDomain.ValidateStateHashesRequest request);
     protected abstract CompletableFuture<ToDomain.InitCallResponse> initCall(ToDomain.InitCallRequest request);
     protected abstract CompletableFuture<ToDomain.ExecCallResponse> execCall(ToDomain.ExecCallRequest request);
+    protected abstract CompletableFuture<ToDomain.BuildReceiptResponse> buildReceipt(ToDomain.BuildReceiptRequest request);
 
     protected DomainInstance(String grpcTarget, String instanceId) {
         super(grpcTarget, instanceId);
@@ -116,6 +117,7 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
                 case VALIDATE_STATE_HASHES -> validateStateHashes(request.getValidateStateHashes()).thenApply(response::setValidateStateHashesRes);
                 case INIT_CALL -> initCall(request.getInitCall()).thenApply(response::setInitCallRes);
                 case EXEC_CALL -> execCall(request.getExecCall()).thenApply(response::setExecCallRes);
+                case BUILD_RECEIPT -> buildReceipt(request.getBuildReceipt()).thenApply(response::setBuildReceiptRes);
                 default -> throw new IllegalArgumentException("unknown request: %s".formatted(request.getRequestToDomainCase()));
             };
             return resultApplied.thenApply((ra) -> {

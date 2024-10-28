@@ -58,7 +58,7 @@ public class PenteConfiguration {
     private final JsonABI.Entry externalCallEventABI;
 
     // Topic generated from event "PenteExternalCall(address,bytes)"
-    private final Bytes externalCallTopic = Bytes.fromHexString("0xcac03685d5ba4ab3e1465a8ee1b2bb21094ddbd612a969fd34f93a5be7a0ac4f");
+    private final JsonHex.Bytes32 externalCallTopic = new JsonHex.Bytes32("0xcac03685d5ba4ab3e1465a8ee1b2bb21094ddbd612a969fd34f93a5be7a0ac4f");
 
     @SuppressWarnings("FieldCanBeLocal")
     private final String transferSignature = "event UTXOTransfer(bytes32 txId, bytes32[] inputs, bytes32[] reads, bytes32[] outputs, bytes32[] info, bytes data)";
@@ -286,7 +286,7 @@ public class PenteConfiguration {
 
     synchronized JsonABI.Entry getExternalCallEventABI() { return externalCallEventABI; }
 
-    synchronized Bytes getExternalCallTopic() { return externalCallTopic; }
+    synchronized JsonHex.Bytes32 getExternalCallTopic() { return externalCallTopic; }
 
     synchronized String getTransferSignature() { return transferSignature; }
 

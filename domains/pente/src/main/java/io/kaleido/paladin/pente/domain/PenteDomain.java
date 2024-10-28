@@ -20,6 +20,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
+import io.kaleido.paladin.pente.evmrunner.EVMRunner;
 import io.kaleido.paladin.toolkit.FromDomain;
 import io.kaleido.paladin.toolkit.ToDomain;
 import io.kaleido.paladin.pente.evmstate.AccountLoader;
@@ -208,15 +209,15 @@ public class PenteDomain extends DomainInstance {
         }
     }
 
-    private List<PenteConfiguration.TransactionExternalCall> parseExternalCalls(List<org.hyperledger.besu.evm.log.Log> logs) throws Exception {
+    private List<PenteConfiguration.TransactionExternalCall> parseExternalCalls(List<EVMRunner.JsonEVMLog> logs) throws Exception {
         var externalCalls = new ArrayList<PenteConfiguration.TransactionExternalCall>();
         for (var log : logs) {
-            if (log.getTopics().getFirst().equals(config.getExternalCallTopic())) {
+            if (log.topics().getFirst().equals(config.getExternalCallTopic())) {
                 var decodedEvent = decodeData(FromDomain.DecodeDataRequest.newBuilder().
                         setEncodingType(FromDomain.EncodingType.EVENT_DATA).
                         setDefinition(config.getExternalCallEventABI().toJSON(false)).
-                        addAllTopics(log.getTopics().stream().map(t -> ByteString.copyFrom(t.toArray())).toList()).
-                        setData(ByteString.copyFrom(log.getData().toArray())).
+                        addAllTopics(log.topics().stream().map(t -> ByteString.copyFrom(t.getBytes())).toList()).
+                        setData(ByteString.copyFrom(log.data().getBytes())).
                         build()).get();
                 var externalCall = new ObjectMapper().readValue(
                         decodedEvent.getBody(),
@@ -298,7 +299,7 @@ public class PenteDomain extends DomainInstance {
             for (var read : request.getReadsList()) {
                 readAccounts.add(PersistedAccount.deserialize(read.getStateDataJson().getBytes(StandardCharsets.UTF_8)));
             }
-            if (request.getInfoCount() != 1) throw new IllegalArgumentException("No transaction input state");
+            if (request.getInfoCount() != 1) throw new IllegalArgumentException("Expected exactly one info state containing the transaction input");
 
             // Recover the input from the signed rawTransaction that is in the "info" state recorded alongside the transaction
             var tx = new PenteTransaction(this, request.getTransaction());
@@ -503,6 +504,44 @@ public class PenteDomain extends DomainInstance {
             var response = ToDomain.ExecCallResponse.newBuilder();
             response.setResultJson(tx.decodeOutput(result.outputData()));
             return CompletableFuture.completedFuture(response.build());
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    @Override
+    protected CompletableFuture<ToDomain.BuildReceiptResponse> buildReceipt(ToDomain.BuildReceiptRequest request) {
+        try {
+            if (!request.getComplete()) {
+                throw new IllegalStateException("all states must be available to build an EVM receipt");
+            }
+
+            // We execute the transaction just like we would during endorsement, but here we return the information
+            // for users to consume. Such as the contractAddress, the logs, or even the outputData.
+
+            var inputAccounts = new ArrayList<PersistedAccount>(request.getInputStatesCount());
+            for (var input : request.getInputStatesList()) {
+                inputAccounts.add(PersistedAccount.deserialize(input.getStateDataJson().getBytes(StandardCharsets.UTF_8)));
+            }
+            var readAccounts = new ArrayList<PersistedAccount>(request.getReadStatesCount());
+            for (var read : request.getReadStatesList()) {
+                readAccounts.add(PersistedAccount.deserialize(read.getStateDataJson().getBytes(StandardCharsets.UTF_8)));
+            }
+            if (request.getInfoStatesCount() != 1) throw new IllegalArgumentException("Expected exactly one info state containing the transaction input");
+
+            // Recover the input from the signed rawTransaction that is in the "info" state recorded alongside the transaction
+            var evmTxn = PenteEVMTransaction.buildFromInput(this, request.getInfoStates(0).getStateDataJson().getBytes(StandardCharsets.UTF_8));
+
+            // Do the execution of the transaction again ourselves
+            var endorsementLoader = new EndorsementAccountLoader(inputAccounts, readAccounts);
+            var execResult = evmTxn.invokeEVM(endorsementLoader);
+
+            // Build the full receipt from the result
+            var jsonReceipt = evmTxn.buildJSONReceipt(execResult);
+
+            return CompletableFuture.completedFuture(ToDomain.BuildReceiptResponse.newBuilder().
+                    setReceiptJson(new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(jsonReceipt)).
+                    build());
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }

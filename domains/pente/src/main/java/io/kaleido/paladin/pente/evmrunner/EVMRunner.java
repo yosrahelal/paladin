@@ -15,10 +15,13 @@
 
 package io.kaleido.paladin.pente.evmrunner;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.kaleido.paladin.pente.evmstate.AccountLoader;
 import io.kaleido.paladin.pente.evmstate.DebugEVMTracer;
 import io.kaleido.paladin.pente.evmstate.DynamicLoadWorldState;
 import io.kaleido.paladin.pente.evmstate.VirtualBlockchain;
+import io.kaleido.paladin.toolkit.JsonHex;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.tuweni.bytes.Bytes;
@@ -45,6 +48,7 @@ import org.web3j.rlp.RlpString;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Deque;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -76,6 +80,8 @@ public class EVMRunner {
             Address sender,
             Address smartContractAddress,
             Bytes codeBytes,
+            long initialGas,
+            List<JsonEVMLog> logAccumulator,
             Type ...parameters
     ) {
         // Use web3j to encode the input data
@@ -84,7 +90,7 @@ public class EVMRunner {
             String constructorParamsHex = FunctionEncoder.encodeConstructor(List.of(parameters));
             constructorParamsBytes = Bytes.fromHexString(constructorParamsHex);
         }
-        return runContractDeploymentBytes(sender, smartContractAddress, codeBytes, constructorParamsBytes);
+        return runContractDeploymentBytes(sender, smartContractAddress, codeBytes, constructorParamsBytes, initialGas, logAccumulator);
     }
 
     public static Address nonceSmartContractAddress(Address address, long nonce) {
@@ -100,7 +106,9 @@ public class EVMRunner {
             Address senderAddress,
             Address smartContractAddress,
             Bytes codeBytes,
-            Bytes constructorParamsBytes
+            Bytes constructorParamsBytes,
+            long initialGas,
+            List<JsonEVMLog> logAccumulator
     ) {
         if (constructorParamsBytes != null) {
             codeBytes = Bytes.wrap(codeBytes, constructorParamsBytes);
@@ -118,7 +126,7 @@ public class EVMRunner {
                 MessageFrame.builder()
                         .type(MessageFrame.Type.CONTRACT_CREATION)
                         .worldUpdater(this.world.getUpdater())
-                        .initialGas(Long.MAX_VALUE)
+                        .initialGas(initialGas)
                         .originator(senderAddress)
                         .sender(senderAddress)
                         .address(smartContractAddress)
@@ -134,7 +142,7 @@ public class EVMRunner {
                         .blockHashLookup(virtualBlockchain)
                         .maxStackSize(Integer.MAX_VALUE)
                         .build();
-        this.runFrame(frame);
+        this.runFrame(frame, logAccumulator);
         return frame;
     }
 
@@ -154,19 +162,23 @@ public class EVMRunner {
             Address sender,
             Address smartContractAddress,
             String methodName,
+            long initialGas,
+            List<JsonEVMLog> logAccumulator,
             Type ...parameters
     ) {
 
         // Use web3j to encode the call data
         Function function = new Function(methodName, List.of(parameters), List.of());
         String callDataHex = FunctionEncoder.encode(function);
-        return runContractInvokeBytes(sender, smartContractAddress, Bytes.fromHexString(callDataHex));
+        return runContractInvokeBytes(sender, smartContractAddress, Bytes.fromHexString(callDataHex), initialGas, logAccumulator);
     }
 
     public MessageFrame runContractInvokeBytes(
             Address senderAddress,
             Address smartContractAddress,
-            Bytes callData
+            Bytes callData,
+            long initialGas,
+            List<JsonEVMLog> logAccumulator
     ) {
         var sender = this.world.getUpdater().getOrCreate(senderAddress);
         logger.debug("Invoking to={} from={} nonce={}", smartContractAddress, senderAddress, sender.getNonce());
@@ -182,7 +194,7 @@ public class EVMRunner {
                 MessageFrame.builder()
                         .type(MessageFrame.Type.MESSAGE_CALL)
                         .worldUpdater(this.world.getUpdater())
-                        .initialGas(Long.MAX_VALUE)
+                        .initialGas(initialGas)
                         .originator(senderAddress)
                         .sender(senderAddress)
                         .address(smartContractAddress)
@@ -199,7 +211,7 @@ public class EVMRunner {
                         .maxStackSize(Integer.MAX_VALUE)
                         .completer(__ -> {})
                         .build();
-        this.runFrame(frame);
+        this.runFrame(frame, logAccumulator);
         return frame;
     }
 
@@ -212,7 +224,17 @@ public class EVMRunner {
 
     }
 
-    public void runFrame(MessageFrame initialFrame) {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record JsonEVMLog(
+            @JsonProperty()
+            JsonHex.Address address,
+            @JsonProperty()
+            List<JsonHex.Bytes32> topics,
+            @JsonProperty()
+            JsonHex.Bytes data
+    ) {}
+
+    public void runFrame(MessageFrame initialFrame, List<JsonEVMLog> logAccumulator) {
         final OperationTracer tracer = new DebugEVMTracer();
         Deque<MessageFrame> messageFrameStack = initialFrame.getMessageFrameStack();
         final PrecompileContractRegistry precompileContractRegistry = new PrecompileContractRegistry();
@@ -241,6 +263,17 @@ public class EVMRunner {
                 logger.debug(
                         new String(
                                 messageFrame.getRevertReason().get().toArrayUnsafe(), StandardCharsets.UTF_8));
+            }
+
+            var frameLogs = messageFrame.getLogs();
+            if (frameLogs != null) {
+                logAccumulator.addAll(
+                    frameLogs.stream().map(l -> new JsonEVMLog(
+                        new JsonHex.Address(messageFrame.getContractAddress().toArray()),
+                        l.getTopics().stream().map(t -> new JsonHex.Bytes32(t.toArray())).toList(),
+                        new JsonHex.Bytes(l.getData().toArray())
+                    )).toList()
+                );
             }
         }
     }

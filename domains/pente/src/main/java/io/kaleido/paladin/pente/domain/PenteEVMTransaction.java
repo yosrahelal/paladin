@@ -93,8 +93,9 @@ class PenteEVMTransaction {
     record EVMExecutionResult(
             EVMRunner evm,
             org.hyperledger.besu.datatypes.Address senderAddress,
+            long gasUsed,
             org.hyperledger.besu.datatypes.Address contractAddress,
-            List<Log> logs,
+            List<EVMRunner.JsonEVMLog> logs,
             byte[] outputData
     ) { }
 
@@ -230,20 +231,29 @@ class PenteEVMTransaction {
                 throw new EVMExecutionException("nonce wrong for EVM state supplied=%d accountState=%d".formatted(this.nonce.longValue(), senderNonce));
             }
         }
+        var initialGas = this.gas.longValue();
+        if (initialGas <= 0) {
+            initialGas = Long.MAX_VALUE;
+        }
 
+        var logs = new LinkedList<EVMRunner.JsonEVMLog>();
         MessageFrame execResult;
         if (to == null) {
             execResult = evm.runContractDeploymentBytes(
                     senderAddress,
                     null,
                     Bytes.wrap(bytecode),
-                    Bytes.wrap(callData)
+                    Bytes.wrap(callData),
+                    initialGas,
+                    logs
             );
         } else {
             execResult = evm.runContractInvokeBytes(
                     senderAddress,
                     org.hyperledger.besu.datatypes.Address.wrap(Bytes.wrap(to.getBytes())),
-                    Bytes.wrap(callData)
+                    Bytes.wrap(callData),
+                    initialGas,
+                    logs
             );
         }
         if (execResult.getState() != MessageFrame.State.COMPLETED_SUCCESS) {
@@ -261,10 +271,49 @@ class PenteEVMTransaction {
         return new EVMExecutionResult(
                 evm,
                 senderAddress,
+                initialGas - execResult.getRemainingGas(),
                 execResult.getContractAddress(),
-                execResult.getLogs(),
+                logs,
                 execResult.getOutputData().toArray()
         );
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record JSONReceipt(
+            @JsonProperty()
+            PenteEVMTransaction transaction,
+            @JsonProperty()
+            EVMReceipt receipt
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record EVMReceipt(
+            @JsonProperty()
+            Address from,
+            @JsonProperty()
+            Address to,
+            @JsonProperty()
+            JsonHexNum.Uint256 gasUsed,
+            @JsonProperty()
+            Address contractAddress,
+            @JsonProperty()
+            List<EVMRunner.JsonEVMLog> logs
+
+    ) {}
+
+    JSONReceipt buildJSONReceipt(EVMExecutionResult execResult) throws IOException {
+        Address contractAddress = null;
+        if (execResult.contractAddress != null) {
+            contractAddress = new Address(execResult.contractAddress.toArray());
+        }
+        var evmReceipt = new EVMReceipt(
+            new Address(execResult.senderAddress.toArray()),
+            this.to,
+            new JsonHexNum.Uint256(execResult.gasUsed),
+            contractAddress,
+            execResult.logs
+        );
+        return new JSONReceipt(this, evmReceipt);
     }
 
     public Address getFrom() {

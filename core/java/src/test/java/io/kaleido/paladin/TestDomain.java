@@ -106,4 +106,9 @@ public class TestDomain extends DomainInstance {
     protected CompletableFuture<ToDomain.ExecCallResponse> execCall(ToDomain.ExecCallRequest request) {
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
+
+    @Override
+    protected CompletableFuture<ToDomain.BuildReceiptResponse> buildReceipt(ToDomain.BuildReceiptRequest request) {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
 }

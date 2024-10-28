@@ -56,10 +56,13 @@ public class SimpleStorageWrappedStoreRetrieveTest {
         }
         final Address smartContractAddress = EVMRunner.randomAddress();
         final Address sender = EVMRunner.randomAddress();
+        final var logs = new LinkedList<EVMRunner.JsonEVMLog>();
         MessageFrame deployFrame = evmRunnerFresh.runContractDeployment(
                 sender,
                 smartContractAddress,
                 Bytes.fromHexString(hexByteCode),
+                Long.MAX_VALUE,
+                logs,
                 new Uint256(12345)
         );
         assertEquals(MessageFrame.State.COMPLETED_SUCCESS, deployFrame.getState());
@@ -67,6 +70,8 @@ public class SimpleStorageWrappedStoreRetrieveTest {
                 sender,
                 smartContractAddress,
                 "set",
+                Long.MAX_VALUE,
+                logs,
                 new Uint256(23456)
         );
         assertEquals(MessageFrame.State.COMPLETED_SUCCESS, setFrame.getState());
@@ -86,7 +91,9 @@ public class SimpleStorageWrappedStoreRetrieveTest {
         MessageFrame getFrame = evmRunnerWithLoad.runContractInvoke(
                 sender,
                 smartContractAddress,
-                "get"
+                "get",
+                Long.MAX_VALUE,
+                logs
         );
         assertEquals(MessageFrame.State.COMPLETED_SUCCESS, getFrame.getState());
         List<Type<?>> returns = evmRunnerWithLoad.decodeReturn(getFrame, List.of(new TypeReference<Uint256>() {}));
