@@ -147,6 +147,11 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 		return err
 	}
 
+	if res.AssemblyResult == prototk.AssembleTransactionResponse_REVERT {
+		// TODO: what should we actually do here?
+		return fmt.Errorf("Private transaction reverted: %s", *res.RevertReason)
+	}
+
 	postAssembly := &components.TransactionPostAssembly{}
 	// We hydrate the states on our side of the Manager<->Plugin divide at this point,
 	// which provides back to the engine the full sequence locking information of the

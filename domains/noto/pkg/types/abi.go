@@ -16,8 +16,6 @@
 package types
 
 import (
-	"context"
-
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -106,13 +104,9 @@ type ApproveExtraParams struct {
 }
 
 type NotoPublicTransaction struct {
-	FunctionABI *abi.Entry      `json:"functionABI"`
-	ParamsJSON  tktypes.RawJSON `json:"paramsJSON"`
-	EncodedCall []byte          `json:"encodedCall"`
-}
-
-func (npt *NotoPublicTransaction) Encode(ctx context.Context) ([]byte, error) {
-	return npt.FunctionABI.EncodeCallDataJSONCtx(ctx, npt.ParamsJSON)
+	FunctionABI *abi.Entry       `json:"functionABI"`
+	ParamsJSON  tktypes.RawJSON  `json:"paramsJSON"`
+	EncodedCall tktypes.HexBytes `json:"encodedCall"`
 }
 
 type NotoTransferMetadata struct {

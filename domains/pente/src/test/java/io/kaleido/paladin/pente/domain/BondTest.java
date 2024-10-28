@@ -29,7 +29,6 @@ import io.kaleido.paladin.toolkit.*;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -159,7 +158,7 @@ public class BondTest {
                     "issuer",
                     bondTrackerPublicABI,
                     bondTrackerPublicBytecode,
-                    new HashMap<String, String>(){{
+                    new HashMap<String, String>() {{
                         put("owner", issuerCustodianInstance.address());
                         put("issueDate_", "0");
                         put("maturityDate_", "1");
@@ -219,11 +218,32 @@ public class BondTest {
                 put("units_", 1000);
             }});
 
+            // Prepare the bond transfer (requires 2 calls to prepare, as the Noto transaction spawns a Pente transaction to wrap it)
+            var bondTransfer = notoBond.prepareTransfer(bondCustodian, alice, 1000);
+            assertEquals("private", bondTransfer.preparedTransaction().type());
+            assertEquals("pente", bondTransfer.preparedTransaction().domain());
+            assertEquals(issuerCustodianInstance.address(), bondTransfer.preparedTransaction().to().toString());
+            assertEquals(1, bondTransfer.preparedTransaction().abi().size());
+            var bondTransfer2 = issuerCustodianInstance.prepare(
+                    bondTransfer.preparedTransaction().from(),
+                    bondTransfer.preparedTransaction().abi().getFirst(),
+                    bondTransfer.preparedTransaction().data()
+            );
+
+            // Pass the prepared bond transfer to the subscription contract
+            bondSubscription.prepareBond(bondCustodian, bondTransfer2.preparedTransaction().to(), bondTransfer2.encodedCall());
+
+            // TODO: we should need to approve either Noto or Pente for the bond transfer
+            // Currently the encoded call that is returned is a fully endorsed Pente/BondTracker onTransfer(),
+            // which will in turn call Noto with a fully endorsed transfer().
+            // Either the Pente call needs to require approval, or the Noto call needs to be transferWithApproval()
+            // so that it requires approval.
+
             // Alice receives full bond distribution
             // TODO: this should be done together as an Atom
-            bondSubscription.markReceived(alice, 1000);
-            notoBond.transfer(bondCustodian, alice, 1000);
-            notoCash.transfer(alice, bondCustodian, 1000);
+            bondSubscription.distribute(alice, 1000);
+            notoCash.transfer(alice, bondCustodian, 1000); // TODO: this should be a side effect of distribute() too
+            // bond transfer was already encoded to happen as a side-effect of distribute()
 
             // TODO: figure out how to test negative cases (such as when Pente reverts due to a non-allowed investor)
 

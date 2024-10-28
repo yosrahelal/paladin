@@ -16,6 +16,7 @@
 package io.kaleido.paladin.pente.domain.helpers;
 
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.kaleido.paladin.testbed.Testbed;
 
 
@@ -27,6 +28,7 @@ import io.kaleido.paladin.toolkit.*;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 public class NotoHelper {
@@ -117,6 +119,25 @@ public class NotoHelper {
             JsonABI.newParameters()
     );
 
+    static final JsonABI.Entry approveTransferABI = JsonABI.newFunction(
+            "approveTransfer",
+            JsonABI.newParameters(
+                    JsonABI.newTupleArray("inputs", "FullState", JsonABI.newParameters(
+                            JsonABI.newParameter("id", "bytes"),
+                            JsonABI.newParameter("schema", "bytes32"),
+                            JsonABI.newParameter("data", "bytes")
+                    )),
+                    JsonABI.newTupleArray("outputs", "FullState", JsonABI.newParameters(
+                            JsonABI.newParameter("id", "bytes"),
+                            JsonABI.newParameter("schema", "bytes32"),
+                            JsonABI.newParameter("data", "bytes")
+                    )),
+                    JsonABI.newParameter("data", "bytes"),
+                    JsonABI.newParameter("delegate", "address")
+            ),
+            JsonABI.newParameters()
+    );
+
     public static NotoHelper deploy(String domainName, Testbed testbed, ConstructorParams params) throws IOException {
         String address = testbed.getRpcClient().request("testbed_deploy", domainName, params);
         return new NotoHelper(domainName, testbed, address);
@@ -130,6 +151,10 @@ public class NotoHelper {
 
     public String address() {
         return address;
+    }
+
+    private static Testbed.TransactionResult getTransactionInfo(LinkedHashMap<String, Object> res) {
+        return new ObjectMapper().convertValue(res, Testbed.TransactionResult.class);
     }
 
     public List<NotoCoin> queryStates(JsonHex.Bytes32 schemaID, JsonQuery.Query query) throws IOException {
@@ -159,6 +184,33 @@ public class NotoHelper {
                 new HashMap<>() {{
                     put("to", to);
                     put("amount", amount);
+                }}
+        ), true);
+    }
+
+    public Testbed.TransactionResult prepareTransfer(String sender, String to, int amount) throws IOException {
+        return getTransactionInfo(
+                testbed.getRpcClient().request("testbed_prepare", new Testbed.TransactionInput(
+                        sender,
+                        JsonHex.addressFrom(address),
+                        transferABI,
+                        new HashMap<>() {{
+                            put("to", to);
+                            put("amount", amount);
+                        }}
+                )));
+    }
+
+    public void approveTransfer(String sender, List<Testbed.StateWithData> inputs, List<Testbed.StateWithData> outputs, JsonHex.Bytes data, String delegate) throws IOException {
+        testbed.getRpcClient().request("testbed_invoke", new Testbed.TransactionInput(
+                sender,
+                JsonHex.addressFrom(address),
+                approveTransferABI,
+                new HashMap<>() {{
+                    put("inputs", inputs);
+                    put("outputs", outputs);
+                    put("data", data);
+                    put("delegate", delegate);
                 }}
         ), true);
     }

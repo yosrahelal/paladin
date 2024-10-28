@@ -163,21 +163,15 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withHooks b
 	err = json.Unmarshal(transferSilver.PreparedMetadata, &transferSilverExtra)
 	require.NoError(t, err)
 
-	transferGoldEncoded, err := transferGoldExtra.TransferWithApproval.Encode(ctx)
-	require.NoError(t, err)
-
-	transferSilverEncoded, err := transferSilverExtra.TransferWithApproval.Encode(ctx)
-	require.NoError(t, err)
-
 	log.L(ctx).Infof("Create Atom instance")
 	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
 		{
 			ContractAddress: transferGold.PreparedTransaction.To,
-			CallData:        transferGoldEncoded,
+			CallData:        transferGoldExtra.TransferWithApproval.EncodedCall,
 		},
 		{
 			ContractAddress: transferSilver.PreparedTransaction.To,
-			CallData:        transferSilverEncoded,
+			CallData:        transferSilverExtra.TransferWithApproval.EncodedCall,
 		},
 		{
 			ContractAddress: swap.Address,

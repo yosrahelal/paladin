@@ -90,12 +90,15 @@ contract BondTracker is INotoHooks, ERC20, Ownable {
         emit PenteExternalCall(prepared.contractAddress, prepared.encodedCall);
     }
 
+    uint256 approvals;
+
     function onApproveTransfer(
         address sender,
         address from,
         address delegate,
         PreparedTransaction calldata prepared
     ) external onlyOwner {
+        approvals++; // must store something on each call (see https://github.com/kaleido-io/paladin/issues/252)
         emit PenteExternalCall(prepared.contractAddress, prepared.encodedCall);
     }
 }

@@ -223,7 +223,6 @@ public class PenteDomain extends DomainInstance {
             result.setAssemblyResult(ToDomain.AssembleTransactionResponse.Result.OK);
             result.setAssembledTransaction(assembledTransaction);
 
-
             // Just like a base Eth transaction, we sign the encoded transaction.
             // However, we do not package the signature back up in any RLP encoded way
             // back again into a full transaction RLP bytestring.

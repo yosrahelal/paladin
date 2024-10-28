@@ -193,7 +193,7 @@ func (h *approveHandler) hookApprove(ctx context.Context, tx *types.ParsedTransa
 
 	if tx.DomainConfig.DecodedData.PrivateAddress != nil {
 		transactionType = prototk.PreparedTransaction_PRIVATE
-		functionABI = penteInvokeABI("onMint", functionABI.Inputs)
+		functionABI = penteInvokeABI("onApproveTransfer", functionABI.Inputs)
 		penteParams := &PenteInvokeParams{
 			Group:  tx.DomainConfig.DecodedData.PrivateGroup,
 			To:     tx.DomainConfig.DecodedData.PrivateAddress,

@@ -58,7 +58,9 @@ public class Testbed implements Closeable {
     public record Setup(
             String dbMigrationsDir,
             long startTimeoutMS
-    ) {}
+    ) {
+    }
+
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record StateWithData(
@@ -141,7 +143,7 @@ public class Testbed implements Closeable {
         yamlConfigMerged = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(configMap);
         try {
             start();
-        } catch(Exception e) {
+        } catch (Exception e) {
             close();
             throw e;
         }
@@ -213,10 +215,10 @@ public class Testbed implements Closeable {
                 log:
                   level: debug
                 """.formatted(
-                    new File(testbedSetup.dbMigrationsDir).getAbsolutePath(),
-                    JsonHex.randomBytes32(),
-                    availableRPCPort
-            );
+                new File(testbedSetup.dbMigrationsDir).getAbsolutePath(),
+                JsonHex.randomBytes32(),
+                availableRPCPort
+        );
     }
 
     private void start() throws Exception {
