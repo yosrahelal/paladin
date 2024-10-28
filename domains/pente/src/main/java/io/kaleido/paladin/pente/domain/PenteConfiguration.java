@@ -66,9 +66,9 @@ public class PenteConfiguration {
     private String domainName;
     private long chainId;
 
-    private String schemaId_AccountState_v24_9_0;
+    private String schemaId_AccountState_v24_10_0;
 
-    private String schemaId_TransactionInfoState_v24_9_0;
+    private String schemaId_TransactionInfoState_v24_10_0;
 
     record Schema(String id, String signature, JsonABI.Parameter def) {}
 
@@ -155,10 +155,11 @@ public class PenteConfiguration {
         JsonNode inputs // leave this unparsed as we will push it back ot paladin to parse for us
     ) {}
 
-    JsonABI.Parameter abiTuple_AccountState_v24_9_0() {
-        return JsonABI.newTuple("AccountState_v24_9_0", "AccountState_v24_9_0", JsonABI.newParameters(
+    JsonABI.Parameter abiTuple_AccountState_v24_10_0() {
+        return JsonABI.newTuple("AccountState_v24_10_0", "AccountState_v24_10_0", JsonABI.newParameters(
             JsonABI.newIndexedParameter("version", "string"),
             JsonABI.newIndexedParameter("address", "address"),
+            JsonABI.newParameter("salt", "bytes32"),
             JsonABI.newParameter("nonce", "uint256"),
             JsonABI.newParameter("balance", "uint256"),
             JsonABI.newParameter("codeHash", "bytes32"),
@@ -168,8 +169,9 @@ public class PenteConfiguration {
         ));
     }
 
-    JsonABI.Parameter abiTuple_TransactionInfoState_v24_9_0() {
-        return JsonABI.newTuple("TransactionInfoState_v24_9_0", "TransactionInfoState_v24_9_0", JsonABI.newParameters(
+    JsonABI.Parameter abiTuple_TransactionInfoState_v24_10_0() {
+        return JsonABI.newTuple("TransactionInfoState_v24_10_0", "TransactionInfoState_v24_10_0", JsonABI.newParameters(
+                JsonABI.newParameter("salt", "bytes32"),
                 JsonABI.newParameter("rawTransaction", "bytes"),
                 JsonABI.newParameter("evmVersion", "string"),
                 JsonABI.newParameter("baseBlock", "uint64"),
@@ -305,8 +307,8 @@ public class PenteConfiguration {
 
     List<String> allPenteSchemas() {
         return List.of(
-                abiTuple_AccountState_v24_9_0().toString(),
-                abiTuple_TransactionInfoState_v24_9_0().toString()
+                abiTuple_AccountState_v24_10_0().toString(),
+                abiTuple_TransactionInfoState_v24_10_0().toString()
         );
     }
 
@@ -316,27 +318,27 @@ public class PenteConfiguration {
             throw new IllegalStateException("expected %d schemas, received %d".formatted(schemaDefs.size(), schemas.size()));
         }
         var schema = schemas.getFirst();
-        schemaId_AccountState_v24_9_0 = schema.getId();
-        schemasByID.put(schemaId_AccountState_v24_9_0, new Schema(
+        schemaId_AccountState_v24_10_0 = schema.getId();
+        schemasByID.put(schemaId_AccountState_v24_10_0, new Schema(
                 schema.getId(),
                 schema.getSignature(),
-                abiTuple_AccountState_v24_9_0()
+                abiTuple_AccountState_v24_10_0()
         ));
         schema = schemas.get(1);
-        schemaId_TransactionInfoState_v24_9_0 = schema.getId();
-        schemasByID.put(schemaId_TransactionInfoState_v24_9_0, new Schema(
+        schemaId_TransactionInfoState_v24_10_0 = schema.getId();
+        schemasByID.put(schemaId_TransactionInfoState_v24_10_0, new Schema(
                 schema.getId(),
                 schema.getSignature(),
-                abiTuple_TransactionInfoState_v24_9_0()
+                abiTuple_TransactionInfoState_v24_10_0()
         ));
     }
 
     synchronized String schemaId_AccountStateLatest() {
-        return schemaId_AccountState_v24_9_0;
+        return schemaId_AccountState_v24_10_0;
     }
 
     synchronized String schemaId_TransactionInputStateLatest() {
-        return schemaId_TransactionInfoState_v24_9_0;
+        return schemaId_TransactionInfoState_v24_10_0;
     }
 
 }

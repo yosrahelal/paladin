@@ -299,13 +299,15 @@ class PenteTransaction {
     @JsonIgnoreProperties(ignoreUnknown = true)
     record TransactionInputInfoState(
             @JsonProperty
-            JsonHex.Bytes rawTransaction,
+            JsonHex.Bytes32 salt,
             @JsonProperty
             String evmVersion,
             @JsonProperty
             JsonHexNum.Uint256 baseBlock,
             @JsonProperty
-            JsonHexNum.Uint256 bytecodeLength
+            JsonHexNum.Uint256 bytecodeLength,
+            @JsonProperty
+            JsonHex.Bytes rawTransaction
     ) {}
 
     ToDomain.AssembledTransaction buildAssembledTransaction(
@@ -339,7 +341,9 @@ class PenteTransaction {
                     var updatedAccount = evm.getWorld().get(loadedAccount);
                     outputStates.add(ToDomain.NewState.newBuilder().
                             setSchemaId(latestAccountSchemaId).
-                            setStateDataJsonBytes(ByteString.copyFrom(updatedAccount.serialize())).
+                            setStateDataJsonBytes(ByteString.copyFrom(
+                                    updatedAccount.serialize(JsonHex.randomBytes32())
+                            )).
                             addAllDistributionList(lookups).
                             build());
                 } else {
@@ -355,10 +359,11 @@ class PenteTransaction {
             }
         }
         var txInput = new TransactionInputInfoState(
-            new JsonHex.Bytes(encodedTxn),
+            JsonHex.randomBytes32(),
             evmTxn.getEVMVersion(),
             new JsonHexNum.Uint256(evmTxn.getBaseBlock()),
-            new JsonHexNum.Uint256(evmTxn.getBytecodeLen())
+            new JsonHexNum.Uint256(evmTxn.getBytecodeLen()),
+            new JsonHex.Bytes(encodedTxn)
         );
         var txInputState = ToDomain.NewState.newBuilder().
                 setSchemaId(latestTransactionInputSchemaId).

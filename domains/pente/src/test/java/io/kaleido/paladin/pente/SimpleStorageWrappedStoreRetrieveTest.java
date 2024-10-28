@@ -18,6 +18,7 @@ package io.kaleido.paladin.pente;
 import io.kaleido.paladin.pente.evmrunner.EVMRunner;
 import io.kaleido.paladin.pente.evmrunner.EVMVersion;
 import io.kaleido.paladin.pente.evmstate.PersistedAccount;
+import io.kaleido.paladin.toolkit.JsonHex;
 import org.apache.tuweni.bytes.Bytes;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.evm.frame.MessageFrame;
@@ -79,7 +80,7 @@ public class SimpleStorageWrappedStoreRetrieveTest {
         // Persist the world we've just built into bytes
         final Map<Address, byte[]> accountBytes = new HashMap<>();
         evmRunnerFresh.getWorld().getQueriedAccounts().forEach(address -> {
-            accountBytes.put(address, evmRunnerFresh.getWorld().get(address).serialize());
+            accountBytes.put(address, evmRunnerFresh.getWorld().get(address).serialize(JsonHex.randomBytes32()));
         });
 
         // Create a new world that dynamically loads those bytes
