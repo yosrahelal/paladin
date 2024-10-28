@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"time"
@@ -218,13 +219,12 @@ var _ = Describe("controller", Ordered, func() {
 			}
 		})
 
-		var penteContract *tktypes.EthAddress
-
+		pentePrivGroupComps := abi.ParameterArray{
+			{Name: "salt", Type: "bytes32"},
+			{Name: "members", Type: "string[]"},
+		}
 		penteGroupABI := &abi.Parameter{
-			Name: "group", Type: "tuple", Components: abi.ParameterArray{
-				{Name: "salt", Type: "bytes32"},
-				{Name: "members", Type: "string[]"},
-			},
+			Name: "group", Type: "tuple", Components: pentePrivGroupComps,
 		}
 
 		type penteGroupParams struct {
@@ -242,10 +242,10 @@ var _ = Describe("controller", Ordered, func() {
 		}
 
 		type penteConstructorParams struct {
-			Group                penteGroupParams `json:"group"`
-			EVMVersion           string           `json:"evmVersion"`
-			EndorsementType      string           `json:"endorsementType"`
-			ExternalCallsEnabled bool             `json:"externalCallsEnabled"`
+			Group                nototypes.PentePrivateGroup `json:"group"`
+			EVMVersion           string                      `json:"evmVersion"`
+			EndorsementType      string                      `json:"endorsementType"`
+			ExternalCallsEnabled bool                        `json:"externalCallsEnabled"`
 		}
 
 		notoTrackerDeployABI := &abi.Entry{
@@ -262,16 +262,17 @@ var _ = Describe("controller", Ordered, func() {
 		}
 
 		type penteDeployParams struct {
-			Group    penteGroupParams `json:"group"`
-			Bytecode tktypes.HexBytes `json:"bytecode"`
-			Inputs   any              `json:"inputs"`
+			Group    nototypes.PentePrivateGroup `json:"group"`
+			Bytecode tktypes.HexBytes            `json:"bytecode"`
+			Inputs   any                         `json:"inputs"`
 		}
 
-		penteGroupNodes1and2 := penteGroupParams{
+		penteGroupNodes1and2 := nototypes.PentePrivateGroup{
 			Salt:    tktypes.Bytes32(tktypes.RandBytes(32)), // unique salt must be shared privately to retain anonymity
 			Members: []string{"bob@node1", "sally@node2"},   // these will be salted to establish the endorsement key identifiers
 		}
 
+		var penteContract *tktypes.EthAddress
 		It("deploys a pente privacy group to node1 and node2, excluding node3", func() {
 
 			const ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES = "group_scoped_identities"
@@ -295,6 +296,7 @@ var _ = Describe("controller", Ordered, func() {
 			log.L(ctx).Warnf("using the Pente privacy group smart contract %s deployed by TX %s", penteContract, deploy.ID())
 		})
 
+		var notoTrackerDeployTX uuid.UUID
 		It("deploys a private smart contract into the privacy group", func() {
 
 			notoTracker := solutils.MustLoadBuild(NotoTrackerERC20BuildJSON)
@@ -317,7 +319,73 @@ var _ = Describe("controller", Ordered, func() {
 				Wait(5 * time.Second)
 			Expect(deploy.Error()).To(BeNil())
 			log.L(ctx).Warnf("using the Pente contract %s deployed into the privacy group in TX %s", "[address needs domain-level receipt/logs]", deploy.ID())
+			notoTrackerDeployTX = deploy.ID()
 		})
 
+		type penteReceipt struct {
+			Receipt struct {
+				ContractAddress *tktypes.EthAddress `json:"contractAddress"`
+			} `json:"receipt"`
+		}
+
+		var notoTrackerAddr *tktypes.EthAddress
+		It("requests the receipt from pente to get the contract address", func() {
+
+			domainReceiptJSON, err := rpc["node1"].PTX().GetDomainReceipt(ctx, "pente", notoTrackerDeployTX)
+			Expect(err).To(BeNil())
+			var pr penteReceipt
+			err = json.Unmarshal(domainReceiptJSON, &pr)
+			Expect(err).To(BeNil())
+			notoTrackerAddr = pr.Receipt.ContractAddress
+			log.L(ctx).Warnf("using the private ERC-20 in the privacy group at address %s", notoTrackerAddr)
+
+		})
+
+		var notoPenteContractAddr *tktypes.EthAddress
+		It("deploys a new noto using Pente smart contract as the notary", func() {
+			deploy := rpc["node1"].ForABI(ctx, abi.ABI{
+				{Type: abi.Constructor, Inputs: abi.ParameterArray{
+					{Name: "notary", Type: "string"},
+					{Name: "guardPublicAddress", Type: "string"},
+					{Name: "guardPrivateAddress", Type: "string"},
+					{Name: "guardPrivateGroup", Type: "tuple", Components: pentePrivGroupComps},
+				}},
+			}).
+				Private().
+				Domain("noto").
+				Constructor().
+				From(notary).
+				Inputs(&nototypes.ConstructorParams{
+					Notary:              notary,
+					GuardPublicAddress:  penteContract,
+					GuardPrivateAddress: notoTrackerAddr,
+					GuardPrivateGroup:   &penteGroupNodes1and2,
+				}).
+				Send().
+				Wait(5 * time.Second)
+			Expect(deploy.Error()).To(BeNil())
+			Expect(deploy.Receipt().ContractAddress).ToNot(BeNil())
+			notoPenteContractAddr = deploy.Receipt().ContractAddress
+			log.L(ctx).Warnf("using the combined Noto<->Pente contract %s deployed by TX %s", notoPenteContractAddr, deploy.ID())
+		})
+
+		// TODO: Needs gap closing on "private transactions triggering private transactions currently supported only in testbed"
+		// It("mints some noto-pentes to bob on node1", func() {
+		// 	txn := rpc["node1"].ForABI(ctx, nototypes.NotoABI).
+		// 		Private().
+		// 		Domain("noto").
+		// 		Function("mint").
+		// 		To(notoPenteContractAddr).
+		// 		From(notary).
+		// 		Inputs(&nototypes.MintParams{
+		// 			To:     "bob@node1",
+		// 			Amount: notoAmount(99),
+		// 		}).
+		// 		Send().
+		// 		Wait(5 * time.Second)
+		// 	Expect(txn.Error()).To(BeNil())
+		// 	log.L(ctx).Warnf("using the Noto coins minted in TX %s", txn.ID())
+		// 	logWallet("bob", "node1")
+		// })
 	})
 })
