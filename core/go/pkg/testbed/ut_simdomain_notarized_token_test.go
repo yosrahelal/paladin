@@ -715,7 +715,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	}`))
 	assert.NoError(t, rpcErr)
 
-	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &TransactionInput{
 		From:     "wallets.org1.aaaaaa",
 		To:       tktypes.EthAddress(contractAddr),
 		Function: *mustParseABIEntry(fakeCoinTransferABI),
@@ -727,7 +727,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	}, true)
 	assert.NoError(t, rpcErr)
 
-	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &TransactionInput{
 		From:     "wallets.org1.aaaaaa",
 		To:       tktypes.EthAddress(contractAddr),
 		Function: *mustParseABIEntry(fakeCoinTransferABI),
@@ -740,7 +740,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	assert.NoError(t, rpcErr)
 
 	var balance *getBalanceResult
-	rpcErr = tbRPC.CallRPC(ctx, &balance, "testbed_call", &tktypes.PrivateContractInvoke{
+	rpcErr = tbRPC.CallRPC(ctx, &balance, "testbed_call", &TransactionInput{
 		To:       tktypes.EthAddress(contractAddr),
 		Function: *mustParseABIEntry(fakeCoinGetBalanceABI),
 		Inputs: tktypes.RawJSON(`{

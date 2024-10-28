@@ -17,6 +17,7 @@ package types
 
 import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -92,8 +93,8 @@ type TransferParams struct {
 }
 
 type ApproveParams struct {
-	Inputs   []*tktypes.FullState `json:"inputs"`
-	Outputs  []*tktypes.FullState `json:"outputs"`
-	Data     tktypes.HexBytes     `json:"data"`
-	Delegate *tktypes.EthAddress  `json:"delegate"`
+	Inputs   []*pldapi.StateWithData `json:"inputs"`
+	Outputs  []*pldapi.StateWithData `json:"outputs"`
+	Data     tktypes.HexBytes        `json:"data"`
+	Delegate *tktypes.EthAddress     `json:"delegate"`
 }

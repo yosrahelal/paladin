@@ -22,7 +22,6 @@ import io.kaleido.paladin.pente.domain.PenteConfiguration;
 import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.JsonABI;
 import io.kaleido.paladin.toolkit.JsonHex;
-import io.kaleido.paladin.toolkit.PrivateContractInvoke;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -65,8 +64,8 @@ public class PenteHelper {
         return address;
     }
 
-    private static Testbed.PrivateContractTransaction getTransactionInfo(LinkedHashMap<String, Object> res) {
-        return new ObjectMapper().convertValue(res, Testbed.PrivateContractTransaction.class);
+    private static Testbed.TransactionResult getTransactionInfo(LinkedHashMap<String, Object> res) {
+        return new ObjectMapper().convertValue(res, Testbed.TransactionResult.class);
     }
 
     public JsonHex.Address deploy(String sender, String bytecode, JsonABI.Parameters inputABI, Object inputValues) throws IOException {
@@ -84,7 +83,7 @@ public class PenteHelper {
         );
 
         var tx = getTransactionInfo(
-                testbed.getRpcClient().request("testbed_invoke", new PrivateContractInvoke(
+                testbed.getRpcClient().request("testbed_invoke", new Testbed.TransactionInput(
                         sender,
                         JsonHex.addressFrom(address),
                         deployABI,
@@ -94,7 +93,7 @@ public class PenteHelper {
                             put("inputs", inputValues);
                         }}
                 ), true));
-        var extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
+        var extraData = new ObjectMapper().convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
         return extraData.contractAddress();
     }
 
@@ -113,7 +112,7 @@ public class PenteHelper {
         );
 
         testbed.getRpcClient().request("testbed_invoke",
-                new PrivateContractInvoke(
+                new Testbed.TransactionInput(
                         sender,
                         JsonHex.addressFrom(address),
                         invokeABI,
@@ -140,7 +139,7 @@ public class PenteHelper {
         );
 
         var queryResult = testbed.getRpcClient().request("testbed_call",
-                new PrivateContractInvoke(
+                new Testbed.TransactionInput(
                         sender,
                         JsonHex.addressFrom(address),
                         callABI,

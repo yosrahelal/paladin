@@ -23,6 +23,7 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -53,8 +54,8 @@ type TradeRequestInput struct {
 }
 
 type StateData struct {
-	Inputs  []*tktypes.FullState `json:"inputs"`
-	Outputs []*tktypes.FullState `json:"outputs"`
+	Inputs  []*pldapi.StateWithData `json:"inputs"`
+	Outputs []*pldapi.StateWithData `json:"outputs"`
 }
 
 func DeploySwap(

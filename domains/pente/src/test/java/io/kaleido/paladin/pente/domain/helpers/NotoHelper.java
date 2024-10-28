@@ -113,7 +113,7 @@ public class NotoHelper {
     }
 
     public void mint(String sender, String to, int amount) throws IOException {
-        testbed.getRpcClient().request("testbed_invoke", new PrivateContractInvoke(
+        testbed.getRpcClient().request("testbed_invoke", new Testbed.TransactionInput(
                 sender,
                 JsonHex.addressFrom(address),
                 mintABI,
@@ -125,7 +125,7 @@ public class NotoHelper {
     }
 
     public void transfer(String sender, String to, int amount) throws IOException {
-        testbed.getRpcClient().request("testbed_invoke", new PrivateContractInvoke(
+        testbed.getRpcClient().request("testbed_invoke", new Testbed.TransactionInput(
                 sender,
                 JsonHex.addressFrom(address),
                 transferABI,

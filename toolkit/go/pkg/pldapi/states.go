@@ -105,6 +105,12 @@ type State struct {
 	Nullifier       *StateNullifier    `docstruct:"State" json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
 }
 
+type StateWithData struct {
+	ID     tktypes.HexBytes `json:"id"`
+	Schema tktypes.Bytes32  `json:"schema"`
+	Data   tktypes.HexBytes `json:"data"`
+}
+
 type StateLabel struct {
 	DomainName string           `gorm:"primaryKey"`
 	State      tktypes.HexBytes `gorm:"primaryKey"`

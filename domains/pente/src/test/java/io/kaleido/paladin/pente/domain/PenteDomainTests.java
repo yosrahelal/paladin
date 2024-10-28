@@ -104,8 +104,8 @@ public class PenteDomainTests {
             JsonABI.newParameters()
     );
 
-    Testbed.PrivateContractTransaction getTransactionInfo(LinkedHashMap<String, Object> res) {
-        return new ObjectMapper().convertValue(res, Testbed.PrivateContractTransaction.class);
+    Testbed.TransactionResult getTransactionInfo(LinkedHashMap<String, Object> res) {
+        return new ObjectMapper().convertValue(res, Testbed.TransactionResult.class);
     }
 
     @Test
@@ -146,13 +146,13 @@ public class PenteDomainTests {
             }};
             var tx = getTransactionInfo(
                     testbed.getRpcClient().request("testbed_invoke",
-                    new PrivateContractInvoke(
+                    new Testbed.TransactionInput(
                             "simpleStorageDeployer",
                             JsonHex.addressFrom(contractAddr),
                             simpleStorageDeployABI,
                             deployValues
                     ), true));
-            var extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
+            var extraData = new ObjectMapper().convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
             var expectedContractAddress = extraData.contractAddress();
 
             // Invoke set on Simple Storage
@@ -164,7 +164,7 @@ public class PenteDomainTests {
                 }});
             }};
             testbed.getRpcClient().request("testbed_invoke",
-                    new PrivateContractInvoke(
+                    new Testbed.TransactionInput(
                             "simpleStorageDeployer",
                             JsonHex.addressFrom(contractAddr),
                             simpleStorageSetABI,
@@ -180,7 +180,7 @@ public class PenteDomainTests {
                 }});
             }};
             testbed.getRpcClient().request("testbed_invoke",
-                    new PrivateContractInvoke(
+                    new Testbed.TransactionInput(
                             "simpleStorageDeployer",
                             JsonHex.addressFrom(contractAddr),
                             simpleStorageSetABI,
@@ -239,7 +239,7 @@ public class PenteDomainTests {
             );
             var tx = getTransactionInfo(
                 testbed.getRpcClient().request("testbed_invoke",
-                        new PrivateContractInvoke(
+                        new Testbed.TransactionInput(
                                 "simpleStorageDeployer",
                                 JsonHex.addressFrom(penteAddr),
                                 simpleStorageLinkedDeployABI,
@@ -251,11 +251,11 @@ public class PenteDomainTests {
                                     }});
                                 }}
                         ), true));
-            var extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
+            var extraData = new ObjectMapper().convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
             var ssLinkedAddr = extraData.contractAddress();
 
             testbed.getRpcClient().request("testbed_invoke",
-                    new PrivateContractInvoke(
+                    new Testbed.TransactionInput(
                             "simpleStorageDeployer",
                             JsonHex.addressFrom(penteAddr),
                             simpleStorageSetABI,

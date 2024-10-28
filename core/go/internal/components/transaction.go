@@ -84,10 +84,9 @@ type PrivateTransaction struct {
 	// DISPATCH PHASE: Once the transaction has reached sufficient confidence of success, we move on to submission.
 	// Each private transaction may result in a public transaction which should be submitted to the
 	// base ledger, or another private transaction which should go around the transaction loop again.
-	Signer                     string                                  `json:"signer"`
-	PreparedPublicTransaction  *pldapi.TransactionInput                `json:"-"`
-	PreparedPrivateTransaction *pldapi.TransactionInput                `json:"-"`
-	PreparedTransactionIntent  prototk.TransactionSpecification_Intent `json:"-"`
+	Signer                     string                   `json:"signer"`
+	PreparedPublicTransaction  *pldapi.TransactionInput `json:"-"`
+	PreparedPrivateTransaction *pldapi.TransactionInput `json:"-"`
 
 	PublicTxOptions pldapi.PublicTxOptions `json:"-"`
 }
