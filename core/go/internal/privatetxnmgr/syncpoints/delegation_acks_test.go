@@ -22,14 +22,17 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/alecthomas/assert/v2"
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWriteDelegationAcksOperations(t *testing.T) {
 	ctx := context.Background()
+
+	dc, flushResult := newTestDomainContextWithFlush(t)
+
 	s, m := newSyncPointsForTesting(t)
 	testDelegationID1 := uuid.New()
 	testDelegationID2 := uuid.New()
@@ -37,12 +40,14 @@ func TestWriteDelegationAcksOperations(t *testing.T) {
 	testContractAddress2 := tktypes.RandAddress()
 	testSyncPointOperations := []*syncPointOperation{
 		{
+			domainContext:   dc,
 			contractAddress: *testContractAddress1,
 			delegationAckOperation: &delegationAckOperation{
 				DelegationID: testDelegationID1,
 			},
 		},
 		{
+			domainContext:   dc,
 			contractAddress: *testContractAddress2,
 			delegationAckOperation: &delegationAckOperation{
 				DelegationID: testDelegationID2,
@@ -55,9 +60,11 @@ func TestWriteDelegationAcksOperations(t *testing.T) {
 		sqlmock.AnyArg(), testDelegationID2,
 	).WillReturnResult(driver.ResultNoRows)
 
-	res, err := s.runBatch(ctx, dbTX, testSyncPointOperations)
+	dbResultCB, res, err := s.runBatch(ctx, dbTX, testSyncPointOperations)
 	assert.NoError(t, err)
 	require.Len(t, res, 2)
 	assert.NoError(t, m.persistence.Mock.ExpectationsWereMet())
+	dbResultCB(nil)
+	require.NoError(t, <-flushResult)
 
 }

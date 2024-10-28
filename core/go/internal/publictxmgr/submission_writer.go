@@ -39,7 +39,7 @@ func newSubmissionWriter(bgCtx context.Context, p persistence.Persistence, conf 
 	return sw
 }
 
-func (sw *submissionWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*DBPubTxnSubmission) ([]flushwriter.Result[*noResult], error) {
+func (sw *submissionWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*DBPubTxnSubmission) (func(error), []flushwriter.Result[*noResult], error) {
 	err := tx.
 		Table("public_submissions").
 		Clauses(clause.OnConflict{
@@ -49,5 +49,5 @@ func (sw *submissionWriter) runBatch(ctx context.Context, tx *gorm.DB, values []
 		Create(values).
 		Error
 	// We don't actually provide any result, so just build an array of nil results
-	return make([]flushwriter.Result[*noResult], len(values)), err
+	return nil, make([]flushwriter.Result[*noResult], len(values)), err
 }

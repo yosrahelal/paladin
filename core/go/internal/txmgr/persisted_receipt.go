@@ -75,11 +75,11 @@ var transactionReceiptFilters = filters.FieldMap{
 	"id":              filters.UUIDField(`"transaction"`),
 	"indexed":         filters.TimestampField("indexed"),
 	"success":         filters.BooleanField("success"),
-	"transactionHash": filters.StringField("tx_hash"),
+	"transactionHash": filters.HexBytesField("tx_hash"),
 	"blockNumber":     filters.Int64Field("block_number"),
 }
 
-func (tm *txManager) MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*components.ReceiptInput) ([]uuid.UUID, error) {
+func (tm *txManager) MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*components.TxCompletion) ([]uuid.UUID, error) {
 	// It's possible for transactions to be deleted out of band, and we don't place a responsibility
 	// on the caller to know that. So we take the hit of querying for the existence of these transactions
 	// and only marking completion on those that exist.
@@ -97,18 +97,18 @@ func (tm *txManager) MatchAndFinalizeTransactions(ctx context.Context, dbTX *gor
 		return nil, err
 	}
 	confirmedInfo := make([]*components.ReceiptInput, 0, len(info))
-	for _, ri := range info {
+	for _, completion := range info {
 		exists := false
 		for _, existing := range existingTXs {
-			if ri.TransactionID == existing {
+			if completion.TransactionID == existing {
 				exists = true
 				break
 			}
 		}
 		if !exists {
-			log.L(ctx).Warnf("Receipt notification for untracked transaction %s: %+v", ri.TransactionID, tktypes.JSONString(ri))
+			log.L(ctx).Warnf("Receipt notification for untracked transaction %s: %+v", completion.TransactionID, tktypes.JSONString(completion))
 		} else {
-			confirmedInfo = append(confirmedInfo, ri)
+			confirmedInfo = append(confirmedInfo, &completion.ReceiptInput)
 		}
 	}
 	return existingTXs, tm.FinalizeTransactions(ctx, dbTX, confirmedInfo)
@@ -187,9 +187,17 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, in
 }
 
 func (tm *txManager) CalculateRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes) error {
+	de, err := tm.DecodeRevertError(ctx, dbTX, revertData, "")
+	if err != nil {
+		return err
+	}
+	return i18n.NewError(ctx, msgs.MsgTxMgrRevertedDecodedData, de.Summary)
+}
+
+func (tm *txManager) DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.DecodedError, error) {
 
 	if len(revertData) < 4 {
-		return i18n.NewError(ctx, msgs.MsgTxMgrRevertedNoData)
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrRevertedNoData)
 	}
 	selector := tktypes.HexBytes(revertData[0:4])
 
@@ -201,7 +209,7 @@ func (tm *txManager) CalculateRevertError(ctx context.Context, dbTX *gorm.DB, re
 		Find(&errorDefs).
 		Error
 	if err != nil {
-		return i18n.WrapError(ctx, err, msgs.MsgTxMgrRevertedDataNotDecoded)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrRevertedDataNotDecoded)
 	}
 
 	// Turn this into an ABI that we pass to the handy utility (which also includes
@@ -214,11 +222,22 @@ func (tm *txManager) CalculateRevertError(ctx context.Context, dbTX *gorm.DB, re
 			virtualABI = append(virtualABI, &e)
 		}
 	}
-	decodedErrString, ok := virtualABI.ErrorStringCtx(ctx, revertData)
-	if ok {
-		return i18n.NewError(ctx, msgs.MsgTxMgrRevertedDecodedData, decodedErrString)
+	e, cv, ok := virtualABI.ParseErrorCtx(ctx, revertData)
+	if !ok {
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrRevertedNoMatchingErrABI, revertData)
 	}
-	return i18n.NewError(ctx, msgs.MsgTxMgrRevertedDataNotDecoded)
+	de := &pldapi.DecodedError{
+		Summary:    abi.FormatErrorStringCtx(ctx, e, cv),
+		Definition: e,
+	}
+	serializer, err := dataFormat.GetABISerializer(ctx)
+	if err == nil {
+		de.Data, err = serializer.SerializeJSONCtx(ctx, cv)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return de, nil
 }
 
 func (tm *txManager) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.TransactionReceipt, error) {

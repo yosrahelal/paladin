@@ -17,173 +17,153 @@ package pldclient
 
 import (
 	"context"
-	"errors"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type PTX interface {
-	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (result SentTransaction, err error)
-	SendTransactions(ctx context.Context, tx *pldapi.TransactionInput) (results []SentTransaction, err error)
+	RPCModule
 
-	WrapSentTransaction(id uuid.UUID) SentTransaction
-	WrapSentTransactions(ids []uuid.UUID) []SentTransaction
-
-	WrapTransactionResult(receipt *pldapi.TransactionReceipt) TransactionResult
+	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (txID *uuid.UUID, err error)
+	SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
+	Call(ctx context.Context, tx *pldapi.TransactionCall) (data tktypes.RawJSON, err error)
 
 	GetTransaction(ctx context.Context, txID uuid.UUID) (receipt *pldapi.Transaction, err error)
 	GetTransactionFull(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionFull, err error)
+	GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey string) (tx *pldapi.Transaction, err error)
 	QueryTransactions(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.Transaction, err error)
 	QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.TransactionFull, err error)
 
 	GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceipt, err error)
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error)
+	DecodeError(ctx context.Context, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedError *pldapi.DecodedError, err error)
+
+	ResolveVerifier(ctx context.Context, keyIdentifier string, algorithm string, verifierType string) (verifier string, err error)
 }
 
-type SentTransaction interface {
-	ID() uuid.UUID
-	Wait(ctx context.Context) (TransactionResult, error)
+// This is necessary because there's no way to introspect function parameter names via reflection
+var ptxInfo = &rpcModuleInfo{
+	group: "ptx",
+	methodInfo: map[string]RPCMethodInfo{
+		"ptx_sendTransaction": {
+			Inputs: []string{"transaction"},
+			Output: "transactionId",
+		},
+		"ptx_sendTransactions": {
+			Inputs: []string{"transactions"},
+			Output: "transactionIds",
+		},
+		"ptx_call": {
+			Inputs: []string{"transaction"},
+			Output: "result",
+		},
+		"ptx_getTransaction": {
+			Inputs: []string{"transactionId"},
+			Output: "transaction",
+		},
+		"ptx_getTransactionFull": {
+			Inputs: []string{"transactionId"},
+			Output: "transaction",
+		},
+		"ptx_getTransactionByIdempotencyKey": {
+			Inputs: []string{"idempotencyKey"},
+			Output: "transaction",
+		},
+		"ptx_queryTransactions": {
+			Inputs: []string{"query"},
+			Output: "transactions",
+		},
+		"ptx_queryTransactionsFull": {
+			Inputs: []string{"query"},
+			Output: "transactions",
+		},
+		"ptx_getTransactionReceipt": {
+			Inputs: []string{"transactionId"},
+			Output: "receipt",
+		},
+		"ptx_queryTransactionReceipts": {
+			Inputs: []string{"query"},
+			Output: "receipts",
+		},
+		"ptx_decodeError": {
+			Inputs: []string{"revertData", "dataFormat"},
+			Output: "decodedError",
+		},
+		"ptx_resolveVerifier": {
+			Inputs: []string{"keyIdentifier", "algorithm", "verifierType"},
+			Output: "receipts",
+		},
+	},
 }
 
-type TransactionResult interface {
-	ID() uuid.UUID
-	Error() error
-	Success() bool
-	Receipt() *pldapi.TransactionReceipt
+type ptx struct {
+	*rpcModuleInfo
+	c *paladinClient
 }
-
-type ptx struct{ *paladinClient }
 
 func (c *paladinClient) PTX() PTX {
-	return &ptx{paladinClient: c}
+	return &ptx{rpcModuleInfo: ptxInfo, c: c}
 }
 
-func (p *ptx) SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (result SentTransaction, err error) {
-	var txID *uuid.UUID
-	err = p.CallRPC(ctx, &txID, "ptx_sendTransaction", tx)
-	if err != nil {
-		return nil, err
-	}
-	return p.WrapSentTransaction(*txID), err
+func (p *ptx) SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (txID *uuid.UUID, err error) {
+	err = p.c.CallRPC(ctx, &txID, "ptx_sendTransaction", tx)
+	return
 }
 
-func (p *ptx) SendTransactions(ctx context.Context, txs *pldapi.TransactionInput) (results []SentTransaction, err error) {
-	var txIDs []uuid.UUID
-	err = p.CallRPC(ctx, &txIDs, "ptx_sendTransactions", txs)
-	return p.WrapSentTransactions(txIDs), err
+func (p *ptx) SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
+	err = p.c.CallRPC(ctx, &txIDs, "ptx_sendTransactions", txs)
+	return
+}
+
+func (p *ptx) Call(ctx context.Context, tx *pldapi.TransactionCall) (data tktypes.RawJSON, err error) {
+	err = p.c.CallRPC(ctx, &data, "ptx_call", tx)
+	return
 }
 
 func (p *ptx) GetTransaction(ctx context.Context, txID uuid.UUID) (tx *pldapi.Transaction, err error) {
-	err = p.CallRPC(ctx, &tx, "ptx_getTransaction", txID, false)
-	return tx, err
+	err = p.c.CallRPC(ctx, &tx, "ptx_getTransaction", txID)
+	return
 }
 
 func (p *ptx) GetTransactionFull(ctx context.Context, txID uuid.UUID) (tx *pldapi.TransactionFull, err error) {
-	err = p.CallRPC(ctx, &tx, "ptx_getTransaction", txID, true)
-	return tx, err
+	err = p.c.CallRPC(ctx, &tx, "ptx_getTransactionFull", txID)
+	return
+}
+
+func (p *ptx) GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey string) (tx *pldapi.Transaction, err error) {
+	err = p.c.CallRPC(ctx, &tx, "ptx_getTransactionByIdempotencyKey", idempotencyKey)
+	return
 }
 
 func (p *ptx) QueryTransactions(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.Transaction, err error) {
-	err = p.CallRPC(ctx, &txs, "ptx_queryTransactions", jq, false)
-	return txs, err
+	err = p.c.CallRPC(ctx, &txs, "ptx_queryTransactions", jq)
+	return
 }
 
 func (p *ptx) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.TransactionFull, err error) {
-	err = p.CallRPC(ctx, &txs, "ptx_queryTransactions", jq, true)
-	return txs, err
+	err = p.c.CallRPC(ctx, &txs, "ptx_queryTransactionsFull", jq)
+	return
 }
 
 func (p *ptx) GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceipt, err error) {
-	err = p.CallRPC(ctx, &receipt, "ptx_getTransactionReceipt", txID)
-	return receipt, err
+	err = p.c.CallRPC(ctx, &receipt, "ptx_getTransactionReceipt", txID)
+	return
 }
 
 func (p *ptx) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error) {
-	err = p.CallRPC(ctx, &receipts, "ptx_queryTransactionReceipts", jq)
-	return receipts, err
+	err = p.c.CallRPC(ctx, &receipts, "ptx_queryTransactionReceipts", jq)
+	return
 }
 
-func (p *ptx) WrapSentTransaction(id uuid.UUID) SentTransaction {
-	return &sentTransaction{ptx: p, txID: id}
+func (p *ptx) DecodeError(ctx context.Context, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedError *pldapi.DecodedError, err error) {
+	err = p.c.CallRPC(ctx, &decodedError, "ptx_decodeError", revertData, dataFormat)
+	return
 }
 
-func (p *ptx) WrapSentTransactions(ids []uuid.UUID) []SentTransaction {
-	results := make([]SentTransaction, len(ids))
-	for i, id := range ids {
-		results[i] = p.WrapSentTransaction(id)
-	}
-	return results
-}
-
-type sentTransaction struct {
-	*ptx
-	txID uuid.UUID
-}
-
-func (s *sentTransaction) ID() uuid.UUID {
-	return s.txID
-}
-
-func (s *sentTransaction) GetTransaction(ctx context.Context) (*pldapi.Transaction, error) {
-	return s.PTX().GetTransaction(ctx, s.txID)
-}
-
-func (s *sentTransaction) GetTransactionFull(ctx context.Context) (*pldapi.TransactionFull, error) {
-	return s.PTX().GetTransactionFull(ctx, s.txID)
-}
-
-func (s *sentTransaction) Wait(ctx context.Context) (TransactionResult, error) {
-	// TODO: Websocket optimization
-	ptx := s.PTX()
-
-	// With HTTP we poll
-	ticker := time.NewTicker(s.receiptPollingInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-		case <-ctx.Done():
-			return nil, i18n.NewError(ctx, tkmsgs.MsgContextCanceled)
-		}
-		receipt, err := ptx.GetTransactionReceipt(ctx, s.txID)
-		if receipt != nil || err != nil {
-			return ptx.WrapTransactionResult(receipt), err
-		}
-	}
-}
-
-func (p *ptx) WrapTransactionResult(r *pldapi.TransactionReceipt) TransactionResult {
-	return &completedTransaction{ptx: p, receipt: r}
-}
-
-type completedTransaction struct {
-	*ptx
-	receipt *pldapi.TransactionReceipt
-}
-
-func (s *completedTransaction) ID() uuid.UUID {
-	return s.receipt.ID
-}
-
-func (s *completedTransaction) Success() bool {
-	return s.receipt != nil && s.receipt.Success
-}
-
-func (s *completedTransaction) Error() error {
-	if s.Success() {
-		return nil
-	}
-	if s.receipt == nil || s.receipt.FailureMessage != "" {
-		return i18n.NewError(context.Background(), tkmsgs.MsgPaladinClientNoFailureMsg)
-	}
-	return errors.New(s.receipt.FailureMessage)
-}
-
-func (s *completedTransaction) Receipt() *pldapi.TransactionReceipt {
-	return s.receipt
+func (p *ptx) ResolveVerifier(ctx context.Context, keyIdentifier string, algorithm string, verifierType string) (verifier string, err error) {
+	err = p.c.CallRPC(ctx, &verifier, "ptx_resolveVerifier", keyIdentifier, algorithm, verifierType)
+	return
 }

@@ -64,6 +64,27 @@ func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, trans
 
 }
 
+func (p *publisher) PublishTransactionAssembledEvent(ctx context.Context, transactionId string) {
+	event := &ptmgrtypes.TransactionAssembledEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
+	}
+	p.privateTxManager.HandleNewEvent(ctx, event)
+}
+
+func (p *publisher) PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string) {
+	event := &ptmgrtypes.TransactionAssembleFailedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
+		Error: errorMessage,
+	}
+	p.privateTxManager.HandleNewEvent(ctx, event)
+}
+
 func (p *publisher) PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult) {
 	event := &ptmgrtypes.TransactionSignedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
@@ -134,6 +155,16 @@ func (p *publisher) PublishTransactionFinalizeError(ctx context.Context, transac
 		},
 		RevertReason: revertReason,
 		ErrorMessage: err.Error(),
+	}
+	p.privateTxManager.HandleNewEvent(ctx, event)
+}
+
+func (p *publisher) PublishTransactionConfirmedEvent(ctx context.Context, transactionId string) {
+	event := &ptmgrtypes.TransactionConfirmedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
 	}
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }

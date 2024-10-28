@@ -43,7 +43,7 @@ func (s *rpcServer) processRPC(ctx context.Context, rpcReq *rpcclient.RPCRequest
 		handler = module.methods[rpcReq.Method]
 	}
 	if handler == nil {
-		err := i18n.NewError(ctx, tkmsgs.MsgJSONRPCUnsupportedMethod)
+		err := i18n.NewError(ctx, tkmsgs.MsgJSONRPCUnsupportedMethod, rpcReq.Method)
 		return rpcclient.NewRPCErrorResponse(err, rpcReq.ID, rpcclient.RPCCodeInvalidRequest), false
 	}
 

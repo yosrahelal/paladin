@@ -17,38 +17,38 @@
 package pldapi
 
 type WalletInfo struct {
-	Name        string `json:"name"`
-	KeySelector string `json:"keySelector"`
+	Name        string `docstruct:"WalletInfo" json:"name"`
+	KeySelector string `docstruct:"WalletInfo" json:"keySelector"`
 }
 
 type KeyMapping struct {
-	Identifier string `json:"identifier"` // the full identifier used to look up this key (including "." separators)
-	Wallet     string `json:"wallet"`     // the name of the wallet containing this key
-	KeyHandle  string `json:"keyHandle"`  // the handle within the wallet containing the key
+	Identifier string `docstruct:"KeyMapping" json:"identifier"` // the full identifier used to look up this key (including "." separators)
+	Wallet     string `docstruct:"KeyMapping" json:"wallet"`     // the name of the wallet containing this key
+	KeyHandle  string `docstruct:"KeyMapping" json:"keyHandle"`  // the handle within the wallet containing the key
 }
 
 type KeyMappingWithPath struct {
 	*KeyMapping `json:",inline"`
-	Path        []*KeyPathSegment `json:"path"` // the full path including the leaf that is the identifier
+	Path        []*KeyPathSegment `docstruct:"KeyMappingWithPath" json:"path"` // the full path including the leaf that is the identifier
 }
 
 type KeyMappingAndVerifier struct {
 	*KeyMappingWithPath `json:",inline"`
-	Verifier            *KeyVerifier `json:"verifier"`
+	Verifier            *KeyVerifier `docstruct:"KeyMappingAndVerifier" json:"verifier"`
 }
 
 type KeyVerifierWithKeyRef struct {
-	KeyIdentifier string `json:"keyIdentifier"`
+	KeyIdentifier string `docstruct:"KeyVerifierWithKeyRef" json:"keyIdentifier"`
 	*KeyVerifier  `json:",inline"`
 }
 
 type KeyVerifier struct {
-	Verifier  string `json:"verifier"`
-	Type      string `json:"type"`
-	Algorithm string `json:"algorithm"`
+	Verifier  string `docstruct:"KeyVerifier" json:"verifier"`
+	Type      string `docstruct:"KeyVerifier" json:"type"`
+	Algorithm string `docstruct:"KeyVerifier" json:"algorithm"`
 }
 
 type KeyPathSegment struct {
-	Name  string `json:"name"`
-	Index int64  `json:"index"`
+	Name  string `docstruct:"KeyPathSegment" json:"name"`
+	Index int64  `docstruct:"KeyPathSegment" json:"index"`
 }

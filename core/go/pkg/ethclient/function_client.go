@@ -61,6 +61,7 @@ type ABIFunctionRequestBuilder interface {
 	Block(uint64) ABIFunctionRequestBuilder
 	Input(any) ABIFunctionRequestBuilder
 	Output(any) ABIFunctionRequestBuilder
+	Serializer(*abi.Serializer) ABIFunctionRequestBuilder
 	CallOptions(...CallOption) ABIFunctionRequestBuilder // adds extra call options (defaults are to use the ABI for errors and decoding)
 
 	// Query functions
@@ -102,6 +103,7 @@ type abiFunctionClient struct {
 	inputs      abi.TypeComponent
 	outputCount int
 	outputs     abi.TypeComponent
+	serializer  *abi.Serializer
 }
 
 type abiFunctionRequestBuilder struct {
@@ -301,6 +303,11 @@ func (ac *abiFunctionRequestBuilder) CallOptions(extendedOpts ...CallOption) ABI
 	return ac
 }
 
+func (ac *abiFunctionRequestBuilder) Serializer(serializer *abi.Serializer) ABIFunctionRequestBuilder {
+	ac.serializer = serializer
+	return ac
+}
+
 func (ac *abiFunctionRequestBuilder) TX() *ethsigner.Transaction {
 	return &ac.tx
 }
@@ -321,28 +328,28 @@ func (ac *abiFunctionRequestBuilder) BuildCallData() (err error) {
 		if ac.input == nil {
 			return i18n.NewError(ac.ctx, msgs.MsgEthClientMissingInput)
 		}
-		var inputMap map[string]any
+		var inputUntyped any
 		var cv *abi.ComponentValue
 		switch input := ac.input.(type) {
 		case map[string]any:
-			inputMap = input
+			inputUntyped = input
 		case string:
-			err = json.Unmarshal([]byte(input), &inputMap)
+			err = json.Unmarshal([]byte(input), &inputUntyped)
 		case []byte:
-			err = json.Unmarshal(input, &inputMap)
+			err = json.Unmarshal(input, &inputUntyped)
 		case tktypes.RawJSON:
-			err = json.Unmarshal(input, &inputMap)
+			err = json.Unmarshal(input, &inputUntyped)
 		case *abi.ComponentValue:
 			cv = input
 		default:
 			var jsonInput []byte
 			jsonInput, err = json.Marshal(ac.input)
 			if err == nil {
-				err = json.Unmarshal(jsonInput, &inputMap)
+				err = json.Unmarshal(jsonInput, &inputUntyped)
 			}
 		}
 		if err == nil && cv == nil /* might have got a CV directly */ {
-			cv, err = ac.inputs.ParseExternalCtx(ac.ctx, inputMap)
+			cv, err = ac.inputs.ParseExternalCtx(ac.ctx, inputUntyped)
 		}
 		if err == nil {
 			inputDataRLP, err = cv.EncodeABIDataCtx(ac.ctx)
@@ -387,6 +394,7 @@ func (ac *abiFunctionRequestBuilder) callOps() []CallOption {
 	return append([]CallOption{
 		WithErrorsFrom(ac.abi),
 		WithOutputs(ac.outputs),
+		WithSerializer(ac.serializer),
 	}, ac.extendedOpts...)
 }
 

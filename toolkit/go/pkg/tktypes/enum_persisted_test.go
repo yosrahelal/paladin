@@ -51,6 +51,8 @@ func TestEnumValue(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "option1", sqlV1)
 
+	require.Equal(t, []string{"option1", "option2", "option3"}, v1.Options())
+
 	assert.Equal(t, TestEnum("OPTION1"), v1.V())
 
 	var v2 Enum[TestEnum] = "option4"

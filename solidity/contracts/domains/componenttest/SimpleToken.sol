@@ -12,13 +12,10 @@ contract SimpleToken {
         bytes signature
     );
 
-    address _notary;
-
     error BadNotary(address sender);
     bytes32 public constant SINGLE_FUNCTION_SELECTOR = keccak256("SimpleToken()");
     
-    constructor(address notary) {
-        _notary = notary;
+    constructor() {
     }
 
     function paladinExecute_V0(bytes32 txId, bytes32 fnSelector, bytes calldata payload) public  {

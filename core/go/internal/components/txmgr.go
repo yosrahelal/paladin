@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -45,11 +46,17 @@ type ReceiptInput struct {
 	RevertData      tktypes.HexBytes        // set for RT_FailedOnChainWithRevertData
 }
 
+type TxCompletion struct {
+	ReceiptInput
+	PSC DomainSmartContract
+}
+
 type TXManager interface {
 	ManagerLifecycle
-	MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) ([]uuid.UUID, error) // returns which transactions were known
+	MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*TxCompletion) ([]uuid.UUID, error) // returns which transactions were known
 	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) error                        // requires all transactions to be known
 	CalculateRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes) error
+	DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.DecodedError, error)
 	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error)
 	SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
 	GetTransactionByID(ctx context.Context, id uuid.UUID) (*pldapi.Transaction, error)
@@ -62,5 +69,6 @@ type TXManager interface {
 	QueryTransactionsFullTx(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) ([]*pldapi.TransactionFull, error)
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.TransactionReceipt, error)
 	GetTransactionReceiptByID(ctx context.Context, id uuid.UUID) (*pldapi.TransactionReceipt, error)
-	CallTransaction(ctx context.Context, result any, tx *pldapi.TransactionInput) (err error)
+	CallTransaction(ctx context.Context, result any, tx *pldapi.TransactionCall) (err error)
+	UpsertABI(ctx context.Context, a abi.ABI) (*pldapi.StoredABI, error)
 }

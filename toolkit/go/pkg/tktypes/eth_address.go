@@ -80,6 +80,10 @@ func (a EthAddress) String() string {
 	return a.Address0xHex().String()
 }
 
+func (a EthAddress) HexString() string {
+	return hex.EncodeToString(a[:])
+}
+
 func (a *EthAddress) UnmarshalJSON(b []byte) error {
 	var s string
 	if err := json.Unmarshal(b, &s); err != nil {

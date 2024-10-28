@@ -32,11 +32,12 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type abiSchema struct {
-	*components.SchemaPersisted
+	*pldapi.Schema
 	tc           abi.TypeComponent
 	definition   *abi.Parameter
 	primaryType  string
@@ -46,9 +47,9 @@ type abiSchema struct {
 
 func newABISchema(ctx context.Context, domainName string, def *abi.Parameter) (*abiSchema, error) {
 	as := &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{
+		Schema: &pldapi.Schema{
 			DomainName: domainName,
-			Type:       components.SchemaTypeABI,
+			Type:       pldapi.SchemaTypeABI.Enum(),
 			Labels:     []string{},
 		},
 		definition: def,
@@ -59,10 +60,10 @@ func newABISchema(ctx context.Context, domainName string, def *abi.Parameter) (*
 		err = as.typedDataV4Setup(ctx, true)
 	}
 	if err == nil {
-		as.SchemaPersisted.Signature, err = as.FullSignature(ctx)
+		as.Schema.Signature, err = as.FullSignature(ctx)
 	}
 	if err == nil {
-		as.SchemaPersisted.ID = tktypes.Bytes32Keccak([]byte(as.SchemaPersisted.Signature))
+		as.Schema.ID = tktypes.Bytes32Keccak([]byte(as.Schema.Signature))
 	}
 	if err != nil {
 		return nil, err
@@ -70,9 +71,9 @@ func newABISchema(ctx context.Context, domainName string, def *abi.Parameter) (*
 	return as, nil
 }
 
-func newABISchemaFromDB(ctx context.Context, persisted *components.SchemaPersisted) (*abiSchema, error) {
+func newABISchemaFromDB(ctx context.Context, persisted *pldapi.Schema) (*abiSchema, error) {
 	as := &abiSchema{
-		SchemaPersisted: persisted,
+		Schema: persisted,
 	}
 	err := json.Unmarshal(persisted.Definition, &as.definition)
 	if err != nil {
@@ -85,20 +86,20 @@ func newABISchemaFromDB(ctx context.Context, persisted *components.SchemaPersist
 	return as, nil
 }
 
-func (as *abiSchema) Type() components.SchemaType {
-	return components.SchemaTypeABI
+func (as *abiSchema) Type() pldapi.SchemaType {
+	return pldapi.SchemaTypeABI
 }
 
 func (as *abiSchema) ID() tktypes.Bytes32 {
-	return as.SchemaPersisted.ID
+	return as.Schema.ID
 }
 
 func (as *abiSchema) Signature() string {
-	return as.SchemaPersisted.Signature
+	return as.Schema.Signature
 }
 
-func (as *abiSchema) Persisted() *components.SchemaPersisted {
-	return as.SchemaPersisted
+func (as *abiSchema) Persisted() *pldapi.Schema {
+	return as.Schema
 }
 
 func (as *abiSchema) labelInfo() []*schemaLabelInfo {
@@ -191,7 +192,7 @@ func (as *abiSchema) getLabelType(ctx context.Context, fieldName string, tc abi.
 	}
 }
 
-func (as *abiSchema) buildLabel(ctx context.Context, fieldName string, f *abi.ComponentValue) (*components.StateLabel, *components.StateInt64Label, error) {
+func (as *abiSchema) buildLabel(ctx context.Context, fieldName string, f *abi.ComponentValue) (*pldapi.StateLabel, *pldapi.StateInt64Label, error) {
 	labelType, err := as.getLabelType(ctx, fieldName, f.Component)
 	if err != nil {
 		return nil, nil, err
@@ -199,14 +200,14 @@ func (as *abiSchema) buildLabel(ctx context.Context, fieldName string, f *abi.Co
 	return as.mapValueToLabel(ctx, fieldName, labelType, f)
 }
 
-func (as *abiSchema) mapValueToLabel(ctx context.Context, fieldName string, labelType labelType, f *abi.ComponentValue) (*components.StateLabel, *components.StateInt64Label, error) {
+func (as *abiSchema) mapValueToLabel(ctx context.Context, fieldName string, labelType labelType, f *abi.ComponentValue) (*pldapi.StateLabel, *pldapi.StateInt64Label, error) {
 	switch labelType {
 	case labelTypeInt64:
 		bigIntVal, ok := f.Value.(*big.Int)
 		if !ok {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgStateLabelFieldUnexpectedValue, fieldName, f.Value, new(big.Int))
 		}
-		return nil, &components.StateInt64Label{Label: fieldName, Value: bigIntVal.Int64()}, nil
+		return nil, &pldapi.StateInt64Label{Label: fieldName, Value: bigIntVal.Int64()}, nil
 	case labelTypeInt256:
 		bigIntVal, ok := f.Value.(*big.Int)
 		if !ok {
@@ -214,7 +215,7 @@ func (as *abiSchema) mapValueToLabel(ctx context.Context, fieldName string, labe
 		}
 		// Otherwise we fall back to encoding as a fixed-width hex string - with a leading sign character
 		filterString := tktypes.Int256To65CharDBSafeSortableString(bigIntVal)
-		return &components.StateLabel{Label: fieldName, Value: filterString}, nil, nil
+		return &pldapi.StateLabel{Label: fieldName, Value: filterString}, nil, nil
 	case labelTypeUint256:
 		bigIntVal, ok := f.Value.(*big.Int)
 		if !ok {
@@ -222,26 +223,26 @@ func (as *abiSchema) mapValueToLabel(ctx context.Context, fieldName string, labe
 		}
 		bigIntVal = bigIntVal.Abs(bigIntVal)
 		filterString := filters.Uint256ToFilterString(ctx, bigIntVal)
-		return &components.StateLabel{Label: fieldName, Value: filterString}, nil, nil
+		return &pldapi.StateLabel{Label: fieldName, Value: filterString}, nil, nil
 	case labelTypeBytes:
 		byteValue, ok := f.Value.([]byte)
 		if !ok {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgStateLabelFieldUnexpectedValue, fieldName, f.Value, []byte{})
 		}
 		// We do NOT use an 0x prefix on bytes types
-		return &components.StateLabel{Label: fieldName, Value: hex.EncodeToString(byteValue)}, nil, nil
+		return &pldapi.StateLabel{Label: fieldName, Value: hex.EncodeToString(byteValue)}, nil, nil
 	case labelTypeString:
 		strValue, ok := f.Value.(string)
 		if !ok {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgStateLabelFieldUnexpectedValue, fieldName, f.Value, "")
 		}
-		return &components.StateLabel{Label: fieldName, Value: strValue}, nil, nil
+		return &pldapi.StateLabel{Label: fieldName, Value: strValue}, nil, nil
 	case labelTypeBool:
 		bValue, ok := f.Value.(*big.Int)
 		if !ok {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgStateLabelFieldUnexpectedValue, fieldName, f.Value, new(big.Int))
 		}
-		return nil, &components.StateInt64Label{Label: fieldName, Value: bValue.Int64()}, nil
+		return nil, &pldapi.StateInt64Label{Label: fieldName, Value: bValue.Int64()}, nil
 	default:
 		// Should not get here - if covered all the types above
 		return nil, nil, i18n.NewError(ctx, msgs.MsgStateInvalidSchemaType, f.Component.String())
@@ -280,8 +281,8 @@ func (as *abiSchema) mapLabelResolver(ctx context.Context, sqlColumn string, lab
 type parsedStateData struct {
 	jsonTree    interface{}
 	cv          *abi.ComponentValue
-	labels      []*components.StateLabel
-	int64Labels []*components.StateInt64Label
+	labels      []*pldapi.StateLabel
+	int64Labels []*pldapi.StateInt64Label
 	labelValues filters.PassthroughValueSet
 }
 
@@ -372,21 +373,21 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 	}
 
 	for i := range psd.labels {
-		psd.labels[i].DomainName = as.SchemaPersisted.DomainName
+		psd.labels[i].DomainName = as.Schema.DomainName
 		psd.labels[i].State = id
 	}
 	for i := range psd.int64Labels {
-		psd.int64Labels[i].DomainName = as.SchemaPersisted.DomainName
+		psd.int64Labels[i].DomainName = as.Schema.DomainName
 		psd.int64Labels[i].State = id
 	}
 
 	now := tktypes.TimestampNow()
 	return &components.StateWithLabels{
-		State: &components.State{
+		State: &pldapi.State{
 			ID:              id,
 			Created:         now,
 			DomainName:      as.DomainName,
-			Schema:          as.SchemaPersisted.ID,
+			Schema:          as.Schema.ID,
 			ContractAddress: contractAddress,
 			Data:            jsonData,
 			Labels:          psd.labels,
@@ -396,7 +397,7 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 	}, nil
 }
 
-func (as *abiSchema) RecoverLabels(ctx context.Context, s *components.State) (*components.StateWithLabels, error) {
+func (as *abiSchema) RecoverLabels(ctx context.Context, s *pldapi.State) (*components.StateWithLabels, error) {
 	psd, err := as.parseStateData(ctx, s.Data)
 	if err != nil {
 		return nil, err

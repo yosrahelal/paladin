@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -33,14 +34,15 @@ func (ss *stateManager) initRPC() {
 	ss.rpcModule = rpcserver.NewRPCModule("pstate").
 		Add("pstate_listSchemas", ss.rpcListSchema()).
 		Add("pstate_storeState", ss.rpcStoreState()).
-		Add("pstate_queryStates", ss.rpcQuery())
+		Add("pstate_queryStates", ss.rpcQueryStates()).
+		Add("pstate_queryContractStates", ss.rpcQueryContractStates())
 }
 
 func (ss *stateManager) rpcListSchema() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		domain string,
-	) ([]components.Schema, error) {
-		return ss.ListSchemas(ctx, ss.p.DB(), domain)
+	) ([]*pldapi.Schema, error) {
+		return ss.ListSchemasForJSON(ctx, ss.p.DB(), domain)
 	})
 }
 
@@ -50,8 +52,8 @@ func (ss *stateManager) rpcStoreState() rpcserver.RPCHandler {
 		contractAddress tktypes.EthAddress,
 		schema tktypes.Bytes32,
 		data tktypes.RawJSON,
-	) (*components.State, error) {
-		var state *components.State
+	) (*pldapi.State, error) {
+		var state *pldapi.State
 		newStates, err := ss.WriteReceivedStates(ctx, ss.p.DB(), domain, []*components.StateUpsertOutsideContext{
 			{
 				ContractAddress: contractAddress,
@@ -66,14 +68,25 @@ func (ss *stateManager) rpcStoreState() rpcserver.RPCHandler {
 	})
 }
 
-func (ss *stateManager) rpcQuery() rpcserver.RPCHandler {
+func (ss *stateManager) rpcQueryStates() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod4(func(ctx context.Context,
+		domain string,
+		schema tktypes.Bytes32,
+		query query.QueryJSON,
+		status pldapi.StateStatusQualifier,
+	) ([]*pldapi.State, error) {
+		return ss.FindStates(ctx, ss.p.DB(), domain, schema, &query, status)
+	})
+}
+
+func (ss *stateManager) rpcQueryContractStates() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod5(func(ctx context.Context,
 		domain string,
 		contractAddress tktypes.EthAddress,
 		schema tktypes.Bytes32,
 		query query.QueryJSON,
-		status StateStatusQualifier,
-	) ([]*components.State, error) {
-		return ss.FindStates(ctx, ss.p.DB(), domain, contractAddress, schema, &query, status)
+		status pldapi.StateStatusQualifier,
+	) ([]*pldapi.State, error) {
+		return ss.FindContractStates(ctx, ss.p.DB(), domain, contractAddress, schema, &query, status)
 	})
 }

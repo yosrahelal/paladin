@@ -20,10 +20,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alecthomas/assert/v2"
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestWriteFinalizeOperations(t *testing.T) {
@@ -33,12 +33,11 @@ func TestWriteFinalizeOperations(t *testing.T) {
 	testTxnID := uuid.New()
 	testContractAddress := tktypes.RandAddress()
 
-	finalizeOperationsByContractAddress := map[tktypes.EthAddress][]*finalizeOperation{
-		*testContractAddress: {
-			{
-				TransactionID:  testTxnID,
-				FailureMessage: testRevertReason,
-			},
+	finalizeOperations := []*finalizeOperation{
+		{
+			TransactionID:   testTxnID,
+			FailureMessage:  testRevertReason,
+			ContractAddress: *testContractAddress,
 		},
 	}
 	dbTX := m.persistence.P.DB()
@@ -53,6 +52,6 @@ func TestWriteFinalizeOperations(t *testing.T) {
 	}
 
 	m.txMgr.On("FinalizeTransactions", ctx, dbTX, expectedReceipts).Return(nil)
-	err := s.writeFinalizeOperations(ctx, dbTX, finalizeOperationsByContractAddress)
+	err := s.writeFailureOperations(ctx, dbTX, finalizeOperations)
 	assert.NoError(t, err)
 }

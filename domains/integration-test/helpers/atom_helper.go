@@ -20,11 +20,12 @@ import (
 	_ "embed"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,21 +74,20 @@ func InitAtom(
 		tb:          tb,
 		pld:         pld,
 		Address:     tktypes.MustEthAddress(address),
-		FactoryABI:  domain.LoadBuild(AtomFactoryJSON).ABI,
-		InstanceABI: domain.LoadBuild(AtomJSON).ABI,
+		FactoryABI:  solutils.MustLoadBuild(AtomFactoryJSON).ABI,
+		InstanceABI: solutils.MustLoadBuild(AtomJSON).ABI,
 	}
 
 	return a
 }
 
 func (a *AtomFactoryHelper) Create(ctx context.Context, signer string, operations []*AtomOperation) *AtomHelper {
-	builder := functionBuilder(ctx, a.t, a.pld, a.FactoryABI, "create").
+	builder := functionBuilder(ctx, a.pld, a.FactoryABI, "create").
 		To(a.Address).
-		Input(toJSON(a.t, map[string]any{"operations": operations}))
+		Inputs(toJSON(a.t, map[string]any{"operations": operations}))
 	th := NewTransactionHelper(ctx, a.t, a.tb, builder)
 	tx := th.SignAndSend(signer)
-	r, err := tx.Wait(ctx)
-	require.NoError(a.t, err)
+	r := tx.Wait(5 * time.Second)
 	require.NoError(a.t, r.Error())
 
 	var atomDeployed AtomDeployed
@@ -103,18 +103,18 @@ func (a *AtomFactoryHelper) Create(ctx context.Context, signer string, operation
 }
 
 func (a *AtomHelper) Execute(ctx context.Context) *TransactionHelper {
-	builder := functionBuilder(ctx, a.t, a.pld, a.InstanceABI, "execute").To(a.Address)
+	builder := functionBuilder(ctx, a.pld, a.InstanceABI, "execute").To(a.Address)
 	return NewTransactionHelper(ctx, a.t, a.tb, builder)
 }
 
 func (a *AtomHelper) GetOperationCount(ctx context.Context) int {
-	tx, err := functionBuilder(ctx, a.t, a.pld, a.InstanceABI, "getOperationCount").
+	var jsonOutput map[string]any
+	err := functionBuilder(ctx, a.pld, a.InstanceABI, "getOperationCount").
 		Public().
 		To(a.Address).
-		BuildTX()
-	require.NoError(a.t, err)
-	var jsonOutput map[string]any
-	err = a.tb.ExecBaseLedgerCall(ctx, &jsonOutput, tx)
+		Outputs(&jsonOutput).
+		BuildTX().
+		Call()
 	require.NoError(a.t, err)
 	opCount, err := strconv.Atoi(jsonOutput["0"].(string))
 	require.NoError(a.t, err)
@@ -125,14 +125,14 @@ func (a *AtomHelper) GetOperations(ctx context.Context) []map[string]any {
 	opCount := a.GetOperationCount(ctx)
 	var operations []map[string]any
 	for i := 0; i < opCount; i++ {
-		tx, err := functionBuilder(ctx, a.t, a.pld, a.InstanceABI, "getOperation").
+		var jsonOutput map[string]any
+		err := functionBuilder(ctx, a.pld, a.InstanceABI, "getOperation").
 			Public().
 			To(a.Address).
-			Input(map[string]int{"n": i}).
-			BuildTX()
-		require.NoError(a.t, err)
-		var jsonOutput map[string]any
-		err = a.tb.ExecBaseLedgerCall(ctx, &jsonOutput, tx)
+			Inputs(map[string]int{"n": i}).
+			Outputs(&jsonOutput).
+			BuildTX().
+			Call()
 		require.NoError(a.t, err)
 		operations = append(operations, jsonOutput["0"].(map[string]any))
 	}

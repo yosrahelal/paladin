@@ -52,6 +52,27 @@ const (
 	SimpleDomainInsufficientFundsError = "SDE0001"
 )
 
+const (
+	ONE_TIME_USE_KEYS   = "ONE_TIME_USE_KEYS"
+	ENDORSER_SUBMISSION = "ENDORSER_SUBMISSION"
+)
+
+const (
+	// SelfEndorsement is kinda like zeto
+	//  There is a single endorser which is the same as the sender.
+	//Unlike zeto, this does *not* imply a domain provided signer algo.
+	// TODO maybe add signerMode flexibiltiy to the simple domain at some point
+	SelfEndorsement = "SelfEndorsement"
+
+	//NotaryEndorsement is kinda like noto.
+	// There is a single endorser which is a notary and endorser must submit.
+	NotaryEndorsement = "NotaryEndorsement"
+
+	//PrivacyGroupEndorsement is kinda like pente.
+	//An endorsement set is provided in the constructor and every member of that group must endorse every transaction.
+	PrivacyGroupEndorsement = "PrivacyGroupEndorsement"
+)
+
 func toJSONString(t *testing.T, v interface{}) string {
 	b, err := json.Marshal(v)
 	assert.NoError(t, err)
@@ -164,27 +185,128 @@ func SimpleTokenTransferABI() *abi.ABI {
 	return &abi.ABI{mustParseABIEntry(simpleTokenTransferABI)}
 }
 
-const simpleTokenConstructorABI = `{
-		"type": "constructor",
-		"inputs": [
-		  {
-			"name": "notary",
-			"type": "string"
-		  },
-		  {
-			"name": "name",
-			"type": "string"
-		  },
-		  {
-			"name": "symbol",
-			"type": "string"
-		  }
-		],
-		"outputs": null
-	}`
+// ABI used by paladin to parse the constructor parameters
+// different for each endorsement mode
+const simpleTokenSelfEndorsementConstructorABI = `{
+  "type": "constructor",
+  "inputs": [
+    {
+      "name": "from",
+      "type": "string"
+    },
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "symbol",
+      "type": "string"
+    },
+    {
+      "name": "endorsementMode",
+      "type": "string"
+    }
+  ],
+  "outputs": null
+}`
 
-func SimpleTokenConstructorABI() *abi.ABI {
-	return &abi.ABI{mustParseABIEntry(simpleTokenConstructorABI)}
+const simpleTokenNotaryEndorsementConstructorABI = `{
+	"type": "constructor",
+	"inputs": [
+	  {
+		"name": "notary",
+		"type": "string"
+	  },
+	  {
+		"name": "name",
+		"type": "string"
+	  },
+	  {
+		"name": "symbol",
+		"type": "string"
+	  },
+	  {
+		"name": "endorsementMode",
+		"type": "string"
+	  }
+	],
+	"outputs": null
+}`
+
+const simpleTokenPrivacyGroupEndorsementConstructorABI = `{
+	"type": "constructor",
+	"inputs": [
+	  {
+		"name": "endorsementSet",
+		"type": "string[]"
+	  },
+	  {
+		"name": "name",
+		"type": "string"
+	  },
+	  {
+		"name": "symbol",
+		"type": "string"
+	  },
+	  {
+		"name": "endorsementMode",
+		"type": "string"
+	  }
+	],
+	"outputs": null
+}`
+
+func SimpleTokenConstructorABI(endorsementMode string) *abi.ABI {
+	switch endorsementMode {
+	case SelfEndorsement:
+
+		return &abi.ABI{mustParseABIEntry(simpleTokenSelfEndorsementConstructorABI)}
+	case NotaryEndorsement:
+		return &abi.ABI{mustParseABIEntry(simpleTokenNotaryEndorsementConstructorABI)}
+	case PrivacyGroupEndorsement:
+		return &abi.ABI{mustParseABIEntry(simpleTokenPrivacyGroupEndorsementConstructorABI)}
+	default:
+		panic("unknown endorsement mode")
+	}
+
+}
+
+// Go struct used in test (test + domain) to work with JSON structure passed into the paladin transaction for the constructor
+// This is a union of the 3 ABI above
+type ConstructorParameters struct {
+	Notary          string   `json:"notary"`         // empty string if  endorsementMode is PrivacyGroupEndorsement
+	EndorsementSet  []string `json:"endorsementSet"` // empty array if endorsementMode is not PrivacyGroupEndorsement
+	From            string   `json:"from"`           // empty string if endorsementMode is not SelfEndorsement
+	Name            string   `json:"name"`
+	Symbol          string   `json:"symbol"`
+	EndorsementMode string   `json:"endorsementMode"`
+}
+
+// Go struct used in test (test + domain) to work with JSON structure for `params` on the base ledger factory function
+// This must match (including ordering of fields) the function signature for newSimpleTokenNotarized defined in the solidity contract
+type FactoryParameters struct {
+	TxId                   string   `json:"txId"`
+	EndorsementMode        string   `json:"endorsementMode"`
+	NotaryLocator          string   `json:"notaryLocator"`
+	EndorsementSetLocators []string `json:"endorsementSetLocators"`
+}
+
+// JSON structure passed into the paladin transaction for the transfer
+type fakeTransferParser struct {
+	From   string               `json:"from,omitempty"`
+	To     string               `json:"to,omitempty"`
+	Amount *ethtypes.HexInteger `json:"amount"`
+}
+
+// JSON structure for the state data
+type simpleTokenParser struct {
+	Salt   tktypes.HexBytes      `json:"salt"`
+	Owner  ethtypes.Address0xHex `json:"owner"`
+	Amount *ethtypes.HexInteger  `json:"amount"`
+}
+
+type SimpleDomainConfig struct {
+	SubmitMode string `json:"submitMode"`
 }
 
 func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
@@ -216,30 +338,21 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 		]
 	}`
 
-	type constructorParametersParser struct {
-		Notary string `json:"notary"`
-		Name   string `json:"name"`
-		Symbol string `json:"symbol"`
-	}
-
-	type fakeTransferParser struct {
-		From   string               `json:"from,omitempty"`
-		To     string               `json:"to,omitempty"`
-		Amount *ethtypes.HexInteger `json:"amount"`
-	}
-
-	type simpleTokenParser struct {
-		Salt   tktypes.HexBytes      `json:"salt"`
-		Owner  ethtypes.Address0xHex `json:"owner"`
-		Amount *ethtypes.HexInteger  `json:"amount"`
-	}
-
+	// ABI for the config field in the PaladinRegisterSmartContract_V0 event
+	// this must match the type and order of arguments passed to the abi.encode function call in the solidity contract
 	contractDataABI := &abi.ParameterArray{
+		{Name: "endorsementMode", Type: "string"},
 		{Name: "notaryLocator", Type: "string"},
+		{Name: "endorsementSetLocators", Type: "string[]"},
 	}
 
+	// golang struct to parse and serialize the data received from the block indexer when the base ledger factor contract
+	//emits a PaladinRegisterSmartContract_V0 event
+	// this must match the ABI above
 	type simpleTokenConfigParser struct {
-		NotaryLocator string `json:"notaryLocator"`
+		EndorsementMode string   `json:"endorsementMode"`
+		NotaryLocator   string   `json:"notaryLocator"`
+		EndorsementSet  []string `json:"endorsementSetLocators"`
 	}
 
 	return plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
@@ -282,7 +395,7 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 					return nil, nil, nil, fmt.Errorf("%s: insufficient funds (available=%s)", SimpleDomainInsufficientFundsError, total.Text(10))
 				}
 				for _, state := range states {
-					lastStateTimestamp = state.StoredAt
+					lastStateTimestamp = state.CreatedAt
 					// Note: More sophisticated coin selection might prefer states that aren't locked to a sequence
 					var coin simpleTokenParser
 					if err := json.Unmarshal([]byte(state.DataJson), &coin); err != nil {
@@ -302,7 +415,7 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 			}
 		}
 
-		validateTransferTransactionInput := func(tx *prototk.TransactionSpecification) (*ethtypes.Address0xHex, string, *fakeTransferParser) {
+		validateTransferTransactionInput := func(tx *prototk.TransactionSpecification) (*ethtypes.Address0xHex, simpleTokenConfigParser, *fakeTransferParser) {
 			assert.JSONEq(t, simpleTokenTransferABI, tx.FunctionAbiJson)
 			assert.Equal(t, "function transfer(string memory from, string memory to, uint256 amount) external { }", tx.FunctionSignature)
 			var inputs fakeTransferParser
@@ -312,14 +425,17 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 			contractAddr, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
 			require.NoError(t, err)
 			configValues, err := contractDataABI.DecodeABIData(tx.ContractInfo.ContractConfig, 0)
+			str := tktypes.HexBytes(tx.ContractInfo.ContractConfig).HexString0xPrefix()
+			assert.NotEqual(t, "", str)
 			require.NoError(t, err)
 			configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
 			require.NoError(t, err)
 			var config simpleTokenConfigParser
 			err = json.Unmarshal(configJSON, &config)
 			require.NoError(t, err)
-			assert.NotEmpty(t, config.NotaryLocator)
-			return contractAddr, config.NotaryLocator, &inputs
+			//assert.NotEmpty(t, config.NotaryLocator)
+
+			return contractAddr, config, &inputs
 		}
 
 		extractTransferVerifiers := func(txSpec *prototk.TransactionSpecification, txInputs *fakeTransferParser, verifiers []*prototk.ResolvedVerifier) (senderAddr, fromAddr, toAddr *ethtypes.Address0xHex) {
@@ -394,7 +510,10 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 
 			ConfigureDomain: func(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
 				assert.Equal(t, "domain1", req.Name)
-				assert.JSONEq(t, `{"some":"config"}`, req.ConfigJson)
+				domainConfig := &SimpleDomainConfig{}
+				err := json.Unmarshal([]byte(req.ConfigJson), domainConfig)
+				require.NoError(t, err)
+
 				assert.Equal(t, int64(1337), req.ChainId) // from tools/besu_bootstrap
 				chainID = req.ChainId
 
@@ -403,13 +522,20 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				eventsJSON, err := json.Marshal(eventsABI)
 				require.NoError(t, err)
 
+				baseLedgerSubmitConfig := &prototk.BaseLedgerSubmitConfig{}
+				if domainConfig.SubmitMode == "" || domainConfig.SubmitMode == ENDORSER_SUBMISSION {
+					baseLedgerSubmitConfig.SubmitMode = prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION
+				} else if domainConfig.SubmitMode == ONE_TIME_USE_KEYS {
+					baseLedgerSubmitConfig.SubmitMode = prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS
+				} else {
+					return nil, fmt.Errorf("unknown submit mode %s", domainConfig.SubmitMode)
+				}
+
 				return &prototk.ConfigureDomainResponse{
 					DomainConfig: &prototk.DomainConfig{
-						BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
-							SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
-						},
-						AbiStateSchemasJson: []string{simpleTokenStateSchema},
-						AbiEventsJson:       string(eventsJSON),
+						BaseLedgerSubmitConfig: baseLedgerSubmitConfig,
+						AbiStateSchemasJson:    []string{simpleTokenStateSchema},
+						AbiEventsJson:          string(eventsJSON),
 					},
 				}, nil
 			},
@@ -422,66 +548,121 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 			},
 
 			InitDeploy: func(ctx context.Context, req *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
-				constructorParametersParser := &constructorParametersParser{}
-				err := json.Unmarshal([]byte(req.Transaction.ConstructorParamsJson), constructorParametersParser)
+				constructorParameters := &ConstructorParameters{}
+				err := json.Unmarshal([]byte(req.Transaction.ConstructorParamsJson), constructorParameters)
 				require.NoError(t, err)
 
-				return &prototk.InitDeployResponse{
-					RequiredVerifiers: []*prototk.ResolveVerifierRequest{
-						{
-							Lookup:       constructorParametersParser.Notary,
+				switch constructorParameters.EndorsementMode {
+				case SelfEndorsement:
+					return &prototk.InitDeployResponse{
+						RequiredVerifiers: []*prototk.ResolveVerifierRequest{
+							{
+								Lookup:       constructorParameters.From,
+								Algorithm:    algorithms.ECDSA_SECP256K1,
+								VerifierType: verifiers.ETH_ADDRESS,
+							},
+						},
+					}, nil
+
+				case NotaryEndorsement:
+					return &prototk.InitDeployResponse{
+						RequiredVerifiers: []*prototk.ResolveVerifierRequest{
+							{
+								Lookup:       constructorParameters.Notary,
+								Algorithm:    algorithms.ECDSA_SECP256K1,
+								VerifierType: verifiers.ETH_ADDRESS,
+							},
+						},
+					}, nil
+				case PrivacyGroupEndorsement:
+					requiredVerifiers := make([]*prototk.ResolveVerifierRequest, len(constructorParameters.EndorsementSet))
+					for i, v := range constructorParameters.EndorsementSet {
+						requiredVerifiers[i] = &prototk.ResolveVerifierRequest{
+							Lookup:       v,
 							Algorithm:    algorithms.ECDSA_SECP256K1,
 							VerifierType: verifiers.ETH_ADDRESS,
-						},
-					},
-				}, nil
+						}
+					}
+					return &prototk.InitDeployResponse{
+						RequiredVerifiers: requiredVerifiers,
+					}, nil
+				}
+				return nil, fmt.Errorf("unknown endorsement mode %s", constructorParameters.EndorsementMode)
 			},
 
 			PrepareDeploy: func(ctx context.Context, req *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 				/*assert.JSONEq(t, `{
 					"notary": "domain1.contract1.notary",
 					"name": "FakeToken1",
-					"symbol": "FT1"
+					"symbol": "FT1",
+					"endorsementMode": "NoEndorsement"
 				}`, req.Transaction.ConstructorParamsJson)*/
-				constructorParametersParser := &constructorParametersParser{}
-				err := json.Unmarshal([]byte(req.Transaction.ConstructorParamsJson), constructorParametersParser)
+				constructorParameters := &ConstructorParameters{}
+				err := json.Unmarshal([]byte(req.Transaction.ConstructorParamsJson), constructorParameters)
 				require.NoError(t, err)
 
-				assert.Len(t, req.ResolvedVerifiers, 1)
-				assert.Equal(t, algorithms.ECDSA_SECP256K1, req.ResolvedVerifiers[0].Algorithm)
-				assert.Equal(t, verifiers.ETH_ADDRESS, req.ResolvedVerifiers[0].VerifierType)
-				//assert.Equal(t, "domain1.contract1.notary", req.ResolvedVerifiers[0].Lookup)
-				assert.NotEmpty(t, req.ResolvedVerifiers[0].Verifier)
+				switch constructorParameters.EndorsementMode {
+				case SelfEndorsement:
+
+					assert.Len(t, req.ResolvedVerifiers, 1)
+					assert.Equal(t, algorithms.ECDSA_SECP256K1, req.ResolvedVerifiers[0].Algorithm)
+					assert.Equal(t, verifiers.ETH_ADDRESS, req.ResolvedVerifiers[0].VerifierType)
+					assert.Equal(t, constructorParameters.From, req.ResolvedVerifiers[0].Lookup)
+					require.NotEmpty(t, req.ResolvedVerifiers[0].Verifier)
+				case NotaryEndorsement:
+					assert.Len(t, req.ResolvedVerifiers, 1)
+					assert.Equal(t, algorithms.ECDSA_SECP256K1, req.ResolvedVerifiers[0].Algorithm)
+					assert.Equal(t, verifiers.ETH_ADDRESS, req.ResolvedVerifiers[0].VerifierType)
+					assert.Equal(t, constructorParameters.Notary, req.ResolvedVerifiers[0].Lookup)
+					require.NotEmpty(t, req.ResolvedVerifiers[0].Verifier)
+				case PrivacyGroupEndorsement:
+					assert.Len(t, req.ResolvedVerifiers, len(constructorParameters.EndorsementSet))
+					// We don't know that the order of the ResolvedVerifiers will match the order of the endorsement set,
+					// so we just check that they are all there
+					for _, v := range constructorParameters.EndorsementSet {
+						found := false
+						for j := range req.ResolvedVerifiers {
+							if req.ResolvedVerifiers[j].Lookup == v {
+								assert.Equal(t, algorithms.ECDSA_SECP256K1, req.ResolvedVerifiers[j].Algorithm)
+								assert.Equal(t, verifiers.ETH_ADDRESS, req.ResolvedVerifiers[j].VerifierType)
+								assert.Equal(t, v, req.ResolvedVerifiers[j].Lookup)
+								assert.NotEmpty(t, req.ResolvedVerifiers[j].Verifier)
+								found = true
+							}
+						}
+						assert.True(t, found, "endorser %s not found in ResolvedVerifiers", v)
+					}
+				}
+				if constructorParameters.EndorsementSet == nil {
+					constructorParameters.EndorsementSet = []string{}
+				}
+				params := FactoryParameters{
+					TxId:                   req.Transaction.TransactionId,
+					EndorsementSetLocators: constructorParameters.EndorsementSet,
+					EndorsementMode:        constructorParameters.EndorsementMode,
+					NotaryLocator:          constructorParameters.Notary,
+				}
 				return &prototk.PrepareDeployResponse{
 					Signer: confutil.P(fmt.Sprintf("domain1.transactions.%s", req.Transaction.TransactionId)),
 					Transaction: &prototk.PreparedTransaction{
 						FunctionAbiJson: toJSONString(t, simpleDomainABI.Functions()["newSimpleTokenNotarized"]),
-						ParamsJson: fmt.Sprintf(`{
-							"txId": "%s",
-							"notary": "%s",
-							"notaryLocator": "%s"
-						}`, req.Transaction.TransactionId, req.ResolvedVerifiers[0].Verifier, constructorParametersParser.Notary),
+						ParamsJson:      tktypes.JSONString(params).String(),
 					},
 				}, nil
 			},
 
 			InitTransaction: func(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
-				_, notaryLocator, txInputs := validateTransferTransactionInput(req.Transaction)
+				_, config, txInputs := validateTransferTransactionInput(req.Transaction)
 
-				// We require ethereum addresses for the "from" and "to" addresses to actually
-				// execute the transaction. See notes above about this.
 				requiredVerifiers := []*prototk.ResolveVerifierRequest{
 					{
 						Lookup:       req.Transaction.From,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
-					{
-						Lookup:       notaryLocator,
-						Algorithm:    algorithms.ECDSA_SECP256K1,
-						VerifierType: verifiers.ETH_ADDRESS,
-					},
 				}
+				// We require ethereum addresses for the "from" and "to" addresses to actually
+				// execute the transaction. See notes above about this.
 				if txInputs.From != "" {
 					requiredVerifiers = append(requiredVerifiers, &prototk.ResolveVerifierRequest{
 						Lookup:       txInputs.From,
@@ -496,13 +677,38 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 						VerifierType: verifiers.ETH_ADDRESS,
 					})
 				}
+
+				switch config.EndorsementMode {
+				case SelfEndorsement:
+
+					//Only need the from and to addresses which have already been added above
+
+				case NotaryEndorsement:
+					requiredVerifiers = append(requiredVerifiers, &prototk.ResolveVerifierRequest{
+						Lookup:       config.NotaryLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						VerifierType: verifiers.ETH_ADDRESS,
+					})
+				case PrivacyGroupEndorsement:
+					for _, v := range config.EndorsementSet {
+						requiredVerifiers = append(requiredVerifiers, &prototk.ResolveVerifierRequest{
+							Lookup:       v,
+							Algorithm:    algorithms.ECDSA_SECP256K1,
+							VerifierType: verifiers.ETH_ADDRESS,
+						})
+					}
+				default:
+					return nil, fmt.Errorf("unknown endorsement mode %s", config.EndorsementMode)
+				}
+
 				return &prototk.InitTransactionResponse{
 					RequiredVerifiers: requiredVerifiers,
 				}, nil
 			},
 
 			AssembleTransaction: func(ctx context.Context, req *prototk.AssembleTransactionRequest) (_ *prototk.AssembleTransactionResponse, err error) {
-				contractAddr, notaryLocator, txInputs := validateTransferTransactionInput(req.Transaction)
+				contractAddr, config, txInputs := validateTransferTransactionInput(req.Transaction)
+
 				_, fromAddr, toAddr := extractTransferVerifiers(req.Transaction, txInputs, req.ResolvedVerifiers)
 				amount := txInputs.Amount.BigInt()
 				toKeep := new(big.Int)
@@ -546,44 +752,115 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				}
 				eip712Payload, err := typedDataV4TransferWithSalts(contractAddr, coinsToSpend, newCoins)
 				require.NoError(t, err)
-				return &prototk.AssembleTransactionResponse{
-					AssembledTransaction: &prototk.AssembledTransaction{
-						InputStates:  stateRefsToSpend,
-						OutputStates: newStates,
-					},
-					AssemblyResult: prototk.AssembleTransactionResponse_OK,
-					AttestationPlan: []*prototk.AttestationRequest{
-						{
-							Name:            "sender",
-							AttestationType: prototk.AttestationType_SIGN,
-							Algorithm:       algorithms.ECDSA_SECP256K1,
-							VerifierType:    verifiers.ETH_ADDRESS,
-							PayloadType:     signpayloads.OPAQUE_TO_RSV,
-							Payload:         eip712Payload,
-							Parties: []string{
-								req.Transaction.From,
+
+				switch config.EndorsementMode {
+				case SelfEndorsement:
+					return &prototk.AssembleTransactionResponse{
+						AssembledTransaction: &prototk.AssembledTransaction{
+							InputStates:  stateRefsToSpend,
+							OutputStates: newStates,
+						},
+						AssemblyResult: prototk.AssembleTransactionResponse_OK,
+						AttestationPlan: []*prototk.AttestationRequest{
+							{
+								Name:            "sender",
+								AttestationType: prototk.AttestationType_SIGN,
+								Algorithm:       algorithms.ECDSA_SECP256K1,
+								VerifierType:    verifiers.ETH_ADDRESS,
+								PayloadType:     signpayloads.OPAQUE_TO_RSV,
+								Payload:         eip712Payload,
+								Parties: []string{
+									req.Transaction.From,
+								},
+							},
+							{
+								Name:            "submitter",
+								AttestationType: prototk.AttestationType_ENDORSE,
+								Algorithm:       algorithms.ECDSA_SECP256K1,
+								VerifierType:    verifiers.ETH_ADDRESS,
+								PayloadType:     signpayloads.OPAQUE_TO_RSV,
+								Payload:         eip712Payload,
+								Parties: []string{
+									req.Transaction.From,
+								},
 							},
 						},
-						{
-							Name:            "notary",
-							AttestationType: prototk.AttestationType_ENDORSE,
-							// we expect an endorsement is of the form ENDORSER_SUBMIT - so we need an eth signing key to exist
-							Algorithm:    algorithms.ECDSA_SECP256K1,
-							VerifierType: verifiers.ETH_ADDRESS,
-							PayloadType:  signpayloads.OPAQUE_TO_RSV,
-							Parties: []string{
-								notaryLocator,
+					}, nil
+				case NotaryEndorsement:
+					return &prototk.AssembleTransactionResponse{
+						AssembledTransaction: &prototk.AssembledTransaction{
+							InputStates:  stateRefsToSpend,
+							OutputStates: newStates,
+						},
+						AssemblyResult: prototk.AssembleTransactionResponse_OK,
+						AttestationPlan: []*prototk.AttestationRequest{
+							{
+								Name:            "sender",
+								AttestationType: prototk.AttestationType_SIGN,
+								Algorithm:       algorithms.ECDSA_SECP256K1,
+								VerifierType:    verifiers.ETH_ADDRESS,
+								PayloadType:     signpayloads.OPAQUE_TO_RSV,
+								Payload:         eip712Payload,
+								Parties: []string{
+									req.Transaction.From,
+								},
+							},
+							{
+								Name:            "notary",
+								AttestationType: prototk.AttestationType_ENDORSE,
+								// we expect an endorsement is of the form ENDORSER_SUBMIT - so we need an eth signing key to exist
+								Algorithm:    algorithms.ECDSA_SECP256K1,
+								VerifierType: verifiers.ETH_ADDRESS,
+								PayloadType:  signpayloads.OPAQUE_TO_RSV,
+								Payload:      eip712Payload,
+								Parties: []string{
+									config.NotaryLocator,
+								},
 							},
 						},
-					},
-				}, nil
+					}, nil
+				case PrivacyGroupEndorsement:
+
+					return &prototk.AssembleTransactionResponse{
+						AssembledTransaction: &prototk.AssembledTransaction{
+							InputStates:  stateRefsToSpend,
+							OutputStates: newStates,
+						},
+						AssemblyResult: prototk.AssembleTransactionResponse_OK,
+						AttestationPlan: []*prototk.AttestationRequest{
+							{
+								Name:            "sender",
+								AttestationType: prototk.AttestationType_SIGN,
+								Algorithm:       algorithms.ECDSA_SECP256K1,
+								VerifierType:    verifiers.ETH_ADDRESS,
+								PayloadType:     signpayloads.OPAQUE_TO_RSV,
+								Payload:         eip712Payload,
+								Parties: []string{
+									req.Transaction.From,
+								},
+							},
+							{
+								Name:            "privacyGroup",
+								AttestationType: prototk.AttestationType_ENDORSE,
+								// we expect an endorsement is of the form ENDORSER_SUBMIT - so we need an eth signing key to exist
+								Algorithm:    algorithms.ECDSA_SECP256K1,
+								VerifierType: verifiers.ETH_ADDRESS,
+								PayloadType:  signpayloads.OPAQUE_TO_RSV,
+								Parties:      config.EndorsementSet,
+							},
+						},
+					}, nil
+				default:
+					return nil, fmt.Errorf("unsupported endorsement mode: %s", config.EndorsementMode)
+				}
 			},
 
 			EndorseTransaction: func(ctx context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
-				contractAddr, notaryLocator, txInputs := validateTransferTransactionInput(req.Transaction)
+				contractAddr, config, txInputs := validateTransferTransactionInput(req.Transaction)
+				//notaryLocator := config.NotaryLocator
 				senderAddr, fromAddr, toAddr := extractTransferVerifiers(req.Transaction, txInputs, req.ResolvedVerifiers)
-				assert.Equal(t, req.EndorsementVerifier.Lookup, req.EndorsementRequest.Parties[0])
-				assert.Equal(t, req.EndorsementVerifier.Lookup, notaryLocator)
+				//assert.Equal(t, req.EndorsementVerifier.Lookup, req.EndorsementRequest.Parties[0])
+				//assert.Equal(t, req.EndorsementVerifier.Lookup, notaryLocator)
 
 				inCoins := make([]*simpleTokenParser, len(req.Inputs))
 				for i, input := range req.Inputs {
@@ -644,9 +921,25 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 					}
 				}
 
-				return &prototk.EndorseTransactionResponse{
-					EndorsementResult: prototk.EndorseTransactionResponse_ENDORSER_SUBMIT,
-				}, nil
+				switch config.EndorsementMode {
+				case SelfEndorsement:
+					return &prototk.EndorseTransactionResponse{
+						EndorsementResult: prototk.EndorseTransactionResponse_ENDORSER_SUBMIT,
+					}, nil
+				case NotaryEndorsement:
+					return &prototk.EndorseTransactionResponse{
+						EndorsementResult: prototk.EndorseTransactionResponse_ENDORSER_SUBMIT,
+					}, nil
+				case PrivacyGroupEndorsement:
+					return &prototk.EndorseTransactionResponse{
+						EndorsementResult: prototk.EndorseTransactionResponse_SIGN,
+						Payload:           signaturePayload,
+					}, nil
+				default:
+					return nil, fmt.Errorf("unsupported endorsement mode: %s", config.EndorsementMode)
+
+				}
+
 			},
 
 			PrepareTransaction: func(ctx context.Context, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {

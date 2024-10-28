@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -90,6 +91,10 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
 				Return([]*tktypes.EthAddress{senderAddr}, nil)
+			mc.keyManager.On("ResolveEthAddressNewDatabaseTX", mock.Anything, "sender1").
+				Return(senderAddr, nil)
+			unconnected := ethclient.NewUnconnectedRPCClient(context.Background(), &pldconf.EthClientConfig{}, 0)
+			mc.ethClientFactory.On("HTTPClient").Return(unconnected)
 		},
 	)
 	defer done()
@@ -103,6 +108,9 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		}},
 		{Type: abi.Function, Name: "set", Inputs: abi.ParameterArray{
 			{Type: "uint256"}, // named where we are using an object input
+		}},
+		{Type: abi.Function, Name: "get", Outputs: abi.ParameterArray{
+			{Type: "uint256"},
 		}},
 		{Type: abi.Error, Name: "BadValue", Inputs: abi.ParameterArray{
 			{Type: "uint256"},
@@ -136,9 +144,18 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		},
 	}
 
+	// Get it back by idempotency key
+	var tx *pldapi.Transaction
+	err = rpcClient.CallRPC(ctx, &tx, "ptx_getTransactionByIdempotencyKey", "not_submitted")
+	require.NoError(t, err)
+	assert.Nil(t, tx)
+	err = rpcClient.CallRPC(ctx, &tx, "ptx_getTransactionByIdempotencyKey", "tx1")
+	require.NoError(t, err)
+	assert.Equal(t, tx1ID, *tx.ID)
+
 	// Query them back
 	var txns []*pldapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactionsFull", query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, txns, 1)
 	assert.Equal(t, tx1ID, *txns[0].ID)
@@ -150,7 +167,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 
 	// Check full=false
 	txns = nil
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), false)
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, txns, 1)
 
@@ -197,11 +214,11 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.NoError(t, err)
 	tx2ID := txIDs[0]
 	var tx2 *pldapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, true)
+	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransactionFull", tx2ID)
 	require.NoError(t, err)
 	assert.Equal(t, tx2ID, *tx2.ID)
 	assert.Equal(t, "set(uint256)", tx2.Function)
-	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, false)
+	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID)
 	require.NoError(t, err)
 	assert.Equal(t, tx2ID, *tx2.ID)
 
@@ -211,7 +228,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 
 	// Null on not found is the consistent ethereum pattern
 	var txNotFound *pldapi.Transaction
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_getTransaction", uuid.New(), false)
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_getTransaction", uuid.New())
 	require.NoError(t, err)
 	assert.Nil(t, txNotFound)
 
@@ -233,7 +250,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 
 	// We should get that back with full
 	var txWithReceipt *pldapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &txWithReceipt, "ptx_getTransaction", tx1ID, true)
+	err = rpcClient.CallRPC(ctx, &txWithReceipt, "ptx_getTransactionFull", tx1ID)
 	require.NoError(t, err)
 	require.True(t, txWithReceipt.Receipt.Success)
 	require.Equal(t, txHash1, *txWithReceipt.Receipt.TransactionHash)
@@ -271,6 +288,11 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	var de *pldapi.DecodedError
+	err = rpcClient.CallRPC(ctx, &de, "ptx_decodeError", tktypes.HexBytes(revertData), tktypes.DefaultJSONFormatOptions)
+	require.NoError(t, err)
+	require.Equal(t, `BadValue("12345")`, de.Summary)
+
 	// Ask for the receipt directly
 	var txReceipt *pldapi.TransactionReceipt
 	err = rpcClient.CallRPC(ctx, &txReceipt, "ptx_getTransactionReceipt", tx2ID)
@@ -295,6 +317,22 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []uuid.UUID{tx0ID}, tx1Deps.DependsOn)
 	assert.Equal(t, []uuid.UUID{tx2ID}, tx1Deps.PrereqOf)
+
+	var resJSON tktypes.RawJSON
+	err = rpcClient.CallRPC(ctx, &resJSON, "ptx_call", &pldapi.TransactionCall{
+		TransactionInput: pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
+				IdempotencyKey: "tx2",
+				Type:           pldapi.TransactionTypePublic.Enum(),
+				Data:           tktypes.RawJSON(`{"0": 123456789012345678901234567890}`),
+				Function:       "get()",
+				From:           "sender1",
+				To:             tktypes.MustEthAddress(tktypes.RandHex(20)),
+			},
+			ABI: sampleABI,
+		},
+	})
+	assert.Regexp(t, "PD011517", err) // means we got all the way to the unconnected client
 
 }
 

@@ -151,6 +151,27 @@ message PrepareTransactionResponse {
   PreparedTransaction transaction = 1; // The instruction for submission to the base ledger
 }
 
+// **INIT_CALL** this allows a domain to provide a read-only view into the state store, using high-level functions. The response data must conform to the ABI supplied, or an error must be returned
+message InitCallRequest {
+  TransactionSpecification transaction = 1; // The transaction to plan
+}
+
+message InitCallResponse {
+  repeated ResolveVerifierRequest required_verifiers = 1; // the list of verifiers that need to be resolved in order to exec the call
+}
+
+
+// **EXEC_CALL** this allows a domain to provide a read-only view into the state store, using high-level functions. The response data must conform to the ABI supplied, or an error must be returned
+message ExecCallRequest {
+  string state_query_context = 1; // handle to supply to state queries performed during this call
+  repeated ResolvedVerifier resolved_verifiers = 2; // The verifiers requested during init
+  TransactionSpecification transaction = 3; // The transaction to exec
+}
+
+message ExecCallResponse {
+  string result_json = 1; // JSON formatted data that conforms to the outputs specification of the ABI interface supplied in the request
+}
+
 // **EVENTS** handler called with batches of blockchain events that match an event signature and contract address registered by this domain
 
 message HandleEventBatchRequest {

@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
@@ -34,9 +35,10 @@ type delegateOperation struct {
 
 // DelegateTransaction writes a record to the local database recording that the given transaction has been delegated to the given delegate
 // then triggers a reliable cross node handshake to transmit that delegation to the delegate node and record their acknowledgement
-func (s *syncPoints) QueueDelegation(ctx context.Context, contractAddress tktypes.EthAddress, transactionID uuid.UUID, delegateNodeID string, onCommit func(context.Context), onRollback func(context.Context, error)) {
+func (s *syncPoints) QueueDelegation(dCtx components.DomainContext, contractAddress tktypes.EthAddress, transactionID uuid.UUID, delegateNodeID string, onCommit func(context.Context), onRollback func(context.Context, error)) {
 
-	op := s.writer.Queue(ctx, &syncPointOperation{
+	op := s.writer.Queue(dCtx.Ctx(), &syncPointOperation{
+		domainContext:   dCtx,
 		contractAddress: contractAddress,
 		delegateOperation: &delegateOperation{
 			ID:             uuid.New(),
@@ -45,10 +47,10 @@ func (s *syncPoints) QueueDelegation(ctx context.Context, contractAddress tktype
 		},
 	})
 	go func() {
-		if _, err := op.WaitFlushed(ctx); err != nil {
-			onRollback(ctx, err)
+		if _, err := op.WaitFlushed(dCtx.Ctx()); err != nil {
+			onRollback(dCtx.Ctx(), err)
 		} else {
-			onCommit(ctx)
+			onCommit(dCtx.Ctx())
 		}
 	}()
 }

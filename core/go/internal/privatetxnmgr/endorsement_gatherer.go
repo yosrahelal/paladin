@@ -24,13 +24,15 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func NewEndorsementGatherer(psc components.DomainSmartContract, dCtx components.DomainContext, keyMgr components.KeyManager) ptmgrtypes.EndorsementGatherer {
+func NewEndorsementGatherer(p persistence.Persistence, psc components.DomainSmartContract, dCtx components.DomainContext, keyMgr components.KeyManager) ptmgrtypes.EndorsementGatherer {
 	return &endorsementGatherer{
+		p:      p,
 		psc:    psc,
 		dCtx:   dCtx,
 		keyMgr: keyMgr,
@@ -38,6 +40,7 @@ func NewEndorsementGatherer(psc components.DomainSmartContract, dCtx components.
 }
 
 type endorsementGatherer struct {
+	p      persistence.Persistence
 	psc    components.DomainSmartContract
 	dCtx   components.DomainContext
 	keyMgr components.KeyManager
@@ -63,7 +66,7 @@ func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transaction
 		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 	}
 	// Invoke the domain
-	endorseRes, err := e.psc.EndorseTransaction(e.dCtx, &components.PrivateTransactionEndorseRequest{
+	endorseRes, err := e.psc.EndorseTransaction(e.dCtx, e.p.DB(), &components.PrivateTransactionEndorseRequest{
 		TransactionSpecification: transactionSpecification,
 		Verifiers:                verifiers,
 		Signatures:               signatures,

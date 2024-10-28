@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -36,15 +37,18 @@ func TestGatherEndorsementFailResolveKey(t *testing.T) {
 		domainContext:       componentmocks.NewDomainContext(t),
 		keyManager:          componentmocks.NewKeyManager(t),
 	}
+	var err error
+	mocks.db, err = mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
 
 	mocks.keyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, "alice", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return(nil, fmt.Errorf("test error"))
 
-	eg := NewEndorsementGatherer(mocks.domainSmartContract, mocks.domainContext, mocks.keyManager)
+	eg := NewEndorsementGatherer(mocks.db.P, mocks.domainSmartContract, mocks.domainContext, mocks.keyManager)
 	endorsementReq := &prototk.AttestationRequest{
 		Algorithm:    algorithms.ECDSA_SECP256K1,
 		VerifierType: verifiers.ETH_ADDRESS,
 	}
-	_, _, err := eg.GatherEndorsement(ctx, &prototk.TransactionSpecification{}, []*prototk.ResolvedVerifier{}, []*prototk.AttestationResult{}, []*prototk.EndorsableState{}, []*prototk.EndorsableState{}, []*prototk.EndorsableState{}, "alice", endorsementReq)
+	_, _, err = eg.GatherEndorsement(ctx, &prototk.TransactionSpecification{}, []*prototk.ResolvedVerifier{}, []*prototk.AttestationResult{}, []*prototk.EndorsableState{}, []*prototk.EndorsableState{}, []*prototk.EndorsableState{}, "alice", endorsementReq)
 	require.ErrorContains(t, err, "PD011801: Unexpected error in engine failed to resolve key for party alice")
 }
 
@@ -54,6 +58,9 @@ func TestGatherEndorsementFailEndorseTransaction(t *testing.T) {
 		domainSmartContract: componentmocks.NewDomainSmartContract(t),
 		keyManager:          componentmocks.NewKeyManager(t),
 	}
+	var err error
+	mocks.db, err = mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
 	endorsementReq := &prototk.AttestationRequest{
 		Algorithm:    algorithms.ECDSA_SECP256K1,
 		VerifierType: verifiers.ETH_ADDRESS,
@@ -63,8 +70,8 @@ func TestGatherEndorsementFailEndorseTransaction(t *testing.T) {
 			KeyMappingWithPath: &pldapi.KeyMappingWithPath{KeyMapping: &pldapi.KeyMapping{Identifier: "alice"}},
 			Verifier:           &pldapi.KeyVerifier{Verifier: "something"},
 		}, nil)
-	mocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("test error"))
-	eg := NewEndorsementGatherer(mocks.domainSmartContract, mocks.domainContext, mocks.keyManager)
-	_, _, err := eg.GatherEndorsement(ctx, &prototk.TransactionSpecification{}, []*prototk.ResolvedVerifier{}, []*prototk.AttestationResult{}, []*prototk.EndorsableState{}, []*prototk.EndorsableState{}, []*prototk.EndorsableState{}, "alice", endorsementReq)
+	mocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("test error"))
+	eg := NewEndorsementGatherer(mocks.db.P, mocks.domainSmartContract, mocks.domainContext, mocks.keyManager)
+	_, _, err = eg.GatherEndorsement(ctx, &prototk.TransactionSpecification{}, []*prototk.ResolvedVerifier{}, []*prototk.AttestationResult{}, []*prototk.EndorsableState{}, []*prototk.EndorsableState{}, []*prototk.EndorsableState{}, "alice", endorsementReq)
 	require.ErrorContains(t, err, "PD011801: Unexpected error in engine failed to endorse for party alice")
 }

@@ -6,7 +6,7 @@
         }
     },
     "besu": {
-        "image": "hyperledger/besu:latest",
+        "image": "hyperledger/besu:24.10.0",
         "labels": {
             "app": "besu"
         }

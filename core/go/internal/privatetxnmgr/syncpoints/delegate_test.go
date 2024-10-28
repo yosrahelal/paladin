@@ -22,14 +22,17 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/alecthomas/assert/v2"
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWriteDelegateOperations(t *testing.T) {
 	ctx := context.Background()
+
+	dc, flushResult := newTestDomainContextWithFlush(t)
+
 	s, m := newSyncPointsForTesting(t)
 	testDelegateNodeA := "delegateNodeA"
 	testDelegateNodeB := "delegateNodeB"
@@ -40,6 +43,7 @@ func TestWriteDelegateOperations(t *testing.T) {
 	testContractAddress2 := tktypes.RandAddress()
 	testSyncPointOperations := []*syncPointOperation{
 		{
+			domainContext:   dc,
 			contractAddress: *testContractAddress1,
 			delegateOperation: &delegateOperation{
 				TransactionID:  testTxnID1,
@@ -47,6 +51,7 @@ func TestWriteDelegateOperations(t *testing.T) {
 			},
 		},
 		{
+			domainContext:   dc,
 			contractAddress: *testContractAddress1,
 			delegateOperation: &delegateOperation{
 				TransactionID:  testTxnID2,
@@ -54,6 +59,7 @@ func TestWriteDelegateOperations(t *testing.T) {
 			},
 		},
 		{
+			domainContext:   dc,
 			contractAddress: *testContractAddress2,
 			delegateOperation: &delegateOperation{
 				TransactionID:  testTxnID3,
@@ -68,8 +74,10 @@ func TestWriteDelegateOperations(t *testing.T) {
 		sqlmock.AnyArg(), testTxnID3, testDelegateNodeB,
 	).WillReturnResult(driver.ResultNoRows)
 
-	res, err := s.runBatch(ctx, dbTX, testSyncPointOperations)
+	dbResultCB, res, err := s.runBatch(ctx, dbTX, testSyncPointOperations)
 	assert.NoError(t, err)
 	require.Len(t, res, 3)
 	assert.NoError(t, m.persistence.Mock.ExpectationsWereMet())
+	dbResultCB(nil)
+	require.NoError(t, <-flushResult)
 }

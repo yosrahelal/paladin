@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -70,8 +71,8 @@ func genWidget(t *testing.T, schemaID tktypes.Bytes32, txID *uuid.UUID, withoutS
 	}
 }
 
-func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, withoutSalt []string) []*components.State {
-	states := make([]*components.State, len(withoutSalt))
+func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, withoutSalt []string) []*pldapi.State {
+	states := make([]*pldapi.State, len(withoutSalt))
 	for i, w := range withoutSalt {
 		withSalt := genWidget(t, schemaID, nil, w)
 		newStates, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), domainName, []*components.StateUpsertOutsideContext{
@@ -89,11 +90,9 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName
 }
 
 func syncFlushContext(t *testing.T, dc components.DomainContext) {
-	flushed := make(chan error)
-	err := dc.InitiateFlush(func(err error) { flushed <- err })
+	postDBTx, err := dc.Flush(dc.(*domainContext).ss.p.DB())
 	require.NoError(t, err)
-	err = <-flushed
-	require.NoError(t, err)
+	postDBTx(nil)
 }
 
 func newTestDomainContext(t *testing.T, ctx context.Context, ss *stateManager, name string, customHashFunction bool) (tktypes.EthAddress, *domainContext) {
@@ -101,7 +100,7 @@ func newTestDomainContext(t *testing.T, ctx context.Context, ss *stateManager, n
 	md.On("Name").Return(name)
 	md.On("CustomHashFunction").Return(customHashFunction)
 	contractAddress := tktypes.RandAddress()
-	dc := ss.NewDomainContext(ctx, md, *contractAddress, ss.p.DB())
+	dc := ss.NewDomainContext(ctx, md, *contractAddress)
 	return *contractAddress, dc.(*domainContext)
 }
 
@@ -114,7 +113,7 @@ func TestStateLockingQuery(t *testing.T) {
 
 	schema, err := newABISchema(ctx, "domain1", testABIParam(t, widgetABI))
 	require.NoError(t, err)
-	err = ss.persistSchemas(ctx, ss.p.DB(), []*components.SchemaPersisted{schema.SchemaPersisted})
+	err = ss.persistSchemas(ctx, ss.p.DB(), []*pldapi.Schema{schema.Schema})
 	require.NoError(t, err)
 	schemaID := schema.ID()
 
@@ -129,8 +128,8 @@ func TestStateLockingQuery(t *testing.T) {
 		`{"size": 55555, "color": "blue", "price": 500}`,
 	})
 
-	checkQuery := func(jq *query.QueryJSON, status StateStatusQualifier, expected ...int) {
-		states, err := ss.FindStates(ctx, ss.p.DB(), "domain1", contractAddress, schemaID, jq, status)
+	checkQuery := func(jq *query.QueryJSON, status pldapi.StateStatusQualifier, expected ...int) {
+		states, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", contractAddress, schemaID, jq, status)
 		require.NoError(t, err)
 		assert.Len(t, states, len(expected))
 		for _, wIndex := range expected {
@@ -146,93 +145,93 @@ func TestStateLockingQuery(t *testing.T) {
 		}
 	}
 
-	seqQual := StateStatusQualifier(dc.Info().ID.String())
+	seqQual := pldapi.StateStatusQualifier(dc.Info().ID.String())
 	all := query.NewQueryBuilder().Query()
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4)
-	checkQuery(all, StateStatusAvailable)
-	checkQuery(all, StateStatusConfirmed)
-	checkQuery(all, StateStatusUnconfirmed, 0, 1, 2, 3, 4)
-	checkQuery(all, StateStatusSpent)
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4)
+	checkQuery(all, pldapi.StateStatusAvailable)
+	checkQuery(all, pldapi.StateStatusConfirmed)
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 0, 1, 2, 3, 4)
+	checkQuery(all, pldapi.StateStatusSpent)
 	checkQuery(all, seqQual)
 
 	// Mark them all confirmed apart from one
 	for i, w := range widgets {
 		if i != 3 {
-			err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*components.StateSpend{},
-				[]*components.StateConfirm{
+			err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*pldapi.StateSpend{},
+				[]*pldapi.StateConfirm{
 					{DomainName: "domain1", State: w.ID, Transaction: uuid.New()},
 				})
 			require.NoError(t, err)
 		}
 	}
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4)    // unchanged
-	checkQuery(all, StateStatusAvailable, 0, 1, 2, 4) // added all but 3
-	checkQuery(all, StateStatusConfirmed, 0, 1, 2, 4) // added all but 3
-	checkQuery(all, StateStatusUnconfirmed, 3)        // added 3
-	checkQuery(all, StateStatusSpent)                 // unchanged
-	checkQuery(all, seqQual, 0, 1, 2, 4)              // added all but 3
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 0, 1, 2, 4) // added all but 3
+	checkQuery(all, pldapi.StateStatusConfirmed, 0, 1, 2, 4) // added all but 3
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3)        // added 3
+	checkQuery(all, pldapi.StateStatusSpent)                 // unchanged
+	checkQuery(all, seqQual, 0, 1, 2, 4)                     // added all but 3
 
 	// Mark one spent
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
-		[]*components.StateSpend{
+		[]*pldapi.StateSpend{
 			{DomainName: "domain1", State: widgets[0].ID, Transaction: uuid.New()},
-		}, []*components.StateConfirm{})
+		}, []*pldapi.StateConfirm{})
 	require.NoError(t, err)
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
-	checkQuery(all, StateStatusAvailable, 1, 2, 4) // removed 0
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4) // removed 0
-	checkQuery(all, StateStatusUnconfirmed, 3)     // unchanged
-	checkQuery(all, StateStatusSpent, 0)           // added 0
-	checkQuery(all, seqQual, 1, 2, 4)              // unchanged
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4) // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4) // removed 0
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4) // removed 0
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3)     // unchanged
+	checkQuery(all, pldapi.StateStatusSpent, 0)           // added 0
+	checkQuery(all, seqQual, 1, 2, 4)                     // unchanged
 
 	// add a new state only within the domain context
 	txID1 := uuid.New()
-	contextStates, err := dc.UpsertStates(
+	contextStates, err := dc.UpsertStates(ss.p.DB(),
 		genWidget(t, schemaID, &txID1, `{"size": 66666, "color": "blue", "price": 600}`))
 	require.NoError(t, err)
 	widgets = append(widgets, contextStates...)
 	syncFlushContext(t, dc)
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // added 5
-	checkQuery(all, StateStatusAvailable, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusUnconfirmed, 3, 5)     // added 5
-	checkQuery(all, StateStatusSpent, 0)              // unchanged
-	checkQuery(all, seqQual, 1, 2, 4, 5)              // added 5
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4, 5) // added 5
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3, 5)     // added 5
+	checkQuery(all, pldapi.StateStatusSpent, 0)              // unchanged
+	checkQuery(all, seqQual, 1, 2, 4, 5)                     // added 5
 
 	// lock the unconfirmed one for spending
 	txID2 := uuid.New()
-	err = dc.AddStateLocks(&components.StateLock{
-		Type:        components.StateLockTypeSpend.Enum(),
+	err = dc.AddStateLocks(&pldapi.StateLock{
+		Type:        pldapi.StateLockTypeSpend.Enum(),
 		Transaction: txID2,
 		State:       widgets[5].ID,
 	})
 	require.NoError(t, err)
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
-	checkQuery(all, StateStatusAvailable, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusUnconfirmed, 3, 5)     // unchanged
-	checkQuery(all, StateStatusSpent, 0)              // unchanged
-	checkQuery(all, seqQual, 1, 2, 4)                 // removed 5
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3, 5)     // unchanged
+	checkQuery(all, pldapi.StateStatusSpent, 0)              // unchanged
+	checkQuery(all, seqQual, 1, 2, 4)                        // removed 5
 
 	// cancel that spend lock
 	dc.ResetTransactions(txID2)
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
-	checkQuery(all, StateStatusAvailable, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusUnconfirmed, 3, 5)     // unchanged
-	checkQuery(all, StateStatusSpent, 0)              // unchanged
-	checkQuery(all, seqQual, 1, 2, 4, 5)              // added 5 back
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3, 5)     // unchanged
+	checkQuery(all, pldapi.StateStatusSpent, 0)              // unchanged
+	checkQuery(all, seqQual, 1, 2, 4, 5)                     // added 5 back
 
 	// Mark that new state confirmed
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
-		[]*components.StateSpend{},
-		[]*components.StateConfirm{
+		[]*pldapi.StateSpend{},
+		[]*pldapi.StateConfirm{
 			{DomainName: "domain1", State: widgets[5].ID, Transaction: uuid.New()},
 		})
 	require.NoError(t, err)
@@ -240,18 +239,18 @@ func TestStateLockingQuery(t *testing.T) {
 	// reset the domain context - does not matter now
 	dc.Reset()
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
-	checkQuery(all, StateStatusAvailable, 1, 2, 4, 5) // added 5
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4, 5) // added 5
-	checkQuery(all, StateStatusUnconfirmed, 3)        // removed 5
-	checkQuery(all, StateStatusSpent, 0)              // unchanged
-	checkQuery(all, seqQual, 1, 2, 4, 5)              // unchanged
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4, 5) // added 5
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4, 5) // added 5
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3)        // removed 5
+	checkQuery(all, pldapi.StateStatusSpent, 0)              // unchanged
+	checkQuery(all, seqQual, 1, 2, 4, 5)                     // unchanged
 
 	// Add 3 only as confirmed by a TX only within the domain context
 	// Note we have to re-supply the data here, so that the domain context can
 	// have it in memory for queries
 	txID13 := uuid.New()
-	_, err = dc.UpsertStates(&components.StateUpsert{
+	_, err = dc.UpsertStates(ss.p.DB(), &components.StateUpsert{
 		ID:        widgets[3].ID,
 		SchemaID:  widgets[3].Schema,
 		Data:      widgets[3].Data,
@@ -259,26 +258,15 @@ func TestStateLockingQuery(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
-	checkQuery(all, StateStatusAvailable, 1, 2, 4, 5) // unchanged
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4, 5) // unchanged
-	checkQuery(all, StateStatusUnconfirmed, 3)        // unchanged
-	checkQuery(all, StateStatusSpent, 0)              // unchanged
-	checkQuery(all, seqQual, 1, 2, 3, 4, 5)           // added 3
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3)        // unchanged
+	checkQuery(all, pldapi.StateStatusSpent, 0)              // unchanged
+	checkQuery(all, seqQual, 1, 2, 3, 4, 5)                  // added 3
 
 	// check a sub-select
 	checkQuery(query.NewQueryBuilder().Equal("color", "pink").Query(), seqQual, 3)
-	checkQuery(query.NewQueryBuilder().Equal("color", "pink").Query(), StateStatusAvailable)
+	checkQuery(query.NewQueryBuilder().Equal("color", "pink").Query(), pldapi.StateStatusAvailable)
 
-}
-
-func TestStateStatusQualifierJSON(t *testing.T) {
-	var q StateStatusQualifier
-	err := json.Unmarshal(([]byte)(`"wrong"`), &q)
-	assert.Regexp(t, "PD010117", err)
-
-	u := uuid.New().String()
-	err = json.Unmarshal(tktypes.JSONString(u), &q)
-	require.NoError(t, err)
-	assert.Equal(t, u, (string)(q))
 }

@@ -51,9 +51,11 @@ public class PenteConfiguration {
 
     private final JsonABI privacyGroupABI;
 
-    private final JsonABI interfaceABI;
+    private final JsonABI eventsABI;
 
     private final JsonABI externalCallABI;
+
+    private final JsonABI.Entry externalCallEventABI;
 
     // Topic generated from event "PenteExternalCall(address,bytes)"
     private final Bytes externalCallTopic = Bytes.fromHexString("0xcac03685d5ba4ab3e1465a8ee1b2bb21094ddbd612a969fd34f93a5be7a0ac4f");
@@ -76,12 +78,18 @@ public class PenteConfiguration {
             privacyGroupABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
                     "contracts/domains/pente/PentePrivacyGroup.sol/PentePrivacyGroup.json",
                     "abi");
-            interfaceABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
-                    "contracts/domains/interfaces/IPente.sol/IPente.json",
-                    "abi");
+            // Note that technically we could just supply the IPente interface ABI for the events, but instead we
+            // grab the events we need from the full privacy group ABI along with the error definitions.
+            // This means that Paladin has our full list of error definitions to decode on-chain errors if things go wrong.
+            eventsABI = new JsonABI();
+            eventsABI.addAll(privacyGroupABI.stream().filter(e ->
+                    e.type().equals("error") ||
+                        (e.type().equals("event") && (e.name().equals("UTXOApproved") || e.name().equals("UTXOTransfer")))
+            ).toList());
             externalCallABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
                     "contracts/private/interfaces/IPenteExternalCall.sol/IPenteExternalCall.json",
                     "abi");
+            externalCallEventABI = externalCallABI.getABIEntry("event", "PenteExternalCall");
         } catch (Exception t) {
             LOGGER.error("failed to initialize configuration", t);
             throw new RuntimeException(t);
@@ -163,6 +171,22 @@ public class PenteConfiguration {
             JsonHex.Bytes data
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TransactionExternalCall(
+            @JsonProperty
+            Address contractAddress,
+            @JsonProperty
+            byte[] encodedCall
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TransactionExtraData(
+            @JsonProperty
+            Address contractAddress,
+            @JsonProperty
+            List<TransactionExternalCall> externalCalls
+    ) {}
+
     public static byte[] intToBytes4(int val) {
         return ByteBuffer.allocate(4).putInt(val).array();
     }
@@ -229,22 +253,6 @@ public class PenteConfiguration {
         };
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record TransactionExternalCall(
-            @JsonProperty
-            Address contractAddress,
-            @JsonProperty
-            byte[] encodedCall
-    ) {}
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record TransactionExtraData(
-            @JsonProperty
-            Address contractAddress,
-            @JsonProperty
-            List<TransactionExternalCall> externalCalls
-    ) {}
-
     synchronized JsonABI getFactoryContractABI() {
         return factoryContractABI;
     }
@@ -253,9 +261,11 @@ public class PenteConfiguration {
         return privacyGroupABI;
     }
 
-    synchronized JsonABI getInterfaceABI() { return interfaceABI; }
+    synchronized JsonABI getEventsABI() { return eventsABI; }
 
     synchronized JsonABI getExternalCallABI() { return externalCallABI; }
+
+    synchronized JsonABI.Entry getExternalCallEventABI() { return externalCallEventABI; }
 
     synchronized Bytes getExternalCallTopic() { return externalCallTopic; }
 
