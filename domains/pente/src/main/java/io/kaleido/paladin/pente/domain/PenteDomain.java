@@ -17,7 +17,6 @@ package io.kaleido.paladin.pente.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
 import io.kaleido.paladin.pente.evmrunner.EVMRunner;
@@ -33,7 +32,6 @@ import io.kaleido.paladin.toolkit.JsonHex.Bytes32;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.FormattedMessage;
-import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -183,7 +181,7 @@ public class PenteDomain extends DomainInstance {
                     setContractConfig(contractConfig).
                     build());
 
-        } catch(Exception e) {
+        } catch (Exception e) {
             LOGGER.error(new FormattedMessage("Invalid configuration for domain {}", request.getContractAddress()), e);
             // We do not stall the indexer for this
             return CompletableFuture.completedFuture(ToDomain.InitContractResponse.newBuilder().
@@ -384,9 +382,7 @@ public class PenteDomain extends DomainInstance {
             if (request.getExtraData().isEmpty()) {
                 externalCalls = Collections.emptyList();
             } else {
-                var extraData = new ObjectMapper().readValue(
-                        request.getExtraData(),
-                        PenteConfiguration.TransactionExtraData.class);
+                var extraData = new ObjectMapper().readValue(request.getExtraData(), PenteConfiguration.TransactionExtraData.class);
                 externalCalls = extraData.externalCalls();
             }
 
@@ -402,11 +398,32 @@ public class PenteDomain extends DomainInstance {
                 put("signatures", signatures.stream().map(r -> JsonHex.wrap(r.getPayload().toByteArray())).toList());
             }};
 
-            var transitionFunctionABI = config.getPrivacyGroupABI().getABIEntry("function", "transition").toJSON(false);
-            var preparedTx = ToDomain.PreparedTransaction.newBuilder().
-                    setFunctionAbiJson(transitionFunctionABI).
+            var transitionABI = config.getPrivacyGroupABI().getABIEntry("function", "transition").toJSON(false);
+            var transitionTX = ToDomain.PreparedTransaction.newBuilder().
+                    setFunctionAbiJson(transitionABI).
                     setParamsJson(new ObjectMapper().writeValueAsString(params));
-            var result = ToDomain.PrepareTransactionResponse.newBuilder().setTransaction(preparedTx);
+
+            var tx = new PenteTransaction(this, request.getTransaction());
+            var transitionHash = tx.eip712TypedDataEndorsementPayload(
+                    request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                    request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                    request.getOutputStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                    request.getInfoStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                    externalCalls);
+
+            var transitionWithApprovalABI = config.getPrivacyGroupABI().getABIEntry("function", "transitionWithApproval");
+            PenteConfiguration.PenteTransitionMetadata metadata = new PenteConfiguration.PenteTransitionMetadata(
+                    new PenteConfiguration.PenteApprovalParams(
+                            new JsonHex.Bytes32(transitionHash),
+                            signatures.stream().map(r -> JsonHex.wrap(r.getPayload().toByteArray())).toList()),
+                    new PenteConfiguration.PentePublicTransaction(
+                            transitionWithApprovalABI,
+                            new ObjectMapper().writeValueAsString(params)));
+
+            var result = ToDomain.PrepareTransactionResponse.newBuilder().
+                    setTransaction(transitionTX).
+                    setMetadata(new ObjectMapper().writeValueAsString(metadata));
+
             return CompletableFuture.completedFuture(result.build());
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
@@ -418,8 +435,8 @@ public class PenteDomain extends DomainInstance {
         try {
             var mapper = new ObjectMapper();
             for (var event : request.getEventsList()) {
-                if (config.getTransferSignature().equals(event.getSoliditySignature())) {
-                    var transfer = mapper.readValue(event.getDataJson(), UTXOTransferJSON.class);
+                if (PenteConfiguration.transferSignature.equals(event.getSoliditySignature())) {
+                    var transfer = mapper.readValue(event.getDataJson(), PenteTransitionJSON.class);
                     var inputs = Arrays.stream(transfer.inputs).map(id -> ToDomain.StateUpdate.newBuilder()
                             .setId(id.to0xHex())
                             .setTransactionId(transfer.txId.to0xHex())
@@ -445,6 +462,14 @@ public class PenteDomain extends DomainInstance {
                             .addAllReadStates(reads)
                             .addAllConfirmedStates(outputs)
                             .addAllInfoStates(info);
+                    return CompletableFuture.completedFuture(result.build());
+                } else if (PenteConfiguration.approvalSignature.equals(event.getSoliditySignature())) {
+                    var approval = mapper.readValue(event.getDataJson(), PenteApprovedJSON.class);
+                    var result = ToDomain.HandleEventBatchResponse.newBuilder()
+                            .addTransactionsComplete(ToDomain.CompletedTransaction.newBuilder()
+                                    .setTransactionId(approval.txId.to0xHex())
+                                    .setLocation(event.getLocation())
+                                    .build());
                     return CompletableFuture.completedFuture(result.build());
                 } else {
                     throw new Exception("Unknown signature: " + event.getSoliditySignature());
@@ -548,16 +573,7 @@ public class PenteDomain extends DomainInstance {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record EventWithData(
-            @JsonProperty
-            String soliditySignature,
-            @JsonProperty
-            JsonNode data
-    ) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record UTXOTransferJSON(
+    record PenteTransitionJSON(
             @JsonProperty
             Bytes32 txId,
             @JsonProperty
@@ -570,7 +586,19 @@ public class PenteDomain extends DomainInstance {
             Bytes32[] info,
             @JsonProperty
             Bytes data
-    ) {}
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record PenteApprovedJSON(
+            @JsonProperty
+            Bytes32 txId,
+            @JsonProperty
+            Address delegate,
+            @JsonProperty
+            Bytes32 transitionHash
+    ) {
+    }
 
     /** during assembly, we load available states from the Paladin state store */
     class AssemblyAccountLoader implements AccountLoader {

@@ -157,7 +157,7 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withGuard b
 		// Unpack the inner "transfer" and replace with "transferWithApproval"
 		// TODO: make this simpler
 		var guardParams NotoGuardTransferParams
-		err = json.Unmarshal(transferGold.ParamsJSON, &guardParams)
+		err = json.Unmarshal(transferGold.PreparedTransaction.Data, &guardParams)
 		require.NoError(t, err)
 		decoded, err := notoGold.ABI.Functions()["transfer"].DecodeCallDataCtx(ctx, guardParams.Prepared.EncodedCall)
 		require.NoError(t, err)
@@ -173,26 +173,26 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withGuard b
 		require.NoError(t, err)
 	} else {
 		// Generate a "transferWithApproval" using the same params from the encoded "transfer"
-		transferGoldEncoded, err = notoGold.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferGold.ParamsJSON)
+		transferGoldEncoded, err = notoGold.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferGold.PreparedTransaction.Data)
 		require.NoError(t, err)
-		err = json.Unmarshal(transferGold.ParamsJSON, &transferGoldParams)
+		err = json.Unmarshal(transferGold.PreparedTransaction.Data, &transferGoldParams)
 		require.NoError(t, err)
 	}
 
 	var transferSilverParams NotoTransferParams
-	transferSilverEncoded, err := notoSilver.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferSilver.ParamsJSON)
+	transferSilverEncoded, err := notoSilver.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferSilver.PreparedTransaction.Data)
 	require.NoError(t, err)
-	err = json.Unmarshal(transferSilver.ParamsJSON, &transferSilverParams)
+	err = json.Unmarshal(transferSilver.PreparedTransaction.Data, &transferSilverParams)
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Create Atom instance")
 	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
 		{
-			ContractAddress: &transferGold.To,
+			ContractAddress: transferGold.PreparedTransaction.To,
 			CallData:        transferGoldEncoded,
 		},
 		{
-			ContractAddress: &transferSilver.To,
+			ContractAddress: transferSilver.PreparedTransaction.To,
 			CallData:        transferSilverEncoded,
 		},
 		{
@@ -356,11 +356,9 @@ func TestNotoForZeto(t *testing.T) {
 	transferNoto := noto.Transfer(ctx, bob, 1).Prepare(alice)
 	transferZeto := zeto.Transfer(ctx, alice, 1).Prepare(bob)
 
-	transferNotoEncoded, err := noto.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferNoto.ParamsJSON)
+	transferNotoEncoded, err := noto.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferNoto.PreparedTransaction.Data)
 	require.NoError(t, err)
-	transferZetoEncoded, err := transferZeto.FunctionABI.EncodeCallDataJSONCtx(ctx, transferZeto.ParamsJSON)
-	require.NoError(t, err)
-	zeto.LockProof(ctx, tktypes.MustEthAddress(bobKey.Verifier.Verifier), transferZetoEncoded).SignAndSend(bob, false).Wait()
+	zeto.LockProof(ctx, tktypes.MustEthAddress(bobKey.Verifier.Verifier), transferZeto.EncodedCall).SignAndSend(bob, false).Wait()
 
 	// TODO: this should actually be a Pente state transition
 	log.L(ctx).Infof("Prepare the trade execute")
@@ -397,7 +395,7 @@ func TestNotoForZeto(t *testing.T) {
 		},
 		{
 			ContractAddress: zeto.Address,
-			CallData:        transferZetoEncoded,
+			CallData:        transferZeto.EncodedCall,
 		},
 		{
 			ContractAddress: swap.Address,
@@ -414,7 +412,7 @@ func TestNotoForZeto(t *testing.T) {
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
 
 	var transferNotoParams NotoTransferParams
-	err = json.Unmarshal(transferNoto.ParamsJSON, &transferNotoParams)
+	err = json.Unmarshal(transferNoto.PreparedTransaction.Data, &transferNotoParams)
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Approve both transfers")
@@ -424,7 +422,7 @@ func TestNotoForZeto(t *testing.T) {
 		Data:     transferNotoParams.Data,
 		Delegate: transferAtom.Address,
 	}).SignAndSend(alice).Wait()
-	zeto.LockProof(ctx, transferAtom.Address, transferZetoEncoded).SignAndSend(bob, false).Wait()
+	zeto.LockProof(ctx, transferAtom.Address, transferZeto.EncodedCall).SignAndSend(bob, false).Wait()
 
 	log.L(ctx).Infof("Execute the atomic operation")
 	sent = transferAtom.Execute(ctx).SignAndSend(alice).Wait(5 * time.Second)

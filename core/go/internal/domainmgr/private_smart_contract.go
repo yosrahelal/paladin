@@ -464,7 +464,6 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 		}
 	}
 
-	tx.PreparedTransactionIntent = tx.Inputs.Intent
 	if res.Transaction.Type == prototk.PreparedTransaction_PRIVATE {
 		psc, err := dc.dm.GetSmartContractByAddress(dCtx.Ctx(), *contractAddress)
 		if err != nil {
@@ -493,6 +492,9 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 			},
 			ABI: abi.ABI{&functionABI},
 		}
+	}
+	if res.Metadata != nil {
+		tx.PreparedMetadata = []byte(*res.Metadata)
 	}
 	return nil
 }

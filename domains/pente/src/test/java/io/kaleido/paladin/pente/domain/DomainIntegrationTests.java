@@ -168,8 +168,8 @@ public class DomainIntegrationTests {
     ) {
     }
 
-    Testbed.PrivateContractTransaction getTransactionInfo(LinkedHashMap<String, Object> res) {
-        return new ObjectMapper().convertValue(res, Testbed.PrivateContractTransaction.class);
+    Testbed.TransactionResult getTransactionInfo(LinkedHashMap<String, Object> res) {
+        return new ObjectMapper().convertValue(res, Testbed.TransactionResult.class);
     }
 
     @Test
@@ -222,7 +222,7 @@ public class DomainIntegrationTests {
             );
             var tx = getTransactionInfo(
                     testbed.getRpcClient().request("testbed_invoke",
-                            new PrivateContractInvoke(
+                            new Testbed.TransactionInput(
                                     "notary",
                                     JsonHex.addressFrom(penteInstanceAddress),
                                     notoTrackerDeployABI,
@@ -235,7 +235,7 @@ public class DomainIntegrationTests {
                                         }});
                                     }}
                             ), true));
-            var extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
+            var extraData = new ObjectMapper().convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
             var notoTrackerAddress = extraData.contractAddress();
 
             // Create Noto token
@@ -250,7 +250,7 @@ public class DomainIntegrationTests {
 
             // Perform Noto mint
             testbed.getRpcClient().request("testbed_invoke",
-                    new PrivateContractInvoke(
+                    new Testbed.TransactionInput(
                             "notary",
                             JsonHex.addressFrom(notoInstanceAddress),
                             notoMintABI,
@@ -277,7 +277,7 @@ public class DomainIntegrationTests {
 
             // Validate ERC20 balance
             LinkedHashMap<String, Object> balanceResult = testbed.getRpcClient().request("testbed_call",
-                    new PrivateContractInvoke(
+                    new Testbed.TransactionInput(
                             "notary",
                             JsonHex.addressFrom(penteInstanceAddress),
                             notoTrackerBalanceABI,
