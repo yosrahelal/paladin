@@ -220,7 +220,7 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 	  	"success":true, 
 	  	"transactionHash":"0xd0561b310b77e47bc16fb3c40d48b72255b1748efeecf7452373dfce8045af30", 
 		"transactionIndex":10,
-		"states": {"unknown": true},
+		"states": {"none": true},
 		"domainReceiptError": "not available"
 	}`, txID), tktypes.JSONString(receipt).Pretty())
 
