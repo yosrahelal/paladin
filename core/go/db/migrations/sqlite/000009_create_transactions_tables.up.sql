@@ -53,7 +53,8 @@ CREATE TABLE transaction_deps (
 CREATE INDEX transaction_deps_depends_on ON transaction_deps("depends_on");
 
 CREATE TABLE transaction_receipts (
-  "transaction"               UUID            NOT NULL,
+  "transaction"               UUID            NOT NULL, -- note there is no foreign key to transactions here - we can have receipts for TXs that we do not know locally
+  "domain"                    TEXT            NOT NULL, -- empty string for public
   "indexed"                   BIGINT          NOT NULL,
   "success"                   BOOLEAN         NOT NULL,
   "failure_message"           TEXT,
@@ -64,8 +65,8 @@ CREATE TABLE transaction_receipts (
   "source"                    TEXT,
   "block_number"              BIGINT,
   "contract_address"          TEXT,
-  PRIMARY KEY ("transaction"),
-  FOREIGN KEY ("transaction") REFERENCES transactions ("id") ON DELETE CASCADE
+  PRIMARY KEY ("transaction")
 );
 CREATE INDEX transaction_receipts_tx_hash ON transaction_receipts("tx_hash");
+CREATE INDEX transaction_receipts_source ON transaction_receipts ("source");
 

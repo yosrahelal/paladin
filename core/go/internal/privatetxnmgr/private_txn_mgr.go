@@ -318,7 +318,7 @@ func (p *privateTxManager) revertDeploy(ctx context.Context, tx *components.Priv
 
 	var tryFinalize func()
 	tryFinalize = func() {
-		p.syncPoints.QueueTransactionFinalize(ctx, tktypes.EthAddress{}, tx.ID, deployError.Error(),
+		p.syncPoints.QueueTransactionFinalize(ctx, tx.Domain, tktypes.EthAddress{}, tx.ID, deployError.Error(),
 			func(ctx context.Context) {
 				log.L(ctx).Debugf("Finalized deployment transaction: %s", tx.ID)
 			},

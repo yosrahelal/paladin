@@ -38,6 +38,7 @@ const (
 )
 
 type ReceiptInput struct {
+	Domain          string                  // set when the receipt is from a domain
 	ReceiptType     ReceiptType             // required
 	TransactionID   uuid.UUID               // required
 	OnChain         tktypes.OnChainLocation // OnChain.Type must be set for an on-chain transaction/event
@@ -53,8 +54,7 @@ type TxCompletion struct {
 
 type TXManager interface {
 	ManagerLifecycle
-	MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*TxCompletion) ([]uuid.UUID, error) // returns which transactions were known
-	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) error                        // requires all transactions to be known
+	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) error // requires all transactions to be known
 	CalculateRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes) error
 	DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.DecodedError, error)
 	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error)

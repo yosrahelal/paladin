@@ -43,33 +43,16 @@ func TestFinalizeTransactionsNoOp(t *testing.T) {
 
 }
 
-func TestFinalizeTransactionsLookupFail(t *testing.T) {
-
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*transactions").WillReturnError(fmt.Errorf("pop"))
-	})
-	defer done()
-
-	txID := uuid.New()
-	_, err := txm.MatchAndFinalizeTransactions(ctx, txm.p.DB(), []*components.TxCompletion{
-		{ReceiptInput: components.ReceiptInput{TransactionID: txID, ReceiptType: components.RT_Success}},
-	})
-	assert.Regexp(t, "pop", err)
-
-}
-
 func TestFinalizeTransactionsSuccessWithFailure(t *testing.T) {
 
 	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(txID))
-	})
+	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	_, err := txm.MatchAndFinalizeTransactions(ctx, txm.p.DB(), []*components.TxCompletion{
-		{ReceiptInput: components.ReceiptInput{TransactionID: txID, ReceiptType: components.RT_Success,
+	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
+		{TransactionID: txID, ReceiptType: components.RT_Success,
 			FailureMessage: "not empty",
-		}},
+		},
 	})
 	assert.Regexp(t, "PD012213", err)
 }
@@ -77,13 +60,11 @@ func TestFinalizeTransactionsSuccessWithFailure(t *testing.T) {
 func TestFinalizeTransactionsBadType(t *testing.T) {
 
 	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(txID))
-	})
+	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	_, err := txm.MatchAndFinalizeTransactions(ctx, txm.p.DB(), []*components.TxCompletion{
-		{ReceiptInput: components.ReceiptInput{TransactionID: txID, ReceiptType: components.ReceiptType(42)}}})
+	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
+		{TransactionID: txID, ReceiptType: components.ReceiptType(42)}})
 	assert.Regexp(t, "PD012213", err)
 
 }
@@ -91,13 +72,11 @@ func TestFinalizeTransactionsBadType(t *testing.T) {
 func TestFinalizeTransactionsFailedWithMessageNoMessage(t *testing.T) {
 
 	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(txID))
-	})
+	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	_, err := txm.MatchAndFinalizeTransactions(ctx, txm.p.DB(), []*components.TxCompletion{
-		{ReceiptInput: components.ReceiptInput{TransactionID: txID, ReceiptType: components.RT_FailedWithMessage}}})
+	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
+		{TransactionID: txID, ReceiptType: components.RT_FailedWithMessage}})
 	assert.Regexp(t, "PD012213", err)
 
 }
@@ -105,14 +84,12 @@ func TestFinalizeTransactionsFailedWithMessageNoMessage(t *testing.T) {
 func TestFinalizeTransactionsFailedWithRevertDataWithMessage(t *testing.T) {
 
 	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(txID))
-	})
+	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	_, err := txm.MatchAndFinalizeTransactions(ctx, txm.p.DB(), []*components.TxCompletion{
-		{ReceiptInput: components.ReceiptInput{TransactionID: txID, ReceiptType: components.RT_FailedOnChainWithRevertData,
-			FailureMessage: "not empty"}}})
+	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
+		{TransactionID: txID, ReceiptType: components.RT_FailedOnChainWithRevertData,
+			FailureMessage: "not empty"}})
 	assert.Regexp(t, "PD012213", err)
 
 }
@@ -232,22 +209,6 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 	  	"transactionHash":"0xd0561b310b77e47bc16fb3c40d48b72255b1748efeecf7452373dfce8045af30", 
 		"transactionIndex":10
 	}`, txID), string(tktypes.JSONString(receipt)))
-
-}
-
-func TestFinalizeTransactionsIgnoreUnknown(t *testing.T) {
-
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}))
-	})
-	defer done()
-
-	ids, err := txm.MatchAndFinalizeTransactions(ctx, txm.p.DB(), []*components.TxCompletion{
-		{ReceiptInput: components.ReceiptInput{TransactionID: uuid.New(), ReceiptType: components.RT_FailedOnChainWithRevertData,
-			FailureMessage: "will be ignored"},
-		}})
-	assert.NoError(t, err)
-	assert.Empty(t, ids)
 
 }
 

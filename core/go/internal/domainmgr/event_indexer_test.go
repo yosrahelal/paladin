@@ -252,7 +252,7 @@ func TestHandleEventBatch(t *testing.T) {
 			},
 		}).Return(nil, nil)
 
-		mc.txManager.On("MatchAndFinalizeTransactions", mock.Anything, mock.Anything, mock.MatchedBy(func(receipts []*components.TxCompletion) bool {
+		mc.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.MatchedBy(func(receipts []*components.ReceiptInput) bool {
 			// Note first contract is unrecognized, second is recognized
 			require.Len(t, receipts, 1)
 			r := receipts[0]
@@ -264,7 +264,7 @@ func TestHandleEventBatch(t *testing.T) {
 			assert.Equal(t, expectedEvent.TransactionIndex, r.OnChain.TransactionIndex)
 			assert.Equal(t, expectedEvent.LogIndex, r.OnChain.LogIndex)
 			return true
-		})).Return([]uuid.UUID{txID}, nil)
+		})).Return(nil)
 
 		mc.privateTxManager.On("PrivateTransactionConfirmed", mock.Anything, mock.Anything).Return()
 	})
@@ -350,7 +350,7 @@ func TestHandleEventBatchFinalizeFail(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 		mc.db.ExpectExec(`INSERT.*private_smart_contracts`).WillReturnResult(driver.ResultNoRows)
 
-		mc.txManager.On("MatchAndFinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
 	})
 	defer done()
 

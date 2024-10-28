@@ -202,10 +202,11 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 				return nil, err
 			}
 			log.L(ctx).Infof("Domain transaction completion: %s", txID)
-			txCompletions = append(txCompletions, &components.TxCompletion{
+			completion := &components.TxCompletion{
 				PSC: batch.psc,
 				ReceiptInput: components.ReceiptInput{
 					TransactionID: *txID,
+					Domain:        d.name,
 					ReceiptType:   components.RT_Success,
 					OnChain: tktypes.OnChainLocation{
 						Type:             tktypes.OnChainEvent, // the on-chain confirmation is an event (even though it's a private transaction we're confirming)
@@ -216,7 +217,8 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 						Source:           &addr,
 					},
 				},
-			})
+			}
+			txCompletions = append(txCompletions, completion)
 		}
 	}
 
@@ -224,6 +226,11 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 		// Ensure we are sorted in block order, as the above processing extracted the array in two
 		// phases (contract deployments, then transactions) so the list will be out of order.
 		sort.Sort(txCompletions)
+
+		receipts := make([]*components.ReceiptInput, len(txCompletions))
+		for i, txc := range txCompletions {
+			receipts[i] = &txc.ReceiptInput
+		}
 
 		// We have completions to hand to the TxManager to write as completions
 		// Note we go directly to the TxManager (bypassing the private TX manager) during the database
@@ -234,7 +241,7 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 		// for ALL private transactions (not just those where we're the sender) as there
 		// might be in-memory coordination activities that need to re-process now these
 		// transactions have been finalized.
-		if _, err := d.dm.txManager.MatchAndFinalizeTransactions(ctx, dbTX, txCompletions); err != nil {
+		if err := d.dm.txManager.FinalizeTransactions(ctx, dbTX, receipts); err != nil {
 			return nil, err
 		}
 	}

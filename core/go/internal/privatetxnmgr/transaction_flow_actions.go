@@ -236,6 +236,7 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 
 	tf.syncPoints.QueueTransactionFinalize(
 		ctx,
+		tf.transaction.Inputs.Domain,
 		tf.domainAPI.Address(),
 		tf.transaction.ID,
 		tf.finalizeRevertReason,
