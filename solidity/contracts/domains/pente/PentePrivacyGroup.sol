@@ -28,6 +28,7 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         keccak256("Upgrade(address address)");
 
     mapping(bytes32 => bool) private _unspent;
+    mapping(bytes32 => address) private _approvals;
     address _nextImplementation;
 
     // Config follows the convention of a 4 byte type selector, followed by ABI encoded bytes
@@ -42,6 +43,7 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     error PenteReadNotAvailable(bytes32 read);
     error PenteOutputAlreadyUnspent(bytes32 output);
     error PenteExternalCallsDisabled();
+    error PenteInvalidDelegate(bytes32 txhash, address delegate, address sender);
 
     struct EndorsementConfig {
         uint threshold;
@@ -111,13 +113,40 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         States calldata states,
         ExternalCall[] calldata externalCalls,
         bytes[] calldata signatures
-    ) public {
-        bytes32 transitionHash = _buildTransitionHash(
-            states,
-            externalCalls
-        );
+    ) external {
+        bytes32 transitionHash = _buildTransitionHash(states, externalCalls);
         validateEndorsements(transitionHash, signatures);
+        _transition(txId, states, externalCalls);
+    }
 
+    function approveTransition(
+        bytes32 txId,
+        address delegate,
+        bytes32 transitionHash,
+        bytes[] calldata signatures
+    ) external {
+        validateEndorsements(transitionHash, signatures);
+        _approvals[transitionHash] = delegate;
+        emit UTXOApproved(txId, delegate, transitionHash);
+    }
+
+    function transitionWithApproval(
+        bytes32 txId,
+        States calldata states,
+        ExternalCall[] calldata externalCalls
+    ) external {
+        bytes32 transitionHash = _buildTransitionHash(states, externalCalls);
+        if (_approvals[transitionHash] != msg.sender) {
+            revert PenteInvalidDelegate(transitionHash, _approvals[transitionHash], msg.sender);
+        }
+        _transition(txId, states, externalCalls);
+    }
+
+    function _transition(
+        bytes32 txId,
+        States calldata states,
+        ExternalCall[] calldata externalCalls
+    ) internal {
         // Perform the state transitions
         for (uint i = 0; i < states.inputs.length; i++) {
             if (!_unspent[states.inputs[i]]) {
@@ -138,7 +167,14 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         }
 
         // Emit the state transition event
-        emit UTXOTransfer(txId, states.inputs, states.reads, states.outputs, states.info, new bytes(0));
+        emit UTXOTransfer(
+            txId,
+            states.inputs,
+            states.reads,
+            states.outputs,
+            states.info,
+            new bytes(0)
+        );
 
         // Trigger any external calls
         for (uint i = 0; i < externalCalls.length; i++) {
