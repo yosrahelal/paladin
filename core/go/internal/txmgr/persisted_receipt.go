@@ -50,6 +50,7 @@ type transactionReceipt struct {
 
 func mapPersistedReceipt(receipt *transactionReceipt) *pldapi.TransactionReceiptData {
 	r := &pldapi.TransactionReceiptData{
+		Domain:          receipt.Domain,
 		Success:         receipt.Success,
 		FailureMessage:  stringOrEmpty(receipt.FailureMessage),
 		RevertData:      receipt.RevertData,

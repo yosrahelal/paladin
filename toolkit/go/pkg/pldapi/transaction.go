@@ -103,6 +103,7 @@ type TransactionReceiptDataOnchainEvent struct {
 }
 
 type TransactionReceiptData struct {
+	Domain                              string              `docstruct:"TransactionReceiptData" json:"domain,omitempty"`  // only set on private transaction receipts
 	Success                             bool                `docstruct:"TransactionReceiptData" json:"success,omitempty"` // true for success (note "status" is reserved for future use)
 	*TransactionReceiptDataOnchain      `json:",inline"`    // if the result was finalized by the blockchain (note quirk of omitempty that we can't put zero-valid int pointers on main struct)
 	*TransactionReceiptDataOnchainEvent `json:",inline"`    // if the result was finalized by the blockchain by an event
