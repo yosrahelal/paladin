@@ -30,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
@@ -228,8 +229,13 @@ func (tm *txManager) CallTransaction(ctx context.Context, result any, call *plda
 		return err
 	}
 
+	serializer, err := call.DataFormat.GetABISerializer(ctx)
+	if err != nil {
+		return err
+	}
+
 	if call.Type.V() == pldapi.TransactionTypePublic {
-		return tm.callTransactionPublic(ctx, result, call, txi)
+		return tm.callTransactionPublic(ctx, result, call, txi, serializer)
 	}
 
 	if call.To == nil {
@@ -237,10 +243,28 @@ func (tm *txManager) CallTransaction(ctx context.Context, result any, call *plda
 		return i18n.NewError(ctx, msgs.MsgTxMgrPrivateCallRequiresTo)
 	}
 
-	psc.InitCall(ctx)
+	// Do the call
+	cv, err := tm.privateTxMgr.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		Domain:   call.Domain,
+		From:     call.From,
+		To:       *call.To,
+		Function: txi.fn.definition,
+		Inputs:   txi.inputs,
+		Intent:   prototk.TransactionSpecification_CALL,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Serialize the result
+	b, err := serializer.SerializeJSONCtx(ctx, cv)
+	if err == nil {
+		err = json.Unmarshal(b, result)
+	}
+	return err
 }
 
-func (tm *txManager) callTransactionPublic(ctx context.Context, result any, call *pldapi.TransactionCall, txi *txInsertInfo) (err error) {
+func (tm *txManager) callTransactionPublic(ctx context.Context, result any, call *pldapi.TransactionCall, txi *txInsertInfo, serializer *abi.Serializer) (err error) {
 
 	ec := tm.ethClientFactory.HTTPClient().(ethclient.EthClientWithKeyManager)
 	var callReq ethclient.ABIFunctionRequestBuilder
@@ -254,6 +278,7 @@ func (tm *txManager) callTransactionPublic(ctx context.Context, result any, call
 			To(call.To.Address0xHex()).
 			Input(call.Data).
 			BlockRef(ethclient.BlockRef(blockRef)).
+			Serializer(serializer).
 			Output(result)
 		if call.From != "" {
 			var senderAddr *tktypes.EthAddress
