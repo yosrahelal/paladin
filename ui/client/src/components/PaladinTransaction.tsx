@@ -14,10 +14,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Button, ButtonBase, Collapse, Grid2, TextField, Typography } from "@mui/material";
+import { Box, Button, Collapse, Grid2, TextField, Typography } from "@mui/material";
 import { t } from "i18next";
 import { useState } from "react";
-import { ViewDetailsDialog } from "../dialogs/ViewDetails";
 import { IPaladinTransaction } from "../interfaces";
 import { Hash } from "./Hash";
 import { Timestamp } from "./Timestamp";
@@ -27,6 +26,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { EllapsedTime } from "./EllapsedTime";
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import { PaladinTransactionDetailsDialog } from "../dialogs/TransactionDetails";
 
 daysjs.extend(relativeTime);
 
@@ -144,9 +144,8 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
           </Grid2>
         </Grid2>
       </Box>
-      <ViewDetailsDialog
-        title={t('transaction')}
-        details={paladinTransaction}
+      <PaladinTransactionDetailsDialog
+        paladinTransaction={paladinTransaction}
         dialogOpen={viewDetailsDialogOpen}
         setDialogOpen={setViewDetailsDialogOpen}
       />

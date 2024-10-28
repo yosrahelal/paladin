@@ -46,10 +46,6 @@ export const Transactions: React.FC = () => {
     enabled: transactionReceipts !== undefined,
   });
 
-  if (paladinTransactions === undefined) {
-    return <></>;
-  }
-
   return (
     <>
       <Typography align="center" sx={{ fontSize: "24px", fontWeight: 500 }}>

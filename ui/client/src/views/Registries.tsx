@@ -25,14 +25,11 @@ import { fetchRegistries } from "../queries/registry";
 export const Registries: React.FC = () => {
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
 
-  const { data: registries, isLoading: loadingRegistries } = useQuery({
+  const { data: registries } = useQuery({
     queryKey: ["registries", lastBlockWithTransactions],
     queryFn: () => fetchRegistries(),
+    retry: false
   });
-
-  if (loadingRegistries) {
-    return <></>;
-  }
 
   return (
     <Fade timeout={800} in={true}>

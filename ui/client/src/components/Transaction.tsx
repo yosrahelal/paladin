@@ -26,6 +26,7 @@ import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { EllapsedTime } from "./EllapsedTime";
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import { PaladinTransactionDetailsDialog } from "../dialogs/TransactionDetails";
 
 type Props = {
   transaction: ITransaction
@@ -97,12 +98,19 @@ export const Transaction: React.FC<Props> = ({ transaction, paladinTransaction }
           </Grid2>
         </Grid2>
       </Box>
-      <ViewDetailsDialog
-        title={t('transaction')}
-        details={paladinTransaction ?? transaction}
-        dialogOpen={viewDetailsDialogOpen}
-        setDialogOpen={setViewDetailsDialogOpen}
-      />
+      {paladinTransaction !== undefined ?
+        <PaladinTransactionDetailsDialog
+          paladinTransaction={paladinTransaction}
+          dialogOpen={viewDetailsDialogOpen}
+          setDialogOpen={setViewDetailsDialogOpen}
+        />
+        :
+        <ViewDetailsDialog
+          title={t('transaction')}
+          details={transaction}
+          dialogOpen={viewDetailsDialogOpen}
+          setDialogOpen={setViewDetailsDialogOpen}
+        />}
     </>
   );
 

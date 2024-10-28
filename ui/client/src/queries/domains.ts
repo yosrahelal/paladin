@@ -14,28 +14,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export const generatePostReq = (stringBody: string): RequestInit => {
-  return {
-    body: stringBody,
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-  };
-};
+import i18next from "i18next";
+import { IStateReceipt } from "../interfaces";
+import { generatePostReq, returnResponse } from "./common";
+import { RpcEndpoint, RpcMethods } from "./rpcMethods";
 
-export const returnResponse = async (
-  res: Response,
-  errorMsg: string,
-  ignoreStatuses: number[] = []
-) => {
-  if (!res.ok && !ignoreStatuses.includes(res.status)) {
-    throw new Error(errorMsg);
-  }
-  try {
-    return (await res.json()).result;
-  } catch {
-    return {};
-  }
+export const fetchDomainReceipt = async (
+  domain: string,
+  transactionId: string
+): Promise<IStateReceipt[]> => {
+  const payload = {
+    jsonrpc: "2.0",
+    id: Date.now(),
+    method: RpcMethods.ptx_getDomainReceipt,
+    params: [domain, transactionId],
+  };
+
+  return <Promise<IStateReceipt[]>>(
+    returnResponse(
+      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
+      i18next.t("errorFetchingDomainReceipt")
+    )
+  );
 };

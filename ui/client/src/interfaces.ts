@@ -70,3 +70,8 @@ export interface ITransactionReceipt {
   success: boolean;
   transactionHash: string;
 }
+
+export interface IStateReceipt {
+  none?: boolean;
+  [key: string]: any;
+}

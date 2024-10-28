@@ -17,7 +17,10 @@
   "errorFetchingRegistryEntries": "Error fetching registry entries",
   "errorFetchingSubmissions": "Error fetching submissions",
   "errorFetchingTransactionReceipts": "Error fetching transaction receipts",
+  "errorFetchingTransactionReceipt": "Error fetching transaction receipt",
   "errorFetchingTransactions": "Error fetching transactions",
+  "errorFetchingStateReceipt": "Error fetching state receipt",
+  "errorFetchingDomainReceipt": "Error fetching domain receipt",
   "events": "Events",
   "from": "From",
   "hash": "Hash",
@@ -50,5 +53,9 @@
   "viewDetails": "View Details",
   "registryEntry": "Registry Entry",
   "noPendingTransactions": "No Pending Transactions",
-  "event": "Event"
+  "event": "Event",
+  "details": "Details",
+  "receipt": "Receipt",
+  "stateReceipt": "State Receipt",
+  "domainReceipt": "Domain Receipt"
 }

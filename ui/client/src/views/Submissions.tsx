@@ -29,6 +29,7 @@ export const Submissions: React.FC = () => {
   const { data: pendingTransactions, isLoading } = useQuery({
     queryKey: ["pendingTransactions", tab, lastBlockWithTransactions],
     queryFn: () => fetchSubmissions(tab === 0 ? "all" : "pending"),
+    retry: false
   });
 
   if (isLoading) {

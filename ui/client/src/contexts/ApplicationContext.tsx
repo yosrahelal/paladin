@@ -21,6 +21,7 @@ interface Props {
 }
 
 export const ApplicationContextProvider = ({ children, colorMode }: Props) => {
+
   const { data: lastBlockWithTransactions, error } = useQuery({
     queryKey: ["lastBlockWithTransactions"],
     queryFn: () =>
@@ -31,9 +32,7 @@ export const ApplicationContextProvider = ({ children, colorMode }: Props) => {
         return 0;
       }),
     refetchInterval: constants.UPDATE_FREQUENCY_MILLISECONDS,
-    retry: (failureCount) => {
-      return failureCount < 1;
-    },
+    retry: false
   });
 
   return (
