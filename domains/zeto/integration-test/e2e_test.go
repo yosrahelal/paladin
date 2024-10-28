@@ -138,11 +138,11 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 
 	log.L(ctx).Infof("Attempt mint from non-controller (should fail)")
 	_, err = s.mint(ctx, zetoAddress, recipient1Name, []int64{10})
-	require.ErrorContains(t, err, "PD011513: Reverted: 0x118cdaa7")
-	assert.Regexp(t, "PD011513: Reverted: 0x118cdaa.*", err)
+	require.ErrorContains(t, err, "PD012216: Transaction reverted OwnableUnauthorizedAccount")
+	assert.Regexp(t, "PD012216: Transaction reverted OwnableUnauthorizedAccount.*", err)
 
-	// for testing the batch circuits, we transfer 50 which would require 3 UTXOs (>2)
 	if useBatch {
+		// for testing the batch circuits, we transfer 50 which would require 3 UTXOs (>2)
 		amount1 := 10
 		amount2 := 40
 		log.L(ctx).Infof("Transfer %d from controller to recipient1 (%d) and recipient2 (%d)", amount1+amount2, amount1, amount2)
