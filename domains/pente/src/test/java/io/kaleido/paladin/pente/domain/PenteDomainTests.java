@@ -22,11 +22,12 @@ import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.*;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class PenteDomainTests {
 
@@ -48,7 +49,7 @@ public class PenteDomainTests {
                     "deployer",
                     factoryABI,
                     factoryBytecode,
-                    new HashMap<String,String>());
+                    new HashMap<String, String>());
             return new JsonHex.Address(contractAddr);
         }
     }
@@ -72,7 +73,8 @@ public class PenteDomainTests {
     static final record SimpleStorageConstructorJSON(
             @JsonProperty
             String x
-    ) {}
+    ) {
+    }
 
     static final JsonABI.Entry simpleStorageSetABI = JsonABI.newFunction(
             "set",
@@ -106,6 +108,18 @@ public class PenteDomainTests {
 
     Testbed.TransactionResult getTransactionInfo(LinkedHashMap<String, Object> res) {
         return new ObjectMapper().convertValue(res, Testbed.TransactionResult.class);
+    }
+
+    LinkedHashMap waitForReceipt(Testbed testbed, String txID, int waitSecs) throws InterruptedException, IOException {
+        for (int i = 0; i < waitSecs; i++) {
+            var approveReceipt = testbed.getRpcClient().request("ptx_getTransactionReceipt", txID);
+            if (approveReceipt != null) {
+                return new ObjectMapper().convertValue(approveReceipt, LinkedHashMap.class);
+            }
+            Thread.sleep(1000);
+        }
+        fail("Receipt not found");
+        return null;
     }
 
     @Test
@@ -146,12 +160,12 @@ public class PenteDomainTests {
             }};
             var tx = getTransactionInfo(
                     testbed.getRpcClient().request("testbed_invoke",
-                    new Testbed.TransactionInput(
-                            "simpleStorageDeployer",
-                            JsonHex.addressFrom(contractAddr),
-                            simpleStorageDeployABI,
-                            deployValues
-                    ), true));
+                            new Testbed.TransactionInput(
+                                    "simpleStorageDeployer",
+                                    JsonHex.addressFrom(contractAddr),
+                                    simpleStorageDeployABI,
+                                    deployValues
+                            ), true));
             var extraData = new ObjectMapper().convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
             var expectedContractAddress = extraData.contractAddress();
 
@@ -187,6 +201,114 @@ public class PenteDomainTests {
                             setValues
                     ), true);
 
+        }
+    }
+
+    @Test
+    void testSimpleStorageApproval() throws Exception {
+        JsonHex.Address address = deployFactory();
+        JsonHex.Bytes32 groupSalt = JsonHex.randomBytes32();
+        try (Testbed testbed = new Testbed(testbedSetup, new Testbed.ConfigDomain(
+                "pente", address, new Testbed.ConfigPlugin("jar", "", PenteDomainFactory.class.getName()), new HashMap<>()
+        ))) {
+            var mapper = new ObjectMapper();
+            PenteConfiguration.GroupTupleJSON groupInfo = new PenteConfiguration.GroupTupleJSON(
+                    groupSalt,
+                    new String[]{"member1", "member2"}
+            );
+
+            // Create the privacy group
+            String contractAddr = testbed.getRpcClient().request("testbed_deploy",
+                    "pente",
+                    new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
+                            groupInfo,
+                            "shanghai",
+                            PenteConfiguration.ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES,
+                            false
+                    ));
+            assertFalse(contractAddr.isBlank());
+
+            // Deploy Simple Storage to the privacy group
+            String simpleStorageBytecode = ResourceLoader.jsonResourceEntryText(
+                    this.getClass().getClassLoader(),
+                    "contracts/testcontracts/SimpleStorage.sol/SimpleStorage.json",
+                    "bytecode"
+            );
+            Map<String, Object> deployValues = new HashMap<>() {{
+                put("group", groupInfo);
+                put("bytecode", simpleStorageBytecode);
+                put("inputs", new HashMap<>() {{
+                    put("x", "1122334455");
+                }});
+            }};
+            var tx = getTransactionInfo(
+                    testbed.getRpcClient().request("testbed_invoke",
+                            new Testbed.TransactionInput(
+                                    "simpleStorageDeployer",
+                                    JsonHex.addressFrom(contractAddr),
+                                    simpleStorageDeployABI,
+                                    deployValues
+                            ), true));
+            var extraData = mapper.convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
+            var expectedContractAddress = extraData.contractAddress();
+
+            // Prepare a "set" on Simple Storage
+            Map<String, Object> setValues = new HashMap<>() {{
+                put("group", groupInfo);
+                put("to", expectedContractAddress.toString());
+                put("inputs", new HashMap<>() {{
+                    put("x", "2233445566");
+                }});
+            }};
+            var preparedSet = mapper.convertValue(
+                    testbed.getRpcClient().request("testbed_prepare",
+                            new Testbed.TransactionInput(
+                                    "simpleStorageDeployer",
+                                    JsonHex.addressFrom(contractAddr),
+                                    simpleStorageSetABI,
+                                    setValues)),
+                    Testbed.TransactionResult.class);
+            var metadata = mapper.convertValue(preparedSet.preparedMetadata(), PenteConfiguration.PenteTransitionMetadata.class);
+            var transitionParams = mapper.convertValue(preparedSet.preparedTransaction().data(), PenteConfiguration.PenteTransitionParams.class);
+
+            String member3Address = testbed.getRpcClient().request("testbed_resolveVerifier",
+                    "member3", Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
+
+            // Approve the "set"
+            var config = new PenteConfiguration();
+            String approveTx = testbed.getRpcClient().request("ptx_sendTransaction",
+                    new LinkedHashMap<String, Object>() {{
+                        put("type", "public");
+                        put("from", "member1");
+                        put("to", contractAddr);
+                        put("abi", config.getPrivacyGroupABI());
+                        put("function", "approveTransition");
+                        put("data", new LinkedHashMap<String, Object>() {{
+                            put("txId", new JsonHex.Bytes32("0x0000000000000000000000000000000000000000000000000000000000000000"));
+                            put("delegate", member3Address);
+                            put("transitionHash", metadata.approvalParams().transitionHash());
+                            put("signatures", metadata.approvalParams().signatures());
+                        }});
+                    }});
+            var approveReceipt = waitForReceipt(testbed, approveTx, 10);
+            assertEquals(true, approveReceipt.get("success"));
+
+            // Utilize the approval
+            String setTx = testbed.getRpcClient().request("ptx_sendTransaction",
+                    new LinkedHashMap<String, Object>() {{
+                        put("type", "public");
+                        put("from", "member3");
+                        put("to", contractAddr);
+                        put("abi", config.getPrivacyGroupABI());
+                        put("function", "transitionWithApproval");
+                        put("data", new LinkedHashMap<String, Object>() {{
+                            put("txId", new JsonHex.Bytes32("0x0000000000000000000000000000000000000000000000000000000000000000"));
+                            put("states", transitionParams.states());
+                            put("externalCalls", transitionParams.externalCalls());
+                        }});
+                    }});
+            var setReceipt = waitForReceipt(testbed, setTx, 10);
+            assertEquals(true, setReceipt.get("success"));
         }
     }
 
@@ -238,19 +360,19 @@ public class PenteDomainTests {
                     "bytecode"
             );
             var tx = getTransactionInfo(
-                testbed.getRpcClient().request("testbed_invoke",
-                        new Testbed.TransactionInput(
-                                "simpleStorageDeployer",
-                                JsonHex.addressFrom(penteAddr),
-                                simpleStorageLinkedDeployABI,
-                                new HashMap<>() {{
-                                    put("group", groupInfo);
-                                    put("bytecode", ssLinkedBytecode);
-                                    put("inputs", new HashMap<>() {{
-                                        put("linked", ssAddr);
-                                    }});
-                                }}
-                        ), true));
+                    testbed.getRpcClient().request("testbed_invoke",
+                            new Testbed.TransactionInput(
+                                    "simpleStorageDeployer",
+                                    JsonHex.addressFrom(penteAddr),
+                                    simpleStorageLinkedDeployABI,
+                                    new HashMap<>() {{
+                                        put("group", groupInfo);
+                                        put("bytecode", ssLinkedBytecode);
+                                        put("inputs", new HashMap<>() {{
+                                            put("linked", ssAddr);
+                                        }});
+                                    }}
+                            ), true));
             var extraData = new ObjectMapper().convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
             var ssLinkedAddr = extraData.contractAddress();
 

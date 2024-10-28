@@ -140,9 +140,9 @@ class PenteTransaction {
         if (defs.group == null) {
             throw new IllegalArgumentException("ABI params 'group' (tuple) and 'from' (address or string) are required");
         }
-        if (functionDef.name().equals("invoke") && defs.data != null) {
+        if (functionDef.name().equals(PenteConfiguration.FUNCTION_NAME_INVOKE) && defs.data != null) {
             abiEntryType = ABIEntryType.INVOKE;
-        } else if (functionDef.name().equals("deploy") && defs.bytecode != null && defs.inputs != null) {
+        } else if (functionDef.name().equals(PenteConfiguration.FUNCTION_NAME_DEPLOY) && defs.bytecode != null && defs.inputs != null) {
             abiEntryType = ABIEntryType.DEPLOY;
         } else if (defs.inputs != null) {
             abiEntryType = ABIEntryType.CUSTOM_FUNCTION;

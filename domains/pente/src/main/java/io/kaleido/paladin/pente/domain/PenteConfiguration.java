@@ -47,6 +47,9 @@ import java.util.*;
 public class PenteConfiguration {
     private static final Logger LOGGER = LogManager.getLogger(PenteConfiguration.class);
 
+    public static final String transferSignature = "event UTXOTransfer(bytes32 txId, bytes32[] inputs, bytes32[] reads, bytes32[] outputs, bytes32[] info, bytes data)";
+    public static final String approvalSignature = "event UTXOApproved(bytes32 txId, address delegate, bytes32 transitionHash)";
+
     private final JsonABI factoryContractABI;
 
     private final JsonABI privacyGroupABI;
@@ -60,9 +63,6 @@ public class PenteConfiguration {
     // Topic generated from event "PenteExternalCall(address,bytes)"
     private final JsonHex.Bytes32 externalCallTopic = new JsonHex.Bytes32("0xcac03685d5ba4ab3e1465a8ee1b2bb21094ddbd612a969fd34f93a5be7a0ac4f");
 
-    @SuppressWarnings("FieldCanBeLocal")
-    private final String transferSignature = "event UTXOTransfer(bytes32 txId, bytes32[] inputs, bytes32[] reads, bytes32[] outputs, bytes32[] info, bytes data)";
-
     private String domainName;
     private long chainId;
 
@@ -70,7 +70,8 @@ public class PenteConfiguration {
 
     private String schemaId_TransactionInfoState_v24_10_0;
 
-    record Schema(String id, String signature, JsonABI.Parameter def) {}
+    record Schema(String id, String signature, JsonABI.Parameter def) {
+    }
 
     private final Map<String, Schema> schemasByID = new HashMap<>();
 
@@ -88,7 +89,7 @@ public class PenteConfiguration {
             eventsABI = new JsonABI();
             eventsABI.addAll(privacyGroupABI.stream().filter(e ->
                     e.type().equals("error") ||
-                        (e.type().equals("event") && (e.name().equals("UTXOApproved") || e.name().equals("UTXOTransfer")))
+                            (e.type().equals("event") && (e.name().equals("UTXOApproved") || e.name().equals("UTXOTransfer")))
             ).toList());
             externalCallABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
                     "contracts/private/interfaces/IPenteExternalCall.sol/IPenteExternalCall.json",
@@ -100,21 +101,13 @@ public class PenteConfiguration {
         }
     }
 
-    public static final String ENDORSEMENT_TYPE_GROUP_SCOPED_KEYS = "groupScopedKeys";
-
     @JsonIgnoreProperties(ignoreUnknown = true)
     record GroupTupleJSON(
             @JsonProperty
             Bytes32 salt,
             @JsonProperty
             String[] members
-    ) {}
-
-    private static JsonABI.Parameter abiTuple_group() {
-        return JsonABI.newTuple("group", "Group", JsonABI.newParameters(
-                JsonABI.newParameter("salt", "bytes32"),
-                JsonABI.newParameter("members", "string[]")
-        ));
+    ) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -127,7 +120,46 @@ public class PenteConfiguration {
             String endorsementType,
             @JsonProperty
             boolean externalCallsEnabled
-    ) {}
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record PenteTransitionParams(
+            @JsonProperty
+            JsonHex.Bytes32 txId,
+            @JsonProperty
+            JsonNode states,
+            @JsonProperty
+            JsonNode externalCalls,
+            @JsonProperty
+            List<JsonHex.Bytes> signatures
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record PenteApprovalParams(
+            @JsonProperty
+            JsonHex.Bytes32 transitionHash,
+            @JsonProperty
+            List<JsonHex.Bytes> signatures
+    ) {
+    }
+
+    record PentePublicTransaction(
+            @JsonProperty
+            JsonABI.Entry functionABI
+            , @JsonProperty
+            String paramsJSON
+    ) {
+    }
+
+    record PenteTransitionMetadata(
+            @JsonProperty
+            PenteApprovalParams approvalParams,
+            @JsonProperty
+            PentePublicTransaction transitionWithApproval
+    ) {
+    }
 
     public static String ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES =
             "group_scoped_identities";
@@ -136,36 +168,17 @@ public class PenteConfiguration {
 
     public static final String FUNCTION_NAME_DEPLOY = "deploy";
 
-    record ParsedInvokeInputs(
-        @JsonProperty
-        GroupTupleJSON group,
-        @JsonProperty
-        String from,
-        @JsonProperty
-        String to,
-        @JsonProperty
-        BigInteger gas, // jackson supports the decimal string format we normalize to before passing to domain
-        @JsonProperty
-        BigInteger value,
-        @JsonProperty
-        JsonHex.Bytes data, // for FUNCTION_NAME_INVOKE only - where the data is passed directly
-        @JsonProperty
-        JsonHex.Bytes bytecode, // for FUNCTION_NAME_DEPLOY only - where the inputs are encoded after the bytecode
-        @JsonProperty
-        JsonNode inputs // leave this unparsed as we will push it back ot paladin to parse for us
-    ) {}
-
     JsonABI.Parameter abiTuple_AccountState_v24_10_0() {
         return JsonABI.newTuple("AccountState_v24_10_0", "AccountState_v24_10_0", JsonABI.newParameters(
-            JsonABI.newIndexedParameter("version", "string"),
-            JsonABI.newIndexedParameter("address", "address"),
-            JsonABI.newParameter("salt", "bytes32"),
-            JsonABI.newParameter("nonce", "uint256"),
-            JsonABI.newParameter("balance", "uint256"),
-            JsonABI.newParameter("codeHash", "bytes32"),
-            JsonABI.newParameter("code", "bytes"),
-            JsonABI.newParameter("storageRoot", "bytes32"),
-            JsonABI.newParameter("storage", "bytes32[2][]")
+                JsonABI.newIndexedParameter("version", "string"),
+                JsonABI.newIndexedParameter("address", "address"),
+                JsonABI.newParameter("salt", "bytes32"),
+                JsonABI.newParameter("nonce", "uint256"),
+                JsonABI.newParameter("balance", "uint256"),
+                JsonABI.newParameter("codeHash", "bytes32"),
+                JsonABI.newParameter("code", "bytes"),
+                JsonABI.newParameter("storageRoot", "bytes32"),
+                JsonABI.newParameter("storage", "bytes32[2][]")
         ));
     }
 
@@ -184,7 +197,8 @@ public class PenteConfiguration {
             Bytes32 transactionId,
             @JsonProperty()
             JsonHex.Bytes data
-    ) {}
+    ) {
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record TransactionExternalCall(
@@ -192,7 +206,8 @@ public class PenteConfiguration {
             Address contractAddress,
             @JsonProperty
             byte[] encodedCall
-    ) {}
+    ) {
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record TransactionExtraData(
@@ -200,7 +215,8 @@ public class PenteConfiguration {
             Address contractAddress,
             @JsonProperty
             List<TransactionExternalCall> externalCalls
-    ) {}
+    ) {
+    }
 
     public static byte[] intToBytes4(int val) {
         return ByteBuffer.allocate(4).putInt(val).array();
@@ -216,7 +232,8 @@ public class PenteConfiguration {
     record ContractConfig(
             @JsonProperty()
             String evmVersion
-    ) {}
+    ) {
+    }
 
     interface OnChainConfig {
         String evmVersion();
@@ -227,6 +244,7 @@ public class PenteConfiguration {
         public Uint256 threshold;
         public DynamicArray<org.web3j.abi.datatypes.Address> addresses;
         public Bool externalCallsEnabled;
+
         public PenteConfig_V0(
                 Utf8String evmVersion,
                 Uint256 threshold,
@@ -270,7 +288,8 @@ public class PenteConfiguration {
         }
         return switch (bytes4ToInt(constructorConfig, 0, 4)) {
             case PenteConfigID_V0 -> abiDecoder_Config_V0(JsonHex.wrap(constructorConfig), 4);
-            default -> throw new IllegalArgumentException("unknown config ID: %s".formatted(JsonHex.from(constructorConfig, 0, 4)));
+            default ->
+                    throw new IllegalArgumentException("unknown config ID: %s".formatted(JsonHex.from(constructorConfig, 0, 4)));
         };
     }
 
