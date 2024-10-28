@@ -30,6 +30,10 @@ type PublicTxOptions struct {
 	PublicTxGasPricing                     // fixed when any of these are supplied - disabling the gas pricing engine for this TX
 }
 
+type PublicCallOptions struct {
+	Block tktypes.HexUint64OrString `docstruct:"PublicCallOptions" json:"block,omitempty"` // a number, or special strings like "latest"
+}
+
 type PublicTxGasPricing struct {
 	MaxPriorityFeePerGas *tktypes.HexUint256 `docstruct:"PublicTxGasPricing" json:"maxPriorityFeePerGas,omitempty"`
 	MaxFeePerGas         *tktypes.HexUint256 `docstruct:"PublicTxGasPricing" json:"maxFeePerGas,omitempty"`

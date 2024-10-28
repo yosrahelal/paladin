@@ -36,6 +36,7 @@ import (
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
@@ -141,12 +142,16 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	}
 
 	if d.config.AbiEventsJson != "" {
-		// Parse the events ABI
+		// Parse the events ABI - which we also pass to TxManager for information about all the errors contained in here
 		var eventsABI abi.ABI
 		if err := json.Unmarshal([]byte(d.config.AbiEventsJson), &eventsABI); err != nil {
 			return nil, i18n.WrapError(d.ctx, err, msgs.MsgDomainInvalidEvents)
 		}
 		stream.Sources = append(stream.Sources, blockindexer.EventStreamSource{ABI: eventsABI})
+
+		if _, err := d.dm.txManager.UpsertABI(d.ctx, eventsABI); err != nil {
+			return nil, err
+		}
 	}
 
 	// We build a stream name in a way assured to result in a new stream if the ABI changes
@@ -197,6 +202,7 @@ func (d *domain) init() {
 
 		// Complete the initialization
 		_, err = d.api.InitDomain(d.ctx, initReq)
+
 		return true, err
 	})
 	if err != nil {
@@ -283,11 +289,11 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidSchemaID, req.SchemaId)
 	}
 
-	var states []*components.State
+	var states []*pldapi.State
 	if req.UseNullifiers != nil && *req.UseNullifiers {
-		_, states, err = c.dCtx.FindAvailableNullifiers(schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableNullifiers(c.dbTX, schemaID, &query)
 	} else {
-		_, states, err = c.dCtx.FindAvailableStates(schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableStates(c.dbTX, schemaID, &query)
 	}
 	if err != nil {
 		return nil, err
@@ -296,11 +302,11 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 	pbStates := make([]*prototk.StoredState, len(states))
 	for i, s := range states {
 		pbStates[i] = &prototk.StoredState{
-			Id:       s.ID.String(),
-			SchemaId: s.Schema.String(),
-			StoredAt: s.Created.UnixNano(),
-			DataJson: string(s.Data),
-			Locks:    []*prototk.StateLock{},
+			Id:        s.ID.String(),
+			SchemaId:  s.Schema.String(),
+			CreatedAt: s.Created.UnixNano(),
+			DataJson:  string(s.Data),
+			Locks:     []*prototk.StateLock{},
 		}
 		for _, l := range s.Locks {
 			pbStates[i].Locks = append(pbStates[i].Locks, &prototk.StateLock{
@@ -315,13 +321,13 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 
 }
 
-func mapStateLockType(t components.StateLockType) prototk.StateLock_StateLockType {
+func mapStateLockType(t pldapi.StateLockType) prototk.StateLock_StateLockType {
 	switch t {
-	case components.StateLockTypeCreate:
+	case pldapi.StateLockTypeCreate:
 		return prototk.StateLock_CREATE
-	case components.StateLockTypeSpend:
+	case pldapi.StateLockTypeSpend:
 		return prototk.StateLock_SPEND
-	case components.StateLockTypeRead:
+	case pldapi.StateLockTypeRead:
 		return prototk.StateLock_READ
 	default:
 		// Unit test covers all valid types and we only use this in fully controlled code

@@ -64,6 +64,13 @@ type TransactionInput struct {
 	Bytecode  tktypes.HexBytes `docstruct:"TransactionInput" json:"bytecode,omitempty"`  // for deploy this is prepended to the encoded data inputs
 }
 
+// Call also provides some options on how to execute the call
+type TransactionCall struct {
+	TransactionInput
+	PublicCallOptions
+	DataFormat tktypes.JSONFormatOptions `docstruct:"TransactionCall" json:"dataFormat"` // formatting options for the result data
+}
+
 // Additional fields returned on output when "full" specified
 type TransactionFull struct {
 	*Transaction
@@ -71,6 +78,12 @@ type TransactionFull struct {
 	Receipt   *TransactionReceiptData `docstruct:"TransactionFull" json:"receipt"`             // available if the transaction has reached a final state
 	Public    []*PublicTx             `docstruct:"TransactionFull" json:"public"`              // list of public transactions associated
 	// TODO: PrivateTransactions object list
+}
+
+type DecodedError struct {
+	Data       tktypes.RawJSON `docstruct:"DecodedError" json:"data"`
+	Summary    string          `docstruct:"DecodedError" json:"summary"`
+	Definition *abi.Entry      `docstruct:"DecodedError" json:"definition"`
 }
 
 type TransactionReceipt struct {

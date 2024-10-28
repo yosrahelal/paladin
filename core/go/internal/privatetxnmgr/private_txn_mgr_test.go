@@ -49,6 +49,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 )
 
@@ -146,8 +147,8 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	// TODO check that the transaction is signed with this key
 
 	assembled := make(chan struct{}, 1)
-	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
+	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
@@ -206,7 +207,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mocks.keyManager.On("Sign", mock.Anything, notaryKeyMapping, signpayloads.OPAQUE_TO_RSV, mock.Anything).
 		Return([]byte("notary-signature-bytes"), nil)
 
-	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
 				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
@@ -214,7 +215,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
-			tx := args[1].(*components.PrivateTransaction)
+			tx := args[2].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
@@ -260,6 +261,11 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
 	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
 
+	dcFlushed := make(chan error, 1)
+	mocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
+
 	err := privateTxManager.Start()
 	require.NoError(t, err)
 	err = privateTxManager.HandleNewTx(ctx, tx)
@@ -269,6 +275,8 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	testTimeout := 100 * time.Minute
 	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx.ID.String(), testTimeout)
 	assert.Equal(t, "dispatched", status)
+
+	require.NoError(t, <-dcFlushed)
 }
 
 func TestPrivateTxManagerLocalEndorserSubmits(t *testing.T) {
@@ -321,6 +329,9 @@ func newPartyForTesting(ctx context.Context, name, node string, mocks *dependenc
 		resolveFn := args.Get(4).(func(context.Context, string))
 		resolveFn(ctx, party.verifier)
 	}).Return(nil).Maybe()
+
+	mocks.identityResolver.On("ResolveVerifier", mock.Anything, party.identityLocator, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return(party.verifier, nil).Maybe()
 
 	keyMapping := &pldapi.KeyMappingAndVerifier{
 		KeyMappingWithPath: &pldapi.KeyMappingWithPath{KeyMapping: &pldapi.KeyMapping{
@@ -382,8 +393,8 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	assembled := make(chan struct{}, 1)
 	delegated := make(chan struct{}, 1)
 
-	localNodeMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
+	localNodeMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
@@ -451,7 +462,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 
 	notary.mockSign([]byte("some-signature-bytes"))
 
-	remoteEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+	remoteEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
 				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
@@ -459,7 +470,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
-			tx := args[1].(*components.PrivateTransaction)
+			tx := args[2].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
@@ -505,6 +516,12 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
 	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
 
+	// Flush of domain context happens on the remote node (the notary)
+	dcFlushed := make(chan error, 1)
+	remoteEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
+
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
 
@@ -514,6 +531,8 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	<-delegated
 	status := pollForStatus(ctx, t, "dispatched", remoteEngine, domainAddressString, tx.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
+
+	require.NoError(t, <-dcFlushed)
 
 }
 
@@ -589,8 +608,8 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	}).Return(nil)
 
 	assembled := make(chan struct{}, 1)
-	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
+	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
@@ -655,7 +674,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("alice-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:       alice.keyHandle,
+			Lookup:       alice.identityLocator,
 			Verifier:     alice.verifier,
 			Algorithm:    algorithms.ECDSA_SECP256K1,
 			VerifierType: verifiers.ETH_ADDRESS,
@@ -668,7 +687,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("bob-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:       bob.keyHandle,
+			Lookup:       bob.identityLocator,
 			Verifier:     bob.verifier,
 			Algorithm:    algorithms.ECDSA_SECP256K1,
 			VerifierType: verifiers.ETH_ADDRESS,
@@ -681,7 +700,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("carol-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:       carol.keyHandle,
+			Lookup:       carol.identityLocator,
 			Verifier:     carol.verifier,
 			Algorithm:    algorithms.ECDSA_SECP256K1,
 			VerifierType: verifiers.ETH_ADDRESS,
@@ -690,7 +709,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 
 	carol.mockSign([]byte("carol-signature-bytes"))
 
-	aliceEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+	aliceEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
 				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
@@ -698,7 +717,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
-			tx := args[1].(*components.PrivateTransaction)
+			tx := args[2].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
@@ -764,6 +783,11 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
 	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
 
+	dcFlushed := make(chan error, 1)
+	aliceEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
+
 	err := aliceEngine.Start()
 	assert.NoError(t, err)
 
@@ -773,6 +797,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
+	require.NoError(t, <-dcFlushed)
 }
 
 func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
@@ -853,8 +878,8 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		},
 	}
 
-	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
+	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
 		switch tx.ID.String() {
 		case tx1.ID.String():
 			tx.PostAssembly = &components.TransactionPostAssembly{
@@ -907,7 +932,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("alice-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:       alice.keyHandle,
+			Lookup:       alice.identityLocator,
 			Verifier:     alice.verifier,
 			Algorithm:    algorithms.ECDSA_SECP256K1,
 			VerifierType: verifiers.ETH_ADDRESS,
@@ -922,7 +947,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		tx.Signer = signingAddress
 	}).Return(nil)
 
-	aliceEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+	aliceEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
 				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
@@ -930,7 +955,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
-			tx := args[1].(*components.PrivateTransaction)
+			tx := args[2].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
@@ -999,7 +1024,10 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		AttestationType: prototk.AttestationType_ENDORSE,
 		Payload:         tktypes.RandBytes(32),
 		Verifier: &prototk.ResolvedVerifier{
-			Verifier: bob.verifier,
+			Lookup:       bob.identityLocator,
+			Verifier:     bob.verifier,
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
 		},
 	}
 
@@ -1052,11 +1080,19 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Payload:     endorsementResponse1Bytes,
 	})
 
+	// at this point we should get a flush of the states
+	dcFlushed := make(chan error, 1)
+	aliceEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
+
 	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx1.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 	status = pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx2.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
+
+	require.NoError(t, <-dcFlushed)
 
 	//TODO assert that transaction 1 got dispatched before 2
 
@@ -1083,7 +1119,7 @@ func TestPrivateTxManagerDeploy(t *testing.T) {
 	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
 		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       notary.identity,
+				Lookup:       notary.identityLocator,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -1188,7 +1224,7 @@ func TestPrivateTxManagerDeployFailPrepare(t *testing.T) {
 	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
 		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       notary.identity,
+				Lookup:       notary.identityLocator,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -1241,7 +1277,7 @@ func TestPrivateTxManagerFailSignerResolve(t *testing.T) {
 	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
 		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       notary.identity,
+				Lookup:       notary.identityLocator,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -1312,7 +1348,7 @@ func TestPrivateTxManagerDeployFailNoInvokeOrDeploy(t *testing.T) {
 	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
 		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       notary.identity,
+				Lookup:       notary.identityLocator,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -1416,7 +1452,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 			failEarly := make(chan string, 1)
 
 			assembleConcurrency := 0
-			mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+			mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 				//assert that we are not assembling more than 1 transaction at a time
 				if assembleConcurrency > 0 {
 					failEarly <- "Assembling more than one transaction at a time"
@@ -1428,7 +1464,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 
 				// chose a number of dependencies at random 0, 1, 2, 3
 				// for each dependency, chose a different unclaimed pending state to spend
-				tx := args.Get(1).(*components.PrivateTransaction)
+				tx := args.Get(2).(*components.PrivateTransaction)
 
 				var inputStates []*components.FullState
 				numDependencies := min(r.Intn(4), len(unclaimedPendingStatesToMintingTransaction))
@@ -1533,7 +1569,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 				Payload: []byte("some-signature-bytes"),
 			}, nil)
 
-			mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
+			mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 			expectedNonce := uint64(0)
 
@@ -1629,6 +1665,7 @@ func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, pri
 
 type dependencyMocks struct {
 	allComponents       *componentmocks.AllComponents
+	db                  *mockpersistence.SQLMockProvider
 	domain              *componentmocks.Domain
 	domainSmartContract *componentmocks.DomainSmartContract
 	domainContext       *componentmocks.DomainContext
@@ -1818,6 +1855,9 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
 	mocks.domainMgr.On("GetDomainByName", mock.Anything, "domain1").Return(mocks.domain, nil).Maybe()
 	mocks.domain.On("Name").Return("domain1").Maybe()
+
+	mocks.domainContext.On("Ctx").Return(ctx).Maybe()
+	mocks.domainContext.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()
 
 	e := NewPrivateTransactionMgr(ctx, &pldconf.PrivateTxManagerConfig{
 		Writer: pldconf.FlushWriterConfig{

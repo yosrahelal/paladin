@@ -110,7 +110,7 @@ func (n *Noto) prepareInputs(ctx context.Context, stateQueryContext string, owne
 			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInsufficientFunds, total.Text(10))
 		}
 		for _, state := range states {
-			lastStateTimestamp = state.StoredAt
+			lastStateTimestamp = state.CreatedAt
 			coin, err := n.unmarshalCoin(state.DataJson)
 			if err != nil {
 				return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidStateData, state.Id, err)

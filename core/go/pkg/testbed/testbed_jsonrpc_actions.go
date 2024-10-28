@@ -66,7 +66,10 @@ func (tb *testbed) initRPC() {
 		Add("testbed_prepare", tb.rpcTestbedPrepare()).
 
 		// Performs identity resolution (which in the case of the testbed is just local identities)
-		Add("testbed_resolveVerifier", tb.rpcResolveVerifier())
+		Add("testbed_resolveVerifier", tb.rpcResolveVerifier()).
+
+		// Performs a call directly against the domain
+		Add("testbed_call", tb.rpcTestbedCall())
 
 }
 
@@ -104,6 +107,23 @@ func (tb *testbed) rpcDeployBytecode() rpcserver.RPCHandler {
 	})
 }
 
+func (tb *testbed) resolveVerifiers(ctx context.Context, requiredVerifiers []*prototk.ResolveVerifierRequest) ([]*prototk.ResolvedVerifier, error) {
+	verifiers := make([]*prototk.ResolvedVerifier, len(requiredVerifiers))
+	for i, v := range requiredVerifiers {
+		resolvedKey, err := tb.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
+		}
+		verifiers[i] = &prototk.ResolvedVerifier{
+			Lookup:       v.Lookup,
+			Algorithm:    v.Algorithm,
+			Verifier:     resolvedKey.Verifier.Verifier,
+			VerifierType: v.VerifierType,
+		}
+	}
+	return verifiers, nil
+}
+
 func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		domainName string,
@@ -125,18 +145,8 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 			return nil, err
 		}
 
-		tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
-		for i, v := range tx.RequiredVerifiers {
-			resolvedKey, err := tb.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
-			if err != nil {
-				return nil, fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
-			}
-			tx.Verifiers[i] = &prototk.ResolvedVerifier{
-				Lookup:       v.Lookup,
-				Algorithm:    v.Algorithm,
-				Verifier:     resolvedKey.Verifier.Verifier,
-				VerifierType: v.VerifierType,
-			}
+		if tx.Verifiers, err = tb.resolveVerifiers(ctx, tx.RequiredVerifiers); err != nil {
+			return nil, err
 		}
 
 		// Prepare the deployment transaction
@@ -189,7 +199,7 @@ func (tb *testbed) newPrivateTransaction(ctx context.Context, invocation tktypes
 func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.DomainSmartContract, tx *components.PrivateTransaction) error {
 
 	// Testbed just uses a domain context for the duration of the TX, and flushes before returning
-	dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address(), tb.c.Persistence().DB() /* no TX */)
+	dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
 	defer dCtx.Close()
 
 	// First we call init on the smart contract to:
@@ -215,7 +225,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 
 	// Now call assemble
-	if err := psc.AssembleTransaction(dCtx, tx); err != nil {
+	if err := psc.AssembleTransaction(dCtx, tb.c.Persistence().DB(), tx); err != nil {
 		return err
 	}
 
@@ -229,7 +239,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	// The testbed always chooses to take the assemble output and progress to endorse
 	// (no complex sequence selection routine that might result in abandonment).
 	// So just write the states
-	if err := psc.WritePotentialStates(dCtx, tx); err != nil {
+	if err := psc.WritePotentialStates(dCtx, tb.c.Persistence().DB(), tx); err != nil {
 		return err
 	}
 
@@ -252,14 +262,16 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 
 	// Prepare the transaction
-	if err := psc.PrepareTransaction(dCtx, tx); err != nil {
+	if err := psc.PrepareTransaction(dCtx, tb.c.Persistence().DB(), tx); err != nil {
 		return err
 	}
 
 	// Flush the context
-	if err := dCtx.FlushSync(); err != nil {
+	dbTXResultCB, err := dCtx.Flush(tb.c.Persistence().DB())
+	if err != nil {
 		return err
 	}
+	dbTXResultCB(nil)
 
 	if tx.PreparedPrivateTransaction != nil && tx.PreparedPrivateTransaction.To != nil {
 		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, *tx.PreparedPrivateTransaction.To)
@@ -269,7 +281,12 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 		return tb.execPrivateTransaction(ctx, nextContract, mapDirectlyToInternalPrivateTX(tx.PreparedPrivateTransaction, tx.Inputs.Intent))
 	} else if tx.Inputs.Intent == prototk.TransactionSpecification_CALL {
 		var ignored any
-		err := tb.ExecBaseLedgerCall(ctx, &ignored, tx.PreparedPublicTransaction)
+		err := tb.ExecBaseLedgerCall(ctx, &ignored, &pldapi.TransactionCall{
+			TransactionInput: *tx.PreparedPublicTransaction,
+			PublicCallOptions: pldapi.PublicCallOptions{
+				Block: "latest",
+			},
+		})
 		return err
 	} else {
 		_, err := tb.ExecTransactionSync(ctx, tx.PreparedPublicTransaction)
@@ -394,5 +411,42 @@ func (tb *testbed) rpcResolveVerifier() rpcserver.RPCHandler {
 			return "", err
 		}
 		return resolvedKey.Verifier.Verifier, err
+	})
+}
+
+func (tb *testbed) rpcTestbedCall() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		invocation tktypes.PrivateContractInvoke,
+		dataFormat tktypes.JSONFormatOptions,
+	) (tktypes.RawJSON, error) {
+		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_CALL)
+		if err != nil {
+			return nil, err
+		}
+
+		requiredVerifiers, err := psc.InitCall(ctx, tx.Inputs)
+		if err != nil {
+			return nil, err
+		}
+
+		resolvedVerifiers, err := tb.resolveVerifiers(ctx, requiredVerifiers)
+		if err != nil {
+			return nil, err
+		}
+
+		dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
+		defer dCtx.Close()
+
+		cv, err := psc.ExecCall(dCtx, tb.c.Persistence().DB(), tx.Inputs, resolvedVerifiers)
+		if err != nil {
+			return nil, err
+		}
+
+		serializer, err := dataFormat.GetABISerializer(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		return serializer.SerializeJSONCtx(ctx, cv)
 	})
 }

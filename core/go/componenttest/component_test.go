@@ -21,23 +21,20 @@ package componenttest
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/sirupsen/logrus"
@@ -86,25 +83,15 @@ wallets:
 `), &testConfig)
 	require.NoError(t, err)
 
-	p, err := persistence.NewPersistence(ctx, &testConfig.DB)
-	require.NoError(t, err)
-	defer p.Close()
+	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil)
+	cm := instance.cm
+	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(100 * time.Microsecond)
 
-	indexer, err := blockindexer.NewBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
-		FromBlock: json.RawMessage(`"latest"`), // don't want earlier events
-	}, &testConfig.Blockchain.WS, p)
+	build, err := solutils.LoadBuild(ctx, simpleStorageBuildJSON)
 	require.NoError(t, err)
 
-	type solBuild struct {
-		ABI      abi.ABI                   `json:"abi"`
-		Bytecode ethtypes.HexBytes0xPrefix `json:"bytecode"`
-	}
-	var simpleStorageBuild solBuild
-	err = json.Unmarshal(simpleStorageBuildJSON, &simpleStorageBuild)
-	require.NoError(t, err)
-
-	eventStreamEvents := make(chan *blockindexer.EventWithData, 2 /* all the events we exepct */)
-	err = indexer.Start(&blockindexer.InternalEventStream{
+	eventStreamEvents := make(chan *pldapi.EventWithData, 2 /* all the events we exepct */)
+	_, err = cm.BlockIndexer().AddEventStream(ctx, &blockindexer.InternalEventStream{
 		Handler: func(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
 			// With SQLite we cannot hang in here with a DB TX - as there's only one per process.
 			for _, e := range batch.Events {
@@ -119,46 +106,46 @@ wallets:
 		Definition: &blockindexer.EventStream{
 			Name: "unittest",
 			Sources: []blockindexer.EventStreamSource{{
-				ABI: abi.ABI{simpleStorageBuild.ABI.Events()["Changed"]},
+				ABI: abi.ABI{build.ABI.Events()["Changed"]},
 			}},
 		},
 	})
 	require.NoError(t, err)
-	defer indexer.Stop()
 
-	keyMgr, err := ethclient.NewSimpleTestKeyManager(ctx, (*signerapi.ConfigNoExt)(testConfig.Wallets[0].Signer))
-	require.NoError(t, err)
+	simpleStorage := c.ForABI(ctx, build.ABI).Public().From("key1")
 
-	ecf, err := ethclient.NewEthClientFactoryWithKeyManager(ctx, keyMgr, &testConfig.Blockchain)
-	require.NoError(t, err)
-	err = ecf.Start()
-	require.NoError(t, err)
-	defer ecf.Stop()
-	ethClient := ecf.HTTPClient()
+	res := simpleStorage.Clone().
+		Constructor().
+		Bytecode(build.Bytecode).
+		Inputs(`{"x":11223344}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
+	contractAddr := res.Receipt().ContractAddress
 
-	simpleStorage, err := ethClient.ABI(ctx, simpleStorageBuild.ABI)
+	var getX1 tktypes.RawJSON
+	err = simpleStorage.Clone().
+		Function("get").
+		To(contractAddr).
+		Outputs(&getX1).
+		Call()
 	require.NoError(t, err)
+	assert.JSONEq(t, `{"x":"11223344"}`, getX1.Pretty())
 
-	txHash1, err := simpleStorage.MustConstructor(tktypes.HexBytes(simpleStorageBuild.Bytecode)).R(ctx).
-		Signer("key1").Input(`{"x":11223344}`).SignAndSend()
-	require.NoError(t, err)
-	deployTX, err := indexer.WaitForTransactionSuccess(ctx, *txHash1, simpleStorageBuild.ABI)
-	require.NoError(t, err)
-	contractAddr := deployTX.ContractAddress.Address0xHex()
+	res = simpleStorage.Clone().
+		Function("set").
+		To(contractAddr).
+		Inputs(`{"_x":99887766}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
 
-	getX1, err := simpleStorage.MustFunction("get").R(ctx).To(contractAddr).CallResult()
+	var getX2 tktypes.RawJSON
+	err = simpleStorage.Clone().
+		Function("get").
+		To(contractAddr).
+		Outputs(&getX2).
+		Call()
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"x":"11223344"}`, getX1.JSON())
-
-	txHash2, err := simpleStorage.MustFunction("set").R(ctx).
-		Signer("key1").To(contractAddr).Input(`{"_x":99887766}`).SignAndSend()
-	require.NoError(t, err)
-	_, err = indexer.WaitForTransactionSuccess(ctx, *txHash2, simpleStorageBuild.ABI)
-	require.NoError(t, err)
-
-	getX2, err := simpleStorage.MustFunction("get").R(ctx).To(contractAddr).CallResult()
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"x":"99887766"}`, getX2.JSON())
+	assert.JSONEq(t, `{"x":"99887766"}`, getX2.Pretty())
 
 	// Expect our event listener to be queued up with two Changed events
 	event1 := <-eventStreamEvents

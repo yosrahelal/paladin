@@ -59,7 +59,7 @@ type BlockIndexer interface {
 	QueryIndexedEvents(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.IndexedEvent, error)
 	QueryIndexedTransactions(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.IndexedTransaction, error)
 	ListTransactionEvents(ctx context.Context, lastBlock int64, lastIndex, limit int, withTransaction, withBlock bool) ([]*pldapi.IndexedEvent, error)
-	DecodeTransactionEvents(ctx context.Context, hash tktypes.Bytes32, abi abi.ABI) ([]*EventWithData, error)
+	DecodeTransactionEvents(ctx context.Context, hash tktypes.Bytes32, abi abi.ABI, resultFormat tktypes.JSONFormatOptions) ([]*pldapi.EventWithData, error)
 	WaitForTransactionSuccess(ctx context.Context, hash tktypes.Bytes32, errorABI abi.ABI) (*pldapi.IndexedTransaction, error)
 	WaitForTransactionAnyResult(ctx context.Context, hash tktypes.Bytes32) (*pldapi.IndexedTransaction, error)
 	GetBlockListenerHeight(ctx context.Context) (highest uint64, err error)
@@ -165,16 +165,19 @@ func (bi *blockIndexer) Start(internalStreams ...*InternalEventStream) error {
 
 func (bi *blockIndexer) AddEventStream(ctx context.Context, stream *InternalEventStream) (*EventStream, error) {
 	es, err := bi.upsertInternalEventStream(ctx, stream)
+	if err != nil {
+		return nil, err
+	}
 
 	// Can be called before start as managers start before the block indexer
 	bi.stateLock.Lock()
 	started := bi.started
 	bi.stateLock.Unlock()
 
-	if started && err == nil {
+	if started {
 		bi.startEventStream(es)
 	}
-	return es.definition, err
+	return es.definition, nil
 }
 
 func (bi *blockIndexer) startOrReset() {
@@ -453,7 +456,7 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 			// spin getting blocks until we it looks like we need to wait for a notification
 			lastFromNotification := false
 			for bi.readNextBlock(ctx, &lastFromNotification) {
-				toDispatch := bi.getNextConfirmed()
+				toDispatch := bi.getNextConfirmed(ctx)
 				if toDispatch != nil {
 					pendingDispatch = append(pendingDispatch, toDispatch)
 				}
@@ -739,21 +742,25 @@ func (bi *blockIndexer) readNextBlock(ctx context.Context, lastFromNotification 
 		// It's possible that while we were off at the node querying this, a notification came in
 		// that affected our state. We need to check this still matches, or go round again
 		if len(bi.blocksSinceCheckpoint) > 0 {
-			if !bi.blocksSinceCheckpoint[len(bi.blocksSinceCheckpoint)-1].Hash.Equals(nextBlock.ParentHash) {
+			headBlock := bi.blocksSinceCheckpoint[len(bi.blocksSinceCheckpoint)-1]
+			if !headBlock.Hash.Equals(nextBlock.ParentHash) {
 				// This doesn't attach to the end of our list. Trim it off and try again.
 				bi.blocksSinceCheckpoint = bi.blocksSinceCheckpoint[0 : len(bi.blocksSinceCheckpoint)-1]
+				log.L(ctx).Debugf("Block %d / %s does not fit in our view of the canonical chain - trimming (parentHash=%s != head[%d]=%s, new blocksSinceCheckpoint=%d)",
+					nextBlock.Number, nextBlock.Hash, nextBlock.ParentHash, len(bi.blocksSinceCheckpoint)-1, headBlock.Hash, len(bi.blocksSinceCheckpoint))
 				return true
 			}
 		}
 
 		// We successfully attached it
 		bi.blocksSinceCheckpoint = append(bi.blocksSinceCheckpoint, nextBlock)
+		log.L(ctx).Debugf("Added read block %d / %s to list (new blocksSinceCheckpoint=%d)", nextBlock.Number, nextBlock.Hash, len(bi.blocksSinceCheckpoint))
 	}
 	return true
 
 }
 
-func (bi *blockIndexer) getNextConfirmed() (toDispatch *BlockInfoJSONRPC) {
+func (bi *blockIndexer) getNextConfirmed(ctx context.Context) (toDispatch *BlockInfoJSONRPC) {
 	bi.stateLock.Lock()
 	defer bi.stateLock.Unlock()
 	if len(bi.blocksSinceCheckpoint) > bi.requiredConfirmations {
@@ -762,6 +769,7 @@ func (bi *blockIndexer) getNextConfirmed() (toDispatch *BlockInfoJSONRPC) {
 		bi.blocksSinceCheckpoint = append([]*BlockInfoJSONRPC{}, bi.blocksSinceCheckpoint[1:]...)
 		newCheckpoint := toDispatch.Number + 1
 		bi.nextBlock = &newCheckpoint
+		log.L(ctx).Debugf("Confirmed block popped for dispatch %d / %s (new blocksSinceCheckpoint=%d)", toDispatch.Number, toDispatch.Hash, len(bi.blocksSinceCheckpoint))
 	}
 	return toDispatch
 }
@@ -908,16 +916,20 @@ func (bi *blockIndexer) ListTransactionEvents(ctx context.Context, lastBlock int
 	return events, err
 }
 
-func (bi *blockIndexer) DecodeTransactionEvents(ctx context.Context, hash tktypes.Bytes32, abi abi.ABI) ([]*EventWithData, error) {
+func (bi *blockIndexer) DecodeTransactionEvents(ctx context.Context, hash tktypes.Bytes32, a abi.ABI, resultFormat tktypes.JSONFormatOptions) ([]*pldapi.EventWithData, error) {
+	var serailizer *abi.Serializer
 	events, err := bi.GetTransactionEventsByHash(ctx, hash)
+	if err == nil {
+		serailizer, err = resultFormat.GetABISerializer(ctx)
+	}
 	if err != nil {
 		return nil, err
 	}
-	decoded := make([]*EventWithData, len(events))
+	decoded := make([]*pldapi.EventWithData, len(events))
 	for i, event := range events {
-		decoded[i] = &EventWithData{IndexedEvent: event}
+		decoded[i] = &pldapi.EventWithData{IndexedEvent: event}
 	}
-	err = bi.enrichTransactionEvents(ctx, abi, nil, hash, decoded, false /* no retry */)
+	err = bi.enrichTransactionEvents(ctx, a, nil, hash, decoded, serailizer, false /* no retry */)
 	return decoded, err
 }
 
@@ -933,7 +945,7 @@ func (bi *blockIndexer) getConfirmedTransactionReceipt(ctx context.Context, tx e
 	return receipt, nil
 }
 
-func (bi *blockIndexer) enrichTransactionEvents(ctx context.Context, abi abi.ABI, source *tktypes.EthAddress, tx tktypes.Bytes32, events []*EventWithData, indefiniteRetry bool) error {
+func (bi *blockIndexer) enrichTransactionEvents(ctx context.Context, abi abi.ABI, source *tktypes.EthAddress, tx tktypes.Bytes32, events []*pldapi.EventWithData, serializer *abi.Serializer, indefiniteRetry bool) error {
 	// Get the TX receipt with all the logs
 	var receipt *TXReceiptJSONRPC
 	err := bi.retry.Do(ctx, func(attempt int) (_ bool, err error) {
@@ -949,7 +961,7 @@ func (bi *blockIndexer) enrichTransactionEvents(ctx context.Context, abi abi.ABI
 		for _, e := range events {
 			if ethtypes.HexUint64(e.LogIndex) == l.LogIndex {
 				// This the the log for this event - try and enrich the .Data field
-				_ = bi.matchLog(ctx, abi, l, e, source)
+				_ = bi.matchLog(ctx, abi, l, e, source, serializer)
 				break
 			}
 		}
@@ -957,7 +969,7 @@ func (bi *blockIndexer) enrichTransactionEvents(ctx context.Context, abi abi.ABI
 	return nil
 }
 
-func (bi *blockIndexer) matchLog(ctx context.Context, abi abi.ABI, in *LogJSONRPC, out *EventWithData, source *tktypes.EthAddress) bool {
+func (bi *blockIndexer) matchLog(ctx context.Context, abi abi.ABI, in *LogJSONRPC, out *pldapi.EventWithData, source *tktypes.EthAddress, serializer *abi.Serializer) bool {
 	if !source.IsZero() && !source.Equals((*tktypes.EthAddress)(in.Address)) {
 		log.L(ctx).Debugf("Event %d/%d/%d does not match source=%s (tx=%s,address=%s)", in.BlockNumber, in.TransactionIndex, in.LogIndex, source, in.TransactionHash, in.Address)
 		return false
@@ -970,7 +982,7 @@ func (bi *blockIndexer) matchLog(ctx context.Context, abi abi.ABI, in *LogJSONRP
 		cv, err := abiEntry.DecodeEventDataCtx(ctx, in.Topics, in.Data)
 		if err == nil {
 			out.SoliditySignature = abiEntry.SolString() // uniquely identifies this ABI entry for the event stream consumer
-			out.Data, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, cv)
+			out.Data, err = serializer.SerializeJSONCtx(ctx, cv)
 		}
 		if err == nil {
 			log.L(ctx).Debugf("Event %d/%d/%d matches ABI event %s matchSource=%v (tx=%s,address=%s)", in.BlockNumber, in.TransactionIndex, in.LogIndex, abiEntry, source, in.TransactionHash, in.Address)

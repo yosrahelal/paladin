@@ -231,7 +231,7 @@ func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backen
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
 	var zetoCoins []*types.ZetoCoinState
-	rpcerr := rpc.CallRPC(ctx, &zetoCoins, "pstate_queryStates",
+	rpcerr := rpc.CallRPC(ctx, &zetoCoins, "pstate_queryContractStates",
 		zeto.Name(),
 		address,
 		zeto.CoinSchemaID(),

@@ -27,6 +27,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -60,7 +61,7 @@ func schemaCacheKey(domainName string, id tktypes.Bytes32) string {
 	return domainName + "/" + id.String()
 }
 
-func (ss *stateManager) persistSchemas(ctx context.Context, dbTX *gorm.DB, schemas []*components.SchemaPersisted) error {
+func (ss *stateManager) persistSchemas(ctx context.Context, dbTX *gorm.DB, schemas []*pldapi.Schema) error {
 	return dbTX.
 		Table("schemas").
 		WithContext(ctx).
@@ -87,7 +88,7 @@ func (ss *stateManager) getSchemaByID(ctx context.Context, dbTX *gorm.DB, domain
 		return s, nil
 	}
 
-	var results []*components.SchemaPersisted
+	var results []*pldapi.Schema
 	err := dbTX.
 		Table("schemas").
 		Where("domain_name = ?", domainName).
@@ -102,18 +103,21 @@ func (ss *stateManager) getSchemaByID(ctx context.Context, dbTX *gorm.DB, domain
 		return s, err
 	}
 
-	persisted := results[0]
-	switch persisted.Type {
-	case components.SchemaTypeABI:
-		s, err = newABISchemaFromDB(ctx, persisted)
-	default:
-		err = i18n.NewError(ctx, msgs.MsgStateInvalidSchemaType, persisted.Type)
-	}
+	s, err = ss.restoreSchema(ctx, results[0])
 	if err != nil {
 		return nil, err
 	}
 	ss.abiSchemaCache.Set(cacheKey, s)
 	return s, nil
+}
+
+func (ss *stateManager) restoreSchema(ctx context.Context, persisted *pldapi.Schema) (components.Schema, error) {
+	switch persisted.Type.V() {
+	case pldapi.SchemaTypeABI:
+		return newABISchemaFromDB(ctx, persisted)
+	default:
+		return nil, i18n.NewError(ctx, msgs.MsgStateInvalidSchemaType, persisted.Type)
+	}
 }
 
 func (ss *stateManager) ListSchemas(ctx context.Context, dbTX *gorm.DB, domainName string) (results []components.Schema, err error) {
@@ -136,6 +140,17 @@ func (ss *stateManager) ListSchemas(ctx context.Context, dbTX *gorm.DB, domainNa
 	return results, nil
 }
 
+func (ss *stateManager) ListSchemasForJSON(ctx context.Context, dbTX *gorm.DB, domainName string) (results []*pldapi.Schema, err error) {
+	fullResults, err := ss.ListSchemas(ctx, dbTX, domainName)
+	if err == nil {
+		results = make([]*pldapi.Schema, len(fullResults))
+		for i, fr := range fullResults {
+			results[i] = fr.Persisted()
+		}
+	}
+	return
+}
+
 func (ss *stateManager) EnsureABISchemas(ctx context.Context, dbTX *gorm.DB, domainName string, defs []*abi.Parameter) ([]components.Schema, error) {
 	if len(defs) == 0 {
 		return nil, nil
@@ -143,14 +158,14 @@ func (ss *stateManager) EnsureABISchemas(ctx context.Context, dbTX *gorm.DB, dom
 
 	// Validate all the schemas
 	prepared := make([]components.Schema, len(defs))
-	toFlush := make([]*components.SchemaPersisted, len(defs))
+	toFlush := make([]*pldapi.Schema, len(defs))
 	for i, def := range defs {
 		s, err := newABISchema(ctx, domainName, def)
 		if err != nil {
 			return nil, err
 		}
 		prepared[i] = s
-		toFlush[i] = s.SchemaPersisted
+		toFlush[i] = s.Schema
 	}
 
 	return prepared, ss.persistSchemas(ctx, dbTX, toFlush)

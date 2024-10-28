@@ -108,7 +108,7 @@ func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backen
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
 	var notoCoins []*types.NotoCoinState
-	rpcerr := rpc.CallRPC(ctx, &notoCoins, "pstate_queryStates",
+	rpcerr := rpc.CallRPC(ctx, &notoCoins, "pstate_queryContractStates",
 		noto.name,
 		address,
 		noto.coinSchema.Id,
@@ -418,24 +418,31 @@ func TestNotoSelfSubmit(t *testing.T) {
 	require.NoError(t, err)
 
 	var callResult map[string]any
-	err = tb.ExecBaseLedgerCall(ctx, &callResult, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
-			Type:     pldapi.TransactionTypePublic.Enum(),
-			To:       factoryAddress,
-			Function: "getImplementation",
-			From:     notaryName,
-			Data: tktypes.JSONString(map[string]any{
-				"name": "selfsubmit",
-			}),
+	rpcerr := rpc.CallRPC(ctx, &callResult, "ptx_call", &pldapi.TransactionCall{
+		TransactionInput: pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
+				Type:     pldapi.TransactionTypePublic.Enum(),
+				To:       factoryAddress,
+				Function: "getImplementation",
+				From:     notaryName,
+				Data: tktypes.JSONString(map[string]any{
+					"name": "selfsubmit",
+				}),
+			},
+			ABI: notoFactory.ABI,
 		},
-		ABI: notoFactory.ABI,
+		PublicCallOptions: pldapi.PublicCallOptions{
+			Block: "latest",
+		},
 	})
-	require.NoError(t, err)
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
 	require.NotEmpty(t, callResult["implementation"])
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
 	var notoAddress tktypes.EthAddress
-	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
+	rpcerr = rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
 		domainName, &types.ConstructorParams{
 			Notary:         notaryName,
 			Implementation: "selfsubmit",

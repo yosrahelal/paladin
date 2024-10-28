@@ -93,7 +93,7 @@ func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string,
 	return tb.ExecTransactionSync(ctx, tx)
 }
 
-func (tb *testbed) ExecBaseLedgerCall(ctx context.Context, result any, tx *pldapi.TransactionInput) error {
+func (tb *testbed) ExecBaseLedgerCall(ctx context.Context, result any, tx *pldapi.TransactionCall) error {
 	return tb.Components().TxManager().CallTransaction(ctx, result, tx)
 }
 
@@ -162,7 +162,7 @@ func (tb *testbed) gatherEndorsements(dCtx components.DomainContext, psc compone
 					return fmt.Errorf("failed to resolve (local in testbed case) endorser for %s (algorithm=%s): %s", partyName, ar.Algorithm, err)
 				}
 				// Invoke the domain
-				endorseRes, err := psc.EndorseTransaction(dCtx, &components.PrivateTransactionEndorseRequest{
+				endorseRes, err := psc.EndorseTransaction(dCtx, tb.c.Persistence().DB(), &components.PrivateTransactionEndorseRequest{
 					TransactionSpecification: tx.PreAssembly.TransactionSpecification,
 					Verifiers:                tx.PreAssembly.Verifiers,
 					Signatures:               tx.PostAssembly.Signatures,

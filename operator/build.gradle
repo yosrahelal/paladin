@@ -80,6 +80,7 @@ task copySolidity(type: Copy) {
         include 'contracts/registry/IdentityRegistry.sol/IdentityRegistry.json'
         include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
         include 'contracts/domains/pente/PenteFactory.sol/PenteFactory.json'
+        include 'contracts/private/NotoTrackerERC20.sol/NotoTrackerERC20.json'
     }
     into 'test/e2e/abis'
 
@@ -102,7 +103,7 @@ task copyZetoSolidity(type: Copy) {
     includeEmptyDirs = false
 }
 
-task buildContractSamples(type: Exec) {
+task buildContractSamples(type: Exec, dependsOn: [copySolidity,copyZetoSolidity]) {
     commandLine "go", "run", "./contractpkg", "./contractpkg/contract_map.json"
 }
 
@@ -201,7 +202,7 @@ task deploy(dependsOn: [copySolidity, copyZetoSolidity, createNode]) {
 }
 
 // The 'e2e' task runs the whole flow
-task e2e(type: Exec, dependsOn: [copySolidity, deploy]) {
+task e2e(type: Exec, dependsOn: [buildContractSamples, deploy]) {
     executable 'make'
     args 'test-e2e'
     args "NAMESPACE=${namespace}"
@@ -223,7 +224,7 @@ task clean {
 }
 
 // Existing 'make' task
-task make(type: Exec, dependsOn: [copySolidity]) {
+task make(type: Exec, dependsOn: [copySolidity,":toolkit:go:protoc"]) {
     executable 'make'
 }
 

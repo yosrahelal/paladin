@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -56,10 +57,10 @@ func (rm *registryManager) rpcQueryEntries() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod3(func(ctx context.Context,
 		registryName string,
 		jq query.QueryJSON,
-		activeFilter tktypes.Enum[components.ActiveFilter],
-	) ([]*components.RegistryEntry, error) {
+		activeFilter tktypes.Enum[pldapi.ActiveFilter],
+	) ([]*pldapi.RegistryEntry, error) {
 		return withRegistry(ctx, rm, registryName,
-			func(r components.Registry) ([]*components.RegistryEntry, error) {
+			func(r components.Registry) ([]*pldapi.RegistryEntry, error) {
 				return r.QueryEntries(ctx, rm.p.DB(), activeFilter.V(), &jq)
 			},
 		)
@@ -70,10 +71,10 @@ func (rm *registryManager) rpcQueryEntriesWithProps() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod3(func(ctx context.Context,
 		registryName string,
 		jq query.QueryJSON,
-		activeFilter tktypes.Enum[components.ActiveFilter],
-	) ([]*components.RegistryEntryWithProperties, error) {
+		activeFilter tktypes.Enum[pldapi.ActiveFilter],
+	) ([]*pldapi.RegistryEntryWithProperties, error) {
 		return withRegistry(ctx, rm, registryName,
-			func(r components.Registry) ([]*components.RegistryEntryWithProperties, error) {
+			func(r components.Registry) ([]*pldapi.RegistryEntryWithProperties, error) {
 				return r.QueryEntriesWithProps(ctx, rm.p.DB(), activeFilter.V(), &jq)
 			},
 		)
@@ -84,10 +85,10 @@ func (rm *registryManager) rpcGetEntryProperties() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod3(func(ctx context.Context,
 		registryName string,
 		entryID tktypes.HexBytes,
-		activeFilter tktypes.Enum[components.ActiveFilter],
-	) ([]*components.RegistryProperty, error) {
+		activeFilter tktypes.Enum[pldapi.ActiveFilter],
+	) ([]*pldapi.RegistryProperty, error) {
 		return withRegistry(ctx, rm, registryName,
-			func(r components.Registry) ([]*components.RegistryProperty, error) {
+			func(r components.Registry) ([]*pldapi.RegistryProperty, error) {
 				return r.GetEntryProperties(ctx, rm.p.DB(), activeFilter.V(), entryID)
 			},
 		)

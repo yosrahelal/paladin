@@ -31,6 +31,7 @@ func (tm *txManager) buildRPCModule() {
 	tm.rpcModule = rpcserver.NewRPCModule("ptx").
 		Add("ptx_sendTransaction", tm.rpcSendTransaction()).
 		Add("ptx_sendTransactions", tm.rpcSendTransactions()).
+		Add("ptx_call", tm.rpcCall()).
 		Add("ptx_getTransaction", tm.rpcGetTransaction()).
 		Add("ptx_getTransactionFull", tm.rpcGetTransactionFull()).
 		Add("ptx_getTransactionByIdempotencyKey", tm.rpcGetTransactionByIdempotencyKey()).
@@ -46,6 +47,7 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_getPublicTransactionByHash", tm.rpcGetPublicTransactionByHash()).
 		Add("ptx_storeABI", tm.rpcStoreABI()).
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
+		Add("ptx_decodeError", tm.rpcDecodeRevertError()).
 		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs()).
 		Add("ptx_resolveVerifier", tm.rpcResolveVerifier())
 
@@ -66,6 +68,15 @@ func (tm *txManager) rpcSendTransactions() rpcserver.RPCHandler {
 		txs []*pldapi.TransactionInput,
 	) ([]uuid.UUID, error) {
 		return tm.SendTransactions(ctx, txs)
+	})
+}
+
+func (tm *txManager) rpcCall() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		tx *pldapi.TransactionCall,
+	) (result tktypes.RawJSON, err error) {
+		err = tm.CallTransaction(ctx, &result, tx)
+		return
 	})
 }
 
@@ -218,5 +229,14 @@ func (tm *txManager) rpcDebugTransactionStatus() rpcserver.RPCHandler {
 		id uuid.UUID,
 	) (components.PrivateTxStatus, error) {
 		return tm.privateTxMgr.GetTxStatus(ctx, contractAddress, id.String())
+	})
+}
+
+func (tm *txManager) rpcDecodeRevertError() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		revertError tktypes.HexBytes,
+		dataFormat tktypes.JSONFormatOptions,
+	) (*pldapi.DecodedError, error) {
+		return tm.DecodeRevertError(ctx, tm.p.DB(), revertError, dataFormat)
 	})
 }

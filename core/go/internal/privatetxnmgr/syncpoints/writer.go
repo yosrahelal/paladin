@@ -19,6 +19,8 @@ package syncpoints
 import (
 	"context"
 
+	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 
 	"gorm.io/gorm"
@@ -53,6 +55,7 @@ to atomically allocate and record the nonce under that same transaction.
 
 type syncPointOperation struct {
 	contractAddress        tktypes.EthAddress
+	domainContext          components.DomainContext
 	finalizeOperation      *finalizeOperation
 	dispatchOperation      *dispatchOperation
 	delegateOperation      *delegateOperation
@@ -65,16 +68,20 @@ func (dso *syncPointOperation) WriteKey() string {
 
 type noResult struct{}
 
-func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*syncPointOperation) ([]flushwriter.Result[*noResult], error) {
+func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*syncPointOperation) (func(error), []flushwriter.Result[*noResult], error) {
 
-	finalizeOperations := make(map[tktypes.EthAddress][]*finalizeOperation)
+	finalizeOperations := make([]*finalizeOperation, 0, len(values))
 	dispatchOperations := make([]*dispatchOperation, 0, len(values))
 	delegateOperations := make([]*delegateOperation, 0, len(values))
 	delegationAckOperations := make([]*delegationAckOperation, 0, len(values))
+	domainContextsToFlush := make(map[uuid.UUID]components.DomainContext)
 
 	for _, op := range values {
+		if op.domainContext != nil {
+			domainContextsToFlush[op.domainContext.Info().ID] = op.domainContext
+		}
 		if op.finalizeOperation != nil {
-			finalizeOperations[op.contractAddress] = append(finalizeOperations[op.contractAddress], op.finalizeOperation)
+			finalizeOperations = append(finalizeOperations, op.finalizeOperation)
 		}
 		if op.dispatchOperation != nil {
 			dispatchOperations = append(dispatchOperations, op.dispatchOperation)
@@ -87,43 +94,60 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 		}
 	}
 
+	// We flush all of the affected domain contexts first, as they might contain states we need to refer
+	// to in the DB transaction below using foreign key relationships
+	domainContextDBTXCallbacks := make([]func(err error), 0, len(domainContextsToFlush))
+	dbTXCallback := func(err error) {
+		for _, dcTXCallback := range domainContextDBTXCallbacks {
+			if dcTXCallback != nil {
+				dcTXCallback(err)
+			}
+		}
+	}
+	// We must track if we're returning an error with a nil callback, and ensure that in those cases
+	// we call the dbTXCallback with the error for any contexts we've received back from a Flush() call
+	var err error
+	defer func() {
+		if err != nil {
+			dbTXCallback(err)
+		}
+	}()
+	log.L(ctx).Infof("SyncPoints flush-writer: domain=contexts=%d finalizeOperations=%d dispatchOperations=%d delegateOperations=%d delegationAckOperations=%d",
+		len(domainContextsToFlush), len(finalizeOperations), len(dispatchOperations), len(delegateOperations), len(delegationAckOperations))
+	for _, dc := range domainContextsToFlush {
+		var domainCB func(error)
+		domainCB, err = dc.Flush(dbTX) // err variable must not be re-allocated
+		if err != nil {
+			return nil, nil, err
+		}
+		domainContextDBTXCallbacks = append(domainContextDBTXCallbacks, domainCB)
+	}
+
 	// If we have any finalizers, we need to call them now
 	//big assumption here that all operations in the batch have the same `contractAddress` which happens to be a safe
 	// assumption at time of coding because WriteKey returns the contract address
 	// but probably should consider a less brittle way to codify this assertion
-	if len(finalizeOperations) > 0 {
-		err := s.writeFinalizeOperations(ctx, dbTX, finalizeOperations)
-		if err != nil {
-			log.L(ctx).Errorf("Error persisting finalizers: %s", err)
-			return nil, err
-		}
+	if err == nil && len(finalizeOperations) > 0 {
+		err = s.writeFailureOperations(ctx, dbTX, finalizeOperations) // err variable must not be re-allocated
 	}
 
-	if len(dispatchOperations) > 0 {
-		err := s.writeDispatchOperations(ctx, dbTX, dispatchOperations)
-		if err != nil {
-			log.L(ctx).Errorf("Error persisting finalizers: %s", err)
-			return nil, err
-		}
+	if err == nil && len(dispatchOperations) > 0 {
+		err = s.writeDispatchOperations(ctx, dbTX, dispatchOperations) // err variable must not be re-allocated
 	}
 
-	if len(delegateOperations) > 0 {
-		err := s.writeDelegateOperations(ctx, dbTX, delegateOperations)
-		if err != nil {
-			log.L(ctx).Errorf("Error persisting delegateOperations: %s", err)
-			return nil, err
-		}
+	if err == nil && len(delegateOperations) > 0 {
+		err = s.writeDelegateOperations(ctx, dbTX, delegateOperations) // err variable must not be re-allocated
 	}
 
-	if len(delegationAckOperations) > 0 {
-		err := s.writeDelegationAckOperations(ctx, dbTX, delegationAckOperations)
-		if err != nil {
-			log.L(ctx).Errorf("Error persisting delegationAckOperations: %s", err)
-			return nil, err
-		}
+	if err == nil && len(delegationAckOperations) > 0 {
+		err = s.writeDelegationAckOperations(ctx, dbTX, delegationAckOperations) // err variable must not be re-allocated
+	}
+
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// We don't actually provide any result, so just build an array of nil results
-	return make([]flushwriter.Result[*noResult], len(values)), nil
+	return dbTXCallback, make([]flushwriter.Result[*noResult], len(values)), nil
 
 }

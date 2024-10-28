@@ -29,6 +29,7 @@ import (
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func NewTransactionFlow(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter, requestTimeout time.Duration) ptmgrtypes.TransactionFlow {
@@ -72,7 +73,7 @@ type transactionFlow struct {
 	identityResolver            components.IdentityResolver
 	syncPoints                  syncpoints.SyncPoints
 	transportWriter             ptmgrtypes.TransportWriter
-	finalizeReason              string
+	finalizeRevertReason        string
 	finalizeRequired            bool
 	finalizePending             bool
 	complete                    bool
@@ -117,7 +118,8 @@ func (tf *transactionFlow) CoordinatingLocally() bool {
 
 func (tf *transactionFlow) PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error) {
 
-	prepError := tf.domainAPI.PrepareTransaction(tf.endorsementGatherer.DomainContext(), tf.transaction)
+	readTX := tf.components.Persistence().DB() // no DB transaction required here
+	prepError := tf.domainAPI.PrepareTransaction(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
 	if prepError != nil {
 		log.L(ctx).Errorf("Error preparing transaction: %s", prepError)
 		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerPrepareError), prepError.Error())
@@ -154,7 +156,15 @@ func (tf *transactionFlow) GetStateDistributions(ctx context.Context) []*statedi
 		//need the output state for the state ID and need the outputStatePotential for the distribution list
 		outputStatePotential := tf.transaction.PostAssembly.OutputStatesPotential[stateIndex]
 
+		// We don't need to send to our local node
+		localNodeName := tf.components.TransportManager().LocalNodeName()
 		for _, party := range outputStatePotential.DistributionList {
+			nodeName, err := tktypes.PrivateIdentityLocator(party).Node(ctx, true)
+			if err != nil || nodeName == "" || nodeName == localNodeName {
+				log.L(ctx).Debugf("skipping unnecessary state distribution party='%s' nodeName='%s' localNodeName='%s'", party, nodeName, localNodeName)
+				continue
+			}
+
 			stateDistributions = append(stateDistributions, &statedistribution.StateDistribution{
 				ID:              uuid.New().String(),
 				StateID:         outputState.ID.String(),

@@ -144,7 +144,7 @@ func (w *wallet) resolveKeyAndVerifier(ctx context.Context, mapping *pldapi.KeyM
 }
 
 func (w *wallet) sign(ctx context.Context, mapping *pldapi.KeyMappingAndVerifier, payloadType string, payload []byte) ([]byte, error) {
-	log.L(ctx).Infof("Wallet '%s' signing %d bytes with keyHandle=%s algorithm=%s payloadType=%s", w.name, len(payload), mapping.KeyHandle, mapping.Verifier.Algorithm, payloadType)
+	log.L(ctx).Infof("Wallet '%s' signing %d bytes with keyIdentifier=%s keyHandle=%s algorithm=%s payloadType=%s", w.name, len(payload), mapping.Identifier, mapping.KeyHandle, mapping.Verifier.Algorithm, payloadType)
 	res, err := w.signingModule.Sign(ctx, &signerapi.SignRequest{
 		KeyHandle:   mapping.KeyHandle,
 		Algorithm:   mapping.Verifier.Algorithm,

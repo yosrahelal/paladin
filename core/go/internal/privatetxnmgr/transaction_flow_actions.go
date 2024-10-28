@@ -36,11 +36,6 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		return
 	}
 
-	if tf.dispatched {
-		log.L(ctx).Infof("Transaction %s is dispatched", tf.transaction.ID.String())
-		return
-	}
-
 	// Lets get the nasty stuff out of the way first
 	// if the event handler has marked the transaction as failed, then we initiate the finalize sync point
 	if tf.finalizeRequired {
@@ -51,6 +46,11 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		//we know we need to finalize but we are not currently waiting for a finalize to complete
 		// most likely a previous attempt to finalize has failed
 		tf.finalize(ctx)
+	}
+
+	if tf.dispatched {
+		log.L(ctx).Infof("Transaction %s is dispatched", tf.transaction.ID.String())
+		return
 	}
 
 	if tf.transaction.PreAssembly == nil {
@@ -93,7 +93,8 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		// We need to write the potential states to the domain before we can sign or endorse the transaction
 		// but there is no point in doing that until we are sure that the transaction is going to be coordinated locally
 		// so this is the earliest, and latest, point in the flow that we can do this
-		err := tf.domainAPI.WritePotentialStates(tf.endorsementGatherer.DomainContext(), tf.transaction)
+		readTX := tf.components.Persistence().DB() // no DB transaction required here for the reads from the DB (writes happen on syncpoint flusher)
+		err := tf.domainAPI.WritePotentialStates(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
 		if err != nil {
 			//Any error from WritePotentialStates is likely to be caused by an invalid init or assemble of the transaction
 			// which is most likely a programming error in the domain or the domain manager or privateTxManager
@@ -105,6 +106,8 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 			return
 		}
 	}
+	log.L(ctx).Debugf("Transaction %s is ready (outputStatesPotential=%d outputStates=%d)",
+		tf.transaction.ID.String(), len(tf.transaction.PostAssembly.OutputStatesPotential), len(tf.transaction.PostAssembly.OutputStates))
 	tf.readyForSequencing = true
 
 	//If we get here, we have an assembled transaction and have no intention of delegating it
@@ -148,13 +151,13 @@ func (tf *transactionFlow) revertTransaction(ctx context.Context, revertReason s
 	//trigger a finalize and update the transaction state so that finalize can be retried if it fails
 	tf.finalizeRequired = true
 	tf.finalizePending = true
-	tf.finalizeReason = revertReason
+	tf.finalizeRevertReason = revertReason
 	tf.finalize(ctx)
 
 }
 
 func (tf *transactionFlow) finalize(ctx context.Context) {
-	log.L(ctx).Errorf("finalize transaction %s: %s", tf.transaction.ID.String(), tf.finalizeReason)
+	log.L(ctx).Errorf("finalize transaction %s: %s", tf.transaction.ID.String(), tf.finalizeRevertReason)
 	//flush that to the txmgr database
 	// so that the user can see that it is reverted and so that we stop retrying to assemble and endorse it
 
@@ -162,18 +165,26 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 		ctx,
 		tf.domainAPI.Address(),
 		tf.transaction.ID,
-		tf.finalizeReason,
+		tf.finalizeRevertReason,
 		func(ctx context.Context) {
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop
 			log.L(ctx).Infof("Transaction %s finalize committed", tf.transaction.ID.String())
+
+			// Remove this transaction from our domain context on success - all changes are flushed to DB at this point
+			tf.endorsementGatherer.DomainContext().ResetTransactions(tf.transaction.ID)
+
 			go tf.publisher.PublishTransactionFinalizedEvent(ctx, tf.transaction.ID.String())
 		},
 		func(ctx context.Context, rollbackErr error) {
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop
 			log.L(ctx).Errorf("Transaction %s finalize rolled back: %s", tf.transaction.ID.String(), rollbackErr)
-			go tf.publisher.PublishTransactionFinalizeError(ctx, tf.transaction.ID.String(), tf.finalizeReason, rollbackErr)
+
+			// Reset the whole domain context on failure
+			tf.endorsementGatherer.DomainContext().Reset()
+
+			go tf.publisher.PublishTransactionFinalizeError(ctx, tf.transaction.ID.String(), tf.finalizeRevertReason, rollbackErr)
 		},
 	)
 }
@@ -251,7 +262,8 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 
 	if assemblingNode == tf.nodeID || assemblingNode == "" {
 		//we are the node that is responsible for assembling this transaction
-		err = tf.domainAPI.AssembleTransaction(tf.endorsementGatherer.DomainContext(), tf.transaction)
+		readTX := tf.components.Persistence().DB() // no DB transaction required here
+		err = tf.domainAPI.AssembleTransaction(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
 		if err != nil {
 			log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
 			tf.publisher.PublishTransactionAssembleFailedEvent(ctx,

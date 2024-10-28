@@ -108,6 +108,7 @@ type componentTestInstance struct {
 	ctx                    context.Context
 	client                 rpcclient.Client
 	resolveEthereumAddress func(identity string) string
+	cm                     componentmgr.ComponentManager
 }
 
 func deployDomainRegistry(t *testing.T) *tktypes.EthAddress {
@@ -257,12 +258,12 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 
 	var pl plugins.UnitTestPluginLoader
 
-	cm := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, uuid.New(), i.conf)
+	i.cm = componentmgr.NewComponentManager(i.ctx, i.grpcTarget, uuid.New(), i.conf)
 	// Start it up
-	err = cm.Init()
+	err = i.cm.Init()
 	require.NoError(t, err)
 
-	err = cm.StartManagers()
+	err = i.cm.StartManagers()
 	require.NoError(t, err)
 
 	loaderMap := map[string]plugintk.Plugin{
@@ -270,17 +271,17 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		"grpc":      grpc.NewPlugin(i.ctx),
 		"registry1": static.NewPlugin(i.ctx),
 	}
-	pc := cm.PluginManager()
+	pc := i.cm.PluginManager()
 	pl, err = plugins.NewUnitTestPluginLoader(pc.GRPCTargetURL(), pc.LoaderID().String(), loaderMap)
 	require.NoError(t, err)
 	go pl.Run()
 
-	err = cm.CompleteStart()
+	err = i.cm.CompleteStart()
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
 		pl.Stop()
-		cm.Stop()
+		i.cm.Stop()
 	})
 
 	client, err := rpcclient.NewHTTPClient(log.WithLogField(context.Background(), "client-for", binding.name), &pldconf.HTTPClientConfig{URL: "http://localhost:" + strconv.Itoa(*i.conf.RPCServer.HTTP.Port)})
@@ -290,7 +291,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	i.resolveEthereumAddress = func(identity string) string {
 		idPart, err := tktypes.PrivateIdentityLocator(identity).Identity(context.Background())
 		require.NoError(t, err)
-		addr, err := cm.KeyManager().ResolveEthAddressNewDatabaseTX(i.ctx, idPart)
+		addr, err := i.cm.KeyManager().ResolveEthAddressNewDatabaseTX(i.ctx, idPart)
 		require.NoError(t, err)
 		return addr.String()
 	}
