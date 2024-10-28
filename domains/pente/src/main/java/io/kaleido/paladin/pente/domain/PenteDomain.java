@@ -17,7 +17,6 @@ package io.kaleido.paladin.pente.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
 import io.kaleido.paladin.pente.evmrunner.EVMRunner;
@@ -33,7 +32,6 @@ import io.kaleido.paladin.toolkit.JsonHex.Bytes32;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.FormattedMessage;
-import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -438,7 +436,7 @@ public class PenteDomain extends DomainInstance {
             var mapper = new ObjectMapper();
             for (var event : request.getEventsList()) {
                 if (PenteConfiguration.transferSignature.equals(event.getSoliditySignature())) {
-                    var transfer = mapper.readValue(event.getDataJson(), UTXOTransferJSON.class);
+                    var transfer = mapper.readValue(event.getDataJson(), PenteTransitionJSON.class);
                     var inputs = Arrays.stream(transfer.inputs).map(id -> ToDomain.StateUpdate.newBuilder()
                             .setId(id.to0xHex())
                             .setTransactionId(transfer.txId.to0xHex())
@@ -466,7 +464,7 @@ public class PenteDomain extends DomainInstance {
                             .addAllInfoStates(info);
                     return CompletableFuture.completedFuture(result.build());
                 } else if (PenteConfiguration.approvalSignature.equals(event.getSoliditySignature())) {
-                    var approval = mapper.readValue(event.getDataJson(), UTXOApprovedJSON.class);
+                    var approval = mapper.readValue(event.getDataJson(), PenteApprovedJSON.class);
                     var result = ToDomain.HandleEventBatchResponse.newBuilder()
                             .addTransactionsComplete(ToDomain.CompletedTransaction.newBuilder()
                                     .setTransactionId(approval.txId.to0xHex())
@@ -575,7 +573,7 @@ public class PenteDomain extends DomainInstance {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record UTXOTransferJSON(
+    record PenteTransitionJSON(
             @JsonProperty
             Bytes32 txId,
             @JsonProperty
@@ -592,7 +590,7 @@ public class PenteDomain extends DomainInstance {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record UTXOApprovedJSON(
+    record PenteApprovedJSON(
             @JsonProperty
             Bytes32 txId,
             @JsonProperty

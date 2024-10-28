@@ -142,8 +142,8 @@ describe("PentePrivacyGroup", function () {
         endorsements1
       )
     )
-      .to.emit(privacyGroup, "UTXOTransfer")
-      .withArgs(tx1ID, [], [], stateSet1, info1, "0x");
+      .to.emit(privacyGroup, "PenteTransition")
+      .withArgs(tx1ID, [], [], stateSet1, info1);
 
     const stateSet2 = [randBytes32(), randBytes32(), randBytes32()];
     const inputs2 = [stateSet1[1]];
@@ -174,8 +174,8 @@ describe("PentePrivacyGroup", function () {
         endorsements2
       )
     )
-      .to.emit(privacyGroup, "UTXOTransfer")
-      .withArgs(tx2ID, inputs2, reads2, stateSet2, info2, "0x");
+      .to.emit(privacyGroup, "PenteTransition")
+      .withArgs(tx2ID, inputs2, reads2, stateSet2, info2);
   });
 
   it("successful transitions with approval delegation", async function () {
@@ -200,7 +200,7 @@ describe("PentePrivacyGroup", function () {
     await expect(
       privacyGroup.approveTransition(tx1ID, otherSigner, txHash, endorsements1)
     )
-      .to.emit(privacyGroup, "UTXOApproved")
+      .to.emit(privacyGroup, "PenteApproved")
       .withArgs(tx1ID, otherSigner, txHash);
 
     await expect(
@@ -215,8 +215,8 @@ describe("PentePrivacyGroup", function () {
         []
       )
     )
-      .to.emit(privacyGroup, "UTXOTransfer")
-      .withArgs(tx1ID, [], [], stateSet1, info1, "0x");
+      .to.emit(privacyGroup, "PenteTransition")
+      .withArgs(tx1ID, [], [], stateSet1, info1);
   });
 
   it("incomplete endorsements", async function () {
@@ -463,8 +463,8 @@ describe("PentePrivacyGroup", function () {
         endorsements1
       )
     )
-      .to.emit(privacyGroup, "UTXOTransfer")
-      .withArgs(tx1ID, [], [], stateSet1, [], "0x")
+      .to.emit(privacyGroup, "PenteTransition")
+      .withArgs(tx1ID, [], [], stateSet1, [])
       .and.to.emit(erc20, "Transfer")
       .withArgs(deployer, other, 100);
   });

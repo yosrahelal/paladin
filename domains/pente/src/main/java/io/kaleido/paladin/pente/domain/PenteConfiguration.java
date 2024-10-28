@@ -47,8 +47,8 @@ import java.util.*;
 public class PenteConfiguration {
     private static final Logger LOGGER = LogManager.getLogger(PenteConfiguration.class);
 
-    public static final String transferSignature = "event UTXOTransfer(bytes32 txId, bytes32[] inputs, bytes32[] reads, bytes32[] outputs, bytes32[] info, bytes data)";
-    public static final String approvalSignature = "event UTXOApproved(bytes32 txId, address delegate, bytes32 transitionHash)";
+    public static final String transferSignature = "event PenteTransition(bytes32 txId, bytes32[] inputs, bytes32[] reads, bytes32[] outputs, bytes32[] info)";
+    public static final String approvalSignature = "event PenteApproved(bytes32 txId, address delegate, bytes32 transitionHash)";
 
     private final JsonABI factoryContractABI;
 
@@ -89,7 +89,7 @@ public class PenteConfiguration {
             eventsABI = new JsonABI();
             eventsABI.addAll(privacyGroupABI.stream().filter(e ->
                     e.type().equals("error") ||
-                            (e.type().equals("event") && (e.name().equals("UTXOApproved") || e.name().equals("UTXOTransfer")))
+                            (e.type().equals("event") && (e.name().equals("PenteApproved") || e.name().equals("PenteTransition")))
             ).toList());
             externalCallABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
                     "contracts/private/interfaces/IPenteExternalCall.sol/IPenteExternalCall.json",

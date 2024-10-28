@@ -290,7 +290,7 @@ public class PenteDomainTests {
                             put("signatures", metadata.approvalParams().signatures());
                         }});
                     }});
-            var approveReceipt = waitForReceipt(testbed, approveTx, 10);
+            var approveReceipt = waitForReceipt(testbed, approveTx, 5);
             assertEquals(true, approveReceipt.get("success"));
 
             // Utilize the approval
@@ -307,7 +307,7 @@ public class PenteDomainTests {
                             put("externalCalls", transitionParams.externalCalls());
                         }});
                     }});
-            var setReceipt = waitForReceipt(testbed, setTx, 10);
+            var setReceipt = waitForReceipt(testbed, setTx, 5);
             assertEquals(true, setReceipt.get("success"));
         }
     }

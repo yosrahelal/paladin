@@ -43,7 +43,11 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     error PenteReadNotAvailable(bytes32 read);
     error PenteOutputAlreadyUnspent(bytes32 output);
     error PenteExternalCallsDisabled();
-    error PenteInvalidDelegate(bytes32 txhash, address delegate, address sender);
+    error PenteInvalidDelegate(
+        bytes32 txhash,
+        address delegate,
+        address sender
+    );
 
     struct EndorsementConfig {
         uint threshold;
@@ -127,7 +131,7 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     ) external {
         validateEndorsements(transitionHash, signatures);
         _approvals[transitionHash] = delegate;
-        emit UTXOApproved(txId, delegate, transitionHash);
+        emit PenteApproved(txId, delegate, transitionHash);
     }
 
     function transitionWithApproval(
@@ -137,7 +141,11 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     ) external {
         bytes32 transitionHash = _buildTransitionHash(states, externalCalls);
         if (_approvals[transitionHash] != msg.sender) {
-            revert PenteInvalidDelegate(transitionHash, _approvals[transitionHash], msg.sender);
+            revert PenteInvalidDelegate(
+                transitionHash,
+                _approvals[transitionHash],
+                msg.sender
+            );
         }
         _transition(txId, states, externalCalls);
     }
@@ -167,13 +175,12 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         }
 
         // Emit the state transition event
-        emit UTXOTransfer(
+        emit PenteTransition(
             txId,
             states.inputs,
             states.reads,
             states.outputs,
-            states.info,
-            new bytes(0)
+            states.info
         );
 
         // Trigger any external calls
