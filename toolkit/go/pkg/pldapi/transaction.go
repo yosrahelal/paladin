@@ -128,3 +128,10 @@ type TransactionDependencies struct {
 	DependsOn []uuid.UUID `docstruct:"TransactionDependencies" json:"dependsOn"`
 	PrereqOf  []uuid.UUID `docstruct:"TransactionDependencies" json:"prereqOf"`
 }
+
+type PreparedTransaction struct {
+	ID          uuid.UUID         `docstruct:"PreparedTransaction" json:"id"`
+	Transaction TransactionInput  `docstruct:"PreparedTransaction" json:"transaction"`
+	ExtraData   tktypes.RawJSON   `docstruct:"PreparedTransaction" json:"extraData,omitempty"`
+	States      TransactionStates `docstruct:"PreparedTransaction" json:"states"`
+}
