@@ -22,6 +22,7 @@ CREATE TABLE transactions (
   "idempotency_key"           VARCHAR,
   "created"                   BIGINT          NOT NULL,
   "type"                      VARCHAR         NOT NULL,
+  "submit_mode"               VARCHAR,
   "abi_ref"                   VARCHAR         NOT NULL,
   "function"                  VARCHAR,
   "domain"                    VARCHAR,

@@ -220,6 +220,14 @@ func (tm *txManager) SendTransaction(ctx context.Context, tx *pldapi.Transaction
 	return &txIDs[0], nil
 }
 
+func (tm *txManager) PrepareTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error) {
+	txIDs, err := tm.PrepareTransactions(ctx, []*pldapi.TransactionInput{tx})
+	if err != nil {
+		return nil, err
+	}
+	return &txIDs[0], nil
+}
+
 func (tm *txManager) CallTransaction(ctx context.Context, result any, call *pldapi.TransactionCall) (err error) {
 
 	txi, err := tm.resolveNewTransaction(ctx, tm.p.DB(), &call.TransactionInput)
@@ -297,7 +305,7 @@ func (tm *txManager) PrepareInternalPrivateTransaction(ctx context.Context, dbTX
 	if tx.IdempotencyKey == "" {
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateChainedTXIdemKey)
 	}
-	return tm.resolveNewTransaction(ctx, dbTX, tx)
+	return tm.resolveNewTransaction(ctx, dbTX, tx, prototk.TransactionSpecification_PREPARE_TRANSACTION)
 }
 
 func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX *gorm.DB, txis []*components.ValidatedTransaction) error {
@@ -347,6 +355,14 @@ func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, db
 }
 
 func (tm *txManager) SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
+	return tm.processNewTransactions(ctx, txs, prototk.TransactionSpecification_SEND_TRANSACTION)
+}
+
+func (tm *txManager) PrepareTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
+	return tm.processNewTransactions(ctx, txs, prototk.TransactionSpecification_PREPARE_TRANSACTION)
+}
+
+func (tm *txManager) processNewTransactions(ctx context.Context, txs []*pldapi.TransactionInput, intent prototk.TransactionSpecification_Intent) (txIDs []uuid.UUID, err error) {
 
 	// Public transactions need a signing address resolution and nonce allocation trackers
 	// before we open the database transaction
@@ -355,7 +371,7 @@ func (tm *txManager) SendTransactions(ctx context.Context, txs []*pldapi.Transac
 	txis := make([]*components.ValidatedTransaction, len(txs))
 	txIDs = make([]uuid.UUID, len(txs))
 	for i, tx := range txs {
-		txi, err := tm.resolveNewTransaction(ctx, tm.p.DB() /* no db tx for this part currently */, tx)
+		txi, err := tm.resolveNewTransaction(ctx, tm.p.DB() /* no db tx for this part currently */, tx, intent)
 		if err != nil {
 			return nil, err
 		}
@@ -458,12 +474,16 @@ func (tm *txManager) checkIdempotencyKeys(ctx context.Context, origErr error, in
 	return origErr
 }
 
-func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput) (*components.ValidatedTransaction, error) {
+func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, intent prototk.TransactionSpecification_Intent) (*components.ValidatedTransaction, error) {
 	txID := uuid.New()
 	tx.ID = &txID
 
 	switch tx.Transaction.Type.V() {
-	case pldapi.TransactionTypePrivate, pldapi.TransactionTypePublic:
+	case pldapi.TransactionTypePrivate:
+	case pldapi.TransactionTypePublic:
+		if intent != prototk.TransactionSpecification_SEND_TRANSACTION {
+			return nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateOnlyForPrepare)
+		}
 	default:
 		// Note autofuel transactions can only be created internally within the public TX manager
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidTXType)
@@ -488,6 +508,7 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, t
 	}
 
 	return &components.ValidatedTransaction{
+		Intent:       intent,
 		Transaction:  tx,
 		Function:     fn,
 		PublicTxData: publicTxData,

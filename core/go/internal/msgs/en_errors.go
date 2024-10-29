@@ -388,6 +388,7 @@ var (
 	MsgTxMgrPrivateCallRequiresTo        = ffe("PD012222", "A to contract address must be specified for private smart contract calls")
 	MsgTxMgrPrivateChainedTXIdemKey      = ffe("PD012223", "Chained internal transactions must have an idempotency key")
 	MsgTxMgrPrivateInsertErrorMismatch   = ffe("PD012224", "An unexpected result occurred inserting private transactions after-insert=%d matched=%d expected=%d")
+	MsgTxMgrPrivateOnlyForPrepare        = ffe("PD012225", "Prepare transaction only supports private transactions")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")

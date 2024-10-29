@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
@@ -54,6 +55,7 @@ type TxCompletion struct {
 
 // This is a transaction read for insertion into the Paladin database with all pre-verification completed.
 type ValidatedTransaction struct {
+	Intent       prototk.TransactionSpecification_Intent
 	Transaction  *pldapi.TransactionInput
 	Function     *ResolvedFunction
 	PublicTxData []byte
@@ -78,6 +80,8 @@ type TXManager interface {
 	DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.DecodedError, error)
 	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error)
 	SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
+	PrepareTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error)
+	PrepareTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
 	GetTransactionByID(ctx context.Context, id uuid.UUID) (*pldapi.Transaction, error)
 	GetTransactionByIDFull(ctx context.Context, id uuid.UUID) (result *pldapi.TransactionFull, err error)
 	GetTransactionDependencies(ctx context.Context, id uuid.UUID) (*pldapi.TransactionDependencies, error)
