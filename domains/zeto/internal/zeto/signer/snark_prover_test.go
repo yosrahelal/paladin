@@ -113,7 +113,7 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 	}
 	prover.circuitLoader = testCircuitLoader
 
-	testProofGenerator := func(witness []byte, provingKey []byte) (*types.ZKProof, error) {
+	testProofGenerator := func(ctx context.Context, witness []byte, provingKey []byte) (*types.ZKProof, error) {
 		peakProverCountMutex.Lock()
 		peakProverCount++
 		assert.LessOrEqual(t, peakProverCount, 50) // ensure the peak prover count is smaller than the default max
@@ -497,12 +497,13 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 }
 
 func TestValidateInputs(t *testing.T) {
+	ctx := context.Background()
 	inputs1 := &pb.ProvingRequestCommon{
 		InputCommitments: []string{"input1", "input2"},
 		InputValues:      []uint64{30},
 		InputSalts:       []string{"salt1", "salt2"},
 	}
-	err := validateInputs(inputs1)
+	err := validateInputs(ctx, inputs1)
 	assert.ErrorContains(t, err, "input commitments, values, and salts must have the same length")
 
 	inputs2 := &pb.ProvingRequestCommon{
@@ -510,7 +511,7 @@ func TestValidateInputs(t *testing.T) {
 		InputValues:      []uint64{30, 40},
 		InputSalts:       []string{"salt1"},
 	}
-	err = validateInputs(inputs2)
+	err = validateInputs(ctx, inputs2)
 	assert.ErrorContains(t, err, "input commitments, values, and salts must have the same length")
 
 	inputs3 := &pb.ProvingRequestCommon{
@@ -520,7 +521,7 @@ func TestValidateInputs(t *testing.T) {
 		OutputValues:     []uint64{32, 38},
 		OutputOwners:     []string{"bob"},
 	}
-	err = validateInputs(inputs3)
+	err = validateInputs(ctx, inputs3)
 	assert.ErrorContains(t, err, "output values and owner keys must have the same length")
 }
 

@@ -480,7 +480,7 @@ func TestGetVerifier(t *testing.T) {
 		Algorithm: "bad algo",
 	}
 	_, err = z.GetVerifier(context.Background(), req)
-	assert.ErrorContains(t, err, "Failed to get verifier. 'bad algo' does not match supported algorithm")
+	assert.ErrorContains(t, err, "Failed to get verifier. PD210088: 'bad algo' does not match supported algorithm")
 
 	bytes, err := hex.DecodeString("7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
 	assert.NoError(t, err)
@@ -508,7 +508,7 @@ func TestSign(t *testing.T) {
 		Algorithm: "bad algo",
 	}
 	_, err := z.Sign(context.Background(), req)
-	assert.ErrorContains(t, err, "PD210023: Failed to sign. 'bad algo' does not match supported algorithm")
+	assert.ErrorContains(t, err, "PD210023: Failed to sign. PD210088: 'bad algo' does not match supported algorithm")
 
 	bytes, err := hex.DecodeString("7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
 	assert.NoError(t, err)
