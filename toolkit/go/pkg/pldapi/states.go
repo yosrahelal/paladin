@@ -111,7 +111,7 @@ type State struct {
 }
 
 // TODO: Separate the GORM DTO from the external pldapi external type definition for States
-func (State) TableName() string {
+func (StateBase) TableName() string {
 	return "states"
 }
 

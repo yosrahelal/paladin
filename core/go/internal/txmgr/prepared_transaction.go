@@ -52,7 +52,9 @@ const (
 
 type preparedTransactionState struct {
 	Transaction uuid.UUID         `gorm:"column:transaction"`
+	DomainName  string            `gorm:"column:domain_name"`
 	StateID     tktypes.HexBytes  `gorm:"column:state"`
+	StateIdx    int               `gorm:"column:state_idx"`
 	Type        preparedStateType `gorm:"column:type"`
 	State       *pldapi.StateBase `gorm:"foreignKey:state;references:id;"`
 }
@@ -62,7 +64,7 @@ func (preparedTransactionState) TableName() string {
 }
 
 var preparedTransactionFilters = filters.FieldMap{
-	"id":      filters.UUIDField(`"transaction"`),
+	"id":      filters.UUIDField(`"id"`),
 	"created": filters.TimestampField("created"),
 }
 
@@ -71,43 +73,62 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 	var preparedTxInserts []*preparedTransaction
 	var preparedTxStateInserts []*preparedTransactionState
 	for _, p := range prepared {
-		p.Transaction.ID = nil
-		p.Transaction.Created = 0
 		dbPreparedTx := &preparedTransaction{
-			ID:        *p.Transaction.ID,
+			ID:        p.ID,
 			ExtraData: p.ExtraData,
 		}
-		if dbPreparedTx.Transaction, err = json.Marshal(p.Transaction); err != nil {
+		// We do the work for the ABI validation etc. before we insert the TX
+		resolved, err := tm.resolveNewTransaction(ctx, dbTX, p.Transaction)
+		if err == nil {
+			p.Transaction.ID = nil    // we do throw away the ID generated in resolveNewTransaction
+			p.Transaction.Created = 0 // ensure the created not set
+			p.Transaction.ABI = nil   // move to the reference
+			p.Transaction.Transaction.ABIReference = resolved.Function.ABIReference
+			p.Transaction.Transaction.Function = resolved.Function.Definition.String()
+			dbPreparedTx.Transaction, err = json.Marshal(p.Transaction)
+		}
+		if err != nil {
 			return err
 		}
 		preparedTxInserts = append(preparedTxInserts, dbPreparedTx)
-		for _, stateID := range p.States.Spent {
-			preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
-				Transaction: p.ID,
-				StateID:     stateID,
-				Type:        preparedSpend,
-			})
-		}
-		for _, stateID := range p.States.Read {
-			preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
-				Transaction: p.ID,
-				StateID:     stateID,
-				Type:        preparedRead,
-			})
-		}
-		for _, stateID := range p.States.Confirmed {
-			preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
-				Transaction: p.ID,
-				StateID:     stateID,
-				Type:        preparedConfirm,
-			})
-		}
-		for _, stateID := range p.States.Info {
-			preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
-				Transaction: p.ID,
-				StateID:     stateID,
-				Type:        preparedInfo,
-			})
+		domainName := p.Transaction.Domain
+		if domainName != "" {
+			for i, stateID := range p.States.Spent {
+				preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
+					Transaction: p.ID,
+					Type:        preparedSpend,
+					DomainName:  domainName,
+					StateID:     stateID,
+					StateIdx:    i,
+				})
+			}
+			for i, stateID := range p.States.Read {
+				preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
+					Transaction: p.ID,
+					Type:        preparedRead,
+					DomainName:  domainName,
+					StateID:     stateID,
+					StateIdx:    i,
+				})
+			}
+			for i, stateID := range p.States.Confirmed {
+				preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
+					Transaction: p.ID,
+					Type:        preparedConfirm,
+					DomainName:  domainName,
+					StateID:     stateID,
+					StateIdx:    i,
+				})
+			}
+			for i, stateID := range p.States.Info {
+				preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
+					Transaction: p.ID,
+					Type:        preparedInfo,
+					DomainName:  domainName,
+					StateID:     stateID,
+					StateIdx:    i,
+				})
+			}
 		}
 		log.L(ctx).Infof("Inserting prepared %s transaction for transaction %s with spent=%d read=%d confirmed=%d info=%d",
 			p.Transaction.Type, p.ID, len(p.States.Spent), len(p.States.Read), len(p.States.Confirmed), len(p.States.Info))
@@ -155,7 +176,34 @@ func (tm *txManager) QueryPreparedTransactions(ctx context.Context, dbTX *gorm.D
 			transactionIDs[i] = pt.ID
 		}
 		var preparedStates []*preparedTransactionState
-		err dbTX
+		err := dbTX.WithContext(ctx).
+			Where(`"transaction" IN (?)`, transactionIDs).
+			Order(`"transaction"`).
+			Order(`"type"`).
+			Order(`"state_idx"`).
+			Joins("State").
+			Find(&preparedStates).
+			Error
+		if err != nil {
+			return nil, err
+		}
+		for _, ps := range preparedStates {
+			for _, pt := range preparedTransactions {
+				if ps.Transaction == pt.ID {
+					switch ps.Type {
+					case preparedSpend:
+						pt.States.Spent = append(pt.States.Spent, ps.State)
+					case preparedRead:
+						pt.States.Read = append(pt.States.Read, ps.State)
+					case preparedConfirm:
+						pt.States.Confirmed = append(pt.States.Confirmed, ps.State)
+					case preparedInfo:
+						pt.States.Info = append(pt.States.Info, ps.State)
+					}
+				}
+			}
+		}
+
 	}
 	return preparedTransactions, nil
 }

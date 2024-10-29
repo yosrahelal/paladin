@@ -31,6 +31,7 @@ import (
 )
 
 type mockComponents struct {
+	c                *componentmocks.AllComponents
 	db               sqlmock.Sqlmock
 	ethClientFactory *ethclientmocks.EthClientFactory
 	domainManager    *componentmocks.DomainManager
@@ -49,6 +50,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 
 	conf := &pldconf.TxManagerConfig{}
 	mc := &mockComponents{
+		c:                componentmocks.NewAllComponents(t),
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
 		ethClientFactory: ethclientmocks.NewEthClientFactory(t),
 		keyManager:       componentmocks.NewKeyManager(t),
@@ -59,7 +61,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 		identityResolver: componentmocks.NewIdentityResolver(t),
 	}
 
-	componentMocks := componentmocks.NewAllComponents(t)
+	componentMocks := mc.c
 	componentMocks.On("BlockIndexer").Return(mc.blockIndexer).Maybe()
 	componentMocks.On("DomainManager").Return(mc.domainManager).Maybe()
 	componentMocks.On("KeyManager").Return(mc.keyManager).Maybe()
