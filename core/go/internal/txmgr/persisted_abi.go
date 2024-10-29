@@ -49,13 +49,13 @@ var abiFilters = filters.FieldMap{
 	"created": filters.TimestampField("created"),
 }
 
-func (tm *txManager) getABIByHash(ctx context.Context, hash tktypes.Bytes32) (*pldapi.StoredABI, error) {
+func (tm *txManager) getABIByHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*pldapi.StoredABI, error) {
 	pa, found := tm.abiCache.Get(hash)
 	if found {
 		return pa, nil
 	}
 	var pABIs []*PersistedABI
-	err := tm.p.DB().
+	err := dbTX.
 		WithContext(ctx).
 		Table("abis").
 		Where("hash = ?", hash).
@@ -72,15 +72,15 @@ func (tm *txManager) getABIByHash(ctx context.Context, hash tktypes.Bytes32) (*p
 	return pa, nil
 }
 
-func (tm *txManager) storeABI(ctx context.Context, a abi.ABI) (*tktypes.Bytes32, error) {
-	pa, err := tm.UpsertABI(ctx, a)
+func (tm *txManager) storeABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*tktypes.Bytes32, error) {
+	pa, err := tm.UpsertABI(ctx, dbTX, a)
 	if err != nil {
 		return nil, err
 	}
 	return &pa.Hash, err
 }
 
-func (tm *txManager) UpsertABI(ctx context.Context, a abi.ABI) (*pldapi.StoredABI, error) {
+func (tm *txManager) UpsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*pldapi.StoredABI, error) {
 	hash, err := tktypes.ABISolDefinitionHash(ctx, a)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidABI)
@@ -109,38 +109,35 @@ func (tm *txManager) UpsertABI(ctx context.Context, a abi.ABI) (*pldapi.StoredAB
 	}
 
 	// Otherwise ask the DB to store
-	err = tm.p.DB().Transaction(func(dbTX *gorm.DB) error {
-		abiBytes, err := json.Marshal(a)
-		if err == nil {
-			err = dbTX.
-				Table("abis").
-				Clauses(clause.OnConflict{
-					Columns: []clause.Column{
-						{Name: "hash"},
-					},
-					DoNothing: true, // immutable
-				}).
-				Create(&PersistedABI{
-					Hash: *hash,
-					ABI:  abiBytes,
-				}).
-				Error
-		}
-		if err == nil && len(errorDefs) > 0 {
-			err = dbTX.
-				Table("abi_errors").
-				Clauses(clause.OnConflict{
-					Columns: []clause.Column{
-						{Name: "abi_hash"},
-						{Name: "selector"},
-					},
-					DoNothing: true, // immutable
-				}).
-				Create(errorDefs).
-				Error
-		}
-		return err
-	})
+	abiBytes, err := json.Marshal(a)
+	if err == nil {
+		err = dbTX.
+			Table("abis").
+			Clauses(clause.OnConflict{
+				Columns: []clause.Column{
+					{Name: "hash"},
+				},
+				DoNothing: true, // immutable
+			}).
+			Create(&PersistedABI{
+				Hash: *hash,
+				ABI:  abiBytes,
+			}).
+			Error
+	}
+	if err == nil && len(errorDefs) > 0 {
+		err = dbTX.
+			Table("abi_errors").
+			Clauses(clause.OnConflict{
+				Columns: []clause.Column{
+					{Name: "abi_hash"},
+					{Name: "selector"},
+				},
+				DoNothing: true, // immutable
+			}).
+			Create(errorDefs).
+			Error
+	}
 	if err != nil {
 		return nil, err
 	}

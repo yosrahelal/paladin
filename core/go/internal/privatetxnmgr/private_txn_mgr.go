@@ -410,7 +410,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	}
 
 	//transactions are always dispatched as a sequence, even if only a sequence of one
-	sequence := &syncpoints.DispatchSequence{
+	sequence := &syncpoints.PublicDispatch{
 		PrivateTransactionDispatches: []*syncpoints.DispatchPersisted{
 			{
 				PrivateTransactionID: tx.ID.String(),
@@ -419,7 +419,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	}
 	sequence.PublicTxBatch = pubBatch
 	dispatchBatch := &syncpoints.DispatchBatch{
-		DispatchSequences: []*syncpoints.DispatchSequence{
+		DispatchSequences: []*syncpoints.PublicDispatch{
 			sequence,
 		},
 	}

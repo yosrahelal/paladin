@@ -221,7 +221,7 @@ func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		a abi.ABI,
 	) (*tktypes.Bytes32, error) {
-		return tm.storeABI(ctx, a)
+		return tm.storeABI(ctx, tm.p.DB(), a)
 	})
 }
 
@@ -229,7 +229,7 @@ func (tm *txManager) rpcGetStoredABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		hash tktypes.Bytes32,
 	) (*pldapi.StoredABI, error) {
-		return tm.getABIByHash(ctx, hash)
+		return tm.getABIByHash(ctx, tm.p.DB(), hash)
 	})
 }
 

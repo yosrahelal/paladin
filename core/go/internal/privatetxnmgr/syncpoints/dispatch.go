@@ -32,7 +32,8 @@ import (
 )
 
 type dispatchOperation struct {
-	dispatches         []*DispatchSequence
+	publicDispatches   []*PublicDispatch
+	privateDispatches  []*PrivateDispatch
 	stateDistributions []*statedistribution.StateDistributionPersisted
 }
 
@@ -44,7 +45,7 @@ type DispatchPersisted struct {
 }
 
 // A dispatch sequence is a collection of private transactions that are submitted together for a given signing address in order
-type DispatchSequence struct {
+type PublicDispatch struct {
 	PublicTxBatch                components.PublicTxBatch
 	PrivateTransactionDispatches []*DispatchPersisted
 }
@@ -52,7 +53,7 @@ type DispatchSequence struct {
 // a dispatch batch is a collection of dispatch sequences that are submitted together with no ordering requirements between sequences
 // purely for a database performance reason, they are included in the same transaction
 type DispatchBatch struct {
-	DispatchSequences []*DispatchSequence
+	DispatchSequences []*PublicDispatch
 }
 
 // PersistDispatches persists the dispatches to the database and coordinates with the public transaction manager
@@ -74,7 +75,7 @@ func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contrac
 		domainContext:   dCtx,
 		contractAddress: contractAddress,
 		dispatchOperation: &dispatchOperation{
-			dispatches:         dispatchBatch.DispatchSequences,
+			publicDispatches:   dispatchBatch.DispatchSequences,
 			stateDistributions: stateDistributionsPersisted,
 		},
 	})
@@ -89,7 +90,7 @@ func (s *syncPoints) PersistDeployDispatchBatch(ctx context.Context, dispatchBat
 	// Send the write operation with all of the batch sequence operations to the flush worker
 	op := s.writer.Queue(ctx, &syncPointOperation{
 		dispatchOperation: &dispatchOperation{
-			dispatches: dispatchBatch.DispatchSequences,
+			publicDispatches: dispatchBatch.DispatchSequences,
 		},
 	})
 
@@ -108,7 +109,7 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 
 		//for each batchSequence operation, call the public transaction manager to allocate a nonce
 		//and persist the intent to send the states to the distribution list.
-		for _, dispatchSequenceOp := range op.dispatches {
+		for _, dispatchSequenceOp := range op.publicDispatches {
 			// Call the public transaction manager to allocate nonces for all transactions in the sequence
 			// and persist them to the database under the current transaction
 			pubBatch := dispatchSequenceOp.PublicTxBatch
