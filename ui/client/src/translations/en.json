@@ -67,5 +67,6 @@
   "atomic": "Atomic",
   "numberNanoseconds": "{{number}} (nanoseconds)",
   "numberMilliseconds": "{{number}} (milliseconds)",
-  "numberSeconds": "{{number}} (seconds)"
+  "numberSeconds": "{{number}} (seconds)",
+  "atomicNumber": "Atomic ({{number}})"
 }
