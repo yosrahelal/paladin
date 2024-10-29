@@ -44,7 +44,7 @@ func TestResolveFunctionABIAndDef(t *testing.T) {
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:         pldapi.TransactionTypePublic.Enum(),
 			ABIReference: confutil.P(tktypes.Bytes32(tktypes.RandBytes(32))),
 		},
@@ -58,7 +58,7 @@ func TestResolveFunctionNoABI(t *testing.T) {
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
@@ -72,7 +72,7 @@ func TestResolveFunctionBadABI(t *testing.T) {
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
@@ -91,7 +91,7 @@ func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: "doIt",
 		},
@@ -168,7 +168,7 @@ func TestSubmitBadFromAddr(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
@@ -192,7 +192,7 @@ func TestResolveFunctionHexInputOK(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
@@ -211,7 +211,7 @@ func TestResolveFunctionHexInputFail(t *testing.T) {
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -229,7 +229,7 @@ func TestResolveFunctionUnsupportedInput(t *testing.T) {
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -253,7 +253,7 @@ func TestResolveFunctionPlainNameOK(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			From:     "sender1",
 			Function: "doIt",
@@ -276,7 +276,7 @@ func TestSendTransactionPrivateDeploy(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:   pldapi.TransactionTypePrivate.Enum(),
 			Domain: "domain1",
 			Data:   tktypes.JSONString(tktypes.HexBytes(callData)),
@@ -297,7 +297,7 @@ func TestSendTransactionPrivateInvoke(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePrivate.Enum(),
 			Domain:   "domain1",
 			Function: "doIt",
@@ -320,7 +320,7 @@ func TestSendTransactionPrivateInvokeFail(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePrivate.Enum(),
 			Domain:   "domain1",
 			Function: "doIt",
@@ -345,7 +345,7 @@ func TestResolveFunctionOnlyOneToMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "sender1",
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -368,7 +368,7 @@ func TestResolveFunctionOnlyDuplicateMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
@@ -389,7 +389,7 @@ func TestResolveFunctionNoMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: "nope",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -411,7 +411,7 @@ func TestParseInputsBadTxType(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
 		},
@@ -431,7 +431,7 @@ func TestParseInputsBytecodeNonConstructor(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
@@ -453,7 +453,7 @@ func TestParseInputsBytecodeMissingConstructor(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
 		},
@@ -471,7 +471,7 @@ func TestParseInputsBadDataJSON(t *testing.T) {
 	}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.RawJSON(`{!!! bad json`),
@@ -490,7 +490,7 @@ func TestParseInputsBadDataForFunction(t *testing.T) {
 	}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.RawJSON(`["not a number"]`),
@@ -509,7 +509,7 @@ func TestParseInputsBadByteString(t *testing.T) {
 	}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.RawJSON(`"not hex"`),
@@ -544,7 +544,7 @@ func TestInsertTransactionFail(t *testing.T) {
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
@@ -576,7 +576,7 @@ func TestInsertTransactionPublicTxPrepareFail(t *testing.T) {
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
@@ -599,7 +599,7 @@ func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
 
 	// Default public constructor invoke - no ABI or data
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "sender1",
 		},
@@ -618,7 +618,7 @@ func TestInsertTransactionOkDefaultConstructor(t *testing.T) {
 
 	// Default public constructor invoke
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "sender1",
 		},
@@ -635,7 +635,7 @@ func TestCheckIdempotencyKeyNoOverrideErrIfFail(t *testing.T) {
 	defer done()
 
 	// Default public constructor invoke
-	err := txm.checkIdempotencyKeys(ctx, fmt.Errorf("pop"), false, []*pldapi.TransactionInput{{Transaction: pldapi.Transaction{
+	err := txm.checkIdempotencyKeys(ctx, fmt.Errorf("pop"), false, []*pldapi.TransactionInput{{TransactionBase: pldapi.TransactionBase{
 		IdempotencyKey: "idem1",
 	}}})
 	assert.Regexp(t, "pop", err)
@@ -805,7 +805,7 @@ func TestCallTransactionPrivMissingTo(t *testing.T) {
 
 	err := txm.CallTransaction(ctx, nil, &pldapi.TransactionCall{
 		TransactionInput: pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				Type: pldapi.TransactionTypePrivate.Enum(),
 			},
 		},
@@ -820,7 +820,7 @@ func TestCallTransactionBadSerializer(t *testing.T) {
 
 	err := txm.CallTransaction(ctx, nil, &pldapi.TransactionCall{
 		TransactionInput: pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				Type: pldapi.TransactionTypePrivate.Enum(),
 			},
 		},
@@ -834,7 +834,7 @@ var testInternalTransactionFn = &abi.Entry{Type: abi.Function, Name: "doStuff"}
 
 func newTestInternalTransaction(idempotencyKey string) *pldapi.TransactionInput {
 	return &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			Function:       "doStuff",
@@ -853,7 +853,7 @@ func TestInternalPrivateTXInsertWithIdempotencyKeys(t *testing.T) {
 	err := txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
 		for i := range fifteenTxns {
 			tx := newTestInternalTransaction(fmt.Sprintf("tx_%.3d", i))
-			fifteenTxns[i], err = txm.PrepareInternalPrivateTransaction(ctx, dbTX, tx)
+			fifteenTxns[i], err = txm.PrepareInternalPrivateTransaction(ctx, dbTX, tx, pldapi.SubmitModeAuto)
 			require.NoError(t, err)
 		}
 		return nil
@@ -885,7 +885,7 @@ func TestPrepareInternalPrivateTransactionNoIdempotencyKey(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	_, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), &pldapi.TransactionInput{})
+	_, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), &pldapi.TransactionInput{}, pldapi.SubmitModeAuto)
 	assert.Regexp(t, "PD012223", err)
 
 }
@@ -898,7 +898,7 @@ func TestUpsertInternalPrivateTxsFinalizeIDsInsertFail(t *testing.T) {
 	})
 	defer done()
 
-	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"))
+	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
 	require.NoError(t, err)
 
 	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
@@ -915,7 +915,7 @@ func TestUpsertInternalPrivateTxsIdempotencyKeyFail(t *testing.T) {
 	})
 	defer done()
 
-	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"))
+	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
 	require.NoError(t, err)
 
 	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
@@ -932,7 +932,7 @@ func TestUpsertInternalPrivateTxsIdempotencyMisMatch(t *testing.T) {
 	})
 	defer done()
 
-	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"))
+	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
 	require.NoError(t, err)
 
 	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})

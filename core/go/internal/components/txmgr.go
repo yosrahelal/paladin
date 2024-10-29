@@ -21,7 +21,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
@@ -55,8 +54,8 @@ type TxCompletion struct {
 
 // This is a transaction read for insertion into the Paladin database with all pre-verification completed.
 type ValidatedTransaction struct {
-	Intent       prototk.TransactionSpecification_Intent
-	Transaction  *pldapi.TransactionInput
+	Transaction  *pldapi.Transaction
+	DependsOn    []uuid.UUID
 	Function     *ResolvedFunction
 	PublicTxData []byte
 	Inputs       tktypes.RawJSON
@@ -99,6 +98,6 @@ type TXManager interface {
 
 	// These functions for use of the private TX manager for chaining private transactions.
 
-	PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput) (*ValidatedTransaction, error)
+	PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*ValidatedTransaction, error)
 	UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX *gorm.DB, txis []*ValidatedTransaction) error
 }

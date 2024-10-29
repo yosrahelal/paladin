@@ -138,7 +138,7 @@ func (r *SmartContractDeploymentReconciler) buildDeployTransaction(ctx context.C
 	}
 
 	return true, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:   tktypes.Enum[pldapi.TransactionType](scd.Spec.TxType),
 			Domain: scd.Spec.Domain,
 			From:   scd.Spec.From,

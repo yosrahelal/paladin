@@ -201,7 +201,7 @@ func registerImpl(ctx context.Context, name string, domainContracts *ZetoDomainC
 		},
 	}
 	_, err := tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			From:     deployer,
 			To:       addr,

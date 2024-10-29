@@ -43,6 +43,7 @@ import (
 type persistedTransaction struct {
 	ID                 uuid.UUID                            `gorm:"column:id;primaryKey"`
 	IdempotencyKey     *string                              `gorm:"column:idempotency_key"`
+	SubmitMode         tktypes.Enum[pldapi.SubmitMode]      `gorm:"column:submit_mode"`
 	Type               tktypes.Enum[pldapi.TransactionType] `gorm:"column:type"`
 	Created            tktypes.Timestamp                    `gorm:"column:created;autoCreateTime:nano"`
 	ABIReference       *tktypes.Bytes32                     `gorm:"column:abi_ref"`
@@ -230,7 +231,7 @@ func (tm *txManager) PrepareTransaction(ctx context.Context, tx *pldapi.Transact
 
 func (tm *txManager) CallTransaction(ctx context.Context, result any, call *pldapi.TransactionCall) (err error) {
 
-	txi, err := tm.resolveNewTransaction(ctx, tm.p.DB(), &call.TransactionInput)
+	txi, err := tm.resolveNewTransaction(ctx, tm.p.DB(), &call.TransactionInput, pldapi.SubmitModeCall)
 	if err != nil {
 		return err
 	}
@@ -300,12 +301,12 @@ func (tm *txManager) callTransactionPublic(ctx context.Context, result any, call
 	return err
 }
 
-func (tm *txManager) PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput) (*components.ValidatedTransaction, error) {
+func (tm *txManager) PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*components.ValidatedTransaction, error) {
 	tx.Type = pldapi.TransactionTypePrivate.Enum()
 	if tx.IdempotencyKey == "" {
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateChainedTXIdemKey)
 	}
-	return tm.resolveNewTransaction(ctx, dbTX, tx, prototk.TransactionSpecification_PREPARE_TRANSACTION)
+	return tm.resolveNewTransaction(ctx, dbTX, tx, submitMode)
 }
 
 func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX *gorm.DB, txis []*components.ValidatedTransaction) error {
@@ -355,14 +356,14 @@ func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, db
 }
 
 func (tm *txManager) SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
-	return tm.processNewTransactions(ctx, txs, prototk.TransactionSpecification_SEND_TRANSACTION)
+	return tm.processNewTransactions(ctx, txs, pldapi.SubmitModeAuto)
 }
 
 func (tm *txManager) PrepareTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
-	return tm.processNewTransactions(ctx, txs, prototk.TransactionSpecification_PREPARE_TRANSACTION)
+	return tm.processNewTransactions(ctx, txs, pldapi.SubmitModeExternal)
 }
 
-func (tm *txManager) processNewTransactions(ctx context.Context, txs []*pldapi.TransactionInput, intent prototk.TransactionSpecification_Intent) (txIDs []uuid.UUID, err error) {
+func (tm *txManager) processNewTransactions(ctx context.Context, txs []*pldapi.TransactionInput, submitMode pldapi.SubmitMode) (txIDs []uuid.UUID, err error) {
 
 	// Public transactions need a signing address resolution and nonce allocation trackers
 	// before we open the database transaction
@@ -371,16 +372,17 @@ func (tm *txManager) processNewTransactions(ctx context.Context, txs []*pldapi.T
 	txis := make([]*components.ValidatedTransaction, len(txs))
 	txIDs = make([]uuid.UUID, len(txs))
 	for i, tx := range txs {
-		txi, err := tm.resolveNewTransaction(ctx, tm.p.DB() /* no db tx for this part currently */, tx, intent)
+		txi, err := tm.resolveNewTransaction(ctx, tm.p.DB() /* no db tx for this part currently */, tx, submitMode)
 		if err != nil {
 			return nil, err
 		}
+		txID := *txi.Transaction.ID
 		txis[i] = txi
-		txIDs[i] = *tx.ID
+		txIDs[i] = txID
 		if tx.Type.V() == pldapi.TransactionTypePublic {
 			publicTxs = append(publicTxs, &components.PublicTxSubmission{
 				// Public transaction bound 1:1 with our parent transaction
-				Bindings: []*components.PaladinTXReference{{TransactionID: *tx.ID, TransactionType: pldapi.TransactionTypePublic.Enum()}},
+				Bindings: []*components.PaladinTXReference{{TransactionID: txID, TransactionType: pldapi.TransactionTypePublic.Enum()}},
 				PublicTxInput: pldapi.PublicTxInput{
 					To:              tx.To,
 					Data:            txi.PublicTxData,
@@ -474,14 +476,13 @@ func (tm *txManager) checkIdempotencyKeys(ctx context.Context, origErr error, in
 	return origErr
 }
 
-func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, intent prototk.TransactionSpecification_Intent) (*components.ValidatedTransaction, error) {
+func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*components.ValidatedTransaction, error) {
 	txID := uuid.New()
-	tx.ID = &txID
 
-	switch tx.Transaction.Type.V() {
+	switch tx.Type.V() {
 	case pldapi.TransactionTypePrivate:
 	case pldapi.TransactionTypePublic:
-		if intent != prototk.TransactionSpecification_SEND_TRANSACTION {
+		if submitMode == pldapi.SubmitModeExternal {
 			return nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateOnlyForPrepare)
 		}
 	default:
@@ -508,8 +509,12 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, t
 	}
 
 	return &components.ValidatedTransaction{
-		Intent:       intent,
-		Transaction:  tx,
+		Transaction: &pldapi.Transaction{
+			TransactionBase: tx.TransactionBase,
+			ID:              &txID,
+			SubmitMode:      submitMode.Enum(),
+		},
+		DependsOn:    tx.DependsOn,
 		Function:     fn,
 		PublicTxData: publicTxData,
 		Inputs:       normalizedJSON,
@@ -549,6 +554,7 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txis
 
 		ptxs[i] = &persistedTransaction{
 			ID:             *tx.ID,
+			SubmitMode:     tx.SubmitMode,
 			IdempotencyKey: notEmptyOrNull(tx.IdempotencyKey),
 			Type:           tx.Type,
 			ABIReference:   txi.Function.ABIReference,
@@ -558,7 +564,7 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txis
 			To:             tx.To,
 			Data:           txi.Inputs,
 		}
-		for _, d := range tx.DependsOn {
+		for _, d := range txi.DependsOn {
 			transactionDeps = append(transactionDeps, &transactionDep{
 				Transaction: *tx.ID,
 				DependsOn:   d,

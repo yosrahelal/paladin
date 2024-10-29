@@ -103,14 +103,14 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 
 	// Create the parent TX
 	parentTx, err := txm.resolveNewTransaction(ctx, txm.p.DB(), &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			IdempotencyKey: "parent_txn",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			To:             tktypes.RandAddress(),
 			Function:       "doThing1",
 		},
 		ABI: abi.ABI{{Type: abi.Function, Name: "doThing1"}},
-	})
+	}, pldapi.SubmitModeAuto)
 	require.NoError(t, err)
 	_, err = txm.insertTransactions(ctx, txm.p.DB(), []*components.ValidatedTransaction{parentTx}, false)
 	require.NoError(t, err)
@@ -126,7 +126,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 	ptInsert := &components.PrepareTransactionWithRefs{
 		ID: *parentTx.Transaction.ID,
 		Transaction: &pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				IdempotencyKey: "child_txn",
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				Domain:         "domain1",
@@ -157,7 +157,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 	require.Equal(t, &pldapi.PreparedTransaction{
 		ID: *parentTx.Transaction.ID,
 		Transaction: pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				IdempotencyKey: "child_txn",
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				Domain:         "domain1",

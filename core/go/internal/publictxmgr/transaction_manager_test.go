@@ -410,8 +410,8 @@ func fakeTxManagerInsert(t *testing.T, db *gorm.DB, txID uuid.UUID, fromStr stri
 		fakeABI, `[]`, tktypes.TimestampNow()).
 		Error
 	require.NoError(t, err)
-	err = db.Exec(`INSERT INTO "transactions" ("id", "created", "type", "abi_ref", "from") VALUES (?, ?, ?, ?, ?)`,
-		txID, tktypes.TimestampNow(), pldapi.TransactionTypePrivate.Enum(), fakeABI, fromStr).
+	err = db.Exec(`INSERT INTO "transactions" ("id", "submit_mode", "created", "type", "abi_ref", "from") VALUES (?, ?, ?, ?, ?, ?)`,
+		txID, pldapi.SubmitModeAuto, tktypes.TimestampNow(), pldapi.TransactionTypePrivate.Enum(), fakeABI, fromStr).
 		Error
 	require.NoError(t, err)
 }

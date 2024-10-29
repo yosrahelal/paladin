@@ -992,7 +992,7 @@ func TestPrepareTransactionPrivateResult(t *testing.T) {
 
 	err := psc.PrepareTransaction(td.mdc, td.c.dbTX, tx)
 	require.NoError(t, err)
-	assert.Equal(t, pldapi.Transaction{
+	assert.Equal(t, pldapi.TransactionBase{
 		IdempotencyKey: fmt.Sprintf("%s_doTheNextThing", tx.ID),
 		Type:           pldapi.TransactionTypePrivate.Enum(),
 		Function:       "doTheNextThing(string)",
@@ -1000,7 +1000,7 @@ func TestPrepareTransactionPrivateResult(t *testing.T) {
 		To:             contractAddr,
 		Data:           tktypes.RawJSON(`{"thing": "something else"}`),
 		Domain:         psc.Domain().Name(),
-	}, tx.PreparedPrivateTransaction.Transaction)
+	}, tx.PreparedPrivateTransaction.TransactionBase)
 }
 
 func TestPrepareTransactionPrivateBadAddr(t *testing.T) {

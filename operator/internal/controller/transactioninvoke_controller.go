@@ -149,7 +149,7 @@ func (r *TransactionInvokeReconciler) buildDeployTransaction(txi *corev1alpha1.T
 	}
 
 	return true, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:   tktypes.Enum[pldapi.TransactionType](txi.Spec.TxType),
 			Domain: txi.Spec.Domain,
 			From:   txi.Spec.From,

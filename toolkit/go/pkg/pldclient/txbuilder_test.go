@@ -551,7 +551,7 @@ func TestBuildBadABIJSON(t *testing.T) {
 func TestGetters(t *testing.T) {
 
 	tx := &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			IdempotencyKey: "tx1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",

@@ -78,13 +78,11 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 			ExtraData: p.ExtraData,
 		}
 		// We do the work for the ABI validation etc. before we insert the TX
-		resolved, err := tm.resolveNewTransaction(ctx, dbTX, p.Transaction)
+		resolved, err := tm.resolveNewTransaction(ctx, dbTX, p.Transaction, pldapi.SubmitModeExternal)
 		if err == nil {
-			p.Transaction.ID = nil    // we do throw away the ID generated in resolveNewTransaction
-			p.Transaction.Created = 0 // ensure the created not set
-			p.Transaction.ABI = nil   // move to the reference
-			p.Transaction.Transaction.ABIReference = resolved.Function.ABIReference
-			p.Transaction.Transaction.Function = resolved.Function.Definition.String()
+			p.Transaction.ABI = nil // move to the reference
+			p.Transaction.ABIReference = resolved.Function.ABIReference
+			p.Transaction.Function = resolved.Function.Definition.String()
 			dbPreparedTx.Transaction, err = json.Marshal(p.Transaction)
 		}
 		if err != nil {

@@ -22,7 +22,7 @@ CREATE TABLE transactions (
   "idempotency_key"           VARCHAR,
   "created"                   BIGINT          NOT NULL,
   "type"                      VARCHAR         NOT NULL,
-  "submit_mode"               VARCHAR,
+  "submit_mode"               VARCHAR         NOT NULL,
   "abi_ref"                   VARCHAR         NOT NULL,
   "function"                  VARCHAR,
   "domain"                    VARCHAR,
@@ -32,7 +32,7 @@ CREATE TABLE transactions (
   PRIMARY KEY ("id"),
   FOREIGN KEY ("abi_ref") REFERENCES abis ("hash") ON DELETE CASCADE
 );
-CREATE INDEX transactions_created ON transactions("created");
+CREATE INDEX transactions_created ON transactions("created", "submit_mode");
 CREATE INDEX transactions_domain ON transactions("domain");
 CREATE UNIQUE INDEX transactions_idempotency_key ON transactions("idempotency_key");
 
