@@ -54,7 +54,7 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 	notary := tx.DomainConfig.NotaryLookup
 
 	if tx.DomainConfig.RestrictMinting && req.Transaction.From != notary {
-		return nil, i18n.NewError(ctx, msgs.MsgMintOnlyNotary)
+		return nil, i18n.NewError(ctx, msgs.MsgMintOnlyNotary, notary, req.Transaction.From)
 	}
 	return &prototk.InitTransactionResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
