@@ -179,6 +179,7 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 	}
 
 	postAssembly := &components.TransactionPostAssembly{}
+	// If the result is not OK (e.g. there is a REVERT) then we return the situation to the private TX manager to handle
 	if res.AssemblyResult == prototk.AssembleTransactionResponse_OK && res.AssembledTransaction != nil {
 		// We hydrate the states on our side of the Manager<->Plugin divide at this point,
 		// which provides back to the engine the full sequence locking information of the

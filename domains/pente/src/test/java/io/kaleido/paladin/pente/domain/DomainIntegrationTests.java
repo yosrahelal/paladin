@@ -20,7 +20,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.kaleido.paladin.Main;
 import io.kaleido.paladin.pente.domain.PenteConfiguration.GroupTupleJSON;
 import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.*;
@@ -88,11 +87,18 @@ public class DomainIntegrationTests {
             @JsonProperty
             String notary,
             @JsonProperty
-            String guardPublicAddress,
+            NotoHookParamsJSON hooks
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record NotoHookParamsJSON(
             @JsonProperty
-            JsonHex.Address guardPrivateAddress,
+            String publicAddress,
             @JsonProperty
-            GroupTupleJSON guardPrivateGroup
+            JsonHex.Address privateAddress,
+            @JsonProperty
+            GroupTupleJSON privateGroup
     ) {
     }
 
@@ -243,9 +249,10 @@ public class DomainIntegrationTests {
                     "noto",
                     new NotoConstructorParamsJSON(
                             "notary",
-                            penteInstanceAddress,
-                            notoTrackerAddress,
-                            groupInfo));
+                            new NotoHookParamsJSON(
+                                    penteInstanceAddress,
+                                    notoTrackerAddress,
+                                    groupInfo)));
             assertFalse(notoInstanceAddress.isBlank());
 
             // Perform Noto mint
