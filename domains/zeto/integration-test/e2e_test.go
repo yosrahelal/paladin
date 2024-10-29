@@ -24,7 +24,6 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
-	testZeto "github.com/kaleido-io/paladin/domains/integration-test/zeto"
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
@@ -51,7 +50,7 @@ func TestZetoDomainTestSuite(t *testing.T) {
 type zetoDomainTestSuite struct {
 	suite.Suite
 	hdWalletSeed      *testbed.UTInitFunction
-	deployedContracts *testZeto.ZetoDomainContracts
+	deployedContracts *ZetoDomainContracts
 	domainName        string
 	domain            zeto.Zeto
 	rpc               rpcbackend.Backend
@@ -60,12 +59,12 @@ type zetoDomainTestSuite struct {
 
 func (s *zetoDomainTestSuite) SetupSuite() {
 	s.hdWalletSeed = testbed.HDWalletSeedScopedToTest()
-	domainContracts := testZeto.DeployZetoContracts(s.T(), s.hdWalletSeed, "./config-for-deploy.yaml", controllerName)
+	domainContracts := DeployZetoContracts(s.T(), s.hdWalletSeed, "./config-for-deploy.yaml", controllerName)
 	s.deployedContracts = domainContracts
 	ctx := context.Background()
 	domainName := "zeto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
-	config := testZeto.PrepareZetoConfig(s.T(), s.deployedContracts, "../zkp")
+	config := PrepareZetoConfig(s.T(), s.deployedContracts, "../zkp")
 	zeto, zetoTestbed := newZetoDomain(s.T(), config)
 	done, _, rpc := newTestbed(s.T(), s.hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: zetoTestbed,
@@ -107,6 +106,7 @@ func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
 func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, useBatch bool) {
 	ctx := context.Background()
 	log.L(ctx).Infof("Deploying an instance of the %s token", tokenName)
+	s.setupContractsAbi(t, ctx, tokenName)
 	var zetoAddress tktypes.EthAddress
 	rpcerr := s.rpc.CallRPC(ctx, &zetoAddress, "testbed_deploy",
 		s.domainName, &types.InitializerParams{
@@ -168,6 +168,17 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	// assert.Equal(t, recipient1Name, coins[1].Owner)
 	// assert.Equal(t, int64(5), coins[2].Amount.Int64())
 	// assert.Equal(t, controllerName, coins[2].Owner)
+}
+
+func (s *zetoDomainTestSuite) setupContractsAbi(t *testing.T, ctx context.Context, tokenName string) {
+	var result tktypes.HexBytes
+
+	contractAbi, ok := s.deployedContracts.deployedContractAbis[tokenName]
+	require.True(t, ok, "Missing ABI for contract %s", tokenName)
+	rpcerr := s.rpc.CallRPC(ctx, &result, "ptx_storeABI", contractAbi)
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
 }
 
 func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthAddress, minter string, amounts []int64) (*tktypes.PrivateContractTransaction, error) {
