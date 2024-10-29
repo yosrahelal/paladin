@@ -110,13 +110,14 @@ public class PenteDomainTests {
         return new ObjectMapper().convertValue(res, Testbed.TransactionResult.class);
     }
 
-    LinkedHashMap waitForReceipt(Testbed testbed, String txID, int waitSecs) throws InterruptedException, IOException {
-        for (int i = 0; i < waitSecs; i++) {
+    LinkedHashMap waitForReceipt(Testbed testbed, String txID, int waitMs) throws InterruptedException, IOException {
+        final int waitIncrement = 100;
+        for (int i = 0; i < waitMs; i += waitIncrement) {
             var approveReceipt = testbed.getRpcClient().request("ptx_getTransactionReceipt", txID);
             if (approveReceipt != null) {
                 return new ObjectMapper().convertValue(approveReceipt, LinkedHashMap.class);
             }
-            Thread.sleep(1000);
+            Thread.sleep(waitIncrement);
         }
         fail("Receipt not found");
         return null;
@@ -290,7 +291,7 @@ public class PenteDomainTests {
                             put("signatures", metadata.approvalParams().signatures());
                         }});
                     }});
-            var approveReceipt = waitForReceipt(testbed, approveTx, 5);
+            var approveReceipt = waitForReceipt(testbed, approveTx, 5000);
             assertEquals(true, approveReceipt.get("success"));
 
             // Utilize the approval
@@ -307,7 +308,7 @@ public class PenteDomainTests {
                             put("externalCalls", transitionParams.externalCalls());
                         }});
                     }});
-            var setReceipt = waitForReceipt(testbed, setTx, 5);
+            var setReceipt = waitForReceipt(testbed, setTx, 5000);
             assertEquals(true, setReceipt.get("success"));
         }
     }
