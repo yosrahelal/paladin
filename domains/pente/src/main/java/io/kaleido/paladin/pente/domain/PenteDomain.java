@@ -402,28 +402,35 @@ public class PenteDomain extends DomainInstance {
             var transitionTX = ToDomain.PreparedTransaction.newBuilder().
                     setFunctionAbiJson(transitionABI).
                     setParamsJson(new ObjectMapper().writeValueAsString(params));
-
-            var tx = new PenteTransaction(this, request.getTransaction());
-            var transitionHash = tx.eip712TypedDataEndorsementPayload(
-                    request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                    request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                    request.getOutputStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                    request.getInfoStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                    externalCalls);
-
-            var transitionWithApprovalABI = config.getPrivacyGroupABI().getABIEntry("function", "transitionWithApproval");
-            PenteConfiguration.PenteTransitionMetadata metadata = new PenteConfiguration.PenteTransitionMetadata(
-                    new PenteConfiguration.PenteApprovalParams(
-                            new JsonHex.Bytes32(transitionHash),
-                            signatures.stream().map(r -> JsonHex.wrap(r.getPayload().toByteArray())).toList()),
-                    new PenteConfiguration.PentePublicTransaction(
-                            transitionWithApprovalABI,
-                            new ObjectMapper().writeValueAsString(params)));
-
             var result = ToDomain.PrepareTransactionResponse.newBuilder().
-                    setTransaction(transitionTX).
-                    setMetadata(new ObjectMapper().writeValueAsString(metadata));
+                    setTransaction(transitionTX);
 
+            if (request.getTransaction().getIntent() == ToDomain.TransactionSpecification.Intent.PREPARE_TRANSACTION) {
+                // TODO: can the transitionHash be reused from a prior step instead of being computed again?
+                var tx = new PenteTransaction(this, request.getTransaction());
+                var transitionHash = tx.eip712TypedDataEndorsementPayload(
+                        request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                        request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                        request.getOutputStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                        request.getInfoStatesList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                        externalCalls);
+
+                var transitionWithApprovalABI = config.getPrivacyGroupABI().getABIEntry("function", "transitionWithApproval");
+                var transitionWithApprovalParams = new HashMap<String, Object>() {{
+                    put("txId", request.getTransaction().getTransactionId());
+                    put("states", params.get("states"));
+                    put("externalCalls", externalCalls);
+                }};
+                var metadata = new PenteConfiguration.PenteTransitionMetadata(
+                        new PenteConfiguration.PenteApprovalParams(
+                                new JsonHex.Bytes32(transitionHash),
+                                signatures.stream().map(r -> JsonHex.wrap(r.getPayload().toByteArray())).toList()),
+                        new PenteConfiguration.PentePublicTransaction(
+                                transitionWithApprovalABI,
+                                new ObjectMapper().writeValueAsString(transitionWithApprovalParams)));
+
+                result.setMetadata(new ObjectMapper().writeValueAsString(metadata));
+            }
             return CompletableFuture.completedFuture(result.build());
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
