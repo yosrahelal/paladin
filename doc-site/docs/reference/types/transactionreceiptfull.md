@@ -14,6 +14,7 @@ title: TransactionReceiptFull
 | Field Name | Description | Type |
 |------------|-------------|------|
 | `id` | Transaction ID | [`UUID`](simpletypes.md#uuid) |
+| `indexed` | The time when this receipt was indexed by the node, providing a relative order of transaction receipts within this node (might be significantly after the timestamp of the block) | [`Timestamp`](simpletypes.md#timestamp) |
 | `domain` | The domain that executed the transaction, for private transactions only | `string` |
 | `success` | Transaction success status | `bool` |
 | `transactionHash` | Transaction hash | [`Bytes32`](simpletypes.md#bytes32) |
