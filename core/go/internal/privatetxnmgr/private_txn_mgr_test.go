@@ -95,7 +95,7 @@ func TestPrivateTxManagerInvalidTransaction(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{})
+	err = privateTxManager.handleNewTx(ctx, &components.PrivateTransaction{})
 	// no input domain should err
 	assert.Regexp(t, "PD011800", err)
 }
@@ -265,7 +265,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
-	err = privateTxManager.HandleNewTx(ctx, tx)
+	err = privateTxManager.handleNewTx(ctx, tx)
 	require.NoError(t, err)
 
 	// testTimeout := 2 * time.Second
@@ -518,7 +518,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, tx)
+	err = privateTxManager.handleNewTx(ctx, tx)
 	assert.NoError(t, err)
 
 	status := pollForStatus(ctx, t, "delegating", privateTxManager, domainAddressString, tx.ID.String(), 200*time.Second)
@@ -782,7 +782,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	err := aliceEngine.Start()
 	assert.NoError(t, err)
 
-	err = aliceEngine.HandleNewTx(ctx, tx)
+	err = aliceEngine.handleNewTx(ctx, tx)
 	assert.NoError(t, err)
 
 	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx.ID.String(), 200*time.Second)
@@ -993,10 +993,10 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	err := aliceEngine.Start()
 	require.NoError(t, err)
 
-	err = aliceEngine.HandleNewTx(ctx, tx1)
+	err = aliceEngine.handleNewTx(ctx, tx1)
 	require.NoError(t, err)
 
-	err = aliceEngine.HandleNewTx(ctx, tx2)
+	err = aliceEngine.handleNewTx(ctx, tx2)
 	require.NoError(t, err)
 
 	// Neither transaction should be dispatched yet
@@ -1164,7 +1164,7 @@ func TestPrivateTxManagerDeploy(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleDeployTx(ctx, tx)
+	err = privateTxManager.handleDeployTx(ctx, tx)
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -1193,7 +1193,7 @@ func TestPrivateTxManagerDeployFailInit(t *testing.T) {
 	err := privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleDeployTx(ctx, tx)
+	err = privateTxManager.handleDeployTx(ctx, tx)
 	assert.Error(t, err)
 	assert.Regexp(t, regexp.MustCompile(".*failed to init.*"), err.Error())
 }
@@ -1235,7 +1235,7 @@ func TestPrivateTxManagerDeployFailPrepare(t *testing.T) {
 	err := privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleDeployTx(ctx, tx)
+	err = privateTxManager.handleDeployTx(ctx, tx)
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -1307,7 +1307,7 @@ func TestPrivateTxManagerFailSignerResolve(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleDeployTx(ctx, tx)
+	err = privateTxManager.handleDeployTx(ctx, tx)
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -1367,7 +1367,7 @@ func TestPrivateTxManagerDeployFailNoInvokeOrDeploy(t *testing.T) {
 	err := privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleDeployTx(ctx, tx)
+	err = privateTxManager.handleDeployTx(ctx, tx)
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -1592,7 +1592,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 						From:   "Alice",
 					},
 				}
-				err = privateTxManager.HandleNewTx(ctx, tx)
+				err = privateTxManager.handleNewTx(ctx, tx)
 				require.NoError(t, err)
 			}
 
@@ -1668,11 +1668,10 @@ type dependencyMocks struct {
 }
 
 // For Black box testing we return components.PrivateTxManager
-func NewPrivateTransactionMgrForTesting(t *testing.T, nodeName string) (components.PrivateTxManager, *dependencyMocks) {
+func NewPrivateTransactionMgrForTesting(t *testing.T, nodeName string) (*privateTxManager, *dependencyMocks) {
 	// by default create a mock publicTxManager if no fake was provided
 	fakePublicTxManager := componentmocks.NewPublicTxManager(t)
-	privateTxManager, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t, fakePublicTxManager, nodeName)
-	return privateTxManager, mocks
+	return NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t, fakePublicTxManager, nodeName)
 }
 
 type fakePublicTxManager struct {
@@ -1817,7 +1816,7 @@ func newFakePublicTxManager(t *testing.T) *fakePublicTxManager {
 	}
 }
 
-func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, publicTxMgr components.PublicTxManager, nodeName string) (components.PrivateTxManager, *dependencyMocks) {
+func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, publicTxMgr components.PublicTxManager, nodeName string) (*privateTxManager, *dependencyMocks) {
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{
@@ -1864,7 +1863,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 	mocks.allComponents.On("IdentityResolver").Return(mocks.identityResolver).Maybe()
 	err := e.PostInit(mocks.allComponents)
 	assert.NoError(t, err)
-	return e, mocks
+	return e.(*privateTxManager), mocks
 
 }
 

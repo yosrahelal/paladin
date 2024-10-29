@@ -340,6 +340,9 @@ func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, db
 		}
 	}
 
+	// Note deliberately no notification to private TX manager here, as this function is for it to call us.
+	// So when it's flushed its internal transaction, it notifies itself.
+
 	return nil
 }
 
@@ -423,27 +426,7 @@ func (tm *txManager) SendTransactions(ctx context.Context, txs []*pldapi.Transac
 	for _, txi := range txis {
 		tx := txi.Transaction
 		if tx.Type.V() == pldapi.TransactionTypePrivate {
-			if tx.To == nil {
-				log.L(ctx).Infof("Passing deploy transaction ID %s to private TX manager", tx.ID)
-				err = tm.privateTxMgr.HandleDeployTx(ctx, &components.PrivateContractDeploy{
-					ID:     *tx.ID,
-					Domain: tx.Domain,
-					Inputs: txi.Inputs,
-				})
-			} else {
-				log.L(ctx).Infof("Passing transaction ID %s to private TX manager", tx.ID)
-				err = tm.privateTxMgr.HandleNewTx(ctx, &components.PrivateTransaction{
-					ID: *tx.ID,
-					Inputs: &components.TransactionInputs{
-						Domain:   tx.Domain,
-						From:     tx.From,
-						To:       *tx.To,
-						Function: txi.Function.Definition,
-						Inputs:   txi.Inputs,
-					},
-					PublicTxOptions: tx.PublicTxOptions,
-				})
-			}
+
 			if err != nil {
 				return nil, err
 			}

@@ -33,7 +33,7 @@ import (
 
 type dispatchOperation struct {
 	publicDispatches   []*PublicDispatch
-	privateDispatches  []*PrivateDispatch
+	privateDispatches  []*components.ValidatedTransaction
 	stateDistributions []*statedistribution.StateDistributionPersisted
 }
 
@@ -53,7 +53,8 @@ type PublicDispatch struct {
 // a dispatch batch is a collection of dispatch sequences that are submitted together with no ordering requirements between sequences
 // purely for a database performance reason, they are included in the same transaction
 type DispatchBatch struct {
-	DispatchSequences []*PublicDispatch
+	PublicDispatches  []*PublicDispatch
+	PrivateDispatches []*components.ValidatedTransaction
 }
 
 // PersistDispatches persists the dispatches to the database and coordinates with the public transaction manager
@@ -75,7 +76,7 @@ func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contrac
 		domainContext:   dCtx,
 		contractAddress: contractAddress,
 		dispatchOperation: &dispatchOperation{
-			publicDispatches:   dispatchBatch.DispatchSequences,
+			publicDispatches:   dispatchBatch.PublicDispatches,
 			stateDistributions: stateDistributionsPersisted,
 		},
 	})
@@ -90,7 +91,7 @@ func (s *syncPoints) PersistDeployDispatchBatch(ctx context.Context, dispatchBat
 	// Send the write operation with all of the batch sequence operations to the flush worker
 	op := s.writer.Queue(ctx, &syncPointOperation{
 		dispatchOperation: &dispatchOperation{
-			publicDispatches: dispatchBatch.DispatchSequences,
+			publicDispatches: dispatchBatch.PublicDispatches,
 		},
 	})
 
@@ -159,6 +160,13 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 				return err
 			}
 
+		}
+
+		if len(op.privateDispatches) > 0 {
+			if err := s.txMgr.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, op.privateDispatches); err != nil {
+				log.L(ctx).Errorf("Error persisting private dispatches: %s", err)
+				return err
+			}
 		}
 
 		if len(op.stateDistributions) == 0 {

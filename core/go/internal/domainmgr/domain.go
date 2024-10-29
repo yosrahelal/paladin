@@ -149,7 +149,7 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 		}
 		stream.Sources = append(stream.Sources, blockindexer.EventStreamSource{ABI: eventsABI})
 
-		if _, err := d.dm.txManager.UpsertABI(d.ctx, eventsABI); err != nil {
+		if _, err := d.dm.txManager.UpsertABI(d.ctx, d.dm.persistence.DB(), eventsABI); err != nil {
 			return nil, err
 		}
 	}

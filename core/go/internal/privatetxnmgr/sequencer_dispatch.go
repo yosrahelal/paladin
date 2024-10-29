@@ -40,7 +40,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 	// array of sequences with space for one per signing address
 	// dispatchableTransactions is a map of signing address to transaction IDs so we can group by signing address
 	dispatchBatch := &syncpoints.DispatchBatch{
-		DispatchSequences: make([]*syncpoints.PublicDispatch, 0, len(dispatchableTransactions)),
+		PublicDispatches: make([]*syncpoints.PublicDispatch, 0, len(dispatchableTransactions)),
 	}
 
 	stateDistributions := make([]*statedistribution.StateDistribution, 0)
@@ -50,7 +50,6 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 		log.L(ctx).Debugf("DispatchTransactions: %d transactions for signingAddress %s", len(transactionIDs), signingAddress)
 
 		publicTransactionsToSend := make([]*components.PrivateTransaction, 0, len(transactionIDs))
-		privateTransactionsToSend := make([]*components.PrivateTransaction, 0)
 
 		sequence := &syncpoints.PublicDispatch{
 			PrivateTransactionDispatches: make([]*syncpoints.DispatchPersisted, len(transactionIDs)),
@@ -79,17 +78,23 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				return err
 			}
 			hasPublicTransaction := preparedTransaction.PreparedPublicTransaction != nil
-			hasPrivateTransaction := preparedTransaction.PreparedPublicTransaction != nil
+			hasPrivateTransaction := preparedTransaction.PreparedPrivateTransaction != nil
 			switch {
 			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPublicTransaction && !hasPrivateTransaction:
 				log.L(ctx).Errorf("Result of transaction %s is a prepared public transaction", err)
 				publicTransactionsToSend = append(publicTransactionsToSend, preparedTransaction)
 			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPrivateTransaction && !hasPublicTransaction:
 				log.L(ctx).Errorf("Result of transaction %s is a chained private transaction", err)
-				privateTransactionsToSend = append(privateTransactionsToSend, preparedTransaction)
+				validatedPrivateTx, err := s.components.TxManager().PrepareInternalPrivateTransaction(ctx, s.components.Persistence().DB(), preparedTransaction.PreparedPrivateTransaction)
+				if err != nil {
+					log.L(ctx).Errorf("Error preparing transaction %s: %s", preparedTransaction.ID, err)
+					// TODO: this is just an error situation for one transaction - this function is a batch function
+					return err
+				}
+				dispatchBatch.PrivateDispatches = append(dispatchBatch.PrivateDispatches, validatedPrivateTx)
 			default:
 				err = i18n.NewError(ctx, msgs.MsgPrivateTxMgrInvalidPrepareOutcome, preparedTransaction.ID, preparedTransaction.Inputs.Intent, hasPublicTransaction, hasPrivateTransaction)
-				log.L(ctx).Errorf("Error preparing transaction: %s", err)
+				log.L(ctx).Errorf("Error preparing transaction %s: %s", preparedTransaction.ID, err)
 				// TODO: this is just an error situation for one transaction - this function is a batch function
 				return err
 			}
@@ -156,7 +161,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 			return i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivTxMgrPublicTxFail)
 		}
 
-		dispatchBatch.DispatchSequences = append(dispatchBatch.DispatchSequences, sequence)
+		dispatchBatch.PublicDispatches = append(dispatchBatch.PublicDispatches, sequence)
 	}
 
 	// TODO: per notes in endorsementGatherer determine if that's the right place to hold the domain context
@@ -173,6 +178,13 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 	}
 	//now that the DB write has been persisted, we can trigger the in-memory state distribution
 	s.stateDistributer.DistributeStates(ctx, stateDistributions)
+
+	// We also need to trigger ourselves for any private TX we chained
+	for _, tx := range dispatchBatch.PrivateDispatches {
+		if err := s.privateTxManager.HandleNewTx(ctx, tx); err != nil {
+			log.L(ctx).Errorf("Sequencer failed to notify private TX manager for chained transaction")
+		}
+	}
 
 	return nil
 
