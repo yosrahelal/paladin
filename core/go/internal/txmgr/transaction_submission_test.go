@@ -267,7 +267,7 @@ func TestResolveFunctionPlainNameOK(t *testing.T) {
 
 func TestSendTransactionPrivateDeploy(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleDeployTx", mock.Anything, mock.Anything).Return(nil)
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
 	})
 	defer done()
 

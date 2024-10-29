@@ -424,10 +424,8 @@ func (tm *txManager) SendTransactions(ctx context.Context, txs []*pldapi.Transac
 	// TODO: Integrate with private TX manager persistence when available, as it will follow the
 	// same pattern as public transactions above
 	for _, txi := range txis {
-		tx := txi.Transaction
-		if tx.Type.V() == pldapi.TransactionTypePrivate {
-
-			if err != nil {
+		if txi.Transaction.Type.V() == pldapi.TransactionTypePrivate {
+			if err := tm.privateTxMgr.HandleNewTx(ctx, txi); err != nil {
 				return nil, err
 			}
 		}
