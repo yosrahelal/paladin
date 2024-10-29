@@ -77,6 +77,7 @@ func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contrac
 		contractAddress: contractAddress,
 		dispatchOperation: &dispatchOperation{
 			publicDispatches:   dispatchBatch.PublicDispatches,
+			privateDispatches:  dispatchBatch.PrivateDispatches,
 			stateDistributions: stateDistributionsPersisted,
 		},
 	})
@@ -111,6 +112,10 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 		//for each batchSequence operation, call the public transaction manager to allocate a nonce
 		//and persist the intent to send the states to the distribution list.
 		for _, dispatchSequenceOp := range op.publicDispatches {
+			if len(dispatchSequenceOp.PrivateTransactionDispatches) == 0 {
+				continue
+			}
+
 			// Call the public transaction manager to allocate nonces for all transactions in the sequence
 			// and persist them to the database under the current transaction
 			pubBatch := dispatchSequenceOp.PublicTxBatch
@@ -140,6 +145,7 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 
 				dispatch.ID = uuid.New().String()
 			}
+
 			log.L(ctx).Debugf("Writing dispatch batch %d", len(dispatchSequenceOp.PrivateTransactionDispatches))
 
 			err = dbTX.

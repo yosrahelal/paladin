@@ -51,16 +51,10 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 
 		publicTransactionsToSend := make([]*components.PrivateTransaction, 0, len(transactionIDs))
 
-		sequence := &syncpoints.PublicDispatch{
-			PrivateTransactionDispatches: make([]*syncpoints.DispatchPersisted, len(transactionIDs)),
-		}
+		sequence := &syncpoints.PublicDispatch{}
 
-		for i, transactionID := range transactionIDs {
+		for _, transactionID := range transactionIDs {
 			// prepare all transactions for the given transaction IDs
-
-			sequence.PrivateTransactionDispatches[i] = &syncpoints.DispatchPersisted{
-				PrivateTransactionID: transactionID,
-			}
 
 			txProcessor := s.getTransactionProcessor(transactionID)
 			if txProcessor == nil {
@@ -83,6 +77,9 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPublicTransaction && !hasPrivateTransaction:
 				log.L(ctx).Infof("Result of transaction %s is a prepared public transaction", preparedTransaction.ID)
 				publicTransactionsToSend = append(publicTransactionsToSend, preparedTransaction)
+				sequence.PrivateTransactionDispatches = append(sequence.PrivateTransactionDispatches, &syncpoints.DispatchPersisted{
+					PrivateTransactionID: transactionID,
+				})
 			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPrivateTransaction && !hasPublicTransaction:
 				log.L(ctx).Infof("Result of transaction %s is a chained private transaction", preparedTransaction.ID)
 				validatedPrivateTx, err := s.components.TxManager().PrepareInternalPrivateTransaction(ctx, s.components.Persistence().DB(), preparedTransaction.PreparedPrivateTransaction)
