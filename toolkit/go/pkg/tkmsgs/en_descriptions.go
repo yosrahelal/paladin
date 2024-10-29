@@ -93,6 +93,7 @@ var (
 var (
 	TransactionID                                 = ffm("Transaction.id", "Server-generated UUID for this transaction (query only)")
 	TransactionCreated                            = ffm("Transaction.created", "Server-generated creation timestamp for this transaction (query only)")
+	TransactionSubmitMode                         = ffm("Transaction.submitMode", "Whether the submission of the transaction to the base ledger is to be performed automatically by the node or coordinated externally (query only)")
 	TransactionIdempotencyKey                     = ffm("Transaction.idempotencyKey", "Externally supplied unique identifier for this transaction. 409 Conflict will be returned on attempt to re-submit")
 	TransactionType                               = ffm("Transaction.type", "Type of transaction (public or private)")
 	TransactionDomain                             = ffm("Transaction.domain", "Name of a domain - only required on input for private deploy transactions")
@@ -127,6 +128,10 @@ var (
 	TransactionActivityRecordMessage              = ffm("TransactionActivityRecord.message", "Activity message")
 	TransactionDependenciesDependsOn              = ffm("TransactionDependencies.dependsOn", "Transactions that this transaction depends on")
 	TransactionDependenciesPrereqOf               = ffm("TransactionDependencies.prereqOf", "Transactions that require this transaction as a prerequisite")
+	PreparedTransactionID                         = ffm("PreparedTransaction.id", "The ID of the original transaction that prepared this transaction, and will be confirmed by its submission to the blockchain")
+	PreparedTransactionTransaction                = ffm("PreparedTransaction.transaction", "The Paladin transaction definition that has been prepared for submission, with the ABI and function details resolved")
+	PreparedTransactionExtraData                  = ffm("PreparedTransaction.extraData", "Domain specific additional information that is created during preparation of the transaction is required as part of a coordination submission, particular pre-approval in atomic multi-party transactions")
+	PreparedTransactionStates                     = ffm("PreparedTransaction.states", "Details of all states involved for a prepared private transaction")
 	DecodedErrorData                              = ffm("DecodedError.data", "The decoded JSON data from the error")
 	DecodedSummary                                = ffm("DecodedError.summary", "String summary of the error")
 	DecodedDefinition                             = ffm("DecodedError.definition", "The ABI definition of the error recovered from the dictionary of ABIs")
