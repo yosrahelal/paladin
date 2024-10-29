@@ -36,5 +36,6 @@ type TransactionResult struct {
 	InputStates         []*pldapi.StateWithData  `json:"inputStates"`
 	OutputStates        []*pldapi.StateWithData  `json:"outputStates"`
 	ReadStates          []*pldapi.StateWithData  `json:"readStates"`
+	InfoStates          []*pldapi.StateWithData  `json:"infoStates"`
 	AssembleExtraData   tktypes.RawJSON          `json:"assembleExtraData"` // TODO: remove (only used for finding Pente contract address)
 }

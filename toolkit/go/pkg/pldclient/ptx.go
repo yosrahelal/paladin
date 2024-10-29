@@ -38,6 +38,9 @@ type PTX interface {
 	QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.TransactionFull, err error)
 
 	GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceipt, err error)
+	GetTransactionReceiptFull(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceiptFull, err error)
+	GetDomainReceipt(ctx context.Context, domain string, txID uuid.UUID) (domainReceipt tktypes.RawJSON, err error)
+	GetStateReceipt(ctx context.Context, txID uuid.UUID) (stateReceipt *pldapi.TransactionStates, err error)
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error)
 	DecodeError(ctx context.Context, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedError *pldapi.DecodedError, err error)
 
@@ -83,6 +86,18 @@ var ptxInfo = &rpcModuleInfo{
 		"ptx_getTransactionReceipt": {
 			Inputs: []string{"transactionId"},
 			Output: "receipt",
+		},
+		"ptx_getTransactionReceiptFull": {
+			Inputs: []string{"transactionId"},
+			Output: "receipt",
+		},
+		"ptx_getDomainReceipt": {
+			Inputs: []string{"domain", "transactionId"},
+			Output: "domainReceipt",
+		},
+		"ptx_getStateReceipt": {
+			Inputs: []string{"transactionId"},
+			Output: "stateReceipt",
 		},
 		"ptx_queryTransactionReceipts": {
 			Inputs: []string{"query"},
@@ -150,6 +165,21 @@ func (p *ptx) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (t
 
 func (p *ptx) GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceipt, err error) {
 	err = p.c.CallRPC(ctx, &receipt, "ptx_getTransactionReceipt", txID)
+	return
+}
+
+func (p *ptx) GetTransactionReceiptFull(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceiptFull, err error) {
+	err = p.c.CallRPC(ctx, &receipt, "ptx_getTransactionReceiptFull", txID)
+	return
+}
+
+func (p *ptx) GetDomainReceipt(ctx context.Context, domain string, txID uuid.UUID) (domainReceipt tktypes.RawJSON, err error) {
+	err = p.c.CallRPC(ctx, &domainReceipt, "ptx_getDomainReceipt", domain, txID)
+	return
+}
+
+func (p *ptx) GetStateReceipt(ctx context.Context, txID uuid.UUID) (stateReceipt *pldapi.TransactionStates, err error) {
+	err = p.c.CallRPC(ctx, &stateReceipt, "ptx_getStateReceipt", txID)
 	return
 }
 

@@ -39,6 +39,7 @@ title: TransactionFull
 
 | Field Name | Description | Type |
 |------------|-------------|------|
+| `domain` | The domain that executed the transaction, for private transactions only | `string` |
 | `success` | Transaction success status | `bool` |
 | `transactionHash` | Transaction hash | [`Bytes32`](simpletypes.md#bytes32) |
 | `blockNumber` | Block number | `int64` |

@@ -120,7 +120,7 @@ func (tw *transportWriter) SendState(ctx context.Context, stateId string, schema
 }
 
 // TODO do we have duplication here?  contractAddress and transactionID are in the transactionSpecification
-func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState) error {
+func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState, infoStates []*components.FullState) error {
 	attRequestAny, err := anypb.New(attRequest)
 	if err != nil {
 		log.L(ctx).Error("Error marshalling attestation request", err)
@@ -173,6 +173,17 @@ func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, party str
 		outputStatesAny[i] = outputStateAny
 	}
 
+	infoStatesAny := make([]*anypb.Any, len(infoStates))
+	endorseableInfoStates := toEndorsableList(infoStates)
+	for i, infoState := range endorseableInfoStates {
+		infoStateAny, err := anypb.New(infoState)
+		if err != nil {
+			log.L(ctx).Error("Error marshalling output state", err)
+			return err
+		}
+		infoStatesAny[i] = infoStateAny
+	}
+
 	endorsementRequest := &engineProto.EndorsementRequest{
 		ContractAddress:          contractAddress,
 		TransactionId:            transactionID,
@@ -183,6 +194,7 @@ func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, party str
 		Signatures:               signaturesAny,
 		InputStates:              inputStatesAny,
 		OutputStates:             outputStatesAny,
+		InfoStates:               infoStatesAny,
 	}
 
 	endorsementRequestBytes, err := proto.Marshal(endorsementRequest)

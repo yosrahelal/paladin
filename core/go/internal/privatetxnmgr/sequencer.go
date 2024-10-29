@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
@@ -97,6 +98,7 @@ type Sequencer struct {
 	pendingEvents chan ptmgrtypes.PrivateTransactionEvent
 
 	contractAddress     tktypes.EthAddress // the contract address managed by the current sequencer
+	defaultSigner       string
 	nodeID              string
 	domainAPI           components.DomainSmartContract
 	components          components.AllComponents
@@ -154,6 +156,10 @@ func NewSequencer(
 		transportWriter:              transportWriter,
 		graph:                        NewGraph(),
 		requestTimeout:               requestTimeout,
+
+		// Randomly allocate a signer.
+		// TODO: rotation
+		defaultSigner: fmt.Sprintf("domains.%s.submit.%s", contractAddress, uuid.New()),
 	}
 
 	log.L(ctx).Debugf("NewSequencer for contract address %s created: %+v", newSequencer.contractAddress, newSequencer)

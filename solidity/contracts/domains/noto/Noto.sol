@@ -38,12 +38,11 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
 
     struct NotoConfig_V0 {
         address notaryAddress;
-        bytes32 variant;
+        uint64 variant;
         bytes data;
     }
 
-    bytes32 public constant NotoVariantDefault =
-        0x0000000000000000000000000000000000000000000000000000000000000000;
+    uint64 public constant NotoVariantDefault = 0x0000;
 
     bytes32 private constant TRANSFER_TYPEHASH =
         keccak256("Transfer(bytes32[] inputs,bytes32[] outputs,bytes data)");

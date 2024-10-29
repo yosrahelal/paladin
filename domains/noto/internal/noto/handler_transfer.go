@@ -36,7 +36,7 @@ type transferHandler struct {
 	noto *Noto
 }
 
-func (h *transferHandler) ValidateParams(ctx context.Context, config *types.NotoConfig_V0, params string) (interface{}, error) {
+func (h *transferHandler) ValidateParams(ctx context.Context, config *types.NotoParsedConfig, params string) (interface{}, error) {
 	var transferParams types.TransferParams
 	if err := json.Unmarshal([]byte(params), &transferParams); err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (h *transferHandler) ValidateParams(ctx context.Context, config *types.Noto
 
 func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	params := tx.Params.(*types.TransferParams)
-	notary := tx.DomainConfig.DecodedData.NotaryLookup
+	notary := tx.DomainConfig.NotaryLookup
 
 	return &prototk.InitTransactionResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
@@ -77,7 +77,7 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 
 func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.TransferParams)
-	notary := tx.DomainConfig.DecodedData.NotaryLookup
+	notary := tx.DomainConfig.NotaryLookup
 
 	_, err := h.noto.findEthAddressVerifier(ctx, "notary", notary, req.ResolvedVerifiers)
 	if err != nil {
@@ -316,12 +316,12 @@ func (h *transferHandler) hookTransfer(ctx context.Context, tx *types.ParsedTran
 	functionABI := solutils.MustLoadBuild(notoHooksJSON).ABI.Functions()["onTransfer"]
 	var paramsJSON []byte
 
-	if tx.DomainConfig.DecodedData.PrivateAddress != nil {
+	if tx.DomainConfig.PrivateAddress != nil {
 		transactionType = prototk.PreparedTransaction_PRIVATE
 		functionABI = penteInvokeABI("onTransfer", functionABI.Inputs)
 		penteParams := &PenteInvokeParams{
-			Group:  tx.DomainConfig.DecodedData.PrivateGroup,
-			To:     tx.DomainConfig.DecodedData.PrivateAddress,
+			Group:  tx.DomainConfig.PrivateGroup,
+			To:     tx.DomainConfig.PrivateAddress,
 			Inputs: params,
 		}
 		paramsJSON, err = json.Marshal(penteParams)
@@ -386,7 +386,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		}
 	}
 
-	if tx.DomainConfig.DecodedData.NotaryType.Equals(&types.NotaryTypePente) {
+	if tx.DomainConfig.NotaryType == types.NotaryTypePente {
 		hookTransaction, err = h.hookTransfer(ctx, tx, req, baseTransaction)
 		if err != nil {
 			return nil, err

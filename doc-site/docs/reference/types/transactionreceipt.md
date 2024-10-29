@@ -16,6 +16,7 @@ title: TransactionReceipt
 | Field Name | Description | Type |
 |------------|-------------|------|
 | `id` | Transaction ID | [`UUID`](simpletypes.md#uuid) |
+| `domain` | The domain that executed the transaction, for private transactions only | `string` |
 | `success` | Transaction success status | `bool` |
 | `transactionHash` | Transaction hash | [`Bytes32`](simpletypes.md#bytes32) |
 | `blockNumber` | Block number | `int64` |

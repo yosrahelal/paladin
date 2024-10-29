@@ -58,9 +58,11 @@ type EthDeployTransaction struct {
 type TransactionPostAssembly struct {
 	AssemblyResult        prototk.AssembleTransactionResponse_Result `json:"assembly_result"`
 	OutputStatesPotential []*prototk.NewState                        `json:"output_states_potential"` // the raw result of assembly, before sequence allocation
+	InfoStatesPotential   []*prototk.NewState                        `json:"info_states_potential"`   // the raw result of assembly, before sequence allocation
 	InputStates           []*FullState                               `json:"input_states"`
 	ReadStates            []*FullState                               `json:"read_states"`
 	OutputStates          []*FullState                               `json:"output_states"`
+	InfoStates            []*FullState                               `json:"info_states"`
 	AttestationPlan       []*prototk.AttestationRequest              `json:"attestation_plan"`
 	Signatures            []*prototk.AttestationResult               `json:"signatures"`
 	Endorsements          []*prototk.AttestationResult               `json:"endorsements"`
@@ -119,6 +121,7 @@ type PrivateTransactionEndorseRequest struct {
 	InputStates              []*prototk.EndorsableState
 	ReadStates               []*prototk.EndorsableState
 	OutputStates             []*prototk.EndorsableState
+	InfoStates               []*prototk.EndorsableState
 	Endorsement              *prototk.AttestationRequest
 	Endorser                 *prototk.ResolvedVerifier
 }

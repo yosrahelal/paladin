@@ -42,7 +42,7 @@ task wrapper(type: Wrapper){}
 assemble.dependsOn jar
 
 application {
-    mainClassName = 'io.kaleido.paladin.Main'  // Your main class
+    mainClass.set('io.kaleido.paladin.Main')
     applicationDefaultJvmArgs = ["-Djna.library.path=" +
         file("${rootDir}/core/go/build/libs").absolutePath + ":" + file("${rootDir}/toolkit/go/build/libs").absolutePath ]
 }

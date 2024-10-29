@@ -226,6 +226,7 @@ var (
 	MsgDomainPrivateAbiJsonInvalid            = ffe("PD011607", "Private contract ABI invalid")
 	MsgDomainInvalidQueryJSON                 = ffe("PD011608", "Invalid query JSON")
 	MsgDomainContractNotFoundByAddr           = ffe("PD011609", "A smart contract with address %s has not yet been indexed")
+	MsgDomainContractNotValid                 = ffe("PD011610", "A smart contract with address %s exists with invalid configuration rejected by the domain")
 	MsgDomainInvalidPrepareDeployResult       = ffe("PD011611", "Prepare deploy did not result in exactly one of a invoke transaction or a deploy transaction")
 	MsgDomainInvalidFunctionParams            = ffe("PD011612", "Invalid function parameters for %s")
 	MsgDomainUnknownSchema                    = ffe("PD011613", "Unknown schema %s")
@@ -236,7 +237,6 @@ var (
 	MsgDomainBaseLedgerSubmitInvalid          = ffe("PD011619", "Base ledger submission config is invalid")
 	MsgDomainTXIncompleteInitDeploy           = ffe("PD011620", "Transaction is incomplete for phase InitDeploy")
 	MsgDomainTXIncompletePrepareDeploy        = ffe("PD011621", "Transaction is incomplete for phase PrepareDeploy")
-	MsgDomainDeployNoSigner                   = ffe("PD011622", "Domain did not provide a signer for base ledger transaction to deploy the private smart contract")
 	MsgDomainMultipleEndorsersSubmit          = ffe("PD011623", "Multiple endorsers of the transaction specified a submission constraint")
 	MsgDomainNoEndorserSubmit                 = ffe("PD011624", "Domain is configured for endorser submission, and no endorser specified a submission constraint")
 	MsgDomainInvalidSubmissionConfig          = ffe("PD011625", "Domain specified an unexpected base ledger submission config: %s")
@@ -268,6 +268,12 @@ var (
 	MsgDomainInvalidStates                    = ffe("PD011651", "Invalid states")
 	MsgDomainInvalidResponseToValidate        = ffe("PD011652", "Invalid response to validation")
 	MsgDomainInvalidDataFromDomain            = ffe("PD011653", "Invalid data returned by domain for call ABI outputs")
+	MsgDomainNotConfiguredForPSC              = ffe("PD011654", "A smart contract with address %s exists for a domain that is no longer configured on this node")
+	MsgDomainEndorserSubmitConfigClash        = ffe("PD011655", "An ENDORSER_MUST_SUBMIT constraint was provided by endorser %s, but the contract configuration is %s / %s")
+	MsgDomainABIEncodingInlineSigningFailed   = ffe("PD011656", "ABI encoding and signing failed with transaction type '%s' and key identifier '%s'")
+	MsgDomainDomainReceiptNotAvailable        = ffe("PD011657", "A domain receipt is not yet available for transaction %s as no state confirmations have been indexed for that transaction")
+	MsgDomainDomainReceiptNoStatesAvailable   = ffe("PD011658", "A domain receipt is not yet available for transaction %s as none of the private state data is available on the local node")
+	MsgDomainSingingKeyMustBeLocalEthSign     = ffe("PD011659", "Singing key must be local for ethereum transaction signing")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")
@@ -297,6 +303,8 @@ var (
 	MsgPrivateTxMgrEncodeCallDataFailed        = ffe("PD011821", "Failed to encode call data '%s' for private contract deploy")
 	MsgPrivateTxManagerNonLocalSigningAddr     = ffe("PD011822", "Attempt do dispatch a blockchain transaction using a signing identity for a different node: %s")
 	MsgPrivateTxManagerStateHashContention     = ffe("PD011823", "Contention detected attempting to spend hash %s in multiple transactions")
+	MsgPrivateReDelegationRequired             = ffe("PD011824", "Re-delegation is required for this transaction to progress")
+	MsgPrivateTxMgrDomainMismatch              = ffe("PD011825", "Domain '%s' specified does not match domain '%s' of deployed private smart contract %s")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")
@@ -375,8 +383,8 @@ var (
 	MsgTxMgrInvalidStoredData            = ffe("PD012217", "Stored data is invalid")
 	MsgTxMgrNoABIOrReference             = ffe("PD012218", "An ABI containing a function/constructor definition or an abiReference to an existing stored ABI must be supplied")
 	MsgTxMgrIdempotencyKeyClash          = ffe("PD012220", "idempotencyKey already used by submitted transaction %s") // important error code (relied on by operator, and apps)
-	MsgTxMgrPrivateCallNotSupported      = ffe("PD012221", "Call (read-only data query via function call) not currently supported for private smart contracts")
-	MsgTxMgrRevertedNoMatchingErrABI     = ffe("PD012222", "No error ABI available to decode %s")
+	MsgTxMgrRevertedNoMatchingErrABI     = ffe("PD012221", "No error ABI available to decode %s")
+	MsgTxMgrPrivateCallRequiresTo        = ffe("PD012222", "A to contract address must be specified for private smart contract calls")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")

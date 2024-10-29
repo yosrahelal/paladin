@@ -91,6 +91,13 @@ type TransactionReceipt struct {
 	TransactionReceiptData
 }
 
+type TransactionReceiptFull struct {
+	*TransactionReceipt
+	States             *TransactionStates `docstruct:"TransactionReceiptFull" json:"states,omitempty"`
+	DomainReceipt      tktypes.RawJSON    `docstruct:"TransactionReceiptFull" json:"domainReceipt,omitempty"`
+	DomainReceiptError string             `docstruct:"TransactionReceiptFull" json:"domainReceiptError,omitempty"`
+}
+
 type TransactionReceiptDataOnchain struct {
 	TransactionHash  *tktypes.Bytes32 `docstruct:"TransactionReceiptDataOnchain" json:"transactionHash,omitempty"`
 	BlockNumber      int64            `docstruct:"TransactionReceiptDataOnchain" json:"blockNumber,omitempty"`
@@ -103,6 +110,7 @@ type TransactionReceiptDataOnchainEvent struct {
 }
 
 type TransactionReceiptData struct {
+	Domain                              string              `docstruct:"TransactionReceiptData" json:"domain,omitempty"`  // only set on private transaction receipts
 	Success                             bool                `docstruct:"TransactionReceiptData" json:"success,omitempty"` // true for success (note "status" is reserved for future use)
 	*TransactionReceiptDataOnchain      `json:",inline"`    // if the result was finalized by the blockchain (note quirk of omitempty that we can't put zero-valid int pointers on main struct)
 	*TransactionReceiptDataOnchainEvent `json:",inline"`    // if the result was finalized by the blockchain by an event

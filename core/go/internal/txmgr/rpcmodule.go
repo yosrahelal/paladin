@@ -39,6 +39,9 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_queryTransactionsFull", tm.rpcQueryTransactionsFull()).
 		Add("ptx_queryPendingTransactions", tm.rpcQueryPendingTransactions()).
 		Add("ptx_getTransactionReceipt", tm.rpcGetTransactionReceipt()).
+		Add("ptx_getTransactionReceiptFull", tm.rpcGetTransactionReceiptFull()).
+		Add("ptx_getDomainReceipt", tm.rpcGetDomainReceipt()).
+		Add("ptx_getStateReceipt", tm.rpcGetStateReceipt()).
 		Add("ptx_queryTransactionReceipts", tm.rpcQueryTransactionReceipts()).
 		Add("ptx_getTransactionDependencies", tm.rpcGetTransactionDependencies()).
 		Add("ptx_queryPublicTransactions", tm.rpcQueryPublicTransactions()).
@@ -137,6 +140,31 @@ func (tm *txManager) rpcGetTransactionReceipt() rpcserver.RPCHandler {
 		id uuid.UUID,
 	) (*pldapi.TransactionReceipt, error) {
 		return tm.GetTransactionReceiptByID(ctx, id)
+	})
+}
+
+func (tm *txManager) rpcGetTransactionReceiptFull() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		id uuid.UUID,
+	) (*pldapi.TransactionReceiptFull, error) {
+		return tm.GetTransactionReceiptByIDFull(ctx, id)
+	})
+}
+
+func (tm *txManager) rpcGetDomainReceipt() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		domain string,
+		id uuid.UUID,
+	) (tktypes.RawJSON, error) {
+		return tm.GetDomainReceiptByID(ctx, domain, id)
+	})
+}
+
+func (tm *txManager) rpcGetStateReceipt() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		id uuid.UUID,
+	) (*pldapi.TransactionStates, error) {
+		return tm.GetStateReceiptByID(ctx, id)
 	})
 }
 

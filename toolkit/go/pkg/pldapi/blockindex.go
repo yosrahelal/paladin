@@ -39,8 +39,14 @@ func (pl EthTransactionResult) Options() []string {
 }
 
 type IndexedBlock struct {
-	Number int64           `docstruct:"IndexedBlock" json:"number"`
-	Hash   tktypes.Bytes32 `docstruct:"IndexedBlock" json:"hash"           gorm:"primaryKey"`
+	Number    int64             `docstruct:"IndexedBlock" json:"number"`
+	Hash      tktypes.Bytes32   `docstruct:"IndexedBlock" json:"hash"           gorm:"primaryKey"`
+	Timestamp tktypes.Timestamp `docstruct:"IndexedBlock" json:"timestamp"`
+}
+
+type EmbeddedBlockInfo struct {
+	BlockHash      tktypes.Bytes32   `docstruct:"IndexedEvent" json:"blockHash"`
+	BlockTimestamp tktypes.Timestamp `docstruct:"IndexedEvent" json:"blockTimestamp"`
 }
 
 type IndexedTransaction struct {
@@ -52,6 +58,7 @@ type IndexedTransaction struct {
 	Nonce            uint64                             `docstruct:"IndexedTransaction" json:"nonce"`
 	ContractAddress  *tktypes.EthAddress                `docstruct:"IndexedTransaction" json:"contractAddress,omitempty"`
 	Result           tktypes.Enum[EthTransactionResult] `docstruct:"IndexedTransaction" json:"result,omitempty"`
+	Block            *IndexedBlock                      `docstruct:"IndexedTransaction" json:"block,omitempty"        gorm:"foreignKey:number;references:block_number"`
 }
 
 type IndexedEvent struct {
@@ -71,8 +78,8 @@ type EventWithData struct {
 	// when both the blockindexer and consuming code are using the same version of firefly-signer.
 	// Includes variable names, including deep within nested structure.
 	// Things like whitespace etc. subject to change (so should not stored for later comparison)
-	SoliditySignature string `json:"soliditySignature"`
+	SoliditySignature string `docstruct:"EventWithData" json:"soliditySignature"`
 
-	Address tktypes.EthAddress `json:"address"`
-	Data    tktypes.RawJSON    `json:"data"`
+	Address tktypes.EthAddress `docstruct:"EventWithData" json:"address"`
+	Data    tktypes.RawJSON    `docstruct:"EventWithData" json:"data"`
 }

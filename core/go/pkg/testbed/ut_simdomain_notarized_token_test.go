@@ -252,12 +252,8 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			assert.Greater(t, inputs.Amount.BigInt().Sign(), 0)
 			contractAddr, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
 			require.NoError(t, err)
-			configValues, err := contractDataABI.DecodeABIData(tx.ContractInfo.ContractConfig, 0)
-			require.NoError(t, err)
-			configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
-			require.NoError(t, err)
 			var config fakeCoinConfigParser
-			err = json.Unmarshal(configJSON, &config)
+			err = json.Unmarshal([]byte(tx.ContractInfo.ContractConfigJson), &config)
 			require.NoError(t, err)
 			assert.NotEmpty(t, config.NotaryLocator)
 			return contractAddr, config.NotaryLocator, &inputs
@@ -346,9 +342,6 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 
 				return &prototk.ConfigureDomainResponse{
 					DomainConfig: &prototk.DomainConfig{
-						BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
-							SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
-						},
 						AbiStateSchemasJson: []string{fakeCoinStateSchema},
 						AbiEventsJson:       string(eventsJSON),
 					},
@@ -396,6 +389,29 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 							"notaryLocator": "domain1.contract1.notary"
 						}`, req.Transaction.TransactionId, req.ResolvedVerifiers[0].Verifier),
 					},
+				}, nil
+			},
+
+			InitContract: func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+
+				configValues, err := contractDataABI.DecodeABIData(icr.ContractConfig, 0)
+				str := tktypes.HexBytes(icr.ContractConfig).HexString0xPrefix()
+				assert.NotEqual(t, "", str)
+				require.NoError(t, err)
+
+				configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
+				require.NoError(t, err)
+				contractConfig := &prototk.ContractConfig{
+					ContractConfigJson:   string(configJSON),
+					CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+					SubmitterSelection:   prototk.ContractConfig_SUBMITTER_COORDINATOR,
+				}
+				var constructorParameters fakeCoinConfigParser
+				err = json.Unmarshal([]byte(configJSON), &constructorParameters)
+				require.NoError(t, err)
+				return &prototk.InitContractResponse{
+					Valid:          true,
+					ContractConfig: contractConfig,
 				}, nil
 			},
 

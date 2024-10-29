@@ -23,6 +23,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
@@ -60,13 +61,16 @@ type Domain interface {
 	// The state manager calls this when states are received for a domain that has a custom hash function.
 	// Any nil IDs should be filled in, and any mis-matched IDs should result in an error
 	ValidateStateHashes(ctx context.Context, states []*FullState) ([]tktypes.HexBytes, error)
+
+	GetDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID) (tktypes.RawJSON, error)
+	BuildDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID, txStates *pldapi.TransactionStates) (tktypes.RawJSON, error)
 }
 
 // External interface for other components to call against a private smart contract
 type DomainSmartContract interface {
 	Domain() Domain
 	Address() tktypes.EthAddress
-	ConfigBytes() tktypes.HexBytes
+	ContractConfig() *prototk.ContractConfig
 
 	InitTransaction(ctx context.Context, tx *PrivateTransaction) error
 	AssembleTransaction(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
@@ -77,8 +81,6 @@ type DomainSmartContract interface {
 
 	InitCall(ctx context.Context, tx *TransactionInputs) ([]*prototk.ResolveVerifierRequest, error)
 	ExecCall(dCtx DomainContext, readTX *gorm.DB, tx *TransactionInputs, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
-
-	ResolveDispatch(ctx context.Context, tx *PrivateTransaction) error
 }
 
 type EndorsementResult struct {

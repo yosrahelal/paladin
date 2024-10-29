@@ -16,7 +16,7 @@ import {IPente} from "../interfaces/IPente.sol";
 ///
 contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     string private constant TRANSITION_TYPE =
-        "Transition(bytes32[] inputs,bytes32[] reads,bytes32[] outputs,ExternalCall[] externalCalls)";
+        "Transition(bytes32[] inputs,bytes32[] reads,bytes32[] outputs,bytes32[] info,ExternalCall[] externalCalls)";
     string private constant EXTERNALCALL_TYPE =
         "ExternalCall(address contractAddress,bytes encodedCall)";
     bytes32 private constant TRANSITION_TYPEHASH =
@@ -28,6 +28,7 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         keccak256("Upgrade(address address)");
 
     mapping(bytes32 => bool) private _unspent;
+    mapping(bytes32 => address) private _approvals;
     address _nextImplementation;
 
     // Config follows the convention of a 4 byte type selector, followed by ABI encoded bytes
@@ -42,6 +43,11 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     error PenteReadNotAvailable(bytes32 read);
     error PenteOutputAlreadyUnspent(bytes32 output);
     error PenteExternalCallsDisabled();
+    error PenteInvalidDelegate(
+        bytes32 txhash,
+        address delegate,
+        address sender
+    );
 
     struct EndorsementConfig {
         uint threshold;
@@ -54,6 +60,13 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     struct ExternalCall {
         address contractAddress;
         bytes encodedCall;
+    }
+
+    struct States {
+        bytes32[] inputs;
+        bytes32[] reads;
+        bytes32[] outputs;
+        bytes32[] info;
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -101,41 +114,74 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
 
     function transition(
         bytes32 txId,
-        bytes32[] calldata inputs,
-        bytes32[] calldata reads,
-        bytes32[] calldata outputs,
+        States calldata states,
         ExternalCall[] calldata externalCalls,
         bytes[] calldata signatures
-    ) public {
-        bytes32 transitionHash = _buildTransitionHash(
-            inputs,
-            reads,
-            outputs,
-            externalCalls
-        );
+    ) external {
+        bytes32 transitionHash = _buildTransitionHash(states, externalCalls);
         validateEndorsements(transitionHash, signatures);
+        _transition(txId, states, externalCalls);
+    }
 
+    function approveTransition(
+        bytes32 txId,
+        address delegate,
+        bytes32 transitionHash,
+        bytes[] calldata signatures
+    ) external {
+        validateEndorsements(transitionHash, signatures);
+        _approvals[transitionHash] = delegate;
+        emit PenteApproved(txId, delegate, transitionHash);
+    }
+
+    function transitionWithApproval(
+        bytes32 txId,
+        States calldata states,
+        ExternalCall[] calldata externalCalls
+    ) external {
+        bytes32 transitionHash = _buildTransitionHash(states, externalCalls);
+        if (_approvals[transitionHash] != msg.sender) {
+            revert PenteInvalidDelegate(
+                transitionHash,
+                _approvals[transitionHash],
+                msg.sender
+            );
+        }
+        _transition(txId, states, externalCalls);
+    }
+
+    function _transition(
+        bytes32 txId,
+        States calldata states,
+        ExternalCall[] calldata externalCalls
+    ) internal {
         // Perform the state transitions
-        for (uint i = 0; i < inputs.length; i++) {
-            if (!_unspent[inputs[i]]) {
-                revert PenteInputNotAvailable(inputs[i]);
+        for (uint i = 0; i < states.inputs.length; i++) {
+            if (!_unspent[states.inputs[i]]) {
+                revert PenteInputNotAvailable(states.inputs[i]);
             }
-            delete _unspent[inputs[i]];
+            delete _unspent[states.inputs[i]];
         }
-        for (uint i = 0; i < reads.length; i++) {
-            if (!_unspent[reads[i]]) {
-                revert PenteReadNotAvailable(reads[i]);
+        for (uint i = 0; i < states.reads.length; i++) {
+            if (!_unspent[states.reads[i]]) {
+                revert PenteReadNotAvailable(states.reads[i]);
             }
         }
-        for (uint i = 0; i < outputs.length; i++) {
-            if (_unspent[outputs[i]]) {
-                revert PenteOutputAlreadyUnspent(outputs[i]);
+        for (uint i = 0; i < states.outputs.length; i++) {
+            if (_unspent[states.outputs[i]]) {
+                revert PenteOutputAlreadyUnspent(states.outputs[i]);
             }
-            _unspent[outputs[i]] = true;
+            _unspent[states.outputs[i]] = true;
         }
 
         // Emit the state transition event
-        emit UTXOTransfer(txId, inputs, outputs, new bytes(0));
+        emit PenteTransition(
+            txId,
+            states.inputs,
+            states.reads,
+            states.outputs,
+            states.info
+        );
 
         // Trigger any external calls
         for (uint i = 0; i < externalCalls.length; i++) {
@@ -147,17 +193,16 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     }
 
     function _buildTransitionHash(
-        bytes32[] calldata inputs,
-        bytes32[] calldata reads,
-        bytes32[] calldata outputs,
+        States calldata states,
         ExternalCall[] calldata externalCalls
     ) internal view returns (bytes32) {
         bytes32 structHash = keccak256(
             abi.encode(
                 TRANSITION_TYPEHASH,
-                keccak256(abi.encodePacked(inputs)),
-                keccak256(abi.encodePacked(reads)),
-                keccak256(abi.encodePacked(outputs)),
+                keccak256(abi.encodePacked(states.inputs)),
+                keccak256(abi.encodePacked(states.reads)),
+                keccak256(abi.encodePacked(states.outputs)),
+                keccak256(abi.encodePacked(states.info)),
                 _buildExternalCallsHash(externalCalls)
             )
         );

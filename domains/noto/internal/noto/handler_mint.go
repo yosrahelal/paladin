@@ -35,7 +35,7 @@ type mintHandler struct {
 	noto *Noto
 }
 
-func (h *mintHandler) ValidateParams(ctx context.Context, config *types.NotoConfig_V0, params string) (interface{}, error) {
+func (h *mintHandler) ValidateParams(ctx context.Context, config *types.NotoParsedConfig, params string) (interface{}, error) {
 	var mintParams types.MintParams
 	if err := json.Unmarshal([]byte(params), &mintParams); err != nil {
 		return nil, err
@@ -51,9 +51,9 @@ func (h *mintHandler) ValidateParams(ctx context.Context, config *types.NotoConf
 
 func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
-	notary := tx.DomainConfig.DecodedData.NotaryLookup
+	notary := tx.DomainConfig.NotaryLookup
 
-	if tx.DomainConfig.DecodedData.RestrictMinting && req.Transaction.From != notary {
+	if tx.DomainConfig.RestrictMinting && req.Transaction.From != notary {
 		return nil, i18n.NewError(ctx, msgs.MsgMintOnlyNotary)
 	}
 	return &prototk.InitTransactionResponse{
@@ -79,7 +79,7 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 
 func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
-	notary := tx.DomainConfig.DecodedData.NotaryLookup
+	notary := tx.DomainConfig.NotaryLookup
 
 	_, err := h.noto.findEthAddressVerifier(ctx, "notary", notary, req.ResolvedVerifiers)
 	if err != nil {
@@ -205,12 +205,12 @@ func (h *mintHandler) hookMint(ctx context.Context, tx *types.ParsedTransaction,
 	functionABI := solutils.MustLoadBuild(notoHooksJSON).ABI.Functions()["onMint"]
 	var paramsJSON []byte
 
-	if tx.DomainConfig.DecodedData.PrivateAddress != nil {
+	if tx.DomainConfig.PrivateAddress != nil {
 		transactionType = prototk.PreparedTransaction_PRIVATE
 		functionABI = penteInvokeABI("onMint", functionABI.Inputs)
 		penteParams := &PenteInvokeParams{
-			Group:  tx.DomainConfig.DecodedData.PrivateGroup,
-			To:     tx.DomainConfig.DecodedData.PrivateAddress,
+			Group:  tx.DomainConfig.PrivateGroup,
+			To:     tx.DomainConfig.PrivateAddress,
 			Inputs: params,
 		}
 		paramsJSON, err = json.Marshal(penteParams)
@@ -236,7 +236,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 	if err != nil {
 		return nil, err
 	}
-	if tx.DomainConfig.DecodedData.NotaryType.Equals(&types.NotaryTypePente) {
+	if tx.DomainConfig.NotaryType == types.NotaryTypePente {
 		hookTransaction, err := h.hookMint(ctx, tx, req, baseTransaction)
 		if err != nil {
 			return nil, err

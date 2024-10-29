@@ -31,6 +31,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -58,10 +59,13 @@ public class SimpleStorageWrappedGetSetTest {
         }
         final Address smartContractAddress = EVMRunner.randomAddress();
         final Address sender = EVMRunner.randomAddress();
+        final var logs = new LinkedList<EVMRunner.JsonEVMLog>();
         MessageFrame deployFrame = evmRunner.runContractDeployment(
                 sender,
                 smartContractAddress,
                 Bytes.fromHexString(hexByteCode),
+                Long.MAX_VALUE,
+                logs,
                 new Uint256(12345)
         );
         assertEquals(MessageFrame.State.COMPLETED_SUCCESS, deployFrame.getState());
@@ -69,13 +73,17 @@ public class SimpleStorageWrappedGetSetTest {
                 sender,
                 smartContractAddress,
                 "set",
+                Long.MAX_VALUE,
+                logs,
                 new Uint256(23456)
         );
         assertEquals(MessageFrame.State.COMPLETED_SUCCESS, setFrame.getState());
         MessageFrame getFrame = evmRunner.runContractInvoke(
                 sender,
                 smartContractAddress,
-                "get"
+                "get",
+                Long.MAX_VALUE,
+                logs
         );
         assertEquals(MessageFrame.State.COMPLETED_SUCCESS, getFrame.getState());
         List<Type<?>> returns = evmRunner.decodeReturn(getFrame, List.of(new TypeReference<Uint256>() {}));

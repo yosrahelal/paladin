@@ -384,14 +384,16 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 	now := tktypes.TimestampNow()
 	return &components.StateWithLabels{
 		State: &pldapi.State{
-			ID:              id,
-			Created:         now,
-			DomainName:      as.DomainName,
-			Schema:          as.Schema.ID,
-			ContractAddress: contractAddress,
-			Data:            jsonData,
-			Labels:          psd.labels,
-			Int64Labels:     psd.int64Labels,
+			StateBase: pldapi.StateBase{
+				ID:              id,
+				Created:         now,
+				DomainName:      as.DomainName,
+				Schema:          as.Schema.ID,
+				ContractAddress: contractAddress,
+				Data:            jsonData,
+			},
+			Labels:      psd.labels,
+			Int64Labels: psd.int64Labels,
 		},
 		LabelValues: addStateBaseLabels(psd.labelValues, id, now),
 	}, nil

@@ -22,6 +22,27 @@ title: ptx_*
 
 0. `decodedError`: `DecodedError`
 
+## `ptx_getDomainReceipt`
+
+### Parameters
+
+0. `domain`: `string`
+1. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+### Returns
+
+0. `domainReceipt`: [`RawJSON`](../types/simpletypes.md#rawjson)
+
+## `ptx_getStateReceipt`
+
+### Parameters
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+### Returns
+
+0. `stateReceipt`: [`TransactionStates`](../types/transactionstates.md#transactionstates)
+
 ## `ptx_getTransaction`
 
 ### Parameters
@@ -61,6 +82,16 @@ title: ptx_*
 ### Returns
 
 0. `receipt`: [`TransactionReceipt`](../types/transactionreceipt.md#transactionreceipt)
+
+## `ptx_getTransactionReceiptFull`
+
+### Parameters
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+### Returns
+
+0. `receipt`: [`TransactionReceiptFull`](../types/transactionreceiptfull.md#transactionreceiptfull)
 
 ## `ptx_queryTransactionReceipts`
 

@@ -170,10 +170,7 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	return &prototk.ConfigureDomainResponse{
 		DomainConfig: &prototk.DomainConfig{
 			AbiStateSchemasJson: []string{string(schemaJSON)},
-			BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
-				SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
-			},
-			AbiEventsJson: string(eventsJSON),
+			AbiEventsJson:       string(eventsJSON),
 		},
 	}, nil
 }
@@ -262,6 +259,41 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	}, nil
 }
 
+func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+	var notoContractConfigJSON []byte
+	var staticCoordinator string
+	domainConfig, err := n.decodeConfig(ctx, req.ContractConfig)
+	if err == nil {
+		parsedConfig := &types.NotoParsedConfig{
+			NotaryType:      domainConfig.DecodedData.NotaryType,
+			NotaryAddress:   domainConfig.NotaryAddress,
+			Variant:         domainConfig.Variant,
+			NotaryLookup:    domainConfig.DecodedData.NotaryLookup,
+			PrivateAddress:  domainConfig.DecodedData.PrivateAddress,
+			PrivateGroup:    domainConfig.DecodedData.PrivateGroup,
+			RestrictMinting: domainConfig.DecodedData.RestrictMinting,
+		}
+		notoContractConfigJSON, err = json.Marshal(parsedConfig)
+	}
+	if err == nil {
+		staticCoordinator = domainConfig.DecodedData.NotaryLookup
+	}
+	if err != nil {
+		// This on-chain contract has invalid configuration - not an error in our process
+		return &prototk.InitContractResponse{Valid: false}, nil
+	}
+
+	return &prototk.InitContractResponse{
+		Valid: true,
+		ContractConfig: &prototk.ContractConfig{
+			ContractConfigJson:   string(notoContractConfigJSON),
+			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
+			StaticCoordinator:    &staticCoordinator,
+			SubmitterSelection:   prototk.ContractConfig_SUBMITTER_COORDINATOR,
+		},
+	}, nil
+}
+
 func (n *Noto) InitTransaction(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	tx, handler, err := n.validateTransaction(ctx, req.Transaction)
 	if err != nil {
@@ -329,7 +361,8 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, err
 	}
 
-	domainConfig, err := n.decodeConfig(ctx, tx.ContractInfo.ContractConfig)
+	var domainConfig *types.NotoParsedConfig
+	err = json.Unmarshal([]byte(tx.ContractInfo.ContractConfigJson), &domainConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -501,4 +534,9 @@ func (n *Noto) InitCall(ctx context.Context, req *prototk.InitCallRequest) (*pro
 
 func (n *Noto) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}
+
+func (n *Noto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+	// TODO: Event logs for transfers would be great for Noto
+	return nil, i18n.NewError(ctx, msgs.MsgNoDomainReceipt)
 }

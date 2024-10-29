@@ -258,10 +258,6 @@ func registerTestDomain(t *testing.T, dm *domainManager, tp *testPlugin) {
 
 func goodDomainConf() *prototk.DomainConfig {
 	return &prototk.DomainConfig{
-		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
-			SubmitMode:       prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS,
-			OneTimeUsePrefix: "one/time/keys/",
-		},
 		AbiStateSchemasJson: []string{
 			fakeCoinStateSchema,
 		},
@@ -282,11 +278,10 @@ func TestDomainInitStates(t *testing.T) {
 
 	assert.Nil(t, td.d.initError.Load())
 	assert.True(t, td.tp.initialized.Load())
-	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.d.RegistryAddress(), false)
+	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.d.RegistryAddress())
 	require.NoError(t, err)
 	assert.Equal(t, td.d, byAddr)
 	assert.True(t, td.d.Initialized())
-	assert.NotNil(t, td.d.Configuration().BaseLedgerSubmitConfig)
 
 }
 func mockUpsertABIOk(mc *mockComponents) {
@@ -304,11 +299,10 @@ func TestDomainInitStatesWithEvents(t *testing.T) {
 
 	assert.Nil(t, td.d.initError.Load())
 	assert.True(t, td.tp.initialized.Load())
-	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.d.RegistryAddress(), false)
+	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.d.RegistryAddress())
 	require.NoError(t, err)
 	assert.Equal(t, td.d, byAddr)
 	assert.True(t, td.d.Initialized())
-	assert.NotNil(t, td.d.Configuration().BaseLedgerSubmitConfig)
 
 }
 
@@ -328,7 +322,7 @@ func TestDoubleRegisterReplaces(t *testing.T) {
 	assert.True(t, tp1.initialized.Load())
 
 	// Check we get the second from all the maps
-	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.tp.d.RegistryAddress(), false)
+	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.tp.d.RegistryAddress())
 	require.NoError(t, err)
 	assert.Same(t, tp1.d, byAddr)
 	byName, err := td.dm.GetDomainByName(td.ctx, "test1")
@@ -339,7 +333,6 @@ func TestDoubleRegisterReplaces(t *testing.T) {
 
 func TestDomainInitBadSchemas(t *testing.T) {
 	td, done := newTestDomain(t, false, &prototk.DomainConfig{
-		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
 		AbiStateSchemasJson: []string{
 			`!!! Wrong`,
 		},
@@ -351,9 +344,8 @@ func TestDomainInitBadSchemas(t *testing.T) {
 
 func TestDomainInitBadEventsJSON(t *testing.T) {
 	td, done := newTestDomain(t, false, &prototk.DomainConfig{
-		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
-		AbiStateSchemasJson:    []string{},
-		AbiEventsJson:          `!!! Wrong`,
+		AbiStateSchemasJson: []string{},
+		AbiEventsJson:       `!!! Wrong`,
 	})
 	defer done()
 	assert.Regexp(t, "PD011642", *td.d.initError.Load())
@@ -362,8 +354,7 @@ func TestDomainInitBadEventsJSON(t *testing.T) {
 
 func TestDomainInitBadEventsABI(t *testing.T) {
 	td, done := newTestDomain(t, false, &prototk.DomainConfig{
-		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
-		AbiStateSchemasJson:    []string{},
+		AbiStateSchemasJson: []string{},
 		AbiEventsJson: `[
 			{
 				"type": "event",
@@ -379,8 +370,7 @@ func TestDomainInitBadEventsABI(t *testing.T) {
 
 func TestDomainInitUpsertEventsABIFail(t *testing.T) {
 	td, done := newTestDomain(t, false, &prototk.DomainConfig{
-		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
-		AbiStateSchemasJson:    []string{},
+		AbiStateSchemasJson: []string{},
 		AbiEventsJson: `[
 			{
 				"type": "event",
@@ -398,9 +388,8 @@ func TestDomainInitUpsertEventsABIFail(t *testing.T) {
 
 func TestDomainInitStreamFail(t *testing.T) {
 	td, done := newTestDomain(t, false, &prototk.DomainConfig{
-		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
-		AbiStateSchemasJson:    []string{},
-		AbiEventsJson:          fakeCoinEventsABI,
+		AbiStateSchemasJson: []string{},
+		AbiEventsJson:       fakeCoinEventsABI,
 	}, mockUpsertABIOk, func(mc *mockComponents) {
 		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
@@ -411,7 +400,6 @@ func TestDomainInitStreamFail(t *testing.T) {
 
 func TestDomainInitFactorySchemaStoreFail(t *testing.T) {
 	td, done := newTestDomain(t, false, &prototk.DomainConfig{
-		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
 		AbiStateSchemasJson: []string{
 			fakeCoinStateSchema,
 		},
@@ -453,7 +441,9 @@ func TestDomainConfigureFail(t *testing.T) {
 }
 
 func TestDomainFindAvailableStatesNotInit(t *testing.T) {
-	td, done := newTestDomain(t, false, &prototk.DomainConfig{})
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{
+		AbiStateSchemasJson: []string{`{!!! invalid`},
+	})
 	defer done()
 	assert.NotNil(t, *td.d.initError.Load())
 	_, err := td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
@@ -709,7 +699,7 @@ func TestDomainPrepareDeployInvokeTX(t *testing.T) {
 	assert.Equal(t, "newInstance", tx.InvokeTransaction.FunctionABI.Name)
 	assert.Equal(t, abi.Function, tx.InvokeTransaction.FunctionABI.Type)
 	assert.NotNil(t, tx.InvokeTransaction.Inputs)
-	assert.Equal(t, "one/time/keys/"+tx.ID.String(), tx.Signer)
+	assert.Empty(t, tx.Signer) // to be assigned by private TX manager
 }
 
 func TestDomainPrepareDeployDeployTXWithSigner(t *testing.T) {
@@ -769,25 +759,6 @@ func TestDomainPrepareDeployError(t *testing.T) {
 
 	err := domain.PrepareDeploy(td.ctx, tx)
 	assert.Regexp(t, "pop", err)
-}
-
-func TestDomainPrepareDeployMissingSigner(t *testing.T) {
-	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
-	defer done()
-	assert.Nil(t, td.d.initError.Load())
-
-	domain := td.d
-	tx := goodTXForDeploy()
-	td.d.config.BaseLedgerSubmitConfig.SubmitMode = prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION
-
-	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
-		return &prototk.PrepareDeployResponse{
-			Deploy: &prototk.BaseLedgerDeployTransaction{},
-		}, nil
-	}
-
-	err := domain.PrepareDeploy(td.ctx, tx)
-	assert.Regexp(t, "PD011622", err)
 }
 
 func TestDomainPrepareDeployBadParams(t *testing.T) {
@@ -1012,6 +983,24 @@ func TestDecodeABIDataFailCases(t *testing.T) {
 		Data:         []byte(``),
 	})
 	assert.Regexp(t, "PD011646.*Insufficient bytes", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
+		Definition:   "eip1559",
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011646.*FF22084", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
+		Definition:   "eip155", // not supported for UNSIGNED round trip currently (supported for signed)
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011645", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION_SIGNED,
+		Definition:   "wrong",
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011645", err)
 }
 
 func TestRecoverSignerFailCases(t *testing.T) {
@@ -1135,4 +1124,147 @@ func TestDomainValidateStateHashesBadHex(t *testing.T) {
 
 	_, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{{ID: stateID1}})
 	require.Regexp(t, "PD011652", err)
+}
+
+func TestGetDomainReceiptAllAvailable(t *testing.T) {
+	txID := uuid.New()
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID3 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID4 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(&pldapi.TransactionStates{
+				Spent:     []*pldapi.StateBase{{ID: stateID1}},
+				Read:      []*pldapi.StateBase{{ID: stateID2}},
+				Confirmed: []*pldapi.StateBase{{ID: stateID3}},
+				Info:      []*pldapi.StateBase{{ID: stateID4}},
+			}, nil)
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.tp.Functions.BuildReceipt = func(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+		require.True(t, req.Complete)
+		require.Len(t, req.InputStates, 1)
+		require.Equal(t, stateID1.String(), req.InputStates[0].Id)
+		require.Len(t, req.ReadStates, 1)
+		require.Equal(t, stateID2.String(), req.ReadStates[0].Id)
+		require.Len(t, req.OutputStates, 1)
+		require.Equal(t, stateID3.String(), req.OutputStates[0].Id)
+		require.Len(t, req.InfoStates, 1)
+		require.Equal(t, stateID4.String(), req.InfoStates[0].Id)
+
+		return &prototk.BuildReceiptResponse{
+			ReceiptJson: `{"some":"receipt"}`,
+		}, nil
+	}
+
+	resData, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"some":"receipt"}`, resData.Pretty())
+
+}
+
+func TestGetDomainReceiptIncomplete(t *testing.T) {
+	txID := uuid.New()
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(&pldapi.TransactionStates{
+				Spent: []*pldapi.StateBase{{ID: stateID1}},
+				Unavailable: &pldapi.UnavailableStates{
+					Confirmed: []tktypes.HexBytes{stateID2},
+				},
+			}, nil)
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.tp.Functions.BuildReceipt = func(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+		require.False(t, req.Complete)
+		require.Len(t, req.InputStates, 1)
+
+		return &prototk.BuildReceiptResponse{
+			ReceiptJson: `{"some":"receipt"}`,
+		}, nil
+	}
+
+	resData, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"some":"receipt"}`, resData.Pretty())
+
+}
+
+func TestGetDomainReceiptFail(t *testing.T) {
+	txID := uuid.New()
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(&pldapi.TransactionStates{
+				Spent: []*pldapi.StateBase{{ID: stateID1}},
+			}, nil)
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.tp.Functions.BuildReceipt = func(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	_, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestGetDomainReceiptNotIndexed(t *testing.T) {
+	txID := uuid.New()
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(&pldapi.TransactionStates{None: true}, nil)
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	_, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	assert.Regexp(t, "PD011657", err) // no state confirmations available
+
+}
+
+func TestGetDomainReceiptMissingData(t *testing.T) {
+	txID := uuid.New()
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(&pldapi.TransactionStates{}, nil)
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	_, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	assert.Regexp(t, "PD011658", err) // no private states available
+
+}
+
+func TestGetDomainReceiptLookupError(t *testing.T) {
+	txID := uuid.New()
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(nil, fmt.Errorf("pop"))
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	_, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	assert.Regexp(t, "pop", err)
+
 }

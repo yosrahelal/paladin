@@ -116,7 +116,12 @@ func (tf *transactionFlow) CoordinatingLocally() bool {
 	return tf.localCoordinator
 }
 
-func (tf *transactionFlow) PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error) {
+func (tf *transactionFlow) PrepareTransaction(ctx context.Context, defaultSigner string) (*components.PrivateTransaction, error) {
+
+	if tf.transaction.Signer == "" {
+		log.L(ctx).Infof("Using random signing key from sequencer to prepare transaction: %s", defaultSigner)
+		tf.transaction.Signer = defaultSigner
+	}
 
 	readTX := tf.components.Persistence().DB() // no DB transaction required here
 	prepError := tf.domainAPI.PrepareTransaction(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
@@ -152,13 +157,27 @@ func (tf *transactionFlow) GetStateDistributions(ctx context.Context) []*statedi
 		log.L(ctx).Debug("OutputStates is nil")
 		return stateDistributions
 	}
-	for stateIndex, outputState := range tf.transaction.PostAssembly.OutputStates {
-		//need the output state for the state ID and need the outputStatePotential for the distribution list
-		outputStatePotential := tf.transaction.PostAssembly.OutputStatesPotential[stateIndex]
 
+	type stateAndDistributionList struct {
+		State            *components.FullState
+		DistributionList []string
+	}
+
+	//need the output state for the state ID and need the outputStatePotential for the distribution list
+	statesToDistribute := make([]stateAndDistributionList, 0, len(tf.transaction.PostAssembly.OutputStates)+len(tf.transaction.PostAssembly.OutputStates))
+	for stateIndex, outputState := range tf.transaction.PostAssembly.OutputStates {
+		statePotential := tf.transaction.PostAssembly.OutputStatesPotential[stateIndex]
+		statesToDistribute = append(statesToDistribute, stateAndDistributionList{outputState, statePotential.DistributionList})
+	}
+	for stateIndex, infoState := range tf.transaction.PostAssembly.InfoStates {
+		statePotential := tf.transaction.PostAssembly.InfoStatesPotential[stateIndex]
+		statesToDistribute = append(statesToDistribute, stateAndDistributionList{infoState, statePotential.DistributionList})
+	}
+
+	for _, s := range statesToDistribute {
 		// We don't need to send to our local node
 		localNodeName := tf.components.TransportManager().LocalNodeName()
-		for _, party := range outputStatePotential.DistributionList {
+		for _, party := range s.DistributionList {
 			nodeName, err := tktypes.PrivateIdentityLocator(party).Node(ctx, true)
 			if err != nil || nodeName == "" || nodeName == localNodeName {
 				log.L(ctx).Debugf("skipping unnecessary state distribution party='%s' nodeName='%s' localNodeName='%s'", party, nodeName, localNodeName)
@@ -167,12 +186,12 @@ func (tf *transactionFlow) GetStateDistributions(ctx context.Context) []*statedi
 
 			stateDistributions = append(stateDistributions, &statedistribution.StateDistribution{
 				ID:              uuid.New().String(),
-				StateID:         outputState.ID.String(),
+				StateID:         s.State.ID.String(),
 				IdentityLocator: party,
 				Domain:          tf.domainAPI.Domain().Name(),
 				ContractAddress: tf.transaction.Inputs.To.String(),
-				SchemaID:        outputState.Schema.String(),
-				StateDataJson:   string(outputState.Data), // the state data json is available on both but we take it
+				SchemaID:        s.State.Schema.String(),
+				StateDataJson:   string(s.State.Data), // the state data json is available on both but we take it
 				// from the outputState to make sure it is the same json that was used to generate the hash
 			})
 		}

@@ -29,16 +29,27 @@ var NotoConfigID_V0 = tktypes.MustParseHexBytes("0x00010000")
 
 type NotoConfig_V0 struct {
 	NotaryAddress tktypes.EthAddress `json:"notaryAddress"`
-	Variant       tktypes.Bytes32    `json:"variant"`
+	Variant       tktypes.HexUint64  `json:"variant"`
 	Data          tktypes.HexBytes   `json:"data"`
 	DecodedData   *NotoConfigData_V0 `json:"-"`
 }
 
 type NotoConfigData_V0 struct {
 	NotaryLookup    string              `json:"notaryLookup"`
-	NotaryType      tktypes.Bytes32     `json:"notaryType"`
+	NotaryType      tktypes.HexUint64   `json:"notaryType"`
 	PrivateAddress  *tktypes.EthAddress `json:"privateAddress"`
 	PrivateGroup    *PentePrivateGroup  `json:"privateGroup"`
+	RestrictMinting bool                `json:"restrictMinting"`
+}
+
+// This is the structure we parse the config into in InitConfig and gets passed back to us on every call
+type NotoParsedConfig struct {
+	NotaryLookup    string              `json:"notaryLookup"`
+	NotaryType      tktypes.HexUint64   `json:"notaryType"`
+	NotaryAddress   tktypes.EthAddress  `json:"notaryAddress"`
+	Variant         tktypes.HexUint64   `json:"variant"`
+	PrivateAddress  *tktypes.EthAddress `json:"privateAddress,omitempty"`
+	PrivateGroup    *PentePrivateGroup  `json:"privateGroup,omitempty"`
 	RestrictMinting bool                `json:"restrictMinting"`
 }
 
@@ -55,11 +66,11 @@ var NotoConfigABI_V0 = &abi.ParameterArray{
 
 var NotoTransactionData_V0 = tktypes.MustParseHexBytes("0x00010000")
 
-type DomainHandler = domain.DomainHandler[NotoConfig_V0]
-type ParsedTransaction = domain.ParsedTransaction[NotoConfig_V0]
+type DomainHandler = domain.DomainHandler[NotoParsedConfig]
+type ParsedTransaction = domain.ParsedTransaction[NotoParsedConfig]
 
-var NotaryTypeSigner = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000000")
-var NotaryTypePente = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000001")
+var NotaryTypeSigner tktypes.HexUint64 = 0x0000
+var NotaryTypePente tktypes.HexUint64 = 0x0001
 
-var NotoVariantDefault = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000000")
-var NotoVariantSelfSubmit = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000001")
+var NotoVariantDefault tktypes.HexUint64 = 0x0000
+var NotoVariantSelfSubmit tktypes.HexUint64 = 0x0001

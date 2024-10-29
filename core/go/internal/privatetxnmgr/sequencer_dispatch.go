@@ -68,7 +68,9 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				panic("Transaction not found")
 			}
 
-			preparedTransaction, err := txProcessor.PrepareTransaction(ctx)
+			// If we don't have a signing key for the TX at this point, we use our randomly assigned one
+			// TODO: Rotation
+			preparedTransaction, err := txProcessor.PrepareTransaction(ctx, s.defaultSigner)
 			if err != nil {
 				log.L(ctx).Errorf("Error preparing transaction: %s", err)
 				//TODO this is a really bad time to be getting an error.  need to think carefully about how to handle this

@@ -87,7 +87,7 @@ func (bi *blockIndexer) rpcGetTransactionEventsByHash() rpcserver.RPCHandler {
 
 func (bi *blockIndexer) rpcGetConfirmedBlockHeight() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod0(func(ctx context.Context,
-	) (uint64, error) {
+	) (tktypes.HexUint64, error) {
 		return bi.GetConfirmedBlockHeight(ctx)
 	})
 }
