@@ -133,7 +133,7 @@ title: ptx_*
 
 ### Returns
 
-0. `receipts`: `string`
+0. `verifier`: `string`
 
 ## `ptx_sendTransaction`
 

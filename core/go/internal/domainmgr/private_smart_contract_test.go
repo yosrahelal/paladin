@@ -764,6 +764,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 				FunctionAbiJson: fakeCoinExecuteABI,
 				ParamsJson:      string(params),
 			},
+			Metadata: confutil.P(`{"some":"data"}`),
 		}, nil
 	}
 
@@ -786,6 +787,8 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	assert.Contains(t, stillAvailable.States[0].DataJson, state2.Salt.String())
 	assert.Contains(t, stillAvailable.States[1].DataJson, state4.Salt.String())
 	assert.Contains(t, stillAvailable.States[2].DataJson, state5.Salt.String())
+
+	assert.JSONEq(t, `{"some":"data"}`, string(tx.PreparedMetadata))
 }
 
 func TestDomainAssembleTransactionError(t *testing.T) {

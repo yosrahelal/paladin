@@ -70,7 +70,9 @@ var AllSequencerStates = []string{
 }
 
 type Sequencer struct {
-	ctx                     context.Context
+	ctx              context.Context
+	privateTxManager components.PrivateTxManager
+
 	persistenceRetryTimeout time.Duration
 
 	// each sequencer has its own go routine
@@ -114,6 +116,7 @@ type Sequencer struct {
 
 func NewSequencer(
 	ctx context.Context,
+	privateTxManager components.PrivateTxManager,
 	nodeID string,
 	contractAddress tktypes.EthAddress,
 	sequencerConfig *pldconf.PrivateTxManagerSequencerConfig,
@@ -130,6 +133,7 @@ func NewSequencer(
 
 	newSequencer := &Sequencer{
 		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("sequencer-%s", contractAddress)),
+		privateTxManager:     privateTxManager,
 		initiated:            time.Now(),
 		contractAddress:      contractAddress,
 		evalInterval:         confutil.DurationMin(sequencerConfig.EvaluationInterval, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.EvaluationInterval),

@@ -495,7 +495,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 		}
 	}
 	if res.Metadata != nil {
-		tx.PreparedMetadata = []byte(*res.Metadata)
+		tx.PreparedMetadata = tktypes.RawJSON(*res.Metadata)
 	}
 	return nil
 }

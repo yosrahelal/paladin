@@ -305,6 +305,7 @@ var (
 	MsgPrivateTxManagerStateHashContention     = ffe("PD011823", "Contention detected attempting to spend hash %s in multiple transactions")
 	MsgPrivateReDelegationRequired             = ffe("PD011824", "Re-delegation is required for this transaction to progress")
 	MsgPrivateTxMgrDomainMismatch              = ffe("PD011825", "Domain '%s' specified does not match domain '%s' of deployed private smart contract %s")
+	MsgPrivateTxMgrInvalidPrepareOutcome       = ffe("PD011826", "Prepare outcome unexpected for transaction %s intent=%s public-submission=%t private-submission=%t")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")
@@ -385,6 +386,8 @@ var (
 	MsgTxMgrIdempotencyKeyClash          = ffe("PD012220", "idempotencyKey already used by submitted transaction %s") // important error code (relied on by operator, and apps)
 	MsgTxMgrRevertedNoMatchingErrABI     = ffe("PD012221", "No error ABI available to decode %s")
 	MsgTxMgrPrivateCallRequiresTo        = ffe("PD012222", "A to contract address must be specified for private smart contract calls")
+	MsgTxMgrPrivateChainedTXIdemKey      = ffe("PD012223", "Chained internal transactions must have an idempotency key")
+	MsgTxMgrPrivateInsertErrorMismatch   = ffe("PD012224", "An unexpected result occurred inserting private transactions after-insert=%d matched=%d expected=%d")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")

@@ -131,7 +131,9 @@ func (p *privateTxManager) getSequencerForContract(ctx context.Context, contract
 
 			p.sequencers[contractAddr.String()] =
 				NewSequencer(
-					p.ctx, p.nodeName,
+					p.ctx,
+					p,
+					p.nodeName,
 					contractAddr,
 					&p.config.Sequencer,
 					p.components,
@@ -178,6 +180,28 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 	return p.endorsementGatherers[contractAddr.String()], nil
 }
 
+func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.ValidatedTransaction) error {
+	tx := txi.Transaction
+	if tx.To == nil {
+		return p.handleDeployTx(ctx, &components.PrivateContractDeploy{
+			ID:     *tx.ID,
+			Domain: tx.Domain,
+			Inputs: txi.Inputs,
+		})
+	}
+	return p.handleNewTx(ctx, &components.PrivateTransaction{
+		ID: *tx.ID,
+		Inputs: &components.TransactionInputs{
+			Domain:   tx.Domain,
+			From:     tx.From,
+			To:       *tx.To,
+			Function: txi.Function.Definition,
+			Inputs:   txi.Inputs,
+		},
+		PublicTxOptions: tx.PublicTxOptions,
+	})
+}
+
 // HandleNewTx synchronously receives a new transaction submission
 // TODO this should really be a 2 (or 3?) phase handshake with
 //   - Pre submit phase to validate the inputs
@@ -186,7 +210,7 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 //
 // We are currently proving out this pattern on the boundary of the private transaction manager and the public transaction manager and once that has settled, we will implement the same pattern here.
 // In the meantime, we a single function to submit a transaction and there is currently no persistence of the submission record.  It is all held in memory only
-func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) error {
+func (p *privateTxManager) handleNewTx(ctx context.Context, tx *components.PrivateTransaction) error {
 	log.L(ctx).Debugf("Handling new transaction: %v", tx)
 	if tx.Inputs == nil {
 		return i18n.NewError(ctx, msgs.MsgDomainNotProvided)
@@ -269,7 +293,7 @@ func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, tx *c
 // Synchronous function to submit a deployment request which is asynchronously processed
 // Private transaction manager will receive a notification when the public transaction is confirmed
 // (same as for invokes)
-func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) error {
+func (p *privateTxManager) handleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) error {
 	log.L(ctx).Debugf("Handling new private contract deploy transaction: %v", tx)
 	if tx.Domain == "" {
 		return i18n.NewError(ctx, msgs.MsgDomainNotProvided)
@@ -410,7 +434,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	}
 
 	//transactions are always dispatched as a sequence, even if only a sequence of one
-	sequence := &syncpoints.DispatchSequence{
+	sequence := &syncpoints.PublicDispatch{
 		PrivateTransactionDispatches: []*syncpoints.DispatchPersisted{
 			{
 				PrivateTransactionID: tx.ID.String(),
@@ -419,7 +443,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	}
 	sequence.PublicTxBatch = pubBatch
 	dispatchBatch := &syncpoints.DispatchBatch{
-		DispatchSequences: []*syncpoints.DispatchSequence{
+		PublicDispatches: []*syncpoints.PublicDispatch{
 			sequence,
 		},
 	}
