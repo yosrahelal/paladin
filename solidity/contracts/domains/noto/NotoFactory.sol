@@ -20,14 +20,12 @@ contract NotoFactory is Ownable, IPaladinContractRegistry_V0 {
      */
     function deploy(
         bytes32 transactionId,
-        uint64 notaryType,
         address notaryAddress,
         bytes calldata data
     ) external {
         _deploy(
             implementations["default"],
             transactionId,
-            notaryType,
             notaryAddress,
             data
         );
@@ -58,14 +56,12 @@ contract NotoFactory is Ownable, IPaladinContractRegistry_V0 {
     function deployImplementation(
         string calldata name,
         bytes32 transactionId,
-        uint64 notaryType,
         address notaryAddress,
         bytes calldata data
     ) external {
         _deploy(
             implementations[name],
             transactionId,
-            notaryType,
             notaryAddress,
             data
         );
@@ -74,13 +70,11 @@ contract NotoFactory is Ownable, IPaladinContractRegistry_V0 {
     function _deploy(
         address implementation,
         bytes32 transactionId,
-        uint64 notaryType,
         address notaryAddress,
         bytes calldata data
     ) internal {
         address instance = Clones.clone(implementation);
         bytes memory config = INoto(instance).initialize(
-            notaryType,
             notaryAddress,
             data
         );

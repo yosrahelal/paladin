@@ -30,7 +30,6 @@ import (
 var encodedConfig = func() []byte {
 	configData := tktypes.HexBytes(`{"notaryLookup":"notary"}`)
 	encoded, err := types.NotoConfigABI_V0.EncodeABIDataJSON([]byte(fmt.Sprintf(`{
-		"notaryType": "0x0000000000000000000000000000000000000000000000000000000000000000",
 		"notaryAddress": "0x138baffcdcc3543aad1afd81c71d2182cdf9c8cd",
 		"variant": "0x0000000000000000000000000000000000000000000000000000000000000000",
 		"data": "%s"
@@ -113,10 +112,11 @@ func TestInitContractOk(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.JSONEq(t, `{
-		"notaryAddress":"0x138baffcdcc3543aad1afd81c71d2182cdf9c8cd",
-		"notaryLookup":"notary",
-		"notaryType":"0x0",
-		"variant":"0x0"
+		"notaryAddress": "0x138baffcdcc3543aad1afd81c71d2182cdf9c8cd",
+		"notaryLookup": "notary",
+		"notaryType": "0x0",
+		"restrictMinting": false,
+		"variant": "0x0"
 	}`, res.ContractConfig.ContractConfigJson)
 }
 

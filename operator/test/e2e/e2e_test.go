@@ -568,9 +568,11 @@ var _ = Describe("controller", Ordered, func() {
 			deploy := rpc["node1"].ForABI(ctx, abi.ABI{
 				{Type: abi.Constructor, Inputs: abi.ParameterArray{
 					{Name: "notary", Type: "string"},
-					{Name: "guardPublicAddress", Type: "string"},
-					{Name: "guardPrivateAddress", Type: "string"},
-					{Name: "guardPrivateGroup", Type: "tuple", Components: pentePrivGroupComps},
+					{Name: "hooks", Type: "tuple", Components: abi.ParameterArray{
+						{Name: "publicAddress", Type: "string"},
+						{Name: "privateAddress", Type: "string"},
+						{Name: "privateGroup", Type: "tuple", Components: pentePrivGroupComps},
+					}},
 				}},
 			}).
 				Private().
@@ -578,10 +580,12 @@ var _ = Describe("controller", Ordered, func() {
 				Constructor().
 				From(notary).
 				Inputs(&nototypes.ConstructorParams{
-					Notary:              notary,
-					GuardPublicAddress:  penteContract,
-					GuardPrivateAddress: notoTrackerAddr,
-					GuardPrivateGroup:   &penteGroupNodes1and2,
+					Notary: notary,
+					Hooks: &nototypes.HookParams{
+						PublicAddress:  penteContract,
+						PrivateAddress: notoTrackerAddr,
+						PrivateGroup:   &penteGroupNodes1and2,
+					},
 				}).
 				Send().
 				Wait(5 * time.Second)

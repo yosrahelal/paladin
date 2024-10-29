@@ -104,11 +104,7 @@ func (n *Noto) validateApprovalSignature(ctx context.Context, req *prototk.Endor
 
 // Check that all input coins are owned by the transaction sender
 func (n *Noto) validateOwners(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest, coins *gatheredCoins) error {
-	from := domain.FindVerifier(tx.Transaction.From, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-	if from == nil {
-		return i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "from")
-	}
-	fromAddress, err := tktypes.ParseEthAddress(from.Verifier)
+	fromAddress, err := n.findEthAddressVerifier(ctx, "from", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return err
 	}
@@ -121,6 +117,15 @@ func (n *Noto) validateOwners(ctx context.Context, tx *types.ParsedTransaction, 
 	return nil
 }
 
+// Parse a resolved verifier as an eth address
+func (n *Noto) findEthAddressVerifier(ctx context.Context, label, lookup string, verifierList []*prototk.ResolvedVerifier) (*tktypes.EthAddress, error) {
+	verifier := domain.FindVerifier(lookup, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, verifierList)
+	if verifier == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, label)
+	}
+	return tktypes.ParseEthAddress(verifier.Verifier)
+}
+
 type TransactionWrapper struct {
 	transactionType prototk.PreparedTransaction_TransactionType
 	functionABI     *abi.Entry
@@ -128,7 +133,7 @@ type TransactionWrapper struct {
 	contractAddress *tktypes.EthAddress
 }
 
-func (tw *TransactionWrapper) prepare() (*prototk.PrepareTransactionResponse, error) {
+func (tw *TransactionWrapper) prepare(metadata []byte) (*prototk.PrepareTransactionResponse, error) {
 	functionJSON, err := json.Marshal(tw.functionABI)
 	if err != nil {
 		return nil, err
@@ -138,14 +143,19 @@ func (tw *TransactionWrapper) prepare() (*prototk.PrepareTransactionResponse, er
 		addr := tw.contractAddress.String()
 		contractAddress = &addr
 	}
-	return &prototk.PrepareTransactionResponse{
+	res := &prototk.PrepareTransactionResponse{
 		Transaction: &prototk.PreparedTransaction{
 			Type:            tw.transactionType,
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(tw.paramsJSON),
 			ContractAddress: contractAddress,
 		},
-	}, nil
+	}
+	if metadata != nil {
+		metadataString := string(metadata)
+		res.Metadata = &metadataString
+	}
+	return res, nil
 }
 
 func (tw *TransactionWrapper) encode(ctx context.Context) ([]byte, error) {

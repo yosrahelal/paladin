@@ -17,7 +17,6 @@ interface INoto {
     );
 
     function initialize(
-        uint64 notaryType,
         address notaryAddress,
         bytes calldata data
     ) external returns (bytes memory);
