@@ -207,3 +207,11 @@ func (tm *txManager) QueryPreparedTransactions(ctx context.Context, dbTX *gorm.D
 	}
 	return preparedTransactions, nil
 }
+
+func (tm *txManager) GetPreparedTransactionByID(ctx context.Context, dbTX *gorm.DB, id uuid.UUID) (*pldapi.PreparedTransaction, error) {
+	pts, err := tm.QueryPreparedTransactions(ctx, dbTX, query.NewQueryBuilder().Limit(1).Equal("id", id).Query())
+	if len(pts) == 0 || err != nil {
+		return nil, err
+	}
+	return pts[0], nil
+}

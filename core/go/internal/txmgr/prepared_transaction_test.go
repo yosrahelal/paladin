@@ -152,11 +152,8 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 	require.NoError(t, err)
 
 	// Query it back
-	pts, err := txm.QueryPreparedTransactions(ctx, txm.p.DB(),
-		query.NewQueryBuilder().Equal("id", parentTx.Transaction.ID).Limit(1).Query())
+	pt, err := txm.GetPreparedTransactionByID(ctx, txm.p.DB(), *parentTx.Transaction.ID)
 	require.NoError(t, err)
-	require.Len(t, pts, 1)
-
 	require.Equal(t, &pldapi.PreparedTransaction{
 		ID: *parentTx.Transaction.ID,
 		Transaction: pldapi.TransactionInput{
@@ -176,7 +173,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 			Info:      info,
 		},
 		ExtraData: tktypes.RawJSON(`{"some":"data"}`),
-	}, pts[0])
+	}, pt)
 
 }
 

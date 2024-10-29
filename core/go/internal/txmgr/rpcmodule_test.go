@@ -500,3 +500,23 @@ func TestDebugTransactionStatus(t *testing.T) {
 	assert.Equal(t, "some error message", result.LatestError)
 
 }
+
+func TestQueryPreparedTransactionsNotFound(t *testing.T) {
+
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t)
+	defer done()
+
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
+	require.NoError(t, err)
+
+	var pt *pldapi.PreparedTransaction
+	err = rpcClient.CallRPC(ctx, &pt, "ptx_getPreparedTransaction", uuid.New())
+	require.NoError(t, err)
+	require.Nil(t, pt)
+
+	var pts []*pldapi.PreparedTransaction
+	err = rpcClient.CallRPC(ctx, &pts, "ptx_queryPreparedTransactions", query.NewQueryBuilder().Limit(10).Query())
+	require.NoError(t, err)
+	require.Empty(t, pts)
+
+}

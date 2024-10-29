@@ -48,10 +48,12 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_queryPendingPublicTransactions", tm.rpcQueryPendingPublicTransactions()).
 		Add("ptx_getPublicTransactionByNonce", tm.rpcGetPublicTransactionByNonce()).
 		Add("ptx_getPublicTransactionByHash", tm.rpcGetPublicTransactionByHash()).
+		Add("ptx_getPreparedTransaction", tm.rpcGetPreparedTransaction()).
+		Add("ptx_queryPreparedTransactions", tm.rpcQueryPreparedTransactions()).
 		Add("ptx_storeABI", tm.rpcStoreABI()).
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
-		Add("ptx_decodeError", tm.rpcDecodeRevertError()).
 		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs()).
+		Add("ptx_decodeError", tm.rpcDecodeRevertError()).
 		Add("ptx_resolveVerifier", tm.rpcResolveVerifier())
 
 	tm.debugRpcModule = rpcserver.NewRPCModule("debug").
@@ -151,6 +153,14 @@ func (tm *txManager) rpcGetTransactionReceiptFull() rpcserver.RPCHandler {
 	})
 }
 
+func (tm *txManager) rpcGetPreparedTransaction() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		id uuid.UUID,
+	) (*pldapi.PreparedTransaction, error) {
+		return tm.GetPreparedTransactionByID(ctx, tm.p.DB(), id)
+	})
+}
+
 func (tm *txManager) rpcGetDomainReceipt() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		domain string,
@@ -181,6 +191,14 @@ func (tm *txManager) rpcQueryTransactionReceipts() rpcserver.RPCHandler {
 		query query.QueryJSON,
 	) ([]*pldapi.TransactionReceipt, error) {
 		return tm.QueryTransactionReceipts(ctx, &query)
+	})
+}
+
+func (tm *txManager) rpcQueryPreparedTransactions() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		query query.QueryJSON,
+	) ([]*pldapi.PreparedTransaction, error) {
+		return tm.QueryPreparedTransactions(ctx, tm.p.DB(), &query)
 	})
 }
 
