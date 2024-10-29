@@ -57,5 +57,12 @@
   "details": "Details",
   "receipt": "Receipt",
   "stateReceipt": "State Receipt",
-  "domainReceipt": "Domain Receipt"
+  "domainReceipt": "Domain Receipt",
+  "timestamp": "Timestamp",
+  "localTime": "Local Time",
+  "ISO": "ISO",
+  "epoch": "Epoch",
+  "to": "To",
+  "debug": "Debug",
+  "atomic": "Atomic"
 }

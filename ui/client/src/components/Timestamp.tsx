@@ -17,7 +17,6 @@
 import { ButtonBase, Typography } from "@mui/material";
 import { useState } from "react";
 import { TimestampDialog } from "../dialogs/Timestamp";
-import { t } from "i18next";
 
 type Props = {
   date: Date
@@ -34,6 +33,6 @@ export const Timestamp: React.FC<Props> = ({ date }) => {
           {`${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()} ${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`}
         </Typography>
       </ButtonBase>
-      <TimestampDialog dialogOpen={timestampDialogOpen} setDialogOpen={setTimestampDialogOpen} date={date} title={t('created')} />
+      <TimestampDialog dialogOpen={timestampDialogOpen} setDialogOpen={setTimestampDialogOpen} date={date} />
     </>);
 }

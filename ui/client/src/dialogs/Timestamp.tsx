@@ -21,30 +21,23 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
-  Tooltip,
-  Typography
-} from '@mui/material';
+  Grid2,
+  TextField} from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import { useState } from 'react';
 
 type Props = {
-  title: string
   date: Date
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 export const TimestampDialog: React.FC<Props> = ({
-  title,
   date,
   dialogOpen,
   setDialogOpen
 }) => {
 
   const { t } = useTranslation();
-  const [copyLabel, setCopyLabel] = useState('copyToClipboard');
 
   return (
     <Dialog
@@ -53,16 +46,44 @@ export const TimestampDialog: React.FC<Props> = ({
       maxWidth="lg"
     >
       <DialogTitle sx={{ textAlign: 'center' }}>
-        {title}
+        {t('timestamp')}
       </DialogTitle>
       <DialogContent>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Typography sx={{ textAlign: 'center' }} color="textSecondary">{date.toISOString()}</Typography>
-          <Tooltip title={t(copyLabel)} arrow placement="right" onMouseLeave={() => setTimeout(() => setCopyLabel('copyToClipboard'), 200)}>
-            <IconButton onClick={() => { navigator.clipboard.writeText(date.toISOString()); setCopyLabel('copied') }}>
-              <ContentCopyIcon />
-            </IconButton>
-          </Tooltip>
+        <Box sx={{ alignItems: 'center', minWidth: '300px', paddingTop: '5px' }}>
+          <Grid2 container direction="column" spacing={2}>
+            <Grid2>
+              <TextField
+                size="small"
+                fullWidth
+                label={t('localTime')}
+                value={date.toLocaleString()}
+              />
+            </Grid2>
+            <Grid2>
+              <TextField
+                size="small"
+                fullWidth
+                label={t('ISO')}
+                value={date.toISOString()}
+              />
+            </Grid2>
+            <Grid2>
+              <TextField
+                size="small"
+                fullWidth
+                label={t('UTC')}
+                value={date.toUTCString()}
+              />
+            </Grid2>
+            <Grid2>
+              <TextField
+                size="small"
+                fullWidth
+                label={t('epoch')}
+                value={date.getTime()}
+              />
+            </Grid2>
+          </Grid2>
         </Box>
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'center', marginBottom: '15px' }}>

@@ -26,17 +26,17 @@ import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { EllapsedTime } from "./EllapsedTime";
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import { PaladinTransactionDetailsDialog } from "../dialogs/TransactionDetails";
+import { PaladinTransactionsDetailsDialog } from "../dialogs/TransactionDetails";
 
 type Props = {
   transaction: ITransaction
-  transactionReceipt?: ITransactionReceipt
-  paladinTransaction?: IPaladinTransaction
+  transactionReceipts?: ITransactionReceipt[]
+  paladinTransactions?: IPaladinTransaction[]
 }
 
 daysjs.extend(relativeTime);
 
-export const Transaction: React.FC<Props> = ({ transaction, paladinTransaction }) => {
+export const Transaction: React.FC<Props> = ({ transaction, paladinTransactions }) => {
 
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
 
@@ -47,15 +47,15 @@ export const Transaction: React.FC<Props> = ({ transaction, paladinTransaction }
         backgroundColor: theme => theme.palette.background.paper,
         marginBottom: '20px', padding: '10px', borderRadius: '6px', boxShadow: '0px 0px 8px 3px rgba(0,0,0,0.26)'
       }}>
-        {paladinTransaction !== undefined &&
+        {paladinTransactions && paladinTransactions.length > 0 &&
           <img src="/paladin-icon-light.svg" width="38" style={{ position: 'absolute', left: 'calc(50% - 19px)', bottom: '0px' }} />
         }
         <Grid2 container direction="column" spacing={2}>
           <Grid2 container justifyContent="space-evenly">
-            {paladinTransaction !== undefined &&
+            {paladinTransactions && paladinTransactions.length > 0 &&
               <Grid2>
-                <Typography align="center" variant="h6" color="textPrimary">{t(paladinTransaction.type)}</Typography>
-                <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
+                <Typography align="center" variant="h6" color="textPrimary">{paladinTransactions.length.toLocaleString()}</Typography>
+                <Typography align="center" variant="body2" color="textSecondary">{t('atomic')}</Typography>
               </Grid2>}
             <Grid2>
               <Typography align="center" variant="h6" color="textPrimary">{transaction.blockNumber.toLocaleString()}</Typography>
@@ -98,9 +98,9 @@ export const Transaction: React.FC<Props> = ({ transaction, paladinTransaction }
           </Grid2>
         </Grid2>
       </Box>
-      {paladinTransaction !== undefined ?
-        <PaladinTransactionDetailsDialog
-          paladinTransaction={paladinTransaction}
+      {paladinTransactions && paladinTransactions?.length > 0 ?
+        <PaladinTransactionsDetailsDialog
+          paladinTransactions={paladinTransactions}
           dialogOpen={viewDetailsDialogOpen}
           setDialogOpen={setViewDetailsDialogOpen}
         />

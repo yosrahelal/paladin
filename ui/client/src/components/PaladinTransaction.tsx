@@ -19,14 +19,14 @@ import { t } from "i18next";
 import { useState } from "react";
 import { IPaladinTransaction } from "../interfaces";
 import { Hash } from "./Hash";
-import { Timestamp } from "./Timestamp";
 import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { EllapsedTime } from "./EllapsedTime";
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import { PaladinTransactionDetailsDialog } from "../dialogs/TransactionDetails";
+import { PaladinTransactionsDetailsDialog } from "../dialogs/TransactionDetails";
+// import BuildIcon from '@mui/icons-material/Build';
 
 daysjs.extend(relativeTime);
 
@@ -34,7 +34,7 @@ type Props = {
   paladinTransaction: IPaladinTransaction;
 };
 
-export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
+export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
 
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -63,10 +63,9 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
           boxShadow: "0px 0px 8px 3px rgba(0,0,0,0.26)",
         }}
       >
-
         <Grid2 container direction="column" spacing={2}>
           <Grid2 container justifyContent="space-evenly">
-            <Grid2>
+            <Grid2 size={{ md: 2 }}>
               <Typography align="center" variant="h6">
                 {t(paladinTransaction.type)}
               </Typography>
@@ -74,19 +73,13 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
                 {t("type")}
               </Typography>
             </Grid2>
-            <Grid2 textAlign="center">
-              <Timestamp date={new Date(paladinTransaction.created)} />
-              <Typography align="center" variant="body2" color="textSecondary">
-                {t("created")}
-              </Typography>
-            </Grid2>
-            <Grid2 textAlign="center">
+            <Grid2 textAlign="center" size={{ md: 2 }}>
               <Hash title={t("id")} hash={paladinTransaction.id} />
               <Typography align="center" variant="body2" color="textSecondary">
                 {t("id")}
               </Typography>
             </Grid2>
-            <Grid2>
+            <Grid2 size={{ md: 2 }}>
               <Typography align="center" variant="h6" color="textPrimary">
                 {paladinTransaction.domain ?? '--'}
               </Typography>
@@ -94,35 +87,44 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
                 {t("domain")}
               </Typography>
             </Grid2>
-            <Grid2>
-              <Typography align="center" variant="h6" color="textPrimary">
-                {t(paladinTransaction.from)}
-              </Typography>
+            <Grid2 textAlign="center" size={{ md: 3 }}>
+              <Hash hash={paladinTransaction.from} title={t('from')} />
               <Typography align="center" variant="body2" color="textSecondary">
                 {t("from")}
               </Typography>
             </Grid2>
-            <Grid2>
+            <Grid2 size={{ md: 3 }}>
               <Typography align="center" variant="h6" color="textPrimary">
-                {t(paladinTransaction.type)}
+                {paladinTransaction.to !== undefined ? <Hash hash={paladinTransaction.to} title={t('to')} /> : '--'}
               </Typography>
               <Typography align="center" variant="body2" color="textSecondary">
-                {t("type")}
+                {t("to")}
               </Typography>
             </Grid2>
           </Grid2>
           <Grid2>
-            <Box sx={{ display: 'flex', padding: '4px', justifyContent: 'space-between' }}>
-              <EllapsedTime timestamp={paladinTransaction?.created} />
-              <Box>
-                <Button size="small" startIcon={<VisibilityIcon />} sx={{ marginRight: '40px' }}
-                  onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
-                <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                  onClick={() => setIsExpanded(!isExpanded)}>
-                  {t(isExpanded ? 'hideProperties' : 'showProperties')}
-                </Button>
-              </Box>
-            </Box>
+            <Grid2 container justifyContent="space-between" spacing={2}>
+              <Grid2>
+                <EllapsedTime timestamp={paladinTransaction?.created} />
+              </Grid2>
+              <Grid2 container spacing={3} size="grow" justifyContent="end">
+                {/* <Grid2>
+                  <Button size="small" startIcon={<BuildIcon />} sx={{ minWidth: '120px' }}
+                    onClick={() => setViewDetailsDialogOpen(true)}
+                    disabled={paladinTransaction.to === undefined}>{t('debug')}</Button>
+                </Grid2> */}
+                <Grid2>
+                  <Button size="small" startIcon={<VisibilityIcon />} sx={{ minWidth: '120px' }}
+                    onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
+                </Grid2>
+                <Grid2>
+                  <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                    onClick={() => setIsExpanded(!isExpanded)} sx={{ minWidth: '160px' }}>
+                    {t(isExpanded ? 'hideProperties' : 'showProperties')}
+                  </Button>
+                </Grid2>
+              </Grid2>
+            </Grid2>
             <Collapse in={isExpanded}>
               {Object.keys(paladinTransaction.data)
                 .filter((property) => property !== "$owner")
@@ -144,8 +146,8 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
           </Grid2>
         </Grid2>
       </Box>
-      <PaladinTransactionDetailsDialog
-        paladinTransaction={paladinTransaction}
+      <PaladinTransactionsDetailsDialog
+        paladinTransactions={[paladinTransaction]}
         dialogOpen={viewDetailsDialogOpen}
         setDialogOpen={setViewDetailsDialogOpen}
       />

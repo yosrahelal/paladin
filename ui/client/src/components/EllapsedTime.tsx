@@ -15,11 +15,12 @@
 // limitations under the License.
 
 import HourglassTopIcon from '@mui/icons-material/HourglassTop';
-import { Box, Typography } from '@mui/material';
+import { Button } from '@mui/material';
 import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useEffect, useState } from 'react';
 import { constants } from './config';
+import { TimestampDialog } from '../dialogs/Timestamp';
 
 daysjs.extend(relativeTime);
 
@@ -30,20 +31,28 @@ type Props = {
 export const EllapsedTime: React.FC<Props> = ({ timestamp }) => {
 
   const [displayValue, setDisplayValue] = useState<string>(daysjs(timestamp).fromNow());
+  const [timestampDialogOpen, setTimestampDialogOpen] = useState(false);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
       setDisplayValue(daysjs(timestamp).fromNow())
     }, constants.ELLAPSED_TIME_AUTO_REFRESH_FREQUENCY_SECONDS * 1000);
     return () => clearInterval(intervalId);
-  }, [])
+  }, []);
 
   return (
-    <Box sx={{ display: 'flex', padding: '4px' }}>
-      <HourglassTopIcon color="primary" sx={{ marginRight: '4px', fontSize: '16px', height: '20px' }} />
-      <Typography color="textSecondary" variant="body2" >
+    <>
+      <Button
+        size="small"
+        startIcon={<HourglassTopIcon />}
+        onClick={() => setTimestampDialogOpen(true)}>
         {displayValue}
-      </Typography>
-    </Box>
+      </Button>
+      <TimestampDialog
+        date={new Date(timestamp)}
+        dialogOpen={timestampDialogOpen}
+        setDialogOpen={setTimestampDialogOpen}
+      />
+    </>
   );
 }

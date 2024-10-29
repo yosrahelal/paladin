@@ -62,17 +62,16 @@ export const Transactions: React.FC = () => {
           <Transaction
             key={transaction.hash}
             transaction={transaction}
-            transactionReceipt={transactionReceipts?.find(
+            transactionReceipts={transactionReceipts?.filter(
               (transactionReceipt) =>
                 transactionReceipt.transactionHash === transaction.hash
             )}
-            paladinTransaction={paladinTransactions?.find(
+            paladinTransactions={paladinTransactions?.filter(
               (paladinTransaction) =>
-                paladinTransaction.id ===
-                transactionReceipts?.find(
+                transactionReceipts?.filter(
                   (transactionReceipt) =>
                     transactionReceipt.transactionHash === transaction.hash
-                )?.id
+                ).map(transactionReceipt => (transactionReceipt.id)).includes(paladinTransaction.id)
             )}
           />
         ))}

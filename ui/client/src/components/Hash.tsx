@@ -18,6 +18,8 @@ import { ButtonBase, Typography } from "@mui/material";
 import { useState } from "react";
 import { HashDialog } from "../dialogs/Hash";
 
+const MAX_LENGTH_WITHOUT_COLLAPSE = 16;
+
 type Props = {
   title: string
   hash: string
@@ -27,10 +29,16 @@ export const Hash: React.FC<Props> = ({ title, hash }) => {
 
   const [hashDialogOpen, setHashDialogOpen] = useState(false);
 
+  if(hash.length < MAX_LENGTH_WITHOUT_COLLAPSE) {
+    return (
+      <Typography variant="h6" color="inherit">{hash}</Typography>
+    );
+  }
+
   return (
     <>
       <ButtonBase onClick={() => setHashDialogOpen(true)}>
-        <Typography variant="h6" color="primary">{`${hash.substring(0, 5)}...${hash.substring(hash.length - 3)}`}</Typography>
+        <Typography variant="h6" color="primary">{`${hash.substring(0, 5)}...${hash.substring(hash.length - 4)}`}</Typography>
       </ButtonBase>
       <HashDialog dialogOpen={hashDialogOpen} setDialogOpen={setHashDialogOpen} title={title} hash={hash} />
     </>
