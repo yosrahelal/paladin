@@ -22,22 +22,39 @@ import {
   DialogContent,
   DialogTitle,
   Grid2,
-  TextField} from '@mui/material';
+  TextField
+} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 
 type Props = {
-  date: Date
+  timestamp: string
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 export const TimestampDialog: React.FC<Props> = ({
-  date,
+  timestamp,
   dialogOpen,
   setDialogOpen
 }) => {
 
   const { t } = useTranslation();
+  const date = new Date(timestamp);
+
+  const getEpoch = () => {
+    let epoch = date.getTime().toString();
+    const length = timestamp.length;
+    switch (length) {
+      case 30:
+        return t('numberNanoseconds', { number: epoch + timestamp.substring(26, 29) });
+      case 25:
+        return t('numberMilliseconds', { number: timestamp.substring(21, 24) });
+      default:
+        return t('numberSeconds', { number: epoch.substring(0, 10) });
+    }
+  };
+
+  console.log(timestamp)
 
   return (
     <Dialog
@@ -64,7 +81,7 @@ export const TimestampDialog: React.FC<Props> = ({
                 size="small"
                 fullWidth
                 label={t('ISO')}
-                value={date.toISOString()}
+                value={timestamp}
               />
             </Grid2>
             <Grid2>
@@ -80,7 +97,7 @@ export const TimestampDialog: React.FC<Props> = ({
                 size="small"
                 fullWidth
                 label={t('epoch')}
-                value={date.getTime()}
+                value={getEpoch()}
               />
             </Grid2>
           </Grid2>

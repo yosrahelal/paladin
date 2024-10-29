@@ -25,7 +25,7 @@ import { TimestampDialog } from '../dialogs/Timestamp';
 daysjs.extend(relativeTime);
 
 type Props = {
-  timestamp: any
+  timestamp: string
 };
 
 export const EllapsedTime: React.FC<Props> = ({ timestamp }) => {
@@ -49,7 +49,7 @@ export const EllapsedTime: React.FC<Props> = ({ timestamp }) => {
         {displayValue}
       </Button>
       <TimestampDialog
-        date={new Date(timestamp)}
+        timestamp={timestamp}
         dialogOpen={timestampDialogOpen}
         setDialogOpen={setTimestampDialogOpen}
       />

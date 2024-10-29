@@ -64,5 +64,8 @@
   "epoch": "Epoch",
   "to": "To",
   "debug": "Debug",
-  "atomic": "Atomic"
+  "atomic": "Atomic",
+  "numberNanoseconds": "{{number}} (nanoseconds)",
+  "numberMilliseconds": "{{number}} (milliseconds)",
+  "numberSeconds": "{{number}} (seconds)"
 }
