@@ -81,10 +81,10 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 			hasPrivateTransaction := preparedTransaction.PreparedPrivateTransaction != nil
 			switch {
 			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPublicTransaction && !hasPrivateTransaction:
-				log.L(ctx).Errorf("Result of transaction %s is a prepared public transaction", err)
+				log.L(ctx).Infof("Result of transaction %s is a prepared public transaction", preparedTransaction.ID)
 				publicTransactionsToSend = append(publicTransactionsToSend, preparedTransaction)
 			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPrivateTransaction && !hasPublicTransaction:
-				log.L(ctx).Errorf("Result of transaction %s is a chained private transaction", err)
+				log.L(ctx).Infof("Result of transaction %s is a chained private transaction", preparedTransaction.ID)
 				validatedPrivateTx, err := s.components.TxManager().PrepareInternalPrivateTransaction(ctx, s.components.Persistence().DB(), preparedTransaction.PreparedPrivateTransaction)
 				if err != nil {
 					log.L(ctx).Errorf("Error preparing transaction %s: %s", preparedTransaction.ID, err)
