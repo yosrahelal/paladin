@@ -46,9 +46,9 @@ export const TimestampDialog: React.FC<Props> = ({
     const length = timestamp.length;
     switch (length) {
       case 30:
-        return t('numberNanoseconds', { number: epoch + timestamp.substring(26, 29) });
+        return t('numberNanoseconds', { number: epoch + timestamp.substring(23, 29) });
       case 25:
-        return t('numberMilliseconds', { number: timestamp.substring(21, 24) });
+        return t('numberMilliseconds', { number: timestamp.substring(18, 24) });
       default:
         return t('numberSeconds', { number: epoch.substring(0, 10) });
     }
@@ -60,7 +60,8 @@ export const TimestampDialog: React.FC<Props> = ({
     <Dialog
       onClose={() => setDialogOpen(false)}
       open={dialogOpen}
-      maxWidth="lg"
+      fullWidth
+      maxWidth="sm"
     >
       <DialogTitle sx={{ textAlign: 'center' }}>
         {t('timestamp')}
