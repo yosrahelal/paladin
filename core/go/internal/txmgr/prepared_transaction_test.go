@@ -148,7 +148,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 	require.NoError(t, err)
 
 	// Write the prepared TX it results in
-	err = txm.WritePreparedTransactions(ctx, txm.p.DB(), ptInsert)
+	err = txm.WritePreparedTransactions(ctx, txm.p.DB(), []*components.PrepareTransactionWithRefs{ptInsert})
 	require.NoError(t, err)
 
 	// Query it back
@@ -182,9 +182,9 @@ func TestWritePreparedTransactionsBadTX(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	err := txm.WritePreparedTransactions(ctx, txm.p.DB(), &components.PrepareTransactionWithRefs{
+	err := txm.WritePreparedTransactions(ctx, txm.p.DB(), []*components.PrepareTransactionWithRefs{{
 		Transaction: &pldapi.TransactionInput{},
-	})
+	}})
 	assert.Regexp(t, "PD012211", err)
 
 }

@@ -100,4 +100,5 @@ type TXManager interface {
 
 	PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*ValidatedTransaction, error)
 	UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX *gorm.DB, txis []*ValidatedTransaction) error
+	WritePreparedTransactions(ctx context.Context, dbTX *gorm.DB, prepared []*PrepareTransactionWithRefs) (err error)
 }

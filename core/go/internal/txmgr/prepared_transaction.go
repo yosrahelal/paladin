@@ -68,7 +68,7 @@ var preparedTransactionFilters = filters.FieldMap{
 	"created": filters.TimestampField("created"),
 }
 
-func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.DB, prepared ...*components.PrepareTransactionWithRefs) (err error) {
+func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.DB, prepared []*components.PrepareTransactionWithRefs) (err error) {
 
 	var preparedTxInserts []*preparedTransaction
 	var preparedTxStateInserts []*preparedTransactionState

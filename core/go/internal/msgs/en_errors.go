@@ -306,6 +306,7 @@ var (
 	MsgPrivateReDelegationRequired             = ffe("PD011824", "Re-delegation is required for this transaction to progress")
 	MsgPrivateTxMgrDomainMismatch              = ffe("PD011825", "Domain '%s' specified does not match domain '%s' of deployed private smart contract %s")
 	MsgPrivateTxMgrInvalidPrepareOutcome       = ffe("PD011826", "Prepare outcome unexpected for transaction %s intent=%s public-submission=%t private-submission=%t")
+	MsgPrivateTxMgrPrepareNotSupportedDeploy   = ffe("PD011827", "Preparing transactions for external submission is not supported for deploy")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")

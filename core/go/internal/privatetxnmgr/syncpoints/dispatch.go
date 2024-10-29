@@ -32,9 +32,10 @@ import (
 )
 
 type dispatchOperation struct {
-	publicDispatches   []*PublicDispatch
-	privateDispatches  []*components.ValidatedTransaction
-	stateDistributions []*statedistribution.StateDistributionPersisted
+	publicDispatches     []*PublicDispatch
+	privateDispatches    []*components.ValidatedTransaction
+	preparedTransactions []*components.PrepareTransactionWithRefs
+	stateDistributions   []*statedistribution.StateDistributionPersisted
 }
 
 type DispatchPersisted struct {
@@ -53,8 +54,9 @@ type PublicDispatch struct {
 // a dispatch batch is a collection of dispatch sequences that are submitted together with no ordering requirements between sequences
 // purely for a database performance reason, they are included in the same transaction
 type DispatchBatch struct {
-	PublicDispatches  []*PublicDispatch
-	PrivateDispatches []*components.ValidatedTransaction
+	PublicDispatches     []*PublicDispatch
+	PrivateDispatches    []*components.ValidatedTransaction
+	PreparedTransactions []*components.PrepareTransactionWithRefs
 }
 
 // PersistDispatches persists the dispatches to the database and coordinates with the public transaction manager
@@ -76,9 +78,10 @@ func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contrac
 		domainContext:   dCtx,
 		contractAddress: contractAddress,
 		dispatchOperation: &dispatchOperation{
-			publicDispatches:   dispatchBatch.PublicDispatches,
-			privateDispatches:  dispatchBatch.PrivateDispatches,
-			stateDistributions: stateDistributionsPersisted,
+			publicDispatches:     dispatchBatch.PublicDispatches,
+			privateDispatches:    dispatchBatch.PrivateDispatches,
+			preparedTransactions: dispatchBatch.PreparedTransactions,
+			stateDistributions:   stateDistributionsPersisted,
 		},
 	})
 
@@ -171,6 +174,13 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 		if len(op.privateDispatches) > 0 {
 			if err := s.txMgr.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, op.privateDispatches); err != nil {
 				log.L(ctx).Errorf("Error persisting private dispatches: %s", err)
+				return err
+			}
+		}
+
+		if len(op.preparedTransactions) > 0 {
+			if err := s.txMgr.WritePreparedTransactions(ctx, dbTX, op.preparedTransactions); err != nil {
+				log.L(ctx).Errorf("Error persisting prepared transactions: %s", err)
 				return err
 			}
 		}

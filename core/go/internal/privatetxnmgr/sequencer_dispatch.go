@@ -89,6 +89,9 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 					return err
 				}
 				dispatchBatch.PrivateDispatches = append(dispatchBatch.PrivateDispatches, validatedPrivateTx)
+			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION && (hasPrivateTransaction || hasPublicTransaction):
+				log.L(ctx).Infof("Result of transaction %s is a prepared transaction", preparedTransaction.ID)
+				dispatchBatch.PreparedTransactions = append(dispatchBatch.PreparedTransactions, mapPreparedTransaction(preparedTransaction))
 			default:
 				err = i18n.NewError(ctx, msgs.MsgPrivateTxMgrInvalidPrepareOutcome, preparedTransaction.ID, preparedTransaction.Inputs.Intent, hasPublicTransaction, hasPrivateTransaction)
 				log.L(ctx).Errorf("Error preparing transaction %s: %s", preparedTransaction.ID, err)
@@ -184,5 +187,44 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 	}
 
 	return nil
+
+}
+
+func mapPreparedTransaction(tx *components.PrivateTransaction) *components.PrepareTransactionWithRefs {
+
+	var extraData tktypes.RawJSON
+	if tx.PostAssembly.ExtraData != nil && *tx.PostAssembly.ExtraData != "" {
+		extraData = tktypes.RawJSON(*tx.PostAssembly.ExtraData)
+	}
+
+	if tx.PreparedPublicTransaction != nil {
+		// For public there's no states or other information for a public Txn
+		return &components.PrepareTransactionWithRefs{
+			ID:          tx.ID,
+			Transaction: tx.PreparedPublicTransaction,
+			ExtraData:   extraData,
+		}
+	}
+
+	// For private we also need to map the states over - which must already have been written to our node at this point
+	pt := &components.PrepareTransactionWithRefs{
+		ID:          tx.ID,
+		Transaction: tx.PreparedPrivateTransaction,
+		ExtraData:   extraData,
+	}
+	for _, s := range tx.PostAssembly.InputStates {
+		pt.States.Spent = append(pt.States.Spent, s.ID)
+	}
+	for _, s := range tx.PostAssembly.ReadStates {
+		pt.States.Read = append(pt.States.Read, s.ID)
+	}
+	for _, s := range tx.PostAssembly.OutputStates {
+		pt.States.Confirmed = append(pt.States.Confirmed, s.ID)
+	}
+	for _, s := range tx.PostAssembly.InfoStates {
+		pt.States.Info = append(pt.States.Info, s.ID)
+	}
+
+	return pt
 
 }
