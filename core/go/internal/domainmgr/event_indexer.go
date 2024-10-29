@@ -51,11 +51,19 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 
 	var contracts []*PrivateSmartContract
 	var txCompletions txCompletionsOrdered
-	unprocessedEvents := make([]*pldapi.EventWithData, 0, len(batch.Events))
+	nonRegisterEvents := make([]*pldapi.EventWithData, 0, len(batch.Events))
 
 	for _, ev := range batch.Events {
 		processedEvent := false
 		if ev.SoliditySignature == eventSolSig_PaladinRegisterSmartContract_V0 {
+
+			// We only register against registries that we have indexed, so we should be able to find the domain for this address
+			d, err := dm.getDomainByAddress(ctx, &ev.Address)
+			if err != nil {
+				log.L(ctx).Errorf("Registration event for unknown domain event: %s", tktypes.JSONString(ev))
+				continue
+			}
+
 			var parsedEvent event_PaladinRegisterSmartContract_V0
 			parseErr := json.Unmarshal(ev.Data, &parsedEvent)
 			if parseErr != nil {
@@ -75,6 +83,7 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 					ReceiptInput: components.ReceiptInput{
 						ReceiptType:   components.RT_Success,
 						TransactionID: txID,
+						Domain:        d.name,
 						OnChain: tktypes.OnChainLocation{
 							Type:             tktypes.OnChainEvent,
 							TransactionHash:  ev.TransactionHash,
@@ -90,7 +99,7 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 			}
 		}
 		if !processedEvent {
-			unprocessedEvents = append(unprocessedEvents, ev)
+			nonRegisterEvents = append(nonRegisterEvents, ev)
 		}
 	}
 
@@ -110,7 +119,7 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 		}
 	}
 
-	return unprocessedEvents, txCompletions, nil
+	return nonRegisterEvents, txCompletions, nil
 }
 
 func (dm *domainManager) notifyTransactions(txCompletions txCompletionsOrdered) {
