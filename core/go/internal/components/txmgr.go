@@ -52,8 +52,27 @@ type TxCompletion struct {
 	PSC DomainSmartContract
 }
 
+// This is a transaction read for insertion into the Paladin database with all pre-verification completed.
+type ValidatedTransaction struct {
+	Transaction  *pldapi.TransactionInput
+	Function     *ResolvedFunction
+	PublicTxData []byte
+	Inputs       tktypes.RawJSON
+}
+
+// A resolved function on the ABI
+type ResolvedFunction struct {
+	ABI          abi.ABI
+	ABIReference *tktypes.Bytes32
+	Definition   *abi.Entry
+	Signature    string
+}
+
 type TXManager interface {
 	ManagerLifecycle
+
+	// These are the general purpose functions exposed also as JSON/RPC APIs on the TX Manager
+
 	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) error // requires all transactions to be known
 	CalculateRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes) error
 	DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.DecodedError, error)
@@ -70,5 +89,10 @@ type TXManager interface {
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.TransactionReceipt, error)
 	GetTransactionReceiptByID(ctx context.Context, id uuid.UUID) (*pldapi.TransactionReceipt, error)
 	CallTransaction(ctx context.Context, result any, tx *pldapi.TransactionCall) (err error)
-	UpsertABI(ctx context.Context, a abi.ABI) (*pldapi.StoredABI, error)
+	UpsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*pldapi.StoredABI, error)
+
+	// These functions for use of the private TX manager for chaining private transactions.
+
+	PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput) (*ValidatedTransaction, error)
+	UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX *gorm.DB, txis []*ValidatedTransaction) error
 }

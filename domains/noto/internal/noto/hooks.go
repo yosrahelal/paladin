@@ -15,22 +15,29 @@
 
 package noto
 
-import "github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+import (
+	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+)
 
-type GuardMintParams struct {
+type MintHookParams struct {
+	Sender   *tktypes.EthAddress `json:"sender"`
 	To       *tktypes.EthAddress `json:"to"`
 	Amount   *tktypes.HexUint256 `json:"amount"`
 	Prepared PreparedTransaction `json:"prepared"`
 }
 
-type GuardTransferParams struct {
+type TransferHookParams struct {
+	Sender   *tktypes.EthAddress `json:"sender"`
 	From     *tktypes.EthAddress `json:"from"`
 	To       *tktypes.EthAddress `json:"to"`
 	Amount   *tktypes.HexUint256 `json:"amount"`
 	Prepared PreparedTransaction `json:"prepared"`
 }
 
-type GuardApproveTransferParams struct {
+type ApproveTransferHookParams struct {
+	Sender   *tktypes.EthAddress `json:"sender"`
 	From     *tktypes.EthAddress `json:"from"`
 	Delegate *tktypes.EthAddress `json:"delegate"`
 	Prepared PreparedTransaction `json:"prepared"`
@@ -39,4 +46,36 @@ type GuardApproveTransferParams struct {
 type PreparedTransaction struct {
 	ContractAddress *tktypes.EthAddress `json:"contractAddress"`
 	EncodedCall     tktypes.HexBytes    `json:"encodedCall"`
+}
+
+func penteInvokeABI(name string, inputs abi.ParameterArray) *abi.Entry {
+	return &abi.Entry{
+		Name: name,
+		Type: "function",
+		Inputs: abi.ParameterArray{
+			{
+				Name:         "group",
+				Type:         "tuple",
+				InternalType: "struct Group",
+				Components: abi.ParameterArray{
+					{Name: "salt", Type: "bytes32"},
+					{Name: "members", Type: "string[]"},
+				},
+			},
+			{Name: "to", Type: "address"},
+			{
+				Name:         "inputs",
+				Type:         "tuple",
+				InternalType: "struct PrivateInvokeInputs",
+				Components:   inputs,
+			},
+		},
+		Outputs: abi.ParameterArray{},
+	}
+}
+
+type PenteInvokeParams struct {
+	Group  *types.PentePrivateGroup `json:"group"`
+	To     *tktypes.EthAddress      `json:"to"`
+	Inputs any                      `json:"inputs"`
 }

@@ -109,7 +109,7 @@ var ptxInfo = &rpcModuleInfo{
 		},
 		"ptx_resolveVerifier": {
 			Inputs: []string{"keyIdentifier", "algorithm", "verifierType"},
-			Output: "receipts",
+			Output: "verifier",
 		},
 	},
 }

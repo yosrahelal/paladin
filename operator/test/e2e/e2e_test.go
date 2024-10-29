@@ -568,9 +568,11 @@ var _ = Describe("controller", Ordered, func() {
 			deploy := rpc["node1"].ForABI(ctx, abi.ABI{
 				{Type: abi.Constructor, Inputs: abi.ParameterArray{
 					{Name: "notary", Type: "string"},
-					{Name: "guardPublicAddress", Type: "string"},
-					{Name: "guardPrivateAddress", Type: "string"},
-					{Name: "guardPrivateGroup", Type: "tuple", Components: pentePrivGroupComps},
+					{Name: "hooks", Type: "tuple", Components: abi.ParameterArray{
+						{Name: "publicAddress", Type: "string"},
+						{Name: "privateAddress", Type: "string"},
+						{Name: "privateGroup", Type: "tuple", Components: pentePrivGroupComps},
+					}},
 				}},
 			}).
 				Private().
@@ -578,10 +580,12 @@ var _ = Describe("controller", Ordered, func() {
 				Constructor().
 				From(notary).
 				Inputs(&nototypes.ConstructorParams{
-					Notary:              notary,
-					GuardPublicAddress:  penteContract,
-					GuardPrivateAddress: notoTrackerAddr,
-					GuardPrivateGroup:   &penteGroupNodes1and2,
+					Notary: notary,
+					Hooks: &nototypes.HookParams{
+						PublicAddress:  penteContract,
+						PrivateAddress: notoTrackerAddr,
+						PrivateGroup:   &penteGroupNodes1and2,
+					},
 				}).
 				Send().
 				Wait(5 * time.Second)
@@ -591,23 +595,22 @@ var _ = Describe("controller", Ordered, func() {
 			testLog("Combined Noto<->Pente contract %s deployed by TX %s", notoPenteContractAddr, deploy.ID())
 		})
 
-		// TODO: Needs gap closing on "private transactions triggering private transactions currently supported only in testbed"
-		// It("mints some noto-pentes to bob on node1", func() {
-		// 	txn := rpc["node1"].ForABI(ctx, nototypes.NotoABI).
-		// 		Private().
-		// 		Domain("noto").
-		// 		Function("mint").
-		// 		To(notoPenteContractAddr).
-		// 		From(notary).
-		// 		Inputs(&nototypes.MintParams{
-		// 			To:     "bob@node1",
-		// 			Amount: notoAmount(99),
-		// 		}).
-		// 		Send().
-		// 		Wait(5 * time.Second)
-		// 	Expect(txn.Error()).To(BeNil())
-		// 	testLog("using the Noto coins minted in TX %s", txn.ID())
-		// 	logWallet("bob", "node1")
-		// })
+		It("mints some noto-pentes to bob on node1", func() {
+			txn := rpc["node1"].ForABI(ctx, nototypes.NotoABI).
+				Private().
+				Domain("noto").
+				Function("mint").
+				To(notoPenteContractAddr).
+				From(notary).
+				Inputs(&nototypes.MintParams{
+					To:     "bob@node1",
+					Amount: with18Decimals(99),
+				}).
+				Send().
+				Wait(5 * time.Second)
+			Expect(txn.Error()).To(BeNil())
+			testLog("Noto<->Pente mint transaction %s", txn.ID())
+			logWallet("bob", "node1")
+		})
 	})
 })

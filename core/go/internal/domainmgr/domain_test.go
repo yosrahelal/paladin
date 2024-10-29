@@ -285,7 +285,7 @@ func TestDomainInitStates(t *testing.T) {
 
 }
 func mockUpsertABIOk(mc *mockComponents) {
-	mc.txManager.On("UpsertABI", mock.Anything, mock.Anything).Return(&pldapi.StoredABI{
+	mc.txManager.On("UpsertABI", mock.Anything, mock.Anything, mock.Anything).Return(&pldapi.StoredABI{
 		Hash: tktypes.Bytes32(tktypes.RandBytes(32)),
 	}, nil)
 }
@@ -379,7 +379,7 @@ func TestDomainInitUpsertEventsABIFail(t *testing.T) {
 			}
 		]`,
 	}, func(mc *mockComponents) {
-		mc.txManager.On("UpsertABI", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.txManager.On("UpsertABI", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 	assert.Regexp(t, "pop", *td.d.initError.Load())

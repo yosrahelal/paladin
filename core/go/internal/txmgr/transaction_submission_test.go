@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
@@ -81,10 +82,8 @@ func TestResolveFunctionBadABI(t *testing.T) {
 }
 
 func mockInsertABI(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectCommit()
 }
 
 func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
@@ -102,10 +101,8 @@ func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
 }
 
 func mockInsertABIAndTransactionOK(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectCommit()
 	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectCommit()
@@ -159,10 +156,8 @@ func mockGetPublicTransactionForHash(cb func(hash tktypes.Bytes32) (*pldapi.Publ
 
 func TestSubmitBadFromAddr(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectCommit()
 		mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
 			Return(nil, fmt.Errorf("bad address"))
 	})
@@ -272,7 +267,7 @@ func TestResolveFunctionPlainNameOK(t *testing.T) {
 
 func TestSendTransactionPrivateDeploy(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleDeployTx", mock.Anything, mock.Anything).Return(nil)
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
 	})
 	defer done()
 
@@ -534,10 +529,8 @@ func mockPublicSubmitTxRollback(t *testing.T) func(conf *pldconf.TxManagerConfig
 }
 func TestInsertTransactionFail(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectCommit()
 		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnError(fmt.Errorf("pop"))
 		mc.db.ExpectRollback()
@@ -834,5 +827,115 @@ func TestCallTransactionBadSerializer(t *testing.T) {
 		DataFormat: "wrong",
 	})
 	assert.Regexp(t, "PD020015", err)
+
+}
+
+var testInternalTransactionFn = &abi.Entry{Type: abi.Function, Name: "doStuff"}
+
+func newTestInternalTransaction(idempotencyKey string) *pldapi.TransactionInput {
+	return &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			Domain:         "domain1",
+			Function:       "doStuff",
+			To:             tktypes.RandAddress(),
+			IdempotencyKey: idempotencyKey,
+		},
+		ABI: abi.ABI{testInternalTransactionFn},
+	}
+}
+
+func TestInternalPrivateTXInsertWithIdempotencyKeys(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, true)
+	defer done()
+
+	fifteenTxns := make([]*components.ValidatedTransaction, 15)
+	err := txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		for i := range fifteenTxns {
+			tx := newTestInternalTransaction(fmt.Sprintf("tx_%.3d", i))
+			fifteenTxns[i], err = txm.PrepareInternalPrivateTransaction(ctx, dbTX, tx)
+			require.NoError(t, err)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Insert first 10 in a Txn
+	err = txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		return txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, fifteenTxns[0:10])
+	})
+	require.NoError(t, err)
+
+	// Insert 5-15 in the second txn so with an overlap
+	err = txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		return txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, fifteenTxns[5:15])
+	})
+	require.NoError(t, err)
+
+	// Check we can get each back
+	for _, expected := range fifteenTxns {
+		tx, err := txm.GetTransactionByID(ctx, *expected.Transaction.ID)
+		require.NoError(t, err)
+		require.Equal(t, expected.Transaction.IdempotencyKey, tx.IdempotencyKey)
+	}
+
+}
+
+func TestPrepareInternalPrivateTransactionNoIdempotencyKey(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false)
+	defer done()
+
+	_, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), &pldapi.TransactionInput{})
+	assert.Regexp(t, "PD012223", err)
+
+}
+
+func TestUpsertInternalPrivateTxsFinalizeIDsInsertFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*transactions").WillReturnError(fmt.Errorf("pop"))
+	})
+	defer done()
+
+	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"))
+	require.NoError(t, err)
+
+	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestUpsertInternalPrivateTxsIdempotencyKeyFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows) // empty result when we expect one
+		mc.db.ExpectQuery("SELECT.*transactions").WillReturnError(fmt.Errorf("pop"))
+	})
+	defer done()
+
+	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"))
+	require.NoError(t, err)
+
+	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestUpsertInternalPrivateTxsIdempotencyMisMatch(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)      // empty result when we expect one
+		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(mc.db.NewRows([]string{})) // definitely should get one
+	})
+	defer done()
+
+	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"))
+	require.NoError(t, err)
+
+	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
+	assert.Regexp(t, "PD012224", err)
 
 }
