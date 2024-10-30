@@ -125,8 +125,9 @@ func (tb *testbed) resolveVerifiers(ctx context.Context, requiredVerifiers []*pr
 }
 
 func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context,
+	return rpcserver.RPCMethod3(func(ctx context.Context,
 		domainName string,
+		from string,
 		constructorParams tktypes.RawJSON,
 	) (*tktypes.EthAddress, error) {
 
@@ -138,6 +139,7 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 		tx := &components.PrivateContractDeploy{
 			ID:     uuid.New(),
 			Domain: domain.Name(),
+			From:   from,
 			Inputs: constructorParams,
 		}
 		err = domain.InitDeploy(ctx, tx)

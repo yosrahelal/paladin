@@ -117,6 +117,7 @@ type PrivateContractDeploy struct {
 	// INPUTS: Items that come in from the submitter of the transaction to send to the constructor
 	ID     uuid.UUID
 	Domain string
+	From   string
 	Inputs tktypes.RawJSON
 
 	// ASSEMBLY PHASE

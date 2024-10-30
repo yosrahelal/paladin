@@ -189,6 +189,7 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.Vali
 		return p.handleDeployTx(ctx, &components.PrivateContractDeploy{
 			ID:     *tx.ID,
 			Domain: tx.Domain,
+			From:   tx.From,
 			Inputs: txi.Inputs,
 		})
 	}

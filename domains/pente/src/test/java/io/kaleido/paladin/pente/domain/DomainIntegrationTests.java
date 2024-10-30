@@ -211,7 +211,7 @@ public class DomainIntegrationTests {
 
             // Create the privacy group
             String penteInstanceAddress = testbed.getRpcClient().request("testbed_deploy",
-                    "pente",
+                    "pente", "notary",
                     new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
                             groupInfo,
                             "shanghai",
@@ -246,7 +246,7 @@ public class DomainIntegrationTests {
 
             // Create Noto token
             String notoInstanceAddress = testbed.getRpcClient().request("testbed_deploy",
-                    "noto",
+                    "noto", "notary",
                     new NotoConstructorParamsJSON(
                             "notary",
                             new NotoHookParamsJSON(

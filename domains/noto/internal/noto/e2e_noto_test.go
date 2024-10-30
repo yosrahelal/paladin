@@ -155,7 +155,7 @@ func TestNoto(t *testing.T) {
 	log.L(ctx).Infof("Deploying an instance of Noto")
 	var notoAddress tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
-		domainName, &types.ConstructorParams{
+		domainName, "me", &types.ConstructorParams{
 			Notary: notaryName,
 		})
 	if rpcerr != nil {
@@ -293,7 +293,7 @@ func TestNotoApprove(t *testing.T) {
 	log.L(ctx).Infof("Deploying an instance of Noto")
 	var notoAddress tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
-		domainName, &types.ConstructorParams{
+		domainName, "me", &types.ConstructorParams{
 			Notary: notaryName,
 		})
 	if rpcerr != nil {
@@ -443,7 +443,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 	log.L(ctx).Infof("Deploying an instance of Noto")
 	var notoAddress tktypes.EthAddress
 	rpcerr = rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
-		domainName, &types.ConstructorParams{
+		domainName, "me", &types.ConstructorParams{
 			Notary:         notaryName,
 			Implementation: "selfsubmit",
 		},

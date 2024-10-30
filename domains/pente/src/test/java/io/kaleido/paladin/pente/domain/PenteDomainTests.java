@@ -137,7 +137,7 @@ public class PenteDomainTests {
 
             // Create the privacy group
             String contractAddr = testbed.getRpcClient().request("testbed_deploy",
-                    "pente",
+                    "pente", "member1",
                     new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
                             groupInfo,
                             "shanghai",
@@ -220,7 +220,7 @@ public class PenteDomainTests {
 
             // Create the privacy group
             String contractAddr = testbed.getRpcClient().request("testbed_deploy",
-                    "pente",
+                    "pente", "member1",
                     new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
                             groupInfo,
                             "shanghai",
@@ -345,7 +345,7 @@ public class PenteDomainTests {
 
             // Create the privacy group
             String penteAddr = testbed.getRpcClient().request("testbed_deploy",
-                    "pente",
+                    "pente", "member1",
                     new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
                             groupInfo,
                             "shanghai",
