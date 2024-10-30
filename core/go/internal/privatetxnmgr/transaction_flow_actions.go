@@ -265,7 +265,19 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 
 func (tf *transactionFlow) delegateIfRequired(ctx context.Context) {
 	log.L(ctx).Debug("transactionFlow:delegateIfRequired")
-	if tf.transaction.PostAssembly.AttestationPlan != nil {
+	contractConfig := tf.domainAPI.ContractConfig()
+
+	// Calculate if we know a coordinator that must be the correct node
+	var knownCoordinator = ""
+	if contractConfig.CoordinatorSelection == prototk.ContractConfig_COORDINATOR_STATIC {
+
+		// Simple decision here. The static coordinator is where the coordinator is located
+		if contractConfig.StaticCoordinator != nil {
+			knownCoordinator = *contractConfig.StaticCoordinator
+		}
+
+	} else if tf.transaction.PostAssembly.AttestationPlan != nil {
+
 		numEndorsers := 0
 		endorser := "" // will only be used if there is only one
 		for _, attRequest := range tf.transaction.PostAssembly.AttestationPlan {
@@ -280,31 +292,38 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) {
 		// and dispatch to base ledger so we might as well delegate the coordination to it so that
 		// it can maximize the optimistic spending of pending states
 
-		if tf.domainAPI.ContractConfig().CoordinatorSelection == prototk.ContractConfig_COORDINATOR_ENDORSER && numEndorsers == 1 {
-			endorserNode, err := tktypes.PrivateIdentityLocator(endorser).Node(ctx, true)
+		if contractConfig.CoordinatorSelection == prototk.ContractConfig_COORDINATOR_ENDORSER && numEndorsers == 1 {
+			knownCoordinator = endorser
+		}
+
+	}
+
+	// If we have one, check we're on that node
+	if knownCoordinator != "" {
+		coordinatorNode, err := tktypes.PrivateIdentityLocator(knownCoordinator).Node(ctx, true)
+		if err != nil {
+			log.L(ctx).Errorf("Failed to get node name from locator %s: %s", knownCoordinator, err)
+			tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
+			return
+		}
+		if coordinatorNode != tf.nodeID && coordinatorNode != "" {
+			tf.localCoordinator = false
+			// TODO persist the delegation and send the request on the callback
+			tf.status = "delegating"
+			// TODO update to "delegated" once the ack has been received
+			err := tf.transportWriter.SendDelegationRequest(
+				ctx,
+				uuid.New().String(),
+				coordinatorNode,
+				tf.transaction,
+			)
 			if err != nil {
-				log.L(ctx).Errorf("Failed to get node name from locator %s: %s", tf.transaction.PostAssembly.AttestationPlan[0].Parties[0], err)
 				tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
-				return
 			}
-			if endorserNode != tf.nodeID && endorserNode != "" {
-				tf.localCoordinator = false
-				// TODO persist the delegation and send the request on the callback
-				tf.status = "delegating"
-				// TODO update to "delegated" once the ack has been received
-				err := tf.transportWriter.SendDelegationRequest(
-					ctx,
-					uuid.New().String(),
-					endorserNode,
-					tf.transaction,
-				)
-				if err != nil {
-					tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
-				}
-				return
-			}
+			return
 		}
 	}
+
 }
 
 func (tf *transactionFlow) requestAssemble(ctx context.Context) {
