@@ -32,6 +32,11 @@ func TestEnums(t *testing.T) {
 	assert.NotEmpty(t, ActiveFilter("").Enum().Options())
 	assert.NotEmpty(t, SchemaType("").Enum().Options())
 	assert.NotEmpty(t, StateLockType("").Enum().Options())
+	assert.NotEmpty(t, SubmitMode("").Enum().Options())
+	assert.NotEmpty(t, SubmitMode("").Default())
+
+	// TODO: separate out from pldapi
+	assert.NotEmpty(t, (StateBase{}).TableName())
 }
 
 func TestStateStatusQualifierJSON(t *testing.T) {
