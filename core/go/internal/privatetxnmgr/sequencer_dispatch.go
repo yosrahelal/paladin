@@ -82,13 +82,16 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				})
 			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPrivateTransaction && !hasPublicTransaction:
 				log.L(ctx).Infof("Result of transaction %s is a chained private transaction", preparedTransaction.ID)
-				validatedPrivateTx, err := s.components.TxManager().PrepareInternalPrivateTransaction(ctx, s.components.Persistence().DB(), preparedTransaction.PreparedPrivateTransaction)
+				validatedPrivateTx, err := s.components.TxManager().PrepareInternalPrivateTransaction(ctx, s.components.Persistence().DB(), preparedTransaction.PreparedPrivateTransaction, pldapi.SubmitModeAuto)
 				if err != nil {
 					log.L(ctx).Errorf("Error preparing transaction %s: %s", preparedTransaction.ID, err)
 					// TODO: this is just an error situation for one transaction - this function is a batch function
 					return err
 				}
 				dispatchBatch.PrivateDispatches = append(dispatchBatch.PrivateDispatches, validatedPrivateTx)
+			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION && (hasPublicTransaction || hasPrivateTransaction):
+				log.L(ctx).Infof("Result of transaction %s is a prepared transaction public=%t private=%t", preparedTransaction.ID, hasPublicTransaction, hasPrivateTransaction)
+				dispatchBatch.PreparedTransactions = append(dispatchBatch.PreparedTransactions, mapPreparedTransaction(preparedTransaction))
 			default:
 				err = i18n.NewError(ctx, msgs.MsgPrivateTxMgrInvalidPrepareOutcome, preparedTransaction.ID, preparedTransaction.Inputs.Intent, hasPublicTransaction, hasPrivateTransaction)
 				log.L(ctx).Errorf("Error preparing transaction %s: %s", preparedTransaction.ID, err)
@@ -184,5 +187,38 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 	}
 
 	return nil
+
+}
+
+func mapPreparedTransaction(tx *components.PrivateTransaction) *components.PrepareTransactionWithRefs {
+
+	var extraData tktypes.RawJSON
+	if tx.PostAssembly.ExtraData != nil && *tx.PostAssembly.ExtraData != "" {
+		extraData = tktypes.RawJSON(*tx.PostAssembly.ExtraData)
+	}
+	pt := &components.PrepareTransactionWithRefs{
+		ID:        tx.ID,
+		ExtraData: extraData,
+		Domain:    tx.Inputs.Domain,
+		To:        &tx.Inputs.To,
+	}
+	for _, s := range tx.PostAssembly.InputStates {
+		pt.States.Spent = append(pt.States.Spent, s.ID)
+	}
+	for _, s := range tx.PostAssembly.ReadStates {
+		pt.States.Read = append(pt.States.Read, s.ID)
+	}
+	for _, s := range tx.PostAssembly.OutputStates {
+		pt.States.Confirmed = append(pt.States.Confirmed, s.ID)
+	}
+	for _, s := range tx.PostAssembly.InfoStates {
+		pt.States.Info = append(pt.States.Info, s.ID)
+	}
+	if tx.PreparedPublicTransaction != nil {
+		pt.Transaction = tx.PreparedPublicTransaction
+	} else {
+		pt.Transaction = tx.PreparedPrivateTransaction
+	}
+	return pt
 
 }

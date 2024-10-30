@@ -33,6 +33,16 @@ title: ptx_*
 
 0. `domainReceipt`: [`RawJSON`](../types/simpletypes.md#rawjson)
 
+## `ptx_getPreparedTransaction`
+
+### Parameters
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+### Returns
+
+0. `preparedTransaction`: [`PreparedTransaction`](../types/preparedtransaction.md#preparedtransaction)
+
 ## `ptx_getStateReceipt`
 
 ### Parameters
@@ -42,6 +52,16 @@ title: ptx_*
 ### Returns
 
 0. `stateReceipt`: [`TransactionStates`](../types/transactionstates.md#transactionstates)
+
+## `ptx_getStoredABI`
+
+### Parameters
+
+0. `hashRef`: [`Bytes32`](../types/simpletypes.md#bytes32)
+
+### Returns
+
+0. `storedABI`: [`StoredABI`](../types/storedabi.md#storedabi)
 
 ## `ptx_getTransaction`
 
@@ -92,6 +112,46 @@ title: ptx_*
 ### Returns
 
 0. `receipt`: [`TransactionReceiptFull`](../types/transactionreceiptfull.md#transactionreceiptfull)
+
+## `ptx_prepareTransaction`
+
+### Parameters
+
+0. `transaction`: [`TransactionInput`](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+## `ptx_prepareTransactions`
+
+### Parameters
+
+0. `transactions`: [`TransactionInput[]`](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+0. `transactionIds`: [`UUID[]`](../types/simpletypes.md#uuid)
+
+## `ptx_queryPreparedTransactions`
+
+### Parameters
+
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+
+### Returns
+
+0. `preparedTransactions`: [`PreparedTransaction[]`](../types/preparedtransaction.md#preparedtransaction)
+
+## `ptx_queryStoredABIs`
+
+### Parameters
+
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+
+### Returns
+
+0. `storedABIs`: [`StoredABI[]`](../types/storedabi.md#storedabi)
 
 ## `ptx_queryTransactionReceipts`
 
@@ -154,4 +214,14 @@ title: ptx_*
 ### Returns
 
 0. `transactionIds`: [`UUID[]`](../types/simpletypes.md#uuid)
+
+## `ptx_storeABI`
+
+### Parameters
+
+0. `abi`: [`Entry[]`](../types/transactioninput.md#entry)
+
+### Returns
+
+0. `storedABI`: [`StoredABI`](../types/storedabi.md#storedabi)
 

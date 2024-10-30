@@ -352,7 +352,7 @@ func TestNotoApprove(t *testing.T) {
 
 	log.L(ctx).Infof("Claim 50 using approval")
 	receipt, err := tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: "transferWithApproval",
 			From:     recipient1Name,
@@ -403,7 +403,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 
 	notoFactory := solutils.MustLoadBuild(notoFactoryJSON)
 	_, err = tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: "registerImplementation",
 			From:     notaryName,
@@ -420,7 +420,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 	var callResult map[string]any
 	rpcerr := rpc.CallRPC(ctx, &callResult, "ptx_call", &pldapi.TransactionCall{
 		TransactionInput: pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				Type:     pldapi.TransactionTypePublic.Enum(),
 				To:       factoryAddress,
 				Function: "getImplementation",

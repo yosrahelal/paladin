@@ -61,7 +61,7 @@ func (tb *testbed) execBaseLedgerDeployTransaction(ctx context.Context, signer s
 		}
 	}
 	tx := &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: signer,
 			Data: data,
@@ -81,7 +81,7 @@ func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string,
 		}
 	}
 	tx := &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: txInstruction.FunctionABI.String(),
 			From:     signer,

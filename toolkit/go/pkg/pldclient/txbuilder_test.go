@@ -273,6 +273,91 @@ func TestBuildAndSubmitPrivateTXHTTPRevert(t *testing.T) {
 
 }
 
+func TestBuildAndPreparePrivateTXHTTPOk(t *testing.T) {
+
+	ctx, c, rpcServer, done := newTestClientAndServerHTTP(t)
+	defer done()
+
+	contractAddr := tktypes.RandAddress()
+	txID := uuid.New()
+
+	rpcServer.Register(rpcserver.NewRPCModule("ptx").
+		Add(
+			"ptx_prepareTransaction", rpcserver.RPCMethod1(func(ctx context.Context, tx pldapi.TransactionInput) (*uuid.UUID, error) {
+				require.JSONEq(t, `{
+					"widget": {
+						"id": "0x172ea50b3535721154ae5b368e850825615882bb",
+						"sku": "12345",
+						"features": ["blue", "round"]
+					}
+				}`, string(tx.Data))
+				require.Equal(t, pldapi.TransactionTypePrivate, tx.Type.V())
+				require.Equal(t, "neeto", tx.Domain)
+				require.Equal(t, "newWidget", tx.Function)
+				require.Equal(t, contractAddr, tx.To)
+				require.Equal(t, "tx.sender", tx.From)
+				require.Equal(t, tktypes.HexUint64(100000), *tx.PublicTxOptions.Gas)
+				return &txID, nil
+			}),
+		).
+		Add(
+			"ptx_getTransaction", rpcserver.RPCMethod1(func(ctx context.Context, suppliedID uuid.UUID) (*pldapi.Transaction, error) {
+				require.Equal(t, txID, suppliedID)
+				return &pldapi.Transaction{
+					ID: &txID,
+				}, nil
+			}),
+		).
+		Add(
+			"ptx_getPreparedTransaction", rpcserver.RPCMethod1(func(ctx context.Context, suppliedID uuid.UUID) (*pldapi.PreparedTransaction, error) {
+				require.Equal(t, txID, suppliedID)
+				return &pldapi.PreparedTransaction{
+					ID: txID,
+					Transaction: pldapi.TransactionInput{
+						TransactionBase: pldapi.TransactionBase{
+							IdempotencyKey: "tx1",
+						},
+					},
+				}, nil
+			}),
+		),
+	)
+
+	prepare := c.ForABI(ctx, testABI).
+		Private().Domain("neeto").
+		Function("newWidget").
+		Inputs(map[string]any{
+			"widget": map[string]any{
+				"id":       "0x172EA50B3535721154ae5B368E850825615882BB",
+				"sku":      12345,
+				"features": []string{"blue", "round"},
+			},
+		}).
+		From("tx.sender").
+		To(contractAddr).
+		PublicTxOptions(pldapi.PublicTxOptions{
+			Gas: confutil.P(tktypes.HexUint64(100000)),
+		}).
+		Prepare()
+
+	res := prepare.Wait(100 * time.Millisecond)
+	require.NoError(t, res.Error())
+	assert.Equal(t, txID, *prepare.ID())
+	assert.Equal(t, txID, res.ID())
+	assert.Equal(t, "tx1", res.PreparedTransaction().Transaction.IdempotencyKey)
+
+	// Check directly getting TX and receipt
+	tx, err := prepare.GetTransaction()
+	require.NoError(t, err)
+	require.Equal(t, txID, *tx.ID)
+
+	// Check directly getting TX and receipt
+	prepared, err := prepare.GetPreparedTransaction()
+	require.NoError(t, err)
+	require.Equal(t, txID, prepared.ID)
+
+}
+
 func TestBuildAndSubmitPublicCallHTTPOk(t *testing.T) {
 
 	ctx, c, rpcServer, done := newTestClientAndServerHTTP(t)
@@ -366,6 +451,53 @@ func TestBuildAndSubmitPublicDeployWSFail(t *testing.T) {
 
 }
 
+func TestBuildAndPreparePrivateHTTPFail(t *testing.T) {
+
+	ctx, c, rpcServer, done := newTestClientAndServerWebSockets(t)
+	defer done()
+
+	bytecode := tktypes.HexBytes(tktypes.RandBytes(64))
+	txID := uuid.New()
+
+	rpcServer.Register(rpcserver.NewRPCModule("ptx").
+		Add(
+			"ptx_prepareTransaction", rpcserver.RPCMethod1(func(ctx context.Context, tx pldapi.TransactionInput) (*uuid.UUID, error) {
+				require.JSONEq(t, `{"supplier": "0x172ea50b3535721154ae5b368e850825615882bb"}`, string(tx.Data))
+				require.Equal(t, bytecode, tx.Bytecode)
+				return &txID, nil
+			}),
+		).
+		Add(
+			"ptx_getPreparedTransaction", rpcserver.RPCMethod1(func(ctx context.Context, suppliedID uuid.UUID) (*pldapi.PreparedTransaction, error) {
+				require.Equal(t, txID, suppliedID)
+				return nil, fmt.Errorf("server throws an error")
+			}),
+		))
+
+	cancellable, cancelCtx := context.WithCancel(ctx)
+
+	sent := c.ReceiptPollingInterval(1 * time.Millisecond).
+		TxBuilder(cancellable).
+		Public().
+		SolidityBuild(&solutils.SolidityBuild{
+			ABI:      testABI,
+			Bytecode: bytecode,
+		}).
+		From("tx.sender").
+		Inputs(`{"supplier": "0x172EA50B3535721154ae5B368E850825615882BB"}`).
+		Prepare()
+
+	res := sent.Wait(25 * time.Millisecond)
+	require.Regexp(t, "PD020216.*timed out.*server throws an error", res.Error())
+	require.Nil(t, res.PreparedTransaction())
+
+	cancelCtx()
+	res = sent.Wait(1 * time.Minute)
+	require.Regexp(t, "PD020000", res.Error())
+	require.Nil(t, res.PreparedTransaction())
+
+}
+
 func TestSendUnconnectedFail(t *testing.T) {
 
 	res := New().TxBuilder(context.Background()).
@@ -393,6 +525,11 @@ func TestIdempotentSubmit(t *testing.T) {
 			}),
 		).
 		Add(
+			"ptx_prepareTransaction", rpcserver.RPCMethod1(func(ctx context.Context, tx pldapi.TransactionInput) (*uuid.UUID, error) {
+				return nil, fmt.Errorf("PD012220: key clash" /* note important error code in Paladin */)
+			}),
+		).
+		Add(
 			"ptx_getTransactionByIdempotencyKey", rpcserver.RPCMethod1(func(ctx context.Context, idempotencyKey string) (*pldapi.Transaction, error) {
 				require.Equal(t, "tx.12345", idempotencyKey)
 				return &pldapi.Transaction{
@@ -401,16 +538,21 @@ func TestIdempotentSubmit(t *testing.T) {
 			}),
 		))
 
-	res := c.TxBuilder(ctx).
+	txb := c.TxBuilder(ctx).
 		Private().
 		Domain("domain1").
 		IdempotencyKey("tx.12345").
 		ABIJSON(testABIJSON).
 		From("tx.sender").
-		Inputs(`{"supplier": "0x172EA50B3535721154ae5B368E850825615882BB"}`).
-		Send()
-	require.NoError(t, res.Error())
-	assert.Equal(t, txID, *res.ID())
+		Inputs(`{"supplier": "0x172EA50B3535721154ae5B368E850825615882BB"}`)
+
+	send := txb.Send()
+	require.NoError(t, send.Error())
+	assert.Equal(t, txID, *send.ID())
+
+	prepare := txb.Prepare()
+	require.NoError(t, prepare.Error())
+	assert.Equal(t, txID, *prepare.ID())
 
 }
 
@@ -528,6 +670,17 @@ func TestErrChainingTXAndReceipt(t *testing.T) {
 
 	_, err = send.GetReceipt()
 	require.Regexp(t, "PD020211", err)
+
+	prepare := builder.Prepare()
+	require.Regexp(t, "PD020211", prepare.Error())
+	require.Regexp(t, "PD020211", prepare.Wait(100*time.Microsecond).Error())
+
+	_, err = prepare.GetTransaction()
+	require.Regexp(t, "PD020211", err)
+
+	_, err = prepare.GetPreparedTransaction()
+	require.Regexp(t, "PD020211", err)
+
 }
 
 func TestBuildBadABIJSON(t *testing.T) {
@@ -551,7 +704,7 @@ func TestBuildBadABIJSON(t *testing.T) {
 func TestGetters(t *testing.T) {
 
 	tx := &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			IdempotencyKey: "tx1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",

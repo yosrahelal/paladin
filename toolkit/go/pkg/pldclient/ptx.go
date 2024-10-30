@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -29,6 +30,8 @@ type PTX interface {
 
 	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (txID *uuid.UUID, err error)
 	SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
+	PrepareTransaction(ctx context.Context, tx *pldapi.TransactionInput) (txID *uuid.UUID, err error)
+	PrepareTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
 	Call(ctx context.Context, tx *pldapi.TransactionCall) (data tktypes.RawJSON, err error)
 
 	GetTransaction(ctx context.Context, txID uuid.UUID) (receipt *pldapi.Transaction, err error)
@@ -42,7 +45,13 @@ type PTX interface {
 	GetDomainReceipt(ctx context.Context, domain string, txID uuid.UUID) (domainReceipt tktypes.RawJSON, err error)
 	GetStateReceipt(ctx context.Context, txID uuid.UUID) (stateReceipt *pldapi.TransactionStates, err error)
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error)
+	GetPreparedTransaction(ctx context.Context, txID uuid.UUID) (preparedTransaction *pldapi.PreparedTransaction, err error)
+	QueryPreparedTransactions(ctx context.Context, jq *query.QueryJSON) (preparedTransactions []*pldapi.PreparedTransaction, err error)
 	DecodeError(ctx context.Context, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedError *pldapi.DecodedError, err error)
+
+	StoreABI(ctx context.Context, abi abi.ABI) (storedABI *pldapi.StoredABI, err error)
+	GetStoredABI(ctx context.Context, hashRef tktypes.Bytes32) (storedABI *pldapi.StoredABI, err error)
+	QueryStoredABIs(ctx context.Context, jq *query.QueryJSON) (storedABIs []*pldapi.StoredABI, err error)
 
 	ResolveVerifier(ctx context.Context, keyIdentifier string, algorithm string, verifierType string) (verifier string, err error)
 }
@@ -56,6 +65,14 @@ var ptxInfo = &rpcModuleInfo{
 			Output: "transactionId",
 		},
 		"ptx_sendTransactions": {
+			Inputs: []string{"transactions"},
+			Output: "transactionIds",
+		},
+		"ptx_prepareTransaction": {
+			Inputs: []string{"transaction"},
+			Output: "transactionId",
+		},
+		"ptx_prepareTransactions": {
 			Inputs: []string{"transactions"},
 			Output: "transactionIds",
 		},
@@ -91,6 +108,10 @@ var ptxInfo = &rpcModuleInfo{
 			Inputs: []string{"transactionId"},
 			Output: "receipt",
 		},
+		"ptx_getPreparedTransaction": {
+			Inputs: []string{"transactionId"},
+			Output: "preparedTransaction",
+		},
 		"ptx_getDomainReceipt": {
 			Inputs: []string{"domain", "transactionId"},
 			Output: "domainReceipt",
@@ -102,6 +123,22 @@ var ptxInfo = &rpcModuleInfo{
 		"ptx_queryTransactionReceipts": {
 			Inputs: []string{"query"},
 			Output: "receipts",
+		},
+		"ptx_queryPreparedTransactions": {
+			Inputs: []string{"query"},
+			Output: "preparedTransactions",
+		},
+		"ptx_storeABI": {
+			Inputs: []string{"abi"},
+			Output: "storedABI",
+		},
+		"ptx_getStoredABI": {
+			Inputs: []string{"hashRef"},
+			Output: "storedABI",
+		},
+		"ptx_queryStoredABIs": {
+			Inputs: []string{"query"},
+			Output: "storedABIs",
 		},
 		"ptx_decodeError": {
 			Inputs: []string{"revertData", "dataFormat"},
@@ -130,6 +167,16 @@ func (p *ptx) SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) 
 
 func (p *ptx) SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
 	err = p.c.CallRPC(ctx, &txIDs, "ptx_sendTransactions", txs)
+	return
+}
+
+func (p *ptx) PrepareTransaction(ctx context.Context, tx *pldapi.TransactionInput) (txID *uuid.UUID, err error) {
+	err = p.c.CallRPC(ctx, &txID, "ptx_prepareTransaction", tx)
+	return
+}
+
+func (p *ptx) PrepareTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
+	err = p.c.CallRPC(ctx, &txIDs, "ptx_prepareTransactions", txs)
 	return
 }
 
@@ -173,6 +220,11 @@ func (p *ptx) GetTransactionReceiptFull(ctx context.Context, txID uuid.UUID) (re
 	return
 }
 
+func (p *ptx) GetPreparedTransaction(ctx context.Context, txID uuid.UUID) (preparedTransaction *pldapi.PreparedTransaction, err error) {
+	err = p.c.CallRPC(ctx, &preparedTransaction, "ptx_getPreparedTransaction", txID)
+	return
+}
+
 func (p *ptx) GetDomainReceipt(ctx context.Context, domain string, txID uuid.UUID) (domainReceipt tktypes.RawJSON, err error) {
 	err = p.c.CallRPC(ctx, &domainReceipt, "ptx_getDomainReceipt", domain, txID)
 	return
@@ -185,6 +237,26 @@ func (p *ptx) GetStateReceipt(ctx context.Context, txID uuid.UUID) (stateReceipt
 
 func (p *ptx) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error) {
 	err = p.c.CallRPC(ctx, &receipts, "ptx_queryTransactionReceipts", jq)
+	return
+}
+
+func (p *ptx) QueryPreparedTransactions(ctx context.Context, jq *query.QueryJSON) (preparedTransactions []*pldapi.PreparedTransaction, err error) {
+	err = p.c.CallRPC(ctx, &preparedTransactions, "ptx_queryPreparedTransactions", jq)
+	return
+}
+
+func (p *ptx) StoreABI(ctx context.Context, abi abi.ABI) (storedABI *pldapi.StoredABI, err error) {
+	err = p.c.CallRPC(ctx, &storedABI, "ptx_storeABI", abi)
+	return
+}
+
+func (p *ptx) GetStoredABI(ctx context.Context, hashRef tktypes.Bytes32) (storedABI *pldapi.StoredABI, err error) {
+	err = p.c.CallRPC(ctx, &storedABI, "ptx_getStoredABI", hashRef)
+	return
+}
+
+func (p *ptx) QueryStoredABIs(ctx context.Context, jq *query.QueryJSON) (storedABIs []*pldapi.StoredABI, err error) {
+	err = p.c.CallRPC(ctx, &storedABIs, "ptx_queryStoredABIs", jq)
 	return
 }
 

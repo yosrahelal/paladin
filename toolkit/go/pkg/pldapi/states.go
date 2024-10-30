@@ -110,6 +110,11 @@ type State struct {
 	Nullifier   *StateNullifier     `docstruct:"State" json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
 }
 
+// TODO: Separate the GORM DTO from the external pldapi external type definition for States
+func (StateBase) TableName() string {
+	return "states"
+}
+
 type StateWithData struct {
 	ID     tktypes.HexBytes `json:"id"`
 	Schema tktypes.Bytes32  `json:"schema"`

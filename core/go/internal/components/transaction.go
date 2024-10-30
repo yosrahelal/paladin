@@ -32,6 +32,22 @@ type TransactionInputs struct {
 	Intent   prototk.TransactionSpecification_Intent `json:"intent"`
 }
 
+type TransactionStateRefs struct {
+	Confirmed []tktypes.HexBytes
+	Read      []tktypes.HexBytes
+	Spent     []tktypes.HexBytes
+	Info      []tktypes.HexBytes
+}
+
+type PrepareTransactionWithRefs struct {
+	ID          uuid.UUID                // ID of the original private transaction
+	Domain      string                   // domain of the original private transaction
+	To          *tktypes.EthAddress      // the private smart contract that was invoked
+	States      TransactionStateRefs     // the states associated with the original private transaction
+	ExtraData   tktypes.RawJSON          // extra data in the prepare of the original private transaction
+	Transaction *pldapi.TransactionInput // the downstream transaction - might be public or private
+}
+
 type TransactionPreAssembly struct {
 	TransactionSpecification *prototk.TransactionSpecification `json:"transaction_specification"`
 	RequiredVerifiers        []*prototk.ResolveVerifierRequest `json:"required_verifiers"`

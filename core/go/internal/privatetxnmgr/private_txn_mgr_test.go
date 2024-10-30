@@ -217,7 +217,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
-				Transaction: pldapi.Transaction{
+				TransactionBase: pldapi.TransactionBase{
 					To:   domainAddress,
 					Data: tktypes.RawJSON(jsonData),
 				},
@@ -468,7 +468,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
-				Transaction: pldapi.Transaction{
+				TransactionBase: pldapi.TransactionBase{
 					To:   domainAddress,
 					Data: tktypes.RawJSON(jsonData),
 				},
@@ -713,7 +713,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
-				Transaction: pldapi.Transaction{
+				TransactionBase: pldapi.TransactionBase{
 					To:   domainAddress,
 					Data: tktypes.RawJSON(jsonData),
 				},
@@ -949,7 +949,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
-				Transaction: pldapi.Transaction{
+				TransactionBase: pldapi.TransactionBase{
 					To:   domainAddress,
 					Data: tktypes.RawJSON(jsonData),
 				},

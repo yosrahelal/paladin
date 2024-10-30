@@ -92,7 +92,7 @@ func (tb *testbed) rpcDeployBytecode() rpcserver.RPCHandler {
 	) (*ethtypes.Address0xHex, error) {
 
 		receipt, err := tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				Type: pldapi.TransactionTypePublic.Enum(),
 				From: from,
 				Data: params,

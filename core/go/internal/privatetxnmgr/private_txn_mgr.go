@@ -183,11 +183,18 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.ValidatedTransaction) error {
 	tx := txi.Transaction
 	if tx.To == nil {
+		if txi.Transaction.SubmitMode.V() != pldapi.SubmitModeAuto {
+			return i18n.NewError(ctx, msgs.MsgPrivateTxMgrPrepareNotSupportedDeploy)
+		}
 		return p.handleDeployTx(ctx, &components.PrivateContractDeploy{
 			ID:     *tx.ID,
 			Domain: tx.Domain,
 			Inputs: txi.Inputs,
 		})
+	}
+	intent := prototk.TransactionSpecification_SEND_TRANSACTION
+	if txi.Transaction.SubmitMode.V() == pldapi.SubmitModeExternal {
+		intent = prototk.TransactionSpecification_PREPARE_TRANSACTION
 	}
 	return p.handleNewTx(ctx, &components.PrivateTransaction{
 		ID: *tx.ID,
@@ -197,6 +204,7 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.Vali
 			To:       *tx.To,
 			Function: txi.Function.Definition,
 			Inputs:   txi.Inputs,
+			Intent:   intent,
 		},
 		PublicTxOptions: tx.PublicTxOptions,
 	})

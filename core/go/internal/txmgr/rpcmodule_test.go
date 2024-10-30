@@ -124,7 +124,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		ABI:       sampleABI,
 		Bytecode:  tktypes.MustParseHexBytes("0x11223344"),
 		DependsOn: []uuid.UUID{tx0ID},
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			IdempotencyKey: "tx1",
 			From:           "sender1",
 			Type:           pldapi.TransactionTypePublic.Enum(),
@@ -199,7 +199,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	// Submit in a public invoke using that same ABI referring to the function
 	tx2Input := &pldapi.TransactionInput{
 		DependsOn: []uuid.UUID{tx1ID},
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			ABIReference:   &abiHash,
 			IdempotencyKey: "tx2",
 			Type:           pldapi.TransactionTypePublic.Enum(),
@@ -321,7 +321,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	var resJSON tktypes.RawJSON
 	err = rpcClient.CallRPC(ctx, &resJSON, "ptx_call", &pldapi.TransactionCall{
 		TransactionInput: pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				IdempotencyKey: "tx2",
 				Type:           pldapi.TransactionTypePublic.Enum(),
 				Data:           tktypes.RawJSON(`{"0": 123456789012345678901234567890}`),
@@ -498,5 +498,78 @@ func TestDebugTransactionStatus(t *testing.T) {
 	assert.Equal(t, "pending", result.Status)
 	assert.Equal(t, "submitted", result.LatestEvent)
 	assert.Equal(t, "some error message", result.LatestError)
+
+}
+
+func TestQueryPreparedTransactionsNotFound(t *testing.T) {
+
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t)
+	defer done()
+
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
+	require.NoError(t, err)
+
+	var pt *pldapi.PreparedTransaction
+	err = rpcClient.CallRPC(ctx, &pt, "ptx_getPreparedTransaction", uuid.New())
+	require.NoError(t, err)
+	require.Nil(t, pt)
+
+	var pts []*pldapi.PreparedTransaction
+	err = rpcClient.CallRPC(ctx, &pts, "ptx_queryPreparedTransactions", query.NewQueryBuilder().Limit(10).Query())
+	require.NoError(t, err)
+	require.Empty(t, pts)
+
+}
+
+func TestPrepareTransactions(t *testing.T) {
+
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t, func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.MatchedBy(func(tx *components.ValidatedTransaction) bool {
+			return tx.Transaction.SubmitMode.V() == pldapi.SubmitModeExternal
+		})).Return(nil)
+	})
+	defer done()
+
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
+	require.NoError(t, err)
+
+	validPublicTx := &pldapi.TransactionInput{
+		ABI: abi.ABI{{Type: abi.Function, Name: "doStuff"}},
+		TransactionBase: pldapi.TransactionBase{
+			Type:           pldapi.TransactionTypePublic.Enum(),
+			IdempotencyKey: "tx1",
+			From:           "sender1",
+			To:             tktypes.RandAddress(),
+			Data:           tktypes.RawJSON(`[]`),
+		},
+	}
+
+	var txID *uuid.UUID
+	err = rpcClient.CallRPC(ctx, &txID, "ptx_prepareTransaction", validPublicTx)
+	assert.Regexp(t, "PD012225", err)
+
+	var txIDs []uuid.UUID
+	err = rpcClient.CallRPC(ctx, &txIDs, "ptx_prepareTransactions", []*pldapi.TransactionInput{validPublicTx})
+	assert.Regexp(t, "PD012225", err)
+
+	validPrivateTx := &pldapi.TransactionInput{
+		ABI: abi.ABI{{Type: abi.Function, Name: "doStuff"}},
+		TransactionBase: pldapi.TransactionBase{
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			Domain:         "domain1",
+			IdempotencyKey: "tx1",
+			From:           "sender1",
+			To:             tktypes.RandAddress(),
+			Data:           tktypes.RawJSON(`[]`),
+		},
+	}
+
+	err = rpcClient.CallRPC(ctx, &txID, "ptx_prepareTransaction", validPrivateTx)
+	require.NoError(t, err)
+
+	var returnedTX *pldapi.Transaction
+	err = rpcClient.CallRPC(ctx, &returnedTX, "ptx_getTransaction", txID)
+	require.NoError(t, err)
+	require.Equal(t, pldapi.SubmitModeExternal, returnedTX.SubmitMode.V())
 
 }

@@ -131,7 +131,7 @@ func DeploySmartContract(t *testing.T, txm components.TXManager) *tktypes.EthAdd
 
 	// In this test we deploy the factory in-line
 	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "domain1_admin",
 		},

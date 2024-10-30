@@ -99,7 +99,7 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 	require.NoError(t, err)
 
 	txID, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:         pldapi.TransactionTypePublic.Enum(),
 			ABIReference: abiRef,
 			From:         "sender1",

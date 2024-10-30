@@ -471,7 +471,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 			return err
 		}
 		tx.PreparedPrivateTransaction = &pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				IdempotencyKey: fmt.Sprintf("%s_%s", tx.ID, functionABI.Name),
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				Function:       functionABI.String(),
@@ -484,7 +484,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 		}
 	} else {
 		tx.PreparedPublicTransaction = &pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				Type:     pldapi.TransactionTypePublic.Enum(),
 				Function: functionABI.String(),
 				From:     tx.Signer,

@@ -29,6 +29,7 @@ import (
 var transactionFilters = filters.FieldMap{
 	"id":             filters.UUIDField("id"),
 	"idempotencyKey": filters.StringField("idempotency_key"),
+	"submitMode":     filters.StringField("submit_mode"),
 	"created":        filters.TimestampField("created"),
 	"abiReference":   filters.TimestampField("abi_ref"),
 	"functionName":   filters.StringField("fn_name"),
@@ -39,16 +40,19 @@ var transactionFilters = filters.FieldMap{
 
 func mapPersistedTXBase(pt *persistedTransaction) *pldapi.Transaction {
 	res := &pldapi.Transaction{
-		ID:             &pt.ID,
-		Created:        pt.Created,
-		IdempotencyKey: stringOrEmpty(pt.IdempotencyKey),
-		Type:           pt.Type,
-		Domain:         stringOrEmpty(pt.Domain),
-		Function:       stringOrEmpty(pt.Function),
-		ABIReference:   pt.ABIReference,
-		From:           pt.From,
-		To:             pt.To,
-		Data:           pt.Data,
+		ID:         &pt.ID,
+		Created:    pt.Created,
+		SubmitMode: pt.SubmitMode,
+		TransactionBase: pldapi.TransactionBase{
+			IdempotencyKey: stringOrEmpty(pt.IdempotencyKey),
+			Type:           pt.Type,
+			Domain:         stringOrEmpty(pt.Domain),
+			Function:       stringOrEmpty(pt.Function),
+			ABIReference:   pt.ABIReference,
+			From:           pt.From,
+			To:             pt.To,
+			Data:           pt.Data,
+		},
 	}
 	return res
 }

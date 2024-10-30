@@ -612,5 +612,22 @@ var _ = Describe("controller", Ordered, func() {
 			testLog("Noto<->Pente mint transaction %s", txn.ID())
 			logWallet("bob", "node1")
 		})
+
+		It("prepares a transfer for some noto-pentes from bob to sally, without submitting to the chain", func() {
+			prepared := rpc["node1"].ForABI(ctx, nototypes.NotoABI).
+				Private().
+				Domain("noto").
+				Function("transfer").
+				To(notoPenteContractAddr).
+				From("bob@node1").
+				Inputs(&nototypes.MintParams{
+					To:     "sally@node2",
+					Amount: with18Decimals(13),
+				}).
+				Prepare().
+				Wait(5 * time.Second)
+			Expect(prepared.Error()).To(BeNil())
+			testLog("Noto<->Pente prepared transaction idempotencyKey=%v", prepared.PreparedTransaction().Transaction.IdempotencyKey)
+		})
 	})
 })
