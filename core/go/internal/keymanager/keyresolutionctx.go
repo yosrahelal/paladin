@@ -105,6 +105,7 @@ func (krc *keyResolutionContext) Commit() (err error) {
 }
 
 func (krc *keyResolutionContext) Rollback() {
+	defer krc.Close(false)
 	if krc.dbTX != nil {
 		rbErr := krc.dbTX.Rollback().Error
 		if rbErr != nil {
