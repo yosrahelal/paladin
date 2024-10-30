@@ -627,7 +627,7 @@ var _ = Describe("controller", Ordered, func() {
 				Prepare().
 				Wait(5 * time.Second)
 			Expect(prepared.Error()).To(BeNil())
-			testLog("Noto<->Pente prepared transaction idempotencyKey=%v", prepared.PreparedTransaction().Transaction.IdempotencyKey)
+			testLog("Noto<->Pente prepared transaction original TX id=%s prepared TX idempotencyKey=%v", prepared.ID(), prepared.PreparedTransaction().Transaction.IdempotencyKey)
 		})
 	})
 })

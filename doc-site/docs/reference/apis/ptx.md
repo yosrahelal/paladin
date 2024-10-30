@@ -11,6 +11,17 @@ title: ptx_*
 
 0. `result`: [`RawJSON`](../types/simpletypes.md#rawjson)
 
+## `ptx_decodeCall`
+
+### Parameters
+
+0. `callData`: [`HexBytes`](../types/simpletypes.md#hexbytes)
+1. `dataFormat`: [`JSONFormatOptions`](../types/jsonformatoptions.md#jsonformatoptions)
+
+### Returns
+
+0. `decodedCall`: [`ABIDecodedData`](../types/abidecodeddata.md#abidecodeddata)
+
 ## `ptx_decodeError`
 
 ### Parameters
@@ -20,7 +31,19 @@ title: ptx_*
 
 ### Returns
 
-0. `decodedError`: `DecodedError`
+0. `decodedError`: [`ABIDecodedData`](../types/abidecodeddata.md#abidecodeddata)
+
+## `ptx_decodeEvent`
+
+### Parameters
+
+0. `topics`: [`Bytes32[]`](../types/simpletypes.md#bytes32)
+1. `data`: [`HexBytes`](../types/simpletypes.md#hexbytes)
+2. `dataFormat`: [`JSONFormatOptions`](../types/jsonformatoptions.md#jsonformatoptions)
+
+### Returns
+
+0. `decodedEvent`: [`ABIDecodedData`](../types/abidecodeddata.md#abidecodeddata)
 
 ## `ptx_getDomainReceipt`
 

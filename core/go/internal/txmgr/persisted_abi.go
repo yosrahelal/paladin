@@ -37,8 +37,9 @@ type PersistedABI struct {
 	Created tktypes.Timestamp `gorm:"column:created;autoCreateTime:nano"`
 }
 
-type PersistedABIError struct {
+type PersistedABIEntry struct {
 	Selector   tktypes.HexBytes `gorm:"column:selector"`
+	Type       string           `gorm:"column:type"`
 	FullHash   tktypes.HexBytes `gorm:"column:full_hash"`
 	ABIHash    tktypes.Bytes32  `gorm:"column:abi_hash"`
 	Definition tktypes.RawJSON  `gorm:"column:definition"`
@@ -94,13 +95,14 @@ func (tm *txManager) UpsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*
 	}
 
 	// Grab all the error definitions for reverse lookup
-	var errorDefs []*PersistedABIError
-	for _, errorDef := range a {
-		fullHash, _ := errorDef.SignatureHashCtx(ctx)
-		defBytes, _ := json.Marshal(errorDef)
+	var abiEntries []*PersistedABIEntry
+	for _, entry := range a {
+		fullHash, _ := entry.SignatureHashCtx(ctx)
+		defBytes, _ := json.Marshal(entry)
 		if fullHash != nil && len(defBytes) > 0 { // note we've already validated it in ABISolDefinitionHash
-			errorDefs = append(errorDefs, &PersistedABIError{
+			abiEntries = append(abiEntries, &PersistedABIEntry{
 				ABIHash:    *hash,
+				Type:       string(entry.Type),
 				Selector:   tktypes.HexBytes(fullHash[0:4]),
 				FullHash:   tktypes.HexBytes(fullHash),
 				Definition: defBytes,
@@ -125,17 +127,11 @@ func (tm *txManager) UpsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*
 			}).
 			Error
 	}
-	if err == nil && len(errorDefs) > 0 {
+	if err == nil && len(abiEntries) > 0 {
 		err = dbTX.
-			Table("abi_errors").
-			Clauses(clause.OnConflict{
-				Columns: []clause.Column{
-					{Name: "abi_hash"},
-					{Name: "selector"},
-				},
-				DoNothing: true, // immutable
-			}).
-			Create(errorDefs).
+			Table("abi_entries").
+			Clauses(clause.OnConflict{DoNothing: true}).
+			Create(abiEntries).
 			Error
 	}
 	if err != nil {

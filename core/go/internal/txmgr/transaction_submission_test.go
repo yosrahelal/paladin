@@ -83,7 +83,7 @@ func TestResolveFunctionBadABI(t *testing.T) {
 
 func mockInsertABI(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+	mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 }
 
 func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
@@ -102,7 +102,7 @@ func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
 
 func mockInsertABIAndTransactionOK(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+	mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectCommit()
@@ -157,7 +157,7 @@ func mockGetPublicTransactionForHash(cb func(hash tktypes.Bytes32) (*pldapi.Publ
 func TestSubmitBadFromAddr(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
 			Return(nil, fmt.Errorf("bad address"))
 	})
@@ -530,7 +530,7 @@ func mockPublicSubmitTxRollback(t *testing.T) func(conf *pldconf.TxManagerConfig
 func TestInsertTransactionFail(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnError(fmt.Errorf("pop"))
 		mc.db.ExpectRollback()
@@ -893,7 +893,7 @@ func TestPrepareInternalPrivateTransactionNoIdempotencyKey(t *testing.T) {
 func TestUpsertInternalPrivateTxsFinalizeIDsInsertFail(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnError(fmt.Errorf("pop"))
 	})
 	defer done()
@@ -909,7 +909,7 @@ func TestUpsertInternalPrivateTxsFinalizeIDsInsertFail(t *testing.T) {
 func TestUpsertInternalPrivateTxsIdempotencyKeyFail(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows) // empty result when we expect one
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnError(fmt.Errorf("pop"))
 	})
@@ -926,7 +926,7 @@ func TestUpsertInternalPrivateTxsIdempotencyKeyFail(t *testing.T) {
 func TestUpsertInternalPrivateTxsIdempotencyMisMatch(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)      // empty result when we expect one
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(mc.db.NewRows([]string{})) // definitely should get one
 	})

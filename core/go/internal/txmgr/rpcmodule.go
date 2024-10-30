@@ -55,7 +55,9 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_storeABI", tm.rpcStoreABI()).
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
 		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs()).
-		Add("ptx_decodeError", tm.rpcDecodeRevertError()).
+		Add("ptx_decodeCall", tm.rpcDecodeCall()).
+		Add("ptx_decodeEvent", tm.rpcDecodeEvent()).
+		Add("ptx_decodeError", tm.rpcDecodeError()).
 		Add("ptx_resolveVerifier", tm.rpcResolveVerifier())
 
 	tm.debugRpcModule = rpcserver.NewRPCModule("debug").
@@ -296,11 +298,30 @@ func (tm *txManager) rpcDebugTransactionStatus() rpcserver.RPCHandler {
 	})
 }
 
-func (tm *txManager) rpcDecodeRevertError() rpcserver.RPCHandler {
+func (tm *txManager) rpcDecodeError() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		revertError tktypes.HexBytes,
 		dataFormat tktypes.JSONFormatOptions,
-	) (*pldapi.DecodedError, error) {
+	) (*pldapi.ABIDecodedData, error) {
 		return tm.DecodeRevertError(ctx, tm.p.DB(), revertError, dataFormat)
+	})
+}
+
+func (tm *txManager) rpcDecodeCall() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		callData tktypes.HexBytes,
+		dataFormat tktypes.JSONFormatOptions,
+	) (*pldapi.ABIDecodedData, error) {
+		return tm.DecodeCall(ctx, tm.p.DB(), callData, dataFormat)
+	})
+}
+
+func (tm *txManager) rpcDecodeEvent() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod3(func(ctx context.Context,
+		topics []tktypes.Bytes32,
+		data tktypes.HexBytes,
+		dataFormat tktypes.JSONFormatOptions,
+	) (*pldapi.ABIDecodedData, error) {
+		return tm.DecodeEvent(ctx, tm.p.DB(), topics, data, dataFormat)
 	})
 }

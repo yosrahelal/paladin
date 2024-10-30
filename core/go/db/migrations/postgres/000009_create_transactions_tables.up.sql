@@ -8,14 +8,18 @@ CREATE TABLE abis (
 );
 CREATE INDEX abis_created ON abis("created");
 
-CREATE TABLE abi_errors (
+CREATE TABLE abi_entries (
   "selector"                  VARCHAR         NOT NULL,
+  "type"                      VARCHAR         NOT NULL,
   "full_hash"                 VARCHAR         NOT NULL,
   "abi_hash"                  VARCHAR         NOT NULL,
   "definition"                VARCHAR         NOT NULL,
   PRIMARY KEY ("abi_hash", "selector"),
   FOREIGN KEY ("abi_hash") REFERENCES abis ("hash") ON DELETE CASCADE
 );
+
+CREATE INDEX abi_entries_selector ON abi_entries ("selector");
+CREATE INDEX abi_entries_full_hash ON abi_entries ("full_hash");
 
 CREATE TABLE transactions (
   "id"                        UUID            NOT NULL,

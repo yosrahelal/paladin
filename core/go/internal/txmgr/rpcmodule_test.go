@@ -115,6 +115,9 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		{Type: abi.Error, Name: "BadValue", Inputs: abi.ParameterArray{
 			{Type: "uint256"},
 		}},
+		{Type: abi.Event, Name: "Updated", Inputs: abi.ParameterArray{
+			{Type: "uint256", Name: "value", Indexed: true},
+		}},
 	}
 
 	// Submit in a public deploy with array encoded params and bytecode
@@ -288,7 +291,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var de *pldapi.DecodedError
+	var de *pldapi.ABIDecodedData
 	err = rpcClient.CallRPC(ctx, &de, "ptx_decodeError", tktypes.HexBytes(revertData), tktypes.DefaultJSONFormatOptions)
 	require.NoError(t, err)
 	require.Equal(t, `BadValue("12345")`, de.Summary)
@@ -333,6 +336,25 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		},
 	})
 	assert.Regexp(t, "PD011517", err) // means we got all the way to the unconnected client
+
+	// Decode a sample call using the stored and shredded ABIs
+	data, err := sampleABI.Functions()["set"].EncodeCallDataJSON([]byte(`{"0": 123456789012345678901234567890}`))
+	require.NoError(t, err)
+	var decodedCall *pldapi.ABIDecodedData
+	err = rpcClient.CallRPC(ctx, &decodedCall, "ptx_decodeCall", tktypes.HexBytes(data), "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"0": "123456789012345678901234567890"}`, decodedCall.Data.String())
+
+	// Decode a sample event using the stored and shredded ABIs
+	valueEncoded, err := (&abi.ParameterArray{{Type: "uint256"}}).EncodeABIDataJSON([]byte(`["123456789012345678901234567890"]`))
+	require.NoError(t, err)
+	var decodedEvent *pldapi.ABIDecodedData
+	err = rpcClient.CallRPC(ctx, &decodedEvent, "ptx_decodeEvent", []string{
+		sampleABI.Events()["Updated"].SignatureHashBytes().String(), // topic 0
+		tktypes.Bytes32(valueEncoded).String(),                      // indexed integer, so can just directly pass data
+	}, "0x", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"value": "123456789012345678901234567890"}`, decodedEvent.Data.String())
 
 }
 

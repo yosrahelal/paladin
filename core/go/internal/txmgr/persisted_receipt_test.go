@@ -152,7 +152,7 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 	require.NotNil(t, receipt)
 	require.JSONEq(t, fmt.Sprintf(`{
 		"id":"%s",
-		"failureMessage":"PD012214: Transaction reverted (no revert data)"
+		"failureMessage":"PD012214: Unable to decode revert data (no revert data available)"
 	}`, txID), string(tktypes.JSONString(receipt)))
 
 }
@@ -239,19 +239,19 @@ func TestCalculateRevertErrorNoData(t *testing.T) {
 func TestCalculateRevertErrorQueryFail(t *testing.T) {
 
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*abi_errors").WillReturnError(fmt.Errorf("pop"))
+		mc.db.ExpectQuery("SELECT.*abi_entries").WillReturnError(fmt.Errorf("pop"))
 	})
 	defer done()
 
 	err := txm.CalculateRevertError(ctx, txm.p.DB(), []byte("any data"))
-	assert.Regexp(t, "PD012215.*pop", err)
+	assert.Regexp(t, "PD012221.*pop", err)
 
 }
 
 func TestCalculateRevertErrorDecodeFail(t *testing.T) {
 
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*abi_errors").WillReturnRows(sqlmock.NewRows([]string{"definition"}).AddRow(`{}`))
+		mc.db.ExpectQuery("SELECT.*abi_entries").WillReturnRows(sqlmock.NewRows([]string{"definition"}).AddRow(`{}`))
 	})
 	defer done()
 
@@ -302,11 +302,83 @@ func TestDecodeRevertErrorBadSerializer(t *testing.T) {
 	revertReasonTooSmallHex := tktypes.MustParseHexBytes("0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001d5468652073746f7265642076616c756520697320746f6f20736d616c6c000000")
 
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*abi_errors").WillReturnRows(sqlmock.NewRows([]string{}))
+		mc.db.ExpectQuery("SELECT.*abi_entries").WillReturnRows(sqlmock.NewRows([]string{}))
 	})
 	defer done()
 
 	_, err := txm.DecodeRevertError(ctx, txm.p.DB(), revertReasonTooSmallHex, "wrong")
+	assert.Regexp(t, "PD020015", err)
+
+}
+
+func TestDecodeCall(t *testing.T) {
+
+	sampleABI := abi.ABI{
+		{Type: abi.Function, Name: "set", Inputs: abi.ParameterArray{
+			{Type: "uint256", Name: "newValue"},
+		}},
+	}
+
+	ctx, txm, done := newTestTransactionManager(t, true)
+	defer done()
+
+	_, err := txm.storeABI(ctx, txm.p.DB(), sampleABI)
+	require.NoError(t, err)
+
+	validCall, err := sampleABI.Functions()["set"].EncodeCallDataJSON([]byte(`[12345]`))
+	require.NoError(t, err)
+
+	decoded, err := txm.DecodeCall(ctx, txm.p.DB(), validCall, "")
+	assert.NoError(t, err)
+	require.JSONEq(t, `{"newValue": "12345"}`, string(decoded.Data))
+	require.Equal(t, `set(uint256)`, string(decoded.Signature))
+
+	invalidCall := append(sampleABI.Functions()["set"].FunctionSelectorBytes(), []byte{0x00}...)
+	_, err = txm.DecodeCall(ctx, txm.p.DB(), tktypes.HexBytes(invalidCall), "")
+	assert.Regexp(t, "PD012227.*1 matched function selector", err)
+
+	short := []byte{0xfe, 0xed}
+	_, err = txm.DecodeCall(ctx, txm.p.DB(), tktypes.HexBytes(short), "")
+	assert.Regexp(t, "PD012226", err)
+
+	_, err = txm.DecodeCall(ctx, txm.p.DB(), validCall, "wrong")
+	assert.Regexp(t, "PD020015", err)
+
+}
+
+func TestDecodeEvent(t *testing.T) {
+
+	sampleABI := abi.ABI{
+		{Type: abi.Event, Name: "Updated", Inputs: abi.ParameterArray{
+			{Type: "uint256", Name: "newValue", Indexed: true},
+		}},
+	}
+
+	ctx, txm, done := newTestTransactionManager(t, true)
+	defer done()
+
+	_, err := txm.storeABI(ctx, txm.p.DB(), sampleABI)
+	require.NoError(t, err)
+
+	validTopic0 := tktypes.Bytes32(sampleABI.Events()["Updated"].SignatureHashBytes())
+	validTopic1, err := (&abi.ParameterArray{{Type: "uint256"}}).EncodeABIDataJSON([]byte(`["12345"]`))
+	require.NoError(t, err)
+
+	decoded, err := txm.DecodeEvent(ctx, txm.p.DB(), []tktypes.Bytes32{validTopic0, tktypes.Bytes32(validTopic1)}, []byte{}, "")
+	assert.NoError(t, err)
+	require.JSONEq(t, `{"newValue": "12345"}`, string(decoded.Data))
+	require.Equal(t, `Updated(uint256)`, string(decoded.Signature))
+
+	_, err = txm.DecodeEvent(ctx, txm.p.DB(), []tktypes.Bytes32{validTopic0 /* missing 2nd topic*/}, []byte{}, "")
+	assert.Regexp(t, "PD012229.*1 matched signature", err)
+
+	_, err = txm.DecodeEvent(ctx, txm.p.DB(), []tktypes.Bytes32{tktypes.Bytes32(tktypes.RandBytes(32)) /* unknown topic */}, []byte{}, "")
+	assert.Regexp(t, "PD012229", err)
+
+	_, err = txm.DecodeEvent(ctx, txm.p.DB(), []tktypes.Bytes32{ /* no topics */ }, []byte{}, "")
+	assert.Regexp(t, "PD012226", err)
+
+	_, err = txm.DecodeEvent(ctx, txm.p.DB(), []tktypes.Bytes32{validTopic0, tktypes.Bytes32(validTopic1)}, []byte{}, "wrong")
 	assert.Regexp(t, "PD020015", err)
 
 }
