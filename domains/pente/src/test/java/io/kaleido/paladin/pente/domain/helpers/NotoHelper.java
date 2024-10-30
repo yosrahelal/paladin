@@ -138,8 +138,8 @@ public class NotoHelper {
             JsonABI.newParameters()
     );
 
-    public static NotoHelper deploy(String domainName, Testbed testbed, ConstructorParams params) throws IOException {
-        String address = testbed.getRpcClient().request("testbed_deploy", domainName, params);
+    public static NotoHelper deploy(String domainName, String from, Testbed testbed, ConstructorParams params) throws IOException {
+        String address = testbed.getRpcClient().request("testbed_deploy", domainName, from, params);
         return new NotoHelper(domainName, testbed, address);
     }
 

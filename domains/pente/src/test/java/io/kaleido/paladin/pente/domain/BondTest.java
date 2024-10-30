@@ -139,14 +139,14 @@ public class BondTest {
 
             // Create the privacy groups
             var issuerCustodianInstance = PenteHelper.newPrivacyGroup(
-                    "pente", testbed, issuerCustodianGroup, true);
+                    "pente", alice, testbed, issuerCustodianGroup, true);
             assertFalse(issuerCustodianInstance.address().isBlank());
             var aliceCustodianInstance = PenteHelper.newPrivacyGroup(
-                    "pente", testbed, aliceCustodianGroup, true);
+                    "pente", alice,  testbed, aliceCustodianGroup, true);
             assertFalse(aliceCustodianInstance.address().isBlank());
 
             // Create Noto cash token
-            var notoCash = NotoHelper.deploy("noto", testbed,
+            var notoCash = NotoHelper.deploy("noto", cashIssuer, testbed,
                     new NotoHelper.ConstructorParams(
                             cashIssuer,
                             null,
@@ -175,7 +175,7 @@ public class BondTest {
             }});
 
             // Create Noto bond token
-            var notoBond = NotoHelper.deploy("noto", testbed,
+            var notoBond = NotoHelper.deploy("noto", bondCustodian, testbed,
                     new NotoHelper.ConstructorParams(
                             bondCustodian,
                             new NotoHelper.HookParams(

@@ -37,7 +37,7 @@ type ZetoHelper struct {
 
 func DeployZeto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domainName, controllerName, tokenName string) *ZetoHelper {
 	var addr tktypes.EthAddress
-	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, &types.InitializerParams{
+	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, "me", &types.InitializerParams{
 		From:      controllerName,
 		TokenName: tokenName,
 	})

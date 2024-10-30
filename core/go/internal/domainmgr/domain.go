@@ -557,6 +557,7 @@ func (d *domain) InitDeploy(ctx context.Context, tx *components.PrivateContractD
 	// Build the init request
 	txSpec := &prototk.DeployTransactionSpecification{}
 	tx.TransactionSpecification = txSpec
+	txSpec.From = tx.From
 	txSpec.TransactionId = tktypes.Bytes32UUIDFirst16(tx.ID).String()
 	txSpec.ConstructorParamsJson = tx.Inputs.String()
 

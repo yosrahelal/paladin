@@ -724,7 +724,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	tbRPC := rpcclient.WrapRestyClient(resty.New().SetBaseURL(url))
 
 	var contractAddr ethtypes.Address0xHex
-	rpcErr := tbRPC.CallRPC(ctx, &contractAddr, "testbed_deploy", "domain1", tktypes.RawJSON(`{
+	rpcErr := tbRPC.CallRPC(ctx, &contractAddr, "testbed_deploy", "domain1", "me", tktypes.RawJSON(`{
 		"notary": "domain1.contract1.notary",
 		"name": "FakeToken1",
 		"symbol": "FT1"
