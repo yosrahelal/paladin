@@ -330,7 +330,8 @@ func TestDecodeCall(t *testing.T) {
 
 	decoded, err := txm.DecodeCall(ctx, txm.p.DB(), validCall, "")
 	assert.NoError(t, err)
-	require.JSONEq(t, `{"newValue": "12345"}`, string(decoded))
+	require.JSONEq(t, `{"newValue": "12345"}`, string(decoded.Data))
+	require.Equal(t, `set(uint256)`, string(decoded.Signature))
 
 	invalidCall := append(sampleABI.Functions()["set"].FunctionSelectorBytes(), []byte{0x00}...)
 	_, err = txm.DecodeCall(ctx, txm.p.DB(), tktypes.HexBytes(invalidCall), "")
@@ -365,7 +366,8 @@ func TestDecodeEvent(t *testing.T) {
 
 	decoded, err := txm.DecodeEvent(ctx, txm.p.DB(), []tktypes.Bytes32{validTopic0, tktypes.Bytes32(validTopic1)}, []byte{}, "")
 	assert.NoError(t, err)
-	require.JSONEq(t, `{"newValue": "12345"}`, string(decoded))
+	require.JSONEq(t, `{"newValue": "12345"}`, string(decoded.Data))
+	require.Equal(t, `Updated(uint256)`, string(decoded.Signature))
 
 	_, err = txm.DecodeEvent(ctx, txm.p.DB(), []tktypes.Bytes32{validTopic0 /* missing 2nd topic*/}, []byte{}, "")
 	assert.Regexp(t, "PD012229.*1 matched signature", err)

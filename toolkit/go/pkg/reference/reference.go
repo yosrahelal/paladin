@@ -96,6 +96,7 @@ var allTypes = []interface{}{
 	pldapi.IndexedTransaction{},
 	pldapi.IndexedEvent{},
 	pldapi.EventWithData{},
+	pldapi.ABIDecodedData{},
 	tktypes.JSONFormatOptions(""),
 	pldapi.StateStatusQualifier(""),
 	query.QueryJSON{

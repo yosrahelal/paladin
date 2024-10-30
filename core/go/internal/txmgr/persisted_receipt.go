@@ -163,7 +163,7 @@ func (tm *txManager) CalculateRevertError(ctx context.Context, dbTX *gorm.DB, re
 	return i18n.NewError(ctx, msgs.MsgTxMgrRevertedDecodedData, de.Summary)
 }
 
-func (tm *txManager) DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.DecodedError, error) {
+func (tm *txManager) DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error) {
 
 	if len(revertData) < 4 {
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrRevertedNoData)
@@ -196,9 +196,10 @@ func (tm *txManager) DecodeRevertError(ctx context.Context, dbTX *gorm.DB, rever
 	if !ok {
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrRevertedNoMatchingErrABI, revertData)
 	}
-	de := &pldapi.DecodedError{
+	de := &pldapi.ABIDecodedData{
 		Summary:    abi.FormatErrorStringCtx(ctx, e, cv),
 		Definition: e,
+		Signature:  e.String(),
 	}
 	serializer, err := dataFormat.GetABISerializer(ctx)
 	if err == nil {
@@ -210,7 +211,7 @@ func (tm *txManager) DecodeRevertError(ctx context.Context, dbTX *gorm.DB, rever
 	return de, nil
 }
 
-func (tm *txManager) DecodeCall(ctx context.Context, dbTX *gorm.DB, callData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (data tktypes.RawJSON, err error) {
+func (tm *txManager) DecodeCall(ctx context.Context, dbTX *gorm.DB, callData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error) {
 
 	if len(callData) < 4 {
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrDecodeCallNoData)
@@ -219,20 +220,20 @@ func (tm *txManager) DecodeCall(ctx context.Context, dbTX *gorm.DB, callData tkt
 
 	// There is potential with a 4 byte selector for clashes, so we do a distinct on the full hash
 	var functionDefs []*PersistedABIEntry
-	err = dbTX.Table("abi_entries").
+	err := dbTX.Table("abi_entries").
 		Where("selector = ?", selector).
 		Where("type = ?", abi.Function).
 		Distinct("full_hash", "definition").
 		Find(&functionDefs).
 		Error
 
+	var e *abi.Entry
 	var cv *abi.ComponentValue
 	if err == nil {
 		for _, storedDef := range functionDefs {
-			var fnDef *abi.Entry
-			_ = json.Unmarshal(storedDef.Definition, &fnDef)
-			if fnDef != nil && fnDef.Inputs != nil {
-				cv, err = fnDef.DecodeCallDataCtx(ctx, callData)
+			_ = json.Unmarshal(storedDef.Definition, &e)
+			if e != nil && e.Inputs != nil {
+				cv, err = e.DecodeCallDataCtx(ctx, callData)
 				if err == nil {
 					break
 				}
@@ -243,14 +244,18 @@ func (tm *txManager) DecodeCall(ctx context.Context, dbTX *gorm.DB, callData tkt
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrDecodeCallDataNoABI, len(functionDefs))
 	}
 
+	de := &pldapi.ABIDecodedData{
+		Definition: e,
+		Signature:  e.String(),
+	}
 	serializer, err := dataFormat.GetABISerializer(ctx)
 	if err == nil {
-		data, err = serializer.SerializeJSONCtx(ctx, cv)
+		de.Data, err = serializer.SerializeJSONCtx(ctx, cv)
 	}
-	return data, err
+	return de, err
 }
 
-func (tm *txManager) DecodeEvent(ctx context.Context, dbTX *gorm.DB, topics []tktypes.Bytes32, eventData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (data tktypes.RawJSON, err error) {
+func (tm *txManager) DecodeEvent(ctx context.Context, dbTX *gorm.DB, topics []tktypes.Bytes32, eventData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error) {
 
 	if len(topics) < 1 {
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrDecodeCallNoData)
@@ -261,19 +266,19 @@ func (tm *txManager) DecodeEvent(ctx context.Context, dbTX *gorm.DB, topics []tk
 	}
 
 	var eventDefs []*PersistedABIEntry
-	err = dbTX.Table("abi_entries").
+	err := dbTX.Table("abi_entries").
 		Where("full_hash = ?", topics[0]).
 		Where("type = ?", abi.Event).
 		Find(&eventDefs).
 		Error
 
+	var e *abi.Entry
 	var cv *abi.ComponentValue
 	if err == nil {
 		for _, storedDef := range eventDefs {
-			var fnDef *abi.Entry
-			_ = json.Unmarshal(storedDef.Definition, &fnDef)
-			if fnDef != nil && fnDef.Inputs != nil {
-				cv, err = fnDef.DecodeEventDataCtx(ctx, ethTopics, ethtypes.HexBytes0xPrefix(eventData))
+			_ = json.Unmarshal(storedDef.Definition, &e)
+			if e != nil && e.Inputs != nil {
+				cv, err = e.DecodeEventDataCtx(ctx, ethTopics, ethtypes.HexBytes0xPrefix(eventData))
 				if err == nil {
 					break
 				}
@@ -284,11 +289,15 @@ func (tm *txManager) DecodeEvent(ctx context.Context, dbTX *gorm.DB, topics []tk
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrDecodeEventNoABI, len(eventDefs))
 	}
 
+	de := &pldapi.ABIDecodedData{
+		Definition: e,
+		Signature:  e.String(),
+	}
 	serializer, err := dataFormat.GetABISerializer(ctx)
 	if err == nil {
-		data, err = serializer.SerializeJSONCtx(ctx, cv)
+		de.Data, err = serializer.SerializeJSONCtx(ctx, cv)
 	}
-	return data, err
+	return de, err
 }
 
 func (tm *txManager) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.TransactionReceipt, error) {

@@ -302,7 +302,7 @@ func (tm *txManager) rpcDecodeError() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		revertError tktypes.HexBytes,
 		dataFormat tktypes.JSONFormatOptions,
-	) (*pldapi.DecodedError, error) {
+	) (*pldapi.ABIDecodedData, error) {
 		return tm.DecodeRevertError(ctx, tm.p.DB(), revertError, dataFormat)
 	})
 }
@@ -311,7 +311,7 @@ func (tm *txManager) rpcDecodeCall() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		callData tktypes.HexBytes,
 		dataFormat tktypes.JSONFormatOptions,
-	) (tktypes.RawJSON, error) {
+	) (*pldapi.ABIDecodedData, error) {
 		return tm.DecodeCall(ctx, tm.p.DB(), callData, dataFormat)
 	})
 }
@@ -321,7 +321,7 @@ func (tm *txManager) rpcDecodeEvent() rpcserver.RPCHandler {
 		topics []tktypes.Bytes32,
 		data tktypes.HexBytes,
 		dataFormat tktypes.JSONFormatOptions,
-	) (tktypes.RawJSON, error) {
+	) (*pldapi.ABIDecodedData, error) {
 		return tm.DecodeEvent(ctx, tm.p.DB(), topics, data, dataFormat)
 	})
 }

@@ -111,10 +111,11 @@ type TransactionFull struct {
 	// TODO: PrivateTransactions object list
 }
 
-type DecodedError struct {
-	Data       tktypes.RawJSON `docstruct:"DecodedError" json:"data"`
-	Summary    string          `docstruct:"DecodedError" json:"summary"`
-	Definition *abi.Entry      `docstruct:"DecodedError" json:"definition"`
+type ABIDecodedData struct {
+	Data       tktypes.RawJSON `docstruct:"ABIDecodedData" json:"data"`
+	Summary    string          `docstruct:"ABIDecodedData" json:"summary,omitempty"` // errors only
+	Definition *abi.Entry      `docstruct:"ABIDecodedData" json:"definition"`
+	Signature  string          `docstruct:"ABIDecodedData" json:"signature"`
 }
 
 type TransactionReceipt struct {

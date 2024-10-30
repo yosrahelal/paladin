@@ -134,9 +134,10 @@ var (
 	PreparedTransactionTransaction                = ffm("PreparedTransaction.transaction", "The Paladin transaction definition that has been prepared for submission, with the ABI and function details resolved")
 	PreparedTransactionExtraData                  = ffm("PreparedTransaction.extraData", "Domain specific additional information that is created during preparation of the transaction is required as part of a coordination submission, particular pre-approval in atomic multi-party transactions")
 	PreparedTransactionStates                     = ffm("PreparedTransaction.states", "Details of all states of the original transaction that prepared this transaction submission")
-	DecodedErrorData                              = ffm("DecodedError.data", "The decoded JSON data from the error")
-	DecodedSummary                                = ffm("DecodedError.summary", "String summary of the error")
-	DecodedDefinition                             = ffm("DecodedError.definition", "The ABI definition of the error recovered from the dictionary of ABIs")
+	DecodedErrorData                              = ffm("ABIDecodedData.data", "The decoded JSON data using the matched ABI definition")
+	DecodedSummary                                = ffm("ABIDecodedData.summary", "A string formatted summary - errors only")
+	DecodedDefinition                             = ffm("ABIDecodedData.definition", "The ABI definition entry matched from the dictionary of ABIs")
+	DecodedSignature                              = ffm("ABIDecodedData.signature", "The signature of the matched ABI definition")
 )
 
 // query/query_json.go

@@ -47,7 +47,9 @@ type PTX interface {
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error)
 	GetPreparedTransaction(ctx context.Context, txID uuid.UUID) (preparedTransaction *pldapi.PreparedTransaction, err error)
 	QueryPreparedTransactions(ctx context.Context, jq *query.QueryJSON) (preparedTransactions []*pldapi.PreparedTransaction, err error)
-	DecodeError(ctx context.Context, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedError *pldapi.DecodedError, err error)
+	DecodeError(ctx context.Context, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedError *pldapi.ABIDecodedData, err error)
+	DecodeCall(ctx context.Context, callData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedCall *pldapi.ABIDecodedData, err error)
+	DecodeEvent(ctx context.Context, topics []tktypes.Bytes32, eventData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedEvent *pldapi.ABIDecodedData, err error)
 
 	StoreABI(ctx context.Context, abi abi.ABI) (storedABI *pldapi.StoredABI, err error)
 	GetStoredABI(ctx context.Context, hashRef tktypes.Bytes32) (storedABI *pldapi.StoredABI, err error)
@@ -143,6 +145,14 @@ var ptxInfo = &rpcModuleInfo{
 		"ptx_decodeError": {
 			Inputs: []string{"revertData", "dataFormat"},
 			Output: "decodedError",
+		},
+		"ptx_decodeCall": {
+			Inputs: []string{"callData", "dataFormat"},
+			Output: "decodedCall",
+		},
+		"ptx_decodeEvent": {
+			Inputs: []string{"topics", "data", "dataFormat"},
+			Output: "decodedEvent",
 		},
 		"ptx_resolveVerifier": {
 			Inputs: []string{"keyIdentifier", "algorithm", "verifierType"},
@@ -260,8 +270,18 @@ func (p *ptx) QueryStoredABIs(ctx context.Context, jq *query.QueryJSON) (storedA
 	return
 }
 
-func (p *ptx) DecodeError(ctx context.Context, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedError *pldapi.DecodedError, err error) {
+func (p *ptx) DecodeError(ctx context.Context, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedError *pldapi.ABIDecodedData, err error) {
 	err = p.c.CallRPC(ctx, &decodedError, "ptx_decodeError", revertData, dataFormat)
+	return
+}
+
+func (p *ptx) DecodeCall(ctx context.Context, callData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedCall *pldapi.ABIDecodedData, err error) {
+	err = p.c.CallRPC(ctx, &decodedCall, "ptx_decodeCall", callData, dataFormat)
+	return
+}
+
+func (p *ptx) DecodeEvent(ctx context.Context, topics []tktypes.Bytes32, data tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (decodedEvent *pldapi.ABIDecodedData, err error) {
+	err = p.c.CallRPC(ctx, &decodedEvent, "ptx_decodeEvent", topics, data, dataFormat)
 	return
 }
 
