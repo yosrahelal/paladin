@@ -197,8 +197,8 @@ var _ = Describe("controller", Ordered, func() {
 					}).
 					Send().
 					Wait(5 * time.Second)
-				Expect(txn.Error()).To(BeNil())
 				testLog("Noto mint transaction %s", txn.ID())
+				Expect(txn.Error()).To(BeNil())
 				logWallet("bob", "node1")
 			}
 		})
@@ -220,11 +220,30 @@ var _ = Describe("controller", Ordered, func() {
 					}).
 					Send().
 					Wait(5 * time.Second)
-				Expect(txn.Error()).To(BeNil())
 				testLog("Noto transfer transaction %s", txn.ID())
+				Expect(txn.Error()).To(BeNil())
 				logWallet("bob", "node1")
 				logWallet("sally", "node2")
 			}
+		})
+
+		It("sally on node2 sends some notos to fred on node3", func() {
+			txn := rpc["node2"].ForABI(ctx, nototypes.NotoABI).
+				Private().
+				Domain("noto").
+				Function("transfer").
+				To(notoContract).
+				From("sally@node2").
+				Inputs(&nototypes.TransferParams{
+					To:     "fred@node3",
+					Amount: with18Decimals(6),
+				}).
+				Send().
+				Wait(5 * time.Second)
+			testLog("Noto transfer transaction %s", txn.ID())
+			Expect(txn.Error()).To(BeNil())
+			logWallet("sally", "node2")
+			logWallet("fred", "node3")
 			testLog("done testing noto in isolation")
 		})
 
@@ -373,8 +392,8 @@ var _ = Describe("controller", Ordered, func() {
 				From("seren@node1").
 				Send().
 				Wait(5 * time.Second)
-			Expect(deploy.Error()).To(BeNil())
 			testLog("Deployed SimpleERC20 contract into privacy group in transaction %s", deploy.ID())
+			Expect(deploy.Error()).To(BeNil())
 			erc20DeployID = deploy.ID()
 		})
 
@@ -440,8 +459,8 @@ var _ = Describe("controller", Ordered, func() {
 				From("seren@node1").
 				Send().
 				Wait(5 * time.Second)
-			Expect(invoke.Error()).To(BeNil())
 			testLog("SimpleERC20 mint transaction %s", invoke.ID())
+			Expect(invoke.Error()).To(BeNil())
 
 		})
 
@@ -472,8 +491,8 @@ var _ = Describe("controller", Ordered, func() {
 				From("seren@node1").
 				Send().
 				Wait(5 * time.Second)
-			Expect(invoke.Error()).To(BeNil())
 			testLog("SimpleERC20 mint transaction %s", invoke.ID())
+			Expect(invoke.Error()).To(BeNil())
 			erc20TransferID = invoke.ID()
 
 		})
@@ -545,8 +564,8 @@ var _ = Describe("controller", Ordered, func() {
 				From(notary).
 				Send().
 				Wait(5 * time.Second)
-			Expect(deploy.Error()).To(BeNil())
 			testLog("Deployed NotoTrackerERC20 contract into privacy group in transaction %s", deploy.ID())
+			Expect(deploy.Error()).To(BeNil())
 			notoTrackerDeployTX = deploy.ID()
 		})
 
