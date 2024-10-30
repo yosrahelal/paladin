@@ -169,7 +169,7 @@ func TestHDSigningDefaultBehaviorOK(t *testing.T) {
 			Type: pldconf.KeyStoreTypeStatic,
 			Static: pldconf.StaticKeyStoreConfig{
 				Keys: map[string]pldconf.StaticKeyEntryConfig{
-					"custom/seed": {
+					"custom.seed": {
 						Encoding: "none",
 						Inline:   mnemonic,
 					},
