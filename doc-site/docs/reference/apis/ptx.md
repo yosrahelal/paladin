@@ -113,6 +113,26 @@ title: ptx_*
 
 0. `receipt`: [`TransactionReceiptFull`](../types/transactionreceiptfull.md#transactionreceiptfull)
 
+## `ptx_prepareTransaction`
+
+### Parameters
+
+0. `transaction`: [`TransactionInput`](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+## `ptx_prepareTransactions`
+
+### Parameters
+
+0. `transactions`: [`TransactionInput[]`](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+0. `transactionIds`: [`UUID[]`](../types/simpletypes.md#uuid)
+
 ## `ptx_queryPreparedTransactions`
 
 ### Parameters
