@@ -40,10 +40,12 @@ type TransactionStateRefs struct {
 }
 
 type PrepareTransactionWithRefs struct {
-	ID          uuid.UUID
-	Transaction *pldapi.TransactionInput
-	ExtraData   tktypes.RawJSON
-	States      TransactionStateRefs
+	ID          uuid.UUID                // ID of the original private transaction
+	Domain      string                   // domain of the original private transaction
+	To          *tktypes.EthAddress      // the private smart contract that was invoked
+	States      TransactionStateRefs     // the states associated with the original private transaction
+	ExtraData   tktypes.RawJSON          // extra data in the prepare of the original private transaction
+	Transaction *pldapi.TransactionInput // the downstream transaction - might be public or private
 }
 
 type TransactionPreAssembly struct {

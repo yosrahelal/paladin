@@ -98,7 +98,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 	schemas, err := txm.stateMgr.EnsureABISchemas(ctx, txm.p.DB(), "domain1", []*abi.Parameter{testStateSchema})
 	require.NoError(t, err)
 
-	fakeContractAddr := *tktypes.RandAddress()
+	contractAddressDomain1 := *tktypes.RandAddress()
 	testSchemaID := schemas[0].ID()
 
 	// Create the parent TX
@@ -106,7 +106,8 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 		TransactionBase: pldapi.TransactionBase{
 			IdempotencyKey: "parent_txn",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
-			To:             tktypes.RandAddress(),
+			Domain:         "domain1",
+			To:             &contractAddressDomain1,
 			Function:       "doThing1",
 		},
 		ABI: abi.ABI{{Type: abi.Function, Name: "doThing1"}},
@@ -116,21 +117,23 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 	require.NoError(t, err)
 
 	// Mimic some states that it produced
-	spent, spentIDs := writeStates(t, txm, testSchemaID, fakeContractAddr, 3)
-	read, readIDs := writeStates(t, txm, testSchemaID, fakeContractAddr, 2)
-	confirm, confirmIDs := writeStates(t, txm, testSchemaID, fakeContractAddr, 5)
-	info, infoIDs := writeStates(t, txm, testSchemaID, fakeContractAddr, 1)
+	spent, spentIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 3)
+	read, readIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 2)
+	confirm, confirmIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 5)
+	info, infoIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 1)
 
 	childFnABI := abi.ABI{{Type: abi.Function, Name: "doThing2"}}
-	toAddr := tktypes.RandAddress()
+	contractAddressDomain2 := tktypes.RandAddress()
 	ptInsert := &components.PrepareTransactionWithRefs{
-		ID: *parentTx.Transaction.ID,
+		ID:     *parentTx.Transaction.ID,
+		Domain: parentTx.Transaction.Domain,
+		To:     &contractAddressDomain1,
 		Transaction: &pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
 				IdempotencyKey: "child_txn",
 				Type:           pldapi.TransactionTypePrivate.Enum(),
-				Domain:         "domain1",
-				To:             toAddr,
+				Domain:         "domain2",
+				To:             contractAddressDomain2,
 				Function:       "doThing2",
 			},
 			ABI: childFnABI,
@@ -155,13 +158,15 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 	pt, err := txm.GetPreparedTransactionByID(ctx, txm.p.DB(), *parentTx.Transaction.ID)
 	require.NoError(t, err)
 	require.Equal(t, &pldapi.PreparedTransaction{
-		ID: *parentTx.Transaction.ID,
+		ID:     *parentTx.Transaction.ID,
+		Domain: "domain1",
+		To:     &contractAddressDomain1,
 		Transaction: pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
 				IdempotencyKey: "child_txn",
 				Type:           pldapi.TransactionTypePrivate.Enum(),
-				Domain:         "domain1",
-				To:             toAddr,
+				Domain:         "domain2",
+				To:             contractAddressDomain2,
 				Function:       "doThing2()",    // now fully qualified
 				ABIReference:   &storedABI.Hash, // now resolved
 			},

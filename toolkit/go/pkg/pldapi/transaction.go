@@ -162,8 +162,10 @@ type TransactionDependencies struct {
 }
 
 type PreparedTransaction struct {
-	ID          uuid.UUID         `docstruct:"PreparedTransaction" json:"id"`
-	Transaction TransactionInput  `docstruct:"PreparedTransaction" json:"transaction"`
-	ExtraData   tktypes.RawJSON   `docstruct:"PreparedTransaction" json:"extraData,omitempty"`
-	States      TransactionStates `docstruct:"PreparedTransaction" json:"states"`
+	ID          uuid.UUID           `docstruct:"PreparedTransaction" json:"id"`
+	Domain      string              `docstruct:"PreparedTransaction" json:"domain"`
+	To          *tktypes.EthAddress `docstruct:"PreparedTransaction" json:"to"`
+	Transaction TransactionInput    `docstruct:"PreparedTransaction" json:"transaction"`
+	ExtraData   tktypes.RawJSON     `docstruct:"PreparedTransaction" json:"extraData,omitempty"`
+	States      TransactionStates   `docstruct:"PreparedTransaction" json:"states"`
 }

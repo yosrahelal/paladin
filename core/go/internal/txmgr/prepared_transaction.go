@@ -31,10 +31,12 @@ import (
 
 // DB persisted record for a prepared transaction
 type preparedTransaction struct {
-	ID          uuid.UUID         `gorm:"column:id"`
-	Created     tktypes.Timestamp `gorm:"column:created"`
-	Transaction tktypes.RawJSON   `gorm:"column:transaction"`
-	ExtraData   tktypes.RawJSON   `gorm:"column:extra_data"`
+	ID          uuid.UUID           `gorm:"column:id"`
+	Domain      string              `gorm:"column:domain"`
+	To          *tktypes.EthAddress `gorm:"column:to"`
+	Created     tktypes.Timestamp   `gorm:"column:created"`
+	Transaction tktypes.RawJSON     `gorm:"column:transaction"`
+	ExtraData   tktypes.RawJSON     `gorm:"column:extra_data"`
 }
 
 func (preparedTransaction) TableName() string {
@@ -75,6 +77,8 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 	for _, p := range prepared {
 		dbPreparedTx := &preparedTransaction{
 			ID:        p.ID,
+			Domain:    p.Domain,
+			To:        p.To,
 			ExtraData: p.ExtraData,
 		}
 		// We do the work for the ABI validation etc. before we insert the TX
@@ -89,44 +93,41 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 			return err
 		}
 		preparedTxInserts = append(preparedTxInserts, dbPreparedTx)
-		domainName := p.Transaction.Domain
-		if domainName != "" {
-			for i, stateID := range p.States.Spent {
-				preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
-					Transaction: p.ID,
-					Type:        preparedSpend,
-					DomainName:  domainName,
-					StateID:     stateID,
-					StateIdx:    i,
-				})
-			}
-			for i, stateID := range p.States.Read {
-				preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
-					Transaction: p.ID,
-					Type:        preparedRead,
-					DomainName:  domainName,
-					StateID:     stateID,
-					StateIdx:    i,
-				})
-			}
-			for i, stateID := range p.States.Confirmed {
-				preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
-					Transaction: p.ID,
-					Type:        preparedConfirm,
-					DomainName:  domainName,
-					StateID:     stateID,
-					StateIdx:    i,
-				})
-			}
-			for i, stateID := range p.States.Info {
-				preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
-					Transaction: p.ID,
-					Type:        preparedInfo,
-					DomainName:  domainName,
-					StateID:     stateID,
-					StateIdx:    i,
-				})
-			}
+		for i, stateID := range p.States.Spent {
+			preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
+				Transaction: p.ID,
+				Type:        preparedSpend,
+				DomainName:  p.Domain,
+				StateID:     stateID,
+				StateIdx:    i,
+			})
+		}
+		for i, stateID := range p.States.Read {
+			preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
+				Transaction: p.ID,
+				Type:        preparedRead,
+				DomainName:  p.Domain,
+				StateID:     stateID,
+				StateIdx:    i,
+			})
+		}
+		for i, stateID := range p.States.Confirmed {
+			preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
+				Transaction: p.ID,
+				Type:        preparedConfirm,
+				DomainName:  p.Domain,
+				StateID:     stateID,
+				StateIdx:    i,
+			})
+		}
+		for i, stateID := range p.States.Info {
+			preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
+				Transaction: p.ID,
+				Type:        preparedInfo,
+				DomainName:  p.Domain,
+				StateID:     stateID,
+				StateIdx:    i,
+			})
 		}
 		log.L(ctx).Infof("Inserting prepared %s transaction for transaction %s with spent=%d read=%d confirmed=%d info=%d",
 			p.Transaction.Type, p.ID, len(p.States.Spent), len(p.States.Read), len(p.States.Confirmed), len(p.States.Info))
@@ -159,6 +160,8 @@ func (tm *txManager) QueryPreparedTransactions(ctx context.Context, dbTX *gorm.D
 		mapResult: func(pt *preparedTransaction) (*pldapi.PreparedTransaction, error) {
 			preparedTx := &pldapi.PreparedTransaction{
 				ID:        pt.ID,
+				Domain:    pt.Domain,
+				To:        pt.To,
 				ExtraData: pt.ExtraData,
 			}
 			return preparedTx, json.Unmarshal(pt.Transaction, &preparedTx.Transaction)
