@@ -127,7 +127,7 @@ export const fetchPaladinTransactions = async (
   const payload = {
     jsonrpc: "2.0",
     id: Date.now(),
-    method: RpcMethods.ptx_QueryTransactions,
+    method: RpcMethods.ptx_QueryTransactionsFull,
     params: [
       {
         limit: constants.TRANSACTION_QUERY_LIMIT,
