@@ -21,12 +21,14 @@ import {
   DialogContent,
   DialogTitle,
   MenuItem,
-  TextField
+  TextField,
+  useTheme
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { IPaladinTransaction } from '../interfaces';
 import { PaladinTransactionsDetails } from '../components/TransactionDetails';
 import { useEffect, useState } from 'react';
+import { altLightModeScrollbarStyle, altDarkModeScrollbarStyle } from '../themes/default';
 
 type Props = {
   paladinTransactions: IPaladinTransaction[]
@@ -42,6 +44,10 @@ export const PaladinTransactionsDetailsDialog: React.FC<Props> = ({
 
   const [selectedPaladinTransactionIndex, setSelectedPaladinTransactionIndex] = useState(0);
   const { t } = useTranslation();
+
+  const theme = useTheme();
+  const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
+
 
   useEffect(() => {
     if (dialogOpen) {
@@ -59,7 +65,7 @@ export const PaladinTransactionsDetailsDialog: React.FC<Props> = ({
       <DialogTitle sx={{ textAlign: 'center' }}>
         {t('transaction')}
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ margin: '10px', padding: '10px', ...addedStyle}}>
         <TextField select label={t('id')} fullWidth size="small" sx={{ marginTop: '5px' }} value={selectedPaladinTransactionIndex}
           onChange={event => setSelectedPaladinTransactionIndex(Number(event.target.value))}>
           {paladinTransactions.map((paladinTransaction, index) =>

@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Typography } from "@mui/material";
+import { Box, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { useContext } from "react";
@@ -25,9 +25,14 @@ import {
   fetchTransactionReceipts,
 } from "../queries/transactions";
 import { Transaction } from "./Transaction";
+import { altLightModeScrollbarStyle, altDarkModeScrollbarStyle } from "../themes/default";
+
 
 export const Transactions: React.FC = () => {
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
+  
+  const theme = useTheme();
+  const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
   const { data: transactions } = useQuery({
     queryKey: ["transactions", lastBlockWithTransactions],
@@ -54,8 +59,8 @@ export const Transactions: React.FC = () => {
       <Box
         sx={{
           height: "calc(100vh - 162px)",
-          overflow: "scroll",
           padding: "20px",
+          ...addedStyle
         }}
       >
         {transactions?.map((transaction) => (

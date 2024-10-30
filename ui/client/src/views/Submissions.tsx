@@ -14,17 +14,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Fade, Paper, Tab, Tabs, Typography } from "@mui/material";
+import { Box, Fade, Paper, Tab, Tabs, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { useContext, useState } from "react";
 import { PaladinTransaction } from "../components/PaladinTransaction";
 import { ApplicationContext } from "../contexts/ApplicationContext";
 import { fetchSubmissions } from "../queries/transactions";
+import { altLightModeScrollbarStyle, altDarkModeScrollbarStyle } from "../themes/default";
 
 export const Submissions: React.FC = () => {
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
   const [tab, setTab] = useState(0);
+
+  const theme = useTheme();
+  const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
   const { data: transactions, isLoading } = useQuery({
     queryKey: ["pendingTransactions", tab, lastBlockWithTransactions],
@@ -66,8 +70,8 @@ export const Submissions: React.FC = () => {
           <Box
             sx={{
               padding: "20px",
-              overflow: "scroll",
               height: "calc(100vh - 178px)",
+              ...addedStyle
             }}
           >
             {transactions?.map(transaction => (

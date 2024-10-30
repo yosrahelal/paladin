@@ -14,13 +14,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Typography } from "@mui/material";
+import { Box, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { fetchEvents } from "../queries/events";
 import { Event } from "./Event";
 import { useContext } from "react";
 import { ApplicationContext } from "../contexts/ApplicationContext";
+import { altDarkModeScrollbarStyle, altLightModeScrollbarStyle } from "../themes/default";
 
 export const Events: React.FC = () => {
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
@@ -28,6 +29,9 @@ export const Events: React.FC = () => {
     queryKey: ["events", lastBlockWithTransactions],
     queryFn: () => fetchEvents(),
   });
+
+  const theme = useTheme();
+  const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
   return (
     <>
@@ -37,8 +41,8 @@ export const Events: React.FC = () => {
       <Box
         sx={{
           height: "calc(100vh - 163px)",
-          overflow: "scroll",
           padding: "20px",
+          ...addedStyle
         }}
       >
         {events?.map((event) => (

@@ -28,12 +28,10 @@ export const darkThemeOptions: ThemeOptions = {
       default: 'black',
       paper: 'black',
     }
-  }
-
+  },
 };
 
 export const lightThemeOptions: ThemeOptions = {
-
   palette: {
     mode: 'light',
     primary: {
@@ -45,5 +43,30 @@ export const lightThemeOptions: ThemeOptions = {
       paper: '#FFFFFF',
     }
   }
+};
 
+export const altDarkModeScrollbarStyle = {
+  overflow: 'overlay',
+  scrollbarColor: '#1e242a',
+  '&::-webkit-scrollbar, & *::-webkit-scrollbar': {
+    backgroundColor: 'rgba(60, 60, 60, .40)',
+  },
+  '&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb': {
+    borderRadius: 8,
+    backgroundColor: '#12171d',
+    border: '3px solid #1e242a',
+  },
+};
+
+export const altLightModeScrollbarStyle = {
+  overflow: 'overlay',
+  scrollbarColor: '#FFFFFF',
+  '&::-webkit-scrollbar, & *::-webkit-scrollbar': {
+    backgroundColor: 'rgba(255, 255, 255, .40)',
+  },
+  '&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb': {
+    borderRadius: 8,
+    backgroundColor: '#F0F0F0',
+    border: '3px solid #FFFFFF',
+  },
 };

@@ -14,16 +14,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Fade, Paper, Typography } from "@mui/material";
+import { Box, Fade, Paper, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { useContext } from "react";
 import { Registry } from "../components/Registry";
 import { ApplicationContext } from "../contexts/ApplicationContext";
 import { fetchRegistries } from "../queries/registry";
+import { altDarkModeScrollbarStyle, altLightModeScrollbarStyle } from "../themes/default";
 
 export const Registries: React.FC = () => {
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
+
+  const theme = useTheme();
+  const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
   const { data: registries } = useQuery({
     queryKey: ["registries", lastBlockWithTransactions],
@@ -55,8 +59,8 @@ export const Registries: React.FC = () => {
           <Box
             sx={{
               padding: "20px",
-              overflow: "scroll",
               height: "calc(100vh - 162px)",
+              ...addedStyle
             }}
           >
             {registries?.map((registry) => (
