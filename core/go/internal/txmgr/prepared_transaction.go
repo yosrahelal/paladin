@@ -82,7 +82,8 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 			ExtraData: p.ExtraData,
 		}
 		// We do the work for the ABI validation etc. before we insert the TX
-		resolved, err := tm.resolveNewTransaction(ctx, dbTX, p.Transaction, pldapi.SubmitModeExternal)
+		resolved, err := tm.resolveNewTransaction(ctx, dbTX, p.Transaction,
+			pldapi.SubmitModeAuto /* seems counter intuitive here, but this is the _result_ of a prepare (not the input for a prepare) */)
 		if err == nil {
 			p.Transaction.ABI = nil // move to the reference
 			p.Transaction.ABIReference = resolved.Function.ABIReference
