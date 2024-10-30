@@ -60,7 +60,7 @@ export const fetchSubmissions = async (
     id: Date.now(),
     method:
       type === "all"
-        ? RpcMethods.ptx_QueryTransactions
+        ? RpcMethods.ptx_QueryTransactionsFull
         : RpcMethods.ptx_QueryPendingTransactions,
     params: type === "all" ? allParams : pendingParams,
   };
