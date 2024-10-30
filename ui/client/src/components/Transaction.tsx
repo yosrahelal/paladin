@@ -52,9 +52,14 @@ export const Transaction: React.FC<Props> = ({ transaction, paladinTransactions 
         }
         <Grid2 container direction="column" spacing={2}>
           <Grid2 container justifyContent="space-evenly">
-            {paladinTransactions && paladinTransactions.length > 0 &&
+            {paladinTransactions && paladinTransactions.length > 1 &&
               <Grid2>
-                <Typography align="center" variant="h6" color="textPrimary">{t('atomicNumber', { number: paladinTransactions.length})}</Typography>
+                <Typography align="center" variant="h6" color="textPrimary">{t('atomicNumber', { number: paladinTransactions.length })}</Typography>
+                <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
+              </Grid2>}
+            {paladinTransactions && paladinTransactions.length === 1 &&
+              <Grid2>
+                <Typography align="center" variant="h6" color="textPrimary">{t(paladinTransactions[0].type)}</Typography>
                 <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
               </Grid2>}
             <Grid2>
