@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -170,14 +171,15 @@ func (tm *txManager) DecodeRevertError(ctx context.Context, dbTX *gorm.DB, rever
 	selector := tktypes.HexBytes(revertData[0:4])
 
 	// There is potential with a 4 byte selector for clashes, so we do a distinct on the full hash
-	var errorDefs []*PersistedABIError
-	err := dbTX.Table("abi_errors").
+	var errorDefs []*PersistedABIEntry
+	err := dbTX.Table("abi_entries").
 		Where("selector = ?", selector).
+		Where("type = ?", abi.Error).
 		Distinct("full_hash", "definition").
 		Find(&errorDefs).
 		Error
 	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrRevertedDataNotDecoded)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrRevertedNoMatchingErrABI, revertData)
 	}
 
 	// Turn this into an ABI that we pass to the handy utility (which also includes
@@ -206,6 +208,87 @@ func (tm *txManager) DecodeRevertError(ctx context.Context, dbTX *gorm.DB, rever
 		return nil, err
 	}
 	return de, nil
+}
+
+func (tm *txManager) DecodeCall(ctx context.Context, dbTX *gorm.DB, callData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (data tktypes.RawJSON, err error) {
+
+	if len(callData) < 4 {
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrDecodeCallNoData)
+	}
+	selector := tktypes.HexBytes(callData[0:4])
+
+	// There is potential with a 4 byte selector for clashes, so we do a distinct on the full hash
+	var functionDefs []*PersistedABIEntry
+	err = dbTX.Table("abi_entries").
+		Where("selector = ?", selector).
+		Where("type = ?", abi.Function).
+		Distinct("full_hash", "definition").
+		Find(&functionDefs).
+		Error
+
+	var cv *abi.ComponentValue
+	if err == nil {
+		for _, storedDef := range functionDefs {
+			var fnDef *abi.Entry
+			_ = json.Unmarshal(storedDef.Definition, &fnDef)
+			if fnDef != nil && fnDef.Inputs != nil {
+				cv, err = fnDef.DecodeCallDataCtx(ctx, callData)
+				if err == nil {
+					break
+				}
+			}
+		}
+	}
+	if cv == nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrDecodeCallDataNoABI, len(functionDefs))
+	}
+
+	serializer, err := dataFormat.GetABISerializer(ctx)
+	if err == nil {
+		data, err = serializer.SerializeJSONCtx(ctx, cv)
+	}
+	return data, err
+}
+
+func (tm *txManager) DecodeEvent(ctx context.Context, dbTX *gorm.DB, topics []tktypes.Bytes32, eventData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (data tktypes.RawJSON, err error) {
+
+	if len(topics) < 1 {
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrDecodeCallNoData)
+	}
+	ethTopics := make([]ethtypes.HexBytes0xPrefix, len(topics))
+	for i, t := range topics {
+		ethTopics[i] = t[:]
+	}
+
+	var eventDefs []*PersistedABIEntry
+	err = dbTX.Table("abi_entries").
+		Where("full_hash = ?", topics[0]).
+		Where("type = ?", abi.Event).
+		Find(&eventDefs).
+		Error
+
+	var cv *abi.ComponentValue
+	if err == nil {
+		for _, storedDef := range eventDefs {
+			var fnDef *abi.Entry
+			_ = json.Unmarshal(storedDef.Definition, &fnDef)
+			if fnDef != nil && fnDef.Inputs != nil {
+				cv, err = fnDef.DecodeEventDataCtx(ctx, ethTopics, ethtypes.HexBytes0xPrefix(eventData))
+				if err == nil {
+					break
+				}
+			}
+		}
+	}
+	if cv == nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrDecodeEventNoABI, len(eventDefs))
+	}
+
+	serializer, err := dataFormat.GetABISerializer(ctx)
+	if err == nil {
+		data, err = serializer.SerializeJSONCtx(ctx, cv)
+	}
+	return data, err
 }
 
 func (tm *txManager) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.TransactionReceipt, error) {

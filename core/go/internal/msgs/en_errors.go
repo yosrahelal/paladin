@@ -379,8 +379,7 @@ var (
 	MsgTxMgrInvalidTXType                = ffe("PD012211", "Invalid transaction type")
 	MsgTxMgrInvalidInputDataType         = ffe("PD012212", "Invalid input data type: %T")
 	MsgTxMgrInvalidReceiptNotification   = ffe("PD012213", "Invalid receipt notification from component: %s")
-	MsgTxMgrRevertedNoData               = ffe("PD012214", "Transaction reverted (no revert data)")
-	MsgTxMgrRevertedDataNotDecoded       = ffe("PD012215", "Transaction reverted (revert data not decoded)")
+	MsgTxMgrRevertedNoData               = ffe("PD012214", "Unable to decode revert data (no revert data available)")
 	MsgTxMgrRevertedDecodedData          = ffe("PD012216", "Transaction reverted %s")
 	MsgTxMgrInvalidStoredData            = ffe("PD012217", "Stored data is invalid")
 	MsgTxMgrNoABIOrReference             = ffe("PD012218", "An ABI containing a function/constructor definition or an abiReference to an existing stored ABI must be supplied")
@@ -390,6 +389,10 @@ var (
 	MsgTxMgrPrivateChainedTXIdemKey      = ffe("PD012223", "Chained internal transactions must have an idempotency key")
 	MsgTxMgrPrivateInsertErrorMismatch   = ffe("PD012224", "An unexpected result occurred inserting private transactions after-insert=%d matched=%d expected=%d")
 	MsgTxMgrPrivateOnlyForPrepare        = ffe("PD012225", "Prepare transaction only supports private transactions")
+	MsgTxMgrDecodeCallNoData             = ffe("PD012226", "Unable to decode call data (less than 4 bytes)")
+	MsgTxMgrDecodeCallDataNoABI          = ffe("PD012227", "Unable to decode call data using stored ABIs (%d matched function selector)")
+	MsgTxMgrDecodeEventAnonymous         = ffe("PD012228", "Unable to decode event with no topics (anonymous events cannot be decoded)")
+	MsgTxMgrDecodeEventNoABI             = ffe("PD012229", "Unable to decode event data using stored ABIs (%d matched signature)")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")
