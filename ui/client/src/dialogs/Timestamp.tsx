@@ -54,8 +54,6 @@ export const TimestampDialog: React.FC<Props> = ({
     }
   };
 
-  console.log(timestamp)
-
   return (
     <Dialog
       onClose={() => setDialogOpen(false)}
@@ -106,8 +104,8 @@ export const TimestampDialog: React.FC<Props> = ({
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'center', marginBottom: '15px' }}>
         <Button
+          sx={{ textTransform: 'none' }}
           onClick={() => setDialogOpen(false)}
-          size="large"
           variant="contained"
           disableElevation>
           {t('dismiss')}

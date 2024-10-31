@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Fade, Paper, Tab, Tabs, Typography, useTheme } from "@mui/material";
+import { Box, Fade, ToggleButton, ToggleButtonGroup, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { useContext, useState } from "react";
@@ -25,65 +25,50 @@ import { altLightModeScrollbarStyle, altDarkModeScrollbarStyle } from "../themes
 
 export const Submissions: React.FC = () => {
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState<'all' | 'pending'>('all');
 
   const theme = useTheme();
-  const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
+  const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
-  const { data: transactions, isLoading } = useQuery({
+  const { data: transactions } = useQuery({
     queryKey: ["pendingTransactions", tab, lastBlockWithTransactions],
-    queryFn: () => fetchSubmissions(tab === 0 ? "all" : "pending"),
+    queryFn: () => fetchSubmissions(tab),
     retry: false
   });
 
-  if (isLoading) {
-    return <></>;
-  }
-
   return (
-    <Fade timeout={800} in={true}>
+    <Fade timeout={600} in={true}>
       <Box
         sx={{
           padding: "20px",
-          maxWidth: "1200px",
+          maxWidth: "1300px",
           marginLeft: "auto",
           marginRight: "auto",
         }}
       >
-        <Paper
+        <Box sx={{ marginBottom: '20px', textAlign: 'right' }}>
+          <ToggleButtonGroup exclusive onChange={(_event, value) => setTab(value)} value={tab}>
+            <ToggleButton color="primary" value="all" sx={{ textTransform: 'none', width: '130px', height: '45px' }}>{t('all')}</ToggleButton>
+            <ToggleButton color="primary" value="pending" sx={{ textTransform: 'none', width: '130px', height: '45px' }}>{t('pending')}</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+        <Box
           sx={{
-            padding: "10px",
-            paddingTop: "12px",
-            backgroundColor: theme => theme.palette.mode === 'light' ?
-            'rgba(255, 255, 255, .65)' : 'rgba(60, 60, 60, .65)'
+            paddingRight: "15px",
+            height: "calc(100vh - 178px)",
+            ...addedStyle
           }}
         >
-          <Tabs
-            value={tab}
-            onChange={(_event, value) => setTab(value)}
-            centered
-          >
-            <Tab label={t("all")} />
-            <Tab label={t("pending")} />
-          </Tabs>
+          {transactions?.map(transaction => (
+            <PaladinTransaction
+              key={transaction.id}
+              paladinTransaction={transaction}
+            />
+          ))}
+          {transactions?.length === 0 &&
+            <Typography color="textSecondary" align="center" variant="h6" sx={{ marginTop: '40px' }}>{t('noPendingTransactions')}</Typography>}
+        </Box>
 
-          <Box
-            sx={{
-              padding: "20px",
-              height: "calc(100vh - 178px)",
-              ...addedStyle
-            }}
-          >
-            {transactions?.map(transaction => (
-              <PaladinTransaction
-                key={transaction.id}
-                paladinTransaction={transaction}
-              />
-            ))}
-            {transactions?.length === 0 &&
-            <Typography align="center" variant="h6" sx={{ marginTop: '20px'}}>{t('noPendingTransactions')}</Typography>}
-          </Box>
-        </Paper>
       </Box>
     </Fade>
   );

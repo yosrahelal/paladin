@@ -14,13 +14,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import HourglassTopIcon from '@mui/icons-material/HourglassTop';
 import { Button } from '@mui/material';
 import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useEffect, useState } from 'react';
 import { constants } from './config';
 import { TimestampDialog } from '../dialogs/Timestamp';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 daysjs.extend(relativeTime);
 
@@ -43,8 +43,9 @@ export const EllapsedTime: React.FC<Props> = ({ timestamp }) => {
   return (
     <>
       <Button
+        sx={{ textTransform: 'none', fontWeight: '400' }}
         size="small"
-        startIcon={<HourglassTopIcon />}
+        startIcon={<AccessTimeIcon />}
         onClick={() => setTimestampDialogOpen(true)}>
         {displayValue}
       </Button>

@@ -36,11 +36,11 @@ export const Registries: React.FC = () => {
   });
 
   return (
-    <Fade timeout={800} in={true}>
+    <Fade timeout={600} in={true}>
       <Box
         sx={{
           padding: "20px",
-          maxWidth: "1200px",
+          maxWidth: "1300px",
           marginLeft: "auto",
           marginRight: "auto",
         }}

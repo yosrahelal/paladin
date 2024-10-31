@@ -26,7 +26,7 @@ export const darkThemeOptions: ThemeOptions = {
     },
     background: {
       default: 'black',
-      paper: 'black',
+      paper: '#1E242B',
     }
   },
 };
