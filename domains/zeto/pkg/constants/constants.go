@@ -29,8 +29,4 @@ const (
 	TOKEN_ANON           = "Zeto_Anon"
 	TOKEN_ANON_ENC       = "Zeto_AnonEnc"
 	TOKEN_ANON_NULLIFIER = "Zeto_AnonNullifier"
-
-	TOKEN_ANON_BATCH           = "Zeto_AnonBatch"
-	TOKEN_ANON_ENC_BATCH       = "Zeto_AnonEncBatch"
-	TOKEN_ANON_NULLIFIER_BATCH = "Zeto_AnonNullifierBatch"
 )
