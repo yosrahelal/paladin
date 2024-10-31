@@ -47,8 +47,8 @@ type Publisher interface {
 	//Service for sending messages and events within the local node
 	PublishTransactionBlockedEvent(ctx context.Context, transactionId string)
 	PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string)
-	PublishTransactionAssembledEvent(ctx context.Context, transactionId string, postAssembly *components.TransactionPostAssembly)
-	PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string)
+	PublishTransactionAssembledEvent(ctx context.Context, transactionId string, postAssembly *components.TransactionPostAssembly, requestID string)
+	PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string, requestID string)
 	PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult)
 	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, idempotencyKey string, party string, attestationRequestName string, attestationResult *prototk.AttestationResult, revertReason *string)
 	PublishResolveVerifierResponseEvent(ctx context.Context, transactionId string, lookup, algorithm, verifier, verifierType string)
@@ -91,6 +91,7 @@ type TransportWriter interface {
 	SendState(ctx context.Context, stateId string, schemaId string, stateDataJson string, party string) error
 	SendDelegationRequest(ctx context.Context, delegationId string, delegateNodeId string, transaction *components.PrivateTransaction) error
 	SendEndorsementRequest(ctx context.Context, idempotencyKey string, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState) error
+	SendAssembleRequest(ctx context.Context, assemblingNode string, assembleRequestID string, txID uuid.UUID, contractAddress string, transactionInputs *components.TransactionInputs, preAssembly *components.TransactionPreAssembly, stateLocksJSON []byte, blockHeight int64) error
 }
 
 type TransactionFlowStatus int

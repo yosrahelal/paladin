@@ -18,44 +18,16 @@ package statedistribution
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/core/internal/components"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
 )
 
-const STATE_DISTRIBUTER_DESTINATION = "state-distributer"
-
-func (sd *stateDistributer) Destination() string {
-	return STATE_DISTRIBUTER_DESTINATION
-}
-
-func (sd *stateDistributer) ReceiveTransportMessage(ctx context.Context, message *components.TransportMessage) {
-	log.L(ctx).Debugf("stateDistributer:ReceiveTransportMessage")
-	messagePayload := message.Payload
-
-	switch message.MessageType {
-	case "StateProducedEvent":
-		distributingNode := message.ReplyTo
-		go sd.handleStateProducedEvent(ctx, messagePayload, distributingNode)
-	case "StateAcknowledgedEvent":
-		go sd.handleStateAcknowledgedEvent(ctx, message.Payload)
-	default:
-		log.L(ctx).Errorf("Unknown message type: %s", message.MessageType)
-	}
-}
-
-func (sd *stateDistributer) handleStateProducedEvent(ctx context.Context, messagePayload []byte, distributingNode string) {
+func (sd *stateDistributer) HandleStateProducedEvent(ctx context.Context, stateProducedEvent *pb.StateProducedEvent, distributingNode string) {
 	log.L(ctx).Debugf("stateDistributer:handleStateProducedEvent")
-	stateProducedEvent := &pb.StateProducedEvent{}
-	err := proto.Unmarshal(messagePayload, stateProducedEvent)
-	if err != nil {
-		log.L(ctx).Errorf("Failed to unmarshal StateProducedEvent: %s", err)
-		return
-	}
 
-	err = sd.receivedStateWriter.QueueAndWait(ctx, stateProducedEvent.DomainName, *tktypes.MustEthAddress(stateProducedEvent.ContractAddress), tktypes.MustParseBytes32(stateProducedEvent.SchemaId), tktypes.RawJSON(stateProducedEvent.StateDataJson))
+	err := sd.receivedStateWriter.QueueAndWait(ctx, stateProducedEvent.DomainName, *tktypes.MustEthAddress(stateProducedEvent.ContractAddress), tktypes.MustParseBytes32(stateProducedEvent.SchemaId), tktypes.RawJSON(stateProducedEvent.StateDataJson))
 	if err != nil {
 		log.L(ctx).Errorf("Error writing state: %s", err)
 		//don't send the acknowledgement, with a bit of luck, the sender will retry and we will get it next time
@@ -79,7 +51,7 @@ func (sd *stateDistributer) handleStateProducedEvent(ctx context.Context, messag
 	}
 }
 
-func (sd *stateDistributer) handleStateAcknowledgedEvent(ctx context.Context, messagePayload []byte) {
+func (sd *stateDistributer) HandleStateAcknowledgedEvent(ctx context.Context, messagePayload []byte) {
 	log.L(ctx).Debugf("stateDistributer:handleStateAcknowledgedEvent")
 	stateAcknowledgedEvent := &pb.StateAcknowledgedEvent{}
 	err := proto.Unmarshal(messagePayload, stateAcknowledgedEvent)

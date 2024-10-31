@@ -52,7 +52,15 @@ func NewCoordinatorSelector(ctx context.Context, nodeName string, contractConfig
 		}, nil
 	}
 	if contractConfig.GetCoordinatorSelection() == prototk.ContractConfig_COORDINATOR_STATIC {
-		staticCoordinatorNode := contractConfig.GetStaticCoordinator()
+		staticCoordinator := contractConfig.GetStaticCoordinator()
+		//staticCoordinator must be a fully qualified identity because it is also used to locate the signing key
+		// but at this point, we only need the node name
+		staticCoordinatorNode, err := tktypes.PrivateIdentityLocator(staticCoordinator).Node(ctx, false)
+		if err != nil {
+			log.L(ctx).Errorf("Error resolving node for static coordinator %s: %s", staticCoordinator, err)
+			return nil, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, err)
+		}
+
 		return &staticCoordinatorSelectorPolicy{
 			nodeName: staticCoordinatorNode,
 		}, nil
@@ -77,7 +85,7 @@ type roundRobinCoordinatorSelectorPolicy struct {
 }
 
 func (s *staticCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.Context, _ *components.PrivateTransaction, _ ptmgrtypes.SequencerEnvironment) (string, error) {
-	log.L(ctx).Debugf("Selecting coordinator node %s", s.nodeName)
+	log.L(ctx).Debugf("SelectCoordinatorNode: Selecting coordinator node %s", s.nodeName)
 	return s.nodeName, nil
 }
 
@@ -86,7 +94,7 @@ func (s *roundRobinCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.
 		if transaction.PostAssembly == nil {
 			//if we don't know the candidate nodes, and the transaction hasn't been assembled yet, then we can't select a coordinator so just assume we are the coordinator
 			// until we get the transaction assembled and then re-evaluate
-			log.L(ctx).Debug("No candidate nodes, assuming local node is the coordinator")
+			log.L(ctx).Debug("SelectCoordinatorNode: No candidate nodes, assuming local node is the coordinator")
 			return s.localNode, nil
 		} else {
 			//use a map to dedupe as we go
@@ -96,7 +104,7 @@ func (s *roundRobinCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.
 					for _, party := range attestationPlan.Parties {
 						node, err := tktypes.PrivateIdentityLocator(party).Node(ctx, true)
 						if err != nil {
-							log.L(ctx).Errorf("Error resolving node for party %s: %s", party, err)
+							log.L(ctx).Errorf("SelectCoordinatorNode: Error resolving node for party %s: %s", party, err)
 							return "", i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, err)
 						}
 						if node == "" {
@@ -115,7 +123,7 @@ func (s *roundRobinCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.
 
 	if len(s.candidateNodes) == 0 {
 		//if we still don't have any candidate nodes, then we can't select a coordinator so just assume we are the coordinator
-		log.L(ctx).Debug("No candidate nodes, assuming local node is the coordinator")
+		log.L(ctx).Debug("SelectCoordinatorNode: No candidate nodes, assuming local node is the coordinator")
 		return s.localNode, nil
 	}
 
@@ -124,6 +132,9 @@ func (s *roundRobinCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.
 	rangeIndex := blockHeight / int64(s.rangeSize)
 
 	coordinatorIndex := int(rangeIndex) % len(s.candidateNodes)
-	return s.candidateNodes[coordinatorIndex], nil
+	coordinatorNode := s.candidateNodes[coordinatorIndex]
+	log.L(ctx).Debugf("SelectCoordinatorNode: selected coordinator node %s using round robin algorithm for blockHeight: %d and rangeSize %d ", coordinatorNode, blockHeight, s.rangeSize)
+
+	return coordinatorNode, nil
 
 }

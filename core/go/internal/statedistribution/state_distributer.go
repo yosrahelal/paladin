@@ -22,6 +22,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	pb "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -73,13 +74,15 @@ StateDistributer is a component that is responsible for distributing state to re
 	it runs in its own goroutine and periodically sends states to the intended recipients
 	until each recipient has acknowledged receipt of the state.
 
-	This operates on in-memory data but will initialise from persistent storage on startup
+	This operates on in-memory data but will initialize from persistent storage on startup
 */
 type StateDistributer interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context)
 	AcknowledgeState(ctx context.Context, stateID string)
 	DistributeStates(ctx context.Context, stateDistributions []*StateDistribution)
+	HandleStateProducedEvent(ctx context.Context, stateProducedEvent *pb.StateProducedEvent, distributingNode string)
+	HandleStateAcknowledgedEvent(ctx context.Context, messagePayload []byte)
 }
 
 type stateDistributer struct {
@@ -102,12 +105,6 @@ func (sd *stateDistributer) Start(bgCtx context.Context) error {
 	sd.runCtx, sd.stopRunCtx = context.WithCancel(bgCtx)
 	ctx := sd.runCtx
 	log.L(ctx).Info("stateDistributer:Start")
-
-	err := sd.transportManager.RegisterClient(ctx, sd)
-	if err != nil {
-		log.L(ctx).Errorf("Error registering transport client: %s", err)
-		return err
-	}
 
 	sd.acknowledgementWriter.Start()
 	sd.receivedStateWriter.Start()

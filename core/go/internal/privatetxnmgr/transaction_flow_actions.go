@@ -35,6 +35,11 @@ func (tf *transactionFlow) logActionDebug(ctx context.Context, msg string) {
 	log.L(ctx).Debugf("transactionFlow:Action TransactionID='%s' Status='%s' LatestEvent='%s' LatestError='%s' : %s", tf.transaction.ID, tf.status, tf.latestEvent, tf.latestError, msg)
 }
 
+func (tf *transactionFlow) logActionDebugf(ctx context.Context, msg string, args ...interface{}) {
+	//centralize the debug logging to force a consistent format and make it easier to analyze the logs
+	log.L(ctx).Debugf("transactionFlow:Action TransactionID='%s' Status='%s' LatestEvent='%s' LatestError='%s' : %s", tf.transaction.ID, tf.status, tf.latestEvent, tf.latestError, fmt.Sprintf(msg, args...))
+}
+
 func (tf *transactionFlow) logActionInfo(ctx context.Context, msg string) {
 	//centralize the info logging to force a consistent format and make it easier to analyze the logs
 	log.L(ctx).Infof("transactionFlow:Action TransactionID='%s' Status='%s' LatestEvent='%s' LatestError='%s' : %s", tf.transaction.ID, tf.status, tf.latestEvent, tf.latestError, msg)
@@ -97,7 +102,7 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 
 		tf.requestAssemble(ctx)
 		if tf.transaction.PostAssembly == nil {
-			tf.logActionInfo(ctx, "Transaction not  not assembled. Waiting for assembler to return")
+			tf.logActionInfo(ctx, "Transaction not assembled. Waiting for assembler to return")
 			return
 		}
 	}
@@ -108,23 +113,6 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		return
 	}
 
-	if tf.transaction.PostAssembly.OutputStatesPotential != nil && tf.transaction.PostAssembly.OutputStates == nil {
-		// We need to write the potential states to the domain before we can sign or endorse the transaction
-		// but there is no point in doing that until we are sure that the transaction is going to be coordinated locally
-		// so this is the earliest, and latest, point in the flow that we can do this
-		readTX := tf.components.Persistence().DB() // no DB transaction required here for the reads from the DB (writes happen on syncpoint flusher)
-		err := tf.domainAPI.WritePotentialStates(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
-		if err != nil {
-			//Any error from WritePotentialStates is likely to be caused by an invalid init or assemble of the transaction
-			// which is most likely a programming error in the domain or the domain manager or privateTxManager
-			// not much we can do other than revert the transaction with an internal error
-			errorMessage := fmt.Sprintf("Failed to write potential states: %s", err)
-			log.L(ctx).Error(errorMessage)
-			//TODO publish an event that will cause the transaction to be reverted
-			//tf.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage))
-			return
-		}
-	}
 	log.L(ctx).Debugf("transactionFlow:Action TransactionID='%s' is ready for sequencing (outputStatesPotential=%d outputStates=%d)",
 		tf.transaction.ID.String(), len(tf.transaction.PostAssembly.OutputStatesPotential), len(tf.transaction.PostAssembly.OutputStates))
 
@@ -252,7 +240,12 @@ func (tf *transactionFlow) revertTransaction(ctx context.Context, revertReason s
 }
 
 func (tf *transactionFlow) finalize(ctx context.Context) {
-	log.L(ctx).Errorf("finalize transaction %s: %s", tf.transaction.ID.String(), tf.finalizeRevertReason)
+	if tf.finalizeRevertReason == "" {
+		log.L(ctx).Debugf("finalize transaction %s", tf.transaction.ID.String())
+
+	} else {
+		log.L(ctx).Errorf("finalize transaction %s: %s", tf.transaction.ID.String(), tf.finalizeRevertReason)
+	}
 	//flush that to the txmgr database
 	// so that the user can see that it is reverted and so that we stop retrying to assemble and endorse it
 
@@ -267,7 +260,7 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 			log.L(ctx).Infof("Transaction %s finalize committed", tf.transaction.ID.String())
 
 			// Remove this transaction from our domain context on success - all changes are flushed to DB at this point
-			tf.endorsementGatherer.DomainContext().ResetTransactions(tf.transaction.ID)
+			tf.domainContext.ResetTransactions(tf.transaction.ID)
 
 			go tf.publisher.PublishTransactionFinalizedEvent(ctx, tf.transaction.ID.String())
 		},
@@ -277,7 +270,7 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 			log.L(ctx).Errorf("Transaction %s finalize rolled back: %s", tf.transaction.ID.String(), rollbackErr)
 
 			// Reset the whole domain context on failure
-			tf.endorsementGatherer.DomainContext().Reset()
+			tf.domainContext.Reset()
 
 			go tf.publisher.PublishTransactionFinalizeError(ctx, tf.transaction.ID.String(), tf.finalizeRevertReason, rollbackErr)
 		},
@@ -348,6 +341,44 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue b
 
 }
 
+func (tf *transactionFlow) writeAndLockStates(ctx context.Context) {
+	//this needs to be carefully coordinated with the assemble requester thread and the sequencer event loop thread
+	// we are accessing the transactionFlow's PrivateTransaction object which is only safe to do on the sequencer thread
+	// but we need to make sure that these writes/locks are complete before the assemble requester thread can proceed to assemble
+	// the next transaction
+	if tf.transaction.PostAssembly.OutputStatesPotential != nil && tf.transaction.PostAssembly.OutputStates == nil {
+		// We need to write the potential states to the domain before we can sign or endorse the transaction
+		// but there is no point in doing that until we are sure that the transaction is going to be coordinated locally
+		// so this is the earliest, and latest, point in the flow that we can do this
+		readTX := tf.components.Persistence().DB() // no DB transaction required here for the reads from the DB (writes happen on syncpoint flusher)
+		err := tf.domainAPI.WritePotentialStates(tf.domainContext, readTX, tf.transaction)
+		if err != nil {
+			//Any error from WritePotentialStates is likely to be caused by an invalid init or assemble of the transaction
+			// which is most likely a programming error in the domain or the domain manager or privateTxManager
+			// not much we can do other than revert the transaction with an internal error
+			errorMessage := fmt.Sprintf("Failed to write potential states: %s", err)
+			log.L(ctx).Error(errorMessage)
+			//TODO publish an event that will cause the transaction to be reverted
+			tf.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage))
+			return
+		} else {
+			tf.logActionDebugf(ctx, "Potential states written %s", tf.domainContext.Info().ID)
+		}
+	}
+	if len(tf.transaction.PostAssembly.InputStates) > 0 {
+		readTX := tf.components.Persistence().DB() // no DB transaction required here for the reads from the DB (writes happen on syncpoint flusher)
+
+		err := tf.domainAPI.LockStates(tf.domainContext, readTX, tf.transaction)
+		if err != nil {
+			errorMessage := fmt.Sprintf("Failed to lock states: %s", err)
+			log.L(ctx).Error(errorMessage)
+			tf.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage))
+			return
+		} else {
+			tf.logActionDebugf(ctx, "Input states locked %s: %s", tf.domainContext.Info().ID, tf.transaction.PostAssembly.InputStates[0].ID)
+		}
+	}
+}
 func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 	//Assemble may require a call to another node ( in the case we have been delegated to coordinate transaction for other nodes)
 	//Usually, they will get sent to us already assembled but there may be cases where we need to re-assemble
@@ -376,6 +407,7 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 			ctx,
 			tf.transaction.ID.String(),
 			i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), "Failed to get node name from locator"),
+			"",
 		)
 		return
 	}
@@ -390,21 +422,20 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 		&preAssemblyCopy,
 
 		AssembleRequestCallbacks{
-			OnComplete: func(postAssembly *components.TransactionPostAssembly) {
-				// TODO should probably include the assemble output in the event
-				// for now that is not necessary because this is a local assemble and the domain manager updates the transaction that we passed by reference
-				// need to decide if we want to continue with that style of interface to the domain manager and if so,
-				// we need to do something different when the assembling node is remote
+			OnComplete: func(requestID string, postAssembly *components.TransactionPostAssembly) {
+
 				tf.publisher.PublishTransactionAssembledEvent(ctx,
 					tf.transaction.ID.String(),
 					postAssembly,
+					requestID,
 				)
 			},
-			OnFail: func(err error) {
+			OnFail: func(requestID string, err error) {
 				log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
 				tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
 					tf.transaction.ID.String(),
 					i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), err.Error()),
+					requestID,
 				)
 			},
 		})

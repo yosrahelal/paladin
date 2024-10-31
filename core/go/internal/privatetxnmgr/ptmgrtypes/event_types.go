@@ -66,12 +66,14 @@ type TransactionSwappedInEvent struct {
 
 type TransactionAssembledEvent struct {
 	PrivateTransactionEventBase
-	PostAssembly *components.TransactionPostAssembly
+	PostAssembly      *components.TransactionPostAssembly
+	AssembleRequestID string
 }
 
 type TransactionAssembleFailedEvent struct {
 	PrivateTransactionEventBase
-	Error string
+	AssembleRequestID string
+	Error             string
 }
 
 type TransactionSignedEvent struct {

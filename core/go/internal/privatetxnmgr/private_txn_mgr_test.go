@@ -366,17 +366,19 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	notary := newPartyForTesting(ctx, "notary", remoteNodeName, remoteEngineMocks)
 
 	alice.mockResolve(ctx, notary)
+	notary.mockResolve(ctx, alice)
 
 	initialised := make(chan struct{}, 1)
 	localNodeMocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
+		StaticCoordinator:    &notary.identityLocator,
 	})
 	localNodeMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
-					Lookup:       alice.identity,
+					Lookup:       alice.identityLocator,
 					Algorithm:    algorithms.ECDSA_SECP256K1,
 					VerifierType: verifiers.ETH_ADDRESS,
 				},
@@ -1855,11 +1857,14 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 	mocks.allComponents.On("PublicTxManager").Return(publicTxMgr).Maybe()
 	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
 	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
+	mocks.domainSmartContract.On("LockStates", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	mocks.domainMgr.On("GetDomainByName", mock.Anything, "domain1").Return(mocks.domain, nil).Maybe()
 	mocks.domain.On("Name").Return("domain1").Maybe()
 
 	mocks.domainContext.On("Ctx").Return(ctx).Maybe()
 	mocks.domainContext.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()
+	mocks.domainContext.On("ExportStateLocks").Return([]byte("[]"), nil).Maybe()
+	mocks.domainContext.On("ImportStateLocks", mock.Anything).Return(nil).Maybe()
 
 	e := NewPrivateTransactionMgr(ctx, &pldconf.PrivateTxManagerConfig{
 		Writer: pldconf.FlushWriterConfig{

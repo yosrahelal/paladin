@@ -38,6 +38,7 @@ func NewTransactionFlow(
 	nodeName string,
 	components components.AllComponents,
 	domainAPI components.DomainSmartContract,
+	domainContext components.DomainContext,
 	publisher ptmgrtypes.Publisher,
 	endorsementGatherer ptmgrtypes.EndorsementGatherer,
 	identityResolver components.IdentityResolver,
@@ -52,6 +53,7 @@ func NewTransactionFlow(
 	return &transactionFlow{
 		stageErrorRetry:             10 * time.Second,
 		domainAPI:                   domainAPI,
+		domainContext:               domainContext,
 		nodeName:                    nodeName,
 		components:                  components,
 		publisher:                   publisher,
@@ -88,6 +90,7 @@ type transactionFlow struct {
 	components                  components.AllComponents
 	nodeName                    string
 	domainAPI                   components.DomainSmartContract
+	domainContext               components.DomainContext
 	transaction                 *components.PrivateTransaction
 	publisher                   ptmgrtypes.Publisher
 	endorsementGatherer         ptmgrtypes.EndorsementGatherer
@@ -151,7 +154,7 @@ func (tf *transactionFlow) PrepareTransaction(ctx context.Context, defaultSigner
 	}
 
 	readTX := tf.components.Persistence().DB() // no DB transaction required here
-	prepError := tf.domainAPI.PrepareTransaction(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
+	prepError := tf.domainAPI.PrepareTransaction(tf.domainContext, readTX, tf.transaction)
 	if prepError != nil {
 		log.L(ctx).Errorf("Error preparing transaction: %s", prepError)
 		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerPrepareError), prepError.Error())

@@ -64,24 +64,26 @@ func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, trans
 
 }
 
-func (p *publisher) PublishTransactionAssembledEvent(ctx context.Context, transactionId string, postAssembly *components.TransactionPostAssembly) {
+func (p *publisher) PublishTransactionAssembledEvent(ctx context.Context, transactionId string, postAssembly *components.TransactionPostAssembly, requestID string) {
 	event := &ptmgrtypes.TransactionAssembledEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			ContractAddress: p.contractAddress,
 			TransactionID:   transactionId,
 		},
-		PostAssembly: postAssembly,
+		PostAssembly:      postAssembly,
+		AssembleRequestID: requestID,
 	}
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }
 
-func (p *publisher) PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string) {
+func (p *publisher) PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string, requestID string) {
 	event := &ptmgrtypes.TransactionAssembleFailedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			ContractAddress: p.contractAddress,
 			TransactionID:   transactionId,
 		},
-		Error: errorMessage,
+		Error:             errorMessage,
+		AssembleRequestID: requestID,
 	}
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }

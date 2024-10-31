@@ -61,7 +61,7 @@ func (sd *stateDistributer) sendState(ctx context.Context, stateDistribution *St
 		MessageType: "StateProducedEvent",
 		Payload:     stateProducedEventBytes,
 		Node:        targetNode,
-		Component:   STATE_DISTRIBUTER_DESTINATION,
+		Component:   components.PRIVATE_TX_MANAGER_DESTINATION,
 		ReplyTo:     sd.nodeID,
 	})
 	if err != nil {

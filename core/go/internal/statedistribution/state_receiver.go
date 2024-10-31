@@ -48,7 +48,7 @@ func (sd *stateDistributer) sendStateAcknowledgement(ctx context.Context, domain
 		MessageType: "StateAcknowledgedEvent",
 		Payload:     stateAcknowledgedEventBytes,
 		Node:        distributingNode,
-		Component:   STATE_DISTRIBUTER_DESTINATION,
+		Component:   components.PRIVATE_TX_MANAGER_DESTINATION,
 		ReplyTo:     sd.nodeID,
 	})
 	if err != nil {

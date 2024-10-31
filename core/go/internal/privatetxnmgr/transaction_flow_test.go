@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	"github.com/kaleido-io/paladin/core/mocks/prvtxsyncpointsmocks"
+	"github.com/kaleido-io/paladin/core/mocks/statedistributionmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -51,6 +52,7 @@ type transactionFlowDepencyMocks struct {
 	transportWriter     *privatetxnmgrmocks.TransportWriter
 	environment         *privatetxnmgrmocks.SequencerEnvironment
 	coordinatorSelector *privatetxnmgrmocks.CoordinatorSelector
+	stateDistributer    *statedistributionmocks.StateDistributer
 }
 
 func newTransactionFlowForTesting(t *testing.T, ctx context.Context, transaction *components.PrivateTransaction, nodeName string) (*transactionFlow, *transactionFlowDepencyMocks) {
@@ -70,6 +72,7 @@ func newTransactionFlowForTesting(t *testing.T, ctx context.Context, transaction
 		transportWriter:     privatetxnmgrmocks.NewTransportWriter(t),
 		environment:         privatetxnmgrmocks.NewSequencerEnvironment(t),
 		coordinatorSelector: privatetxnmgrmocks.NewCoordinatorSelector(t),
+		stateDistributer:    statedistributionmocks.NewStateDistributer(t),
 	}
 	contractAddress := tktypes.RandAddress()
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
@@ -86,8 +89,9 @@ func newTransactionFlowForTesting(t *testing.T, ctx context.Context, transaction
 	domain.On("Configuration").Return(&prototk.DomainConfig{}).Maybe()
 	mocks.domainSmartContract.On("Domain").Return(domain).Maybe()
 
-	assembleCoordinator := NewAssembleCoordinator(ctx, nodeName, 1, mocks.allComponents, mocks.domainSmartContract, mocks.domainContext)
-	tp := NewTransactionFlow(ctx, transaction, nodeName, mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter, 1*time.Minute, mocks.coordinatorSelector, assembleCoordinator, mocks.environment)
+	assembleCoordinator := NewAssembleCoordinator(ctx, nodeName, 1, mocks.allComponents, mocks.domainSmartContract, mocks.domainContext, mocks.transportWriter, *contractAddress, mocks.environment, 1*time.Second, mocks.stateDistributer)
+
+	tp := NewTransactionFlow(ctx, transaction, nodeName, mocks.allComponents, mocks.domainSmartContract, mocks.domainContext, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter, 1*time.Minute, mocks.coordinatorSelector, assembleCoordinator, mocks.environment)
 
 	return tp.(*transactionFlow), mocks
 }

@@ -100,7 +100,7 @@ message StateProducedEvent {
     string party = 3;
     string domain_name = 4;
 	string contract_address = 5;
-	string schema_id = 6 ;
+	string schema_id = 6;
     string distribution_id = 7; //this is used to correlate the acknowledgement back to the distribution. unlike the transport message id / correlation id, this is not unique across retries
 }
 
@@ -112,4 +112,28 @@ message StateAcknowledgedEvent {
 	string contract_address = 5;
 	string schema_id = 6 ;
     string distribution_id = 7; //this is used to correlate the acknowledgement back to the distribution. unlike the transport message id / correlation id, this is not unique across retries
+}
+
+message AssembleRequest {
+    string transaction_id = 1;
+    string assemble_request_id = 2;
+    string contract_address = 3;
+    bytes transaction_inputs = 4;
+    bytes pre_assembly = 5;
+    bytes state_locks = 6;
+    int64 block_height = 7;
+}
+
+message AssembleResponse {
+    string transaction_id = 1;
+    string assemble_request_id = 2;
+    string contract_address = 3;
+    bytes post_assembly = 4;
+}
+
+message AssembleError {
+    string transaction_id = 1;
+    string assemble_request_id = 2;
+    string contract_address = 3;
+    string error_message = 4;
 }
