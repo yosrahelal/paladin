@@ -82,6 +82,8 @@ task copySolidity(type: Copy) {
         include 'contracts/domains/pente/PenteFactory.sol/PenteFactory.json'
         include 'contracts/private/NotoTrackerERC20.sol/NotoTrackerERC20.json'
         include 'contracts/testcontracts/ERC20Simple.sol/ERC20Simple.json'
+        include 'contracts/shared/BondTrackerPublic.sol/BondTrackerPublic.json'
+        include 'contracts/private/BondTracker.sol/BondTracker.json'
     }
     into 'test/e2e/abis'
 

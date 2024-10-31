@@ -66,6 +66,7 @@ export interface IPaladinTransaction {
 
 export interface ITransactionReceipt {
   blockNumber: number;
+  domain: string;
   id: string;
   success: boolean;
   transactionHash: string;

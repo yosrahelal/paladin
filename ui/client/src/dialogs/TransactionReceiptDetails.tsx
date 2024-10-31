@@ -25,19 +25,21 @@ import {
   useTheme
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { IPaladinTransaction } from '../interfaces';
+import { IPaladinTransaction, ITransactionReceipt } from '../interfaces';
 import { PaladinTransactionsDetails } from '../components/TransactionDetails';
 import { useEffect, useState } from 'react';
 import { altLightModeScrollbarStyle, altDarkModeScrollbarStyle } from '../themes/default';
 
 type Props = {
   paladinTransactions?: IPaladinTransaction[]
+  paladinReceipts: ITransactionReceipt[]
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
 }
 
-export const PaladinTransactionsDetailsDialog: React.FC<Props> = ({
+export const PaladinTransactionsReceiptDetailsDialog: React.FC<Props> = ({
   paladinTransactions,
+  paladinReceipts,
   dialogOpen,
   setDialogOpen
 }) => {
@@ -48,11 +50,12 @@ export const PaladinTransactionsDetailsDialog: React.FC<Props> = ({
   const theme = useTheme();
   const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
+  const selectedReceipt = paladinReceipts?.find(r => (r.id == selectedPaladinTransactionId));
   const selectedTransaction = paladinTransactions?.find(r => (r.id == selectedPaladinTransactionId));
 
   useEffect(() => {
     if (dialogOpen) {
-      setSelectedPaladinTransactionId((paladinTransactions && paladinTransactions.length > 0) ? paladinTransactions[0].id : '');
+      setSelectedPaladinTransactionId((paladinReceipts && paladinReceipts.length > 0) ? paladinReceipts[0].id : '');
     }
   }, [dialogOpen]);
 
@@ -69,12 +72,13 @@ export const PaladinTransactionsDetailsDialog: React.FC<Props> = ({
       <DialogContent sx={{ margin: '10px', padding: '10px', ...addedStyle}}>
         <TextField select label={t('id')} fullWidth size="small" sx={{ marginTop: '5px' }} value={selectedPaladinTransactionId}
           onChange={event => setSelectedPaladinTransactionId(event.target.value)}>
-          {paladinTransactions?.map(paladinTransaction =>
-            <MenuItem key={paladinTransaction.id} value={paladinTransaction.id}>{paladinTransaction.id}</MenuItem>
+          {paladinReceipts?.map(paladinReceipt =>
+            <MenuItem key={paladinReceipt.id} value={paladinReceipt.id}>{paladinReceipt.id}</MenuItem>
           )}
         </TextField>
-        { selectedTransaction ?
+        { selectedReceipt ?
           <PaladinTransactionsDetails
+            transactionReceipt={selectedReceipt}
             paladinTransaction={selectedTransaction}
           />
           : undefined

@@ -63,7 +63,27 @@ func testLog(message string, inserts ...any) {
 	log.L(context.Background()).Warnf(fmt.Sprintf("** TEST OUTPUT **: %s", message), inserts...)
 }
 
-var _ = Describe("controller", Ordered, func() {
+func with18Decimals(x int64) *tktypes.HexUint256 {
+	bx := new(big.Int).Mul(
+		big.NewInt(x),
+		new(big.Int).Exp(big.NewInt(10), big.NewInt(18), big.NewInt(0)),
+	)
+	return (*tktypes.HexUint256)(bx)
+}
+
+func getJSONPropertyAs(jsonData tktypes.RawJSON, name string, toValue any) {
+	var mapProp map[string]tktypes.RawJSON
+	err := json.Unmarshal(jsonData, &mapProp)
+	if err != nil {
+		panic(fmt.Errorf("Unable to unmarshal %s", jsonData))
+	}
+	err = json.Unmarshal(mapProp[name], toValue)
+	if err != nil {
+		panic(fmt.Errorf("Unable to map %s to %T: %s", mapProp[name], toValue, err))
+	}
+}
+
+var _ = Describe("bonds", Ordered, func() {
 	BeforeAll(func() {
 		log.SetLevel("warn")
 	})
@@ -171,13 +191,6 @@ var _ = Describe("controller", Ordered, func() {
 			testLog("%s@%s balance=%s coins:%v", identity, node, balance, summary)
 		}
 
-		var with18Decimals = func(x int64) *tktypes.HexUint256 {
-			bx := new(big.Int).Mul(
-				big.NewInt(x),
-				new(big.Int).Exp(big.NewInt(10), big.NewInt(18), big.NewInt(0)),
-			)
-			return (*tktypes.HexUint256)(bx)
-		}
 		It("mints some notos to bob on node1", func() {
 			for _, amount := range []*tktypes.HexUint256{
 				with18Decimals(15),

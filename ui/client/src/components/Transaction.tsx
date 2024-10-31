@@ -14,19 +14,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Button, Grid2, Typography } from "@mui/material";
-import { IPaladinTransaction, ITransaction, ITransactionReceipt } from "../interfaces";
-import { t } from "i18next";
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import { Hash } from "./Hash";
-import { ViewDetailsDialog } from "../dialogs/ViewDetails";
-import { useState } from "react";
+import VisibilityIcon from '@mui/icons-material/VisibilityOutlined';
+import { Box, Button, Grid2, Typography } from "@mui/material";
 import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { t } from "i18next";
+import { useState } from "react";
+import { PaladinTransactionsReceiptDetailsDialog } from "../dialogs/TransactionReceiptDetails";
+import { ViewDetailsDialog } from "../dialogs/ViewDetails";
+import { IPaladinTransaction, ITransaction, ITransactionReceipt } from "../interfaces";
 import { EllapsedTime } from "./EllapsedTime";
-import VisibilityIcon from '@mui/icons-material/VisibilityOutlined';
-import { PaladinTransactionsDetailsDialog } from "../dialogs/TransactionDetails";
+import { Hash } from "./Hash";
 
 type Props = {
   transaction: ITransaction
@@ -36,9 +36,19 @@ type Props = {
 
 daysjs.extend(relativeTime);
 
-export const Transaction: React.FC<Props> = ({ transaction, paladinTransactions }) => {
+export const Transaction: React.FC<Props> = ({
+    transaction,
+    paladinTransactions,
+    transactionReceipts,
+  }) => {
 
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
+  const receiptCount = (transactionReceipts && transactionReceipts.length) ? transactionReceipts.length : 0;
+  const receiptIsPrivate = (transactionReceipts && transactionReceipts.length && transactionReceipts[0].domain !== '');
+  const typeKey = 
+    receiptCount > 1 ? 'atomicNumber' :
+    receiptIsPrivate ? 'private' :
+    'public';
 
   return (
     <>
@@ -47,7 +57,7 @@ export const Transaction: React.FC<Props> = ({ transaction, paladinTransactions 
         backgroundColor: theme => theme.palette.background.paper,
         marginBottom: '20px', borderRadius: '4px'
       }}>
-        {paladinTransactions && paladinTransactions.length > 0 &&
+        {receiptCount > 0 &&
           <img src="/paladin-icon-light.svg" width="40" style={{ position: 'absolute', left: '20px', bottom: '0px' }} />
         }
         <Box sx={{ padding: '10px', paddingLeft: '20px', paddingRight: '20px', borderBottom: theme => `solid 1px ${theme.palette.divider}` }}>
@@ -65,16 +75,18 @@ export const Transaction: React.FC<Props> = ({ transaction, paladinTransactions 
                 <Typography align="center" variant="h6" color="textPrimary">{transaction.nonce}</Typography>
                 <Typography align="center" variant="body2" color="textSecondary">{t('nonce')}</Typography>
               </Grid2>
-              {paladinTransactions && paladinTransactions.length > 1 &&
+              {receiptCount > 0 ?
                 <Grid2>
-                  <Typography align="center" variant="h6" color="textPrimary">{t('atomicNumber', { number: paladinTransactions.length })}</Typography>
+                  <Typography align="center" variant="h6" color="textPrimary">{t(typeKey, { number: receiptCount })}</Typography>
                   <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
-                </Grid2>}
-              {paladinTransactions && paladinTransactions.length === 1 &&
-                <Grid2>
-                  <Typography align="center" variant="h6" color="textPrimary">{t(paladinTransactions[0].type)}</Typography>
-                  <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
-                </Grid2>}
+                </Grid2>
+              : receiptCount ?
+              <Grid2>
+              <Typography align="center" variant="h6" color="textPrimary">{t('receipt')}</Typography>
+              <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
+            </Grid2>
+          : undefined
+              }
               <Grid2 sx={{ textAlign: 'center' }} alignContent="center">
                 {transaction.result === 'success' ? <CheckCircleOutlineIcon color="primary" /> : <ErrorOutlineIcon color="error" />}
                 <Typography align="center" variant="body2" color="textSecondary">{t('result')}</Typography>
@@ -114,8 +126,9 @@ export const Transaction: React.FC<Props> = ({ transaction, paladinTransactions 
             onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
         </Box>
       </Box>
-      {paladinTransactions && paladinTransactions?.length > 0 ?
-        <PaladinTransactionsDetailsDialog
+      {transactionReceipts && transactionReceipts.length > 0 ?
+        <PaladinTransactionsReceiptDetailsDialog
+          paladinReceipts={transactionReceipts}
           paladinTransactions={paladinTransactions}
           dialogOpen={viewDetailsDialogOpen}
           setDialogOpen={setViewDetailsDialogOpen}
