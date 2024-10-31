@@ -10,7 +10,6 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -29,7 +28,7 @@ func (z *Zeto) handleMintEvent(ctx context.Context, tree core.SparseMerkleTree, 
 			Location:      ev.Location,
 		})
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, mint.Outputs)...)
-		if tokenName == constants.TOKEN_ANON_NULLIFIER {
+		if isNullifiersToken(tokenName) {
 			err := z.updateMerkleTree(ctx, tree, storage, txID, mint.Outputs)
 			if err != nil {
 				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOMint", err)
@@ -55,7 +54,7 @@ func (z *Zeto) handleTransferEvent(ctx context.Context, tree core.SparseMerkleTr
 		})
 		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
-		if tokenName == constants.TOKEN_ANON_NULLIFIER {
+		if isNullifiersToken(tokenName) {
 			err := z.updateMerkleTree(ctx, tree, storage, txID, transfer.Outputs)
 			if err != nil {
 				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOTransfer", err)
@@ -81,7 +80,7 @@ func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, tree core.
 		})
 		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
-		if tokenName == constants.TOKEN_ANON_NULLIFIER {
+		if isNullifiersToken(tokenName) {
 			err := z.updateMerkleTree(ctx, tree, storage, txID, transfer.Outputs)
 			if err != nil {
 				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOTransferWithEncryptedValues", err)
