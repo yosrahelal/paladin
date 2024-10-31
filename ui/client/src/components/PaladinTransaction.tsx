@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Button, Collapse, Grid2, TextField, Typography } from "@mui/material";
+import { Box, Button, Collapse, Grid2, TextField, Typography, useTheme } from "@mui/material";
 import { t } from "i18next";
 import { useState } from "react";
 import { IPaladinTransaction } from "../interfaces";
@@ -37,7 +37,7 @@ export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
 
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-
+  const theme = useTheme();
 
   if (paladinTransaction === undefined) {
     return <></>;
@@ -101,7 +101,7 @@ export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
               </Grid2>
               <Grid2>
                 <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                  onClick={() => setIsExpanded(!isExpanded)} sx={{ minWidth: '120px', textTransform: 'none', fontWeight: '400' }}>
+                  onClick={() => setIsExpanded(!isExpanded)} sx={{ minWidth: '140px', textTransform: 'none', fontWeight: '400' }}>
                   {t(isExpanded ? 'hideProperties' : 'showProperties')}
                 </Button>
               </Grid2>
@@ -119,6 +119,7 @@ export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
                   fullWidth
                   size="small"
                   sx={{ marginTop: '12px' }}
+                  slotProps={{ htmlInput: { style: { fontSize: '12px', color: `${theme.palette.text.secondary}`}  }}}
                   value={formatProperty(paladinTransaction.data[property])}
                 />
               ))}

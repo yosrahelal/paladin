@@ -67,7 +67,7 @@ export const ViewDetailsDialog: React.FC<Props> = ({
         {title}
       </DialogTitle>
       <DialogContent>
-        <JSONPretty style={{ fontSize: '14px'}}  data={details} theme={colors} />
+        <JSONPretty style={{ fontSize: '12px'}}  data={details} theme={colors} />
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'center', marginBottom: '15px' }}>
         <Button
@@ -75,7 +75,7 @@ export const ViewDetailsDialog: React.FC<Props> = ({
           sx={{ textTransform: 'none' }}
           variant="contained"
           disableElevation>
-          {t('dismiss')}
+          {t('close')}
         </Button>
       </DialogActions>
     </Dialog>

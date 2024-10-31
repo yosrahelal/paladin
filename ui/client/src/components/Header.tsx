@@ -64,9 +64,9 @@ export const Header: React.FC = () => {
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 12, md: 4 }} alignContent="center">
               <Tabs value={tab} onChange={(_event, value) => handleNavigation(value)} centered>
-                <Tab label={t('indexer')} />
-                <Tab label={t('submissions')} />
-                <Tab label={t('registry')} />
+                <Tab sx={{ textTransform: 'none' }} label={t('indexer')} />
+                <Tab sx={{ textTransform: 'none' }} label={t('submissions')} />
+                <Tab sx={{ textTransform: 'none' }} label={t('registry')} />
               </Tabs>
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 12, md: 4 }} textAlign="center">

@@ -46,7 +46,7 @@ export const EVMPrivateDetails: React.FC<Props> = ({
 
   return (
     (hasTransaction || hasReceipt) ? 
-      <Accordion>
+      <Accordion elevation={0} disableGutters>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           {t('evmPrivateTransaction')}
         </AccordionSummary>

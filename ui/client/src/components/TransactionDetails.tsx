@@ -60,7 +60,7 @@ export const PaladinTransactionsDetails: React.FC<Props> = ({
   return (
     <>
       {paladinTransaction ?
-      <Accordion>
+      <Accordion elevation={0} disableGutters>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           {t('details')}
         </AccordionSummary>
@@ -69,7 +69,7 @@ export const PaladinTransactionsDetails: React.FC<Props> = ({
         </AccordionDetails>
       </Accordion>
       :undefined}
-      <Accordion>
+      <Accordion elevation={0} disableGutters>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           {t('receipt')}
         </AccordionSummary>
@@ -79,7 +79,7 @@ export const PaladinTransactionsDetails: React.FC<Props> = ({
       </Accordion>
       {domainReceipt !== undefined && <>
         <EVMPrivateDetails transactionId={transactionId} domainReceipt={domainReceipt}/>
-        <Accordion>
+        <Accordion elevation={0} disableGutters>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             {t('domainReceipt')}
           </AccordionSummary>
@@ -89,7 +89,7 @@ export const PaladinTransactionsDetails: React.FC<Props> = ({
         </Accordion>
       </>}
       {!(stateReceipt?.none === true) &&
-        <Accordion>
+        <Accordion elevation={0} disableGutters>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             {t('stateReceipt')}
           </AccordionSummary>
