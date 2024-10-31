@@ -86,7 +86,18 @@ func (tf *transactionFlow) applyTransactionAssembledEvent(ctx context.Context, e
 	if tf.transaction.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_REVERT {
 		// Not sure if any domains actually use this but it is a valid response to indicate failure
 		log.L(ctx).Errorf("AssemblyResult is AssembleTransactionResponse_REVERT")
-		tf.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleRevert)))
+		revertReason := ""
+		if event.PostAssembly.RevertReason != nil {
+			revertReason = *event.PostAssembly.RevertReason
+		}
+		tf.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleRevert), revertReason))
+		return
+	}
+	if tf.transaction.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_PARK {
+
+		log.L(ctx).Infof("AssemblyResult is AssembleTransactionResponse_PARK")
+		tf.status = "parked"
+		tf.assemblePending = false
 		return
 	}
 	tf.status = "assembled"
@@ -97,11 +108,10 @@ func (tf *transactionFlow) applyTransactionAssembledEvent(ctx context.Context, e
 }
 
 func (tf *transactionFlow) applyTransactionAssembleFailedEvent(ctx context.Context, event *ptmgrtypes.TransactionAssembleFailedEvent) {
-	log.L(ctx).Debugf("transactionFlow:applyTransactionAssembleFailedEvent: %s", event.Error)
+	log.L(ctx).Debugf("transactionFlow:applyTransactionAssembleFailedEvent: RequestID: '%s' Error: %s ", event.AssembleRequestID, event.Error)
 	tf.latestEvent = "TransactionAssembleFailedEvent"
 	tf.latestError = event.Error
-	tf.finalizeRequired = true
-	tf.finalizeRevertReason = event.Error
+	// set assemblePending to false so that the transaction can be re-assembled
 	tf.assemblePending = false
 	tf.assembleCoordinator.Commit(event.AssembleRequestID, nil)
 }

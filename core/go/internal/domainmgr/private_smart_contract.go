@@ -190,6 +190,9 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 	if err != nil {
 		return err
 	}
+	if res.RevertReason != nil && *res.RevertReason != "" {
+		postAssembly.RevertReason = res.RevertReason
+	}
 
 	// We need to pass the assembly result back - it needs to be assigned to a sequence
 	// before anything interesting can happen with the result here
