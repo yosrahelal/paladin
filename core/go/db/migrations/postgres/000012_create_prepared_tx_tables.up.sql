@@ -7,8 +7,8 @@ CREATE TABLE prepared_txns (
     "to"          TEXT       ,
     "transaction" TEXT       NOT NULL,
     "extra_data"  TEXT       ,
-    PRIMARY KEY ("id"),
-    FOREIGN KEY ("id") REFERENCES transactions ("id") ON DELETE CASCADE
+    PRIMARY KEY ("id")
+    -- FOREIGN KEY ("id") REFERENCES transactions ("id") ON DELETE CASCADE
 );
 
 CREATE INDEX prepared_txns_domain_to ON prepared_txns("domain", "to");
