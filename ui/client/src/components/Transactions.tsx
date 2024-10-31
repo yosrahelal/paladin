@@ -58,7 +58,7 @@ export const Transactions: React.FC = () => {
       </Typography>
       <Box
         sx={{
-          height: "calc(100vh - 162px)",
+          height: "calc(100vh - 170px)",
           paddingRight: "15px",
           ...addedStyle
         }}
