@@ -26,6 +26,8 @@ export const RpcMethods = {
   ptx_QueryTransactionsFull: "ptx_queryTransactionsFull",
   ptx_getStateReceipt: "ptx_getStateReceipt",
   ptx_getDomainReceipt: "ptx_getDomainReceipt",
+  ptx_decodeCall: "ptx_decodeCall",
+  ptx_decodeEvent: "ptx_decodeEvent",
   reg_QueryEntriesWithProps: "reg_queryEntriesWithProps",
   reg_Registries: "reg_registries",
 };

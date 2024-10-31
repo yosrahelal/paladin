@@ -14,20 +14,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
   Accordion,
   AccordionDetails,
-  AccordionSummary,
-  useTheme
+  AccordionSummary
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import JSONPretty from 'react-json-pretty';
-import { fetchStateReceipt } from '../queries/states';
 import { IPaladinTransaction } from '../interfaces';
 import { fetchDomainReceipt } from '../queries/domains';
+import { fetchStateReceipt } from '../queries/states';
 import { fetchTransactionReceipt } from '../queries/transactions';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { JSONBox } from './JSONBox';
+import { EVMPrivateDetails } from './EVMPrivateDetails';
 
 type Props = {
   paladinTransaction: IPaladinTransaction
@@ -38,7 +39,6 @@ export const PaladinTransactionsDetails: React.FC<Props> = ({
 }) => {
 
   const { t } = useTranslation();
-  const theme = useTheme();
 
   const { data: transactionReceipt } = useQuery({
     queryKey: ["ptx_getTransactionReceipt", paladinTransaction],
@@ -58,30 +58,14 @@ export const PaladinTransactionsDetails: React.FC<Props> = ({
     retry: false
   });
 
-  const colors = theme.palette.mode === 'dark' ?
-    {
-      main: 'line-height:1.3;color:#white;overflow:auto;',
-      key: 'color:white;',
-      string: 'color:#20dfdf;',
-      value: 'color:#20dfdf;',
-      boolean: 'color:#20dfdf;'
-    } :
-    {
-      main: 'line-height:1.3;color:#107070;overflow:auto;',
-      key: 'color:#464646;',
-      string: 'color:#107070;',
-      value: 'color:#107070;',
-      boolean: 'color:#107070;'
-    };
-
   return (
     <>
-      <Accordion defaultExpanded={true}>
+      <Accordion>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           {t('details')}
         </AccordionSummary>
         <AccordionDetails >
-          <JSONPretty style={{ fontSize: '14px' }} data={paladinTransaction} theme={colors} />
+          <JSONBox data={paladinTransaction} />
         </AccordionDetails>
       </Accordion>
       <Accordion>
@@ -89,25 +73,27 @@ export const PaladinTransactionsDetails: React.FC<Props> = ({
           {t('receipt')}
         </AccordionSummary>
         <AccordionDetails >
-          <JSONPretty style={{ fontSize: '14px' }} data={transactionReceipt} theme={colors} />
+          <JSONBox data={transactionReceipt} />
         </AccordionDetails>
       </Accordion>
+      {domainReceipt !== undefined && <>
+        <EVMPrivateDetails transactionId={paladinTransaction.id} domainReceipt={domainReceipt}/>
+        <Accordion>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            {t('domainReceipt')}
+          </AccordionSummary>
+          <AccordionDetails >
+            <JSONBox data={domainReceipt} />
+          </AccordionDetails>
+        </Accordion>
+      </>}
       {!(stateReceipt?.none === true) &&
         <Accordion>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             {t('stateReceipt')}
           </AccordionSummary>
           <AccordionDetails >
-            <JSONPretty style={{ fontSize: '14px' }} data={stateReceipt} theme={colors} />
-          </AccordionDetails>
-        </Accordion>}
-      {domainReceipt !== undefined &&
-        <Accordion>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            {t('domainReceipt')}
-          </AccordionSummary>
-          <AccordionDetails >
-            <JSONPretty style={{ fontSize: '14px' }} data={domainReceipt} theme={colors} />
+            <JSONPretty data={stateReceipt} />
           </AccordionDetails>
         </Accordion>}
     </>

@@ -14,25 +14,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import i18next from "i18next";
+import { IABIDecodedEntry } from "../interfaces";
 import { generatePostReq, returnResponse } from "./common";
 import { RpcEndpoint, RpcMethods } from "./rpcMethods";
 
-export const fetchDomainReceipt = async (
-  domain: string,
-  transactionId: string
-): Promise<any> => {
+export const fetchDecodedCallData = async (
+  callData: string
+): Promise<IABIDecodedEntry> => {
   const payload = {
     jsonrpc: "2.0",
     id: Date.now(),
-    method: RpcMethods.ptx_getDomainReceipt,
-    params: [domain, transactionId],
+    method: RpcMethods.ptx_decodeCall,
+    params: [callData, "mode=object"],
   };
 
-  return <Promise<any>>(
+  return <Promise<IABIDecodedEntry>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
-      i18next.t("errorFetchingDomainReceipt")
+      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))), "", [500]
+    )
+  );
+};
+
+export const fetchDecodedEvent = async (
+  topics: string[],
+  data: string
+): Promise<IABIDecodedEntry> => {
+  const payload = {
+    jsonrpc: "2.0",
+    id: Date.now(),
+    method: RpcMethods.ptx_decodeEvent,
+    params: [topics, data, "mode=object"],
+  };
+
+  return <Promise<IABIDecodedEntry>>(
+    returnResponse(
+      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))), "", [500]
     )
   );
 };
