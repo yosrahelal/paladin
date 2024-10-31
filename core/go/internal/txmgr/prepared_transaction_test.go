@@ -144,7 +144,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 			Confirmed: confirmIDs,
 			Info:      infoIDs,
 		},
-		ExtraData: tktypes.RawJSON(`{"some":"data"}`),
+		Metadata: tktypes.RawJSON(`{"some":"data"}`),
 	}
 
 	storedABI, err := txm.UpsertABI(ctx, txm.p.DB(), childFnABI)
@@ -177,7 +177,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 			Confirmed: confirm,
 			Info:      info,
 		},
-		ExtraData: tktypes.RawJSON(`{"some":"data"}`),
+		Metadata: tktypes.RawJSON(`{"some":"data"}`),
 	}, pt)
 
 }

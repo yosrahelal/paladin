@@ -4,7 +4,7 @@ CREATE TABLE prepared_txns (
     "domain"      VARCHAR    NOT NULL,
     "to"          VARCHAR    ,
     "transaction" VARCHAR    NOT NULL,
-    "extra_data"  VARCHAR    ,
+    "metadata"    VARCHAR    ,
     PRIMARY KEY ("id")
     -- FOREIGN KEY ("id") REFERENCES transactions ("id") ON DELETE CASCADE
 );

@@ -44,7 +44,7 @@ type PrepareTransactionWithRefs struct {
 	Domain      string                   // domain of the original private transaction
 	To          *tktypes.EthAddress      // the private smart contract that was invoked
 	States      TransactionStateRefs     // the states associated with the original private transaction
-	ExtraData   tktypes.RawJSON          // extra data in the prepare of the original private transaction
+	Metadata    tktypes.RawJSON          // metadta produced from the prepare of the original private transaction, in addition to the prepared transaction
 	Transaction *pldapi.TransactionInput // the downstream transaction - might be public or private
 }
 

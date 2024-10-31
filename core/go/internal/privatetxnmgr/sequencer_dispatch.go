@@ -191,16 +191,11 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 }
 
 func mapPreparedTransaction(tx *components.PrivateTransaction) *components.PrepareTransactionWithRefs {
-
-	var extraData tktypes.RawJSON
-	if tx.PostAssembly.ExtraData != nil && *tx.PostAssembly.ExtraData != "" {
-		extraData = tktypes.RawJSON(*tx.PostAssembly.ExtraData)
-	}
 	pt := &components.PrepareTransactionWithRefs{
-		ID:        tx.ID,
-		ExtraData: extraData,
-		Domain:    tx.Inputs.Domain,
-		To:        &tx.Inputs.To,
+		ID:       tx.ID,
+		Domain:   tx.Inputs.Domain,
+		To:       &tx.Inputs.To,
+		Metadata: tx.PreparedMetadata,
 	}
 	for _, s := range tx.PostAssembly.InputStates {
 		pt.States.Spent = append(pt.States.Spent, s.ID)

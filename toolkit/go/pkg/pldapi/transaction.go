@@ -167,6 +167,6 @@ type PreparedTransaction struct {
 	Domain      string              `docstruct:"PreparedTransaction" json:"domain"`
 	To          *tktypes.EthAddress `docstruct:"PreparedTransaction" json:"to"`
 	Transaction TransactionInput    `docstruct:"PreparedTransaction" json:"transaction"`
-	ExtraData   tktypes.RawJSON     `docstruct:"PreparedTransaction" json:"extraData,omitempty"`
+	Metadata    tktypes.RawJSON     `docstruct:"PreparedTransaction" json:"metadata,omitempty"`
 	States      TransactionStates   `docstruct:"PreparedTransaction" json:"states"`
 }

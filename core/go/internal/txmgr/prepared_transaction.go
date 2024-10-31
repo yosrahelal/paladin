@@ -36,7 +36,7 @@ type preparedTransaction struct {
 	To          *tktypes.EthAddress `gorm:"column:to"`
 	Created     tktypes.Timestamp   `gorm:"column:created"`
 	Transaction tktypes.RawJSON     `gorm:"column:transaction"`
-	ExtraData   tktypes.RawJSON     `gorm:"column:extra_data"`
+	Metadata    tktypes.RawJSON     `gorm:"column:metadata"`
 }
 
 func (preparedTransaction) TableName() string {
@@ -76,10 +76,10 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 	var preparedTxStateInserts []*preparedTransactionState
 	for _, p := range prepared {
 		dbPreparedTx := &preparedTransaction{
-			ID:        p.ID,
-			Domain:    p.Domain,
-			To:        p.To,
-			ExtraData: p.ExtraData,
+			ID:       p.ID,
+			Domain:   p.Domain,
+			To:       p.To,
+			Metadata: p.Metadata,
 		}
 		// We do the work for the ABI validation etc. before we insert the TX
 		resolved, err := tm.resolveNewTransaction(ctx, dbTX, p.Transaction,
@@ -160,10 +160,10 @@ func (tm *txManager) QueryPreparedTransactions(ctx context.Context, dbTX *gorm.D
 		query:       jq,
 		mapResult: func(pt *preparedTransaction) (*pldapi.PreparedTransaction, error) {
 			preparedTx := &pldapi.PreparedTransaction{
-				ID:        pt.ID,
-				Domain:    pt.Domain,
-				To:        pt.To,
-				ExtraData: pt.ExtraData,
+				ID:       pt.ID,
+				Domain:   pt.Domain,
+				To:       pt.To,
+				Metadata: pt.Metadata,
 			}
 			return preparedTx, json.Unmarshal(pt.Transaction, &preparedTx.Transaction)
 		},
