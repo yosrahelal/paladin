@@ -93,7 +93,7 @@ export const PaladinTransactionsDetails: React.FC<Props> = ({
             {t('stateReceipt')}
           </AccordionSummary>
           <AccordionDetails >
-            <JSONPretty data={stateReceipt} />
+            <JSONBox data={stateReceipt} />
           </AccordionDetails>
         </Accordion>}
     </>
