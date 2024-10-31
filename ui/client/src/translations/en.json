@@ -72,7 +72,8 @@
   "evmPrivateTransaction": "EVM Private Transaction",
   "evmPrivateReceipt": "EVM Private Receipt",
   "evmPrivateLog": "EVM Private Log {{logIndex}}",
-  "decoded": "decoded",
+  "decodedFunction": "Decoded function:",
+  "decodedEvent": "Decoded event:",
   "topic": "Topic",
   "pending": "Pending"
 }

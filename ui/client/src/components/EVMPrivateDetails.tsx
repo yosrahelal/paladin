@@ -84,7 +84,9 @@ const EVMPrivateTransaction: React.FC<EVMTxnProps> = ({
     <>
       <JSONBox data={evmTransaction} />
       {decodedCall?.data ? <>
-        <Typography variant='caption'>{t('decoded')}</Typography>
+        <Typography variant='caption' component='span'>{t('decodedFunction')}</Typography>
+        {" "}
+        <Typography variant='caption' component='span'><code>{decodedCall.signature}</code></Typography>
         <JSONBox data={decodedCall.data} />
       </> : undefined}
     </>
@@ -142,7 +144,9 @@ const EVMPrivateLog: React.FC<EVMLogProps> = ({
       <Typography variant='caption'>{t('evmPrivateLog', {logIndex})}</Typography>
       <JSONBox data={log} />
       {decodedEvent?.data ? <>
-        <Typography variant='caption'>{t('decoded')}</Typography>
+        <Typography variant='caption' component='span'>{t('decodedEvent')}</Typography>
+        {" "}
+        <Typography variant='caption' component='span'><code>{decodedEvent.signature}</code></Typography>
         <JSONBox data={decodedEvent.data} />
       </> : undefined}
     </>
