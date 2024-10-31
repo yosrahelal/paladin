@@ -77,6 +77,13 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		}
 	}
 
+	// Must be signed on the same node as it was assembled so do this before considering whether to delegate
+	tf.requestSignatures(ctx)
+	if tf.hasOutstandingSignatureRequests() {
+		return
+	}
+	tf.status = "signed"
+
 	tf.delegateIfRequired(ctx)
 	if tf.status == "delegating" {
 		log.L(ctx).Infof("Transaction %s is delegating", tf.transaction.ID.String())
@@ -112,14 +119,7 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 
 	//If we get here, we have an assembled transaction and have no intention of delegating it
 	// so we are responsible for coordinating the endorsement flow
-
 	// either because it was submitted locally and we decided not to delegate or because it was delegated to us
-	// start with fulfilling any outstanding signature requests
-	tf.requestSignatures(ctx)
-	if tf.hasOutstandingSignatureRequests() {
-		return
-	}
-	tf.status = "signed"
 
 	tf.requestEndorsements(ctx)
 	if tf.hasOutstandingEndorsementRequests(ctx) {
@@ -418,7 +418,16 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 func (tf *transactionFlow) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
 
 	keyMgr := tf.components.KeyManager()
-	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(partyName).Identity(ctx)
+
+	unqualifiedLookup := partyName
+	signerNode, err := tktypes.PrivateIdentityLocator(partyName).Node(ctx, true)
+	if signerNode != "" && signerNode != tf.nodeID {
+		log.L(ctx).Debugf("Requesting signature from a remote identity %s for %s", partyName, attRequest.Name)
+		err = i18n.NewError(ctx, msgs.MsgPrivateTxManagerSignRemoteError, partyName)
+	}
+	if err == nil {
+		unqualifiedLookup, err = tktypes.PrivateIdentityLocator(partyName).Identity(ctx)
+	}
 	var resolvedKey *pldapi.KeyMappingAndVerifier
 	if err == nil {
 		resolvedKey, err = keyMgr.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, attRequest.Algorithm, attRequest.VerifierType)

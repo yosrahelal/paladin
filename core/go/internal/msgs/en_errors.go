@@ -74,6 +74,7 @@ var (
 	MsgComponentAdditionalMgrInitError          = ffe("PD010031", "Error initializing %s manager")
 	MsgComponentAdditionalMgrStartError         = ffe("PD010032", "Error initializing %s manager")
 	MsgPrivateTxManagerInvalidEventMissingField = ffe("PD010033", "Invalid event: missing field %s")
+	MsgPrivateTxManagerSignRemoteError          = ffe("PD010034", "Attempt to sign a transaction with an identity from a remote node: %s")
 
 	// States PD0101XX
 	MsgStateInvalidLength             = ffe("PD010101", "Invalid hash len expected=%d actual=%d")

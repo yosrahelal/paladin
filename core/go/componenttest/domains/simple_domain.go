@@ -918,6 +918,7 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 
 				// There would need to be minting/spending rules here - we just check the signature
 				assert.Equal(t, signerAddr.String(), signerVerification.Verifier.Verifier)
+				assert.Equal(t, signerAddr.String(), senderAddr.String(), "signer and sender should match")
 
 				// Check the math
 				if fromAddr != nil && toAddr != nil {
