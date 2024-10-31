@@ -60,7 +60,7 @@ export const fetchSubmissions = async (
     id: Date.now(),
     method:
       type === "all"
-        ? RpcMethods.ptx_QueryTransactions
+        ? RpcMethods.ptx_QueryTransactionsFull
         : RpcMethods.ptx_QueryPendingTransactions,
     params: type === "all" ? allParams : pendingParams,
   };
@@ -127,7 +127,7 @@ export const fetchPaladinTransactions = async (
   const payload = {
     jsonrpc: "2.0",
     id: Date.now(),
-    method: RpcMethods.ptx_QueryTransactions,
+    method: RpcMethods.ptx_QueryTransactionsFull,
     params: [
       {
         limit: constants.TRANSACTION_QUERY_LIMIT,

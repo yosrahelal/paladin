@@ -75,3 +75,46 @@ export interface IStateReceipt {
   none?: boolean;
   [key: string]: any;
 }
+
+export interface IPrivateEVMTransaction {
+  from?: string;
+  to?: string;
+  nonce?: string;
+  gas?: string;
+  data?: string;
+}
+
+export interface IPrivateEVMReceipt {
+  from?: string;
+  to?: string;
+  gasUsed?: string;
+  contractAddress?: string;
+  logs?: IPrivateEVMLog[];
+}
+
+export interface IPrivateEVMLog {
+  address?: string;
+  topics?: string[];
+  data?: string;
+}
+
+export interface IABIParameter {
+  type: string;
+  name?: string;
+  indexed?: boolean;
+  components?: IABIParameter[] | null;
+}
+
+export interface IABIEntry {
+  type: string;
+  name: string;
+  inputs?: IABIParameter[] | null;
+  outputs?: IABIParameter[] | null;
+}
+
+export interface IABIDecodedEntry {
+  data: any;
+  definition: IABIEntry;
+  signature: string;
+  summary?: string; // errors only
+}

@@ -68,5 +68,9 @@
   "numberNanoseconds": "{{number}} (nanoseconds)",
   "numberMilliseconds": "{{number}} (milliseconds)",
   "numberSeconds": "{{number}} (seconds)",
-  "atomicNumber": "Atomic ({{number}})"
+  "atomicNumber": "Atomic ({{number}})",
+  "evmPrivateTransaction": "EVM Private Transaction",
+  "evmPrivateReceipt": "EVM Private Receipt",
+  "evmPrivateLog": "EVM Private Log {{logIndex}}",
+  "decoded": "decoded"
 }
