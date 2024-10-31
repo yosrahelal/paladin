@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, CssBaseline } from "@mui/material";
+import { CssBaseline } from "@mui/material";
 import { createTheme, PaletteMode, ThemeProvider } from "@mui/material/styles";
 import {
   MutationCache,
@@ -91,19 +91,6 @@ function App() {
         <ApplicationContextProvider colorMode={colorMode}>
           <ThemeProvider theme={theme}>
             <CssBaseline />
-            <Box
-              sx={{
-                position: "fixed",
-                height: "100vh",
-                width: "100vw",
-                zIndex: -1,
-                backgroundImage: 'url("paladin-icon-light.svg")',
-                backgroundRepeat: "no-repeat",
-                backgroundSize: "88vh",
-                backgroundPosition: "center bottom",
-                backgroundAttachment: "fixed",
-              }}
-            />
             <BrowserRouter>
               <Header />
               <Routes>

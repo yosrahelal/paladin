@@ -53,13 +53,13 @@ export const Transactions: React.FC = () => {
 
   return (
     <>
-      <Typography align="center" sx={{ fontSize: "24px", fontWeight: 500 }}>
+      <Typography align="center" variant="h5" sx={{ marginBottom: '20px' }}>
         {t("transactions")}
       </Typography>
       <Box
         sx={{
-          height: "calc(100vh - 162px)",
-          padding: "20px",
+          height: "calc(100vh - 170px)",
+          paddingRight: "15px",
           ...addedStyle
         }}
       >

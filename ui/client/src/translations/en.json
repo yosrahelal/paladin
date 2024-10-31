@@ -72,5 +72,7 @@
   "evmPrivateTransaction": "EVM Private Transaction",
   "evmPrivateReceipt": "EVM Private Receipt",
   "evmPrivateLog": "EVM Private Log {{logIndex}}",
-  "decoded": "decoded"
+  "decoded": "decoded",
+  "topic": "Topic",
+  "pending": "Pending"
 }

@@ -25,7 +25,7 @@ import { useState } from "react";
 import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { EllapsedTime } from "./EllapsedTime";
-import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityIcon from '@mui/icons-material/VisibilityOutlined';
 import { PaladinTransactionsDetailsDialog } from "../dialogs/TransactionDetails";
 
 type Props = {
@@ -45,63 +45,74 @@ export const Transaction: React.FC<Props> = ({ transaction, paladinTransactions 
       <Box sx={{
         position: 'relative',
         backgroundColor: theme => theme.palette.background.paper,
-        marginBottom: '20px', padding: '10px', borderRadius: '6px', boxShadow: '0px 0px 8px 3px rgba(0,0,0,0.26)'
+        marginBottom: '20px', borderRadius: '4px'
       }}>
         {paladinTransactions && paladinTransactions.length > 0 &&
-          <img src="/paladin-icon-light.svg" width="38" style={{ position: 'absolute', left: 'calc(50% - 19px)', bottom: '0px' }} />
+          <img src="/paladin-icon-light.svg" width="40" style={{ position: 'absolute', left: '20px', bottom: '0px' }} />
         }
-        <Grid2 container direction="column" spacing={2}>
-          <Grid2 container justifyContent="space-evenly">
-            {paladinTransactions && paladinTransactions.length > 1 &&
+        <Box sx={{ padding: '10px', paddingLeft: '20px', paddingRight: '20px', borderBottom: theme => `solid 1px ${theme.palette.divider}` }}>
+          <Grid2 container direction="column" spacing={2}>
+            <Grid2 container justifyContent="space-between">
               <Grid2>
-                <Typography align="center" variant="h6" color="textPrimary">{t('atomicNumber', { number: paladinTransactions.length })}</Typography>
-                <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
-              </Grid2>}
-            {paladinTransactions && paladinTransactions.length === 1 &&
+                <Typography align="center" variant="h6" color="textPrimary">{transaction.blockNumber.toLocaleString()}</Typography>
+                <Typography align="center" variant="body2" color="textSecondary">{t('block')}</Typography>
+              </Grid2>
               <Grid2>
-                <Typography align="center" variant="h6" color="textPrimary">{t(paladinTransactions[0].type)}</Typography>
-                <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
-              </Grid2>}
-            <Grid2>
-              <Typography align="center" variant="h6" color="textPrimary">{transaction.blockNumber.toLocaleString()}</Typography>
-              <Typography align="center" variant="body2" color="textSecondary">{t('block')}</Typography>
-            </Grid2>
-            <Grid2>
-              <Typography align="center" variant="h6" color="textPrimary">{transaction.transactionIndex}</Typography>
-              <Typography align="center" variant="body2" color="textSecondary">{t('transactionIndex')}</Typography>
-            </Grid2>
-            <Grid2>
-              <Typography align="center" variant="h6" color="textPrimary">{transaction.nonce}</Typography>
-              <Typography align="center" variant="body2" color="textSecondary">{t('nonce')}</Typography>
-            </Grid2>
-            <Grid2 sx={{ textAlign: 'center' }} alignContent="center">
-              {transaction.result === 'success' ? <CheckCircleOutlineIcon color="primary" /> : <ErrorOutlineIcon color="error" />}
-              <Typography align="center" variant="body2" color="textSecondary">{t('result')}</Typography>
+                <Typography align="center" variant="h6" color="textPrimary">{transaction.transactionIndex}</Typography>
+                <Typography align="center" variant="body2" color="textSecondary">{t('transactionIndex')}</Typography>
+              </Grid2>
+              <Grid2>
+                <Typography align="center" variant="h6" color="textPrimary">{transaction.nonce}</Typography>
+                <Typography align="center" variant="body2" color="textSecondary">{t('nonce')}</Typography>
+              </Grid2>
+              {paladinTransactions && paladinTransactions.length > 1 &&
+                <Grid2>
+                  <Typography align="center" variant="h6" color="textPrimary">{t('atomicNumber', { number: paladinTransactions.length })}</Typography>
+                  <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
+                </Grid2>}
+              {paladinTransactions && paladinTransactions.length === 1 &&
+                <Grid2>
+                  <Typography align="center" variant="h6" color="textPrimary">{t(paladinTransactions[0].type)}</Typography>
+                  <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
+                </Grid2>}
+              <Grid2 sx={{ textAlign: 'center' }} alignContent="center">
+                {transaction.result === 'success' ? <CheckCircleOutlineIcon color="primary" /> : <ErrorOutlineIcon color="error" />}
+                <Typography align="center" variant="body2" color="textSecondary">{t('result')}</Typography>
+              </Grid2>
             </Grid2>
           </Grid2>
-          <Grid2 container justifyContent="space-evenly" wrap="nowrap">
-            <Grid2>
-              <Hash title={t('hash')} hash={transaction.hash} />
-              <Typography align="center" variant="body2" color="textSecondary">{t('hash')}</Typography>
-            </Grid2>
-            <Grid2>
-              <Hash title={t('from')} hash={transaction.from} />
-              <Typography align="center" variant="body2" color="textSecondary">{t('from')}</Typography>
-            </Grid2>
-            {transaction.contractAddress &&
-              <Grid2>
-                <Hash title={t('contract')} hash={transaction.contractAddress} />
-                <Typography align="center" variant="body2" color="textSecondary">{t('contract')}</Typography>
-              </Grid2>}
+        </Box>
+        <Box sx={{ padding: '10px', paddingBottom: '20px' }}>
+          <Grid2 container justifyContent="space-evenly" wrap="nowrap" spacing={2}>
+            {transaction.contractAddress ?
+              <>
+                <Grid2 size={{ xs: 12, sm: 4 }}>
+                  <Hash title={t('hash')} hash={transaction.hash} />
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 4 }}>
+                  <Hash title={t('from')} hash={transaction.from} />
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 4 }}>
+                  <Hash title={t('contract')} hash={transaction.contractAddress} />
+                </Grid2>
+              </>
+              :
+              <>
+                <Grid2 size={{ xs: 12, sm: 6 }}>
+                  <Hash title={t('hash')} hash={transaction.hash} />
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 6 }}>
+                  <Hash title={t('from')} hash={transaction.from} />
+                </Grid2>
+              </>
+            }
           </Grid2>
-          <Grid2>
-            <Box sx={{ display: 'flex', padding: '4px', justifyContent: 'space-between' }}>
-              <EllapsedTime timestamp={transaction.block.timestamp} />
-              <Button size="small" startIcon={<VisibilityIcon />}
-                onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
-            </Box>
-          </Grid2>
-        </Grid2>
+        </Box>
+        <Box sx={{ display: 'flex', padding: '4px', justifyContent: 'end' }}>
+          <EllapsedTime timestamp={transaction.block.timestamp} />
+          <Button sx={{ marginLeft: '20px', textTransform: 'none', fontWeight: '400' }} size="small" startIcon={<VisibilityIcon />}
+            onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
+        </Box>
       </Box>
       {paladinTransactions && paladinTransactions?.length > 0 ?
         <PaladinTransactionsDetailsDialog

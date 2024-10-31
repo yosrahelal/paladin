@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ButtonBase, Typography } from "@mui/material";
+import { Button } from "@mui/material";
 import { useState } from "react";
 import { HashDialog } from "../dialogs/Hash";
 
@@ -29,17 +29,18 @@ export const Hash: React.FC<Props> = ({ title, hash }) => {
 
   const [hashDialogOpen, setHashDialogOpen] = useState(false);
 
-  if(hash.length < MAX_LENGTH_WITHOUT_COLLAPSE) {
-    return (
-      <Typography variant="h6" color="inherit">{hash}</Typography>
-    );
-  }
+  const getHash = (value: string) => {
+    if(value.length < MAX_LENGTH_WITHOUT_COLLAPSE) {
+      return hash;
+    }
+    return `${value.substring(0, 5)}...${value.substring(value.length - 3)}`
+  };
 
   return (
     <>
-      <ButtonBase onClick={() => setHashDialogOpen(true)}>
-        <Typography variant="h6" color="primary">{`${hash.substring(0, 5)}...${hash.substring(hash.length - 4)}`}</Typography>
-      </ButtonBase>
+      <Button disableElevation onClick={() => setHashDialogOpen(true)} fullWidth variant="contained" sx={{ paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400'}} size="small">
+        {`${title} | ${getHash(hash)}`}
+      </Button>
       <HashDialog dialogOpen={hashDialogOpen} setDialogOpen={setHashDialogOpen} title={title} hash={hash} />
     </>
   );

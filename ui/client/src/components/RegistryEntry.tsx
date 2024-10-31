@@ -23,7 +23,7 @@ import { useState } from "react";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { IRegistryEntry } from "../interfaces";
-import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityIcon from '@mui/icons-material/VisibilityOutlined';
 import { ViewDetailsDialog } from "../dialogs/ViewDetails";
 
 type Props = {
@@ -51,14 +51,22 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
         sx={{
           backgroundColor: (theme) => theme.palette.background.paper,
           marginBottom: "20px",
-          padding: "10px",
-          borderRadius: "6px",
-          boxShadow: "0px 0px 8px 3px rgba(0,0,0,0.26)",
+          borderRadius: "4px"
         }}
       >
-        <Grid2 container direction="column" spacing={2}>
-          <Grid2 container justifyContent="space-evenly">
-            <Grid2>
+        <Box sx={{ padding: '10px', paddingLeft: '20px', paddingRight: '20px', borderBottom: theme => `solid 1px ${theme.palette.divider}` }}>
+
+          <Grid2 container justifyContent="space-between" alignItems="center" spacing={2}>
+            <Grid2 size={{ xs: 3 }}>
+              <Hash title={t("id")} hash={registryEntry.id} />
+            </Grid2>
+            <Grid2 size={{ xs: 3 }}>
+              <Hash
+                title={t("owner")}
+                hash={registryEntry.properties.$owner}
+              />
+            </Grid2>
+            <Grid2 size={{ xs: 2 }}>
               <Typography align="center" variant="h6" color="textPrimary">
                 {registryEntry.name}
               </Typography>
@@ -70,7 +78,7 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
                 {t("name")}
               </Typography>
             </Grid2>
-            <Grid2>
+            <Grid2 size={{ xs: 2 }}>
               <Typography align="center" variant="h6" color="textPrimary">
                 {registryEntry.registry}
               </Typography>
@@ -82,30 +90,7 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
                 {t("registry")}
               </Typography>
             </Grid2>
-            <Grid2>
-              <Hash title={t("id")} hash={registryEntry.id} />
-              <Typography
-                align="center"
-                variant="body2"
-                color="textSecondary"
-              >
-                {t("id")}
-              </Typography>
-            </Grid2>
-            <Grid2>
-              <Hash
-                title={t("owner")}
-                hash={registryEntry.properties.$owner}
-              />
-              <Typography
-                align="center"
-                variant="body2"
-                color="textSecondary"
-              >
-                {t("owner")}
-              </Typography>
-            </Grid2>
-            <Grid2 sx={{ textAlign: "center" }} alignContent="center">
+            <Grid2 sx={{ textAlign: "center" }} alignContent="center" size={{ xs: 2 }}>
               {registryEntry.active ? (
                 <CheckCircleOutlineIcon color="primary" />
               ) : (
@@ -120,33 +105,34 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
               </Typography>
             </Grid2>
           </Grid2>
-          <Grid2>
-            <Box sx={{ display: 'flex', padding: '4px', justifyContent: 'right' }}>
-              <Button size="small" startIcon={<VisibilityIcon />} sx={{ marginRight: '40px' }}
-                onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
-              <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                onClick={() => setIsExpanded(!isExpanded)}>
-                {t(isExpanded ? 'hideProperties' : 'showProperties')}
-              </Button>
-            </Box>
-            <Collapse in={isExpanded}>
-              {Object.keys(registryEntry.properties)
-                .filter((property) => property !== "$owner")
-                .map((property) => (
-                  <TextField
-                    key={property}
-                    label={property}
-                    maxRows={8}
-                    multiline
-                    fullWidth
-                    size="small"
-                    sx={{ marginTop: '12px' }}
-                    value={processValue(registryEntry.properties[property])}
-                  />
-                ))}
-            </Collapse>
-          </Grid2>
-        </Grid2>
+        </Box>
+
+        <Box sx={{ display: 'flex', padding: '10px', justifyContent: 'right' }}>
+          <Button size="small" startIcon={<VisibilityIcon />} sx={{ marginRight: '40px', textTransform: 'none', fontWeight: '400' }}
+            onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
+          <Button sx={{ textTransform: 'none', fontWeight: '400', minWidth: '140px' }} size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            onClick={() => setIsExpanded(!isExpanded)}>
+            {t(isExpanded ? 'hideProperties' : 'showProperties')}
+          </Button>
+        </Box>
+        <Collapse in={isExpanded}>
+          {Object.keys(registryEntry.properties)
+            .filter((property) => property !== "$owner")
+            .map((property) => (
+              <TextField
+                key={property}
+                label={property}
+                maxRows={8}
+                multiline
+                fullWidth
+                size="small"
+                sx={{ marginTop: '12px' }}
+                value={processValue(registryEntry.properties[property])}
+              />
+            ))}
+        </Collapse>
+
+
       </Box>
       <ViewDetailsDialog
         title={t('registryEntry')}

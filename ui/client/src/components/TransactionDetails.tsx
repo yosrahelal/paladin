@@ -22,7 +22,6 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import JSONPretty from 'react-json-pretty';
 import { IPaladinTransaction } from '../interfaces';
 import { fetchDomainReceipt } from '../queries/domains';
 import { fetchStateReceipt } from '../queries/states';

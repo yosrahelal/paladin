@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { AppBar, Box, Grid2, IconButton, Tab, Tabs, Toolbar, Tooltip, Typography, useTheme } from "@mui/material";
+import { AppBar, Box, Grid2, IconButton, Tab, Tabs, Toolbar, Tooltip, useTheme } from "@mui/material";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -55,31 +55,27 @@ export const Header: React.FC = () => {
   return (
     <>
       <AppBar>
-        <Toolbar>
-          <Grid2 container alignItems="center" justifyContent="space-between" size={{ xs: 12 }}>
-            <Grid2>
-              <Typography variant="h6" color={ theme.palette.mode === 'dark' ? 'primary' : 'inherit'}>{t('paladin')}</Typography>
+        <Toolbar sx={{ backgroundColor: theme => theme.palette.background.paper }}>
+          <Grid2 container alignItems="center" size={{ xs: 12 }}>
+            <Grid2 size={{ xs: 12, sm: 12, md: 4 }} textAlign="center">
+              <img src={theme.palette.mode === 'dark' ?
+                '/paladin-title-dark.svg' : '/paladin-title-light.svg'
+              } style={{ marginTop: '7px' }} />
             </Grid2>
-            <Grid2>
-              <Tabs value={tab} onChange={(_event, value) => handleNavigation(value)} textColor="inherit"
-                TabIndicatorProps={{
-                  style: {
-                    backgroundColor: 'white'
-                  }
-                }}
-              >
+            <Grid2 size={{ xs: 12, sm: 12, md: 4 }} alignContent="center">
+              <Tabs value={tab} onChange={(_event, value) => handleNavigation(value)} centered>
                 <Tab label={t('indexer')} />
                 <Tab label={t('submissions')} />
                 <Tab label={t('registry')} />
               </Tabs>
             </Grid2>
-          </Grid2>
-          <Grid2>
-            <Tooltip arrow title={t('switchThemeMode')}>
-            <IconButton color="inherit" onClick={() => colorMode.toggleColorMode()}>
-                <Brightness4Icon />
-            </IconButton>
-            </Tooltip>
+            <Grid2 size={{ xs: 12, sm: 12, md: 4 }} textAlign="center">
+              <Tooltip arrow title={t('switchThemeMode')}>
+                <IconButton onClick={() => colorMode.toggleColorMode()}>
+                  <Brightness4Icon />
+                </IconButton>
+              </Tooltip>
+            </Grid2>
           </Grid2>
         </Toolbar>
       </AppBar>
