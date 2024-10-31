@@ -83,7 +83,7 @@ func getJSONPropertyAs(jsonData tktypes.RawJSON, name string, toValue any) {
 	}
 }
 
-var _ = Describe("bonds", Ordered, func() {
+var _ = Describe("simple", Ordered, func() {
 	BeforeAll(func() {
 		log.SetLevel("warn")
 	})

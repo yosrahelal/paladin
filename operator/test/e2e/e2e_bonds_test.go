@@ -34,6 +34,7 @@ import (
 	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -46,12 +47,14 @@ var BondTrackerPublicBuildJSON []byte
 //go:embed abis/BondTracker.json
 var BondTrackerPrivateBuildJSON []byte
 
+//go:embed abis/BondSubscription.json
+var BondSubscriptionPrivateBuildJSON []byte
+
 var _ = Describe("controller", Ordered, func() {
 	defer GinkgoRecover()
 
 	BeforeAll(func() {
 		log.SetLevel("warn")
-		Skip("bonds for now")
 	})
 
 	AfterAll(func() {
@@ -126,18 +129,6 @@ var _ = Describe("controller", Ordered, func() {
 			ExternalCallsEnabled bool                        `json:"externalCallsEnabled"`
 		}
 
-		type penteDeployParams struct {
-			Group    nototypes.PentePrivateGroup `json:"group"`
-			Bytecode tktypes.HexBytes            `json:"bytecode"`
-			Inputs   any                         `json:"inputs"`
-		}
-
-		type penteInvokeParams struct {
-			Group  nototypes.PentePrivateGroup `json:"group"`
-			To     tktypes.EthAddress          `json:"to"`
-			Inputs any                         `json:"inputs"`
-		}
-
 		type penteReceipt struct {
 			Receipt struct {
 				ContractAddress *tktypes.EthAddress `json:"contractAddress"`
@@ -153,8 +144,9 @@ var _ = Describe("controller", Ordered, func() {
 
 		bondTrackerPublicBuild := solutils.MustLoadBuild(BondTrackerPublicBuildJSON)
 		bondTrackerPrivateBuild := solutils.MustLoadBuild(BondTrackerPrivateBuildJSON)
+		bondSubscriptionPrivateBuild := solutils.MustLoadBuild(BondSubscriptionPrivateBuildJSON)
 
-		// TODO: This could be a convert-to-pente function for all functions on the the ABI
+		// TODO: This could be a convert-to-pente function for all functions on the the ABIs
 		bondTrackerPenteABI := abi.ABI{
 			{
 				Type: abi.Function,
@@ -176,6 +168,8 @@ var _ = Describe("controller", Ordered, func() {
 						Components: bondTrackerPrivateBuild.ABI.Functions()["beginDistribution"].Inputs},
 				},
 			},
+		}
+		investorRegistryPenteABI := abi.ABI{
 			{
 				Type: abi.Function,
 				Name: "investorRegistry",
@@ -197,6 +191,18 @@ var _ = Describe("controller", Ordered, func() {
 						Components: abi.ParameterArray{
 							{Name: "addr", Type: "address"},
 						}},
+				},
+			},
+		}
+		bondSubscriptionPenteABI := abi.ABI{
+			{
+				Type: abi.Function,
+				Name: "deploy",
+				Inputs: abi.ParameterArray{
+					penteGroupABI,
+					{Name: "bytecode", Type: "bytes"},
+					{Name: "inputs", Type: "tuple",
+						Components: bondSubscriptionPrivateBuild.ABI.Constructor().Inputs},
 				},
 			},
 		}
@@ -267,7 +273,7 @@ var _ = Describe("controller", Ordered, func() {
 			}
 		})
 
-		var cashIssuerContract *tktypes.EthAddress
+		var cashTokenContract *tktypes.EthAddress
 		It("creates cash issuer token", func() {
 			tx := rpc[cashIssuer.node].ForABI(ctx, abi.ABI{
 				{Type: abi.Constructor, Inputs: abi.ParameterArray{
@@ -286,8 +292,8 @@ var _ = Describe("controller", Ordered, func() {
 			testLog("Cash issuer contract deployment transaction: %s", tx.ID())
 			Expect(tx.Error()).To(BeNil())
 			Expect(tx.Receipt().ContractAddress).ToNot(BeNil())
-			cashIssuerContract = tx.Receipt().ContractAddress
-			testLog("Cash issuer contract (noto): %s", cashIssuerContract)
+			cashTokenContract = tx.Receipt().ContractAddress
+			testLog("Cash issuer contract (noto): %s", cashTokenContract)
 		})
 
 		var publicBondTrackerContract *tktypes.EthAddress
@@ -302,7 +308,7 @@ var _ = Describe("controller", Ordered, func() {
 					"owner":          privacyGroups["issuerCustodian"].contractAddress,
 					"issueDate_":     "0",
 					"maturityDate_":  "1",
-					"currencyToken_": cashIssuerContract,
+					"currencyToken_": cashTokenContract,
 					"faceValue_":     "1",
 				}).
 				Send().
@@ -392,7 +398,7 @@ var _ = Describe("controller", Ordered, func() {
 			tx := rpc[cashIssuer.node].ForABI(ctx, nototypes.NotoABI).
 				Private().
 				Domain("noto").
-				To(cashIssuerContract).
+				To(cashTokenContract).
 				From(cashIssuer.id).
 				Function("mint").
 				Inputs(map[string]any{
@@ -446,7 +452,7 @@ var _ = Describe("controller", Ordered, func() {
 		var investorRegistryAddress *tktypes.EthAddress
 		It("gets the investor registry", func() {
 			var out tktypes.RawJSON
-			err := rpc[bondIssuer.node].ForABI(ctx, bondTrackerPenteABI).
+			err := rpc[bondIssuer.node].ForABI(ctx, investorRegistryPenteABI).
 				Private().
 				Domain("pente").
 				To(privacyGroups["issuerCustodian"].contractAddress).
@@ -465,8 +471,8 @@ var _ = Describe("controller", Ordered, func() {
 			Expect(investorRegistryAddress).ToNot(BeNil())
 		})
 
-		It("adds investor", func() {
-			tx := rpc[bondCustodian.node].ForABI(ctx, bondTrackerPenteABI).
+		It("adds alice as an investor", func() {
+			tx := rpc[bondCustodian.node].ForABI(ctx, investorRegistryPenteABI).
 				Private().
 				Domain("pente").
 				To(privacyGroups["issuerCustodian"].contractAddress).
@@ -481,9 +487,77 @@ var _ = Describe("controller", Ordered, func() {
 				}).
 				Send().
 				Wait(5 * time.Second)
-			testLog("Bond tracker Private EVM contract addInvestor() invoke txn: %s", tx.ID())
+			testLog("Bond tracker Private EVM contract addInvestor(alice) invoke txn: %s", tx.ID())
 			Expect(tx.Error()).To(BeNil())
 		})
 
+		var privateBondSubscriptionDeployID uuid.UUID
+		It("deploy private bond subscription to the alice/custodian privacy group", func() {
+
+			tx := rpc[alice.node].ForABI(ctx, bondSubscriptionPenteABI).
+				Private().
+				Domain("pente").
+				To(privacyGroups["aliceCustodian"].contractAddress).
+				From(alice.identity).
+				Function("deploy").
+				Inputs(map[string]any{
+					"group":    privacyGroups["aliceCustodian"].PentePrivateGroup,
+					"bytecode": bondSubscriptionPrivateBuild.Bytecode.String(),
+					"inputs": map[string]any{
+						"bondAddress_": bondTokenContract,
+						"units_":       1000,
+					},
+				}).
+				Send().
+				Wait(5 * time.Second)
+			privateBondSubscriptionDeployID = tx.ID()
+			testLog("Bond subscription Private EVM contract deployment transaction: %s", privateBondSubscriptionDeployID)
+			Expect(tx.Error()).To(BeNil())
+		})
+
+		var preparedBondTransfer *pldapi.PreparedTransaction
+		It("prepare transfer of bonds from custodian to alice", func() {
+			tx := rpc[bondCustodian.node].ForABI(ctx, nototypes.NotoABI).
+				Private().
+				Domain("noto").
+				To(bondTokenContract).
+				From(bondCustodian.id).
+				Function("transfer").
+				Inputs(map[string]any{
+					"to":     alice.id,
+					"amount": 1000,
+				}).
+				Prepare().
+				Wait(5 * time.Second)
+			testLog("Bond transfer to alice prepared TX ID: %s", tx.ID())
+			Expect(tx.Error()).To(BeNil())
+			preparedBondTransfer = tx.PreparedTransaction()
+			Expect(preparedBondTransfer).ToNot(BeNil())
+			Expect(preparedBondTransfer.Domain).ToNot(Equal("pente"))
+		})
+
+		var preparedPaymentTransfer *pldapi.PreparedTransaction
+		It("prepare transfer of cash from alice to custodian", func() {
+
+			Skip("until code updated so the prepared transaction gets moved back from the bond issuer node, to the alice node")
+
+			tx := rpc[alice.node].ForABI(ctx, nototypes.NotoABI).
+				Private().
+				Domain("noto").
+				To(cashTokenContract).
+				From(alice.id).
+				Function("transfer").
+				Inputs(map[string]any{
+					"to":     bondCustodian.id,
+					"amount": 1000,
+				}).
+				Prepare().
+				Wait(5 * time.Second)
+			testLog("Cash transfer to bond custodian prepared TX ID: %s", tx.ID())
+			Expect(tx.Error()).To(BeNil())
+			preparedPaymentTransfer = tx.PreparedTransaction()
+			Expect(preparedPaymentTransfer).ToNot(BeNil())
+			Expect(preparedPaymentTransfer.Domain).To(BeEmpty( /* e.g. pubic */ ))
+		})
 	})
 })
