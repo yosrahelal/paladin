@@ -44,5 +44,5 @@ export const JSONBox: React.FC<Props> = ({
       boolean: 'color:#107070;'
     };
 
-  return <JSONPretty style={{ fontSize: '14px' }} data={data} theme={colors} />;
+  return <JSONPretty style={{ fontSize: '12px' }} data={data} theme={colors} />;
 };

@@ -75,5 +75,8 @@
   "decodedFunction": "Decoded function:",
   "decodedEvent": "Decoded event:",
   "topic": "Topic",
-  "pending": "Pending"
+  "pending": "Pending",
+  "indexer": "Indexer",
+  "submissions": "Submissions",
+  "close": "Close"
 }

@@ -16,7 +16,7 @@
 
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
-import { Box, Button, Collapse, Grid2, TextField, Typography } from "@mui/material";
+import { Box, Button, Collapse, Grid2, TextField, Typography, useTheme } from "@mui/material";
 import { t } from "i18next";
 import { Hash } from "./Hash";
 import { useState } from "react";
@@ -34,6 +34,7 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
+  const theme = useTheme();
 
   const processValue = (value: string) => {
     try {
@@ -106,8 +107,8 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
             </Grid2>
           </Grid2>
         </Box>
-
-        <Box sx={{ display: 'flex', padding: '10px', justifyContent: 'right' }}>
+        <Box sx={{ padding: '10px'}}>
+        <Box sx={{ display: 'flex', justifyContent: 'right' }}>
           <Button size="small" startIcon={<VisibilityIcon />} sx={{ marginRight: '40px', textTransform: 'none', fontWeight: '400' }}
             onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
           <Button sx={{ textTransform: 'none', fontWeight: '400', minWidth: '140px' }} size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
@@ -116,6 +117,7 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
           </Button>
         </Box>
         <Collapse in={isExpanded}>
+
           {Object.keys(registryEntry.properties)
             .filter((property) => property !== "$owner")
             .map((property) => (
@@ -126,13 +128,14 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
                 multiline
                 fullWidth
                 size="small"
-                sx={{ marginTop: '12px' }}
+                sx={{ marginTop: '10px' }}
+                slotProps={{ htmlInput: { style: { fontSize: '12px', color: `${theme.palette.text.secondary}`}  }}}
                 value={processValue(registryEntry.properties[property])}
               />
             ))}
+
         </Collapse>
-
-
+        </Box>
       </Box>
       <ViewDetailsDialog
         title={t('registryEntry')}

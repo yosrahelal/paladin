@@ -15,6 +15,7 @@
 // limitations under the License.
 
 import {
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -48,7 +49,7 @@ export const PaladinTransactionsReceiptDetailsDialog: React.FC<Props> = ({
   const { t } = useTranslation();
 
   const theme = useTheme();
-  const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
+  const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
   const selectedReceipt = paladinReceipts?.find(r => (r.id == selectedPaladinTransactionId));
   const selectedTransaction = paladinTransactions?.find(r => (r.id == selectedPaladinTransactionId));
@@ -69,14 +70,16 @@ export const PaladinTransactionsReceiptDetailsDialog: React.FC<Props> = ({
       <DialogTitle sx={{ textAlign: 'center' }}>
         {t('transaction')}
       </DialogTitle>
-      <DialogContent sx={{ margin: '10px', padding: '10px', ...addedStyle}}>
-        <TextField select label={t('id')} fullWidth size="small" sx={{ marginTop: '5px' }} value={selectedPaladinTransactionId}
-          onChange={event => setSelectedPaladinTransactionId(event.target.value)}>
-          {paladinReceipts?.map(paladinReceipt =>
-            <MenuItem key={paladinReceipt.id} value={paladinReceipt.id}>{paladinReceipt.id}</MenuItem>
-          )}
-        </TextField>
-        { selectedReceipt ?
+      <DialogContent sx={{ height: '80vh', margin: '10px', padding: '10px', ...addedStyle }}>
+        <Box sx={{ padding: '20px', paddingTop: '5px' }}>
+          <TextField select label={t('id')} fullWidth size="small" sx={{ marginTop: '5px' }} value={selectedPaladinTransactionId}
+            onChange={event => setSelectedPaladinTransactionId(event.target.value)}>
+            {paladinReceipts?.map(paladinReceipt =>
+              <MenuItem key={paladinReceipt.id} value={paladinReceipt.id}>{paladinReceipt.id}</MenuItem>
+            )}
+          </TextField>
+        </Box>
+        {selectedReceipt ?
           <PaladinTransactionsDetails
             transactionReceipt={selectedReceipt}
             paladinTransaction={selectedTransaction}
@@ -90,7 +93,7 @@ export const PaladinTransactionsReceiptDetailsDialog: React.FC<Props> = ({
           sx={{ textTransform: 'none' }}
           variant="contained"
           disableElevation>
-          {t('dismiss')}
+          {t('close')}
         </Button>
       </DialogActions>
     </Dialog>

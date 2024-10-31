@@ -15,19 +15,13 @@
 // limitations under the License.
 
 import {
-  Box,
   Button,
   Dialog,
   DialogActions,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-  Tooltip,
-  Typography
+  DialogContent
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import { useState } from 'react';
+import { SingleValue } from '../components/SingleValue';
 
 type Props = {
   title: string
@@ -44,7 +38,6 @@ export const HashDialog: React.FC<Props> = ({
 }) => {
 
   const { t } = useTranslation();
-  const [copyLabel, setCopyLabel] = useState('copyToClipboard');
 
   return (
     <Dialog
@@ -52,18 +45,8 @@ export const HashDialog: React.FC<Props> = ({
       open={dialogOpen}
       maxWidth="lg"
     >
-      <DialogTitle sx={{ textAlign: 'center' }}>
-        {title}
-      </DialogTitle>
       <DialogContent>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Typography sx={{ textAlign: 'center' }} color="textSecondary">{hash}</Typography>
-          <Tooltip title={t(copyLabel)} arrow placement="right" onMouseLeave={() => setTimeout(() => setCopyLabel('copyToClipboard'), 200)}>
-            <IconButton onClick={() => { navigator.clipboard.writeText(hash); setCopyLabel('copied') }}>
-              <ContentCopyIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
+        <SingleValue label={title} value={hash} />
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'center', marginBottom: '15px' }}>
         <Button
@@ -71,7 +54,7 @@ export const HashDialog: React.FC<Props> = ({
           sx={{ textTransform: 'none' }}
           variant="contained"
           disableElevation>
-          {t('dismiss')}
+          {t('close')}
         </Button>
       </DialogActions>
     </Dialog>

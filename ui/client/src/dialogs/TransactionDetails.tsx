@@ -15,6 +15,7 @@
 // limitations under the License.
 
 import {
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -66,13 +67,15 @@ export const PaladinTransactionsDetailsDialog: React.FC<Props> = ({
       <DialogTitle sx={{ textAlign: 'center' }}>
         {t('transaction')}
       </DialogTitle>
-      <DialogContent sx={{ margin: '10px', padding: '10px', ...addedStyle}}>
-        <TextField select label={t('id')} fullWidth size="small" sx={{ marginTop: '5px' }} value={selectedPaladinTransactionId}
+      <DialogContent sx={{ height: '80vh',  padding: '20px', ...addedStyle}}>
+        <Box sx={{ padding: '20px', paddingTop: '5px' }}>
+        <TextField select={paladinTransactions && paladinTransactions.length > 1} label={t('id')} fullWidth size="small" value={selectedPaladinTransactionId}
           onChange={event => setSelectedPaladinTransactionId(event.target.value)}>
           {paladinTransactions?.map(paladinTransaction =>
             <MenuItem key={paladinTransaction.id} value={paladinTransaction.id}>{paladinTransaction.id}</MenuItem>
           )}
         </TextField>
+        </Box>
         { selectedTransaction ?
           <PaladinTransactionsDetails
             paladinTransaction={selectedTransaction}
@@ -86,7 +89,7 @@ export const PaladinTransactionsDetailsDialog: React.FC<Props> = ({
           sx={{ textTransform: 'none' }}
           variant="contained"
           disableElevation>
-          {t('dismiss')}
+          {t('close')}
         </Button>
       </DialogActions>
     </Dialog>
