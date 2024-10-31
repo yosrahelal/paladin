@@ -100,6 +100,11 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, err
 	}
+	infoStates, err := h.noto.prepareInfo(params.Data, []string{notary, tx.Transaction.From, params.To})
+	if err != nil {
+		return nil, err
+	}
+
 	if total.Cmp(params.Amount.Int()) == 1 {
 		remainder := big.NewInt(0).Sub(total, params.Amount.Int())
 		returnedCoins, returnedStates, err := h.noto.prepareOutputs(notary, tx.Transaction.From, fromAddress, (*tktypes.HexUint256)(remainder))
@@ -166,6 +171,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		AssembledTransaction: &prototk.AssembledTransaction{
 			InputStates:  inputStates,
 			OutputStates: outputStates,
+			InfoStates:   infoStates,
 		},
 		AttestationPlan: attestation,
 	}, nil

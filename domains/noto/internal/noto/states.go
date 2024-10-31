@@ -72,7 +72,7 @@ func (n *Noto) unmarshalCoin(stateData string) (*types.NotoCoin, error) {
 	return &coin, err
 }
 
-func (n *Noto) makeNewState(coin *types.NotoCoin, distributionList []string) (*prototk.NewState, error) {
+func (n *Noto) makeNewCoinState(coin *types.NotoCoin, distributionList []string) (*prototk.NewState, error) {
 	coinJSON, err := json.Marshal(coin)
 	if err != nil {
 		return nil, err
@@ -80,6 +80,18 @@ func (n *Noto) makeNewState(coin *types.NotoCoin, distributionList []string) (*p
 	return &prototk.NewState{
 		SchemaId:         n.coinSchema.Id,
 		StateDataJson:    string(coinJSON),
+		DistributionList: distributionList,
+	}, nil
+}
+
+func (n *Noto) makeNewInfoState(info *types.TransactionData, distributionList []string) (*prototk.NewState, error) {
+	infoJSON, err := json.Marshal(info)
+	if err != nil {
+		return nil, err
+	}
+	return &prototk.NewState{
+		SchemaId:         n.dataSchema.Id,
+		StateDataJson:    string(infoJSON),
 		DistributionList: distributionList,
 	}, nil
 }
@@ -137,8 +149,16 @@ func (n *Noto) prepareOutputs(notaryName, ownerName string, ownerAddress *tktype
 		Owner:  ownerAddress,
 		Amount: amount,
 	}
-	newState, err := n.makeNewState(newCoin, []string{notaryName, ownerName})
+	newState, err := n.makeNewCoinState(newCoin, []string{notaryName, ownerName})
 	return []*types.NotoCoin{newCoin}, []*prototk.NewState{newState}, err
+}
+
+func (n *Noto) prepareInfo(data tktypes.HexBytes, distributionList []string) ([]*prototk.NewState, error) {
+	newData := &types.TransactionData{
+		Data: data,
+	}
+	newState, err := n.makeNewInfoState(newData, distributionList)
+	return []*prototk.NewState{newState}, err
 }
 
 func (n *Noto) findAvailableStates(ctx context.Context, stateQueryContext, query string) ([]*prototk.StoredState, error) {

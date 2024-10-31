@@ -56,6 +56,7 @@ type Noto struct {
 	config            types.DomainConfig
 	chainID           int64
 	coinSchema        *prototk.StateSchema
+	dataSchema        *prototk.StateSchema
 	factoryABI        abi.ABI
 	contractABI       abi.ABI
 	transferSignature string
@@ -151,7 +152,11 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 		return nil, err
 	}
 
-	schemaJSON, err := json.Marshal(types.NotoCoinABI)
+	coinSchemaJSON, err := json.Marshal(types.NotoCoinABI)
+	if err != nil {
+		return nil, err
+	}
+	infoSchemaJSON, err := json.Marshal(types.TransactionDataABI)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +174,7 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 
 	return &prototk.ConfigureDomainResponse{
 		DomainConfig: &prototk.DomainConfig{
-			AbiStateSchemasJson: []string{string(schemaJSON)},
+			AbiStateSchemasJson: []string{string(coinSchemaJSON), string(infoSchemaJSON)},
 			AbiEventsJson:       string(eventsJSON),
 		},
 	}, nil
@@ -177,6 +182,7 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 
 func (n *Noto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error) {
 	n.coinSchema = req.AbiStateSchemas[0]
+	n.dataSchema = req.AbiStateSchemas[1]
 	return &prototk.InitDomainResponse{}, nil
 }
 

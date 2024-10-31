@@ -99,10 +99,16 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 		return nil, err
 	}
 
+	infoStates, err := h.noto.prepareInfo(params.Data, []string{notary, params.To})
+	if err != nil {
+		return nil, err
+	}
+
 	return &prototk.AssembleTransactionResponse{
 		AssemblyResult: prototk.AssembleTransactionResponse_OK,
 		AssembledTransaction: &prototk.AssembledTransaction{
 			OutputStates: outputStates,
+			InfoStates:   infoStates,
 		},
 		AttestationPlan: []*prototk.AttestationRequest{
 			// Sender confirms the initial request with a signature
