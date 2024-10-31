@@ -161,7 +161,7 @@ func (h *mintHandler) baseLedgerMint(ctx context.Context, req *prototk.PrepareTr
 		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 	}
 
-	data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
+	data, err := h.noto.encodeTransactionData(req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, err
 	}
