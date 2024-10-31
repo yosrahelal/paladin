@@ -162,6 +162,31 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 	return plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
 
 		var simpleStorageSchemaID string
+		getAllStates := func(ctx context.Context, stateQueryContext string) ([]*prototk.StoredState, error) {
+			var lastStateTimestamp int64
+			// There is only one state per domain instance
+			jq := &query.QueryJSON{
+				Limit:      confutil.P(10),
+				Sort:       []string{".created"},
+				Statements: query.Statements{},
+			}
+			if lastStateTimestamp > 0 {
+				jq.GT = []*query.OpSingleVal{
+					{Op: query.Op{Field: ".created"}, Value: tktypes.RawJSON(strconv.FormatInt(lastStateTimestamp, 10))},
+				}
+			}
+			res, err := callbacks.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
+				StateQueryContext: stateQueryContext,
+				SchemaId:          simpleStorageSchemaID,
+				QueryJson:         tktypes.JSONString(jq).String(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			return res.States, nil
+
+		}
 		simpleStorageSelection := func(ctx context.Context, stateQueryContext string) (*StorageState, *prototk.StateRef, error) {
 			var lastStateTimestamp int64
 			// There is only one state per domain instance
@@ -192,7 +217,7 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 				//return nil, nil, fmt.Errorf("%s: state not available", SimpleStorageDomainStateNotAvailableError)
 			}
 			if len(states) > 1 {
-				return nil, nil, fmt.Errorf("%s: state not available", SimpleStorageDomainTooManyStates)
+				return nil, nil, fmt.Errorf("%s: too many states", SimpleStorageDomainTooManyStates)
 			}
 			state := states[0]
 			stateData := new(StorageState)
@@ -478,9 +503,27 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 				//senderAddr, fromAddr, toAddr := extractTransferVerifiers(req.Transaction, txInputs, req.ResolvedVerifiers)
 				//assert.Equal(t, req.EndorsementVerifier.Lookup, req.EndorsementRequest.Parties[0])
 				//assert.Equal(t, req.EndorsementVerifier.Lookup, notaryLocator)
-				if len(req.Inputs) > 1 {
+				if len(req.Inputs) == 0 {
 					//We allow 0 in the special case of the first transaction
 					//TODO is that a faithful emulation of the pente domain?
+					states, err := getAllStates(ctx, req.StateQueryContext)
+					if err != nil {
+						return nil, err
+					}
+					if len(states) > 0 {
+						// if there is only one state and it is the output of this transaction then it is valid to have no inputs
+						// otherwise it is an error
+						if len(states) == 1 && states[0].Id == req.Outputs[0].Id {
+						} else {
+							return &prototk.EndorseTransactionResponse{
+								EndorsementResult: prototk.EndorseTransactionResponse_REVERT,
+								RevertReason:      confutil.P("already initialised"),
+							}, nil
+						}
+					}
+
+				} else if len(req.Inputs) > 1 {
+
 					return nil, fmt.Errorf("invalid number of inputs [%d]", len(req.Inputs))
 				}
 				if len(req.Outputs) != 1 {
