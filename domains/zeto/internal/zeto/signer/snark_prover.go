@@ -24,11 +24,13 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/key"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/iden3/go-rapidsnark/prover"
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
@@ -51,7 +53,7 @@ type snarkProver struct {
 	circuitsWorkerIndexChanRWLock sync.RWMutex
 	circuitsWorkerIndexChan       map[string]chan *int
 	circuitLoader                 func(ctx context.Context, circuitID string, config *zetosignerapi.SnarkProverConfig) (witness.Calculator, []byte, error)
-	proofGenerator                func(witness []byte, provingKey []byte) (*types.ZKProof, error)
+	proofGenerator                func(ctx context.Context, witness []byte, provingKey []byte) (*types.ZKProof, error)
 }
 
 func NewSnarkProver(conf *zetosignerapi.SnarkProverConfig) (signerapi.InMemorySigner, error) {
@@ -75,10 +77,10 @@ func newSnarkProver(conf *zetosignerapi.SnarkProverConfig) (*snarkProver, error)
 
 func (sp *snarkProver) GetVerifier(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error) {
 	if !zetosignerapi.ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP.MatchString(algorithm) {
-		return "", fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, zetosignerapi.ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
+		return "", i18n.NewError(ctx, msgs.MsgErrorSignAlgoMismatch, algorithm, zetosignerapi.ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
 	}
 	if verifierType != zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X {
-		return "", fmt.Errorf("'%s' does not match supported verifierType '%s'", algorithm, zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X)
+		return "", i18n.NewError(ctx, msgs.MsgErrorVerifierTypeMismatch, algorithm, zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X)
 	}
 	pk, err := NewBabyJubJubPrivateKey(privateKey)
 	if err != nil {
@@ -89,17 +91,17 @@ func (sp *snarkProver) GetVerifier(ctx context.Context, algorithm, verifierType 
 
 func (sp *snarkProver) GetMinimumKeyLen(ctx context.Context, algorithm string) (int, error) {
 	if !zetosignerapi.ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP.MatchString(algorithm) {
-		return -1, fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, zetosignerapi.ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
+		return -1, i18n.NewError(ctx, msgs.MsgErrorSignAlgoMismatch, algorithm, zetosignerapi.ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
 	}
 	return 32, nil
 }
 
 func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, privateKey, payload []byte) ([]byte, error) {
 	if !zetosignerapi.ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP.MatchString(algorithm) {
-		return nil, fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, zetosignerapi.ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorSignAlgoMismatch, algorithm, zetosignerapi.ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
 	}
 	if payloadType != zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK {
-		return nil, fmt.Errorf("'%s' does not match supported payloadType '%s'", payloadType, zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorPayloadTypeMismatch, payloadType, zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK)
 	}
 
 	keyBytes := [32]byte{}
@@ -112,9 +114,9 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 	}
 	// Perform proof generation
 	if inputs.CircuitId == "" {
-		return nil, errors.New("circuit ID is required")
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMissingCircuitID)
 	}
-	if err := validateInputs(inputs.Common); err != nil {
+	if err := validateInputs(ctx, inputs.Common); err != nil {
 		return nil, err
 	}
 
@@ -181,7 +183,7 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		return nil, err
 	}
 
-	proof, err := sp.proofGenerator(wtns, provingKey)
+	proof, err := sp.proofGenerator(ctx, wtns, provingKey)
 	if err != nil {
 		return nil, err
 	}
@@ -202,27 +204,27 @@ func getCircuitId(inputs *pb.ProvingRequest) string {
 	return circuitId
 }
 
-func validateInputs(inputs *pb.ProvingRequestCommon) error {
+func validateInputs(ctx context.Context, inputs *pb.ProvingRequestCommon) error {
 	if len(inputs.InputCommitments) == 0 {
-		return errors.New("input commitments are required")
+		return i18n.NewError(ctx, msgs.MsgErrorMissingInputCommitments)
 	}
 	if len(inputs.InputValues) == 0 {
-		return errors.New("input values are required")
+		return i18n.NewError(ctx, msgs.MsgErrorMissingInputValues)
 	}
 	if len(inputs.InputSalts) == 0 {
-		return errors.New("input salts are required")
+		return i18n.NewError(ctx, msgs.MsgErrorMissingInputSalts)
 	}
 	if len(inputs.InputCommitments) != len(inputs.InputValues) || len(inputs.InputCommitments) != len(inputs.InputSalts) {
-		return errors.New("input commitments, values, and salts must have the same length")
+		return i18n.NewError(ctx, msgs.MsgErrorInputsDiffLength)
 	}
 	if len(inputs.OutputValues) == 0 {
-		return errors.New("output values are required")
+		return i18n.NewError(ctx, msgs.MsgErrorMissingOutputValues)
 	}
 	if len(inputs.OutputOwners) == 0 {
-		return errors.New("output owner keys are required")
+		return i18n.NewError(ctx, msgs.MsgErrorMissingOutputOwners)
 	}
 	if len(inputs.OutputValues) != len(inputs.OutputOwners) {
-		return errors.New("output values and owner keys must have the same length")
+		return i18n.NewError(ctx, msgs.MsgErrorOutputsDiffLength)
 	}
 	return nil
 }
@@ -277,27 +279,27 @@ func calculateWitness(ctx context.Context, circuitId string, commonInputs *pb.Pr
 	case constants.CIRCUIT_ANON_ENC, constants.CIRCUIT_ANON_ENC_BATCH:
 		witnessInputs, err = assembleInputs_anon_enc(ctx, inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
 		if err != nil {
-			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
 		}
 	case constants.CIRCUIT_ANON_NULLIFIER, constants.CIRCUIT_ANON_NULLIFIER_BATCH:
 		witnessInputs, err = assembleInputs_anon_nullifier(ctx, inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
 		if err != nil {
-			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
 		}
 	}
 
 	wtns, err := circuit.CalculateWTNSBin(witnessInputs, true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to calculate the witness. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorCalcWitness, err)
 	}
 
 	return wtns, nil
 }
 
-func generateProof(wtns, provingKey []byte) (*types.ZKProof, error) {
+func generateProof(ctx context.Context, wtns, provingKey []byte) (*types.ZKProof, error) {
 	proof, err := prover.Groth16Prover(provingKey, wtns)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate proof. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateProof, err)
 	}
 	return proof, nil
 }
