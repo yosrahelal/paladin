@@ -29,7 +29,8 @@ var WSDefaults = RPCServerConfigWS{
 }
 
 type RPCServerConfigHTTP struct {
-	Disabled         bool `json:"disabled,omitempty"`
+	Disabled         bool                 `json:"disabled,omitempty"`
+	StaticServers    []StaticServerConfig `json:"staticServers,omitempty"` // Configurations for static file servers handled by the HTTP server (e.g., for serving a UI hosted on the same server as the RPC server)
 	HTTPServerConfig `json:",inline"`
 }
 
