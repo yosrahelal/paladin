@@ -269,7 +269,7 @@ func newZetoDomain(t *testing.T, domainContracts *ZetoDomainContracts, config *t
 			domain.Callbacks = callbacks
 			return &domain
 		}),
-		RegistryAddress: tktypes.MustEthAddress(domainContracts.factoryAddress.String()),
+		RegistryAddress: tktypes.MustEthAddress(domainContracts.FactoryAddress.String()),
 		AllowSigning:    true,
 	}
 }

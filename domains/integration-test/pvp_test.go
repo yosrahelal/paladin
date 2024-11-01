@@ -269,7 +269,7 @@ func TestNotoForZeto(t *testing.T) {
 	waitForNoto, notoTestbed := newNotoDomain(t, &nototypes.DomainConfig{
 		FactoryAddress: contracts["noto"],
 	})
-	waitForZeto, zetoTestbed := newZetoDomain(t, zetoConfig)
+	waitForZeto, zetoTestbed := newZetoDomain(t, zetoConfig, zetoContracts.FactoryAddress)
 	done, _, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		notoDomainName: notoTestbed,
 		zetoDomainName: zetoTestbed,
