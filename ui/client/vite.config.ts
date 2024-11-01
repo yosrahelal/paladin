@@ -11,6 +11,7 @@ export default defineConfig({
       "/": {
         target: "http://localhost:3555",
         secure: false,
+        bypass: (req, resolveConfig, options) => (req.method === 'POST') ? undefined : req.url,
       },
     },
   },
