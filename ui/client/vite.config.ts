@@ -8,7 +8,7 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      "/json-rpc": {
+      "/": {
         target: "http://localhost:3555",
         secure: false,
       },
