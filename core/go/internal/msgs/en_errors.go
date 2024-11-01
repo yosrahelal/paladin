@@ -274,7 +274,7 @@ var (
 	MsgDomainABIEncodingInlineSigningFailed   = ffe("PD011656", "ABI encoding and signing failed with transaction type '%s' and key identifier '%s'")
 	MsgDomainDomainReceiptNotAvailable        = ffe("PD011657", "A domain receipt is not yet available for transaction %s as no state confirmations have been indexed for that transaction")
 	MsgDomainDomainReceiptNoStatesAvailable   = ffe("PD011658", "A domain receipt is not yet available for transaction %s as none of the private state data is available on the local node")
-	MsgDomainSingingKeyMustBeLocalEthSign     = ffe("PD011659", "Singing key must be local for ethereum transaction signing")
+	MsgDomainSingingKeyMustBeLocalEthSign     = ffe("PD011659", "Signing key must be local for ethereum transaction signing")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")
