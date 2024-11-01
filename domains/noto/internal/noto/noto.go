@@ -19,8 +19,10 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"math/big"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
@@ -28,7 +30,6 @@ import (
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
@@ -207,23 +208,18 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	if err != nil {
 		return nil, err
 	}
-	notary := domain.FindVerifier(params.Notary, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-	if notary == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
+	notaryAddress, err := n.findEthAddressVerifier(ctx, "notary", params.Notary, req.ResolvedVerifiers)
+	if err != nil {
+		return nil, err
 	}
 
 	deployData := &types.NotoConfigData_V0{
-		NotaryLookup:    notary.Lookup,
+		NotaryLookup:    params.Notary,
 		NotaryType:      types.NotaryTypeSigner,
 		RestrictMinting: true,
 	}
 	if params.RestrictMinting != nil {
 		deployData.RestrictMinting = *params.RestrictMinting
-	}
-
-	notaryAddress, err := tktypes.ParseEthAddress(notary.Verifier)
-	if err != nil {
-		return nil, err
 	}
 
 	if params.Hooks != nil && !params.Hooks.PublicAddress.IsZero() {
@@ -256,12 +252,14 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 		return nil, err
 	}
 
+	// Use a random key to deploy
+	signer := fmt.Sprintf("%s.deploy.%s", n.name, uuid.New())
 	return &prototk.PrepareDeployResponse{
 		Transaction: &prototk.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
 		},
-		Signer: &notary.Lookup,
+		Signer: &signer,
 	}, nil
 }
 
