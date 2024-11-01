@@ -24,29 +24,23 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 // DomainFactoryConfig is the configuration for a Zeto domain
 // to provision new domain instances based on a factory contract
 // and avalable implementation contracts
 type DomainFactoryConfig struct {
-	// FactoryAddress  string                          `json:"factoryAddress"`
-	Libraries       map[string]*tktypes.EthAddress  `json:"libraries"`
 	DomainContracts DomainConfigContracts           `json:"domainContracts"`
 	SnarkProver     zetosignerapi.SnarkProverConfig `json:"snarkProver"`
 }
 
 type DomainConfigContracts struct {
-	Factory         *DomainContract   `yaml:"factory"`
 	Implementations []*DomainContract `yaml:"implementations"`
 }
 
 type DomainContract struct {
-	Name            string `yaml:"name"`
-	CircuitId       string `yaml:"circuitId"`
-	ContractAddress string `yaml:"address"`
-	// Abi             string `yaml:"abi"`
+	Name      string `yaml:"name"`
+	CircuitId string `yaml:"circuitId"`
 }
 
 // func (d *DomainFactoryConfig) GetContractAbi(ctx context.Context, tokenName string) (abi.ABI, error) {

@@ -34,17 +34,9 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
-
-//go:embed abis/ZetoFactory.json
-var factoryJSONBytes []byte // From "gradle copySolidity"
-// //go:embed abis/IZetoFungibleInitializable.json
-// var zetoFungibleInitializableABIBytes []byte // From "gradle copySolidity"
-// //go:embed abis/IZetoNonFungibleInitializable.json
-// var zetoNonFungibleInitializableABIBytes []byte // From "gradle copySolidity"
 
 type Zeto struct {
 	Callbacks plugintk.DomainCallbacks
@@ -55,7 +47,6 @@ type Zeto struct {
 	coinSchema               *prototk.StateSchema
 	merkleTreeRootSchema     *prototk.StateSchema
 	merkleTreeNodeSchema     *prototk.StateSchema
-	factoryABI               abi.ABI
 	mintSignature            string
 	transferSignature        string
 	transferWithEncSignature string
@@ -79,6 +70,17 @@ type TransferWithEncryptedValuesEvent struct {
 	Data            tktypes.HexBytes     `json:"data"`
 	EncryptionNonce tktypes.HexUint256   `json:"encryptionNonce"`
 	EncryptedValues []tktypes.HexUint256 `json:"encryptedValues"`
+}
+
+var factoryDeployABI = &abi.Entry{
+	Type: abi.Function,
+	Name: "deploy",
+	Inputs: abi.ParameterArray{
+		{Name: "transactionId", Type: "bytes32"},
+		{Name: "tokenName", Type: "string"},
+		{Name: "initialOwner", Type: "address"},
+		{Name: "data", Type: "bytes"},
+	},
 }
 
 func New(callbacks plugintk.DomainCallbacks) *Zeto {
@@ -109,9 +111,6 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	z.name = req.Name
 	z.config = &config
 	z.chainID = req.ChainId
-
-	factory := solutils.MustLoadBuildResolveLinks(factoryJSONBytes, config.Libraries)
-	z.factoryABI = factory.ABI
 
 	schemas, err := getStateSchemas(ctx)
 	if err != nil {
@@ -203,7 +202,7 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	if err != nil {
 		return nil, err
 	}
-	functionJSON, err := json.Marshal(z.factoryABI.Functions()["deploy"])
+	functionJSON, err := json.Marshal(factoryDeployABI)
 	if err != nil {
 		return nil, err
 	}

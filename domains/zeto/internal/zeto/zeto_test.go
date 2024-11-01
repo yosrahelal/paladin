@@ -24,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
@@ -160,7 +159,6 @@ func TestPrepareDeploy(t *testing.T) {
 	assert.EqualError(t, err, "PD210007: Failed to find circuit ID based on the token name. PD210000: Contract  not found")
 
 	req.Transaction.ConstructorParamsJson = "{\"tokenName\":\"testToken1\"}"
-	z.factoryABI = abi.ABI{}
 	_, err = z.PrepareDeploy(context.Background(), req)
 	assert.NoError(t, err)
 }

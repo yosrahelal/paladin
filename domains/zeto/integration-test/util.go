@@ -99,19 +99,13 @@ func PrepareZetoConfig(t *testing.T, domainContracts *ZetoDomainContracts, zkpDi
 			CircuitsDir:    zkpDir,
 			ProvingKeysDir: zkpDir,
 		},
-		DomainContracts: zetotypes.DomainConfigContracts{
-			Factory: &zetotypes.DomainContract{
-				ContractAddress: domainContracts.factoryAddress.String(),
-			},
-		},
 	}
 
 	var impls []*zetotypes.DomainContract
 	for name, implContract := range domainContracts.cloneableContracts {
 		contract := zetotypes.DomainContract{
-			Name:            name,
-			CircuitId:       implContract.circuitId,
-			ContractAddress: domainContracts.deployedContracts[name].String(),
+			Name:      name,
+			CircuitId: implContract.circuitId,
 		}
 		impls = append(impls, &contract)
 	}
