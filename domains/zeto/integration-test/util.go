@@ -18,7 +18,6 @@ package integration_test
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
 	"os"
 	"testing"
 
@@ -28,9 +27,7 @@ import (
 	zetotypes "github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
 
@@ -111,21 +108,13 @@ func PrepareZetoConfig(t *testing.T, domainContracts *ZetoDomainContracts, zkpDi
 
 	var impls []*zetotypes.DomainContract
 	for name, implContract := range domainContracts.cloneableContracts {
-		abiJSON, err := json.Marshal(domainContracts.deployedContractAbis[name])
-		require.NoError(t, err)
 		contract := zetotypes.DomainContract{
 			Name:            name,
 			CircuitId:       implContract.circuitId,
 			ContractAddress: domainContracts.deployedContracts[name].String(),
-			Abi:             tktypes.RawJSON(abiJSON).String(),
 		}
 		impls = append(impls, &contract)
 	}
 	config.DomainContracts.Implementations = impls
-
-	factoryAbiJSON, err := json.Marshal(domainContracts.factoryAbi)
-	assert.NoError(t, err)
-	config.DomainContracts.Factory.Abi = tktypes.RawJSON(factoryAbiJSON).String()
-	config.FactoryAddress = domainContracts.factoryAddress.String()
 	return &config
 }

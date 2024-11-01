@@ -365,19 +365,12 @@ func TestTransferPrepare(t *testing.T) {
 			Implementations: []*types.DomainContract{},
 		},
 	}
-	_, err = h.Prepare(ctx, tx, req)
-	assert.EqualError(t, err, "PD210051: Failed to find abi for the token contract Zeto_AnonEnc. PD210000: Contract Zeto_AnonEnc not found")
-
 	z.config.DomainContracts.Implementations = []*types.DomainContract{
 		{
 			Name: constants.TOKEN_ANON_ENC,
-			Abi:  "{}",
 		},
 	}
-	_, err = h.Prepare(ctx, tx, req)
-	assert.EqualError(t, err, "PD210051: Failed to find abi for the token contract Zeto_AnonEnc. json: cannot unmarshal object into Go value of type abi.ABI")
 
-	z.config.DomainContracts.Implementations[0].Abi = "[{\"inputs\": [{\"internalType\": \"bytes32\",\"name\": \"transactionId\",\"type\": \"bytes32\"}],\"name\": \"transfer\",\"outputs\": [],\"type\": \"function\"}]"
 	res, err := h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Equal(t, "{\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"ecdhPublicKey\":[\"\"],\"encryptedValues\":[\"0x1234567890\",\"0x1234567890\"],\"encryptionNonce\":\"0x1234567890\",\"inputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)

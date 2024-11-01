@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
@@ -40,6 +41,64 @@ import (
 
 type transferHandler struct {
 	zeto *Zeto
+}
+
+var proofComponents = abi.ParameterArray{
+	{Name: "pA", Type: "uint256[2]"},
+	{Name: "pB", Type: "uint256[2][2]"},
+	{Name: "pC", Type: "uint256[2]"},
+}
+
+var transferABI = &abi.Entry{
+	Type: abi.Function,
+	Name: "transfer",
+	Inputs: abi.ParameterArray{
+		{Name: "inputs", Type: "uint256[]"},
+		{Name: "outputs", Type: "uint256[]"},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "data", Type: "bytes"},
+	},
+}
+
+var transferABI_nullifiers = &abi.Entry{
+	Type: abi.Function,
+	Name: "transfer",
+	Inputs: abi.ParameterArray{
+		{Name: "nullifiers", Type: "uint256[]"},
+		{Name: "outputs", Type: "uint256[]"},
+		{Name: "root", Type: "uint256"},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "data", Type: "bytes"},
+	},
+}
+
+var transferABI_withEncryption = &abi.Entry{
+	Type: abi.Function,
+	Name: "transfer",
+	Inputs: abi.ParameterArray{
+		{Name: "inputs", Type: "uint256[]"},
+		{Name: "outputs", Type: "uint256[]"},
+		{Name: "encryptionNonce", Type: "uint256"},
+		{Name: "ecdhPublicKey", Type: "uint256[2]"},
+		{Name: "encryptedValues", Type: "uint256[]"},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "data", Type: "bytes"},
+	},
+}
+
+var transferABI_withEncryption_nullifiers = &abi.Entry{
+	Type: abi.Function,
+	Name: "transfer",
+	Inputs: abi.ParameterArray{
+		{Name: "nullifiers", Type: "uint256[]"},
+		{Name: "outputs", Type: "uint256[]"},
+		{Name: "root", Type: "uint256"},
+		{Name: "encryptionNonce", Type: "uint256"},
+		{Name: "ecdhPublicKey", Type: "uint256[2]"},
+		{Name: "encryptedValues", Type: "uint256[]"},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "data", Type: "bytes"},
+	},
 }
 
 func (h *transferHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
@@ -153,6 +212,19 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 	}, nil
 }
 
+func getTransferABI(tokenName string) *abi.Entry {
+	transferFunction := transferABI
+	if isEncryptionToken(tokenName) {
+		transferFunction = transferABI_withEncryption
+		if isNullifiersToken(tokenName) {
+			transferFunction = transferABI_withEncryption_nullifiers
+		}
+	} else if isNullifiersToken(tokenName) {
+		transferFunction = transferABI_nullifiers
+	}
+	return transferFunction
+}
+
 func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
 	var proofRes corepb.ProvingResponse
 	result := domain.FindAttestation("sender", req.AttestationResult)
@@ -209,11 +281,13 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		"proof":   h.encodeProof(proofRes.Proof),
 		"data":    data,
 	}
+	transferFunction := getTransferABI(tx.DomainConfig.TokenName)
 	if isEncryptionToken(tx.DomainConfig.TokenName) {
 		params["ecdhPublicKey"] = strings.Split(proofRes.PublicInputs["ecdhPublicKey"], ",")
 		params["encryptionNonce"] = proofRes.PublicInputs["encryptionNonce"]
 		params["encryptedValues"] = strings.Split(proofRes.PublicInputs["encryptedValues"], ",")
-	} else if isNullifiersToken(tx.DomainConfig.TokenName) {
+	}
+	if isNullifiersToken(tx.DomainConfig.TokenName) {
 		delete(params, "inputs")
 		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
 		params["root"] = proofRes.PublicInputs["root"]
@@ -222,11 +296,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalPrepedParams, err)
 	}
-	contractAbi, err := h.zeto.config.GetContractAbi(ctx, tx.DomainConfig.TokenName)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorFindTokenAbi, tx.DomainConfig.TokenName, err)
-	}
-	functionJSON, err := json.Marshal(contractAbi.Functions()["transfer"])
+	functionJSON, err := json.Marshal(transferFunction)
 	if err != nil {
 		return nil, err
 	}

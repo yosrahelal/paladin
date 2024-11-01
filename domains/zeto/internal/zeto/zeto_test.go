@@ -48,7 +48,6 @@ func TestNew(t *testing.T) {
 func TestConfigureDomain(t *testing.T) {
 	z := &Zeto{}
 	dfConfig := &types.DomainFactoryConfig{
-		FactoryAddress: "0x1234",
 		SnarkProver: zetosignerapi.SnarkProverConfig{
 			CircuitsDir: "circuit-dir",
 		},
@@ -338,7 +337,6 @@ func TestPrepareTransaction(t *testing.T) {
 				{
 					Name:      "testToken1",
 					CircuitId: "circuit1",
-					Abi:       "[{\"inputs\": [{\"internalType\": \"bytes32\",\"name\": \"transactionId\",\"type\": \"bytes32\"}],\"name\": \"transfer\",\"outputs\": [],\"type\": \"function\"}]",
 				},
 			},
 		},

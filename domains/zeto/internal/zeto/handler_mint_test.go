@@ -203,22 +203,14 @@ func TestMintPrepare(t *testing.T) {
 			Implementations: []*types.DomainContract{
 				{
 					Name: "tokenContract2",
-					Abi:  "{}",
 				},
 			},
 		},
 	}
-	_, err = h.Prepare(ctx, tx, req)
-	assert.EqualError(t, err, "PD210000: Contract tokenContract1 not found")
 
 	z.config.DomainContracts.Implementations = append(z.config.DomainContracts.Implementations, &types.DomainContract{
 		Name: "tokenContract1",
-		Abi:  "{}",
 	})
-	_, err = h.Prepare(ctx, tx, req)
-	assert.EqualError(t, err, "json: cannot unmarshal object into Go value of type abi.ABI")
-
-	z.config.DomainContracts.Implementations[1].Abi = "[{\"inputs\": [{\"internalType\": \"bytes32\",\"name\": \"transactionId\",\"type\": \"bytes32\"}],\"name\": \"mint\",\"outputs\": [],\"type\": \"function\"}]"
 	_, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
 }

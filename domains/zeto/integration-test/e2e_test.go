@@ -65,7 +65,7 @@ func (s *zetoDomainTestSuite) SetupSuite() {
 	domainName := "zeto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 	config := PrepareZetoConfig(s.T(), s.deployedContracts, "../zkp")
-	zeto, zetoTestbed := newZetoDomain(s.T(), config)
+	zeto, zetoTestbed := newZetoDomain(s.T(), domainContracts, config)
 	done, _, rpc := newTestbed(s.T(), s.hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: zetoTestbed,
 	})
@@ -261,7 +261,7 @@ func mapConfig(t *testing.T, config *types.DomainFactoryConfig) (m map[string]an
 	return m
 }
 
-func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, *testbed.TestbedDomain) {
+func newZetoDomain(t *testing.T, domainContracts *ZetoDomainContracts, config *types.DomainFactoryConfig) (zeto.Zeto, *testbed.TestbedDomain) {
 	var domain internalZeto.Zeto
 	return &domain, &testbed.TestbedDomain{
 		Config: mapConfig(t, config),
@@ -269,7 +269,7 @@ func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, 
 			domain.Callbacks = callbacks
 			return &domain
 		}),
-		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
+		RegistryAddress: tktypes.MustEthAddress(domainContracts.factoryAddress.String()),
 		AllowSigning:    true,
 	}
 }

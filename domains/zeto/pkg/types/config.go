@@ -17,7 +17,6 @@ package types
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -32,7 +31,7 @@ import (
 // to provision new domain instances based on a factory contract
 // and avalable implementation contracts
 type DomainFactoryConfig struct {
-	FactoryAddress  string                          `json:"factoryAddress"`
+	// FactoryAddress  string                          `json:"factoryAddress"`
 	Libraries       map[string]*tktypes.EthAddress  `json:"libraries"`
 	DomainContracts DomainConfigContracts           `json:"domainContracts"`
 	SnarkProver     zetosignerapi.SnarkProverConfig `json:"snarkProver"`
@@ -47,22 +46,22 @@ type DomainContract struct {
 	Name            string `yaml:"name"`
 	CircuitId       string `yaml:"circuitId"`
 	ContractAddress string `yaml:"address"`
-	Abi             string `yaml:"abi"`
+	// Abi             string `yaml:"abi"`
 }
 
-func (d *DomainFactoryConfig) GetContractAbi(ctx context.Context, tokenName string) (abi.ABI, error) {
-	for _, contract := range d.DomainContracts.Implementations {
-		if contract.Name == tokenName {
-			var contractAbi abi.ABI
-			err := json.Unmarshal([]byte(contract.Abi), &contractAbi)
-			if err != nil {
-				return nil, err
-			}
-			return contractAbi, nil
-		}
-	}
-	return nil, i18n.NewError(ctx, msgs.MsgContractNotFound, tokenName)
-}
+// func (d *DomainFactoryConfig) GetContractAbi(ctx context.Context, tokenName string) (abi.ABI, error) {
+// 	for _, contract := range d.DomainContracts.Implementations {
+// 		if contract.Name == tokenName {
+// 			var contractAbi abi.ABI
+// 			err := json.Unmarshal([]byte(contract.Abi), &contractAbi)
+// 			if err != nil {
+// 				return nil, err
+// 			}
+// 			return contractAbi, nil
+// 		}
+// 	}
+// 	return nil, i18n.NewError(ctx, msgs.MsgContractNotFound, tokenName)
+// }
 
 func (d *DomainFactoryConfig) GetCircuitId(ctx context.Context, tokenName string) (string, error) {
 	for _, contract := range d.DomainContracts.Implementations {
