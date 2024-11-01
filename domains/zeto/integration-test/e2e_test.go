@@ -109,8 +109,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	s.setupContractsAbi(t, ctx, tokenName)
 	var zetoAddress tktypes.EthAddress
 	rpcerr := s.rpc.CallRPC(ctx, &zetoAddress, "testbed_deploy",
-		s.domainName, "me", &types.InitializerParams{
-			From:      controllerName,
+		s.domainName, controllerName, &types.InitializerParams{
 			TokenName: tokenName,
 		})
 	if rpcerr != nil {

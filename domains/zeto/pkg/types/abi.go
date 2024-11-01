@@ -60,7 +60,6 @@ var ZetoABI = abi.ABI{
 }
 
 type InitializerParams struct {
-	From         string `json:"from"`
 	TokenName    string `json:"tokenName"`
 	InitialOwner string `json:"initialOwner"`
 }

@@ -155,14 +155,10 @@ func (z *Zeto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (
 }
 
 func (z *Zeto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
-	initParams, err := z.validateDeploy(req.Transaction)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateInitDeployParams, err)
-	}
 	return &prototk.InitDeployResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       initParams.From,
+				Lookup:       req.Transaction.From,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -207,12 +203,13 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 		return nil, err
 	}
 
+	from := req.Transaction.From
 	return &prototk.PrepareDeployResponse{
 		Transaction: &prototk.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
 		},
-		Signer: &initParams.From,
+		Signer: &from,
 	}, nil
 }
 
