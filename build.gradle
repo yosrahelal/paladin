@@ -22,6 +22,24 @@ def transports = [
 def uiClient = [
     'ui/client/dist',
 ]
+
+// These can be very large binaries, so adding to this list in the base image should be done with care.
+// Likely if the range of circuits grows, a separate docker tag will be required for builds
+// of Paladin that have a wider range of pre-built circuits included.
+def zetoZKP = [
+    // anon
+    'domains/zeto/zkp/anon.zkey',
+    'domains/zeto/zkp/anon-vkey.json',
+    'domains/zeto/zkp/anon_js',
+    // anon_enc
+    'domains/zeto/zkp/anon_enc.zkey',
+    'domains/zeto/zkp/anon_enc-vkey.json',
+    'domains/zeto/zkp/anon_enc_js',
+    // anon_nullifier
+    'domains/zeto/zkp/anon_nullifier.zkey',
+    'domains/zeto/zkp/anon_nullifier-vkey.json',
+    'domains/zeto/zkp/anon_nullifier_js',
+]
  
 def assembleSubprojects = [
     ':core:go',
@@ -185,6 +203,25 @@ task copyUIFiles(type: Copy) {
     }
 }
 
+task copyZetoZKPFiles(type: Copy) {
+    def zetoZkpDir = file("${buildDir}/domains/zeto/zkp")
+
+    doFirst {
+        zetoZkpDir.mkdirs()
+    }
+
+    zetoZKP.each { file ->
+        from file
+    }
+    into zetoZkpDir
+
+    outputs.upToDateWhen { false }
+
+    doLast {
+        println "Copied zetoZkp files to ${zetoZkpDir}"
+    }
+}
+
 // Root assemble task that depends on subproject's assemble tasks
 task assemble {
     assembleSubprojects.each { projectPath ->
@@ -192,7 +229,7 @@ task assemble {
     }
 }
 
-assemble.finalizedBy(copyLibraries, copyDomains, copyRegistries, copyTransports, copyUIFiles)
+assemble.finalizedBy(copyLibraries, copyDomains, copyRegistries, copyTransports, copyUIFiles, copyZetoZKPFiles)
 
 defaultTasks 'build'
 
