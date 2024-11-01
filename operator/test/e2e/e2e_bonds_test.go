@@ -404,6 +404,7 @@ var _ = Describe("controller", Ordered, func() {
 				Inputs(map[string]any{
 					"to":     alice.id,
 					"amount": with18Decimals(100000),
+					"data":   "0x",
 				}).
 				Send().
 				Wait(5 * time.Second)
@@ -421,6 +422,7 @@ var _ = Describe("controller", Ordered, func() {
 				Inputs(map[string]any{
 					"to":     bondCustodian.id,
 					"amount": 1000,
+					"data":   "0x",
 				}).
 				Send().
 				Wait(5 * time.Second)
@@ -526,6 +528,7 @@ var _ = Describe("controller", Ordered, func() {
 				Inputs(map[string]any{
 					"to":     alice.id,
 					"amount": 1000,
+					"data":   "0x",
 				}).
 				Prepare().
 				Wait(5 * time.Second)
@@ -550,6 +553,7 @@ var _ = Describe("controller", Ordered, func() {
 				Inputs(map[string]any{
 					"to":     bondCustodian.id,
 					"amount": 1000,
+					"data":   "0x",
 				}).
 				Prepare().
 				Wait(5 * time.Second)
