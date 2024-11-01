@@ -94,10 +94,10 @@ function App() {
             <BrowserRouter>
               <Header />
               <Routes>
-                <Route path="/indexer" element={<Indexer />} />
-                <Route path="/submissions" element={<Submissions />} />\
-                <Route path="/registry" element={<Registries />} />
-                <Route path="*" element={<Navigate to="/indexer" replace />} />
+                <Route path="/ui/indexer" element={<Indexer />} />
+                <Route path="/ui/submissions" element={<Submissions />} />\
+                <Route path="/ui/registry" element={<Registries />} />
+                <Route path="*" element={<Navigate to="/ui/indexer" replace />} />
               </Routes>
             </BrowserRouter>
           </ThemeProvider>

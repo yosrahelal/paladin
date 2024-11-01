@@ -31,11 +31,15 @@ const proxyMiddleware = createProxyMiddleware<Request, Response>({
     changeOrigin: true
 });
 
-app.use('/json-rpc', proxyMiddleware);
-app.use(express.static('../client/dist'));
-app.get('*', (_req, res) => {
+const router = express.Router()
+
+app.post('/', proxyMiddleware);
+router.use(express.static('../client/dist'));
+router.get('*', (_req, res) => {
     res.sendFile(path.resolve(__dirname + '/../../client/dist/index.html'));
 });
+
+app.use('/ui', router);
 
 app.listen(PORT, () => {
     logger.info(`Paladin UI server running on port ${PORT}`);

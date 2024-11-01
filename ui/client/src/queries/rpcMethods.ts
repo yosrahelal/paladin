@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export const RpcEndpoint = "/json-rpc";
+export const RpcEndpoint = "/";
 
 export const RpcMethods = {
   bidx_QueryIndexedEvents: "bidx_queryIndexedEvents",
