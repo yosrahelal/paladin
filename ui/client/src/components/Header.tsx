@@ -31,11 +31,11 @@ export const Header: React.FC = () => {
   const theme = useTheme();
 
   const getTabFromPath = (path: string) => {
-    if (path.startsWith('/indexer')) {
+    if (path.startsWith('/ui/indexer')) {
       return 0;
-    } else if (path.startsWith('/submissions')) {
+    } else if (path.startsWith('/ui/submissions')) {
       return 1;
-    } else if (path.startsWith('/registry')) {
+    } else if (path.startsWith('/ui/registry')) {
       return 2;
     }
     return 0;
@@ -46,9 +46,9 @@ export const Header: React.FC = () => {
   const handleNavigation = (tab: number) => {
     setTab(tab);
     switch (tab) {
-      case 0: navigate('/indexer'); break;
-      case 1: navigate('/submissions'); break;
-      case 2: navigate('/registry'); break;
+      case 0: navigate('/ui/indexer'); break;
+      case 1: navigate('/ui/submissions'); break;
+      case 2: navigate('/ui/registry'); break;
     }
   };
 
@@ -59,7 +59,7 @@ export const Header: React.FC = () => {
           <Grid2 container alignItems="center" size={{ xs: 12 }}>
             <Grid2 size={{ xs: 12, sm: 12, md: 4 }} textAlign="center">
               <img src={theme.palette.mode === 'dark' ?
-                '/paladin-title-dark.svg' : '/paladin-title-light.svg'
+                '/ui/paladin-title-dark.svg' : '/ui/paladin-title-light.svg'
               } style={{ marginTop: '7px' }} />
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 12, md: 4 }} alignContent="center">

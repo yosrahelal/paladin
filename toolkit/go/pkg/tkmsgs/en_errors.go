@@ -97,6 +97,7 @@ var (
 	MsgHTTPServerStartFailed        = ffe("PD020600", "Failed to start server on '%s'")
 	MsgHTTPServerMissingPort        = ffe("PD020601", "HTTP server port must be specified for '%s'")
 	MsgHTTPServerNoWSUpgradeSupport = ffe("PD020602", "HTTP server does not support WebSocket upgrade (%T)")
+	MsgUIServerFailed               = ffe("PD020603", "HTTP server failed to load index file", 500)
 
 	// JSON/RPC PD0207XX
 	MsgJSONRPCInvalidRequest      = ffe("PD020700", "Invalid JSON/RPC request data")

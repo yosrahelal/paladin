@@ -58,7 +58,7 @@ export const Transaction: React.FC<Props> = ({
         marginBottom: '20px', borderRadius: '4px'
       }}>
         {receiptCount > 0 &&
-          <img src="/paladin-icon-light.svg" width="40" style={{ position: 'absolute', left: '20px', bottom: '0px' }} />
+          <img src="/ui/paladin-icon-light.svg" width="40" style={{ position: 'absolute', left: '20px', bottom: '0px' }} />
         }
         <Box sx={{ padding: '10px', paddingLeft: '20px', paddingRight: '20px', borderBottom: theme => `solid 1px ${theme.palette.divider}` }}>
           <Grid2 container direction="column" spacing={2}>

@@ -61,6 +61,7 @@ type componentManager struct {
 	persistence      persistence.Persistence
 	blockIndexer     blockindexer.BlockIndexer
 	rpcServer        rpcserver.RPCServer
+
 	// managers
 	stateManager     components.StateManager
 	domainManager    components.DomainManager
@@ -357,8 +358,10 @@ func (cm *componentManager) CompleteStart() error {
 		if cm.rpcServer.WSAddr() != nil {
 			httpEndpoint = cm.rpcServer.WSAddr().String()
 		}
-		log.L(cm.bgCtx).Infof("Startup complete. RPC endpoints http=%s ws=%s", httpEndpoint, wsEndpoint)
+		log.L(cm.bgCtx).Infof("RPC endpoints http=%s ws=%s", httpEndpoint, wsEndpoint)
 	}
+
+	log.L(cm.bgCtx).Infof("Startup complete")
 
 	return err
 }
