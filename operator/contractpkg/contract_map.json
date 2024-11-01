@@ -62,6 +62,6 @@
         }
     },
     "zeto_factory": {
-        "filename": "test/e2e/abis/zeto/ZetoTokenFactory.json"
+        "filename": "test/e2e/abis/zeto/ZetoFactory.json"
     }
 }

@@ -95,10 +95,15 @@ task copySolidity(type: Copy) {
 
 task copyZetoSolidity(type: Copy) {
     inputs.files(configurations.zetoArtifacts)
+    inputs.files(configurations.contractCompile)
     from fileTree(configurations.zetoArtifacts.asPath) {
         include 'artifacts/contracts/**/*.json'
         include 'artifacts/@iden3/contracts/**/*.json'
         exclude '**/*.dbg.json'
+    }
+    from fileTree(configurations.contractCompile.asPath) {
+        include 'contracts/registry/IdentityRegistry.sol/IdentityRegistry.json'
+        include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
     into 'test/e2e/abis/zeto'
 
