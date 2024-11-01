@@ -141,7 +141,7 @@ func (n *Noto) prepareInputs(ctx context.Context, stateQueryContext string, owne
 	}
 }
 
-func (n *Noto) prepareOutputs(notaryName, ownerName string, ownerAddress *tktypes.EthAddress, amount *tktypes.HexUint256) ([]*types.NotoCoin, []*prototk.NewState, error) {
+func (n *Noto) prepareOutputs(ownerAddress *tktypes.EthAddress, amount *tktypes.HexUint256, distributionList []string) ([]*types.NotoCoin, []*prototk.NewState, error) {
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
 	newCoin := &types.NotoCoin{
@@ -149,7 +149,7 @@ func (n *Noto) prepareOutputs(notaryName, ownerName string, ownerAddress *tktype
 		Owner:  ownerAddress,
 		Amount: amount,
 	}
-	newState, err := n.makeNewCoinState(newCoin, []string{notaryName, ownerName})
+	newState, err := n.makeNewCoinState(newCoin, distributionList)
 	return []*types.NotoCoin{newCoin}, []*prototk.NewState{newState}, err
 }
 
