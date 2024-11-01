@@ -43,9 +43,6 @@ func (s *starter) configureDomain(ctx context.Context, cdr *prototk.ConfigureDom
 		// This is a useless, but valid, example
 		DomainConfig: &prototk.DomainConfig{
 			AbiStateSchemasJson: []string{},
-			BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
-				SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
-			},
 		},
 	}, nil
 }

@@ -35,13 +35,13 @@ export const Events: React.FC = () => {
 
   return (
     <>
-      <Typography align="center" sx={{ fontSize: "24px", fontWeight: 500 }}>
+      <Typography align="center" variant="h5" sx={{ marginBottom: '20px' }}>
         {t("events")}
       </Typography>
       <Box
         sx={{
-          height: "calc(100vh - 163px)",
-          padding: "20px",
+          height: "calc(100vh - 170px)",
+          paddingRight: "15px",
           ...addedStyle
         }}
       >

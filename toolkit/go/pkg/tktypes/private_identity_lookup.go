@@ -45,15 +45,19 @@ func (pil PrivateIdentityLocator) Validate(ctx context.Context, defaultNode stri
 	default:
 		return "", "", i18n.NewError(ctx, tkmsgs.MsgTypesPrivateIdentityLocatorInvalid, node)
 	}
+	if err := ValidateSafeCharsStartEndAlphaNum(ctx, identity, DefaultNameMaxLen, "identity"); err != nil {
+		return "", "", i18n.WrapError(ctx, err, tkmsgs.MsgTypesPrivateIdentityLocatorInvalid, pil)
+	}
 	if node == "" {
 		node = defaultNode
 	}
-	if err := ValidateSafeCharsStartEndAlphaNum(ctx, identity, DefaultNameMaxLen, "identity"); err != nil {
-		return "", "", i18n.WrapError(ctx, err, tkmsgs.MsgTypesPrivateIdentityLocatorInvalid, identity)
-	}
-	if !allowEmptyNode {
+	if node == "" /* 2nd check with any default applied */ {
+		if !allowEmptyNode {
+			return "", "", i18n.WrapError(ctx, err, tkmsgs.MsgTypesPrivateIdentityReqFullyQualified, pil)
+		}
+	} else {
 		if err := ValidateSafeCharsStartEndAlphaNum(ctx, node, DefaultNameMaxLen, "node"); err != nil {
-			return "", "", i18n.WrapError(ctx, err, tkmsgs.MsgTypesPrivateIdentityLocatorInvalid, node)
+			return "", "", i18n.WrapError(ctx, err, tkmsgs.MsgTypesPrivateIdentityLocatorInvalid, pil)
 		}
 	}
 	return identity, node, nil

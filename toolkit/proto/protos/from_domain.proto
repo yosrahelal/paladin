@@ -34,12 +34,14 @@ enum EncodingType {
   ETH_TRANSACTION = 2; // encode only
   TYPED_DATA_V4 = 3; // encode only
   EVENT_DATA = 4; // decode only
+  ETH_TRANSACTION_SIGNED = 5; // encode and sign
 }
 
 message EncodeDataRequest {
   EncodingType encoding_type = 1;
   string body = 2;
   string definition = 3;
+  string key_identifier = 4; // only where signing is performed
 }
 
 message EncodeDataResponse {

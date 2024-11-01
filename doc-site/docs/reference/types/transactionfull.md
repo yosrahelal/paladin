@@ -18,6 +18,7 @@ title: TransactionFull
 |------------|-------------|------|
 | `id` | Server-generated UUID for this transaction (query only) | [`UUID`](simpletypes.md#uuid) |
 | `created` | Server-generated creation timestamp for this transaction (query only) | [`Timestamp`](simpletypes.md#timestamp) |
+| `submitMode` | Whether the submission of the transaction to the base ledger is to be performed automatically by the node or coordinated externally (query only) | `"auto", "external", "call"` |
 | `idempotencyKey` | Externally supplied unique identifier for this transaction. 409 Conflict will be returned on attempt to re-submit | `string` |
 | `type` | Type of transaction (public or private) | `"private", "public"` |
 | `domain` | Name of a domain - only required on input for private deploy transactions | `string` |
@@ -39,6 +40,8 @@ title: TransactionFull
 
 | Field Name | Description | Type |
 |------------|-------------|------|
+| `indexed` | The time when this receipt was indexed by the node, providing a relative order of transaction receipts within this node (might be significantly after the timestamp of the block) | [`Timestamp`](simpletypes.md#timestamp) |
+| `domain` | The domain that executed the transaction, for private transactions only | `string` |
 | `success` | Transaction success status | `bool` |
 | `transactionHash` | Transaction hash | [`Bytes32`](simpletypes.md#bytes32) |
 | `blockNumber` | Block number | `int64` |

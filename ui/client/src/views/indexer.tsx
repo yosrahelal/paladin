@@ -14,31 +14,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Fade, Grid2, Paper } from "@mui/material";
+import { Box, Fade, Grid2, useMediaQuery, useTheme } from "@mui/material";
 import { Transactions } from "../components/Transactions";
 import { Events } from "../components/Events";
 
 export const Indexer: React.FC = () => {
 
+  const theme = useTheme();
+  const displayLine = useMediaQuery(theme.breakpoints.up('md'));
+
   return (
-    <Fade timeout={800} in={true}>
-      <Box sx={{ padding: '20px', maxWidth: '1200px', marginLeft: 'auto', marginRight: 'auto' }}>
-        <Grid2 container spacing={2}>
-          <Grid2 size={{ md: 6, sm: 12, xs: 12 }}>
-            <Paper sx={{ padding: '10px', paddingTop: '12px',
-              backgroundColor: theme => theme.palette.mode === 'light' ?
-               'rgba(255, 255, 255, .65)' : 'rgba(60, 60, 60, .65)' }}>
-              <Transactions />
-            </Paper>
+    <Fade timeout={600} in={true}>
+      <Box sx={{ padding: '10px', paddingTop: '30px', maxWidth: '1300px', marginLeft: 'auto', marginRight: 'auto' }}>
+        <Grid2 container spacing={8}>
+          <Grid2 size={{ md: 6, sm: 12, xs: 12 }} alignSelf="center">
+            <Transactions />
           </Grid2>
           <Grid2 size={{ md: 6, sm: 12, xs: 12 }}>
-            <Paper sx={{ padding: '10px', paddingTop: '12px', 
-              backgroundColor: theme => theme.palette.mode === 'light' ?
-              'rgba(255, 255, 255, .65)' : 'rgba(60, 60, 60, .65)' }}>
-              <Events />
-            </Paper>
+            <Events />
           </Grid2>
         </Grid2>
+        {displayLine &&
+          <Box sx={{
+            left: 'calc(50% - 1px)',
+            top: 0,
+            position: 'fixed',
+            height: '100vh',
+            width: '1px',
+            backgroundColor: theme => theme.palette.primary.main
+          }} />}
       </Box>
     </Fade>
   );

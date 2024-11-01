@@ -27,8 +27,16 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func useNullifiers(circuitId string) bool {
+func isNullifiersCircuit(circuitId string) bool {
 	return circuitId == constants.CIRCUIT_ANON_NULLIFIER || circuitId == constants.CIRCUIT_ANON_NULLIFIER_BATCH
+}
+
+func isNullifiersToken(tokenName string) bool {
+	return tokenName == constants.TOKEN_ANON_NULLIFIER
+}
+
+func isEncryptionToken(tokenName string) bool {
+	return tokenName == constants.TOKEN_ANON_ENC
 }
 
 // the Zeto implementations support two input/output sizes for the circuits: 2 and 10,
@@ -53,15 +61,15 @@ func validateTransferParams(ctx context.Context, params []*types.TransferParamEn
 	if len(params) == 0 {
 		return i18n.NewError(ctx, msgs.MsgNoTransferParams)
 	}
-	for _, param := range params {
+	for i, param := range params {
 		if param.To == "" {
-			return i18n.NewError(ctx, msgs.MsgNoParamTo)
+			return i18n.NewError(ctx, msgs.MsgNoParamTo, i)
 		}
 		if param.Amount == nil {
-			return i18n.NewError(ctx, msgs.MsgNoParamAmount)
+			return i18n.NewError(ctx, msgs.MsgNoParamAmount, i)
 		}
 		if param.Amount.Int().Sign() != 1 {
-			return i18n.NewError(ctx, msgs.MsgParamAmountGtZero)
+			return i18n.NewError(ctx, msgs.MsgParamAmountGtZero, i)
 		}
 	}
 	return nil

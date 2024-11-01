@@ -11,6 +11,17 @@ title: ptx_*
 
 0. `result`: [`RawJSON`](../types/simpletypes.md#rawjson)
 
+## `ptx_decodeCall`
+
+### Parameters
+
+0. `callData`: [`HexBytes`](../types/simpletypes.md#hexbytes)
+1. `dataFormat`: [`JSONFormatOptions`](../types/jsonformatoptions.md#jsonformatoptions)
+
+### Returns
+
+0. `decodedCall`: [`ABIDecodedData`](../types/abidecodeddata.md#abidecodeddata)
+
 ## `ptx_decodeError`
 
 ### Parameters
@@ -20,7 +31,60 @@ title: ptx_*
 
 ### Returns
 
-0. `decodedError`: `DecodedError`
+0. `decodedError`: [`ABIDecodedData`](../types/abidecodeddata.md#abidecodeddata)
+
+## `ptx_decodeEvent`
+
+### Parameters
+
+0. `topics`: [`Bytes32[]`](../types/simpletypes.md#bytes32)
+1. `data`: [`HexBytes`](../types/simpletypes.md#hexbytes)
+2. `dataFormat`: [`JSONFormatOptions`](../types/jsonformatoptions.md#jsonformatoptions)
+
+### Returns
+
+0. `decodedEvent`: [`ABIDecodedData`](../types/abidecodeddata.md#abidecodeddata)
+
+## `ptx_getDomainReceipt`
+
+### Parameters
+
+0. `domain`: `string`
+1. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+### Returns
+
+0. `domainReceipt`: [`RawJSON`](../types/simpletypes.md#rawjson)
+
+## `ptx_getPreparedTransaction`
+
+### Parameters
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+### Returns
+
+0. `preparedTransaction`: [`PreparedTransaction`](../types/preparedtransaction.md#preparedtransaction)
+
+## `ptx_getStateReceipt`
+
+### Parameters
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+### Returns
+
+0. `stateReceipt`: [`TransactionStates`](../types/transactionstates.md#transactionstates)
+
+## `ptx_getStoredABI`
+
+### Parameters
+
+0. `hashRef`: [`Bytes32`](../types/simpletypes.md#bytes32)
+
+### Returns
+
+0. `storedABI`: [`StoredABI`](../types/storedabi.md#storedabi)
 
 ## `ptx_getTransaction`
 
@@ -62,6 +126,56 @@ title: ptx_*
 
 0. `receipt`: [`TransactionReceipt`](../types/transactionreceipt.md#transactionreceipt)
 
+## `ptx_getTransactionReceiptFull`
+
+### Parameters
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+### Returns
+
+0. `receipt`: [`TransactionReceiptFull`](../types/transactionreceiptfull.md#transactionreceiptfull)
+
+## `ptx_prepareTransaction`
+
+### Parameters
+
+0. `transaction`: [`TransactionInput`](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+## `ptx_prepareTransactions`
+
+### Parameters
+
+0. `transactions`: [`TransactionInput[]`](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+0. `transactionIds`: [`UUID[]`](../types/simpletypes.md#uuid)
+
+## `ptx_queryPreparedTransactions`
+
+### Parameters
+
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+
+### Returns
+
+0. `preparedTransactions`: [`PreparedTransaction[]`](../types/preparedtransaction.md#preparedtransaction)
+
+## `ptx_queryStoredABIs`
+
+### Parameters
+
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+
+### Returns
+
+0. `storedABIs`: [`StoredABI[]`](../types/storedabi.md#storedabi)
+
 ## `ptx_queryTransactionReceipts`
 
 ### Parameters
@@ -102,7 +216,7 @@ title: ptx_*
 
 ### Returns
 
-0. `receipts`: `string`
+0. `verifier`: `string`
 
 ## `ptx_sendTransaction`
 
@@ -123,4 +237,14 @@ title: ptx_*
 ### Returns
 
 0. `transactionIds`: [`UUID[]`](../types/simpletypes.md#uuid)
+
+## `ptx_storeABI`
+
+### Parameters
+
+0. `abi`: [`Entry[]`](../types/transactioninput.md#entry)
+
+### Returns
+
+0. `storedABI`: [`StoredABI`](../types/storedabi.md#storedabi)
 

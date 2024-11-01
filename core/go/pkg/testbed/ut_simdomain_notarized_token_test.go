@@ -252,12 +252,8 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			assert.Greater(t, inputs.Amount.BigInt().Sign(), 0)
 			contractAddr, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
 			require.NoError(t, err)
-			configValues, err := contractDataABI.DecodeABIData(tx.ContractInfo.ContractConfig, 0)
-			require.NoError(t, err)
-			configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
-			require.NoError(t, err)
 			var config fakeCoinConfigParser
-			err = json.Unmarshal(configJSON, &config)
+			err = json.Unmarshal([]byte(tx.ContractInfo.ContractConfigJson), &config)
 			require.NoError(t, err)
 			assert.NotEmpty(t, config.NotaryLocator)
 			return contractAddr, config.NotaryLocator, &inputs
@@ -346,9 +342,6 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 
 				return &prototk.ConfigureDomainResponse{
 					DomainConfig: &prototk.DomainConfig{
-						BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
-							SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
-						},
 						AbiStateSchemasJson: []string{fakeCoinStateSchema},
 						AbiEventsJson:       string(eventsJSON),
 					},
@@ -396,6 +389,29 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 							"notaryLocator": "domain1.contract1.notary"
 						}`, req.Transaction.TransactionId, req.ResolvedVerifiers[0].Verifier),
 					},
+				}, nil
+			},
+
+			InitContract: func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+
+				configValues, err := contractDataABI.DecodeABIData(icr.ContractConfig, 0)
+				str := tktypes.HexBytes(icr.ContractConfig).HexString0xPrefix()
+				assert.NotEqual(t, "", str)
+				require.NoError(t, err)
+
+				configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
+				require.NoError(t, err)
+				contractConfig := &prototk.ContractConfig{
+					ContractConfigJson:   string(configJSON),
+					CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+					SubmitterSelection:   prototk.ContractConfig_SUBMITTER_COORDINATOR,
+				}
+				var constructorParameters fakeCoinConfigParser
+				err = json.Unmarshal([]byte(configJSON), &constructorParameters)
+				require.NoError(t, err)
+				return &prototk.InitContractResponse{
+					Valid:          true,
+					ContractConfig: contractConfig,
 				}, nil
 			},
 
@@ -708,14 +724,14 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	tbRPC := rpcclient.WrapRestyClient(resty.New().SetBaseURL(url))
 
 	var contractAddr ethtypes.Address0xHex
-	rpcErr := tbRPC.CallRPC(ctx, &contractAddr, "testbed_deploy", "domain1", tktypes.RawJSON(`{
+	rpcErr := tbRPC.CallRPC(ctx, &contractAddr, "testbed_deploy", "domain1", "me", tktypes.RawJSON(`{
 		"notary": "domain1.contract1.notary",
 		"name": "FakeToken1",
 		"symbol": "FT1"
 	}`))
 	assert.NoError(t, rpcErr)
 
-	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &TransactionInput{
 		From:     "wallets.org1.aaaaaa",
 		To:       tktypes.EthAddress(contractAddr),
 		Function: *mustParseABIEntry(fakeCoinTransferABI),
@@ -727,7 +743,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	}, true)
 	assert.NoError(t, rpcErr)
 
-	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &TransactionInput{
 		From:     "wallets.org1.aaaaaa",
 		To:       tktypes.EthAddress(contractAddr),
 		Function: *mustParseABIEntry(fakeCoinTransferABI),
@@ -740,7 +756,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	assert.NoError(t, rpcErr)
 
 	var balance *getBalanceResult
-	rpcErr = tbRPC.CallRPC(ctx, &balance, "testbed_call", &tktypes.PrivateContractInvoke{
+	rpcErr = tbRPC.CallRPC(ctx, &balance, "testbed_call", &TransactionInput{
 		To:       tktypes.EthAddress(contractAddr),
 		Function: *mustParseABIEntry(fakeCoinGetBalanceABI),
 		Inputs: tktypes.RawJSON(`{
@@ -773,7 +789,7 @@ func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
 
 	// In this test we deploy the factory in-line
 	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "domain1_admin",
 		},

@@ -36,7 +36,7 @@ message InitDomainRequest {
   repeated StateSchema abi_state_schemas = 1; // The deterministically hashed identifiers of the same array of schemas provied to Paladin in the DomainConfig
 }
 
-message InitDomainResponse {    
+message InitDomainResponse {
 }
 
 // **INIT DEPLOY** step for a deploy transasctio happens in-line with the deploy being accepted by Paladin from the application. Should verify the transaction is a valid request and build the list of required verifiers for the prepare phase.
@@ -55,9 +55,20 @@ message PrepareDeployRequest {
 }
 
 message PrepareDeployResponse {
-  optional string signer = 1; // The identifier of a signing address to use to submit the transaction to the chain. Default behavior if not supplied defined by domain config. Uses standard Paladin resolution of signing addresses (including dynamic allocation, if for example the transaction_id is supplied as part of the string to require a different key for each TX)
+  optional string signer = 1; // The identifier of a signing address to use to submit the transaction to the chain. Default behavior if not supplied is that the signing key is considered to be irrelevant to the submission and will be managed by Paladin for anonymity, with regular rotation (as often as once per transaction)
   optional PreparedTransaction transaction = 2; // The instruction for a transaction to submit to the base ledger
   optional BaseLedgerDeployTransaction deploy = 3; // The instruction for deploy request to submit to the base ledger
+}
+
+// **INIT CONTRACT** happens every time a squencer for a private smart contract in a domain is paged into memory, providing the runtine configuration needed for execution
+message InitContractRequest {
+  string contract_address = 1; // The address of the smart contract on-chain
+  bytes contract_config = 2; // Binary config emitted by the constructor event of the contract that is persisted by Paladin and provided back each time the smart contract is loaded into memory
+}
+
+message InitContractResponse {    
+  bool valid = 1; // MUST not be returned as an error. It is important that when the configuration of one individual domain is rejected as invalid, this function does not error. This will block the indexing event handler for the whole domain. Instead reject the individual smart contract with this boolean
+  ContractConfig contract_config = 2; // The parse contract contract configuration
 }
 
 // **INIT** step for a business transaction happens in-line with the tranaction being accepted by Paladin from the application. Should verify the transaction is a valid request and build a list of required verifiers, but not resolve whether sufficient states exist to execute the transaction.
@@ -119,9 +130,11 @@ message EndorseTransactionRequest {
   TransactionSpecification transaction = 4; // The transaction specified by the user
   repeated ResolvedVerifier resolved_verifiers = 5; // The list of resovled verifiers
   repeated EndorsableState inputs = 6; // Input states for the transaction
-  repeated EndorsableState reads = 7; // States relied upon by the transaction, that are not actually consumed
+  repeated EndorsableState reads = 7; // States relied upon by the transaction, that are not actually consumed, but must exist on chain
   repeated EndorsableState outputs = 8; // Output states for the transaction
-  repeated AttestationResult signatures = 9; // All SIGN attestation results (required from submitting node before endorsement)
+  repeated EndorsableState info = 9; // Info states for the transaction, that are important information in/out of the business transaction, but are never recorded in an on-chain map, or returned from FindAvailableStates
+  repeated AttestationResult signatures = 10; // All SIGN attestation results (required from submitting node before endorsement)
+  
 }
 
 message EndorseTransactionResponse {
@@ -142,13 +155,15 @@ message PrepareTransactionRequest {
   repeated EndorsableState input_states = 3; // The list of input states
   repeated EndorsableState read_states = 4; // The list of read states
   repeated EndorsableState output_states = 5; // The list of output states
-  repeated AttestationResult attestation_result = 6; // The results of any proofs/attestations that came out of the endorsement phase
-  repeated ResolvedVerifier resolved_verifiers = 7; // A list of transaction signatures/proofs that have been resolved
-  optional string extra_data = 8; // Any extra data that was included in the transaction assembly
+  repeated EndorsableState info_states = 6; // The list of states that are important information in/out of the business transaction, but are never recorded in an on-chain map, or returned from FindAvailableStates
+  repeated AttestationResult attestation_result = 7; // The results of any proofs/attestations that came out of the endorsement phase
+  repeated ResolvedVerifier resolved_verifiers = 8; // A list of transaction signatures/proofs that have been resolved
+  optional string extra_data = 9; // Any extra data that was included in the transaction assembly
 }
 
 message PrepareTransactionResponse {
   PreparedTransaction transaction = 1; // The instruction for submission to the base ledger
+  optional string metadata = 2; // Domain-provided metadata about the prepared transaction (only used when intent is PREPARE_TRANSACTION)
 }
 
 // **INIT_CALL** this allows a domain to provide a read-only view into the state store, using high-level functions. The response data must conform to the ABI supplied, or an error must be returned
@@ -160,7 +175,6 @@ message InitCallResponse {
   repeated ResolveVerifierRequest required_verifiers = 1; // the list of verifiers that need to be resolved in order to exec the call
 }
 
-
 // **EXEC_CALL** this allows a domain to provide a read-only view into the state store, using high-level functions. The response data must conform to the ABI supplied, or an error must be returned
 message ExecCallRequest {
   string state_query_context = 1; // handle to supply to state queries performed during this call
@@ -171,6 +185,21 @@ message ExecCallRequest {
 message ExecCallResponse {
   string result_json = 1; // JSON formatted data that conforms to the outputs specification of the ABI interface supplied in the request
 }
+
+// **RECEIPT** given the available details of a confirmed transation, returns a domain specific receipt payload that an application can process
+message BuildReceiptRequest {
+  string transaction_id = 1; // the transaction ID
+  bool complete = 2; // some domains only process complete data sets. If true, then the states provided in this request are the full set of states that known to be part of the transaction (as recorded by the event handler)
+  repeated EndorsableState input_states = 3; // available input states
+  repeated EndorsableState read_states = 4; // available read states
+  repeated EndorsableState output_states = 5; // available output states
+  repeated EndorsableState info_states = 6; // available info states  
+}
+
+message BuildReceiptResponse {
+  string receipt_json = 1; // a domain specific JSON payload describing the transaction receipt
+}
+
 
 // **EVENTS** handler called with batches of blockchain events that match an event signature and contract address registered by this domain
 
@@ -184,8 +213,10 @@ message HandleEventBatchRequest {
 message HandleEventBatchResponse {
   repeated CompletedTransaction transactions_complete = 1; // A list of Paladin transactions that may be considered complete
   repeated StateUpdate spent_states = 2; // A list of states that are now spent
-  repeated StateUpdate confirmed_states = 3; // A list of states that are now confirmed (and unspent)
-  repeated NewConfirmedState new_states = 4; // A list of new states to store (only for events that contain full state data)
+  repeated StateUpdate read_states = 3; // A list of states that this transaction was dependent on the un-spent state of, but did not spend in the transation
+  repeated StateUpdate confirmed_states = 4; // A list of states that are now confirmed (and unspent)
+  repeated StateUpdate info_states = 5; // A list of states that are important information in/out of the business transaction, but are never recorded in an on-chain map, or returned from FindAvailableStates
+  repeated NewConfirmedState new_states = 6; // A list of new states to store (only for events that contain full state data)
 }
 
 // **VALIDATE_STATE_HASHES** step only happens when custom_state_hash is true in the domain config, and then must be implemented
@@ -200,19 +231,32 @@ message ValidateStateHashesResponse {
 message DomainConfig {
   bool custom_hash_function = 1; // If true then the ValidateStateHashes function must be implemeted, and all states must come with a pre-caclculated ID
   repeated string abi_state_schemas_json = 2; // A list of Schema definitions (in ABI parameter format) the domain requires for all state types it interacts with
-  BaseLedgerSubmitConfig base_ledger_submit_config = 3; // Describe the requirements of this domain for how submission happens
-  string abi_events_json = 4; // ABI events that the domain will process for state updates
-  map<string, int32> signing_algorithms = 5; // A list of supported signing algorithms with the minimum key lengths for each algorithm
+  string abi_events_json = 3; // ABI events that the domain will process for state updates
+  map<string, int32> signing_algorithms = 4; // A list of supported signing algorithms with the minimum key lengths for each algorithm
 }
 
-message BaseLedgerSubmitConfig {
-  enum Mode {
-      ONE_TIME_USE_KEYS = 0; // every TX is submitted by a different key, with a HD wallet path from the UUID of the TX itself
-      ENDORSER_SUBMISSION = 1; // one of the endorsers of the transaction should submit the TX (that endorser might specify ENDORSER_SUBMIT)
-      SUBMITTER_LIST = 2; // TODO: a bank of submitters are provided by the domain config/runtime as candidates to submit transactions
+message ContractInfo {
+  string contract_address = 1; // the address of the smart contract on-chain
+  string contract_config_json = 2; // the JSON configuration returned from InitSmartContract
+}
+
+message ContractConfig {
+  string contract_config_json = 1; // Arbitray JSON configuration parsed by the domain itself - opaque to Paladin beyond being valid JSON. Passed back on all transaction calls
+  
+  enum CoordinatorSelection {
+      COORDINATOR_STATIC = 0; // The coordinator is fixed for the smart contract by the configuration
+      COORDINATOR_ENDORSER = 1; // Any of the endorsers of a transaction can be the coordinator
+      COORDINATOR_SENDER = 2; // The sender of the transaction is the endorser
   }
-  Mode submit_mode = 1;
-  string one_time_use_prefix = 2;
+  CoordinatorSelection coordinator_selection = 20;
+  optional string static_coordinator = 21; // only applicable with coordinator_mode=STATIC
+  
+  enum SubmitterSelection {
+      SUBMITTER_COORDINATOR = 0; // The coordinator submits the transaction
+      SUBMITTER_SENDER = 1; // The sender submits the transaction            
+  }
+  SubmitterSelection submitter_selection = 30;
+
 }
 
 message StateSchema {
@@ -222,13 +266,15 @@ message StateSchema {
 
 message DeployTransactionSpecification {
   string transaction_id = 1; // A UUID for the transaction generated by the Paladin node when accepting the request from the caller
-  string constructor_params_json = 2; // The parameters supplied in the invocation in normalized JSON format, after validation against the ABI the caller supplied
+  string from = 2; // The unresolved sender identity - the instruction for how to resolve it will be an output of the TX init from 
+  string constructor_params_json = 3; // The parameters supplied in the invocation in normalized JSON format, after validation against the ABI the caller supplied
 }
 
 message TransactionSpecification {
   enum Intent {
     SEND_TRANSACTION = 0; // This transaction should be sent to the base ledger once ready
-    CALL = 1; // This transaction should be validated by calling the ledger and storing the outcome (but should not result in a base ledger transaction)
+    PREPARE_TRANSACTION = 1; // This transaction should be assembled and prepared, and returned in a way that it could be executed later
+    CALL = 2; // This transaction should be should be sent to the base ledger as a "call", and the output should be captured
   }
   string transaction_id = 1; // A 32 byte 0x prefxied hex string containing unique identifier for the transaction generated by the Paladin node when accepting the request from the caller (UUID in first 16 bytes)
   string from = 2; // The unresolved sender identity - the instruction for how to resolve it will be an output of the TX init from 
@@ -244,7 +290,8 @@ message AssembledTransaction {
   repeated StateRef input_states = 1; // A list of the state IDs that the transaction spends - these might include ones being minted on other sequences, resulting in an instruction to the TX manager to re-allocate the transaction to another sequence
   repeated StateRef read_states = 2; // A list of state IDs that the execution of the transaction depends on being unspent on the chain (but will not spend). Also could be being minted on other sequences.
   repeated NewState output_states = 3; // A list of new states the domain will create as an output from this transaction, if it is executed and confirmed
-  optional string extra_data = 4; // Any extra data to be included in the transaction (other than states)
+  repeated NewState info_states = 4; // A list of states recorded as meaningful to the transaction, but do not need to exist on-chain before the transaction, and are not stored on-chain in any map afterwards
+  optional string extra_data = 5; // Any extra data to be propagated to prepare the transaction (this is not recorded directly as states, so primary use is for data that results in direct EVM transaction function in the base ledger contract)
 }
 
 message StateRef {
@@ -311,7 +358,7 @@ message ResolvedVerifier {
 
 message AttestationResult {
   enum AttestationConstraint {
-    ENDORSER_MUST_SUBMIT = 0;
+    ENDORSER_MUST_SUBMIT = 0; // causes a non-anonymous signing key to be used to submit the transaction. Only valid with COORDINATOR_STATIC or COORDINATOR_ENDORSER
   }
   string name = 1; // The name of the AttestationRequest, so the domain knows the detail of how to process this result
   AttestationType attestation_type = 2; // The type of attestation, which instructs the Paladin engine how to coordinate and submit it
@@ -345,9 +392,4 @@ message DomainAPIError {
 message CompletedTransaction {
   string transaction_id = 1; // The ID of the transaction that has completed (opaque 32 byte identifier)
   OnChainEventLocation location = 2; // the locator information on the blockchain to point at as the source of the confirmation
-}
-
-message ContractInfo {
-  string contract_address = 1; // The private smart contract address
-  bytes contract_config = 2; // Binary config emitted by the constructor event of the contract that is persisted by Paladin and provided on all calls  
 }

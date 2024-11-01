@@ -19,7 +19,7 @@ import { IEvent } from "../interfaces";
 import { t } from "i18next";
 import { Hash } from "./Hash";
 import { EllapsedTime } from "./EllapsedTime";
-import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityIcon from '@mui/icons-material/VisibilityOutlined';
 import { useState } from "react";
 import { ViewDetailsDialog } from "../dialogs/ViewDetails";
 
@@ -35,41 +35,41 @@ export const Event: React.FC<Props> = ({ event }) => {
     <>
       <Box sx={{
         backgroundColor: theme => theme.palette.background.paper,
-        marginBottom: '20px', padding: '10px', borderRadius: '6px', boxShadow: '0px 0px 8px 3px rgba(0,0,0,0.26)'
+        marginBottom: '20px', borderRadius: '4px'
       }}>
-        <Grid2 container direction="column" spacing={2}>
-          <Grid2 container justifyContent="space-evenly">
-            <Grid2>
-              <Typography align="center" variant="h6" color="textPrimary">{event.blockNumber.toLocaleString()}</Typography>
-              <Typography align="center" variant="body2" color="textSecondary">{t('block')}</Typography>
-            </Grid2>
-            <Grid2>
-              <Typography align="center" variant="h6" color="textPrimary">{event.transactionIndex}</Typography>
-              <Typography align="center" variant="body2" color="textSecondary">{t('transactionIndex')}</Typography>
-            </Grid2>
-            <Grid2>
-              <Typography align="center" variant="h6" color="textPrimary">{event.logIndex}</Typography>
-              <Typography align="center" variant="body2" color="textSecondary">{t('logIndex')}</Typography>
+        <Box sx={{ padding: '10px', paddingLeft: '20px', paddingRight: '20px', borderBottom: theme => `solid 1px ${theme.palette.divider}` }}>
+          <Grid2 container direction="column" spacing={2}>
+            <Grid2 container justifyContent="space-between">
+              <Grid2>
+                <Typography align="center" variant="h6" color="textPrimary">{event.blockNumber.toLocaleString()}</Typography>
+                <Typography align="center" variant="body2" color="textSecondary">{t('block')}</Typography>
+              </Grid2>
+              <Grid2>
+                <Typography align="center" variant="h6" color="textPrimary">{event.transactionIndex}</Typography>
+                <Typography align="center" variant="body2" color="textSecondary">{t('transactionIndex')}</Typography>
+              </Grid2>
+              <Grid2>
+                <Typography align="center" variant="h6" color="textPrimary">{event.logIndex}</Typography>
+                <Typography align="center" variant="body2" color="textSecondary">{t('logIndex')}</Typography>
+              </Grid2>
             </Grid2>
           </Grid2>
-          <Grid2 container justifyContent="space-evenly">
-            <Grid2>
+        </Box>
+        <Box sx={{ padding: '10px', paddingBottom: '20px' }}>
+          <Grid2 container justifyContent="space-evenly" spacing={2}>
+            <Grid2 size={{ xs: 6 }}>
               <Hash title={t('transactionHash')} hash={event.transactionHash} />
-              <Typography align="center" variant="body2" color="textSecondary">{t('transactionHash')}</Typography>
             </Grid2>
-            <Grid2>
+            <Grid2 size={{ xs: 6 }}>
               <Hash title={t('signature')} hash={event.signature} />
-              <Typography align="center" variant="body2" color="textSecondary">{t('signature')}</Typography>
             </Grid2>
           </Grid2>
-          <Grid2>
-            <Box sx={{ display: 'flex', padding: '4px', justifyContent: 'space-between' }}>
-              <EllapsedTime timestamp={event.block.timestamp} />
-              <Button size="small" startIcon={<VisibilityIcon />}
-                onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
-            </Box>
-          </Grid2>
-        </Grid2>
+        </Box>
+        <Box sx={{ display: 'flex', padding: '10px', justifyContent: 'end' }}>
+          <EllapsedTime timestamp={event.block.timestamp} />
+          <Button sx={{ marginLeft: '20px', textTransform: 'none', fontWeight: '400' }} size="small" startIcon={<VisibilityIcon />}
+            onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
+        </Box>
       </Box>
       <ViewDetailsDialog
         title={t('event')}

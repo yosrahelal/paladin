@@ -41,11 +41,11 @@ type NotoHelper struct {
 	ABI     abi.ABI
 }
 
-func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domainName, notary string, guard *tktypes.EthAddress) *NotoHelper {
+func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domainName, notary string, hooks *tktypes.EthAddress) *NotoHelper {
 	var addr tktypes.EthAddress
-	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, &types.ConstructorParams{
-		Notary:             notary,
-		GuardPublicAddress: guard,
+	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, "notary", &types.ConstructorParams{
+		Notary: notary,
+		Hooks:  &types.HookParams{PublicAddress: hooks},
 	})
 	if rpcerr != nil {
 		assert.NoError(t, rpcerr.Error())

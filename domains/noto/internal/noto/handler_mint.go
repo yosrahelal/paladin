@@ -35,7 +35,7 @@ type mintHandler struct {
 	noto *Noto
 }
 
-func (h *mintHandler) ValidateParams(ctx context.Context, config *types.NotoConfig_V0, params string) (interface{}, error) {
+func (h *mintHandler) ValidateParams(ctx context.Context, config *types.NotoParsedConfig, params string) (interface{}, error) {
 	var mintParams types.MintParams
 	if err := json.Unmarshal([]byte(params), &mintParams); err != nil {
 		return nil, err
@@ -51,14 +51,20 @@ func (h *mintHandler) ValidateParams(ctx context.Context, config *types.NotoConf
 
 func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
+	notary := tx.DomainConfig.NotaryLookup
 
-	if req.Transaction.From != tx.DomainConfig.DecodedData.NotaryLookup {
+	if tx.DomainConfig.RestrictMinting && req.Transaction.From != notary {
 		return nil, i18n.NewError(ctx, msgs.MsgMintOnlyNotary)
 	}
 	return &prototk.InitTransactionResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       tx.DomainConfig.DecodedData.NotaryLookup,
+				Lookup:       notary,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
+			{
+				Lookup:       tx.Transaction.From,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -73,21 +79,18 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 
 func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
+	notary := tx.DomainConfig.NotaryLookup
 
-	notary := domain.FindVerifier(tx.DomainConfig.DecodedData.NotaryLookup, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-	if notary == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
+	_, err := h.noto.findEthAddressVerifier(ctx, "notary", notary, req.ResolvedVerifiers)
+	if err != nil {
+		return nil, err
 	}
-	to := domain.FindVerifier(params.To, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-	if to == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "to")
-	}
-	toAddress, err := tktypes.ParseEthAddress(to.Verifier)
+	toAddress, err := h.noto.findEthAddressVerifier(ctx, "to", params.To, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
-	outputCoins, outputStates, err := h.noto.prepareOutputs(notary.Lookup, to.Lookup, toAddress, params.Amount)
+	outputCoins, outputStates, err := h.noto.prepareOutputs(notary, params.To, toAddress, params.Amount)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +122,7 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 				AttestationType: prototk.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1,
 				VerifierType:    verifiers.ETH_ADDRESS,
-				Parties:         []string{tx.DomainConfig.DecodedData.NotaryLookup},
+				Parties:         []string{notary},
 			},
 		},
 	}, nil
@@ -172,14 +175,14 @@ func (h *mintHandler) baseLedgerMint(ctx context.Context, req *prototk.PrepareTr
 	}, nil
 }
 
-func (h *mintHandler) guardMint(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
+func (h *mintHandler) hookMint(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
 	inParams := tx.Params.(*types.MintParams)
 
-	to := domain.FindVerifier(inParams.To, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-	if to == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "to")
+	fromAddress, err := h.noto.findEthAddressVerifier(ctx, "from", tx.Transaction.From, req.ResolvedVerifiers)
+	if err != nil {
+		return nil, err
 	}
-	toAddress, err := tktypes.ParseEthAddress(to.Verifier)
+	toAddress, err := h.noto.findEthAddressVerifier(ctx, "to", inParams.To, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +191,8 @@ func (h *mintHandler) guardMint(ctx context.Context, tx *types.ParsedTransaction
 	if err != nil {
 		return nil, err
 	}
-	params := &GuardMintParams{
+	params := &MintHookParams{
+		Sender: fromAddress,
 		To:     toAddress,
 		Amount: inParams.Amount,
 		Prepared: PreparedTransaction{
@@ -198,20 +202,20 @@ func (h *mintHandler) guardMint(ctx context.Context, tx *types.ParsedTransaction
 	}
 
 	transactionType := prototk.PreparedTransaction_PUBLIC
-	functionABI := solutils.MustLoadBuild(notoGuardJSON).ABI.Functions()["onMint"]
+	functionABI := solutils.MustLoadBuild(notoHooksJSON).ABI.Functions()["onMint"]
 	var paramsJSON []byte
 
-	if tx.DomainConfig.DecodedData.PrivateAddress != nil {
+	if tx.DomainConfig.PrivateAddress != nil {
 		transactionType = prototk.PreparedTransaction_PRIVATE
 		functionABI = penteInvokeABI("onMint", functionABI.Inputs)
 		penteParams := &PenteInvokeParams{
-			Group:  tx.DomainConfig.DecodedData.PrivateGroup,
-			To:     tx.DomainConfig.DecodedData.PrivateAddress,
+			Group:  tx.DomainConfig.PrivateGroup,
+			To:     tx.DomainConfig.PrivateAddress,
 			Inputs: params,
 		}
 		paramsJSON, err = json.Marshal(penteParams)
 	} else {
-		// Note: public guards aren't really useful except in testing
+		// Note: public hooks aren't really useful except in testing, as they disclose everything
 		// TODO: remove this?
 		paramsJSON, err = json.Marshal(params)
 	}
@@ -232,12 +236,12 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 	if err != nil {
 		return nil, err
 	}
-	if tx.DomainConfig.NotaryType.Equals(&types.NotaryTypeContract) {
-		guardTransaction, err := h.guardMint(ctx, tx, req, baseTransaction)
+	if tx.DomainConfig.NotaryType == types.NotaryTypePente {
+		hookTransaction, err := h.hookMint(ctx, tx, req, baseTransaction)
 		if err != nil {
 			return nil, err
 		}
-		return guardTransaction.prepare()
+		return hookTransaction.prepare(nil)
 	}
-	return baseTransaction.prepare()
+	return baseTransaction.prepare(nil)
 }

@@ -121,7 +121,7 @@ func newTestBlockIndexerConf(t *testing.T, config *pldconf.BlockIndexerConfig) (
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	p, pDone, err := persistence.NewUnitTestPersistence(ctx)
+	p, pDone, err := persistence.NewUnitTestPersistence(ctx, "blockindexer")
 	require.NoError(t, err)
 
 	blockListener, mRPC := newTestBlockListenerConf(t, ctx, config)
@@ -458,7 +458,7 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 	lastBlock := int64(-1)
 	lastIndex := -1
 	for i := 0; i < 15; i += 5 {
-		page, err := bi.ListTransactionEvents(ctx, lastBlock, lastIndex, 5, true, true)
+		page, err := bi.ListTransactionEvents(ctx, lastBlock, lastIndex, 5)
 		require.NoError(t, err)
 		assert.Len(t, page, 5)
 		for i2 := 0; i2 < 5; i2++ {
@@ -521,7 +521,7 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 
 	ch, err := bi.GetConfirmedBlockHeight(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(9), ch)
+	assert.Equal(t, tktypes.HexUint64(9), ch)
 }
 
 func TestBlockIndexerCancelledBeforeCurrentBlock(t *testing.T) {

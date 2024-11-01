@@ -41,6 +41,8 @@ type Server interface {
 	Addr() net.Addr
 }
 
+var _ Server = &httpServer{}
+
 type httpServer struct {
 	ctx             context.Context
 	cancelCtx       func()
@@ -53,7 +55,6 @@ type httpServer struct {
 }
 
 func NewServer(ctx context.Context, description string, conf *pldconf.HTTPServerConfig, handler http.Handler) (_ Server, err error) {
-
 	s := &httpServer{
 		description:     description,
 		httpServerDone:  make(chan error),

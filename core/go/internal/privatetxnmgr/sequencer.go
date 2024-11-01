@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
@@ -69,7 +70,9 @@ var AllSequencerStates = []string{
 }
 
 type Sequencer struct {
-	ctx                     context.Context
+	ctx              context.Context
+	privateTxManager components.PrivateTxManager
+
 	persistenceRetryTimeout time.Duration
 
 	// each sequencer has its own go routine
@@ -97,6 +100,7 @@ type Sequencer struct {
 	pendingEvents chan ptmgrtypes.PrivateTransactionEvent
 
 	contractAddress     tktypes.EthAddress // the contract address managed by the current sequencer
+	defaultSigner       string
 	nodeID              string
 	domainAPI           components.DomainSmartContract
 	components          components.AllComponents
@@ -112,6 +116,7 @@ type Sequencer struct {
 
 func NewSequencer(
 	ctx context.Context,
+	privateTxManager components.PrivateTxManager,
 	nodeID string,
 	contractAddress tktypes.EthAddress,
 	sequencerConfig *pldconf.PrivateTxManagerSequencerConfig,
@@ -128,6 +133,7 @@ func NewSequencer(
 
 	newSequencer := &Sequencer{
 		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("sequencer-%s", contractAddress)),
+		privateTxManager:     privateTxManager,
 		initiated:            time.Now(),
 		contractAddress:      contractAddress,
 		evalInterval:         confutil.DurationMin(sequencerConfig.EvaluationInterval, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.EvaluationInterval),
@@ -154,6 +160,10 @@ func NewSequencer(
 		transportWriter:              transportWriter,
 		graph:                        NewGraph(),
 		requestTimeout:               requestTimeout,
+
+		// Randomly allocate a signer.
+		// TODO: rotation
+		defaultSigner: fmt.Sprintf("domains.%s.submit.%s", contractAddress, uuid.New()),
 	}
 
 	log.L(ctx).Debugf("NewSequencer for contract address %s created: %+v", newSequencer.contractAddress, newSequencer)

@@ -18,6 +18,7 @@ package pldclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -106,6 +107,7 @@ type TxBuilder interface {
 	BuildInputDataJSON() (jsonData tktypes.RawJSON, err error)             // build the input data as JSON (object by default, with serialization options via Serializer())
 	BuildTX() SendableTransaction                                          // builds the full TransactionInput object for use with Paladin - copies the TX so the builder can be re-used safely
 	Send() SentTransaction                                                 // shortcut to BuildTX() then Send() with a chainable result (errors deferred)
+	Prepare() PreparingTransaction                                         // shortcut to BuildTX() then Prepare() with a chainable result (errors deferred)
 	Call() error                                                           // shortcut to BuildTX() then Call()
 }
 
@@ -116,6 +118,7 @@ type SendableTransaction interface {
 	CallTX() *pldapi.TransactionCall // get the call version of the transaction directly to use
 	Error() error                    // deferred error
 	Send() SentTransaction           // sends the transaction and builds a wrapper around the returned ID, including handling idempotency key conflicts
+	Prepare() PreparingTransaction   // requests the node to prepare the transaction, but not submit it to the chain. Once prepared the transaction ready fro submission can be obtained to send later
 	Call() error                     // performs a call, storing the returned value back into the outputs (as JSON per the DataFormat if a string/[]byte/RawJSON is provided, otherwise un-marshalling to your value)
 }
 
@@ -136,6 +139,24 @@ type TransactionResult interface {
 	TransactionHash() *tktypes.Bytes32   // non-nil if this made it to the chain - which is possible when error is true, for revert cases
 	Error() error                        // could be a failure to submit, or an error at any point up to and including execution reversion on-chain
 	Receipt() *pldapi.TransactionReceipt // if nil, then error is guaranteed to be non-nil
+}
+
+type PreparingTransaction interface {
+	Chainable
+
+	ID() *uuid.UUID                                               // nil if there was an error
+	Wait(timeout time.Duration) PreparedTransactionResult         // chainable
+	Error() error                                                 // get any deferred error
+	GetTransaction() (*pldapi.Transaction, error)                 // calls ptx_getTransaction
+	GetPreparedTransaction() (*pldapi.PreparedTransaction, error) // calls ptx_getPreparedTransaction
+}
+
+type PreparedTransactionResult interface {
+	Chainable
+
+	ID() uuid.UUID
+	Error() error                                     // could be a failure to prepare, or an error at any point up to and including execution reversion on-chain
+	PreparedTransaction() *pldapi.PreparedTransaction // if nil, then error is guaranteed to be non-nil
 }
 
 var defaultConstructor = &abi.Entry{Type: abi.Constructor, Inputs: abi.ParameterArray{}}
@@ -165,10 +186,21 @@ type sentTransaction struct {
 	txID *uuid.UUID
 }
 
+type preparingTransaction struct {
+	chainable
+	txID *uuid.UUID
+}
+
 type transactionResult struct {
 	chainable
 	txID    uuid.UUID
 	receipt *pldapi.TransactionReceipt
+}
+
+type preparedTransactionResult struct {
+	chainable
+	txID     uuid.UUID
+	prepared *pldapi.PreparedTransaction
 }
 
 func (wc *chainable) GetCtx() context.Context {
@@ -444,6 +476,10 @@ func (t *txBuilder) Send() SentTransaction {
 	return t.BuildTX().Send()
 }
 
+func (t *txBuilder) Prepare() PreparingTransaction {
+	return t.BuildTX().Prepare()
+}
+
 func (t *txBuilder) Call() error {
 	return t.BuildTX().Call()
 }
@@ -572,6 +608,31 @@ func (st sendableTransaction) Send() SentTransaction {
 	return sent
 }
 
+func (st sendableTransaction) Prepare() PreparingTransaction {
+	preparing := &preparingTransaction{
+		chainable: st.chainable,
+	}
+	if st.tx.From == "" {
+		preparing.deferError(i18n.NewError(st.ctx, tkmsgs.MsgPaladinClientMissingFrom))
+	}
+	if preparing.deferredErr != nil {
+		return preparing
+	}
+	var err error
+	var existingTX *pldapi.Transaction
+	preparing.txID, err = st.c.PTX().PrepareTransaction(st.ctx, &st.tx.TransactionInput)
+	if err != nil && st.tx.IdempotencyKey != "" && strings.Contains(err.Error(), "PD012220") {
+		log.L(st.ctx).Infof("Idempotency key clash for %s - checking for existing transaction: %s", st.tx.IdempotencyKey, err)
+		existingTX, err = st.c.PTX().GetTransactionByIdempotencyKey(st.ctx, st.tx.IdempotencyKey)
+		if err == nil && existingTX != nil {
+			err = nil
+			preparing.txID = existingTX.ID
+		}
+	}
+	preparing.deferError(err)
+	return preparing
+}
+
 func (st sendableTransaction) Call() error {
 	if st.deferredErr != nil {
 		return st.deferredErr
@@ -620,10 +681,37 @@ func (sent *sentTransaction) Wait(timeout time.Duration) TransactionResult {
 	return tr.wait(timeout)
 }
 
-func (tr *transactionResult) wait(timeout time.Duration) TransactionResult {
-	// TODO: Websocket optimization
+func (preparing *preparingTransaction) GetPreparedTransaction() (*pldapi.PreparedTransaction, error) {
+	if preparing.deferredErr != nil {
+		return nil, preparing.deferredErr
+	}
+	return preparing.c.PTX().GetPreparedTransaction(preparing.ctx, *preparing.txID)
+}
 
-	pollingInterval := tr.c.receiptPollingInterval
+func (preparing *preparingTransaction) GetTransaction() (*pldapi.Transaction, error) {
+	if preparing.deferredErr != nil {
+		return nil, preparing.deferredErr
+	}
+	return preparing.c.PTX().GetTransaction(preparing.ctx, *preparing.txID)
+}
+
+func (preparing *preparingTransaction) ID() *uuid.UUID {
+	return preparing.txID
+}
+
+func (preparing *preparingTransaction) Wait(timeout time.Duration) PreparedTransactionResult {
+	tr := &preparedTransactionResult{
+		chainable: preparing.chainable,
+	}
+	if tr.deferredErr != nil {
+		return tr
+	}
+	tr.txID = *preparing.txID
+	return tr.wait(timeout)
+}
+
+func txPoller[R any](ch *chainable, timeout time.Duration, txID uuid.UUID, doGet func() (*R, error)) *R {
+	pollingInterval := ch.c.receiptPollingInterval
 	if pollingInterval > timeout {
 		pollingInterval = timeout
 	}
@@ -634,30 +722,42 @@ func (tr *transactionResult) wait(timeout time.Duration) TransactionResult {
 	defer ticker.Stop()
 	attempt := 0
 	var lastErr error
+	var result *R
 	for {
 		attempt++
-		tr.receipt, lastErr = tr.c.PTX().GetTransactionReceipt(tr.ctx, tr.txID)
+		result, lastErr = doGet()
 		if lastErr != nil {
-			log.L(tr.ctx).Warnf("attempt %d to get receipt %s failed: %s", attempt, tr.txID, lastErr)
+			log.L(ch.ctx).Warnf("attempt %d to poll transaction %s failed: %s", attempt, txID, lastErr)
 		}
 		// Did we get one?
-		if tr.receipt != nil {
-			return tr
+		if result != nil {
+			return result
 		}
 		// Check we didn't timeout
 		waitTime := time.Since(startTime)
 		if waitTime > timeout {
-			tr.deferError(i18n.WrapError(tr.ctx, lastErr, tkmsgs.MsgPaladinClientPollTimedOut, attempt, waitTime))
-			return tr
+			ch.deferError(i18n.WrapError(ch.ctx, lastErr, tkmsgs.MsgPaladinClientPollTimedOut, attempt, waitTime))
+			return result
 		}
 		// Wait before polling
 		select {
 		case <-ticker.C:
-		case <-tr.ctx.Done():
-			tr.deferError(i18n.WrapError(tr.ctx, lastErr, tkmsgs.MsgContextCanceled))
-			return tr
+		case <-ch.ctx.Done():
+			ch.deferError(i18n.WrapError(ch.ctx, lastErr, tkmsgs.MsgContextCanceled))
+			return result
 		}
 	}
+}
+
+func (tr *transactionResult) wait(timeout time.Duration) TransactionResult {
+	// TODO: Websocket optimization
+	tr.receipt = txPoller(&tr.chainable, timeout, tr.txID, func() (*pldapi.TransactionReceipt, error) {
+		return tr.c.PTX().GetTransactionReceipt(tr.ctx, tr.txID)
+	})
+	if tr.receipt != nil && !tr.receipt.Success {
+		tr.deferError(errors.New(tr.receipt.FailureMessage))
+	}
+	return tr
 }
 
 func (tr *transactionResult) ID() uuid.UUID {
@@ -669,10 +769,25 @@ func (tr *transactionResult) Receipt() *pldapi.TransactionReceipt {
 }
 
 func (tr *transactionResult) TransactionHash() *tktypes.Bytes32 {
-	if tr.receipt != nil {
+	if tr.receipt != nil && tr.receipt.TransactionReceiptDataOnchain != nil {
 		return tr.receipt.TransactionHash
 	}
 	return nil
+}
+
+func (ptr *preparedTransactionResult) wait(timeout time.Duration) PreparedTransactionResult {
+	ptr.prepared = txPoller(&ptr.chainable, timeout, ptr.txID, func() (*pldapi.PreparedTransaction, error) {
+		return ptr.c.PTX().GetPreparedTransaction(ptr.ctx, ptr.txID)
+	})
+	return ptr
+}
+
+func (ptr *preparedTransactionResult) ID() uuid.UUID {
+	return ptr.txID
+}
+
+func (ptr *preparedTransactionResult) PreparedTransaction() *pldapi.PreparedTransaction {
+	return ptr.prepared
 }
 
 func (t *txBuilder) validateForSend() error {

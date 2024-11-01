@@ -18,6 +18,7 @@ package components
 import (
 	"context"
 
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"gorm.io/gorm"
 )
 
@@ -45,9 +46,11 @@ type PrivateTxManager interface {
 	TransportClient
 
 	//Synchronous functions to submit a new private transaction
-	HandleNewTx(ctx context.Context, tx *PrivateTransaction) error
-	HandleDeployTx(ctx context.Context, tx *PrivateContractDeploy) error
+	HandleNewTx(ctx context.Context, tx *ValidatedTransaction) error
 	GetTxStatus(ctx context.Context, domainAddress string, txID string) (status PrivateTxStatus, err error)
+
+	// Synchronous function to call an existing deployed smart contract
+	CallPrivateSmartContract(ctx context.Context, call *TransactionInputs) (*abi.ComponentValue, error)
 
 	//TODO this is just a placeholder until we figure out the external interface for events
 	// in the meantime, this is handy for some blackish box testing

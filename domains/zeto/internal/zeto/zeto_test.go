@@ -166,6 +166,33 @@ func TestPrepareDeploy(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestInitContract(t *testing.T) {
+	testCallbacks := &testDomainCallbacks{}
+	z := New(testCallbacks)
+	req := &prototk.InitContractRequest{
+		ContractConfig: []byte("bad config"),
+	}
+	res, err := z.InitContract(context.Background(), req)
+	assert.NoError(t, err) // so we don't block the indexing
+	require.False(t, res.Valid)
+
+	conf := types.DomainInstanceConfig{
+		CircuitId: "circuit1",
+		TokenName: "testToken1",
+	}
+	configJSON, _ := json.Marshal(conf)
+	encoded, err := types.DomainInstanceConfigABI.EncodeABIDataJSON(configJSON)
+	assert.NoError(t, err)
+	req.ContractConfig = encoded
+	res, err = z.InitContract(context.Background(), req)
+	assert.NoError(t, err)
+	require.True(t, res.Valid)
+	require.JSONEq(t, `{
+		"circuitId": "circuit1",
+		"tokenName": "testToken1"
+	}`, res.ContractConfig.ContractConfigJson)
+}
+
 func TestInitTransaction(t *testing.T) {
 	testCallbacks := &testDomainCallbacks{}
 	z := New(testCallbacks)
@@ -175,25 +202,28 @@ func TestInitTransaction(t *testing.T) {
 			FunctionAbiJson:    "bad json",
 			FunctionParamsJson: "bad json",
 			ContractInfo: &prototk.ContractInfo{
-				ContractConfig: []byte("bad config"),
+				ContractConfigJson: `{!!! bad`,
 			},
 		},
 	}
 	_, err := z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210012: Failed to unmarshal function abi json. invalid character 'b' looking for beginning of value")
+	assert.ErrorContains(t, err, "PD210008")
 
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"test\"}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.ErrorContains(t, err, "PD210008: Failed to validate init transaction spec. PD210013: Failed to decode domain config. FF22045: Insufficient bytes")
+	assert.ErrorContains(t, err, "PD210008")
+
+	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"test\"}"
+	_, err = z.InitTransaction(context.Background(), req)
+	assert.ErrorContains(t, err, "PD210008")
 
 	conf := types.DomainInstanceConfig{
 		CircuitId: "circuit1",
 		TokenName: "testToken1",
 	}
-	configJSON, _ := json.Marshal(conf)
-	encoded, err := types.DomainInstanceConfigABI.EncodeABIDataJSON(configJSON)
+	configJSON, err := json.Marshal(conf)
 	assert.NoError(t, err)
-	req.Transaction.ContractInfo.ContractConfig = encoded
+	req.Transaction.ContractInfo.ContractConfigJson = string(configJSON)
 	_, err = z.InitTransaction(context.Background(), req)
 	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210014: Unknown function: test")
 
@@ -207,15 +237,15 @@ func TestInitTransaction(t *testing.T) {
 
 	req.Transaction.FunctionParamsJson = "{\"mints\":[{}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210025: Parameter 'to' is required")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210025: Parameter 'to' is required (index=0)")
 
 	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210026: Parameter 'amount' is required")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210026: Parameter 'amount' is required (index=0)")
 
 	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"0\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210027: Parameter 'amount' must be greater than 0")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210027: Parameter 'amount' must be greater than 0 (index=0)")
 
 	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"10\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
@@ -261,17 +291,14 @@ func TestAssembleTransaction(t *testing.T) {
 		},
 	}
 	_, err := z.AssembleTransaction(context.Background(), req)
-	assert.ErrorContains(t, err, "PD210009: Failed to validate assemble transaction spec. PD210013: Failed to decode domain config. FF22045: Insufficient bytes")
+	assert.ErrorContains(t, err, "PD210009")
 
 	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
 		CircuitId: "circuit1",
 		TokenName: "testToken1",
 	}
-	configJSON, _ := json.Marshal(conf)
-	encoded, err := types.DomainInstanceConfigABI.EncodeABIDataJSON(configJSON)
-	assert.NoError(t, err)
-	req.Transaction.ContractInfo.ContractConfig = encoded
+	req.Transaction.ContractInfo.ContractConfigJson = tktypes.JSONString(conf).Pretty()
 	_, err = z.AssembleTransaction(context.Background(), req)
 	assert.NoError(t, err)
 }
@@ -297,10 +324,7 @@ func TestEndorseTransaction(t *testing.T) {
 		CircuitId: "circuit1",
 		TokenName: "testToken1",
 	}
-	configJSON, _ := json.Marshal(conf)
-	encoded, err := types.DomainInstanceConfigABI.EncodeABIDataJSON(configJSON)
-	assert.NoError(t, err)
-	req.Transaction.ContractInfo.ContractConfig = encoded
+	req.Transaction.ContractInfo.ContractConfigJson = tktypes.JSONString(conf).Pretty()
 	_, err = z.EndorseTransaction(context.Background(), req)
 	assert.NoError(t, err)
 }
@@ -342,10 +366,7 @@ func TestPrepareTransaction(t *testing.T) {
 		CircuitId: "circuit1",
 		TokenName: "testToken1",
 	}
-	configJSON, _ := json.Marshal(conf)
-	encoded, err := types.DomainInstanceConfigABI.EncodeABIDataJSON(configJSON)
-	assert.NoError(t, err)
-	req.Transaction.ContractInfo.ContractConfig = encoded
+	req.Transaction.ContractInfo.ContractConfigJson = tktypes.JSONString(conf).Pretty()
 	_, err = z.PrepareTransaction(context.Background(), req)
 	assert.NoError(t, err)
 }
@@ -416,19 +437,16 @@ func TestHandleEventBatch(t *testing.T) {
 			},
 		},
 		ContractInfo: &prototk.ContractInfo{
-			ContractConfig: []byte("bad config"),
+			ContractConfigJson: `{!!! bad config`,
 		},
 	}
 	_, err := z.HandleEventBatch(ctx, req)
-	assert.ErrorContains(t, err, "PD210018: Failed to abi decode domain instance config bytes. FF22045: Insufficient bytes")
+	assert.ErrorContains(t, err, "PD210018")
 
-	config := map[string]interface{}{
+	req.ContractInfo.ContractConfigJson = tktypes.JSONString(map[string]interface{}{
 		"circuitId": "anon_nullifier",
 		"tokenName": "Zeto_AnonNullifier",
-	}
-	bytes, err := types.DomainInstanceConfigABI.EncodeABIDataValues(config)
-	require.NoError(t, err)
-	req.ContractInfo.ContractConfig = bytes
+	}).Pretty()
 	req.ContractInfo.ContractAddress = "0x1234"
 	_, err = z.HandleEventBatch(ctx, req)
 	assert.ErrorContains(t, err, "PD210017: Failed to decode contract address. bad address - must be 20 bytes (len=2)")
@@ -480,7 +498,7 @@ func TestGetVerifier(t *testing.T) {
 		Algorithm: "bad algo",
 	}
 	_, err = z.GetVerifier(context.Background(), req)
-	assert.ErrorContains(t, err, "Failed to get verifier. 'bad algo' does not match supported algorithm")
+	assert.ErrorContains(t, err, "Failed to get verifier. PD210088: 'bad algo' does not match supported algorithm")
 
 	bytes, err := hex.DecodeString("7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
 	assert.NoError(t, err)
@@ -508,7 +526,7 @@ func TestSign(t *testing.T) {
 		Algorithm: "bad algo",
 	}
 	_, err := z.Sign(context.Background(), req)
-	assert.ErrorContains(t, err, "PD210023: Failed to sign. 'bad algo' does not match supported algorithm")
+	assert.ErrorContains(t, err, "PD210023: Failed to sign. PD210088: 'bad algo' does not match supported algorithm")
 
 	bytes, err := hex.DecodeString("7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
 	assert.NoError(t, err)
@@ -554,6 +572,39 @@ func TestSign(t *testing.T) {
 	res, err := z.Sign(context.Background(), req)
 	assert.NoError(t, err)
 	assert.Len(t, res.Payload, 36)
+}
+
+func TestValidateStateHashes(t *testing.T) {
+	z, _ := newTestZeto()
+	ctx := context.Background()
+	req := &prototk.ValidateStateHashesRequest{
+		States: []*prototk.EndorsableState{
+			{
+				SchemaId:      "coin",
+				StateDataJson: "bad json",
+			},
+		},
+	}
+	_, err := z.ValidateStateHashes(ctx, req)
+	assert.ErrorContains(t, err, "PD210087: Failed to unmarshal state data. invalid character 'b' looking for beginning of value")
+
+	req.States[0].StateDataJson = "{\"salt\":\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\"}"
+	_, err = z.ValidateStateHashes(ctx, req)
+	assert.ErrorContains(t, err, "PD210048: Failed to create Poseidon hash for an output coin. inputs values not inside Finite Field")
+
+	req.States[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\"}"
+	res, err := z.ValidateStateHashes(ctx, req)
+	assert.NoError(t, err)
+	assert.Len(t, res.StateIds, 1)
+
+	req.States[0].Id = "0x1234"
+	_, err = z.ValidateStateHashes(ctx, req)
+	assert.ErrorContains(t, err, "PD210086: State hash mismatch (hashed vs. received): 0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f != 0x1234")
+
+	req.States[0].Id = "0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f"
+	res, err = z.ValidateStateHashes(ctx, req)
+	assert.NoError(t, err)
+	assert.Len(t, res.StateIds, 1)
 }
 
 func findCoins(ctx context.Context, z *Zeto, contractAddress *tktypes.EthAddress, query string) ([]*types.ZetoCoin, error) {

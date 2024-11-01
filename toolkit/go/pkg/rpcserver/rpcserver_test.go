@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -19,8 +19,11 @@ package rpcserver
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -39,8 +42,7 @@ func newTestServerHTTP(t *testing.T, conf *pldconf.RPCServerConfig) (string, *rp
 	require.NoError(t, err)
 	err = s.Start()
 	require.NoError(t, err)
-	rs := s.(*rpcServer)
-	return fmt.Sprintf("http://%s", rs.HTTPAddr()), rs, s.Stop
+	return fmt.Sprintf("http://%s", s.HTTPAddr()), s, s.Stop
 
 }
 
@@ -53,8 +55,7 @@ func newTestServerWebSockets(t *testing.T, conf *pldconf.RPCServerConfig) (strin
 	require.NoError(t, err)
 	err = s.Start()
 	require.NoError(t, err)
-	rs := s.(*rpcServer)
-	return fmt.Sprintf("ws://%s", rs.WSAddr()), rs, s.Stop
+	return fmt.Sprintf("ws://%s", s.WSAddr()), s, s.Stop
 
 }
 
@@ -134,4 +135,123 @@ func TestWSHandler(t *testing.T) {
 	res := httptest.NewRecorder()
 	rpcServer.WSHandler(res, req)
 	assert.Equal(t, http.StatusBadRequest, res.Code)
+}
+
+func TestHTTPHandler(t *testing.T) {
+	rpcServer, err := NewRPCServer(context.Background(), &pldconf.RPCServerConfig{
+		HTTP: pldconf.RPCServerConfigHTTP{
+			Disabled: false,
+			HTTPServerConfig: pldconf.HTTPServerConfig{
+				Address: confutil.P("127.0.0.1"),
+				Port:    confutil.P(0), // Use dynamic port
+			},
+		},
+		WS: pldconf.RPCServerConfigWS{Disabled: true},
+	})
+	require.NoError(t, err)
+	defer rpcServer.Stop()
+
+	req := httptest.NewRequest("POST", "/", nil)
+	res := httptest.NewRecorder()
+	rpcServer.HTTPHandler(res, req)
+	assert.Equal(t, http.StatusInternalServerError, res.Code)
+}
+
+// Helper to create a temporary UI directory with files for testing
+func setupUITestDir(t *testing.T, relativeDir string) string {
+	tmpDir := t.TempDir()
+	tmpDirP := filepath.Join(tmpDir, relativeDir)
+	_ = os.Mkdir(tmpDirP, 0755)
+	_ = os.WriteFile(filepath.Join(tmpDirP, "index.html"), []byte("<html><body>Some content</body></html>"), 0644)
+	return tmpDirP
+}
+func TestNewRPCServerWithStaticServerEnabled(t *testing.T) {
+	urlPath := "/ui"
+	tmpDir := setupUITestDir(t, urlPath)
+
+	// Configure RPC server with UI enabled
+	conf := &pldconf.RPCServerConfig{
+		HTTP: pldconf.RPCServerConfigHTTP{
+			Disabled: false,
+			HTTPServerConfig: pldconf.HTTPServerConfig{
+				Address: confutil.P("127.0.0.1"),
+				Port:    confutil.P(0), // Use dynamic port
+			},
+			StaticServers: []pldconf.StaticServerConfig{
+				{
+					Enabled:    true,
+					StaticPath: tmpDir,
+					URLPath:    urlPath,
+				},
+			},
+		},
+		WS: pldconf.RPCServerConfigWS{Disabled: true},
+	}
+
+	ctx := context.Background()
+	rpcServer, err := NewRPCServer(ctx, conf)
+	require.NoError(t, err)
+
+	// Start the server
+	err = rpcServer.Start()
+	require.NoError(t, err)
+	defer rpcServer.Stop()
+
+	// Retrieve the HTTP server address (e.g., http://127.0.0.1:12345)
+	serverURL := fmt.Sprintf("http://%s%s", rpcServer.HTTPAddr(), urlPath)
+
+	// Perform a real HTTP GET request to the url path
+	res, err := http.Get(serverURL)
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	// Verify the status code and response content
+	require.Equal(t, http.StatusOK, res.StatusCode)
+
+	body, _ := io.ReadAll(res.Body)
+	assert.Contains(t, string(body), "<html><body>Some content</body></html>")
+}
+
+func TestNewRPCServerWithStaticServerDisabled(t *testing.T) {
+	urlPath := "/ui"
+	tmpDir := setupUITestDir(t, urlPath)
+
+	// Configure RPC server with UI enabled
+	conf := &pldconf.RPCServerConfig{
+		HTTP: pldconf.RPCServerConfigHTTP{
+			Disabled: false,
+			HTTPServerConfig: pldconf.HTTPServerConfig{
+				Address: confutil.P("127.0.0.1"),
+				Port:    confutil.P(0), // Use dynamic port
+			},
+			StaticServers: []pldconf.StaticServerConfig{
+				{
+					Enabled:    false,
+					StaticPath: tmpDir,
+					URLPath:    urlPath,
+				},
+			},
+		},
+		WS: pldconf.RPCServerConfigWS{Disabled: true},
+	}
+
+	ctx := context.Background()
+	rpcServer, err := NewRPCServer(ctx, conf)
+	require.NoError(t, err)
+
+	// Start the server
+	err = rpcServer.Start()
+	require.NoError(t, err)
+	defer rpcServer.Stop()
+
+	// Retrieve the HTTP server address (e.g., http://127.0.0.1:12345)
+	serverURL := fmt.Sprintf("http://%s%s", rpcServer.HTTPAddr(), urlPath)
+
+	// Perform a real HTTP GET request to the url path
+	res, err := http.Get(serverURL)
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	// Verify the status code
+	require.Equal(t, http.StatusNotFound, res.StatusCode)
 }

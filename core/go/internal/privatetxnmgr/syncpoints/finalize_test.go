@@ -22,7 +22,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,23 +30,20 @@ func TestWriteFinalizeOperations(t *testing.T) {
 	s, m := newSyncPointsForTesting(t)
 	testRevertReason := "test error"
 	testTxnID := uuid.New()
-	testContractAddress := tktypes.RandAddress()
 
 	finalizeOperations := []*finalizeOperation{
 		{
-			TransactionID:   testTxnID,
-			FailureMessage:  testRevertReason,
-			ContractAddress: *testContractAddress,
+			TransactionID:  testTxnID,
+			FailureMessage: testRevertReason,
 		},
 	}
 	dbTX := m.persistence.P.DB()
 
 	expectedReceipts := []*components.ReceiptInput{
 		{
-			ReceiptType:     components.RT_FailedWithMessage,
-			ContractAddress: testContractAddress,
-			TransactionID:   testTxnID,
-			FailureMessage:  testRevertReason,
+			ReceiptType:    components.RT_FailedWithMessage,
+			TransactionID:  testTxnID,
+			FailureMessage: testRevertReason,
 		},
 	}
 

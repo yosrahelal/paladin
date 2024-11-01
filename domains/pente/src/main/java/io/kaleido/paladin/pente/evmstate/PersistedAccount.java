@@ -175,6 +175,8 @@ public class PersistedAccount implements Account {
             @JsonProperty
             String version,
             @JsonProperty
+            JsonHex.Bytes32 salt,
+            @JsonProperty
             JsonHex.Address address,
             @JsonProperty
             long nonce,
@@ -190,7 +192,7 @@ public class PersistedAccount implements Account {
             List<JsonHex.Bytes32[]> storage
     ) {}
 
-    public byte[] serialize() {
+    public byte[] serialize(JsonHex.Bytes32 salt) {
         try {
             JsonHex.Bytes32 jsonCodeHash = JsonHex.Bytes32.ZERO;
             JsonHex.Bytes jsonCode = new JsonHex.Bytes(new byte[0]);
@@ -202,6 +204,7 @@ public class PersistedAccount implements Account {
             var storageTrieLeafs = new ArrayDeque<JsonHex.Bytes32[]>();
             var jsonAccount = new PersistedAccountJson(
                     "v24.9.0",
+                    salt,
                     new JsonHex.Address(this.address.toArray()),
                     this.nonce,
                     this.balance.getAsBigInteger(),

@@ -22,6 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
@@ -32,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"golang.org/x/crypto/sha3"
 	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -42,6 +44,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 type domain struct {
@@ -102,9 +105,6 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 
 	// Parse all the schemas
 	d.config = confRes.DomainConfig
-	if d.config.BaseLedgerSubmitConfig == nil {
-		return nil, i18n.NewError(d.ctx, msgs.MsgDomainBaseLedgerSubmitInvalid)
-	}
 	abiSchemas := make([]*abi.Parameter, len(d.config.AbiStateSchemasJson))
 	for i, schemaJSON := range d.config.AbiStateSchemasJson {
 		if err := json.Unmarshal([]byte(schemaJSON), &abiSchemas[i]); err != nil {
@@ -149,7 +149,7 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 		}
 		stream.Sources = append(stream.Sources, blockindexer.EventStreamSource{ABI: eventsABI})
 
-		if _, err := d.dm.txManager.UpsertABI(d.ctx, eventsABI); err != nil {
+		if _, err := d.dm.txManager.UpsertABI(d.ctx, d.dm.persistence.DB(), eventsABI); err != nil {
 			return nil, err
 		}
 	}
@@ -358,20 +358,37 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIEncodingRequestEncodingFail)
 		}
-	case prototk.EncodingType_ETH_TRANSACTION:
+	case prototk.EncodingType_ETH_TRANSACTION, prototk.EncodingType_ETH_TRANSACTION_SIGNED:
 		var tx *ethsigner.Transaction
 		err := json.Unmarshal([]byte(encRequest.Body), &tx)
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIEncodingRequestEntryInvalid)
 		}
 		// We only support EIP-155 and EIP-1559 as they include the ChainID in the payload
+		var sigPayload *ethsigner.TransactionSignaturePayload
+		var finalizer func(signaturePayload *ethsigner.TransactionSignaturePayload, sig *secp256k1.SignatureData) ([]byte, error)
 		switch encRequest.Definition {
 		case "", "eip1559", "eip-1559": // default
-			abiData = tx.SignaturePayloadEIP1559(d.dm.ethClientFactory.ChainID()).Bytes()
+			sigPayload = tx.SignaturePayloadEIP1559(d.dm.ethClientFactory.ChainID())
+			finalizer = tx.FinalizeEIP1559WithSignature
 		case "eip155", "eip-155":
-			abiData = tx.SignaturePayloadLegacyEIP155(d.dm.ethClientFactory.ChainID()).Bytes()
+			sigPayload = tx.SignaturePayloadLegacyEIP155(d.dm.ethClientFactory.ChainID())
+			finalizer = func(signaturePayload *ethsigner.TransactionSignaturePayload, sig *secp256k1.SignatureData) ([]byte, error) {
+				return tx.FinalizeLegacyEIP155WithSignature(signaturePayload, sig, d.dm.ethClientFactory.ChainID())
+			}
 		default:
 			return nil, i18n.NewError(ctx, msgs.MsgDomainABIEncodingRequestInvalidType, encRequest.Definition)
+		}
+		if encRequest.EncodingType == prototk.EncodingType_ETH_TRANSACTION_SIGNED {
+			sig, err := d.inlineEthSign(ctx, sigPayload.Bytes(), encRequest.KeyIdentifier)
+			if err == nil {
+				abiData, err = finalizer(sigPayload, sig)
+			}
+			if err != nil {
+				return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIEncodingInlineSigningFailed, encRequest.Definition, encRequest.KeyIdentifier)
+			}
+		} else {
+			abiData = sigPayload.Bytes()
 		}
 	case prototk.EncodingType_TYPED_DATA_V4:
 		var tdv4 *eip712.TypedData
@@ -389,6 +406,37 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 	return &prototk.EncodeDataResponse{
 		Data: abiData,
 	}, nil
+}
+
+func (d *domain) inlineEthSign(ctx context.Context, payload []byte, keyIdentifier string) (sig *secp256k1.SignatureData, err error) {
+
+	sigPayloadHash := sha3.NewLegacyKeccak256()
+	_, err = sigPayloadHash.Write(payload)
+
+	var localKeyIdentifier, nodeName string
+	if err == nil {
+		localKeyIdentifier, nodeName, err = tktypes.PrivateIdentityLocator(keyIdentifier).Validate(ctx, "", true)
+	}
+
+	if err == nil && nodeName != "" && nodeName != d.dm.transportMgr.LocalNodeName() {
+		return nil, i18n.NewError(ctx, msgs.MsgDomainSingingKeyMustBeLocalEthSign)
+	}
+
+	var resolvedKey *pldapi.KeyMappingAndVerifier
+	if err == nil {
+		resolvedKey, err = d.dm.keyManager.ResolveKeyNewDatabaseTX(ctx, localKeyIdentifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	}
+
+	var signatureRSV []byte
+	if err == nil {
+		signatureRSV, err = d.dm.keyManager.Sign(ctx, resolvedKey, signpayloads.OPAQUE_TO_RSV, tktypes.HexBytes(sigPayloadHash.Sum(nil)))
+	}
+
+	if err == nil {
+		sig, err = secp256k1.DecodeCompactRSV(ctx, signatureRSV)
+	}
+
+	return sig, err
 }
 
 func (d *domain) DecodeData(ctx context.Context, decRequest *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
@@ -437,6 +485,42 @@ func (d *domain) DecodeData(ctx context.Context, decRequest *prototk.DecodeDataR
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
 		}
+	case prototk.EncodingType_ETH_TRANSACTION:
+		// We support round tripping the same types as encode
+		var tx *ethsigner.Transaction
+		var err error
+		switch decRequest.Definition {
+		case "", "eip1559", "eip-1559": // this is all we support currently
+			tx, err = ethsigner.DecodeEIP1559SignaturePayload(ctx, decRequest.Data, d.dm.ethClientFactory.ChainID())
+		default:
+			return nil, i18n.NewError(ctx, msgs.MsgDomainABIDecodingRequestEntryInvalid, decRequest.Definition)
+		}
+		if err == nil {
+			body, err = json.Marshal(tx)
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
+		}
+	case prototk.EncodingType_ETH_TRANSACTION_SIGNED:
+		// We support round tripping the same types as encode
+		var tx *ethsigner.TransactionWithOriginalPayload
+		var from *ethtypes.Address0xHex
+		var err error
+		switch decRequest.Definition {
+		case "", "eip1559", "eip-1559":
+			from, tx, err = ethsigner.RecoverEIP1559Transaction(ctx, decRequest.Data, d.dm.ethClientFactory.ChainID())
+		case "eip155", "eip-155":
+			from, tx, err = ethsigner.RecoverLegacyRawTransaction(ctx, decRequest.Data, d.dm.ethClientFactory.ChainID())
+		default:
+			err = i18n.NewError(ctx, msgs.MsgDomainABIDecodingRequestEntryInvalid, decRequest.Definition)
+		}
+		if err == nil {
+			tx.From = json.RawMessage(fmt.Sprintf(`"%s"`, from))
+			body, err = json.Marshal(tx)
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
+		}
 	default:
 		return nil, i18n.NewError(ctx, msgs.MsgDomainABIDecodingRequestInvalidType, decRequest.EncodingType)
 	}
@@ -473,6 +557,7 @@ func (d *domain) InitDeploy(ctx context.Context, tx *components.PrivateContractD
 	// Build the init request
 	txSpec := &prototk.DeployTransactionSpecification{}
 	tx.TransactionSpecification = txSpec
+	txSpec.From = tx.From
 	txSpec.TransactionId = tktypes.Bytes32UUIDFirst16(tx.ID).String()
 	txSpec.ConstructorParamsJson = tx.Inputs.String()
 
@@ -504,16 +589,8 @@ func (d *domain) PrepareDeploy(ctx context.Context, tx *components.PrivateContra
 		return err
 	}
 
-	if res.Signer != nil && *res.Signer != "" {
+	if res.Signer != nil {
 		tx.Signer = *res.Signer
-	} else {
-		switch d.config.BaseLedgerSubmitConfig.SubmitMode {
-		case prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS:
-			tx.Signer = d.config.BaseLedgerSubmitConfig.OneTimeUsePrefix + tx.ID.String()
-		default:
-			log.L(ctx).Errorf("Signer mode %s and no signer returned", d.config.BaseLedgerSubmitConfig.SubmitMode)
-			return i18n.NewError(ctx, msgs.MsgDomainDeployNoSigner)
-		}
 	}
 	if res.Transaction != nil && res.Deploy == nil {
 		var functionABI abi.Entry
@@ -607,6 +684,18 @@ func (d *domain) toEndorsableList(states []*components.FullState) []*prototk.End
 	return endorsableList
 }
 
+func (d *domain) toEndorsableListBase(states []*pldapi.StateBase) []*prototk.EndorsableState {
+	endorsableList := make([]*prototk.EndorsableState, len(states))
+	for i, input := range states {
+		endorsableList[i] = &prototk.EndorsableState{
+			Id:            input.ID.String(),
+			SchemaId:      input.Schema.String(),
+			StateDataJson: string(input.Data),
+		}
+	}
+	return endorsableList
+}
+
 func (d *domain) CustomHashFunction() bool {
 	// note config assured to be non-nil by GetDomainByName() not returning a domain until init complete
 	return d.config.CustomHashFunction
@@ -637,4 +726,41 @@ func (d *domain) ValidateStateHashes(ctx context.Context, states []*components.F
 		return nil, i18n.NewError(d.ctx, msgs.MsgDomainInvalidResponseToValidate)
 	}
 	return hexIDs, nil
+}
+
+func (d *domain) GetDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID) (tktypes.RawJSON, error) {
+
+	// Load up the currently available set of states
+	txStates, err := d.dm.stateStore.GetTransactionStates(ctx, dbTX, txID)
+	if err != nil {
+		return nil, err
+	}
+
+	return d.BuildDomainReceipt(ctx, dbTX, txID, txStates)
+}
+
+func (d *domain) BuildDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID, txStates *pldapi.TransactionStates) (tktypes.RawJSON, error) {
+	if txStates.None {
+		// We know nothing about this transaction yet
+		return nil, i18n.NewError(ctx, msgs.MsgDomainDomainReceiptNotAvailable, txID)
+	}
+	empty := len(txStates.Spent) == 0 && len(txStates.Read) == 0 && len(txStates.Confirmed) == 0 && len(txStates.Info) == 0
+	if empty {
+		// We have none of the private data for the transaction at all
+		return nil, i18n.NewError(ctx, msgs.MsgDomainDomainReceiptNoStatesAvailable, txID)
+	}
+
+	// As long as we have some knowledge, we call to the domain and see what it builds with what we have available
+	res, err := d.api.BuildReceipt(ctx, &prototk.BuildReceiptRequest{
+		TransactionId: tktypes.Bytes32UUIDFirst16(txID).String(),
+		Complete:      txStates.Unavailable == nil, // important for the domain to know if we have everything (it may fail with partial knowledge)
+		InputStates:   d.toEndorsableListBase(txStates.Spent),
+		ReadStates:    d.toEndorsableListBase(txStates.Read),
+		OutputStates:  d.toEndorsableListBase(txStates.Confirmed),
+		InfoStates:    d.toEndorsableListBase(txStates.Info),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tktypes.RawJSON(res.ReceiptJson), nil
 }

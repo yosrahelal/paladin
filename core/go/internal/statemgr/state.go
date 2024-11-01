@@ -33,6 +33,19 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+type transactionStateRecord struct {
+	pldapi.StateBase
+	State          tktypes.HexBytes `gorm:"column:state"`
+	RecordType     string           `gorm:"column:record_type"`
+	SpentState     tktypes.HexBytes `gorm:"column:spent_state"`
+	ReadState      tktypes.HexBytes `gorm:"column:read_state"`
+	ConfirmedState tktypes.HexBytes `gorm:"column:confirmed_state"`
+}
+
+func (transactionStateRecord) TableName() string {
+	return "states"
+}
+
 func (ss *stateManager) WritePreVerifiedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*components.StateUpsertOutsideContext) ([]*pldapi.State, error) {
 
 	d, err := ss.domainManager.GetDomainByName(ctx, domainName)

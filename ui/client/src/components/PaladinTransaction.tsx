@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Button, Collapse, Grid2, TextField, Typography } from "@mui/material";
+import { Box, Button, Collapse, Grid2, TextField, Typography, useTheme } from "@mui/material";
 import { t } from "i18next";
 import { useState } from "react";
 import { IPaladinTransaction } from "../interfaces";
@@ -24,9 +24,8 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { EllapsedTime } from "./EllapsedTime";
-import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityIcon from '@mui/icons-material/VisibilityOutlined';
 import { PaladinTransactionsDetailsDialog } from "../dialogs/TransactionDetails";
-// import BuildIcon from '@mui/icons-material/Build';
 
 daysjs.extend(relativeTime);
 
@@ -38,7 +37,7 @@ export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
 
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-
+  const theme = useTheme();
 
   if (paladinTransaction === undefined) {
     return <></>;
@@ -58,14 +57,21 @@ export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
         sx={{
           backgroundColor: (theme) => theme.palette.background.paper,
           marginBottom: "20px",
-          padding: "10px",
-          borderRadius: "6px",
-          boxShadow: "0px 0px 8px 3px rgba(0,0,0,0.26)",
+          borderRadius: "4px"
         }}
       >
-        <Grid2 container direction="column" spacing={2}>
-          <Grid2 container justifyContent="space-evenly">
-            <Grid2 size={{ md: 2 }}>
+        <Box sx={{ padding: '10px', paddingLeft: '20px', paddingRight: '20px', borderBottom: theme => `solid 1px ${theme.palette.divider}` }}>
+          <Grid2 container justifyContent="space-between" alignItems="center" spacing={2}>
+            <Grid2 textAlign="center" size={{ md: 2.5 }}>
+              <Hash title={t("id")} hash={paladinTransaction.id} />
+            </Grid2>
+            <Grid2 textAlign="center" size={{ md: 2.5 }}>
+              <Hash hash={paladinTransaction.from} title={t('from')} />
+            </Grid2>
+            <Grid2 textAlign="center" size={{ md: 2.5 }}>
+              <Hash hash={paladinTransaction.to ?? '--'} title={t('to')} />
+            </Grid2>
+            <Grid2 size={{ md: 2.25 }}>
               <Typography align="center" variant="h6">
                 {t(paladinTransaction.type)}
               </Typography>
@@ -73,13 +79,7 @@ export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
                 {t("type")}
               </Typography>
             </Grid2>
-            <Grid2 textAlign="center" size={{ md: 2 }}>
-              <Hash title={t("id")} hash={paladinTransaction.id} />
-              <Typography align="center" variant="body2" color="textSecondary">
-                {t("id")}
-              </Typography>
-            </Grid2>
-            <Grid2 size={{ md: 2 }}>
+            <Grid2 size={{ md: 2.25 }}>
               <Typography align="center" variant="h6" color="textPrimary">
                 {paladinTransaction.domain ?? '--'}
               </Typography>
@@ -87,64 +87,46 @@ export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
                 {t("domain")}
               </Typography>
             </Grid2>
-            <Grid2 textAlign="center" size={{ md: 3 }}>
-              <Hash hash={paladinTransaction.from} title={t('from')} />
-              <Typography align="center" variant="body2" color="textSecondary">
-                {t("from")}
-              </Typography>
-            </Grid2>
-            <Grid2 size={{ md: 3 }}>
-              <Typography align="center" variant="h6" color="textPrimary">
-                {paladinTransaction.to !== undefined ? <Hash hash={paladinTransaction.to} title={t('to')} /> : '--'}
-              </Typography>
-              <Typography align="center" variant="body2" color="textSecondary">
-                {t("to")}
-              </Typography>
-            </Grid2>
           </Grid2>
-          <Grid2>
-            <Grid2 container justifyContent="space-between" spacing={2}>
+        </Box>
+        <Box sx={{ padding: '10px' }}>
+          <Grid2 container justifyContent="space-between" spacing={2}>
+            <Grid2>
+              <EllapsedTime timestamp={paladinTransaction?.created} />
+            </Grid2>
+            <Grid2 container spacing={3} size="grow" justifyContent="end">
               <Grid2>
-                <EllapsedTime timestamp={paladinTransaction?.created} />
+                <Button size="small" startIcon={<VisibilityIcon />} sx={{ minWidth: '120px', textTransform: 'none', fontWeight: '400' }}
+                  onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
               </Grid2>
-              <Grid2 container spacing={3} size="grow" justifyContent="end">
-                {/* <Grid2>
-                  <Button size="small" startIcon={<BuildIcon />} sx={{ minWidth: '120px' }}
-                    onClick={() => setViewDetailsDialogOpen(true)}
-                    disabled={paladinTransaction.to === undefined}>{t('debug')}</Button>
-                </Grid2> */}
-                <Grid2>
-                  <Button size="small" startIcon={<VisibilityIcon />} sx={{ minWidth: '120px' }}
-                    onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
-                </Grid2>
-                <Grid2>
-                  <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                    onClick={() => setIsExpanded(!isExpanded)} sx={{ minWidth: '160px' }}>
-                    {t(isExpanded ? 'hideProperties' : 'showProperties')}
-                  </Button>
-                </Grid2>
+              <Grid2>
+                <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                  onClick={() => setIsExpanded(!isExpanded)} sx={{ minWidth: '140px', textTransform: 'none', fontWeight: '400' }}>
+                  {t(isExpanded ? 'hideProperties' : 'showProperties')}
+                </Button>
               </Grid2>
             </Grid2>
-            <Collapse in={isExpanded}>
-              {Object.keys(paladinTransaction.data)
-                .filter((property) => property !== "$owner")
-                .map((property) => (
-                  <TextField
-                    key={property}
-                    label={property}
-                    maxRows={8}
-                    multiline
-                    fullWidth
-                    size="small"
-                    sx={{ marginTop: '12px' }}
-                    value={formatProperty(paladinTransaction.data[property])}
-                  />
-                ))}
-              {Object.keys(paladinTransaction.data).length === 0 &&
-                <Typography align="center">{t('noProperties')}</Typography>}
-            </Collapse>
           </Grid2>
-        </Grid2>
+          <Collapse in={isExpanded}>
+            {Object.keys(paladinTransaction.data)
+              .filter((property) => property !== "$owner")
+              .map((property) => (
+                <TextField
+                  key={property}
+                  label={property}
+                  maxRows={8}
+                  multiline
+                  fullWidth
+                  size="small"
+                  sx={{ marginTop: '12px' }}
+                  slotProps={{ htmlInput: { style: { fontSize: '12px', color: `${theme.palette.text.secondary}`}  }}}
+                  value={formatProperty(paladinTransaction.data[property])}
+                />
+              ))}
+            {Object.keys(paladinTransaction.data).length === 0 &&
+              <Typography align="center">{t('noProperties')}</Typography>}
+          </Collapse>
+        </Box>
       </Box>
       <PaladinTransactionsDetailsDialog
         paladinTransactions={[paladinTransaction]}

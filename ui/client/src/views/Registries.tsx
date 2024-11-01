@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Fade, Paper, Typography, useTheme } from "@mui/material";
+import { Box, Fade, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { useContext } from "react";
@@ -27,7 +27,7 @@ export const Registries: React.FC = () => {
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
 
   const theme = useTheme();
-  const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
+  const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
   const { data: registries } = useQuery({
     queryKey: ["registries", lastBlockWithTransactions],
@@ -36,38 +36,29 @@ export const Registries: React.FC = () => {
   });
 
   return (
-    <Fade timeout={800} in={true}>
+    <Fade timeout={600} in={true}>
       <Box
         sx={{
-          padding: "20px",
-          maxWidth: "1200px",
+          padding: "30px",
+          maxWidth: "1300px",
           marginLeft: "auto",
           marginRight: "auto",
         }}
       >
-        <Paper
+      <Typography align="center" variant="h5" sx={{ marginBottom: '20px' }}>
+        {t("entries")}
+      </Typography>
+        <Box
           sx={{
-            padding: "10px",
-            paddingTop: "12px",
-            backgroundColor: theme => theme.palette.mode === 'light' ?
-            'rgba(255, 255, 255, .65)' : 'rgba(60, 60, 60, .65)'
+            paddingRight: '15px',
+            height: "calc(100vh - 170px)",
+            ...addedStyle
           }}
         >
-          <Typography align="center" sx={{ fontSize: "24px", fontWeight: 500 }}>
-            {t("entries")}
-          </Typography>
-          <Box
-            sx={{
-              padding: "20px",
-              height: "calc(100vh - 162px)",
-              ...addedStyle
-            }}
-          >
-            {registries?.map((registry) => (
-              <Registry key={registry} registryName={registry} />
-            ))}
-          </Box>
-        </Paper>
+          {registries?.map((registry) => (
+            <Registry key={registry} registryName={registry} />
+          ))}
+        </Box>
       </Box>
     </Fade>
   );

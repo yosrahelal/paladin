@@ -12,18 +12,16 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+package pldconf
 
-package io.kaleido.paladin.toolkit;
+import "github.com/kaleido-io/paladin/config/pkg/confutil"
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+type IdentityResolverConfig struct {
+	VerifierCache CacheConfig `json:"verifierCache"`
+}
 
-public record PrivateContractInvoke(
-    @JsonProperty
-    String from,
-    @JsonProperty
-    JsonHex.Address to,
-    @JsonProperty
-    JsonABI.Entry function,
-    @JsonProperty
-    Object inputs
-) {}
+var IdentityResolverDefaults = &IdentityResolverConfig{
+	VerifierCache: CacheConfig{
+		Capacity: confutil.P(1000),
+	},
+}

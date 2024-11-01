@@ -217,7 +217,7 @@ func TestStaticStoreBadEncType(t *testing.T) {
 func TestStaticStoreResolveOK(t *testing.T) {
 
 	ctx, store := newTestStaticStore(t, map[string]pldconf.StaticKeyEntryConfig{
-		"my/shiny/key%20ten": {
+		"my.shiny.key%20ten": {
 			Encoding: "none",
 			Inline:   "my key",
 		},
@@ -231,7 +231,7 @@ func TestStaticStoreResolveOK(t *testing.T) {
 		},
 	}, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "my/shiny/key%20ten", keyHandle)
+	assert.Equal(t, "my.shiny.key%20ten", keyHandle)
 	assert.Equal(t, ([]byte)("my key"), keyData)
 
 }
@@ -239,7 +239,7 @@ func TestStaticStoreResolveOK(t *testing.T) {
 func TestStaticStoreResolveBadPath(t *testing.T) {
 
 	ctx, store := newTestStaticStore(t, map[string]pldconf.StaticKeyEntryConfig{
-		"my/shiny/key%20ten": {
+		"my.shiny.key%20ten": {
 			Encoding: "none",
 			Inline:   "my key",
 		},

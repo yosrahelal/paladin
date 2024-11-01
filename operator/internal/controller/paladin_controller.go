@@ -551,6 +551,16 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 	pldConf.RPCServer.WS.Port = ptrTo(8549)
 	pldConf.RPCServer.WS.Address = ptrTo("0.0.0.0") // use k8s for network control outside the pod
 
+	// Enable UI if not explicitly disabled
+	if len(pldConf.RPCServer.HTTP.StaticServers) == 0 {
+		pldConf.RPCServer.HTTP.StaticServers = append(pldConf.RPCServer.HTTP.StaticServers,
+			pldconf.StaticServerConfig{
+				Enabled:    true,
+				StaticPath: "/app/ui",
+				URLPath:    "/ui",
+			})
+	}
+
 	// DB needs merging from user config and our config
 	if err := r.generatePaladinDBConfig(ctx, node, &pldConf, name); err != nil {
 		return "", nil, err

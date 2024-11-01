@@ -14,100 +14,87 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
   Accordion,
   AccordionDetails,
-  AccordionSummary,
-  useTheme
+  AccordionSummary
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import JSONPretty from 'react-json-pretty';
-import { fetchStateReceipt } from '../queries/states';
-import { IPaladinTransaction } from '../interfaces';
+import { IPaladinTransaction, ITransactionReceipt } from '../interfaces';
 import { fetchDomainReceipt } from '../queries/domains';
-import { fetchTransactionReceipt } from '../queries/transactions';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { fetchStateReceipt } from '../queries/states';
+import { EVMPrivateDetails } from './EVMPrivateDetails';
+import { JSONBox } from './JSONBox';
 
 type Props = {
-  paladinTransaction: IPaladinTransaction
+  transactionReceipt?: ITransactionReceipt
+  paladinTransaction?: IPaladinTransaction
 }
 
 export const PaladinTransactionsDetails: React.FC<Props> = ({
+  transactionReceipt,
   paladinTransaction
 }) => {
 
   const { t } = useTranslation();
-  const theme = useTheme();
 
-  const { data: transactionReceipt } = useQuery({
-    queryKey: ["ptx_getTransactionReceipt", paladinTransaction],
-    queryFn: () => fetchTransactionReceipt(paladinTransaction.id),
-    retry: false
-  });
+  const transactionId = transactionReceipt?.id || paladinTransaction?.id || '';
+  const domain = transactionReceipt?.domain || paladinTransaction?.domain || '';
 
   const { data: stateReceipt } = useQuery({
+    enabled: !!transactionId,
     queryKey: ["stateReceipt", paladinTransaction],
-    queryFn: () => fetchStateReceipt(paladinTransaction.id),
+    queryFn: () => fetchStateReceipt(transactionId),
     retry: false
   });
 
   const { data: domainReceipt } = useQuery({
+    enabled: !!domain && !!transactionId,
     queryKey: ["domainReceipt", paladinTransaction],
-    queryFn: () => fetchDomainReceipt(paladinTransaction.domain, paladinTransaction.id),
+    queryFn: () => fetchDomainReceipt(domain, transactionId),
     retry: false
   });
 
-  const colors = theme.palette.mode === 'dark' ?
-    {
-      main: 'line-height:1.3;color:#white;overflow:auto;',
-      key: 'color:white;',
-      string: 'color:#20dfdf;',
-      value: 'color:#20dfdf;',
-      boolean: 'color:#20dfdf;'
-    } :
-    {
-      main: 'line-height:1.3;color:#107070;overflow:auto;',
-      key: 'color:#464646;',
-      string: 'color:#107070;',
-      value: 'color:#107070;',
-      boolean: 'color:#107070;'
-    };
-
   return (
     <>
-      <Accordion defaultExpanded={true}>
+      {paladinTransaction ?
+      <Accordion elevation={0} disableGutters>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           {t('details')}
         </AccordionSummary>
         <AccordionDetails >
-          <JSONPretty style={{ fontSize: '14px' }} data={paladinTransaction} theme={colors} />
+          <JSONBox data={paladinTransaction} />
         </AccordionDetails>
       </Accordion>
-      <Accordion>
+      :undefined}
+      <Accordion elevation={0} disableGutters>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           {t('receipt')}
         </AccordionSummary>
         <AccordionDetails >
-          <JSONPretty style={{ fontSize: '14px' }} data={transactionReceipt} theme={colors} />
+          <JSONBox data={transactionReceipt} />
         </AccordionDetails>
       </Accordion>
-      {!(stateReceipt?.none === true) &&
-        <Accordion>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            {t('stateReceipt')}
-          </AccordionSummary>
-          <AccordionDetails >
-            <JSONPretty style={{ fontSize: '14px' }} data={stateReceipt} theme={colors} />
-          </AccordionDetails>
-        </Accordion>}
-      {domainReceipt !== undefined &&
-        <Accordion>
+      {domainReceipt !== undefined && <>
+        <EVMPrivateDetails transactionId={transactionId} domainReceipt={domainReceipt}/>
+        <Accordion elevation={0} disableGutters>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             {t('domainReceipt')}
           </AccordionSummary>
           <AccordionDetails >
-            <JSONPretty style={{ fontSize: '14px' }} data={domainReceipt} theme={colors} />
+            <JSONBox data={domainReceipt} />
+          </AccordionDetails>
+        </Accordion>
+      </>}
+      {!(stateReceipt?.none === true) &&
+        <Accordion elevation={0} disableGutters>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            {t('stateReceipt')}
+          </AccordionSummary>
+          <AccordionDetails >
+            <JSONBox data={stateReceipt} />
           </AccordionDetails>
         </Accordion>}
     </>

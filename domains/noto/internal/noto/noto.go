@@ -42,8 +42,8 @@ var notoFactoryJSON []byte
 //go:embed abis/INoto.json
 var notoInterfaceJSON []byte
 
-//go:embed abis/INotoGuard.json
-var notoGuardJSON []byte
+//go:embed abis/INotoHooks.json
+var notoHooksJSON []byte
 
 func NewNoto(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
 	return &Noto{Callbacks: callbacks}
@@ -65,7 +65,6 @@ type Noto struct {
 type NotoDeployParams struct {
 	Name          string             `json:"name,omitempty"`
 	TransactionID string             `json:"transactionId"`
-	NotaryType    tktypes.Bytes32    `json:"notaryType"`
 	NotaryAddress tktypes.EthAddress `json:"notaryAddress"`
 	Data          tktypes.HexBytes   `json:"data"`
 }
@@ -171,10 +170,7 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	return &prototk.ConfigureDomainResponse{
 		DomainConfig: &prototk.DomainConfig{
 			AbiStateSchemasJson: []string{string(schemaJSON)},
-			BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
-				SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
-			},
-			AbiEventsJson: string(eventsJSON),
+			AbiEventsJson:       string(eventsJSON),
 		},
 	}, nil
 }
@@ -210,34 +206,36 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
 	}
 
-	var notaryType tktypes.Bytes32
-	var notaryAddress *tktypes.EthAddress
-	if params.GuardPublicAddress.IsZero() {
-		notaryAddress, err = tktypes.ParseEthAddress(notary.Verifier)
-		if err != nil {
-			return nil, err
-		}
-		notaryType = types.NotaryTypeSigner
-	} else {
-		notaryAddress = params.GuardPublicAddress
-		notaryType = types.NotaryTypeContract
+	deployData := &types.NotoConfigData_V0{
+		NotaryLookup:    notary.Lookup,
+		NotaryType:      types.NotaryTypeSigner,
+		RestrictMinting: true,
+	}
+	if params.RestrictMinting != nil {
+		deployData.RestrictMinting = *params.RestrictMinting
 	}
 
-	deployData, err := json.Marshal(&types.NotoConfigData_V0{
-		NotaryLookup:   notary.Lookup,
-		PrivateAddress: params.GuardPrivateAddress,
-		PrivateGroup:   params.GuardPrivateGroup,
-	})
+	notaryAddress, err := tktypes.ParseEthAddress(notary.Verifier)
 	if err != nil {
 		return nil, err
 	}
 
+	if params.Hooks != nil && !params.Hooks.PublicAddress.IsZero() {
+		notaryAddress = params.Hooks.PublicAddress
+		deployData.NotaryType = types.NotaryTypePente
+		deployData.PrivateAddress = params.Hooks.PrivateAddress
+		deployData.PrivateGroup = params.Hooks.PrivateGroup
+	}
+
+	deployDataJSON, err := json.Marshal(deployData)
+	if err != nil {
+		return nil, err
+	}
 	deployParams := &NotoDeployParams{
 		Name:          params.Implementation,
 		TransactionID: req.Transaction.TransactionId,
-		NotaryType:    notaryType,
 		NotaryAddress: *notaryAddress,
-		Data:          deployData,
+		Data:          deployDataJSON,
 	}
 	paramsJSON, err := json.Marshal(deployParams)
 	if err != nil {
@@ -258,6 +256,41 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 			ParamsJson:      string(paramsJSON),
 		},
 		Signer: &notary.Lookup,
+	}, nil
+}
+
+func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+	var notoContractConfigJSON []byte
+	var staticCoordinator string
+	domainConfig, err := n.decodeConfig(ctx, req.ContractConfig)
+	if err == nil {
+		parsedConfig := &types.NotoParsedConfig{
+			NotaryType:      domainConfig.DecodedData.NotaryType,
+			NotaryAddress:   domainConfig.NotaryAddress,
+			Variant:         domainConfig.Variant,
+			NotaryLookup:    domainConfig.DecodedData.NotaryLookup,
+			PrivateAddress:  domainConfig.DecodedData.PrivateAddress,
+			PrivateGroup:    domainConfig.DecodedData.PrivateGroup,
+			RestrictMinting: domainConfig.DecodedData.RestrictMinting,
+		}
+		notoContractConfigJSON, err = json.Marshal(parsedConfig)
+	}
+	if err == nil {
+		staticCoordinator = domainConfig.DecodedData.NotaryLookup
+	}
+	if err != nil {
+		// This on-chain contract has invalid configuration - not an error in our process
+		return &prototk.InitContractResponse{Valid: false}, nil
+	}
+
+	return &prototk.InitContractResponse{
+		Valid: true,
+		ContractConfig: &prototk.ContractConfig{
+			ContractConfigJson:   string(notoContractConfigJSON),
+			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
+			StaticCoordinator:    &staticCoordinator,
+			SubmitterSelection:   prototk.ContractConfig_SUBMITTER_COORDINATOR,
+		},
 	}, nil
 }
 
@@ -328,7 +361,8 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, err
 	}
 
-	domainConfig, err := n.decodeConfig(ctx, tx.ContractInfo.ContractConfig)
+	var domainConfig *types.NotoParsedConfig
+	err = json.Unmarshal([]byte(tx.ContractInfo.ContractConfigJson), &domainConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -500,4 +534,9 @@ func (n *Noto) InitCall(ctx context.Context, req *prototk.InitCallRequest) (*pro
 
 func (n *Noto) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}
+
+func (n *Noto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+	// TODO: Event logs for transfers would be great for Noto
+	return nil, i18n.NewError(ctx, msgs.MsgNoDomainReceipt)
 }

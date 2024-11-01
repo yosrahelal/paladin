@@ -21,10 +21,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Grid2,
-  TextField
+  Grid2
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { SingleValue } from '../components/SingleValue';
 
 type Props = {
   timestamp: string
@@ -54,8 +54,6 @@ export const TimestampDialog: React.FC<Props> = ({
     }
   };
 
-  console.log(timestamp)
-
   return (
     <Dialog
       onClose={() => setDialogOpen(false)}
@@ -70,47 +68,27 @@ export const TimestampDialog: React.FC<Props> = ({
         <Box sx={{ alignItems: 'center', minWidth: '300px', paddingTop: '5px' }}>
           <Grid2 container direction="column" spacing={2}>
             <Grid2>
-              <TextField
-                size="small"
-                fullWidth
-                label={t('localTime')}
-                value={date.toLocaleString()}
-              />
+              <SingleValue label={t('localTime')} value={date.toLocaleString()} />
             </Grid2>
             <Grid2>
-              <TextField
-                size="small"
-                fullWidth
-                label={t('ISO')}
-                value={timestamp}
-              />
+              <SingleValue label={t('ISO')} value={timestamp} />
             </Grid2>
             <Grid2>
-              <TextField
-                size="small"
-                fullWidth
-                label={t('UTC')}
-                value={date.toUTCString()}
-              />
+              <SingleValue label={t('UTC')} value={date.toUTCString()} />
             </Grid2>
             <Grid2>
-              <TextField
-                size="small"
-                fullWidth
-                label={t('epoch')}
-                value={getEpoch()}
-              />
+              <SingleValue label={t('epoch')} value={getEpoch()} />
             </Grid2>
           </Grid2>
         </Box>
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'center', marginBottom: '15px' }}>
         <Button
+          sx={{ textTransform: 'none' }}
           onClick={() => setDialogOpen(false)}
-          size="large"
           variant="contained"
           disableElevation>
-          {t('dismiss')}
+          {t('close')}
         </Button>
       </DialogActions>
     </Dialog>

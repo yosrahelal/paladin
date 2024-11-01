@@ -29,6 +29,7 @@ type DomainAPI interface {
 	InitDomain(context.Context, *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error)
 	InitDeploy(context.Context, *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error)
 	PrepareDeploy(context.Context, *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error)
+	InitContract(context.Context, *prototk.InitContractRequest) (*prototk.InitContractResponse, error)
 	InitTransaction(context.Context, *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error)
 	AssembleTransaction(context.Context, *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error)
 	EndorseTransaction(context.Context, *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error)
@@ -39,6 +40,7 @@ type DomainAPI interface {
 	ValidateStateHashes(context.Context, *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error)
 	InitCall(context.Context, *prototk.InitCallRequest) (*prototk.InitCallResponse, error)
 	ExecCall(context.Context, *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error)
+	BuildReceipt(context.Context, *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error)
 }
 
 type DomainCallbacks interface {
@@ -145,6 +147,10 @@ func (dp *domainHandler) RequestToPlugin(ctx context.Context, iReq PluginMessage
 		resMsg := &prototk.DomainMessage_PrepareDeployRes{}
 		resMsg.PrepareDeployRes, err = dp.api.PrepareDeploy(ctx, input.PrepareDeploy)
 		res.ResponseFromDomain = resMsg
+	case *prototk.DomainMessage_InitContract:
+		resMsg := &prototk.DomainMessage_InitContractRes{}
+		resMsg.InitContractRes, err = dp.api.InitContract(ctx, input.InitContract)
+		res.ResponseFromDomain = resMsg
 	case *prototk.DomainMessage_InitTransaction:
 		resMsg := &prototk.DomainMessage_InitTransactionRes{}
 		resMsg.InitTransactionRes, err = dp.api.InitTransaction(ctx, input.InitTransaction)
@@ -184,6 +190,10 @@ func (dp *domainHandler) RequestToPlugin(ctx context.Context, iReq PluginMessage
 	case *prototk.DomainMessage_ExecCall:
 		resMsg := &prototk.DomainMessage_ExecCallRes{}
 		resMsg.ExecCallRes, err = dp.api.ExecCall(ctx, input.ExecCall)
+		res.ResponseFromDomain = resMsg
+	case *prototk.DomainMessage_BuildReceipt:
+		resMsg := &prototk.DomainMessage_BuildReceiptRes{}
+		resMsg.BuildReceiptRes, err = dp.api.BuildReceipt(ctx, input.BuildReceipt)
 		res.ResponseFromDomain = resMsg
 	default:
 		err = i18n.NewError(ctx, tkmsgs.MsgPluginUnsupportedRequest, input)
@@ -240,6 +250,7 @@ type DomainAPIFunctions struct {
 	InitDomain          func(context.Context, *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error)
 	InitDeploy          func(context.Context, *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error)
 	PrepareDeploy       func(context.Context, *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error)
+	InitContract        func(context.Context, *prototk.InitContractRequest) (*prototk.InitContractResponse, error)
 	InitTransaction     func(context.Context, *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error)
 	AssembleTransaction func(context.Context, *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error)
 	EndorseTransaction  func(context.Context, *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error)
@@ -250,6 +261,7 @@ type DomainAPIFunctions struct {
 	ValidateStateHashes func(context.Context, *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error)
 	InitCall            func(context.Context, *prototk.InitCallRequest) (*prototk.InitCallResponse, error)
 	ExecCall            func(context.Context, *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error)
+	BuildReceipt        func(context.Context, *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error)
 }
 
 type DomainAPIBase struct {
@@ -270,6 +282,10 @@ func (db *DomainAPIBase) InitDeploy(ctx context.Context, req *prototk.InitDeploy
 
 func (db *DomainAPIBase) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 	return callPluginImpl(ctx, req, db.Functions.PrepareDeploy)
+}
+
+func (db *DomainAPIBase) InitContract(ctx context.Context, req *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+	return callPluginImpl(ctx, req, db.Functions.InitContract)
 }
 
 func (db *DomainAPIBase) InitTransaction(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
@@ -310,4 +326,8 @@ func (db *DomainAPIBase) InitCall(ctx context.Context, req *prototk.InitCallRequ
 
 func (db *DomainAPIBase) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 	return callPluginImpl(ctx, req, db.Functions.ExecCall)
+}
+
+func (db *DomainAPIBase) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+	return callPluginImpl(ctx, req, db.Functions.BuildReceipt)
 }

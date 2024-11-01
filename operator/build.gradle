@@ -81,6 +81,10 @@ task copySolidity(type: Copy) {
         include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
         include 'contracts/domains/pente/PenteFactory.sol/PenteFactory.json'
         include 'contracts/private/NotoTrackerERC20.sol/NotoTrackerERC20.json'
+        include 'contracts/testcontracts/ERC20Simple.sol/ERC20Simple.json'
+        include 'contracts/shared/BondTrackerPublic.sol/BondTrackerPublic.json'
+        include 'contracts/private/BondTracker.sol/BondTracker.json'
+        include 'contracts/private/BondSubscription.sol/BondSubscription.json'
     }
     into 'test/e2e/abis'
 
@@ -232,4 +236,20 @@ task build {
     // Default 'build' task just builds as part of the main Paladin build.
     // The operator primary build and test is all docker, and runs in separate builds
     dependsOn make
+}
+
+// Task to update the Paladin image in the Kind cluster
+task updatePaladinImage(type: Exec) {
+    doFirst {
+        buildOperator = false
+        buildPaladin = true
+    }
+    dependsOn promoteKindImages 
+    executable 'kubectl'
+    args "rollout" 
+    args "restart" 
+    args "sts"
+    args "paladin-node1"
+    args "paladin-node2"
+    args "paladin-node3"
 }

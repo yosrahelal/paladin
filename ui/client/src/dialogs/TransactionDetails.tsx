@@ -15,6 +15,7 @@
 // limitations under the License.
 
 import {
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -31,7 +32,7 @@ import { useEffect, useState } from 'react';
 import { altLightModeScrollbarStyle, altDarkModeScrollbarStyle } from '../themes/default';
 
 type Props = {
-  paladinTransactions: IPaladinTransaction[]
+  paladinTransactions?: IPaladinTransaction[]
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
 }
@@ -42,16 +43,17 @@ export const PaladinTransactionsDetailsDialog: React.FC<Props> = ({
   setDialogOpen
 }) => {
 
-  const [selectedPaladinTransactionIndex, setSelectedPaladinTransactionIndex] = useState(0);
+  const [selectedPaladinTransactionId, setSelectedPaladinTransactionId] = useState('');
   const { t } = useTranslation();
 
   const theme = useTheme();
   const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
+  const selectedTransaction = paladinTransactions?.find(r => (r.id == selectedPaladinTransactionId));
 
   useEffect(() => {
     if (dialogOpen) {
-      setSelectedPaladinTransactionIndex(0);
+      setSelectedPaladinTransactionId((paladinTransactions && paladinTransactions.length > 0) ? paladinTransactions[0].id : '');
     }
   }, [dialogOpen]);
 
@@ -65,24 +67,29 @@ export const PaladinTransactionsDetailsDialog: React.FC<Props> = ({
       <DialogTitle sx={{ textAlign: 'center' }}>
         {t('transaction')}
       </DialogTitle>
-      <DialogContent sx={{ margin: '10px', padding: '10px', ...addedStyle}}>
-        <TextField select label={t('id')} fullWidth size="small" sx={{ marginTop: '5px' }} value={selectedPaladinTransactionIndex}
-          onChange={event => setSelectedPaladinTransactionIndex(Number(event.target.value))}>
-          {paladinTransactions.map((paladinTransaction, index) =>
-            <MenuItem key={paladinTransaction.id} value={index}>{paladinTransaction.id}</MenuItem>
+      <DialogContent sx={{ height: '80vh',  padding: '20px', ...addedStyle}}>
+        <Box sx={{ padding: '20px', paddingTop: '5px' }}>
+        <TextField select={paladinTransactions && paladinTransactions.length > 1} label={t('id')} fullWidth size="small" value={selectedPaladinTransactionId}
+          onChange={event => setSelectedPaladinTransactionId(event.target.value)}>
+          {paladinTransactions?.map(paladinTransaction =>
+            <MenuItem key={paladinTransaction.id} value={paladinTransaction.id}>{paladinTransaction.id}</MenuItem>
           )}
         </TextField>
-        <PaladinTransactionsDetails
-          paladinTransaction={paladinTransactions[selectedPaladinTransactionIndex]}
-        />
+        </Box>
+        { selectedTransaction ?
+          <PaladinTransactionsDetails
+            paladinTransaction={selectedTransaction}
+          />
+          : undefined
+        }
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'center', marginBottom: '15px' }}>
         <Button
           onClick={() => setDialogOpen(false)}
-          size="large"
+          sx={{ textTransform: 'none' }}
           variant="contained"
           disableElevation>
-          {t('dismiss')}
+          {t('close')}
         </Button>
       </DialogActions>
     </Dialog>

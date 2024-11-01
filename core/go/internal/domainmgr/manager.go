@@ -76,7 +76,9 @@ type domainManager struct {
 	stateStore       components.StateManager
 	privateTxManager components.PrivateTxManager
 	txManager        components.TXManager
+	transportMgr     components.TransportManager
 	blockIndexer     blockindexer.BlockIndexer
+	keyManager       components.KeyManager
 	ethClientFactory ethclient.EthClientFactory
 	domainSigner     *domainSigner
 
@@ -105,6 +107,8 @@ func (dm *domainManager) PostInit(c components.AllComponents) error {
 	dm.persistence = c.Persistence()
 	dm.ethClientFactory = c.EthClientFactory()
 	dm.blockIndexer = c.BlockIndexer()
+	dm.keyManager = c.KeyManager()
+	dm.transportMgr = c.TransportManager()
 
 	// Register ourselves as a signing on the key manager
 	dm.domainSigner = &domainSigner{dm: dm}
@@ -251,36 +255,49 @@ func (dm *domainManager) setDomainAddress(d *domain) {
 	dm.domainsByAddress[*d.RegistryAddress()] = d
 }
 
-func (dm *domainManager) getDomainByAddress(ctx context.Context, addr *tktypes.EthAddress, nilOnNotFound bool) (d *domain, _ error) {
+func (dm *domainManager) getDomainByAddress(ctx context.Context, addr *tktypes.EthAddress) (d *domain, _ error) {
 	dm.mux.Lock()
 	defer dm.mux.Unlock()
 	if addr != nil {
 		d = dm.domainsByAddress[*addr]
 	}
-	if d == nil && !nilOnNotFound {
+	if d == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgDomainNotFound, addr)
 	}
 	return d, nil
 }
 
+func (dm *domainManager) getDomainByAddressOrNil(addr *tktypes.EthAddress) *domain {
+	dm.mux.Lock()
+	defer dm.mux.Unlock()
+	return dm.domainsByAddress[*addr]
+}
+
 func (dm *domainManager) GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (components.DomainSmartContract, error) {
-	dc, err := dm.getSmartContractCached(ctx, dm.persistence.DB(), addr)
+	loadResult, dc, err := dm.getSmartContractCached(ctx, dm.persistence.DB(), addr)
 	if dc != nil || err != nil {
 		return dc, err
 	}
-	return nil, i18n.NewError(ctx, msgs.MsgDomainContractNotFoundByAddr, addr)
+	switch loadResult {
+	case pscDomainNotFound:
+		return nil, i18n.NewError(ctx, msgs.MsgDomainNotConfiguredForPSC, addr)
+	case pscInvalid:
+		return nil, i18n.NewError(ctx, msgs.MsgDomainContractNotValid, addr)
+	default:
+		return nil, i18n.NewError(ctx, msgs.MsgDomainContractNotFoundByAddr, addr)
+	}
 }
 
-func (dm *domainManager) getSmartContractCached(ctx context.Context, tx *gorm.DB, addr tktypes.EthAddress) (*domainContract, error) {
+func (dm *domainManager) getSmartContractCached(ctx context.Context, tx *gorm.DB, addr tktypes.EthAddress) (pscLoadResult, *domainContract, error) {
 	dc, isCached := dm.contractCache.Get(addr)
 	if isCached {
-		return dc, nil
+		return pscValid, dc, nil
 	}
-	// Updating the cache deferred down to newSmartContract (under enrichContractWithDomain)
+	// Updating the cache deferred down to initSmartContract (under enrichContractWithDomain)
 	return dm.dbGetSmartContract(ctx, tx, func(db *gorm.DB) *gorm.DB { return db.Where("address = ?", addr) })
 }
 
-func (dm *domainManager) dbGetSmartContract(ctx context.Context, tx *gorm.DB, setWhere func(db *gorm.DB) *gorm.DB) (*domainContract, error) {
+func (dm *domainManager) dbGetSmartContract(ctx context.Context, tx *gorm.DB, setWhere func(db *gorm.DB) *gorm.DB) (pscLoadResult, *domainContract, error) {
 	var contracts []*PrivateSmartContract
 	query := tx.Table("private_smart_contracts")
 	query = setWhere(query)
@@ -290,27 +307,30 @@ func (dm *domainManager) dbGetSmartContract(ctx context.Context, tx *gorm.DB, se
 		Find(&contracts).
 		Error
 	if err != nil || len(contracts) == 0 {
-		return nil, err
+		return pscLoadError, nil, err
 	}
 
 	// At this point it's possible we have a matching smart contract in our DB, for which we
 	// no longer recognize the domain registry (as it's not one that is configured an longer)
-	dc, err := dm.enrichContractWithDomain(ctx, contracts[0], true)
-	if err == nil && dc == nil {
+	loadResult, dc, err := dm.enrichContractWithDomain(ctx, contracts[0])
+	if err != nil {
+		return loadResult, nil, err
+	}
+	if loadResult == pscDomainNotFound {
 		log.L(ctx).Warnf("Lookup of smart contract '%s' that is stored in the DB for domain registry '%s' that is no longer configured on this node", contracts[0].Address, contracts[0].RegistryAddress)
 	}
-	return dc, nil
+	return loadResult, dc, nil
 }
 
-func (dm *domainManager) enrichContractWithDomain(ctx context.Context, contract *PrivateSmartContract, nilOnNotFound bool) (*domainContract, error) {
+func (dm *domainManager) enrichContractWithDomain(ctx context.Context, contract *PrivateSmartContract) (pscLoadResult, *domainContract, error) {
 
 	// Get the domain by address
-	d, err := dm.getDomainByAddress(ctx, &contract.RegistryAddress, nilOnNotFound)
-	if d == nil || err != nil {
-		return nil, err
+	d := dm.getDomainByAddressOrNil(&contract.RegistryAddress)
+	if d == nil {
+		return pscDomainNotFound, nil, nil
 	}
 
-	return d.newSmartContract(contract), nil
+	return d.initSmartContract(ctx, contract)
 }
 
 // If an embedded ABI is broken, we don't even run the tests / start the runtime

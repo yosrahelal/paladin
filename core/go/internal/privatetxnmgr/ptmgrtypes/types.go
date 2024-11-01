@@ -79,6 +79,7 @@ type EndorsementGatherer interface {
 		inputStates []*prototk.EndorsableState,
 		readStates []*prototk.EndorsableState,
 		outputStates []*prototk.EndorsableState,
+		infoStates []*prototk.EndorsableState,
 		partyName string,
 		endorsementRequest *prototk.AttestationRequest) (*prototk.AttestationResult, *string, error)
 }
@@ -90,7 +91,7 @@ type ContentionResolver interface {
 type TransportWriter interface {
 	SendState(ctx context.Context, stateId string, schemaId string, stateDataJson string, party string) error
 	SendDelegationRequest(ctx context.Context, delegationId string, delegateNodeId string, transaction *components.PrivateTransaction) error
-	SendEndorsementRequest(ctx context.Context, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState) error
+	SendEndorsementRequest(ctx context.Context, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState, infoStates []*components.FullState) error
 }
 
 type TransactionFlowStatus int
@@ -108,7 +109,7 @@ type TransactionFlow interface {
 	ApplyEvent(ctx context.Context, event PrivateTransactionEvent)
 	Action(ctx context.Context)
 
-	PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error)
+	PrepareTransaction(ctx context.Context, defaultSigner string) (*components.PrivateTransaction, error)
 	GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution
 	CoordinatingLocally() bool
 	IsComplete() bool

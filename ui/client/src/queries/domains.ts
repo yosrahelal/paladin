@@ -15,14 +15,13 @@
 // limitations under the License.
 
 import i18next from "i18next";
-import { IStateReceipt } from "../interfaces";
 import { generatePostReq, returnResponse } from "./common";
 import { RpcEndpoint, RpcMethods } from "./rpcMethods";
 
 export const fetchDomainReceipt = async (
   domain: string,
   transactionId: string
-): Promise<IStateReceipt[]> => {
+): Promise<any> => {
   const payload = {
     jsonrpc: "2.0",
     id: Date.now(),
@@ -30,7 +29,7 @@ export const fetchDomainReceipt = async (
     params: [domain, transactionId],
   };
 
-  return <Promise<IStateReceipt[]>>(
+  return <Promise<any>>(
     returnResponse(
       await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
       i18next.t("errorFetchingDomainReceipt")

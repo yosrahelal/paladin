@@ -57,19 +57,17 @@ func TestRunBatchFinalizeOperations(t *testing.T) {
 			domainContext:   dc,
 			contractAddress: *testContractAddress,
 			finalizeOperation: &finalizeOperation{
-				TransactionID:   testTxnID,
-				ContractAddress: *testContractAddress,
-				FailureMessage:  testRevertReason,
+				TransactionID:  testTxnID,
+				FailureMessage: testRevertReason,
 			},
 		},
 	}
 
 	expectedReceipts := []*components.ReceiptInput{
 		{
-			ReceiptType:     components.RT_FailedWithMessage,
-			ContractAddress: testContractAddress,
-			TransactionID:   testTxnID,
-			FailureMessage:  testRevertReason,
+			ReceiptType:    components.RT_FailedWithMessage,
+			TransactionID:  testTxnID,
+			FailureMessage: testRevertReason,
 		},
 	}
 
@@ -104,27 +102,24 @@ func TestRunBatchFinalizeOperationsMixedContractAddresses(t *testing.T) {
 			domainContext:   dc,
 			contractAddress: *testContractAddress1,
 			finalizeOperation: &finalizeOperation{
-				TransactionID:   testTxnID1,
-				ContractAddress: *testContractAddress1,
-				FailureMessage:  testRevertReason1,
+				TransactionID:  testTxnID1,
+				FailureMessage: testRevertReason1,
 			},
 		},
 		{
 			domainContext:   dc,
 			contractAddress: *testContractAddress2,
 			finalizeOperation: &finalizeOperation{
-				TransactionID:   testTxnID2a,
-				ContractAddress: *testContractAddress2,
-				FailureMessage:  testRevertReason2a,
+				TransactionID:  testTxnID2a,
+				FailureMessage: testRevertReason2a,
 			},
 		},
 		{
 			domainContext:   dc,
 			contractAddress: *testContractAddress2,
 			finalizeOperation: &finalizeOperation{
-				TransactionID:   testTxnID2b,
-				ContractAddress: *testContractAddress2,
-				FailureMessage:  testRevertReason2b,
+				TransactionID:  testTxnID2b,
+				FailureMessage: testRevertReason2b,
 			},
 		},
 		{
@@ -133,30 +128,26 @@ func TestRunBatchFinalizeOperationsMixedContractAddresses(t *testing.T) {
 			domainContext:   dc,
 			contractAddress: *testContractAddress2,
 			finalizeOperation: &finalizeOperation{
-				TransactionID:   testTxnID2a,
-				ContractAddress: *testContractAddress2,
+				TransactionID: testTxnID2a,
 			},
 		},
 	}
 
 	expectedReceipts := []*components.ReceiptInput{
 		{
-			ReceiptType:     components.RT_FailedWithMessage,
-			ContractAddress: testContractAddress1,
-			TransactionID:   testTxnID1,
-			FailureMessage:  testRevertReason1,
+			ReceiptType:    components.RT_FailedWithMessage,
+			TransactionID:  testTxnID1,
+			FailureMessage: testRevertReason1,
 		},
 		{
-			ReceiptType:     components.RT_FailedWithMessage,
-			ContractAddress: testContractAddress2,
-			TransactionID:   testTxnID2a,
-			FailureMessage:  testRevertReason2a,
+			ReceiptType:    components.RT_FailedWithMessage,
+			TransactionID:  testTxnID2a,
+			FailureMessage: testRevertReason2a,
 		},
 		{
-			ReceiptType:     components.RT_FailedWithMessage,
-			ContractAddress: testContractAddress2,
-			TransactionID:   testTxnID2b,
-			FailureMessage:  testRevertReason2b,
+			ReceiptType:    components.RT_FailedWithMessage,
+			TransactionID:  testTxnID2b,
+			FailureMessage: testRevertReason2b,
 		},
 	}
 

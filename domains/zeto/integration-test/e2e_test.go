@@ -109,7 +109,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	s.setupContractsAbi(t, ctx, tokenName)
 	var zetoAddress tktypes.EthAddress
 	rpcerr := s.rpc.CallRPC(ctx, &zetoAddress, "testbed_deploy",
-		s.domainName, &types.InitializerParams{
+		s.domainName, "me", &types.InitializerParams{
 			From:      controllerName,
 			TokenName: tokenName,
 		})
@@ -181,8 +181,7 @@ func (s *zetoDomainTestSuite) setupContractsAbi(t *testing.T, ctx context.Contex
 	}
 }
 
-func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthAddress, minter string, amounts []int64) (*tktypes.PrivateContractTransaction, error) {
-	var invokeResult tktypes.PrivateContractTransaction
+func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthAddress, minter string, amounts []int64) (invokeResult *testbed.TransactionResult, err error) {
 	var params []*types.TransferParamEntry
 	for _, amount := range amounts {
 		params = append(params, &types.TransferParamEntry{
@@ -197,7 +196,7 @@ func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthA
 	if err != nil {
 		return nil, err
 	}
-	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
 		From:     minter,
 		To:       tktypes.EthAddress(zetoAddress),
 		Function: *types.ZetoABI.Functions()["mint"],
@@ -206,11 +205,11 @@ func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthA
 	if rpcerr != nil {
 		return nil, rpcerr.Error()
 	}
-	return &invokeResult, nil
+	return invokeResult, nil
 }
 
-func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.EthAddress, sender string, receivers []string, amounts []int64) (*tktypes.PrivateContractTransaction, error) {
-	var invokeResult tktypes.PrivateContractTransaction
+func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.EthAddress, sender string, receivers []string, amounts []int64) (*testbed.TransactionResult, error) {
+	var invokeResult testbed.TransactionResult
 	var params []*types.TransferParamEntry
 	for i, receiver := range receivers {
 		params = append(params, &types.TransferParamEntry{
@@ -225,7 +224,7 @@ func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.
 	if err != nil {
 		return nil, err
 	}
-	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
 		From:     sender,
 		To:       tktypes.EthAddress(zetoAddress),
 		Function: *types.ZetoABI.Functions()["transfer"],

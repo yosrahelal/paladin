@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"time"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -41,6 +43,9 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
+//go:embed abis/ERC20Simple.json
+var ERC20SimpleBuildJSON []byte
+
 //go:embed abis/NotoTrackerERC20.json
 var NotoTrackerERC20BuildJSON []byte
 
@@ -54,7 +59,31 @@ func withTimeout[T any](do func(ctx context.Context) T) T {
 	return do(ctx)
 }
 
-var _ = Describe("controller", Ordered, func() {
+func testLog(message string, inserts ...any) {
+	log.L(context.Background()).Warnf(fmt.Sprintf("** TEST OUTPUT **: %s", message), inserts...)
+}
+
+func with18Decimals(x int64) *tktypes.HexUint256 {
+	bx := new(big.Int).Mul(
+		big.NewInt(x),
+		new(big.Int).Exp(big.NewInt(10), big.NewInt(18), big.NewInt(0)),
+	)
+	return (*tktypes.HexUint256)(bx)
+}
+
+func getJSONPropertyAs(jsonData tktypes.RawJSON, name string, toValue any) {
+	var mapProp map[string]tktypes.RawJSON
+	err := json.Unmarshal(jsonData, &mapProp)
+	if err != nil {
+		panic(fmt.Errorf("Unable to unmarshal %s", jsonData))
+	}
+	err = json.Unmarshal(mapProp[name], toValue)
+	if err != nil {
+		panic(fmt.Errorf("Unable to map %s to %T: %s", mapProp[name], toValue, err))
+	}
+}
+
+var _ = Describe("simple", Ordered, func() {
 	BeforeAll(func() {
 		log.SetLevel("warn")
 	})
@@ -128,7 +157,7 @@ var _ = Describe("controller", Ordered, func() {
 			Expect(deploy.Error()).To(BeNil())
 			Expect(deploy.Receipt().ContractAddress).ToNot(BeNil())
 			notoContract = deploy.Receipt().ContractAddress
-			log.L(ctx).Warnf("using the contract %s deployed by TX %s", notoContract, deploy.ID())
+			testLog("Noto (plain) contract %s deployed by TX %s", notoContract, deploy.ID())
 		})
 
 		var notoCoinSchemaID *tktypes.Bytes32
@@ -159,22 +188,15 @@ var _ = Describe("controller", Ordered, func() {
 				summary[ic] = fmt.Sprintf("%s...[%s]", c.ID.String()[0:8], c.Data.Amount.Int().Text(10))
 				balance = new(big.Int).Add(balance, c.Data.Amount.Int())
 			}
-			log.L(ctx).Warnf("%s@%s balance=%s coins:%v", identity, node, balance, summary)
+			testLog("%s@%s balance=%s coins:%v", identity, node, balance, summary)
 		}
 
-		var notoAmount = func(x int64) *tktypes.HexUint256 {
-			bx := new(big.Int).Mul(
-				big.NewInt(x),
-				new(big.Int).Exp(big.NewInt(10), big.NewInt(18), big.NewInt(0)),
-			)
-			return (*tktypes.HexUint256)(bx)
-		}
 		It("mints some notos to bob on node1", func() {
 			for _, amount := range []*tktypes.HexUint256{
-				notoAmount(15),
-				notoAmount(25), // 40
-				notoAmount(30), // 70
-				notoAmount(42), // 112
+				with18Decimals(15),
+				with18Decimals(25), // 40
+				with18Decimals(30), // 70
+				with18Decimals(42), // 112
 			} {
 				txn := rpc["node1"].ForABI(ctx, nototypes.NotoABI).
 					Private().
@@ -188,16 +210,16 @@ var _ = Describe("controller", Ordered, func() {
 					}).
 					Send().
 					Wait(5 * time.Second)
+				testLog("Noto mint transaction %s", txn.ID())
 				Expect(txn.Error()).To(BeNil())
-				log.L(ctx).Warnf("using the Noto coins minted in TX %s", txn.ID())
 				logWallet("bob", "node1")
 			}
 		})
 
 		It("sends some notos to sally on node2", func() {
 			for _, amount := range []*tktypes.HexUint256{
-				notoAmount(33), // 79
-				notoAmount(66), // 13
+				with18Decimals(33), // 79
+				with18Decimals(66), // 13
 			} {
 				txn := rpc["node1"].ForABI(ctx, nototypes.NotoABI).
 					Private().
@@ -211,25 +233,39 @@ var _ = Describe("controller", Ordered, func() {
 					}).
 					Send().
 					Wait(5 * time.Second)
+				testLog("Noto transfer transaction %s", txn.ID())
 				Expect(txn.Error()).To(BeNil())
-				log.L(ctx).Warnf("using the Noto coins minted in TX %s", txn.ID())
 				logWallet("bob", "node1")
 				logWallet("sally", "node2")
 			}
 		})
 
-		var penteContract *tktypes.EthAddress
+		It("sally on node2 sends some notos to fred on node3", func() {
+			txn := rpc["node2"].ForABI(ctx, nototypes.NotoABI).
+				Private().
+				Domain("noto").
+				Function("transfer").
+				To(notoContract).
+				From("sally@node2").
+				Inputs(&nototypes.TransferParams{
+					To:     "fred@node3",
+					Amount: with18Decimals(6),
+				}).
+				Send().
+				Wait(5 * time.Second)
+			testLog("Noto transfer transaction %s", txn.ID())
+			Expect(txn.Error()).To(BeNil())
+			logWallet("sally", "node2")
+			logWallet("fred", "node3")
+			testLog("done testing noto in isolation")
+		})
 
-		penteGroupABI := &abi.Parameter{
-			Name: "group", Type: "tuple", Components: abi.ParameterArray{
-				{Name: "salt", Type: "bytes32"},
-				{Name: "members", Type: "string[]"},
-			},
+		pentePrivGroupComps := abi.ParameterArray{
+			{Name: "salt", Type: "bytes32"},
+			{Name: "members", Type: "string[]"},
 		}
-
-		type penteGroupParams struct {
-			Salt    tktypes.Bytes32 `json:"salt"`
-			Members []string        `json:"members"`
+		penteGroupABI := &abi.Parameter{
+			Name: "group", Type: "tuple", Components: pentePrivGroupComps,
 		}
 
 		penteConstructorABI := &abi.Entry{
@@ -242,35 +278,90 @@ var _ = Describe("controller", Ordered, func() {
 		}
 
 		type penteConstructorParams struct {
-			Group                penteGroupParams `json:"group"`
-			EVMVersion           string           `json:"evmVersion"`
-			EndorsementType      string           `json:"endorsementType"`
-			ExternalCallsEnabled bool             `json:"externalCallsEnabled"`
+			Group                nototypes.PentePrivateGroup `json:"group"`
+			EVMVersion           string                      `json:"evmVersion"`
+			EndorsementType      string                      `json:"endorsementType"`
+			ExternalCallsEnabled bool                        `json:"externalCallsEnabled"`
 		}
 
-		notoTrackerDeployABI := &abi.Entry{
-			Type: abi.Function,
-			Name: "deploy",
-			Inputs: abi.ParameterArray{
-				penteGroupABI,
-				{Name: "bytecode", Type: "bytes"},
-				{Name: "inputs", Type: "tuple", Components: abi.ParameterArray{
-					{Name: "maxSupply", Type: "uint256"},
-				}},
+		// This works for both ERC20Simple and NotoTrackerERC20 when invoked via Pente
+		erc20PrivateABI := abi.ABI{
+			{
+				Type: abi.Function,
+				Name: "deploy",
+				Inputs: abi.ParameterArray{
+					penteGroupABI,
+					{Name: "bytecode", Type: "bytes"},
+					{Name: "inputs", Type: "tuple", Components: abi.ParameterArray{
+						{Name: "name", Type: "string"},
+						{Name: "symbol", Type: "string"},
+					}},
+				},
+			},
+			{
+				Type: abi.Function,
+				Name: "mint",
+				Inputs: abi.ParameterArray{
+					penteGroupABI,
+					{Name: "to", Type: "address"},
+					{Name: "inputs", Type: "tuple", Components: abi.ParameterArray{
+						{Name: "to", Type: "address"},
+						{Name: "amount", Type: "uint256"},
+					}},
+				},
+			},
+			{
+				Type: abi.Function,
+				Name: "transfer",
+				Inputs: abi.ParameterArray{
+					penteGroupABI,
+					{Name: "to", Type: "address"},
+					{Name: "inputs", Type: "tuple", Components: abi.ParameterArray{
+						{Name: "to", Type: "address"},
+						{Name: "value", Type: "uint256"},
+					}},
+				},
+			},
+			{
+				Type: abi.Function,
+				Name: "balanceOf",
+				Inputs: abi.ParameterArray{
+					penteGroupABI,
+					{Name: "to", Type: "address"},
+					{Name: "inputs", Type: "tuple", Components: abi.ParameterArray{
+						{Name: "account", Type: "address"},
+					}},
+				},
+				Outputs: abi.ParameterArray{
+					{Type: "uint256"},
+				},
 			},
 		}
 
 		type penteDeployParams struct {
-			Group    penteGroupParams `json:"group"`
-			Bytecode tktypes.HexBytes `json:"bytecode"`
-			Inputs   any              `json:"inputs"`
+			Group    nototypes.PentePrivateGroup `json:"group"`
+			Bytecode tktypes.HexBytes            `json:"bytecode"`
+			Inputs   any                         `json:"inputs"`
 		}
 
-		penteGroupNodes1and2 := penteGroupParams{
+		type penteInvokeParams struct {
+			Group  nototypes.PentePrivateGroup `json:"group"`
+			To     tktypes.EthAddress          `json:"to"`
+			Inputs any                         `json:"inputs"`
+		}
+
+		type penteReceipt struct {
+			Receipt struct {
+				ContractAddress *tktypes.EthAddress `json:"contractAddress"`
+			} `json:"receipt"`
+		}
+
+		penteGroupNodes1and2 := nototypes.PentePrivateGroup{
 			Salt:    tktypes.Bytes32(tktypes.RandBytes(32)), // unique salt must be shared privately to retain anonymity
 			Members: []string{"bob@node1", "sally@node2"},   // these will be salted to establish the endorsement key identifiers
 		}
 
+		var penteContract *tktypes.EthAddress
 		It("deploys a pente privacy group to node1 and node2, excluding node3", func() {
 
 			const ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES = "group_scoped_identities"
@@ -291,16 +382,186 @@ var _ = Describe("controller", Ordered, func() {
 			Expect(deploy.Error()).To(BeNil())
 			Expect(deploy.Receipt().ContractAddress).ToNot(BeNil())
 			penteContract = deploy.Receipt().ContractAddress
-			log.L(ctx).Warnf("using the Pente privacy group smart contract %s deployed by TX %s", penteContract, deploy.ID())
+			testLog("Pente privacy group %s (salt=%s) deployed by TX %s", penteContract, penteGroupNodes1and2.Salt, deploy.ID())
 		})
 
-		It("deploys a private smart contract into the privacy group", func() {
+		erc20Simple := solutils.MustLoadBuild(ERC20SimpleBuildJSON)
+		var erc20DeployID uuid.UUID
+		It("deploys a vanilla ERC-20 into the the privacy group with a minter/owner", func() {
+
+			deploy := rpc["node1"].ForABI(ctx, erc20PrivateABI).
+				Private().
+				Domain("pente").
+				To(penteContract).
+				Function("deploy").
+				Inputs(&penteDeployParams{
+					Group:    penteGroupNodes1and2,
+					Bytecode: erc20Simple.Bytecode,
+					Inputs: map[string]any{
+						"name":   "Stars",
+						"symbol": "STAR",
+					},
+				}).
+				From("seren@node1").
+				Send().
+				Wait(5 * time.Second)
+			testLog("Deployed SimpleERC20 contract into privacy group in transaction %s", deploy.ID())
+			Expect(deploy.Error()).To(BeNil())
+			erc20DeployID = deploy.ID()
+		})
+
+		var erc20StarsAddr *tktypes.EthAddress
+		It("requests the receipt from pente to get the contract address", func() {
+
+			domainReceiptJSON, err := rpc["node1"].PTX().GetDomainReceipt(ctx, "pente", erc20DeployID)
+			Expect(err).To(BeNil())
+			var pr penteReceipt
+			err = json.Unmarshal(domainReceiptJSON, &pr)
+			Expect(err).To(BeNil())
+			erc20StarsAddr = pr.Receipt.ContractAddress
+			testLog("SimpleERC20 contractAddress (within privacy group): %s", erc20StarsAddr)
+
+		})
+
+		getEthAddress := func(identity, node string) tktypes.EthAddress {
+			addr, err := rpc[node].PTX().ResolveVerifier(ctx, fmt.Sprintf("%s@%s", identity, node), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			Expect(err).To(BeNil())
+			return *tktypes.MustEthAddress(addr)
+		}
+		getERC20Balance := func(identity, node string) *tktypes.HexUint256 {
+			addr := getEthAddress(identity, node)
+			type ercBalanceOf struct {
+				Param0 *tktypes.HexUint256 `json:"0"`
+			}
+			var result ercBalanceOf
+			err := rpc[node].ForABI(ctx, erc20PrivateABI).
+				Private().
+				Domain("pente").
+				To(penteContract).
+				Function("balanceOf").
+				Inputs(&penteInvokeParams{
+					Group: penteGroupNodes1and2,
+					To:    *erc20StarsAddr,
+					Inputs: map[string]any{
+						"account": addr.String(),
+					},
+				}).
+				Outputs(&result).
+				From("seren@node1").
+				Call()
+			Expect(err).To(BeNil())
+			Expect(result).ToNot(BeNil())
+			return result.Param0
+		}
+
+		It("mints some ERC-20 inside the the privacy group", func() {
+
+			invoke := rpc["node1"].ForABI(ctx, erc20PrivateABI).
+				Private().
+				Domain("pente").
+				To(penteContract).
+				Function("mint").
+				Inputs(&penteInvokeParams{
+					Group: penteGroupNodes1and2,
+					To:    *erc20StarsAddr,
+					Inputs: map[string]any{
+						"to":     getEthAddress("seren", "node1"),
+						"amount": with18Decimals(1977),
+					},
+				}).
+				From("seren@node1").
+				Send().
+				Wait(5 * time.Second)
+			testLog("SimpleERC20 mint transaction %s", invoke.ID())
+			Expect(invoke.Error()).To(BeNil())
+
+		})
+
+		It("check ERC-20 balance of Seren", func() {
+
+			serenBalance := getERC20Balance("seren", "node1")
+			testLog("SimpleERC20 balance after mint to seren@node1: %s", serenBalance.Int())
+			Expect(serenBalance.String()).To(Equal(with18Decimals(1977).String()))
+
+		})
+
+		var erc20TransferID uuid.UUID
+		It("transfers some ERC-20 inside the the privacy group from seren@node1 to sally@node2", func() {
+
+			invoke := rpc["node1"].ForABI(ctx, erc20PrivateABI).
+				Private().
+				Domain("pente").
+				To(penteContract).
+				Function("transfer").
+				Inputs(&penteInvokeParams{
+					Group: penteGroupNodes1and2,
+					To:    *erc20StarsAddr,
+					Inputs: map[string]any{
+						"to":    getEthAddress("sally", "node2"),
+						"value": with18Decimals(42),
+					},
+				}).
+				From("seren@node1").
+				Send().
+				Wait(5 * time.Second)
+			testLog("SimpleERC20 mint transaction %s", invoke.ID())
+			Expect(invoke.Error()).To(BeNil())
+			erc20TransferID = invoke.ID()
+
+		})
+
+		decodePrivateEVMEvent := func(eventDef *abi.Entry, log *pldapi.PrivateEVMLog) string {
+			ethTopics := make([]ethtypes.HexBytes0xPrefix, len(log.Topics))
+			for i, t := range log.Topics {
+				ethTopics[i] = t[:]
+			}
+			cv, err := eventDef.DecodeEventDataCtx(ctx, ethTopics, ethtypes.HexBytes0xPrefix(log.Data))
+			Expect(err).To(BeNil())
+			b, err := tktypes.DefaultJSONFormatOptions.GetABISerializerIgnoreErrors(ctx).SerializeJSONCtx(ctx, cv)
+			Expect(err).To(BeNil())
+			return string(b)
+		}
+
+		It("waits for the receipt logs on node2", func() {
+			var penteReceiptJSON tktypes.RawJSON
+			Eventually(func() error {
+				var err error
+				penteReceiptJSON, err = rpc["node2"].PTX().GetDomainReceipt(ctx, "pente", erc20TransferID)
+				return err
+			}, "5s").Should(BeNil())
+			var penteReceipt *pldapi.PenteDomainReceipt
+			err := json.Unmarshal(penteReceiptJSON, &penteReceipt)
+			Expect(err).To(BeNil())
+
+			// Decode the transfer
+			erc20TransferABI := erc20Simple.ABI.Events()["Transfer"]
+			Expect(penteReceipt.Receipt.Logs).To(HaveLen(1))
+			transferEventJSON := decodePrivateEVMEvent(erc20TransferABI, penteReceipt.Receipt.Logs[0])
+			Expect(transferEventJSON).To(MatchJSON(fmt.Sprintf(`{
+				"from": "%s",
+				"to": "%s",
+				"value": "42000000000000000000"
+			}`, getEthAddress("seren", "node1"), getEthAddress("sally", "node2"))))
+		})
+
+		It("check ERC-20 balance of Seren and Sally", func() {
+
+			serenBalance := getERC20Balance("seren", "node1")
+			testLog("SimpleERC20 balance after mint to seren@node1: %s", serenBalance.Int())
+			Expect(serenBalance.String()).To(Equal(with18Decimals(1935).String()))
+
+			sallyBalance := getERC20Balance("sally", "node2")
+			testLog("SimpleERC20 balance after mint to seren@node1: %s", sallyBalance.Int())
+			Expect(sallyBalance.String()).To(Equal(with18Decimals(42).String()))
+
+		})
+
+		var notoTrackerDeployTX uuid.UUID
+		It("deploys a noto tracker smart contract into the privacy group", func() {
 
 			notoTracker := solutils.MustLoadBuild(NotoTrackerERC20BuildJSON)
 
-			type notoTrackerConstructorInputParams struct{}
-
-			deploy := rpc["node1"].ForABI(ctx, abi.ABI{notoTrackerDeployABI}).
+			deploy := rpc["node1"].ForABI(ctx, erc20PrivateABI).
 				Private().
 				Domain("pente").
 				To(penteContract).
@@ -308,14 +569,97 @@ var _ = Describe("controller", Ordered, func() {
 				Inputs(&penteDeployParams{
 					Group:    penteGroupNodes1and2,
 					Bytecode: notoTracker.Bytecode,
-					Inputs:   notoTrackerConstructorInputParams{},
+					Inputs: map[string]any{
+						"name":   "NOTO",
+						"symbol": "NOTO",
+					},
 				}).
-				From("random." + uuid.NewString()). // anyone can submit this by design
+				From(notary).
+				Send().
+				Wait(5 * time.Second)
+			testLog("Deployed NotoTrackerERC20 contract into privacy group in transaction %s", deploy.ID())
+			Expect(deploy.Error()).To(BeNil())
+			notoTrackerDeployTX = deploy.ID()
+		})
+
+		var notoTrackerAddr *tktypes.EthAddress
+		It("requests the receipt from pente to get the contract address", func() {
+
+			domainReceiptJSON, err := rpc["node1"].PTX().GetDomainReceipt(ctx, "pente", notoTrackerDeployTX)
+			Expect(err).To(BeNil())
+			var pr penteReceipt
+			err = json.Unmarshal(domainReceiptJSON, &pr)
+			Expect(err).To(BeNil())
+			notoTrackerAddr = pr.Receipt.ContractAddress
+			testLog("NotoTrackerERC20 contractAddress (within privacy group): %s", erc20StarsAddr)
+
+		})
+
+		var notoPenteContractAddr *tktypes.EthAddress
+		It("deploys a new noto using Pente smart contract as the notary", func() {
+			deploy := rpc["node1"].ForABI(ctx, abi.ABI{
+				{Type: abi.Constructor, Inputs: abi.ParameterArray{
+					{Name: "notary", Type: "string"},
+					{Name: "hooks", Type: "tuple", Components: abi.ParameterArray{
+						{Name: "publicAddress", Type: "string"},
+						{Name: "privateAddress", Type: "string"},
+						{Name: "privateGroup", Type: "tuple", Components: pentePrivGroupComps},
+					}},
+				}},
+			}).
+				Private().
+				Domain("noto").
+				Constructor().
+				From(notary).
+				Inputs(&nototypes.ConstructorParams{
+					Notary: notary,
+					Hooks: &nototypes.HookParams{
+						PublicAddress:  penteContract,
+						PrivateAddress: notoTrackerAddr,
+						PrivateGroup:   &penteGroupNodes1and2,
+					},
+				}).
 				Send().
 				Wait(5 * time.Second)
 			Expect(deploy.Error()).To(BeNil())
-			log.L(ctx).Warnf("using the Pente contract %s deployed into the privacy group in TX %s", "[address needs domain-level receipt/logs]", deploy.ID())
+			Expect(deploy.Receipt().ContractAddress).ToNot(BeNil())
+			notoPenteContractAddr = deploy.Receipt().ContractAddress
+			testLog("Combined Noto<->Pente contract %s deployed by TX %s", notoPenteContractAddr, deploy.ID())
 		})
 
+		It("mints some noto-pentes to bob on node1", func() {
+			txn := rpc["node1"].ForABI(ctx, nototypes.NotoABI).
+				Private().
+				Domain("noto").
+				Function("mint").
+				To(notoPenteContractAddr).
+				From(notary).
+				Inputs(&nototypes.MintParams{
+					To:     "bob@node1",
+					Amount: with18Decimals(99),
+				}).
+				Send().
+				Wait(5 * time.Second)
+			Expect(txn.Error()).To(BeNil())
+			testLog("Noto<->Pente mint transaction %s", txn.ID())
+			logWallet("bob", "node1")
+		})
+
+		It("prepares a transfer for some noto-pentes from bob to sally, without submitting to the chain", func() {
+			prepared := rpc["node1"].ForABI(ctx, nototypes.NotoABI).
+				Private().
+				Domain("noto").
+				Function("transfer").
+				To(notoPenteContractAddr).
+				From("bob@node1").
+				Inputs(&nototypes.MintParams{
+					To:     "sally@node2",
+					Amount: with18Decimals(13),
+				}).
+				Prepare().
+				Wait(5 * time.Second)
+			Expect(prepared.Error()).To(BeNil())
+			testLog("Noto<->Pente prepared transaction original TX id=%s prepared TX idempotencyKey=%v", prepared.ID(), prepared.PreparedTransaction().Transaction.IdempotencyKey)
+		})
 	})
 })

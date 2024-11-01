@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
@@ -43,7 +44,7 @@ func TestResolveFunctionABIAndDef(t *testing.T) {
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:         pldapi.TransactionTypePublic.Enum(),
 			ABIReference: confutil.P(tktypes.Bytes32(tktypes.RandBytes(32))),
 		},
@@ -57,7 +58,7 @@ func TestResolveFunctionNoABI(t *testing.T) {
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
@@ -71,7 +72,7 @@ func TestResolveFunctionBadABI(t *testing.T) {
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
@@ -81,10 +82,8 @@ func TestResolveFunctionBadABI(t *testing.T) {
 }
 
 func mockInsertABI(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectCommit()
+	mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 }
 
 func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
@@ -92,7 +91,7 @@ func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: "doIt",
 		},
@@ -102,10 +101,8 @@ func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
 }
 
 func mockInsertABIAndTransactionOK(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectCommit()
+	mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectCommit()
@@ -159,10 +156,8 @@ func mockGetPublicTransactionForHash(cb func(hash tktypes.Bytes32) (*pldapi.Publ
 
 func TestSubmitBadFromAddr(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectCommit()
+		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
 			Return(nil, fmt.Errorf("bad address"))
 	})
@@ -173,7 +168,7 @@ func TestSubmitBadFromAddr(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
@@ -197,7 +192,7 @@ func TestResolveFunctionHexInputOK(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
@@ -216,7 +211,7 @@ func TestResolveFunctionHexInputFail(t *testing.T) {
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -234,7 +229,7 @@ func TestResolveFunctionUnsupportedInput(t *testing.T) {
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -258,7 +253,7 @@ func TestResolveFunctionPlainNameOK(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			From:     "sender1",
 			Function: "doIt",
@@ -272,7 +267,7 @@ func TestResolveFunctionPlainNameOK(t *testing.T) {
 
 func TestSendTransactionPrivateDeploy(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleDeployTx", mock.Anything, mock.Anything).Return(nil)
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
 	})
 	defer done()
 
@@ -281,7 +276,7 @@ func TestSendTransactionPrivateDeploy(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:   pldapi.TransactionTypePrivate.Enum(),
 			Domain: "domain1",
 			Data:   tktypes.JSONString(tktypes.HexBytes(callData)),
@@ -302,7 +297,7 @@ func TestSendTransactionPrivateInvoke(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePrivate.Enum(),
 			Domain:   "domain1",
 			Function: "doIt",
@@ -325,7 +320,7 @@ func TestSendTransactionPrivateInvokeFail(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePrivate.Enum(),
 			Domain:   "domain1",
 			Function: "doIt",
@@ -350,7 +345,7 @@ func TestResolveFunctionOnlyOneToMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "sender1",
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -373,7 +368,7 @@ func TestResolveFunctionOnlyDuplicateMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
@@ -394,7 +389,7 @@ func TestResolveFunctionNoMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: "nope",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -416,7 +411,7 @@ func TestParseInputsBadTxType(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
 		},
@@ -436,7 +431,7 @@ func TestParseInputsBytecodeNonConstructor(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
@@ -458,7 +453,7 @@ func TestParseInputsBytecodeMissingConstructor(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
 		},
@@ -476,7 +471,7 @@ func TestParseInputsBadDataJSON(t *testing.T) {
 	}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.RawJSON(`{!!! bad json`),
@@ -495,7 +490,7 @@ func TestParseInputsBadDataForFunction(t *testing.T) {
 	}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.RawJSON(`["not a number"]`),
@@ -514,7 +509,7 @@ func TestParseInputsBadByteString(t *testing.T) {
 	}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.RawJSON(`"not hex"`),
@@ -534,10 +529,8 @@ func mockPublicSubmitTxRollback(t *testing.T) func(conf *pldconf.TxManagerConfig
 }
 func TestInsertTransactionFail(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectCommit()
+		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnError(fmt.Errorf("pop"))
 		mc.db.ExpectRollback()
@@ -551,7 +544,7 @@ func TestInsertTransactionFail(t *testing.T) {
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
@@ -583,7 +576,7 @@ func TestInsertTransactionPublicTxPrepareFail(t *testing.T) {
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
@@ -606,7 +599,7 @@ func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
 
 	// Default public constructor invoke - no ABI or data
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "sender1",
 		},
@@ -625,7 +618,7 @@ func TestInsertTransactionOkDefaultConstructor(t *testing.T) {
 
 	// Default public constructor invoke
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "sender1",
 		},
@@ -642,7 +635,7 @@ func TestCheckIdempotencyKeyNoOverrideErrIfFail(t *testing.T) {
 	defer done()
 
 	// Default public constructor invoke
-	err := txm.checkIdempotencyKeys(ctx, fmt.Errorf("pop"), false, []*pldapi.TransactionInput{{Transaction: pldapi.Transaction{
+	err := txm.checkIdempotencyKeys(ctx, fmt.Errorf("pop"), false, []*pldapi.TransactionInput{{TransactionBase: pldapi.TransactionBase{
 		IdempotencyKey: "idem1",
 	}}})
 	assert.Regexp(t, "pop", err)
@@ -747,21 +740,202 @@ func TestCallTransactionBadTX(t *testing.T) {
 
 }
 
-func TestCallTransactionPrivNotSupported(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+func TestCallTransactionPrivOk(t *testing.T) {
+	fnDef := &abi.Entry{Name: "getSpins", Type: abi.Function,
+		Inputs: abi.ParameterArray{
+			{Name: "wheel", Type: "string"},
+		},
+		Outputs: abi.ParameterArray{
+			{Name: "spins", Type: "uint256"},
+		},
+	}
+
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		res, err := fnDef.Outputs.ParseJSON([]byte(`{"spins": 42}`))
+		require.NoError(t, err)
+
+		mc.privateTxMgr.On("CallPrivateSmartContract", mock.Anything, mock.Anything).
+			Return(res, nil)
+	})
 	defer done()
 
-	tx := pldclient.New().ForABI(ctx, abi.ABI{{Name: "getSpins", Type: abi.Function}}).
+	tx := pldclient.New().ForABI(ctx, abi.ABI{fnDef}).
 		Function("getSpins").
 		Private().
 		Domain("test1").
 		To(tktypes.RandAddress()).
 		Inputs(map[string]any{"wheel": "of fortune"}).
+		DataFormat("mode=array&number=json-number").
 		BuildTX()
 	require.NoError(t, tx.Error())
 
-	var result any
+	var result tktypes.RawJSON
 	err := txm.CallTransaction(ctx, &result, tx.CallTX())
-	require.Regexp(t, "PD012221", err)
+	require.NoError(t, err)
+	require.JSONEq(t, `[42]`, result.Pretty())
+
+}
+
+func TestCallTransactionPrivFail(t *testing.T) {
+	fnDef := &abi.Entry{Name: "ohSnap", Type: abi.Function}
+
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.privateTxMgr.On("CallPrivateSmartContract", mock.Anything, mock.Anything).
+			Return(nil, fmt.Errorf("snap"))
+	})
+	defer done()
+
+	tx := pldclient.New().ForABI(ctx, abi.ABI{fnDef}).
+		Function("ohSnap").
+		Private().
+		Domain("test1").
+		To(tktypes.RandAddress()).
+		BuildTX()
+	require.NoError(t, tx.Error())
+
+	var result tktypes.RawJSON
+	err := txm.CallTransaction(ctx, &result, tx.CallTX())
+	assert.Regexp(t, "snap", err)
+
+}
+
+func TestCallTransactionPrivMissingTo(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	defer done()
+
+	err := txm.CallTransaction(ctx, nil, &pldapi.TransactionCall{
+		TransactionInput: pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type: pldapi.TransactionTypePrivate.Enum(),
+			},
+		},
+	})
+	assert.Regexp(t, "PD012222", err)
+
+}
+
+func TestCallTransactionBadSerializer(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	defer done()
+
+	err := txm.CallTransaction(ctx, nil, &pldapi.TransactionCall{
+		TransactionInput: pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type: pldapi.TransactionTypePrivate.Enum(),
+			},
+		},
+		DataFormat: "wrong",
+	})
+	assert.Regexp(t, "PD020015", err)
+
+}
+
+var testInternalTransactionFn = &abi.Entry{Type: abi.Function, Name: "doStuff"}
+
+func newTestInternalTransaction(idempotencyKey string) *pldapi.TransactionInput {
+	return &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			Domain:         "domain1",
+			Function:       "doStuff",
+			To:             tktypes.RandAddress(),
+			IdempotencyKey: idempotencyKey,
+		},
+		ABI: abi.ABI{testInternalTransactionFn},
+	}
+}
+
+func TestInternalPrivateTXInsertWithIdempotencyKeys(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, true)
+	defer done()
+
+	fifteenTxns := make([]*components.ValidatedTransaction, 15)
+	err := txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		for i := range fifteenTxns {
+			tx := newTestInternalTransaction(fmt.Sprintf("tx_%.3d", i))
+			fifteenTxns[i], err = txm.PrepareInternalPrivateTransaction(ctx, dbTX, tx, pldapi.SubmitModeAuto)
+			require.NoError(t, err)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Insert first 10 in a Txn
+	err = txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		return txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, fifteenTxns[0:10])
+	})
+	require.NoError(t, err)
+
+	// Insert 5-15 in the second txn so with an overlap
+	err = txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		return txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, fifteenTxns[5:15])
+	})
+	require.NoError(t, err)
+
+	// Check we can get each back
+	for _, expected := range fifteenTxns {
+		tx, err := txm.GetTransactionByID(ctx, *expected.Transaction.ID)
+		require.NoError(t, err)
+		require.Equal(t, expected.Transaction.IdempotencyKey, tx.IdempotencyKey)
+	}
+
+}
+
+func TestPrepareInternalPrivateTransactionNoIdempotencyKey(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false)
+	defer done()
+
+	_, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), &pldapi.TransactionInput{}, pldapi.SubmitModeAuto)
+	assert.Regexp(t, "PD012223", err)
+
+}
+
+func TestUpsertInternalPrivateTxsFinalizeIDsInsertFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*transactions").WillReturnError(fmt.Errorf("pop"))
+	})
+	defer done()
+
+	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
+	require.NoError(t, err)
+
+	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestUpsertInternalPrivateTxsIdempotencyKeyFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows) // empty result when we expect one
+		mc.db.ExpectQuery("SELECT.*transactions").WillReturnError(fmt.Errorf("pop"))
+	})
+	defer done()
+
+	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
+	require.NoError(t, err)
+
+	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestUpsertInternalPrivateTxsIdempotencyMisMatch(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)      // empty result when we expect one
+		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(mc.db.NewRows([]string{})) // definitely should get one
+	})
+	defer done()
+
+	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
+	require.NoError(t, err)
+
+	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
+	assert.Regexp(t, "PD012224", err)
 
 }

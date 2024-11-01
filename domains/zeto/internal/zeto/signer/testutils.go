@@ -73,7 +73,7 @@ func NewTestProver(t *testing.T) signerapi.InMemorySigner {
 	}
 	prover.circuitLoader = testCircuitLoader
 
-	testProofGenerator := func(witness []byte, provingKey []byte) (*types.ZKProof, error) {
+	testProofGenerator := func(ctx context.Context, witness []byte, provingKey []byte) (*types.ZKProof, error) {
 		return &types.ZKProof{
 			Proof: &types.ProofData{
 				A:        []string{"a"},
