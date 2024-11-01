@@ -27,6 +27,7 @@ import { ViewDetailsDialog } from "../dialogs/ViewDetails";
 import { IPaladinTransaction, ITransaction, ITransactionReceipt } from "../interfaces";
 import { EllapsedTime } from "./EllapsedTime";
 import { Hash } from "./Hash";
+import { Captions, HashIcon } from 'lucide-react';
 
 type Props = {
   transaction: ITransaction
@@ -37,18 +38,18 @@ type Props = {
 daysjs.extend(relativeTime);
 
 export const Transaction: React.FC<Props> = ({
-    transaction,
-    paladinTransactions,
-    transactionReceipts,
-  }) => {
+  transaction,
+  paladinTransactions,
+  transactionReceipts,
+}) => {
 
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
   const receiptCount = (transactionReceipts && transactionReceipts.length) ? transactionReceipts.length : 0;
   const receiptIsPrivate = (transactionReceipts && transactionReceipts.length && transactionReceipts[0].domain !== '');
-  const typeKey = 
+  const typeKey =
     receiptCount > 1 ? 'atomicNumber' :
-    receiptIsPrivate ? 'private' :
-    'public';
+      receiptIsPrivate ? 'private' :
+        'public';
 
   return (
     <>
@@ -80,12 +81,12 @@ export const Transaction: React.FC<Props> = ({
                   <Typography align="center" variant="h6" color="textPrimary">{t(typeKey, { number: receiptCount })}</Typography>
                   <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
                 </Grid2>
-              : receiptCount ?
-              <Grid2>
-              <Typography align="center" variant="h6" color="textPrimary">{t('receipt')}</Typography>
-              <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
-            </Grid2>
-          : undefined
+                : receiptCount ?
+                  <Grid2>
+                    <Typography align="center" variant="h6" color="textPrimary">{t('receipt')}</Typography>
+                    <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
+                  </Grid2>
+                  : undefined
               }
               <Grid2 sx={{ textAlign: 'center' }} alignContent="center">
                 {transaction.result === 'success' ? <CheckCircleOutlineIcon color="primary" /> : <ErrorOutlineIcon color="error" />}
@@ -99,22 +100,22 @@ export const Transaction: React.FC<Props> = ({
             {transaction.contractAddress ?
               <>
                 <Grid2 size={{ xs: 12, sm: 4 }}>
-                  <Hash title={t('hash')} hash={transaction.hash} />
+                  <Hash Icon={<Captions size="18px" />} title={t('hash')} hash={transaction.hash} />
                 </Grid2>
                 <Grid2 size={{ xs: 12, sm: 4 }}>
-                  <Hash title={t('from')} hash={transaction.from} />
+                  <Hash Icon={<Captions size="18px"/>} title={t('from')} hash={transaction.from} />
                 </Grid2>
                 <Grid2 size={{ xs: 12, sm: 4 }}>
-                  <Hash title={t('contract')} hash={transaction.contractAddress} />
+                  <Hash Icon={<Captions size="18px"/>} title={t('contract')} hash={transaction.contractAddress} />
                 </Grid2>
               </>
               :
               <>
                 <Grid2 size={{ xs: 12, sm: 6 }}>
-                  <Hash title={t('hash')} hash={transaction.hash} />
+                  <Hash Icon={<HashIcon size="18px" />} title={t('hash')} hash={transaction.hash} />
                 </Grid2>
                 <Grid2 size={{ xs: 12, sm: 6 }}>
-                  <Hash title={t('from')} hash={transaction.from} />
+                  <Hash Icon={<Captions size="18px"/>} title={t('from')} hash={transaction.from} />
                 </Grid2>
               </>
             }

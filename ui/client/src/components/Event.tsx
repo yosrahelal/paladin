@@ -22,6 +22,7 @@ import { EllapsedTime } from "./EllapsedTime";
 import VisibilityIcon from '@mui/icons-material/VisibilityOutlined';
 import { useState } from "react";
 import { ViewDetailsDialog } from "../dialogs/ViewDetails";
+import { HashIcon, Radio } from 'lucide-react';
 
 type Props = {
   event: IEvent
@@ -58,10 +59,10 @@ export const Event: React.FC<Props> = ({ event }) => {
         <Box sx={{ padding: '10px', paddingBottom: '20px' }}>
           <Grid2 container justifyContent="space-evenly" spacing={2}>
             <Grid2 size={{ xs: 6 }}>
-              <Hash title={t('transactionHash')} hash={event.transactionHash} />
+              <Hash Icon={<HashIcon size="18px"/>} title={t('transactionHash')} hash={event.transactionHash} />
             </Grid2>
             <Grid2 size={{ xs: 6 }}>
-              <Hash title={t('signature')} hash={event.signature} />
+              <Hash Icon={<Radio size="18px"/>} title={t('signature')} hash={event.signature} />
             </Grid2>
           </Grid2>
         </Box>
