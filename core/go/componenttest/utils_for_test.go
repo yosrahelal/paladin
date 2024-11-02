@@ -506,7 +506,7 @@ func (p *partyForTesting) deploySimpleStorageDomainInstanceContract(t *testing.T
 
 	err := p.client.CallRPC(context.Background(), &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleStorageConstructorABI(endorsementMode),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:   pldapi.TransactionTypePrivate.Enum(),
 			Domain: "simpleStorageDomain",
 			From:   p.identity,

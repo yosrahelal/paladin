@@ -823,7 +823,7 @@ func TestSingleNodeSelfEndorseConcurrentSpends(t *testing.T) {
 	var dplyTxID uuid.UUID
 	err := rpcClient.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenConstructorABI(domains.SelfEndorsement),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			IdempotencyKey: "deploy1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
@@ -863,7 +863,7 @@ func TestSingleNodeSelfEndorseConcurrentSpends(t *testing.T) {
 		var txID uuid.UUID
 		err = rpcClient.CallRPC(ctx, &txID, "ptx_sendTransaction", &pldapi.TransactionInput{
 			ABI: *domains.SimpleTokenTransferABI(),
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				To:             contractAddress,
 				Domain:         "domain1",
 				IdempotencyKey: tktypes.RandHex(8),
@@ -906,7 +906,7 @@ func TestSingleNodeSelfEndorseConcurrentSpends(t *testing.T) {
 		var txID uuid.UUID
 		err = rpcClient.CallRPC(ctx, &txID, "ptx_sendTransaction", &pldapi.TransactionInput{
 			ABI: *domains.SimpleTokenTransferABI(),
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				To:             contractAddress,
 				Domain:         "domain1",
 				IdempotencyKey: tktypes.RandHex(8),
@@ -954,7 +954,7 @@ func TestSingleNodeSelfEndorseSeriesOfTransfers(t *testing.T) {
 	var dplyTxID uuid.UUID
 	err = rpcClient.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenConstructorABI(domains.SelfEndorsement),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			IdempotencyKey: "deploy1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
@@ -993,7 +993,7 @@ func TestSingleNodeSelfEndorseSeriesOfTransfers(t *testing.T) {
 	var tx1ID uuid.UUID
 	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "tx1",
@@ -1014,7 +1014,7 @@ func TestSingleNodeSelfEndorseSeriesOfTransfers(t *testing.T) {
 	var tx2ID uuid.UUID
 	err = rpcClient.CallRPC(ctx, &tx2ID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "tx2",
@@ -1035,7 +1035,7 @@ func TestSingleNodeSelfEndorseSeriesOfTransfers(t *testing.T) {
 	var tx3ID uuid.UUID
 	err = rpcClient.CallRPC(ctx, &tx3ID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "tx3",
@@ -1105,7 +1105,7 @@ func TestNotaryEndorseConcurrentSpends(t *testing.T) {
 	var dplyTxID uuid.UUID
 	err := client3.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenConstructorABI(domains.NotaryEndorsement),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			IdempotencyKey: "deploy1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
@@ -1139,7 +1139,7 @@ func TestNotaryEndorseConcurrentSpends(t *testing.T) {
 		var txID uuid.UUID
 		err = client3.CallRPC(ctx, &txID, "ptx_sendTransaction", &pldapi.TransactionInput{
 			ABI: *domains.SimpleTokenTransferABI(),
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				To:             contractAddress,
 				Domain:         "domain1",
 				IdempotencyKey: tktypes.RandHex(8),
@@ -1182,7 +1182,7 @@ func TestNotaryEndorseConcurrentSpends(t *testing.T) {
 		var txID uuid.UUID
 		err = client1.CallRPC(ctx, &txID, "ptx_sendTransaction", &pldapi.TransactionInput{
 			ABI: *domains.SimpleTokenTransferABI(),
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				To:             contractAddress,
 				Domain:         "domain1",
 				IdempotencyKey: tktypes.RandHex(8),
@@ -1244,7 +1244,7 @@ func TestNotaryEndorseSeriesOfTransfers(t *testing.T) {
 	var dplyTxID uuid.UUID
 	err := client3.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenConstructorABI(domains.NotaryEndorsement),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			IdempotencyKey: "deploy1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
@@ -1273,7 +1273,7 @@ func TestNotaryEndorseSeriesOfTransfers(t *testing.T) {
 	var mintTxID uuid.UUID
 	err = client3.CallRPC(ctx, &mintTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "tx1-mint",
@@ -1294,7 +1294,7 @@ func TestNotaryEndorseSeriesOfTransfers(t *testing.T) {
 	var transferA2B1TxId uuid.UUID
 	err = client1.CallRPC(ctx, &transferA2B1TxId, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "transferA2B1",
@@ -1315,7 +1315,7 @@ func TestNotaryEndorseSeriesOfTransfers(t *testing.T) {
 	var transferB2A1TxId uuid.UUID
 	err = client2.CallRPC(ctx, &transferB2A1TxId, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "transferB2A1",
@@ -1336,7 +1336,7 @@ func TestNotaryEndorseSeriesOfTransfers(t *testing.T) {
 	var transferA2B2TxId uuid.UUID
 	err = client1.CallRPC(ctx, &transferA2B2TxId, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "transferA2B2",
@@ -1445,10 +1445,10 @@ func TestPrivacyGroupEndorsement(t *testing.T) {
 	// this should require endorsement from bob and carol
 	var aliceTxID uuid.UUID
 	err := alice.client.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
-		ABI: *domains.SimpleTokenTransferABI(),
+		ABI: *domains.SimpleStorageSetABI(),
 		TransactionBase: pldapi.TransactionBase{
 			To:             contractAddress,
-			Domain:         "domain1",
+			Domain:         "simpleStorageDomain",
 			IdempotencyKey: "tx1-alice",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           alice.identity,
@@ -1473,9 +1473,9 @@ func TestPrivacyGroupEndorsement(t *testing.T) {
 	var bobTxID uuid.UUID
 	err = bob.client.CallRPC(ctx, &bobTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleStorageSetABI(),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			To:             contractAddress,
-			Domain:         "domain1",
+			Domain:         "simpleStorageDomain",
 			IdempotencyKey: "tx1-bob",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           bob.identity,

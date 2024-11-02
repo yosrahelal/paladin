@@ -449,7 +449,7 @@ func (tf *transactionFlow) requestSignature(ctx context.Context, attRequest *pro
 
 	unqualifiedLookup := partyName
 	signerNode, err := tktypes.PrivateIdentityLocator(partyName).Node(ctx, true)
-	if signerNode != "" && signerNode != tf.nodeID {
+	if signerNode != "" && signerNode != tf.nodeName {
 		log.L(ctx).Debugf("Requesting signature from a remote identity %s for %s", partyName, attRequest.Name)
 		err = i18n.NewError(ctx, msgs.MsgPrivateTxManagerSignRemoteError, partyName)
 	}
