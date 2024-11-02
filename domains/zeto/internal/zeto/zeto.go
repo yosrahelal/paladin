@@ -19,12 +19,15 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
@@ -151,10 +154,15 @@ func (z *Zeto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (
 	z.coinSchema = req.AbiStateSchemas[0]
 	z.merkleTreeRootSchema = req.AbiStateSchemas[1]
 	z.merkleTreeNodeSchema = req.AbiStateSchemas[2]
+
 	return &prototk.InitDomainResponse{}, nil
 }
 
 func (z *Zeto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
+	_, err := z.validateDeploy(req.Transaction)
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateInitDeployParams, err)
+	}
 	return &prototk.InitDeployResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
@@ -405,14 +413,39 @@ func (z *Zeto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest)
 	}, nil
 }
 
+func intTo32ByteSlice(bigInt *big.Int) (res []byte) {
+	return bigInt.FillBytes(make([]byte, 32))
+}
+
 func (z *Zeto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.SignResponse, error) {
-	proof, err := z.snarkProver.Sign(ctx, req.Algorithm, req.PayloadType, req.PrivateKey, req.Payload)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorSign, err)
+	switch req.PayloadType {
+	case zetosignerapi.PAYLOAD_DOMAIN_ZETO_NULLIFIER:
+		var coin *types.ZetoCoin
+		var hashInt *big.Int
+		keyPair, err := signer.NewBabyJubJubPrivateKey(req.PrivateKey)
+		if err == nil {
+			err = json.Unmarshal(req.Payload, &coin)
+		}
+		if err == nil {
+			hashInt, err = signer.CalculateNullifier(coin.Amount.Int(), coin.Salt.Int(), babyjub.SkToBigInt(keyPair))
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgNullifierGenerationFailed)
+		}
+		return &prototk.SignResponse{
+			Payload: intTo32ByteSlice(hashInt),
+		}, nil
+	case zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK:
+		proof, err := z.snarkProver.Sign(ctx, req.Algorithm, req.PayloadType, req.PrivateKey, req.Payload)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorSign, err)
+		}
+		return &prototk.SignResponse{
+			Payload: proof,
+		}, nil
+	default:
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownSignPayload, req.PayloadType)
 	}
-	return &prototk.SignResponse{
-		Payload: proof,
-	}, nil
 }
 
 func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {

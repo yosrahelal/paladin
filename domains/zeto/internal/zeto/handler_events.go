@@ -8,6 +8,7 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -33,6 +34,12 @@ func (z *Zeto) handleMintEvent(ctx context.Context, tree core.SparseMerkleTree, 
 			if err != nil {
 				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOMint", err)
 			}
+
+			// TODO: REMOVE THIS HACK
+			// The zeto GO SDK on init resets the logrus logging config of the whole go environment.
+			// In the testbed tests, this means disabling DEBUG logging back to INFO, and breaking the formatting
+			log.InitConfig(&pldconf.LogConfig{})
+			log.SetLevel("debug")
 		}
 	} else {
 		log.L(ctx).Errorf("Failed to unmarshal mint event: %s", err)

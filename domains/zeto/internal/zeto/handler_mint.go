@@ -76,7 +76,8 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
 	params := tx.Params.([]*types.TransferParamEntry)
 
-	_, outputStates, err := h.zeto.prepareOutputs(ctx, params, req.ResolvedVerifiers)
+	useNullifiers := isNullifiersToken(tx.DomainConfig.TokenName)
+	_, outputStates, err := h.zeto.prepareOutputs(ctx, useNullifiers, params, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}

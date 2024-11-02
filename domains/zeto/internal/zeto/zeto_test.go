@@ -378,8 +378,9 @@ func TestFindCoins(t *testing.T) {
 	z.coinSchema = &prototk.StateSchema{
 		Id: "coin",
 	}
+	useNullifiers := false
 	addr, _ := tktypes.ParseEthAddress("0x1234567890123456789012345678901234567890")
-	_, err := findCoins(context.Background(), z, addr, "{}")
+	_, err := findCoins(context.Background(), z, useNullifiers, addr, "{}")
 	assert.EqualError(t, err, "find coins error")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
@@ -391,7 +392,7 @@ func TestFindCoins(t *testing.T) {
 			},
 		}, nil
 	}
-	res, err := findCoins(context.Background(), z, addr, "{}")
+	res, err := findCoins(context.Background(), z, useNullifiers, addr, "{}")
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 }
@@ -519,9 +520,16 @@ func TestSign(t *testing.T) {
 	z.snarkProver = snarkProver
 
 	req := &prototk.SignRequest{
-		Algorithm: "bad algo",
+		PayloadType: "bad payload",
 	}
 	_, err := z.Sign(context.Background(), req)
+	assert.ErrorContains(t, err, "PD210103: Sign payload type 'bad payload' not recognized")
+
+	req = &prototk.SignRequest{
+		PayloadType: "domain:zeto:snark",
+		Algorithm:   "bad algo",
+	}
+	_, err = z.Sign(context.Background(), req)
 	assert.ErrorContains(t, err, "PD210023: Failed to sign. PD210088: 'bad algo' does not match supported algorithm")
 
 	bytes, err := hex.DecodeString("7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
@@ -568,6 +576,24 @@ func TestSign(t *testing.T) {
 	res, err := z.Sign(context.Background(), req)
 	assert.NoError(t, err)
 	assert.Len(t, res.Payload, 36)
+
+	// Test with nullifiers
+	salt := crypto.NewSalt()
+	fakeCoin := types.ZetoCoin{
+		Salt:     (*tktypes.HexUint256)(salt),
+		Owner:    "Alice",
+		OwnerKey: tktypes.MustParseHexBytes(alicePubKey),
+		Amount:   tktypes.Int64ToInt256(12345),
+	}
+	req = &prototk.SignRequest{
+		Algorithm:   z.getAlgoZetoSnarkBJJ(),
+		PayloadType: "domain:zeto:nullifier",
+		PrivateKey:  bytes,
+		Payload:     tktypes.JSONString(fakeCoin),
+	}
+	res, err = z.Sign(context.Background(), req)
+	assert.NoError(t, err)
+	assert.Len(t, res.Payload, 32)
 }
 
 func TestValidateStateHashes(t *testing.T) {
@@ -603,8 +629,8 @@ func TestValidateStateHashes(t *testing.T) {
 	assert.Len(t, res.StateIds, 1)
 }
 
-func findCoins(ctx context.Context, z *Zeto, contractAddress *tktypes.EthAddress, query string) ([]*types.ZetoCoin, error) {
-	states, err := z.findAvailableStates(ctx, contractAddress.String(), query)
+func findCoins(ctx context.Context, z *Zeto, useNullifiers bool, contractAddress *tktypes.EthAddress, query string) ([]*types.ZetoCoin, error) {
+	states, err := z.findAvailableStates(ctx, useNullifiers, contractAddress.String(), query)
 	if err != nil {
 		return nil, err
 	}

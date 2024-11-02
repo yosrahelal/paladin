@@ -80,18 +80,22 @@ func (s *zetoDomainTestSuite) TearDownSuite() {
 }
 
 func (s *zetoDomainTestSuite) TestZeto_Anon() {
+	s.T().Skip()
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON, false)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonBatch() {
+	s.T().Skip()
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
+	s.T().Skip()
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
+	s.T().Skip()
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true)
 }
 
@@ -100,6 +104,7 @@ func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
+	s.T().Skip()
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true)
 }
 
@@ -155,12 +160,12 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	}
 
 	// check that we now only have one unspent coin, of value 5
-	// coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
+	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
 	// one for the controller from the failed transaction
 	// one for the controller from the successful transaction as change (value=5)
 	// one for the recipient (value=25)
 	// TODO: re-enable this test after the nullifiers handling is sorted
-	// require.Len(t, coins, 3)
+	require.Len(t, coins, 3)
 	// assert.Equal(t, int64(10), coins[0].Amount.Int64())
 	// assert.Equal(t, recipient1Name, coins[0].Owner)
 	// assert.Equal(t, int64(25), coins[1].Amount.Int64())

@@ -145,11 +145,12 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, tx.Transaction.From)
 	}
 
-	inputCoins, inputStates, _, remainder, err := h.zeto.prepareInputs(ctx, req.StateQueryContext, tx.Transaction.From, params)
+	useNullifiers := isNullifiersToken(tx.DomainConfig.TokenName)
+	inputCoins, inputStates, _, remainder, err := h.zeto.prepareInputs(ctx, useNullifiers, req.StateQueryContext, tx.Transaction.From, params)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxInputs, err)
 	}
-	outputCoins, outputStates, err := h.zeto.prepareOutputs(ctx, params, req.ResolvedVerifiers)
+	outputCoins, outputStates, err := h.zeto.prepareOutputs(ctx, useNullifiers, params, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
@@ -162,7 +163,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 				Amount: &remainderHex,
 			},
 		}
-		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(ctx, remainderParams, req.ResolvedVerifiers)
+		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(ctx, useNullifiers, remainderParams, req.ResolvedVerifiers)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxChange, err)
 		}

@@ -98,6 +98,9 @@ func TestMintAssemble(t *testing.T) {
 		Transaction: &prototk.TransactionSpecification{
 			From: "Bob",
 		},
+		DomainConfig: &types.DomainInstanceConfig{
+			TokenName: "Anon",
+		},
 	}
 	req := &prototk.AssembleTransactionRequest{
 		ResolvedVerifiers: []*prototk.ResolvedVerifier{},

@@ -65,7 +65,7 @@ func (n *Zeto) makeCoin(stateData string) (*types.ZetoCoin, error) {
 	return coin, err
 }
 
-func (z *Zeto) makeNewState(ctx context.Context, coin *types.ZetoCoin, owner string) (*pb.NewState, error) {
+func (z *Zeto) makeNewState(ctx context.Context, useNullifiers bool, coin *types.ZetoCoin, owner string) (*pb.NewState, error) {
 	coinJSON, err := json.Marshal(coin)
 	if err != nil {
 		return nil, err
@@ -75,15 +75,26 @@ func (z *Zeto) makeNewState(ctx context.Context, coin *types.ZetoCoin, owner str
 		return nil, err
 	}
 	hashStr := hash.String()
-	return &pb.NewState{
+	newState := &pb.NewState{
 		Id:               &hashStr,
 		SchemaId:         z.coinSchema.Id,
 		StateDataJson:    string(coinJSON),
 		DistributionList: []string{owner},
-	}, nil
+	}
+	if useNullifiers {
+		newState.NullifierSpecs = []*pb.NullifierSpec{
+			{
+				Identity:     owner,
+				Algorithm:    z.getAlgoZetoSnarkBJJ(),
+				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+				PayloadType:  zetosignerapi.PAYLOAD_DOMAIN_ZETO_NULLIFIER,
+			},
+		}
+	}
+	return newState, nil
 }
 
-func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, sender string, params []*types.TransferParamEntry) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
+func (z *Zeto) prepareInputs(ctx context.Context, useNullifiers bool, stateQueryContext, sender string, params []*types.TransferParamEntry) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
@@ -103,7 +114,7 @@ func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, sender stri
 		if lastStateTimestamp > 0 {
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)
 		}
-		states, err := z.findAvailableStates(ctx, stateQueryContext, queryBuilder.Query().String())
+		states, err := z.findAvailableStates(ctx, useNullifiers, stateQueryContext, queryBuilder.Query().String())
 		if err != nil {
 			return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
 		}
@@ -133,7 +144,7 @@ func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, sender stri
 	}
 }
 
-func (z *Zeto) prepareOutputs(ctx context.Context, params []*types.TransferParamEntry, resolvedVerifiers []*pb.ResolvedVerifier) ([]*types.ZetoCoin, []*pb.NewState, error) {
+func (z *Zeto) prepareOutputs(ctx context.Context, useNullifiers bool, params []*types.TransferParamEntry, resolvedVerifiers []*pb.ResolvedVerifier) ([]*types.ZetoCoin, []*pb.NewState, error) {
 	var coins []*types.ZetoCoin
 	var newStates []*pb.NewState
 	for _, param := range params {
@@ -155,7 +166,7 @@ func (z *Zeto) prepareOutputs(ctx context.Context, params []*types.TransferParam
 			Amount:   param.Amount,
 		}
 
-		newState, err := z.makeNewState(ctx, newCoin, param.To)
+		newState, err := z.makeNewState(ctx, useNullifiers, newCoin, param.To)
 		if err != nil {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorCreateNewState, err)
 		}
@@ -165,11 +176,12 @@ func (z *Zeto) prepareOutputs(ctx context.Context, params []*types.TransferParam
 	return coins, newStates, nil
 }
 
-func (z *Zeto) findAvailableStates(ctx context.Context, stateQueryContext, query string) ([]*pb.StoredState, error) {
+func (z *Zeto) findAvailableStates(ctx context.Context, useNullifiers bool, stateQueryContext, query string) ([]*pb.StoredState, error) {
 	req := &pb.FindAvailableStatesRequest{
 		StateQueryContext: stateQueryContext,
 		SchemaId:          z.coinSchema.Id,
 		QueryJson:         query,
+		UseNullifiers:     &useNullifiers,
 	}
 	res, err := z.Callbacks.FindAvailableStates(ctx, req)
 	if err != nil {
