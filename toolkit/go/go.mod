@@ -9,6 +9,7 @@ require (
 	github.com/btcsuite/btcd/btcutil v1.1.6
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/hyperledger/firefly-common v1.4.11
 	github.com/hyperledger/firefly-signer v1.1.19-0.20241024010504-13d52d4241be
@@ -41,7 +42,6 @@ require (
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-openapi/jsonpointer v0.20.2 // indirect
 	github.com/go-openapi/swag v0.22.7 // indirect
-	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/yaml v0.2.0 // indirect

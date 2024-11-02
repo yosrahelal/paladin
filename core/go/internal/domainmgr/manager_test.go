@@ -40,6 +40,7 @@ import (
 
 type mockComponents struct {
 	db               sqlmock.Sqlmock
+	c                *componentmocks.AllComponents
 	ethClient        *ethclientmocks.EthClient
 	ethClientFactory *ethclientmocks.EthClientFactory
 	stateStore       *componentmocks.StateManager
@@ -47,22 +48,25 @@ type mockComponents struct {
 	keyManager       *componentmocks.KeyManager
 	txManager        *componentmocks.TXManager
 	privateTxManager *componentmocks.PrivateTxManager
+	transportMgr     *componentmocks.TransportManager
 }
 
 func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *mockComponents, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
+	componentMocks := componentmocks.NewAllComponents(t)
 	mc := &mockComponents{
+		c:                componentMocks,
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
 		stateStore:       componentmocks.NewStateManager(t),
 		ethClientFactory: ethclientmocks.NewEthClientFactory(t),
 		keyManager:       componentmocks.NewKeyManager(t),
 		txManager:        componentmocks.NewTXManager(t),
 		privateTxManager: componentmocks.NewPrivateTxManager(t),
+		transportMgr:     componentmocks.NewTransportManager(t),
 	}
 
 	// Blockchain stuff is always mocked
-	componentMocks := componentmocks.NewAllComponents(t)
 	componentMocks.On("EthClientFactory").Return(mc.ethClientFactory)
 	mc.ethClientFactory.On("ChainID").Return(int64(12345)).Maybe()
 	mc.ethClientFactory.On("HTTPClient").Return(mc.ethClient).Maybe()
@@ -72,13 +76,14 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 	componentMocks.On("KeyManager").Return(mc.keyManager)
 	componentMocks.On("TxManager").Return(mc.txManager)
 	componentMocks.On("PrivateTxManager").Return(mc.privateTxManager)
+	componentMocks.On("TransportManager").Return(mc.transportMgr)
 
 	var p persistence.Persistence
 	var err error
 	var realStateManager components.StateManager
 	var pDone func()
 	if realDB {
-		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
+		p, pDone, err = persistence.NewUnitTestPersistence(ctx, "domainmgr")
 		require.NoError(t, err)
 		realStateManager = statemgr.NewStateManager(ctx, &pldconf.StateStoreConfig{}, p)
 		componentMocks.On("StateManager").Return(realStateManager)
@@ -176,6 +181,7 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 		keyManager:       componentmocks.NewKeyManager(t),
 		txManager:        componentmocks.NewTXManager(t),
 		privateTxManager: componentmocks.NewPrivateTxManager(t),
+		transportMgr:     componentmocks.NewTransportManager(t),
 	}
 	componentMocks := componentmocks.NewAllComponents(t)
 	componentMocks.On("EthClientFactory").Return(mc.ethClientFactory)
@@ -187,6 +193,7 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 	componentMocks.On("KeyManager").Return(mc.keyManager)
 	componentMocks.On("TxManager").Return(mc.txManager)
 	componentMocks.On("PrivateTxManager").Return(mc.privateTxManager)
+	componentMocks.On("TransportManager").Return(mc.transportMgr)
 
 	mp, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)

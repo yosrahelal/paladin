@@ -37,16 +37,12 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     bytes4 public constant NotoConfigID_V0 = 0x00010000;
 
     struct NotoConfig_V0 {
-        uint64 notaryType;
         address notaryAddress;
         uint64 variant;
         bytes data;
     }
 
     uint64 public constant NotoVariantDefault = 0x0000;
-
-    uint64 public constant NotaryTypeSigner = 0x0000;
-    uint64 public constant NotaryTypeContract = 0x0001;
 
     bytes32 private constant TRANSFER_TYPEHASH =
         keccak256("Transfer(bytes32[] inputs,bytes32[] outputs,bytes data)");
@@ -68,7 +64,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     }
 
     function initialize(
-        uint64 notaryType,
         address notaryAddress,
         bytes calldata data
     ) public virtual initializer returns (bytes memory) {
@@ -76,7 +71,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
         _notary = notaryAddress;
 
         return _encodeConfig(NotoConfig_V0({
-            notaryType: notaryType,
             notaryAddress: notaryAddress,
             data: data,
             variant: NotoVariantDefault
@@ -87,10 +81,9 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
         NotoConfig_V0 memory config
     ) internal pure returns (bytes memory) {
         bytes memory configOut = abi.encode(
-            config.notaryType,
             config.notaryAddress,
-            config.data,
-            config.variant
+            config.variant,
+            config.data
         );
         return bytes.concat(NotoConfigID_V0, configOut);
     }

@@ -739,6 +739,7 @@ func TestRequestRemoteEndorsements(t *testing.T) {
 		mock.Anything, //Signatures,
 		mock.Anything, //InputStates,
 		mock.Anything, //OutputStates,
+		mock.Anything, //InfoStates,
 	).Return(nil).Once()
 	mocks.transportWriter.On("SendEndorsementRequest",
 		mock.Anything,
@@ -753,6 +754,7 @@ func TestRequestRemoteEndorsements(t *testing.T) {
 		mock.Anything, //Signatures,
 		mock.Anything, //InputStates,
 		mock.Anything, //OutputStates,
+		mock.Anything, //InfoStates,
 	).Return(nil).Once()
 	mocks.transportWriter.On("SendEndorsementRequest",
 		mock.Anything,
@@ -767,6 +769,7 @@ func TestRequestRemoteEndorsements(t *testing.T) {
 		mock.Anything, //Signatures,
 		mock.Anything, //InputStates,
 		mock.Anything, //OutputStates,
+		mock.Anything, //InfoStates,
 	).Return(nil).Once()
 	tp.Action(ctx)
 
@@ -1045,6 +1048,7 @@ func TestTimedOutEndorsementRequest(t *testing.T) {
 			mock.Anything, //Signatures,
 			mock.Anything, //InputStates,
 			mock.Anything, //OutputStates,
+			mock.Anything, //InfoStates,
 		).Return(nil).Once()
 	}
 
@@ -1533,6 +1537,7 @@ func TestDuplicateEndorsementResponse(t *testing.T) {
 			mock.Anything, //Signatures,
 			mock.Anything, //InputStates,
 			mock.Anything, //OutputStates,
+			mock.Anything, //InfoStates,
 		).Return(nil).Once()
 	}
 

@@ -61,10 +61,13 @@ type param struct {
 var allTypes = []interface{}{
 	pldapi.IndexedEvent{},
 	pldapi.TransactionReceipt{},
+	pldapi.TransactionReceiptFull{},
+	pldapi.TransactionStates{},
 	pldapi.TransactionInput{},
 	pldapi.TransactionFull{},
 	pldapi.TransactionCall{},
 	pldapi.Transaction{},
+	pldapi.PreparedTransaction{},
 	pldapi.PublicTx{},
 	pldapi.StoredABI{
 		ABI: abi.ABI{
@@ -77,8 +80,8 @@ var allTypes = []interface{}{
 		Hash: tktypes.Bytes32{},
 	},
 	pldapi.State{},
-	pldapi.StateConfirm{},
-	pldapi.StateSpend{},
+	pldapi.StateConfirmRecord{},
+	pldapi.StateSpendRecord{},
 	pldapi.StateLock{},
 	pldapi.Schema{},
 	pldapi.RegistryEntry{OnChainLocation: &pldapi.OnChainLocation{}},
@@ -89,6 +92,11 @@ var allTypes = []interface{}{
 	},
 	pldapi.RegistryProperty{},
 	pldapi.OnChainLocation{},
+	pldapi.IndexedBlock{},
+	pldapi.IndexedTransaction{},
+	pldapi.IndexedEvent{},
+	pldapi.EventWithData{},
+	pldapi.ABIDecodedData{},
 	tktypes.JSONFormatOptions(""),
 	pldapi.StateStatusQualifier(""),
 	query.QueryJSON{
@@ -195,6 +203,7 @@ var allAPITypes = []pldclient.RPCModule{
 	pldclient.New().Registry(),
 	pldclient.New().Transport(),
 	pldclient.New().StateStore(),
+	pldclient.New().BlockIndex(),
 }
 
 var allSimpleTypes = []interface{}{

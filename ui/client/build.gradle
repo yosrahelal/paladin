@@ -1,0 +1,21 @@
+import org.gradle.api.tasks.Exec
+ 
+// Task to install client dependencies
+task installClientDeps(type: Exec) {
+    commandLine 'npm', 'install'
+}
+
+// Task to build the client (using Vite)
+task build(type: Exec) {
+    dependsOn installClientDeps // Ensure dependencies are installed first
+    commandLine 'npm', 'run', 'build'
+}
+
+task assemble {
+    dependsOn build
+}
+
+task clean{
+    delete "dist"
+    delete "node_modules"
+}

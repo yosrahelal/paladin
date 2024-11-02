@@ -18,6 +18,7 @@ package privatetxnmgr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"reflect"
 	"regexp"
@@ -94,7 +95,7 @@ func TestPrivateTxManagerInvalidTransaction(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{})
+	err = privateTxManager.handleNewTx(ctx, &components.PrivateTransaction{})
 	// no input domain should err
 	assert.Regexp(t, "PD011800", err)
 }
@@ -217,7 +218,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
-				Transaction: pldapi.Transaction{
+				TransactionBase: pldapi.TransactionBase{
 					To:   domainAddress,
 					Data: tktypes.RawJSON(jsonData),
 				},
@@ -265,7 +266,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
-	err = privateTxManager.HandleNewTx(ctx, tx)
+	err = privateTxManager.handleNewTx(ctx, tx)
 	require.NoError(t, err)
 
 	// testTimeout := 2 * time.Second
@@ -470,7 +471,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
-				Transaction: pldapi.Transaction{
+				TransactionBase: pldapi.TransactionBase{
 					To:   domainAddress,
 					Data: tktypes.RawJSON(jsonData),
 				},
@@ -520,7 +521,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, tx)
+	err = privateTxManager.handleNewTx(ctx, tx)
 	assert.NoError(t, err)
 
 	status := pollForStatus(ctx, t, "delegating", privateTxManager, domainAddressString, tx.ID.String(), 200*time.Second)
@@ -715,7 +716,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
-				Transaction: pldapi.Transaction{
+				TransactionBase: pldapi.TransactionBase{
 					To:   domainAddress,
 					Data: tktypes.RawJSON(jsonData),
 				},
@@ -784,7 +785,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	err := aliceEngine.Start()
 	assert.NoError(t, err)
 
-	err = aliceEngine.HandleNewTx(ctx, tx)
+	err = aliceEngine.handleNewTx(ctx, tx)
 	assert.NoError(t, err)
 
 	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx.ID.String(), 200*time.Second)
@@ -958,7 +959,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
-				Transaction: pldapi.Transaction{
+				TransactionBase: pldapi.TransactionBase{
 					To:   domainAddress,
 					Data: tktypes.RawJSON(jsonData),
 				},
@@ -1002,10 +1003,10 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	err := aliceEngine.Start()
 	require.NoError(t, err)
 
-	err = aliceEngine.HandleNewTx(ctx, tx1)
+	err = aliceEngine.handleNewTx(ctx, tx1)
 	require.NoError(t, err)
 
-	err = aliceEngine.HandleNewTx(ctx, tx2)
+	err = aliceEngine.handleNewTx(ctx, tx2)
 	require.NoError(t, err)
 
 	// Neither transaction should be dispatched yet
@@ -1179,7 +1180,7 @@ func TestPrivateTxManagerDeploy(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleDeployTx(ctx, tx)
+	err = privateTxManager.handleDeployTx(ctx, tx)
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -1208,7 +1209,7 @@ func TestPrivateTxManagerDeployFailInit(t *testing.T) {
 	err := privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleDeployTx(ctx, tx)
+	err = privateTxManager.handleDeployTx(ctx, tx)
 	assert.Error(t, err)
 	assert.Regexp(t, regexp.MustCompile(".*failed to init.*"), err.Error())
 }
@@ -1250,7 +1251,7 @@ func TestPrivateTxManagerDeployFailPrepare(t *testing.T) {
 	err := privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleDeployTx(ctx, tx)
+	err = privateTxManager.handleDeployTx(ctx, tx)
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -1322,7 +1323,7 @@ func TestPrivateTxManagerFailSignerResolve(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleDeployTx(ctx, tx)
+	err = privateTxManager.handleDeployTx(ctx, tx)
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -1382,7 +1383,7 @@ func TestPrivateTxManagerDeployFailNoInvokeOrDeploy(t *testing.T) {
 	err := privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleDeployTx(ctx, tx)
+	err = privateTxManager.handleDeployTx(ctx, tx)
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -1607,7 +1608,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 						From:   "Alice",
 					},
 				}
-				err = privateTxManager.HandleNewTx(ctx, tx)
+				err = privateTxManager.handleNewTx(ctx, tx)
 				require.NoError(t, err)
 			}
 
@@ -1683,11 +1684,10 @@ type dependencyMocks struct {
 }
 
 // For Black box testing we return components.PrivateTxManager
-func NewPrivateTransactionMgrForTesting(t *testing.T, nodeName string) (components.PrivateTxManager, *dependencyMocks) {
+func NewPrivateTransactionMgrForTesting(t *testing.T, nodeName string) (*privateTxManager, *dependencyMocks) {
 	// by default create a mock publicTxManager if no fake was provided
 	fakePublicTxManager := componentmocks.NewPublicTxManager(t)
-	privateTxManager, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t, fakePublicTxManager, nodeName)
-	return privateTxManager, mocks
+	return NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t, fakePublicTxManager, nodeName)
 }
 
 type fakePublicTxManager struct {
@@ -1832,7 +1832,7 @@ func newFakePublicTxManager(t *testing.T) *fakePublicTxManager {
 	}
 }
 
-func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, publicTxMgr components.PublicTxManager, nodeName string) (components.PrivateTxManager, *dependencyMocks) {
+func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, publicTxMgr components.PublicTxManager, nodeName string) (*privateTxManager, *dependencyMocks) {
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{
@@ -1855,7 +1855,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("TxManager").Return(mocks.txManager).Maybe()
 	mocks.allComponents.On("PublicTxManager").Return(publicTxMgr).Maybe()
-	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
+	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx, "privatetxmgr")).Maybe()
 	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
 	mocks.domainSmartContract.On("LockStates", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	mocks.domainMgr.On("GetDomainByName", mock.Anything, "domain1").Return(mocks.domain, nil).Maybe()
@@ -1882,7 +1882,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 	mocks.allComponents.On("IdentityResolver").Return(mocks.identityResolver).Maybe()
 	err := e.PostInit(mocks.allComponents)
 	assert.NoError(t, err)
-	return e, mocks
+	return e.(*privateTxManager), mocks
 
 }
 
@@ -1905,4 +1905,162 @@ func timeTillDeadline(t *testing.T) time.Duration {
 		return 0
 	}
 	return timeRemaining - 100*time.Millisecond
+}
+
+func mockDomainSmartContractAndCtx(t *testing.T, m *dependencyMocks) (*componentmocks.Domain, *componentmocks.DomainSmartContract) {
+	contractAddr := *tktypes.RandAddress()
+
+	mDomain := componentmocks.NewDomain(t)
+	mDomain.On("Name").Return("domain1").Maybe()
+
+	mPSC := componentmocks.NewDomainSmartContract(t)
+	mPSC.On("Address").Return(contractAddr).Maybe()
+	mPSC.On("Domain").Return(mDomain).Maybe()
+
+	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, contractAddr).Return(mPSC, nil)
+
+	mDC := componentmocks.NewDomainContext(t)
+	m.stateStore.On("NewDomainContext", mock.Anything, mDomain, contractAddr).Return(mDC).Maybe()
+	mDC.On("Close").Return().Maybe()
+
+	return mDomain, mPSC
+}
+
+func TestCallPrivateSmartContractOk(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+
+	fnDef := &abi.Entry{Name: "getIt", Type: abi.Function, Outputs: abi.ParameterArray{
+		{Name: "it", Type: "string"},
+	}}
+	resultCV, err := fnDef.Outputs.ParseJSON([]byte(`["thing"]`))
+	require.NoError(t, err)
+
+	bobAddr := tktypes.RandAddress()
+	m.identityResolver.On("ResolveVerifier", mock.Anything, "bob@node1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return(bobAddr.String(), nil)
+	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
+		[]*prototk.ResolveVerifierRequest{
+			{Lookup: "bob@node1", Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS},
+		}, nil,
+	)
+	mPSC.On("ExecCall", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(verifiers []*prototk.ResolvedVerifier) bool {
+		require.Equal(t, bobAddr.String(), verifiers[0].Verifier)
+		return true
+	})).Return(
+		resultCV, nil,
+	)
+
+	res, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:       mPSC.Address(),
+		Inputs:   tktypes.RawJSON(`{}`),
+		Function: fnDef,
+	})
+	require.NoError(t, err)
+	jsonData, err := res.JSON()
+	require.NoError(t, err)
+	require.JSONEq(t, `{"it": "thing"}`, string(jsonData))
+
+}
+
+func TestCallPrivateSmartContractBadContract(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("not found"))
+
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     *tktypes.RandAddress(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	assert.Regexp(t, "not found", err)
+
+}
+func TestCallPrivateSmartContractBadDomainName(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+
+	fnDef := &abi.Entry{Name: "getIt", Type: abi.Function, Outputs: abi.ParameterArray{
+		{Name: "it", Type: "string"},
+	}}
+
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		Domain:   "does-not-match",
+		To:       mPSC.Address(),
+		Inputs:   tktypes.RawJSON(`{}`),
+		Function: fnDef,
+	})
+	assert.Regexp(t, "PD011825", err)
+
+}
+
+func TestCallPrivateSmartContractInitCallFail(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+
+	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
+		nil, fmt.Errorf("pop"),
+	)
+
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     mPSC.Address(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	require.Regexp(t, "pop", err)
+
+}
+
+func TestCallPrivateSmartContractResolveFail(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+
+	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
+		[]*prototk.ResolveVerifierRequest{
+			{Lookup: "bob@node1", Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS},
+		}, nil,
+	)
+	m.identityResolver.On("ResolveVerifier", mock.Anything, "bob@node1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return("", fmt.Errorf("pop"))
+
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     mPSC.Address(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	require.Regexp(t, "pop", err)
+
+}
+
+func TestCallPrivateSmartContractExecCallFail(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+
+	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
+		[]*prototk.ResolveVerifierRequest{}, nil,
+	)
+	mPSC.On("ExecCall", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(
+		nil, fmt.Errorf("pop"),
+	)
+
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     mPSC.Address(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	require.Regexp(t, "pop", err)
+
 }

@@ -18,6 +18,7 @@ package io.kaleido.paladin.pente;
 import io.kaleido.paladin.pente.evmrunner.EVMRunner;
 import io.kaleido.paladin.pente.evmrunner.EVMVersion;
 import io.kaleido.paladin.pente.evmstate.PersistedAccount;
+import io.kaleido.paladin.toolkit.JsonHex;
 import org.apache.tuweni.bytes.Bytes;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.evm.frame.MessageFrame;
@@ -56,10 +57,13 @@ public class SimpleStorageWrappedStoreRetrieveTest {
         }
         final Address smartContractAddress = EVMRunner.randomAddress();
         final Address sender = EVMRunner.randomAddress();
+        final var logs = new LinkedList<EVMRunner.JsonEVMLog>();
         MessageFrame deployFrame = evmRunnerFresh.runContractDeployment(
                 sender,
                 smartContractAddress,
                 Bytes.fromHexString(hexByteCode),
+                Long.MAX_VALUE,
+                logs,
                 new Uint256(12345)
         );
         assertEquals(MessageFrame.State.COMPLETED_SUCCESS, deployFrame.getState());
@@ -67,6 +71,8 @@ public class SimpleStorageWrappedStoreRetrieveTest {
                 sender,
                 smartContractAddress,
                 "set",
+                Long.MAX_VALUE,
+                logs,
                 new Uint256(23456)
         );
         assertEquals(MessageFrame.State.COMPLETED_SUCCESS, setFrame.getState());
@@ -74,7 +80,7 @@ public class SimpleStorageWrappedStoreRetrieveTest {
         // Persist the world we've just built into bytes
         final Map<Address, byte[]> accountBytes = new HashMap<>();
         evmRunnerFresh.getWorld().getQueriedAccounts().forEach(address -> {
-            accountBytes.put(address, evmRunnerFresh.getWorld().get(address).serialize());
+            accountBytes.put(address, evmRunnerFresh.getWorld().get(address).serialize(JsonHex.randomBytes32()));
         });
 
         // Create a new world that dynamically loads those bytes
@@ -86,7 +92,9 @@ public class SimpleStorageWrappedStoreRetrieveTest {
         MessageFrame getFrame = evmRunnerWithLoad.runContractInvoke(
                 sender,
                 smartContractAddress,
-                "get"
+                "get",
+                Long.MAX_VALUE,
+                logs
         );
         assertEquals(MessageFrame.State.COMPLETED_SUCCESS, getFrame.getState());
         List<Type<?>> returns = evmRunnerWithLoad.decodeReturn(getFrame, List.of(new TypeReference<Uint256>() {}));

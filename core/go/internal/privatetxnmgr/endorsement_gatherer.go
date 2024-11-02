@@ -50,7 +50,7 @@ func (e *endorsementGatherer) DomainContext() components.DomainContext {
 	return e.dCtx
 }
 
-func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, partyName string, endorsementRequest *prototk.AttestationRequest) (*prototk.AttestationResult, *string, error) {
+func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState, partyName string, endorsementRequest *prototk.AttestationRequest) (*prototk.AttestationResult, *string, error) {
 
 	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(partyName).Identity(ctx)
 	if err != nil {
@@ -73,6 +73,7 @@ func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transaction
 		InputStates:              inputStates,
 		ReadStates:               readStates,
 		OutputStates:             outputStates,
+		InfoStates:               infoStates,
 		Endorsement:              endorsementRequest,
 		Endorser: &prototk.ResolvedVerifier{
 			Lookup:       partyName,

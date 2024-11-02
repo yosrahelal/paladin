@@ -39,6 +39,7 @@ import (
 
 type sequencerDepencyMocks struct {
 	allComponents       *componentmocks.AllComponents
+	privateTxManager    *componentmocks.PrivateTxManager
 	domainSmartContract *componentmocks.DomainSmartContract
 	domainContext       *componentmocks.DomainContext
 	domainMgr           *componentmocks.DomainManager
@@ -61,6 +62,7 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 
 	mocks := &sequencerDepencyMocks{
 		allComponents:       componentmocks.NewAllComponents(t),
+		privateTxManager:    componentmocks.NewPrivateTxManager(t),
 		domainSmartContract: componentmocks.NewDomainSmartContract(t),
 		domainContext:       componentmocks.NewDomainContext(t),
 		domainMgr:           componentmocks.NewDomainManager(t),
@@ -81,7 +83,7 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("TxManager").Return(mocks.txManager).Maybe()
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
-	p, persistenceDone, err := persistence.NewUnitTestPersistence(ctx)
+	p, persistenceDone, err := persistence.NewUnitTestPersistence(ctx, "privatetxmgr")
 	require.NoError(t, err)
 	mocks.allComponents.On("Persistence").Return(p).Maybe()
 	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
@@ -95,7 +97,7 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 	//mocks.domain.On("Configuration").Return(&prototk.DomainConfig{}).Maybe()
 
 	syncPoints := syncpoints.NewSyncPoints(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager)
-	o, err := NewSequencer(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerSequencerConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.transportWriter, 30*time.Second, 0)
+	o, err := NewSequencer(ctx, mocks.privateTxManager, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerSequencerConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.transportWriter, 30*time.Second, 0)
 	require.NoError(t, err)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)

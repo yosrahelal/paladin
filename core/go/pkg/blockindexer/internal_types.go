@@ -28,7 +28,7 @@ var IndexedBlockFilters filters.FieldSet = filters.FieldMap{
 }
 
 var IndexedTransactionFilters filters.FieldSet = filters.FieldMap{
-	"hash":             filters.HexBytesField("hash"),
+	"hash":             filters.HexBytesField(`"indexed_transactions"."hash"`),
 	"blockNumber":      filters.Int64Field("block_number"),
 	"transactionIndex": filters.Int64Field("transaction_index"),
 	"from":             filters.HexBytesField(`"from"`),

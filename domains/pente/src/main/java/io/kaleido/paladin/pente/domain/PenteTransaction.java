@@ -19,22 +19,13 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.google.protobuf.ByteString;
 import io.kaleido.paladin.toolkit.*;
 import io.kaleido.paladin.pente.evmrunner.EVMRunner;
-import io.kaleido.paladin.pente.evmrunner.EVMVersion;
-import io.kaleido.paladin.pente.evmstate.AccountLoader;
 import io.kaleido.paladin.pente.evmstate.DynamicLoadWorldState;
-import io.kaleido.paladin.pente.evmstate.PersistedAccount;
 import io.kaleido.paladin.toolkit.JsonHex.Address;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.tuweni.bytes.Bytes;
-import org.hyperledger.besu.evm.frame.MessageFrame;
-import org.hyperledger.besu.evm.internal.EvmConfiguration;
-import org.hyperledger.besu.evm.log.Log;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -76,24 +67,26 @@ class PenteTransaction {
     private static final Logger LOGGER = LogManager.getLogger(PenteTransaction.class);
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Values (
-        @JsonProperty
-        PenteConfiguration.GroupTupleJSON group,
-        @JsonProperty
-        Address to,
-        @JsonProperty
-        BigInteger gas,
-        @JsonProperty
-        BigInteger data,
-        @JsonProperty
-        BigInteger value,
-        @JsonProperty
-        JsonHex.Bytes bytecode,
-        @JsonProperty
-        JsonNode inputs
-    ) {}
+    public record Values(
+            @JsonProperty
+            PenteConfiguration.GroupTupleJSON group,
+            @JsonProperty
+            Address to,
+            @JsonProperty
+            BigInteger gas,
+            @JsonProperty
+            BigInteger data,
+            @JsonProperty
+            BigInteger value,
+            @JsonProperty
+            JsonHex.Bytes bytecode,
+            @JsonProperty
+            JsonNode inputs
+    ) {
+    }
 
-    private enum ABIEntryType { INVOKE, DEPLOY, CUSTOM_FUNCTION }
+    private enum ABIEntryType {INVOKE, DEPLOY, CUSTOM_FUNCTION}
+
     private final ABIEntryType abiEntryType;
 
     static class ABIDefinitions {
@@ -130,7 +123,7 @@ class PenteTransaction {
         for (JsonABI.Parameter param : functionDef.inputs()) {
             switch (param.name()) {
                 case "group" -> defs.group = checkGroup(param);
-                case "to" -> defs.to = checkABIMatch(param, "string","address");
+                case "to" -> defs.to = checkABIMatch(param, "string", "address");
                 case "gas" -> defs.gas = checkABIMatch(param, "uint256");
                 case "value" -> defs.value = checkABIMatch(param, "uint256");
                 case "data" -> defs.data = checkABIMatch(param, "bytes");
@@ -147,9 +140,9 @@ class PenteTransaction {
         if (defs.group == null) {
             throw new IllegalArgumentException("ABI params 'group' (tuple) and 'from' (address or string) are required");
         }
-        if (functionDef.name().equals("invoke") && defs.data != null) {
+        if (functionDef.name().equals(PenteConfiguration.FUNCTION_NAME_INVOKE) && defs.data != null) {
             abiEntryType = ABIEntryType.INVOKE;
-        } else if (functionDef.name().equals("deploy") && defs.bytecode != null && defs.inputs != null) {
+        } else if (functionDef.name().equals(PenteConfiguration.FUNCTION_NAME_DEPLOY) && defs.bytecode != null && defs.inputs != null) {
             abiEntryType = ABIEntryType.DEPLOY;
         } else if (defs.inputs != null) {
             abiEntryType = ABIEntryType.CUSTOM_FUNCTION;
@@ -213,18 +206,6 @@ class PenteTransaction {
         return this.contractConfig;
     }
 
-    EVMRunner getEVM(long chainId, long blockNumber, AccountLoader accountLoader) throws ClassNotFoundException {
-        var evmConfig = EvmConfiguration.DEFAULT;
-        var evmVersionStr = getConfig().evmVersion();
-        EVMVersion evmVersion = switch (evmVersionStr) {
-            case "london" -> EVMVersion.London(chainId, evmConfig);
-            case "paris" -> EVMVersion.Paris(chainId, evmConfig);
-            case "shanghai" -> EVMVersion.Shanghai(chainId, evmConfig);
-            default -> throw new IllegalArgumentException("unknown EVM version '%s'".formatted(evmVersionStr));
-        };
-        return new EVMRunner(evmVersion, accountLoader, blockNumber);
-    }
-
     boolean requiresABIEncoding() {
         return (abiEntryType == ABIEntryType.DEPLOY || abiEntryType == ABIEntryType.CUSTOM_FUNCTION);
     }
@@ -233,65 +214,51 @@ class PenteTransaction {
         String paramsJSON = new ObjectMapper().writeValueAsString(getValues().inputs);
         FromDomain.EncodeDataRequest request;
         switch (abiEntryType) {
-        case ABIEntryType.DEPLOY -> {
-            request = FromDomain.EncodeDataRequest.newBuilder().
-                    setEncodingType(FromDomain.EncodingType.TUPLE).
-                    setDefinition(defs.inputs.toJSON(false)).
-                    setBody(paramsJSON).
-                    build();
-        }
-        case ABIEntryType.CUSTOM_FUNCTION -> {
-            JsonABI.Entry functionEntry = JsonABI.newFunction(functionDef.name(), defs.inputs.components(), JsonABI.newParameters());
-            request = FromDomain.EncodeDataRequest.newBuilder().
-                    setEncodingType(FromDomain.EncodingType.FUNCTION_CALL_DATA).
-                    setDefinition(functionEntry.toJSON(false)).
-                    setBody(paramsJSON).
-                    build();
-        }
-        default -> throw new IllegalStateException("no ABI encoding required for %s".formatted(abiEntryType));
-        }
-        var response = domain.encodeData(request).get();
-        return response.getData().toByteArray();
-    }
-
-    /** The sub-set of Ethereum JSON fields for a transaction built on-demand from input, that we include in the signature that is verified by endorsement */
-    record EndorsableEthTransactionJson(
-        @JsonProperty
-        Address to,
-        @JsonProperty
-        long nonce,
-        @JsonProperty
-        @JsonSerialize(using = ToStringSerializer.class)
-        BigInteger gas,
-        @JsonProperty
-        @JsonSerialize(using = ToStringSerializer.class)
-        BigInteger value,
-        @JsonProperty
-        JsonHex.Bytes data
-
-        // Note no gas price used/supported in Pente transactions
-    ) {}
-
-    byte[] getEncodedTransaction(long nonce, byte[] calldata) throws IOException, IllegalStateException, ExecutionException, InterruptedException {
-        var values = getValues();
-        var ethTXJson = new EndorsableEthTransactionJson(
-                values.to,
-                nonce,
-                values.gas,
-                values.value,
-                JsonHex.wrap(calldata)
-        );
-        var request = FromDomain.EncodeDataRequest.newBuilder().
-                        setEncodingType(FromDomain.EncodingType.ETH_TRANSACTION).
+            case ABIEntryType.DEPLOY -> {
+                request = FromDomain.EncodeDataRequest.newBuilder().
+                        setEncodingType(FromDomain.EncodingType.TUPLE).
                         setDefinition(defs.inputs.toJSON(false)).
-                        setBody(new ObjectMapper().writeValueAsString(ethTXJson)).
-                        setDefinition("eip-1559").
+                        setBody(paramsJSON).
                         build();
+            }
+            case ABIEntryType.CUSTOM_FUNCTION -> {
+                JsonABI.Entry functionEntry = JsonABI.newFunction(functionDef.name(), defs.inputs.components(), JsonABI.newParameters());
+                request = FromDomain.EncodeDataRequest.newBuilder().
+                        setEncodingType(FromDomain.EncodingType.FUNCTION_CALL_DATA).
+                        setDefinition(functionEntry.toJSON(false)).
+                        setBody(paramsJSON).
+                        build();
+            }
+            default -> throw new IllegalStateException("no ABI encoding required for %s".formatted(abiEntryType));
+        }
         var response = domain.encodeData(request).get();
         return response.getData().toByteArray();
     }
 
-    private JsonABI.Parameter checkABIMatch(JsonABI.Parameter param, String ...expectedTypes) throws IllegalArgumentException {
+    String decodeOutput(byte[] outputData) throws IllegalStateException, ExecutionException, InterruptedException {
+        JsonABI.Parameter outputsEntry = JsonABI.newTuple("", "", functionDef.outputs());
+        var request = FromDomain.DecodeDataRequest.newBuilder().
+                setEncodingType(FromDomain.EncodingType.TUPLE).
+                setDefinition(outputsEntry.toJSON(false)).
+                setData(ByteString.copyFrom(outputData)).
+                build();
+        var response = domain.decodeData(request).get();
+        return response.getBody();
+    }
+
+    byte[] getSignedRawTransaction(PenteEVMTransaction ethTXJson) throws IOException, IllegalStateException, ExecutionException, InterruptedException {
+        var request = FromDomain.EncodeDataRequest.newBuilder().
+                setEncodingType(FromDomain.EncodingType.ETH_TRANSACTION_SIGNED).
+                setDefinition(defs.inputs.toJSON(false)).
+                setBody(new ObjectMapper().writeValueAsString(ethTXJson)).
+                setDefinition("eip-1559").
+                setKeyIdentifier(from).
+                build();
+        var response = domain.encodeData(request).get();
+        return response.getData().toByteArray();
+    }
+
+    private JsonABI.Parameter checkABIMatch(JsonABI.Parameter param, String... expectedTypes) throws IllegalArgumentException {
         for (String expectedType : expectedTypes) {
             if (param.type().equals(expectedType)) {
                 return param;
@@ -329,13 +296,29 @@ class PenteTransaction {
                 formatted(Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS, from));
     }
 
-    record EVMStateResult(
-            List<PersistedAccount> newAccountStates,
-            ToDomain.AssembledTransaction assembledTransaction
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TransactionInputInfoState(
+            @JsonProperty
+            JsonHex.Bytes32 salt,
+            @JsonProperty
+            String evmVersion,
+            @JsonProperty
+            JsonHexNum.Uint256 baseBlock,
+            @JsonProperty
+            JsonHexNum.Uint256 bytecodeLength,
+            @JsonProperty
+            JsonHex.Bytes rawTransaction
     ) {}
 
-    ToDomain.AssembledTransaction buildAssembledTransaction(EVMRunner evm, PenteDomain.AssemblyAccountLoader accountLoader, String extraData) throws IOException {
-        var latestSchemaId = domain.getConfig().schemaId_AccountStateLatest();
+    ToDomain.AssembledTransaction buildAssembledTransaction(
+            EVMRunner evm,
+            PenteDomain.AssemblyAccountLoader accountLoader,
+            PenteEVMTransaction evmTxn,
+            byte[] encodedTxn,
+            String extraData) throws IOException, ExecutionException, InterruptedException {
+
+        var latestAccountSchemaId = domain.getConfig().schemaId_AccountStateLatest();
+        var latestTransactionInputSchemaId = domain.getConfig().schemaId_TransactionInputStateLatest();
         var result = ToDomain.AssembledTransaction.newBuilder();
         var committedUpdates = evm.getWorld().getCommittedAccountUpdates();
         var loadedAccountStates = accountLoader.getLoadedAccountStates();
@@ -357,8 +340,10 @@ class PenteTransaction {
                     LOGGER.info("Writing new state for account {} (existing={})", loadedAccount, inputState);
                     var updatedAccount = evm.getWorld().get(loadedAccount);
                     outputStates.add(ToDomain.NewState.newBuilder().
-                            setSchemaId(latestSchemaId).
-                            setStateDataJsonBytes(ByteString.copyFrom(updatedAccount.serialize())).
+                            setSchemaId(latestAccountSchemaId).
+                            setStateDataJsonBytes(ByteString.copyFrom(
+                                    updatedAccount.serialize(JsonHex.randomBytes32())
+                            )).
                             addAllDistributionList(lookups).
                             build());
                 } else {
@@ -373,22 +358,40 @@ class PenteTransaction {
                         build());
             }
         }
+        var txInput = new TransactionInputInfoState(
+            JsonHex.randomBytes32(),
+            evmTxn.getEVMVersion(),
+            new JsonHexNum.Uint256(evmTxn.getBaseBlock()),
+            new JsonHexNum.Uint256(evmTxn.getBytecodeLen()),
+            new JsonHex.Bytes(encodedTxn)
+        );
+        var txInputState = ToDomain.NewState.newBuilder().
+                setSchemaId(latestTransactionInputSchemaId).
+                setStateDataJsonBytes(ByteString.copyFrom(new ObjectMapper().writeValueAsBytes(txInput))).
+                addAllDistributionList(lookups).
+                build();
         result.addAllInputStates(inputStates);
         result.addAllReadStates(readStates);
         result.addAllOutputStates(outputStates);
+        result.addInfoStates(txInputState);
         if (extraData != null) {
             result.setExtraData(extraData);
         }
         return result.build();
     }
 
-    String getFrom() { return from; }
+    String getFrom() {
+        return from;
+    }
 
-    long getBaseBlock() { return baseBlock; }
+    long getBaseBlock() {
+        return baseBlock;
+    }
 
-    static List<String> buildGroupScopeIdentityLookups(JsonHex.Bytes32 salt, String [] members) throws IllegalArgumentException {
+    static List<String> buildGroupScopeIdentityLookups(JsonHex.Bytes32 salt, String[] members) throws IllegalArgumentException {
         // Salt must be a 32byte hex string
-        if (salt == null || members == null) throw new IllegalArgumentException("salt and members are required for group");
+        if (salt == null || members == null)
+            throw new IllegalArgumentException("salt and members are required for group");
         var saltHex = salt.toHex();
 
         // To deploy a new Privacy Group we need to collect unique endorsement addresses that
@@ -411,86 +414,72 @@ class PenteTransaction {
         return lookups;
     }
 
-    record EVMExecutionResult(
-            EVMRunner evm,
-            org.hyperledger.besu.datatypes.Address senderAddress,
-            org.hyperledger.besu.datatypes.Address contractAddress,
-            byte[] txPayload,
-            JsonHex.Bytes32 txPayloadHash,
-            List<Log> logs
-    ) {}
-
-    static class EVMExecutionException extends Exception { EVMExecutionException(String message) { super(message); } }
-
-    EVMExecutionResult executeEVM(long chainId, Address fromAddr, AccountLoader accountLoader) throws IOException, ExecutionException, InterruptedException, ClassNotFoundException, EVMExecutionException {
-        var evm = getEVM(chainId, getBaseBlock(), accountLoader);
-        var senderAddress = org.hyperledger.besu.datatypes.Address.wrap(Bytes.wrap(fromAddr.getBytes()));
-        var calldata = getEncodedCallData();
-        var sender = evm.getWorld().getUpdater().getOrCreate(senderAddress);
-        var nonce = sender.getNonce();
-        MessageFrame execResult;
-        if (getValues().to() == null) {
-            execResult = evm.runContractDeploymentBytes(
-                    senderAddress,
-                    null,
-                    Bytes.wrap(getValues().bytecode().getBytes()),
-                    Bytes.wrap(calldata)
-            );
-        } else {
-            execResult = evm.runContractInvokeBytes(
-                    senderAddress,
-                    org.hyperledger.besu.datatypes.Address.wrap(Bytes.wrap(getValues().to().getBytes())),
-                    Bytes.wrap(calldata)
-            );
-        }
-        if (execResult.getState() != MessageFrame.State.COMPLETED_SUCCESS) {
-            throw new EVMExecutionException("transaction reverted: %s".formatted(execResult.getRevertReason()));
-        }
-        // Note we only increment the nonce after successful executions
-        sender.setNonce(nonce+1);
-        evm.getWorld().getUpdater().commit();
-        var txPayload = getEncodedTransaction(nonce, calldata);
-        return new EVMExecutionResult(
-                evm,
-                senderAddress,
-                execResult.getContractAddress(),
-                txPayload,
-                Keccak.Hash(txPayload),
-                execResult.getLogs()
-        );
-    }
-
-    byte[] eip712TypedDataEndorsementPayload(List<String> inputs, List<String> reads, List<String> outputs, List<PenteConfiguration.TransactionExternalCall> externalCalls) throws IOException, ExecutionException, InterruptedException {
-        var typedDataRequest = new HashMap<String, Object>(){{
-            put("types", new HashMap<String, Object>(){{
-                put("Transition", new ArrayDeque<Map<String, Object>>(){{
-                    add(new HashMap<>(){{put("name", "inputs"); put("type", "bytes32[]");}});
-                    add(new HashMap<>(){{put("name", "reads"); put("type", "bytes32[]");}});
-                    add(new HashMap<>(){{put("name", "outputs"); put("type", "bytes32[]");}});
-                    add(new HashMap<>(){{put("name", "externalCalls"); put("type", "ExternalCall[]");}});
+    byte[] eip712TypedDataEndorsementPayload(List<String> inputs, List<String> reads, List<String> outputs, List<String> info, List<PenteConfiguration.TransactionExternalCall> externalCalls) throws IOException, ExecutionException, InterruptedException {
+        var typedDataRequest = new HashMap<String, Object>() {{
+            put("types", new HashMap<String, Object>() {{
+                put("Transition", new ArrayDeque<Map<String, Object>>() {{
+                    add(new HashMap<>() {{
+                        put("name", "inputs");
+                        put("type", "bytes32[]");
+                    }});
+                    add(new HashMap<>() {{
+                        put("name", "reads");
+                        put("type", "bytes32[]");
+                    }});
+                    add(new HashMap<>() {{
+                        put("name", "outputs");
+                        put("type", "bytes32[]");
+                    }});
+                    add(new HashMap<>() {{
+                        put("name", "info");
+                        put("type", "bytes32[]");
+                    }});
+                    add(new HashMap<>() {{
+                        put("name", "externalCalls");
+                        put("type", "ExternalCall[]");
+                    }});
                 }});
-                put("ExternalCall", new ArrayDeque<Map<String, Object>>(){{
-                    add(new HashMap<>(){{put("name", "contractAddress"); put("type", "address");}});
-                    add(new HashMap<>(){{put("name", "encodedCall"); put("type", "bytes");}});
+                put("ExternalCall", new ArrayDeque<Map<String, Object>>() {{
+                    add(new HashMap<>() {{
+                        put("name", "contractAddress");
+                        put("type", "address");
+                    }});
+                    add(new HashMap<>() {{
+                        put("name", "encodedCall");
+                        put("type", "bytes");
+                    }});
                 }});
-                put("EIP712Domain", new ArrayDeque<Map<String, Object>>(){{
-                    add(new HashMap<>(){{put("name", "name"); put("type", "string");}});
-                    add(new HashMap<>(){{put("name", "version"); put("type", "string");}});
-                    add(new HashMap<>(){{put("name", "chainId"); put("type", "uint256");}});
-                    add(new HashMap<>(){{put("name", "verifyingContract"); put("type", "address");}});
+                put("EIP712Domain", new ArrayDeque<Map<String, Object>>() {{
+                    add(new HashMap<>() {{
+                        put("name", "name");
+                        put("type", "string");
+                    }});
+                    add(new HashMap<>() {{
+                        put("name", "version");
+                        put("type", "string");
+                    }});
+                    add(new HashMap<>() {{
+                        put("name", "chainId");
+                        put("type", "uint256");
+                    }});
+                    add(new HashMap<>() {{
+                        put("name", "verifyingContract");
+                        put("type", "address");
+                    }});
                 }});
             }});
             put("primaryType", "Transition");
-            put("domain", new HashMap<>(){{
+            put("domain", new HashMap<>() {{
                 put("name", "pente");
                 put("version", "0.0.1");
                 put("chainId", domain.getConfig().getChainId());
                 put("verifyingContract", contractAddress);
             }});
-            put("message", new HashMap<>(){{
+            put("message", new HashMap<>() {{
                 put("inputs", inputs);
                 put("reads", reads);
                 put("outputs", outputs);
+                put("info", info);
                 put("externalCalls", externalCalls);
             }});
         }};

@@ -42,8 +42,8 @@ var notoFactoryJSON []byte
 //go:embed abis/INoto.json
 var notoInterfaceJSON []byte
 
-//go:embed abis/INotoGuard.json
-var notoGuardJSON []byte
+//go:embed abis/INotoHooks.json
+var notoHooksJSON []byte
 
 func NewNoto(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
 	return &Noto{Callbacks: callbacks}
@@ -65,7 +65,6 @@ type Noto struct {
 type NotoDeployParams struct {
 	Name          string             `json:"name,omitempty"`
 	TransactionID string             `json:"transactionId"`
-	NotaryType    tktypes.HexUint64  `json:"notaryType"`
 	NotaryAddress tktypes.EthAddress `json:"notaryAddress"`
 	Data          tktypes.HexBytes   `json:"data"`
 }
@@ -207,34 +206,36 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
 	}
 
-	var notaryType tktypes.HexUint64
-	var notaryAddress *tktypes.EthAddress
-	if params.GuardPublicAddress.IsZero() {
-		notaryAddress, err = tktypes.ParseEthAddress(notary.Verifier)
-		if err != nil {
-			return nil, err
-		}
-		notaryType = types.NotaryTypeSigner
-	} else {
-		notaryAddress = params.GuardPublicAddress
-		notaryType = types.NotaryTypeContract
+	deployData := &types.NotoConfigData_V0{
+		NotaryLookup:    notary.Lookup,
+		NotaryType:      types.NotaryTypeSigner,
+		RestrictMinting: true,
+	}
+	if params.RestrictMinting != nil {
+		deployData.RestrictMinting = *params.RestrictMinting
 	}
 
-	deployData, err := json.Marshal(&types.NotoConfigData_V0{
-		NotaryLookup:   notary.Lookup,
-		PrivateAddress: params.GuardPrivateAddress,
-		PrivateGroup:   params.GuardPrivateGroup,
-	})
+	notaryAddress, err := tktypes.ParseEthAddress(notary.Verifier)
 	if err != nil {
 		return nil, err
 	}
 
+	if params.Hooks != nil && !params.Hooks.PublicAddress.IsZero() {
+		notaryAddress = params.Hooks.PublicAddress
+		deployData.NotaryType = types.NotaryTypePente
+		deployData.PrivateAddress = params.Hooks.PrivateAddress
+		deployData.PrivateGroup = params.Hooks.PrivateGroup
+	}
+
+	deployDataJSON, err := json.Marshal(deployData)
+	if err != nil {
+		return nil, err
+	}
 	deployParams := &NotoDeployParams{
 		Name:          params.Implementation,
 		TransactionID: req.Transaction.TransactionId,
-		NotaryType:    notaryType,
 		NotaryAddress: *notaryAddress,
-		Data:          deployData,
+		Data:          deployDataJSON,
 	}
 	paramsJSON, err := json.Marshal(deployParams)
 	if err != nil {
@@ -264,12 +265,13 @@ func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractReques
 	domainConfig, err := n.decodeConfig(ctx, req.ContractConfig)
 	if err == nil {
 		parsedConfig := &types.NotoParsedConfig{
-			NotaryType:     domainConfig.NotaryType,
-			NotaryAddress:  domainConfig.NotaryAddress,
-			Variant:        domainConfig.Variant,
-			NotaryLookup:   domainConfig.DecodedData.NotaryLookup,
-			PrivateAddress: domainConfig.DecodedData.PrivateAddress,
-			PrivateGroup:   domainConfig.DecodedData.PrivateGroup,
+			NotaryType:      domainConfig.DecodedData.NotaryType,
+			NotaryAddress:   domainConfig.NotaryAddress,
+			Variant:         domainConfig.Variant,
+			NotaryLookup:    domainConfig.DecodedData.NotaryLookup,
+			PrivateAddress:  domainConfig.DecodedData.PrivateAddress,
+			PrivateGroup:    domainConfig.DecodedData.PrivateGroup,
+			RestrictMinting: domainConfig.DecodedData.RestrictMinting,
 		}
 		notoContractConfigJSON, err = json.Marshal(parsedConfig)
 	}
@@ -532,4 +534,9 @@ func (n *Noto) InitCall(ctx context.Context, req *prototk.InitCallRequest) (*pro
 
 func (n *Noto) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}
+
+func (n *Noto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+	// TODO: Event logs for transfers would be great for Noto
+	return nil, i18n.NewError(ctx, msgs.MsgNoDomainReceipt)
 }

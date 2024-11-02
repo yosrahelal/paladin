@@ -29,17 +29,19 @@ import (
 // to record a failed transaction.  nothing gets written to any tables owned by the private transaction manager
 // but the write is coordinated by our flush writer to minimize the number of database transactions
 type finalizeOperation struct {
+	Domain         string
 	TransactionID  uuid.UUID
 	FailureMessage string
 }
 
 // QueueTransactionFinalize
-func (s *syncPoints) QueueTransactionFinalize(ctx context.Context, contractAddress tktypes.EthAddress, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error)) {
+func (s *syncPoints) QueueTransactionFinalize(ctx context.Context, domain string, contractAddress tktypes.EthAddress, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error)) {
 
 	op := s.writer.Queue(ctx, &syncPointOperation{
 		domainContext:   nil, // finalize does not depend on the flushing of any states
 		contractAddress: contractAddress,
 		finalizeOperation: &finalizeOperation{
+			Domain:         domain,
 			TransactionID:  transactionID,
 			FailureMessage: failureMessage,
 		},
@@ -66,6 +68,7 @@ func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX *gorm.DB, 
 		if op.FailureMessage != "" {
 			failureReceipts = append(failureReceipts, &components.ReceiptInput{
 				ReceiptType:    components.RT_FailedWithMessage,
+				Domain:         op.Domain,
 				TransactionID:  op.TransactionID,
 				FailureMessage: op.FailureMessage,
 			})

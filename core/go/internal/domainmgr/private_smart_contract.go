@@ -179,16 +179,26 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 	}
 
 	postAssembly := &components.TransactionPostAssembly{}
-	// We hydrate the states on our side of the Manager<->Plugin divide at this point,
-	// which provides back to the engine the full sequence locking information of the
-	// states (inputs, and read)
-	postAssembly.InputStates, err = dc.loadStates(dCtx, readTX, res.AssembledTransaction.InputStates)
-	if err != nil {
-		return err
-	}
-	postAssembly.ReadStates, err = dc.loadStates(dCtx, readTX, res.AssembledTransaction.ReadStates)
-	if err != nil {
-		return err
+	// If the result is not OK (e.g. there is a REVERT) then we return the situation to the private TX manager to handle
+	if res.AssemblyResult == prototk.AssembleTransactionResponse_OK && res.AssembledTransaction != nil {
+		// We hydrate the states on our side of the Manager<->Plugin divide at this point,
+		// which provides back to the engine the full sequence locking information of the
+		// states (inputs, and read)
+		postAssembly.InputStates, err = dc.loadStatesFromContext(dCtx, readTX, res.AssembledTransaction.InputStates)
+		if err != nil {
+			return err
+		}
+		postAssembly.ReadStates, err = dc.loadStatesFromContext(dCtx, readTX, res.AssembledTransaction.ReadStates)
+		if err != nil {
+			return err
+		}
+
+		// Note the states at this point are just potential states - depending on the analysis
+		// of the result, and the locking on the input states, the engine might decide to
+		// abandon this attempt and just re-assemble later.
+		postAssembly.OutputStatesPotential = res.AssembledTransaction.OutputStates
+		postAssembly.InfoStatesPotential = res.AssembledTransaction.InfoStates
+		postAssembly.ExtraData = res.AssembledTransaction.ExtraData
 	}
 	if res.RevertReason != nil && *res.RevertReason != "" {
 		postAssembly.RevertReason = res.RevertReason
@@ -198,11 +208,6 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 	// before anything interesting can happen with the result here
 	postAssembly.AssemblyResult = res.AssemblyResult
 	postAssembly.AttestationPlan = res.AttestationPlan
-	// Note the states at this point are just potential states - depending on the analysis
-	// of the result, and the locking on the input states, the engine might decide to
-	// abandon this attempt and just re-assemble later.
-	postAssembly.OutputStatesPotential = res.AssembledTransaction.OutputStates
-	postAssembly.ExtraData = res.AssembledTransaction.ExtraData
 	tx.PostAssembly = postAssembly
 	return nil
 }
@@ -214,57 +219,69 @@ func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, re
 	}
 
 	// Now we're confident enough about this transaction to (on the sequencer) to have allocated
-	// it to a sequence, and we want to write the OutputStatesPotential array:
+	// it to a sequence, and we want to write the OutputStatesPotential+InfoStatesPotential arrays:
 	// 1) Writing them to the DB (unflushed at this point)
 	// 2) Storing their identifiers into the OutputStatesFull list
 	//
 	// Note: This only happens on the sequencer node - any endorsing nodes just take the Full states
 	//       and write them directly to the sequence prior to endorsement
 	postAssembly := tx.PostAssembly
+	postAssembly.OutputStates, err = dc.upsertPotentialStates(dCtx, readTX, tx, postAssembly.OutputStatesPotential, true)
+	if err == nil {
+		postAssembly.InfoStates, err = dc.upsertPotentialStates(dCtx, readTX, tx, postAssembly.InfoStatesPotential, false)
+	}
+	return err
 
-	newStatesToWrite := make([]*components.StateUpsert, len(postAssembly.OutputStatesPotential))
+}
+
+func (dc *domainContract) upsertPotentialStates(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction, potentialStates []*prototk.NewState, isOutput bool) (writtenStates []*components.FullState, err error) {
+	newStatesToWrite := make([]*components.StateUpsert, len(potentialStates))
 	domain := dc.d
-	for i, s := range postAssembly.OutputStatesPotential {
+	for i, s := range potentialStates {
 		schema := domain.schemasByID[s.SchemaId]
 		if schema == nil {
 			schema = domain.schemasBySignature[s.SchemaId]
 		}
 		if schema == nil {
-			return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainUnknownSchema, s.SchemaId)
+			return nil, i18n.NewError(dCtx.Ctx(), msgs.MsgDomainUnknownSchema, s.SchemaId)
 		}
 		var id tktypes.HexBytes
 		if s.Id != nil {
 			id, err = tktypes.ParseHexBytes(dCtx.Ctx(), *s.Id)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
-		newStatesToWrite[i] = &components.StateUpsert{
+		stateUpsert := &components.StateUpsert{
 			ID:       id,
 			SchemaID: schema.ID(),
 			Data:     tktypes.RawJSON(s.StateDataJson),
-			// These are marked as locked and creating in the transaction
-			CreatedBy: &tx.ID,
+		}
+		if isOutput {
+			// These are marked as locked and creating in the transaction, and become available for other transaction to read
+			stateUpsert.CreatedBy = &tx.ID
+		}
+		newStatesToWrite[i] = stateUpsert
+	}
+
+	writtenStates = make([]*components.FullState, len(newStatesToWrite))
+	if len(newStatesToWrite) > 0 {
+		log.L(dCtx.Ctx()).Infof("Writing states to domain context for transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, tx.Inputs.To)
+		newStates, err := dCtx.UpsertStates(readTX, newStatesToWrite...)
+		if err != nil {
+			return nil, err
+		}
+
+		// Store the results on the TX
+		for i, s := range newStates {
+			writtenStates[i] = &components.FullState{
+				ID:     s.ID,
+				Schema: s.Schema,
+				Data:   s.Data,
+			}
 		}
 	}
-
-	log.L(dCtx.Ctx()).Infof("Writing states to domain context for transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, tx.Inputs.To)
-	states, err := dCtx.UpsertStates(readTX, newStatesToWrite...)
-	if err != nil {
-		return err
-	}
-
-	// Store the results on the TX
-	postAssembly.OutputStates = make([]*components.FullState, len(states))
-	for i, s := range states {
-		postAssembly.OutputStates[i] = &components.FullState{
-			ID:     s.ID,
-			Schema: s.Schema,
-			Data:   s.Data,
-		}
-	}
-	return nil
-
+	return writtenStates, nil
 }
 
 // Happens on all nodes that are aware of the transaction and want to mask input states from other
@@ -321,20 +338,31 @@ func (dc *domainContract) LockStates(dCtx components.DomainContext, readTX *gorm
 		readIDs[i] = s.ID.String()
 	}
 
-	// Output state locks are implicit as part of writing it
+	// Output state locks are implicit as part of writing it with CreatedBy
 	outputIDs := make([]string, len(postAssembly.OutputStates))
 	for i, s := range postAssembly.OutputStates {
 		states = append(states, &components.StateUpsert{
 			ID:        s.ID,
 			SchemaID:  s.Schema,
 			Data:      s.Data,
-			CreatedBy: &tx.ID,
+			CreatedBy: &tx.ID, // output states have create-locks to the transaction
 		})
 		outputIDs[i] = s.ID.String()
 	}
 
+	// Info states have no locks, they can only be found by a state query that includes unavailable states
+	infoIDs := make([]string, len(postAssembly.InfoStates))
+	for i, s := range postAssembly.InfoStates {
+		states = append(states, &components.StateUpsert{
+			ID:       s.ID,
+			SchemaID: s.Schema,
+			Data:     s.Data,
+		})
+		infoIDs[i] = s.ID.String()
+	}
+
 	// Heavy lifting is all done for us by the state store
-	log.L(dCtx.Ctx()).Infof("Loading TX into context transaction=%s domain=%s contract-address=%s inputs=%v read=%s outputs=%v", tx.ID, dc.d.name, tx.Inputs.To, inputIDs, readIDs, outputIDs)
+	log.L(dCtx.Ctx()).Infof("Loading TX into context transaction=%s domain=%s contract-address=%s inputs=%v read=%s outputs=%v info=%v", tx.ID, dc.d.name, tx.Inputs.To, inputIDs, readIDs, outputIDs, infoIDs)
 	_, err := dCtx.UpsertStates(readTX, states...)
 	if err == nil {
 		err = dCtx.AddStateLocks(stateLocks...)
@@ -352,6 +380,7 @@ func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, read
 		req.InputStates == nil ||
 		req.ReadStates == nil ||
 		req.OutputStates == nil ||
+		req.InfoStates == nil ||
 		req.Endorsement == nil ||
 		req.Endorser == nil {
 		return nil, i18n.NewError(dCtx.Ctx(), msgs.MsgDomainReqIncompleteEndorseTransaction)
@@ -378,6 +407,7 @@ func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, read
 		Inputs:              req.InputStates,
 		Reads:               req.ReadStates,
 		Outputs:             req.OutputStates,
+		Info:                req.InfoStates,
 		Signatures:          req.Signatures,
 		EndorsementRequest:  req.Endorsement,
 		EndorsementVerifier: req.Endorser,
@@ -416,6 +446,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 		InputStates:       dc.d.toEndorsableList(postAssembly.InputStates),
 		ReadStates:        dc.d.toEndorsableList(postAssembly.ReadStates),
 		OutputStates:      dc.d.toEndorsableList(postAssembly.OutputStates),
+		InfoStates:        dc.d.toEndorsableList(postAssembly.InfoStates),
 		AttestationResult: dc.allAttestations(tx),
 		ResolvedVerifiers: preAssembly.Verifiers,
 		ExtraData:         postAssembly.ExtraData,
@@ -437,14 +468,13 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 		}
 	}
 
-	tx.PreparedTransactionIntent = tx.Inputs.Intent
 	if res.Transaction.Type == prototk.PreparedTransaction_PRIVATE {
 		psc, err := dc.dm.GetSmartContractByAddress(dCtx.Ctx(), *contractAddress)
 		if err != nil {
 			return err
 		}
 		tx.PreparedPrivateTransaction = &pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				IdempotencyKey: fmt.Sprintf("%s_%s", tx.ID, functionABI.Name),
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				Function:       functionABI.String(),
@@ -457,7 +487,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 		}
 	} else {
 		tx.PreparedPublicTransaction = &pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				Type:     pldapi.TransactionTypePublic.Enum(),
 				Function: functionABI.String(),
 				From:     tx.Signer,
@@ -466,6 +496,9 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 			},
 			ABI: abi.ABI{&functionABI},
 		}
+	}
+	if res.Metadata != nil {
+		tx.PreparedMetadata = tktypes.RawJSON(*res.Metadata)
 	}
 	return nil
 }
@@ -541,7 +574,7 @@ func (dc *domainContract) allAttestations(tx *components.PrivateTransaction) []*
 	return attestations
 }
 
-func (dc *domainContract) loadStates(dCtx components.DomainContext, readTX *gorm.DB, refs []*prototk.StateRef) ([]*components.FullState, error) {
+func (dc *domainContract) loadStatesFromContext(dCtx components.DomainContext, readTX *gorm.DB, refs []*prototk.StateRef) ([]*components.FullState, error) {
 	rawIDsBySchema := make(map[tktypes.Bytes32][]tktypes.RawJSON)
 	stateIDs := make([]tktypes.HexBytes, len(refs))
 	for i, s := range refs {

@@ -56,6 +56,9 @@ type PaladinClient interface {
 
 	// Paladin state store RPC interface
 	StateStore() StateStore
+
+	// Paladin block index
+	BlockIndex() BlockIndex
 }
 
 type RPCModule interface {

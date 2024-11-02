@@ -34,7 +34,7 @@ import (
 )
 
 func TestRPCLocalDetails(t *testing.T) {
-	ctx, km, _, done := newTestKeyManagerHDWallet(t)
+	ctx, km, _, done := newTestDBKeyManagerWithWallets(t, hdWalletConfig("hdwallet1", ""))
 	defer done()
 
 	rpc, rpcDone := newTestRPCServer(t, ctx, km)

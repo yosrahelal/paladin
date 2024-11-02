@@ -724,14 +724,14 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	tbRPC := rpcclient.WrapRestyClient(resty.New().SetBaseURL(url))
 
 	var contractAddr ethtypes.Address0xHex
-	rpcErr := tbRPC.CallRPC(ctx, &contractAddr, "testbed_deploy", "domain1", tktypes.RawJSON(`{
+	rpcErr := tbRPC.CallRPC(ctx, &contractAddr, "testbed_deploy", "domain1", "me", tktypes.RawJSON(`{
 		"notary": "domain1.contract1.notary",
 		"name": "FakeToken1",
 		"symbol": "FT1"
 	}`))
 	assert.NoError(t, rpcErr)
 
-	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &TransactionInput{
 		From:     "wallets.org1.aaaaaa",
 		To:       tktypes.EthAddress(contractAddr),
 		Function: *mustParseABIEntry(fakeCoinTransferABI),
@@ -743,7 +743,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	}, true)
 	assert.NoError(t, rpcErr)
 
-	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &TransactionInput{
 		From:     "wallets.org1.aaaaaa",
 		To:       tktypes.EthAddress(contractAddr),
 		Function: *mustParseABIEntry(fakeCoinTransferABI),
@@ -756,7 +756,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	assert.NoError(t, rpcErr)
 
 	var balance *getBalanceResult
-	rpcErr = tbRPC.CallRPC(ctx, &balance, "testbed_call", &tktypes.PrivateContractInvoke{
+	rpcErr = tbRPC.CallRPC(ctx, &balance, "testbed_call", &TransactionInput{
 		To:       tktypes.EthAddress(contractAddr),
 		Function: *mustParseABIEntry(fakeCoinGetBalanceABI),
 		Inputs: tktypes.RawJSON(`{
@@ -789,7 +789,7 @@ func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
 
 	// In this test we deploy the factory in-line
 	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "domain1_admin",
 		},

@@ -223,6 +223,12 @@ func TestDomainRequestsOK(t *testing.T) {
 				ResultJson: `{"some":"data"}`,
 			}, nil
 		},
+		BuildReceipt: func(ctx context.Context, brr *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+			assert.Equal(t, "tx1", brr.TransactionId)
+			return &prototk.BuildReceiptResponse{
+				ReceiptJson: `{"receipt":"data"}`,
+			}, nil
+		},
 	}
 
 	tdm := &testDomainManager{
@@ -379,6 +385,12 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, `{"some":"data"}`, ecr.ResultJson)
+
+	brr, err := domainAPI.BuildReceipt(ctx, &prototk.BuildReceiptRequest{
+		TransactionId: "tx1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, `{"receipt":"data"}`, brr.ReceiptJson)
 
 	callbacks := <-waitForCallbacks
 

@@ -95,11 +95,11 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 	})
 	defer done()
 
-	abiRef, err := txm.storeABI(ctx, testABI)
+	abiRef, err := txm.storeABI(ctx, txm.p.DB(), testABI)
 	require.NoError(t, err)
 
 	txID, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:         pldapi.TransactionTypePublic.Enum(),
 			ABIReference: abiRef,
 			From:         "sender1",

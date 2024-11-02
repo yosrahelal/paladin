@@ -107,6 +107,13 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		}
 	}
 
+	// Must be signed on the same node as it was assembled so do this before considering whether to delegate
+	tf.requestSignatures(ctx)
+	if tf.hasOutstandingSignatureRequests() {
+		return
+	}
+	tf.status = "signed"
+
 	//depending on the delegation policy, we may not be able to decide to delegate until after we have assembled the transaction
 	if !tf.delegateIfRequired(ctx) {
 		tf.logActionDebug(ctx, "no continue after post assembly delegate check")
@@ -118,15 +125,7 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 
 	//If we get here, we have an assembled transaction and have no intention of delegating it
 	// so we are responsible for coordinating the endorsement flow
-
 	// either because it was submitted locally and we decided not to delegate or because it was delegated to us
-	// start with fulfilling any outstanding signature requests
-	tf.requestSignatures(ctx)
-	if tf.hasOutstandingSignatureRequests() {
-		tf.logActionDebug(ctx, "Transaction not ready to endorse. Waiting for signatures to be resolved")
-		return
-	}
-	tf.status = "signed"
 
 	tf.requestEndorsements(ctx)
 	if tf.hasOutstandingEndorsementRequests(ctx) {
@@ -251,6 +250,7 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 
 	tf.syncPoints.QueueTransactionFinalize(
 		ctx,
+		tf.transaction.Inputs.Domain,
 		tf.domainAPI.Address(),
 		tf.transaction.ID,
 		tf.finalizeRevertReason,
@@ -446,7 +446,16 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 func (tf *transactionFlow) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
 
 	keyMgr := tf.components.KeyManager()
-	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(partyName).Identity(ctx)
+
+	unqualifiedLookup := partyName
+	signerNode, err := tktypes.PrivateIdentityLocator(partyName).Node(ctx, true)
+	if signerNode != "" && signerNode != tf.nodeID {
+		log.L(ctx).Debugf("Requesting signature from a remote identity %s for %s", partyName, attRequest.Name)
+		err = i18n.NewError(ctx, msgs.MsgPrivateTxManagerSignRemoteError, partyName)
+	}
+	if err == nil {
+		unqualifiedLookup, err = tktypes.PrivateIdentityLocator(partyName).Identity(ctx)
+	}
 	var resolvedKey *pldapi.KeyMappingAndVerifier
 	if err == nil {
 		resolvedKey, err = keyMgr.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, attRequest.Algorithm, attRequest.VerifierType)
@@ -534,6 +543,7 @@ func (tf *transactionFlow) requestEndorsement(ctx context.Context, idempotencyKe
 			toEndorsableList(tf.transaction.PostAssembly.InputStates),
 			toEndorsableList(tf.transaction.PostAssembly.ReadStates),
 			toEndorsableList(tf.transaction.PostAssembly.OutputStates),
+			toEndorsableList(tf.transaction.PostAssembly.InfoStates),
 			party,
 			attRequest)
 		if err != nil {
@@ -567,6 +577,7 @@ func (tf *transactionFlow) requestEndorsement(ctx context.Context, idempotencyKe
 			tf.transaction.PostAssembly.Signatures,
 			tf.transaction.PostAssembly.InputStates,
 			tf.transaction.PostAssembly.OutputStates,
+			tf.transaction.PostAssembly.InfoStates,
 		)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to send endorsement request to party %s: %s", party, err)

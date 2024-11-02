@@ -92,7 +92,7 @@ func (tb *testbed) rpcDeployBytecode() rpcserver.RPCHandler {
 	) (*ethtypes.Address0xHex, error) {
 
 		receipt, err := tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				Type: pldapi.TransactionTypePublic.Enum(),
 				From: from,
 				Data: params,
@@ -125,8 +125,9 @@ func (tb *testbed) resolveVerifiers(ctx context.Context, requiredVerifiers []*pr
 }
 
 func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context,
+	return rpcserver.RPCMethod3(func(ctx context.Context,
 		domainName string,
+		from string,
 		constructorParams tktypes.RawJSON,
 	) (*tktypes.EthAddress, error) {
 
@@ -138,6 +139,7 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 		tx := &components.PrivateContractDeploy{
 			ID:     uuid.New(),
 			Domain: domain.Name(),
+			From:   from,
 			Inputs: constructorParams,
 		}
 		err = domain.InitDeploy(ctx, tx)
@@ -176,7 +178,7 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 	})
 }
 
-func (tb *testbed) newPrivateTransaction(ctx context.Context, invocation tktypes.PrivateContractInvoke, intent prototk.TransactionSpecification_Intent) (components.DomainSmartContract, *components.PrivateTransaction, error) {
+func (tb *testbed) newPrivateTransaction(ctx context.Context, invocation TransactionInput, intent prototk.TransactionSpecification_Intent) (components.DomainSmartContract, *components.PrivateTransaction, error) {
 	psc, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, invocation.To)
 	if err != nil {
 		return nil, nil, err
@@ -294,22 +296,30 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 	dbTXResultCB(nil)
 
+	// If preparing only, stop here
+	if tx.Inputs.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION {
+		return nil
+	}
+
 	if tx.PreparedPrivateTransaction != nil && tx.PreparedPrivateTransaction.To != nil {
+		// Private transaction
 		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, *tx.PreparedPrivateTransaction.To)
 		if err != nil {
 			return err
 		}
-		return tb.execPrivateTransaction(ctx, nextContract, mapDirectlyToInternalPrivateTX(tx.PreparedPrivateTransaction, tx.Inputs.Intent))
-	} else if tx.Inputs.Intent == prototk.TransactionSpecification_CALL {
-		var ignored any
-		err := tb.ExecBaseLedgerCall(ctx, &ignored, &pldapi.TransactionCall{
-			TransactionInput: *tx.PreparedPublicTransaction,
-			PublicCallOptions: pldapi.PublicCallOptions{
-				Block: "latest",
-			},
-		})
-		return err
+		nextTX := mapDirectlyToInternalPrivateTX(tx.PreparedPrivateTransaction, tx.Inputs.Intent)
+		return tb.execPrivateTransaction(ctx, nextContract, nextTX)
 	} else {
+		// Public transaction
+		if tx.Inputs.Intent == prototk.TransactionSpecification_CALL {
+			var ignored any // TODO: return the output in some way
+			return tb.ExecBaseLedgerCall(ctx, &ignored, &pldapi.TransactionCall{
+				TransactionInput: *tx.PreparedPublicTransaction,
+				PublicCallOptions: pldapi.PublicCallOptions{
+					Block: "latest",
+				},
+			})
+		}
 		_, err := tb.ExecTransactionSync(ctx, tx.PreparedPublicTransaction)
 		return err
 	}
@@ -329,61 +339,72 @@ func mapDirectlyToInternalPrivateTX(etx *pldapi.TransactionInput, intent prototk
 	}
 }
 
-func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) (*tktypes.PrivateContractTransaction, error) {
-	inputStates := make([]*tktypes.FullState, len(tx.PostAssembly.InputStates))
+func (tb *testbed) mapTransaction(ctx context.Context, tx *components.PrivateTransaction) (*TransactionResult, error) {
+	inputStates := make([]*pldapi.StateWithData, len(tx.PostAssembly.InputStates))
 	for i, state := range tx.PostAssembly.InputStates {
-		inputStates[i] = &tktypes.FullState{
+		inputStates[i] = &pldapi.StateWithData{
 			ID:     state.ID,
 			Schema: state.Schema,
 			Data:   []byte(state.Data),
 		}
 	}
-	outputStates := make([]*tktypes.FullState, len(tx.PostAssembly.OutputStates))
+	outputStates := make([]*pldapi.StateWithData, len(tx.PostAssembly.OutputStates))
 	for i, state := range tx.PostAssembly.OutputStates {
-		outputStates[i] = &tktypes.FullState{
+		outputStates[i] = &pldapi.StateWithData{
 			ID:     state.ID,
 			Schema: state.Schema,
 			Data:   []byte(state.Data),
 		}
 	}
-	readStates := make([]*tktypes.FullState, len(tx.PostAssembly.ReadStates))
+	readStates := make([]*pldapi.StateWithData, len(tx.PostAssembly.ReadStates))
 	for i, state := range tx.PostAssembly.ReadStates {
-		readStates[i] = &tktypes.FullState{
+		readStates[i] = &pldapi.StateWithData{
+			ID:     state.ID,
+			Schema: state.Schema,
+			Data:   []byte(state.Data),
+		}
+	}
+	infoStates := make([]*pldapi.StateWithData, len(tx.PostAssembly.InfoStates))
+	for i, state := range tx.PostAssembly.InfoStates {
+		infoStates[i] = &pldapi.StateWithData{
 			ID:     state.ID,
 			Schema: state.Schema,
 			Data:   []byte(state.Data),
 		}
 	}
 
-	var functionABI *abi.Entry
-	var to tktypes.EthAddress
-	var paramsJSON tktypes.RawJSON
-	if tx.PreparedPublicTransaction != nil {
-		functionABI = tx.PreparedPublicTransaction.ABI[0]
-		to = *tx.PreparedPublicTransaction.To
-		paramsJSON = tx.PreparedPublicTransaction.Data
-	} else {
-		functionABI = tx.PreparedPrivateTransaction.ABI[0]
-		to = *tx.PreparedPrivateTransaction.To
-		paramsJSON = tx.PreparedPrivateTransaction.Data
+	preparedTransaction := tx.PreparedPublicTransaction
+	if tx.PreparedPublicTransaction == nil {
+		preparedTransaction = tx.PreparedPrivateTransaction
 	}
 
-	return &tktypes.PrivateContractTransaction{
-		FunctionABI:  functionABI,
-		To:           to,
-		ParamsJSON:   paramsJSON,
-		InputStates:  inputStates,
-		OutputStates: outputStates,
-		ReadStates:   readStates,
-		ExtraData:    tx.PostAssembly.ExtraData,
+	encodedCall, err := preparedTransaction.ABI[0].EncodeCallDataJSONCtx(ctx, preparedTransaction.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	var assembleExtraData []byte
+	if tx.PostAssembly.ExtraData != nil {
+		assembleExtraData = []byte(*tx.PostAssembly.ExtraData)
+	}
+
+	return &TransactionResult{
+		EncodedCall:         encodedCall,
+		PreparedTransaction: preparedTransaction,
+		PreparedMetadata:    tx.PreparedMetadata,
+		InputStates:         inputStates,
+		OutputStates:        outputStates,
+		ReadStates:          readStates,
+		InfoStates:          infoStates,
+		AssembleExtraData:   assembleExtraData,
 	}, nil
 }
 
 func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
-		invocation tktypes.PrivateContractInvoke,
+		invocation TransactionInput,
 		waitForCompletion bool,
-	) (*tktypes.PrivateContractTransaction, error) {
+	) (*TransactionResult, error) {
 		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_SEND_TRANSACTION)
 		if err != nil {
 			return nil, err
@@ -399,17 +420,17 @@ func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 		if err != nil {
 			return nil, err
 		}
-		return tb.mapTransaction(tx)
+		return tb.mapTransaction(ctx, tx)
 
 	})
 }
 
 func (tb *testbed) rpcTestbedPrepare() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
-		invocation tktypes.PrivateContractInvoke,
-	) (*tktypes.PrivateContractTransaction, error) {
+		invocation TransactionInput,
+	) (*TransactionResult, error) {
 
-		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_CALL)
+		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_PREPARE_TRANSACTION)
 		if err != nil {
 			return nil, err
 		}
@@ -417,7 +438,7 @@ func (tb *testbed) rpcTestbedPrepare() rpcserver.RPCHandler {
 		if err != nil {
 			return nil, err
 		}
-		return tb.mapTransaction(tx)
+		return tb.mapTransaction(ctx, tx)
 	})
 }
 
@@ -437,7 +458,7 @@ func (tb *testbed) rpcResolveVerifier() rpcserver.RPCHandler {
 
 func (tb *testbed) rpcTestbedCall() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
-		invocation tktypes.PrivateContractInvoke,
+		invocation TransactionInput,
 		dataFormat tktypes.JSONFormatOptions,
 	) (tktypes.RawJSON, error) {
 		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_CALL)

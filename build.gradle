@@ -19,6 +19,10 @@ def transports = [
     'transports/grpc/build/libs',
 ]
 
+def uiClient = [
+    'ui/client/dist',
+]
+ 
 def assembleSubprojects = [
     ':core:go',
     ':core:java',
@@ -29,6 +33,7 @@ def assembleSubprojects = [
     ':registries:static',
     ':registries:evm',
     ':transports:grpc',
+    ':ui:client',
 ]
 
 ext {
@@ -161,6 +166,25 @@ task copyTransports(type: Copy) {
     }
 }
 
+task copyUIFiles(type: Copy) {
+    def uiDir = file("${buildDir}/ui")
+
+    doFirst {
+        uiDir.mkdirs()
+    }
+
+    uiClient.each { dir ->
+        from dir
+    }
+    into uiDir
+
+    outputs.upToDateWhen { false }
+
+    doLast {
+        println "Copied UI files to ${uiDir}"
+    }
+}
+
 // Root assemble task that depends on subproject's assemble tasks
 task assemble {
     assembleSubprojects.each { projectPath ->
@@ -168,7 +192,7 @@ task assemble {
     }
 }
 
-assemble.finalizedBy(copyLibraries, copyDomains, copyRegistries, copyTransports)
+assemble.finalizedBy(copyLibraries, copyDomains, copyRegistries, copyTransports, copyUIFiles)
 
 defaultTasks 'build'
 

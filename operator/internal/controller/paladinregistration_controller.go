@@ -203,7 +203,7 @@ func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context,
 	}
 
 	tx := &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			To:       registryAddr,
 			Function: registryABI.Functions()["registerIdentity"].String(),
@@ -258,7 +258,7 @@ func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, re
 	}
 
 	tx := &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			To:       registryAddr,
 			Function: registryABI.Functions()["setIdentityProperty"].String(),

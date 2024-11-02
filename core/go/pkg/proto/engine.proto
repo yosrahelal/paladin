@@ -40,6 +40,7 @@ message EndorsementRequest {
     repeated google.protobuf.Any inputStates = 9;
     repeated google.protobuf.Any readStates = 10;
     repeated google.protobuf.Any outputStates = 11;
+    repeated google.protobuf.Any infoStates = 12;
 }
 
 message EndorsementResponse {

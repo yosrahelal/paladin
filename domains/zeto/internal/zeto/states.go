@@ -123,7 +123,7 @@ func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, sender stri
 			})
 			coins = append(coins, coin)
 			if total.Cmp(expectedTotal) >= 0 {
-				remainder := total.Sub(total, expectedTotal)
+				remainder := big.NewInt(0).Sub(total, expectedTotal)
 				return coins, stateRefs, total, remainder, nil
 			}
 			if len(stateRefs) >= MAX_INPUT_COUNT {

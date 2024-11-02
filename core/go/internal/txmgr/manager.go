@@ -41,6 +41,8 @@ type txManager struct {
 	keyManager       components.KeyManager
 	publicTxMgr      components.PublicTxManager
 	privateTxMgr     components.PrivateTxManager
+	domainMgr        components.DomainManager
+	stateMgr         components.StateManager
 	identityResolver components.IdentityResolver
 	abiCache         cache.Cache[tktypes.Bytes32, *pldapi.StoredABI]
 	rpcModule        *rpcserver.RPCModule
@@ -53,6 +55,8 @@ func (tm *txManager) PostInit(c components.AllComponents) error {
 	tm.keyManager = c.KeyManager()
 	tm.publicTxMgr = c.PublicTxManager()
 	tm.privateTxMgr = c.PrivateTxManager()
+	tm.domainMgr = c.DomainManager()
+	tm.stateMgr = c.StateManager()
 	tm.identityResolver = c.IdentityResolver()
 	return nil
 }

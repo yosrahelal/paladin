@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
@@ -159,7 +160,9 @@ func (p *privateTxManager) getSequencerForContract(ctx context.Context, contract
 			}
 
 			newSequencer, err := NewSequencer(
-				p.ctx, p.nodeName,
+				p.ctx,
+				p,
+				p.nodeName,
 				contractAddr,
 				&p.config.Sequencer,
 				p.components,
@@ -215,6 +218,37 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 	return p.endorsementGatherers[contractAddr.String()], nil
 }
 
+func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.ValidatedTransaction) error {
+	tx := txi.Transaction
+	if tx.To == nil {
+		if txi.Transaction.SubmitMode.V() != pldapi.SubmitModeAuto {
+			return i18n.NewError(ctx, msgs.MsgPrivateTxMgrPrepareNotSupportedDeploy)
+		}
+		return p.handleDeployTx(ctx, &components.PrivateContractDeploy{
+			ID:     *tx.ID,
+			Domain: tx.Domain,
+			From:   tx.From,
+			Inputs: txi.Inputs,
+		})
+	}
+	intent := prototk.TransactionSpecification_SEND_TRANSACTION
+	if txi.Transaction.SubmitMode.V() == pldapi.SubmitModeExternal {
+		intent = prototk.TransactionSpecification_PREPARE_TRANSACTION
+	}
+	return p.handleNewTx(ctx, &components.PrivateTransaction{
+		ID: *tx.ID,
+		Inputs: &components.TransactionInputs{
+			Domain:   tx.Domain,
+			From:     tx.From,
+			To:       *tx.To,
+			Function: txi.Function.Definition,
+			Inputs:   txi.Inputs,
+			Intent:   intent,
+		},
+		PublicTxOptions: tx.PublicTxOptions,
+	})
+}
+
 // HandleNewTx synchronously receives a new transaction submission
 // TODO this should really be a 2 (or 3?) phase handshake with
 //   - Pre submit phase to validate the inputs
@@ -223,9 +257,9 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 //
 // We are currently proving out this pattern on the boundary of the private transaction manager and the public transaction manager and once that has settled, we will implement the same pattern here.
 // In the meantime, we a single function to submit a transaction and there is currently no persistence of the submission record.  It is all held in memory only
-func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) error {
+func (p *privateTxManager) handleNewTx(ctx context.Context, tx *components.PrivateTransaction) error {
 	log.L(ctx).Debugf("Handling new transaction: %v", tx)
-	if tx.Inputs == nil || tx.Inputs.Domain == "" {
+	if tx.Inputs == nil {
 		return i18n.NewError(ctx, msgs.MsgDomainNotProvided)
 	}
 
@@ -239,6 +273,13 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.Priva
 	if err != nil {
 		return err
 	}
+
+	domainName := domainAPI.Domain().Name()
+	if tx.Inputs.Domain != "" && domainName != tx.Inputs.Domain {
+		return i18n.NewError(ctx, msgs.MsgPrivateTxMgrDomainMismatch, tx.Inputs.Domain, domainName, domainAPI.Address())
+	}
+	tx.Inputs.Domain = domainName
+
 	err = domainAPI.InitTransaction(ctx, tx)
 	if err != nil {
 		return err
@@ -299,7 +340,7 @@ func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, tx *c
 // Synchronous function to submit a deployment request which is asynchronously processed
 // Private transaction manager will receive a notification when the public transaction is confirmed
 // (same as for invokes)
-func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) error {
+func (p *privateTxManager) handleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) error {
 	log.L(ctx).Debugf("Handling new private contract deploy transaction: %v", tx)
 	if tx.Domain == "" {
 		return i18n.NewError(ctx, msgs.MsgDomainNotProvided)
@@ -356,7 +397,7 @@ func (p *privateTxManager) revertDeploy(ctx context.Context, tx *components.Priv
 
 	var tryFinalize func()
 	tryFinalize = func() {
-		p.syncPoints.QueueTransactionFinalize(ctx, tktypes.EthAddress{}, tx.ID, deployError.Error(),
+		p.syncPoints.QueueTransactionFinalize(ctx, tx.Domain, tktypes.EthAddress{}, tx.ID, deployError.Error(),
 			func(ctx context.Context) {
 				log.L(ctx).Debugf("Finalized deployment transaction: %s", tx.ID)
 			},
@@ -440,7 +481,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	}
 
 	//transactions are always dispatched as a sequence, even if only a sequence of one
-	sequence := &syncpoints.DispatchSequence{
+	sequence := &syncpoints.PublicDispatch{
 		PrivateTransactionDispatches: []*syncpoints.DispatchPersisted{
 			{
 				PrivateTransactionID: tx.ID.String(),
@@ -449,7 +490,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	}
 	sequence.PublicTxBatch = pubBatch
 	dispatchBatch := &syncpoints.DispatchBatch{
-		DispatchSequences: []*syncpoints.DispatchSequence{
+		PublicDispatches: []*syncpoints.PublicDispatch{
 			sequence,
 		},
 	}
@@ -591,6 +632,16 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 		}
 	}
 
+	infoStates := make([]*prototk.EndorsableState, len(endorsementRequest.GetInfoStates()))
+	for i, s := range endorsementRequest.GetInfoStates() {
+		infoStates[i] = &prototk.EndorsableState{}
+		err = s.UnmarshalTo(infoStates[i])
+		if err != nil {
+			log.L(ctx).Errorf("Failed to unmarshal attestation request: %s", err)
+			return
+		}
+	}
+
 	endorsement, revertReason, err := endorsementGatherer.GatherEndorsement(ctx,
 		transactionSpecification,
 		verifiers,
@@ -598,6 +649,7 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 		inputStates,
 		readStates,
 		outputStates,
+		infoStates,
 		endorsementRequest.GetParty(),
 		attestationRequest)
 	if err != nil {
@@ -979,4 +1031,47 @@ func (p *privateTxManager) handleStateProducedEvent(ctx context.Context, message
 	}
 	sequencer.HandleStateProducedEvent(ctx, stateProducedEvent)
 
+}
+
+func (p *privateTxManager) CallPrivateSmartContract(ctx context.Context, call *components.TransactionInputs) (*abi.ComponentValue, error) {
+
+	psc, err := p.components.DomainManager().GetSmartContractByAddress(ctx, call.To)
+	if err != nil {
+		return nil, err
+	}
+
+	domainName := psc.Domain().Name()
+	if call.Domain != "" && domainName != call.Domain {
+		return nil, i18n.NewError(ctx, msgs.MsgPrivateTxMgrDomainMismatch, call.Domain, domainName, psc.Address())
+	}
+	call.Domain = domainName
+
+	// Initialize the call, returning at list of required verifiers
+	requiredVerifiers, err := psc.InitCall(ctx, call)
+	if err != nil {
+		return nil, err
+	}
+
+	// Do the verification in-line and synchronously for call (there is caching in the identity resolver)
+	identityResolver := p.components.IdentityResolver()
+	verifiers := make([]*prototk.ResolvedVerifier, len(requiredVerifiers))
+	for i, r := range requiredVerifiers {
+		verifier, err := identityResolver.ResolveVerifier(ctx, r.Lookup, r.Algorithm, r.VerifierType)
+		if err != nil {
+			return nil, err
+		}
+		verifiers[i] = &prototk.ResolvedVerifier{
+			Lookup:       r.Lookup,
+			Algorithm:    r.Algorithm,
+			VerifierType: r.VerifierType,
+			Verifier:     verifier,
+		}
+	}
+
+	// Create a throwaway domain context for this call
+	dCtx := p.components.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
+	defer dCtx.Close()
+
+	// Do the actual call
+	return psc.ExecCall(dCtx, p.components.Persistence().DB(), call, verifiers)
 }

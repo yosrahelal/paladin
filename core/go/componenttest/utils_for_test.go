@@ -476,7 +476,7 @@ func (p *partyForTesting) deploySimpleDomainInstanceContract(t *testing.T, endor
 
 	err := p.client.CallRPC(context.Background(), &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenConstructorABI(endorsementMode),
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:   pldapi.TransactionTypePrivate.Enum(),
 			Domain: "domain1",
 			From:   p.identity,

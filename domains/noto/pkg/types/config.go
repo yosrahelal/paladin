@@ -28,7 +28,6 @@ type DomainConfig struct {
 var NotoConfigID_V0 = tktypes.MustParseHexBytes("0x00010000")
 
 type NotoConfig_V0 struct {
-	NotaryType    tktypes.HexUint64  `json:"notaryType"`
 	NotaryAddress tktypes.EthAddress `json:"notaryAddress"`
 	Variant       tktypes.HexUint64  `json:"variant"`
 	Data          tktypes.HexBytes   `json:"data"`
@@ -36,19 +35,22 @@ type NotoConfig_V0 struct {
 }
 
 type NotoConfigData_V0 struct {
-	NotaryLookup   string              `json:"notaryLookup"`
-	PrivateAddress *tktypes.EthAddress `json:"privateAddress"`
-	PrivateGroup   *PentePrivateGroup  `json:"privateGroup"`
+	NotaryLookup    string              `json:"notaryLookup"`
+	NotaryType      tktypes.HexUint64   `json:"notaryType"`
+	PrivateAddress  *tktypes.EthAddress `json:"privateAddress"`
+	PrivateGroup    *PentePrivateGroup  `json:"privateGroup"`
+	RestrictMinting bool                `json:"restrictMinting"`
 }
 
 // This is the structure we parse the config into in InitConfig and gets passed back to us on every call
 type NotoParsedConfig struct {
-	NotaryType     tktypes.HexUint64   `json:"notaryType"`
-	NotaryAddress  tktypes.EthAddress  `json:"notaryAddress"`
-	Variant        tktypes.HexUint64   `json:"variant"`
-	NotaryLookup   string              `json:"notaryLookup"`
-	PrivateAddress *tktypes.EthAddress `json:"privateAddress,omitempty"`
-	PrivateGroup   *PentePrivateGroup  `json:"privateGroup,omitempty"`
+	NotaryLookup    string              `json:"notaryLookup"`
+	NotaryType      tktypes.HexUint64   `json:"notaryType"`
+	NotaryAddress   tktypes.EthAddress  `json:"notaryAddress"`
+	Variant         tktypes.HexUint64   `json:"variant"`
+	PrivateAddress  *tktypes.EthAddress `json:"privateAddress,omitempty"`
+	PrivateGroup    *PentePrivateGroup  `json:"privateGroup,omitempty"`
+	RestrictMinting bool                `json:"restrictMinting"`
 }
 
 type PentePrivateGroup struct {
@@ -57,10 +59,9 @@ type PentePrivateGroup struct {
 }
 
 var NotoConfigABI_V0 = &abi.ParameterArray{
-	{Name: "notaryType", Type: "uint64"},
 	{Name: "notaryAddress", Type: "address"},
+	{Name: "variant", Type: "bytes32"},
 	{Name: "data", Type: "bytes"},
-	{Name: "variant", Type: "uint64"},
 }
 
 var NotoTransactionData_V0 = tktypes.MustParseHexBytes("0x00010000")
@@ -69,7 +70,7 @@ type DomainHandler = domain.DomainHandler[NotoParsedConfig]
 type ParsedTransaction = domain.ParsedTransaction[NotoParsedConfig]
 
 var NotaryTypeSigner tktypes.HexUint64 = 0x0000
-var NotaryTypeContract tktypes.HexUint64 = 0x0001
+var NotaryTypePente tktypes.HexUint64 = 0x0001
 
 var NotoVariantDefault tktypes.HexUint64 = 0x0000
 var NotoVariantSelfSubmit tktypes.HexUint64 = 0x0001

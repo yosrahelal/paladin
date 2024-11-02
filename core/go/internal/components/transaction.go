@@ -32,6 +32,22 @@ type TransactionInputs struct {
 	Intent   prototk.TransactionSpecification_Intent `json:"intent"`
 }
 
+type TransactionStateRefs struct {
+	Confirmed []tktypes.HexBytes
+	Read      []tktypes.HexBytes
+	Spent     []tktypes.HexBytes
+	Info      []tktypes.HexBytes
+}
+
+type PrepareTransactionWithRefs struct {
+	ID          uuid.UUID                // ID of the original private transaction
+	Domain      string                   // domain of the original private transaction
+	To          *tktypes.EthAddress      // the private smart contract that was invoked
+	States      TransactionStateRefs     // the states associated with the original private transaction
+	Metadata    tktypes.RawJSON          // metadta produced from the prepare of the original private transaction, in addition to the prepared transaction
+	Transaction *pldapi.TransactionInput // the downstream transaction - might be public or private
+}
+
 type TransactionPreAssembly struct {
 	TransactionSpecification *prototk.TransactionSpecification `json:"transaction_specification"`
 	RequiredVerifiers        []*prototk.ResolveVerifierRequest `json:"required_verifiers"`
@@ -58,9 +74,11 @@ type EthDeployTransaction struct {
 type TransactionPostAssembly struct {
 	AssemblyResult        prototk.AssembleTransactionResponse_Result `json:"assembly_result"`
 	OutputStatesPotential []*prototk.NewState                        `json:"output_states_potential"` // the raw result of assembly, before sequence allocation
+	InfoStatesPotential   []*prototk.NewState                        `json:"info_states_potential"`   // the raw result of assembly, before sequence allocation
 	InputStates           []*FullState                               `json:"input_states"`
 	ReadStates            []*FullState                               `json:"read_states"`
 	OutputStates          []*FullState                               `json:"output_states"`
+	InfoStates            []*FullState                               `json:"info_states"`
 	AttestationPlan       []*prototk.AttestationRequest              `json:"attestation_plan"`
 	Signatures            []*prototk.AttestationResult               `json:"signatures"`
 	Endorsements          []*prototk.AttestationResult               `json:"endorsements"`
@@ -85,10 +103,10 @@ type PrivateTransaction struct {
 	// DISPATCH PHASE: Once the transaction has reached sufficient confidence of success, we move on to submission.
 	// Each private transaction may result in a public transaction which should be submitted to the
 	// base ledger, or another private transaction which should go around the transaction loop again.
-	Signer                     string                                  `json:"signer"`
-	PreparedPublicTransaction  *pldapi.TransactionInput                `json:"-"`
-	PreparedPrivateTransaction *pldapi.TransactionInput                `json:"-"`
-	PreparedTransactionIntent  prototk.TransactionSpecification_Intent `json:"-"`
+	Signer                     string                   `json:"signer"`
+	PreparedPublicTransaction  *pldapi.TransactionInput `json:"-"`
+	PreparedPrivateTransaction *pldapi.TransactionInput `json:"-"`
+	PreparedMetadata           tktypes.RawJSON          `json:"-"`
 
 	PublicTxOptions pldapi.PublicTxOptions `json:"-"`
 }
@@ -100,6 +118,7 @@ type PrivateContractDeploy struct {
 	// INPUTS: Items that come in from the submitter of the transaction to send to the constructor
 	ID     uuid.UUID
 	Domain string
+	From   string
 	Inputs tktypes.RawJSON
 
 	// ASSEMBLY PHASE
@@ -120,6 +139,7 @@ type PrivateTransactionEndorseRequest struct {
 	InputStates              []*prototk.EndorsableState
 	ReadStates               []*prototk.EndorsableState
 	OutputStates             []*prototk.EndorsableState
+	InfoStates               []*prototk.EndorsableState
 	Endorsement              *prototk.AttestationRequest
 	Endorser                 *prototk.ResolvedVerifier
 }

@@ -133,7 +133,7 @@ func DeploySmartContract(t *testing.T, txm components.TXManager) *tktypes.EthAdd
 
 	// In this test we deploy the factory in-line
 	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "domain1_admin",
 		},
@@ -932,7 +932,8 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				require.NoError(t, err)
 
 				// There would need to be minting/spending rules here - we just check the signature
-				assert.Equal(t, signerVerification.Verifier.Verifier, signerAddr.String(), fmt.Sprintf("payload %s", signaturePayload.HexString0xPrefix()))
+				assert.Equal(t, signerAddr.String(), signerVerification.Verifier.Verifier)
+				assert.Equal(t, signerAddr.String(), senderAddr.String(), "signer and sender should match")
 
 				// Check the math
 				if fromAddr != nil && toAddr != nil {

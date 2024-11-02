@@ -130,9 +130,11 @@ message EndorseTransactionRequest {
   TransactionSpecification transaction = 4; // The transaction specified by the user
   repeated ResolvedVerifier resolved_verifiers = 5; // The list of resovled verifiers
   repeated EndorsableState inputs = 6; // Input states for the transaction
-  repeated EndorsableState reads = 7; // States relied upon by the transaction, that are not actually consumed
+  repeated EndorsableState reads = 7; // States relied upon by the transaction, that are not actually consumed, but must exist on chain
   repeated EndorsableState outputs = 8; // Output states for the transaction
-  repeated AttestationResult signatures = 9; // All SIGN attestation results (required from submitting node before endorsement)
+  repeated EndorsableState info = 9; // Info states for the transaction, that are important information in/out of the business transaction, but are never recorded in an on-chain map, or returned from FindAvailableStates
+  repeated AttestationResult signatures = 10; // All SIGN attestation results (required from submitting node before endorsement)
+  
 }
 
 message EndorseTransactionResponse {
@@ -153,13 +155,15 @@ message PrepareTransactionRequest {
   repeated EndorsableState input_states = 3; // The list of input states
   repeated EndorsableState read_states = 4; // The list of read states
   repeated EndorsableState output_states = 5; // The list of output states
-  repeated AttestationResult attestation_result = 6; // The results of any proofs/attestations that came out of the endorsement phase
-  repeated ResolvedVerifier resolved_verifiers = 7; // A list of transaction signatures/proofs that have been resolved
-  optional string extra_data = 8; // Any extra data that was included in the transaction assembly
+  repeated EndorsableState info_states = 6; // The list of states that are important information in/out of the business transaction, but are never recorded in an on-chain map, or returned from FindAvailableStates
+  repeated AttestationResult attestation_result = 7; // The results of any proofs/attestations that came out of the endorsement phase
+  repeated ResolvedVerifier resolved_verifiers = 8; // A list of transaction signatures/proofs that have been resolved
+  optional string extra_data = 9; // Any extra data that was included in the transaction assembly
 }
 
 message PrepareTransactionResponse {
   PreparedTransaction transaction = 1; // The instruction for submission to the base ledger
+  optional string metadata = 2; // Domain-provided metadata about the prepared transaction (only used when intent is PREPARE_TRANSACTION)
 }
 
 // **INIT_CALL** this allows a domain to provide a read-only view into the state store, using high-level functions. The response data must conform to the ABI supplied, or an error must be returned
@@ -182,6 +186,21 @@ message ExecCallResponse {
   string result_json = 1; // JSON formatted data that conforms to the outputs specification of the ABI interface supplied in the request
 }
 
+// **RECEIPT** given the available details of a confirmed transation, returns a domain specific receipt payload that an application can process
+message BuildReceiptRequest {
+  string transaction_id = 1; // the transaction ID
+  bool complete = 2; // some domains only process complete data sets. If true, then the states provided in this request are the full set of states that known to be part of the transaction (as recorded by the event handler)
+  repeated EndorsableState input_states = 3; // available input states
+  repeated EndorsableState read_states = 4; // available read states
+  repeated EndorsableState output_states = 5; // available output states
+  repeated EndorsableState info_states = 6; // available info states  
+}
+
+message BuildReceiptResponse {
+  string receipt_json = 1; // a domain specific JSON payload describing the transaction receipt
+}
+
+
 // **EVENTS** handler called with batches of blockchain events that match an event signature and contract address registered by this domain
 
 message HandleEventBatchRequest {
@@ -194,8 +213,10 @@ message HandleEventBatchRequest {
 message HandleEventBatchResponse {
   repeated CompletedTransaction transactions_complete = 1; // A list of Paladin transactions that may be considered complete
   repeated StateUpdate spent_states = 2; // A list of states that are now spent
-  repeated StateUpdate confirmed_states = 3; // A list of states that are now confirmed (and unspent)
-  repeated NewConfirmedState new_states = 4; // A list of new states to store (only for events that contain full state data)
+  repeated StateUpdate read_states = 3; // A list of states that this transaction was dependent on the un-spent state of, but did not spend in the transation
+  repeated StateUpdate confirmed_states = 4; // A list of states that are now confirmed (and unspent)
+  repeated StateUpdate info_states = 5; // A list of states that are important information in/out of the business transaction, but are never recorded in an on-chain map, or returned from FindAvailableStates
+  repeated NewConfirmedState new_states = 6; // A list of new states to store (only for events that contain full state data)
 }
 
 // **VALIDATE_STATE_HASHES** step only happens when custom_state_hash is true in the domain config, and then must be implemented
@@ -245,13 +266,15 @@ message StateSchema {
 
 message DeployTransactionSpecification {
   string transaction_id = 1; // A UUID for the transaction generated by the Paladin node when accepting the request from the caller
-  string constructor_params_json = 2; // The parameters supplied in the invocation in normalized JSON format, after validation against the ABI the caller supplied
+  string from = 2; // The unresolved sender identity - the instruction for how to resolve it will be an output of the TX init from 
+  string constructor_params_json = 3; // The parameters supplied in the invocation in normalized JSON format, after validation against the ABI the caller supplied
 }
 
 message TransactionSpecification {
   enum Intent {
     SEND_TRANSACTION = 0; // This transaction should be sent to the base ledger once ready
-    CALL = 1; // This transaction should be validated by calling the ledger and storing the outcome (but should not result in a base ledger transaction)
+    PREPARE_TRANSACTION = 1; // This transaction should be assembled and prepared, and returned in a way that it could be executed later
+    CALL = 2; // This transaction should be should be sent to the base ledger as a "call", and the output should be captured
   }
   string transaction_id = 1; // A 32 byte 0x prefxied hex string containing unique identifier for the transaction generated by the Paladin node when accepting the request from the caller (UUID in first 16 bytes)
   string from = 2; // The unresolved sender identity - the instruction for how to resolve it will be an output of the TX init from 
@@ -267,7 +290,8 @@ message AssembledTransaction {
   repeated StateRef input_states = 1; // A list of the state IDs that the transaction spends - these might include ones being minted on other sequences, resulting in an instruction to the TX manager to re-allocate the transaction to another sequence
   repeated StateRef read_states = 2; // A list of state IDs that the execution of the transaction depends on being unspent on the chain (but will not spend). Also could be being minted on other sequences.
   repeated NewState output_states = 3; // A list of new states the domain will create as an output from this transaction, if it is executed and confirmed
-  optional string extra_data = 4; // Any extra data to be included in the transaction (other than states)
+  repeated NewState info_states = 4; // A list of states recorded as meaningful to the transaction, but do not need to exist on-chain before the transaction, and are not stored on-chain in any map afterwards
+  optional string extra_data = 5; // Any extra data to be propagated to prepare the transaction (this is not recorded directly as states, so primary use is for data that results in direct EVM transaction function in the base ledger contract)
 }
 
 message StateRef {

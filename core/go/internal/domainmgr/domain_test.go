@@ -285,7 +285,7 @@ func TestDomainInitStates(t *testing.T) {
 
 }
 func mockUpsertABIOk(mc *mockComponents) {
-	mc.txManager.On("UpsertABI", mock.Anything, mock.Anything).Return(&pldapi.StoredABI{
+	mc.txManager.On("UpsertABI", mock.Anything, mock.Anything, mock.Anything).Return(&pldapi.StoredABI{
 		Hash: tktypes.Bytes32(tktypes.RandBytes(32)),
 	}, nil)
 }
@@ -379,7 +379,7 @@ func TestDomainInitUpsertEventsABIFail(t *testing.T) {
 			}
 		]`,
 	}, func(mc *mockComponents) {
-		mc.txManager.On("UpsertABI", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.txManager.On("UpsertABI", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 	assert.Regexp(t, "pop", *td.d.initError.Load())
@@ -983,6 +983,24 @@ func TestDecodeABIDataFailCases(t *testing.T) {
 		Data:         []byte(``),
 	})
 	assert.Regexp(t, "PD011646.*Insufficient bytes", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
+		Definition:   "eip1559",
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011646.*FF22084", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
+		Definition:   "eip155", // not supported for UNSIGNED round trip currently (supported for signed)
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011645", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION_SIGNED,
+		Definition:   "wrong",
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011645", err)
 }
 
 func TestRecoverSignerFailCases(t *testing.T) {
@@ -1106,4 +1124,147 @@ func TestDomainValidateStateHashesBadHex(t *testing.T) {
 
 	_, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{{ID: stateID1}})
 	require.Regexp(t, "PD011652", err)
+}
+
+func TestGetDomainReceiptAllAvailable(t *testing.T) {
+	txID := uuid.New()
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID3 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID4 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(&pldapi.TransactionStates{
+				Spent:     []*pldapi.StateBase{{ID: stateID1}},
+				Read:      []*pldapi.StateBase{{ID: stateID2}},
+				Confirmed: []*pldapi.StateBase{{ID: stateID3}},
+				Info:      []*pldapi.StateBase{{ID: stateID4}},
+			}, nil)
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.tp.Functions.BuildReceipt = func(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+		require.True(t, req.Complete)
+		require.Len(t, req.InputStates, 1)
+		require.Equal(t, stateID1.String(), req.InputStates[0].Id)
+		require.Len(t, req.ReadStates, 1)
+		require.Equal(t, stateID2.String(), req.ReadStates[0].Id)
+		require.Len(t, req.OutputStates, 1)
+		require.Equal(t, stateID3.String(), req.OutputStates[0].Id)
+		require.Len(t, req.InfoStates, 1)
+		require.Equal(t, stateID4.String(), req.InfoStates[0].Id)
+
+		return &prototk.BuildReceiptResponse{
+			ReceiptJson: `{"some":"receipt"}`,
+		}, nil
+	}
+
+	resData, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"some":"receipt"}`, resData.Pretty())
+
+}
+
+func TestGetDomainReceiptIncomplete(t *testing.T) {
+	txID := uuid.New()
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(&pldapi.TransactionStates{
+				Spent: []*pldapi.StateBase{{ID: stateID1}},
+				Unavailable: &pldapi.UnavailableStates{
+					Confirmed: []tktypes.HexBytes{stateID2},
+				},
+			}, nil)
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.tp.Functions.BuildReceipt = func(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+		require.False(t, req.Complete)
+		require.Len(t, req.InputStates, 1)
+
+		return &prototk.BuildReceiptResponse{
+			ReceiptJson: `{"some":"receipt"}`,
+		}, nil
+	}
+
+	resData, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"some":"receipt"}`, resData.Pretty())
+
+}
+
+func TestGetDomainReceiptFail(t *testing.T) {
+	txID := uuid.New()
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(&pldapi.TransactionStates{
+				Spent: []*pldapi.StateBase{{ID: stateID1}},
+			}, nil)
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.tp.Functions.BuildReceipt = func(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	_, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestGetDomainReceiptNotIndexed(t *testing.T) {
+	txID := uuid.New()
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(&pldapi.TransactionStates{None: true}, nil)
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	_, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	assert.Regexp(t, "PD011657", err) // no state confirmations available
+
+}
+
+func TestGetDomainReceiptMissingData(t *testing.T) {
+	txID := uuid.New()
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(&pldapi.TransactionStates{}, nil)
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	_, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	assert.Regexp(t, "PD011658", err) // no private states available
+
+}
+
+func TestGetDomainReceiptLookupError(t *testing.T) {
+	txID := uuid.New()
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
+			Return(nil, fmt.Errorf("pop"))
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	_, err := td.d.GetDomainReceipt(td.ctx, td.c.dbTX, txID)
+	assert.Regexp(t, "pop", err)
+
 }

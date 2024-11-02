@@ -169,7 +169,7 @@ func (td *TestDeployer) DeploySmartContractDeploymentBytecode(ctx context.Contex
 	}
 
 	txIn := &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: td.From,
 			Data: data,

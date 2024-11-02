@@ -43,7 +43,7 @@ type StateManager interface {
 	EnsureABISchemas(ctx context.Context, dbTX *gorm.DB, domainName string, defs []*abi.Parameter) ([]Schema, error)
 
 	// State finalizations are written on the DB context of the block indexer, by the domain manager.
-	WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*pldapi.StateSpend, confirms []*pldapi.StateConfirm) (err error)
+	WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*pldapi.StateSpendRecord, reads []*pldapi.StateReadRecord, confirms []*pldapi.StateConfirmRecord, infoRecords []*pldapi.StateInfoRecord) (err error)
 
 	// MUST NOT be called for states received over a network from another node.
 	// Writes a batch of states that have been pre-verified BY THIS NODE so can bypass domain hash verification.
@@ -54,6 +54,9 @@ type StateManager interface {
 
 	// GetState returns a state by ID, with optional labels
 	GetState(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*pldapi.State, error)
+
+	// Get all states created, read or spent by a confirmed transaction
+	GetTransactionStates(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID) (*pldapi.TransactionStates, error)
 }
 
 type DomainContextInfo struct {

@@ -40,7 +40,6 @@ export async function deployNotoInstance(
   const deployTx = await notoFactory.deployImplementation(
     "selfsubmit",
     randomBytes32(),
-    "0x0000000000000000000000000000000000000000000000000000000000000000",
     notary,
     "0x"
   );

@@ -24,7 +24,6 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
-	testZeto "github.com/kaleido-io/paladin/domains/integration-test/zeto"
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
@@ -51,7 +50,7 @@ func TestZetoDomainTestSuite(t *testing.T) {
 type zetoDomainTestSuite struct {
 	suite.Suite
 	hdWalletSeed      *testbed.UTInitFunction
-	deployedContracts *testZeto.ZetoDomainContracts
+	deployedContracts *ZetoDomainContracts
 	domainName        string
 	domain            zeto.Zeto
 	rpc               rpcbackend.Backend
@@ -60,12 +59,12 @@ type zetoDomainTestSuite struct {
 
 func (s *zetoDomainTestSuite) SetupSuite() {
 	s.hdWalletSeed = testbed.HDWalletSeedScopedToTest()
-	domainContracts := testZeto.DeployZetoContracts(s.T(), s.hdWalletSeed, "./config-for-deploy.yaml", controllerName)
+	domainContracts := DeployZetoContracts(s.T(), s.hdWalletSeed, "./config-for-deploy.yaml", controllerName)
 	s.deployedContracts = domainContracts
 	ctx := context.Background()
 	domainName := "zeto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
-	config := testZeto.PrepareZetoConfig(s.T(), s.deployedContracts, "../zkp")
+	config := PrepareZetoConfig(s.T(), s.deployedContracts, "../zkp")
 	zeto, zetoTestbed := newZetoDomain(s.T(), config)
 	done, _, rpc := newTestbed(s.T(), s.hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: zetoTestbed,
@@ -107,9 +106,10 @@ func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
 func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, useBatch bool) {
 	ctx := context.Background()
 	log.L(ctx).Infof("Deploying an instance of the %s token", tokenName)
+	s.setupContractsAbi(t, ctx, tokenName)
 	var zetoAddress tktypes.EthAddress
 	rpcerr := s.rpc.CallRPC(ctx, &zetoAddress, "testbed_deploy",
-		s.domainName, &types.InitializerParams{
+		s.domainName, "me", &types.InitializerParams{
 			From:      controllerName,
 			TokenName: tokenName,
 		})
@@ -138,11 +138,11 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 
 	log.L(ctx).Infof("Attempt mint from non-controller (should fail)")
 	_, err = s.mint(ctx, zetoAddress, recipient1Name, []int64{10})
-	require.ErrorContains(t, err, "PD011513: Reverted: 0x118cdaa7")
-	assert.Regexp(t, "PD011513: Reverted: 0x118cdaa.*", err)
+	require.ErrorContains(t, err, "PD012216: Transaction reverted OwnableUnauthorizedAccount")
+	assert.Regexp(t, "PD012216: Transaction reverted OwnableUnauthorizedAccount.*", err)
 
-	// for testing the batch circuits, we transfer 50 which would require 3 UTXOs (>2)
 	if useBatch {
+		// for testing the batch circuits, we transfer 50 which would require 3 UTXOs (>2)
 		amount1 := 10
 		amount2 := 40
 		log.L(ctx).Infof("Transfer %d from controller to recipient1 (%d) and recipient2 (%d)", amount1+amount2, amount1, amount2)
@@ -170,8 +170,18 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	// assert.Equal(t, controllerName, coins[2].Owner)
 }
 
-func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthAddress, minter string, amounts []int64) (*tktypes.PrivateContractTransaction, error) {
-	var invokeResult tktypes.PrivateContractTransaction
+func (s *zetoDomainTestSuite) setupContractsAbi(t *testing.T, ctx context.Context, tokenName string) {
+	var result tktypes.HexBytes
+
+	contractAbi, ok := s.deployedContracts.deployedContractAbis[tokenName]
+	require.True(t, ok, "Missing ABI for contract %s", tokenName)
+	rpcerr := s.rpc.CallRPC(ctx, &result, "ptx_storeABI", contractAbi)
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+}
+
+func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthAddress, minter string, amounts []int64) (invokeResult *testbed.TransactionResult, err error) {
 	var params []*types.TransferParamEntry
 	for _, amount := range amounts {
 		params = append(params, &types.TransferParamEntry{
@@ -186,7 +196,7 @@ func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthA
 	if err != nil {
 		return nil, err
 	}
-	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
 		From:     minter,
 		To:       tktypes.EthAddress(zetoAddress),
 		Function: *types.ZetoABI.Functions()["mint"],
@@ -195,11 +205,11 @@ func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthA
 	if rpcerr != nil {
 		return nil, rpcerr.Error()
 	}
-	return &invokeResult, nil
+	return invokeResult, nil
 }
 
-func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.EthAddress, sender string, receivers []string, amounts []int64) (*tktypes.PrivateContractTransaction, error) {
-	var invokeResult tktypes.PrivateContractTransaction
+func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.EthAddress, sender string, receivers []string, amounts []int64) (*testbed.TransactionResult, error) {
+	var invokeResult testbed.TransactionResult
 	var params []*types.TransferParamEntry
 	for i, receiver := range receivers {
 		params = append(params, &types.TransferParamEntry{
@@ -214,7 +224,7 @@ func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.
 	if err != nil {
 		return nil, err
 	}
-	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
 		From:     sender,
 		To:       tktypes.EthAddress(zetoAddress),
 		Function: *types.ZetoABI.Functions()["transfer"],

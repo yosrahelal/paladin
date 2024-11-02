@@ -18,14 +18,16 @@ package identityresolver
 
 import (
 	"context"
-	"strings"
+	"fmt"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	pbIdentityResolver "github.com/kaleido-io/paladin/core/pkg/proto/identityresolver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -39,6 +41,7 @@ type identityResolver struct {
 	transportManager      components.TransportManager
 	inflightRequests      map[string]*inflightRequest
 	inflightRequestsMutex *sync.Mutex
+	verifierCache         cache.Cache[string, string]
 }
 
 type inflightRequest struct {
@@ -47,12 +50,17 @@ type inflightRequest struct {
 }
 
 // As a LateBoundComponent, the identity resolver is created and initialised in a single function call
-func NewIdentityResolver(ctx context.Context) components.IdentityResolver {
+func NewIdentityResolver(ctx context.Context, conf *pldconf.IdentityResolverConfig) components.IdentityResolver {
 	return &identityResolver{
 		bgCtx:                 ctx,
 		inflightRequests:      make(map[string]*inflightRequest),
 		inflightRequestsMutex: &sync.Mutex{},
+		verifierCache:         cache.NewCache[string, string](&conf.VerifierCache, &pldconf.IdentityResolverDefaults.VerifierCache),
 	}
+}
+
+func cacheKey(identifier, node, algorithm, verifierType string) string {
+	return fmt.Sprintf("%s@%s|%s|%s", identifier, node, algorithm, verifierType)
 }
 
 func (ir *identityResolver) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
@@ -97,25 +105,49 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 	// if the verifier lookup is a local key, we can resolve it here
 	// if it is a remote key, we need to delegate to the remote node
 
-	atIndex := strings.Index(lookup, "@")
+	identifier, node, err := tktypes.PrivateIdentityLocator(lookup).Validate(ctx, ir.nodeName, true)
+	if err != nil {
+		log.L(ctx).Errorf("Invalid resolve verifier request: %s (algorithm=%s, verifierType=%s): %s", lookup, algorithm, verifierType, err)
+		failed(ctx, err)
+		return
+	}
 
-	if atIndex == -1 || lookup[atIndex+1:] == ir.nodeName {
+	// Ensure we log and cache if we resolve
+	cacheKey := cacheKey(identifier, node, algorithm, verifierType)
+	cachedVerifier, _ := ir.verifierCache.Get(cacheKey)
+	isCached := cachedVerifier != ""
+	isLocal := node == ir.nodeName
+	cacheAndResolve := func(ctx context.Context, verifier string) {
+		if !isCached {
+			ir.verifierCache.Set(cacheKey, verifier)
+		}
+		log.L(ctx).Debugf("ResolvedVerifier(lookup='%s',identifier='%s',node='%s',isLocal=%t,algorithm='%s',verifierType='%s',cached=%t): %s",
+			lookup, identifier, node, isLocal, algorithm, verifierType, isCached, verifier,
+		)
+		resolved(ctx, verifier)
+	}
+
+	if isCached {
+		cacheAndResolve(ctx, cachedVerifier)
+		return
+	}
+
+	if isLocal {
 		// this is an asynchronous call because the key manager may need to call out to a remote signer in order to
 		// resolve the key (e.g. if this is the first time this key has been referenced)
 		// its a one and done go routine so no need for additional concurrency controls
 		// we just need to be careful not to update the transaction object on this other thread
 		go func() {
-			unqualifiedLookup, err := tktypes.PrivateIdentityLocator(lookup).Identity(ctx)
 			var resolvedKey *pldapi.KeyMappingAndVerifier
 			if err == nil {
-				resolvedKey, err = ir.keyManager.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, algorithm, verifierType)
+				resolvedKey, err = ir.keyManager.ResolveKeyNewDatabaseTX(ctx, identifier, algorithm, verifierType)
 			}
 			if err != nil {
 				log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s, verifierType=%s): %s", lookup, algorithm, verifierType, err)
 				failed(ctx, err)
 				return
 			}
-			resolved(ctx, resolvedKey.Verifier.Verifier)
+			cacheAndResolve(ctx, resolvedKey.Verifier.Verifier)
 		}()
 
 	} else {
@@ -154,7 +186,7 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 			return
 		}
 		ir.addInflightRequest(requestID.String(), &inflightRequest{
-			resolved: resolved,
+			resolved: cacheAndResolve,
 			failed:   failed,
 		})
 	}
