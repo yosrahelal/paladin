@@ -472,7 +472,7 @@ func (tf *transactionFlow) requestSignatures(ctx context.Context) {
 		tf.transaction.PostAssembly.Signatures = make([]*prototk.AttestationResult, 0)
 	}
 	attPlan := tf.transaction.PostAssembly.AttestationPlan
-	attResults := tf.transaction.PostAssembly.Endorsements
+	attResults := tf.transaction.PostAssembly.Signatures
 
 	for _, attRequest := range attPlan {
 		switch attRequest.AttestationType {

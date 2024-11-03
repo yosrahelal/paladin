@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package statedistribution
+package preparedtxdistribution
 
 import (
 	"context"
@@ -24,30 +24,30 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (sd *stateDistributer) sendStateAcknowledgement(ctx context.Context, domainName string, contractAddress string, stateId string, receivingParty string, distributingNode string, distributionID string) error {
-	log.L(ctx).Debugf("stateDistributer:sendStateAcknowledgement %s %s %s %s %s %s", domainName, contractAddress, stateId, receivingParty, distributingNode, distributionID)
-	stateAcknowledgedEvent := &pb.StateAcknowledgedEvent{
+func (sd *preparedTransactionDistributer) sendPreparedTransactionAcknowledgement(ctx context.Context, domainName string, contractAddress string, preparedTxnId string, receivingParty string, distributingNode string, distributionID string) error {
+	log.L(ctx).Debugf("preparedTransactionDistributer:sendPreparedTransactionAcknowledgement %s %s %s %s %s %s", domainName, contractAddress, preparedTxnId, receivingParty, distributingNode, distributionID)
+	preparedTransactionAcknowledgedMessage := &pb.PreparedTransactionAcknowledgedMessage{
 		DomainName:      domainName,
 		ContractAddress: contractAddress,
-		StateId:         stateId,
+		PreparedTxnId:   preparedTxnId,
 		Party:           receivingParty,
 		DistributionId:  distributionID,
 	}
-	stateAcknowledgedEventBytes, err := proto.Marshal(stateAcknowledgedEvent)
+	preparedTransactionAcknowledgedMessageBytes, err := proto.Marshal(preparedTransactionAcknowledgedMessage)
 	if err != nil {
-		log.L(ctx).Errorf("Error marshalling state acknowledgment event: %s", err)
+		log.L(ctx).Errorf("Error marshalling prepared transaction acknowledgment event: %s", err)
 		return err
 	}
 
 	err = sd.transportManager.Send(ctx, &components.TransportMessage{
-		MessageType: "StateAcknowledgedEvent",
-		Payload:     stateAcknowledgedEventBytes,
+		MessageType: "PreparedTransactionAcknowledgedMessage",
+		Payload:     preparedTransactionAcknowledgedMessageBytes,
 		Node:        distributingNode,
-		Component:   STATE_DISTRIBUTER_DESTINATION,
+		Component:   PREPARED_TRANSACTION_DISTRIBUTER_DESTINATION,
 		ReplyTo:     sd.nodeID,
 	})
 	if err != nil {
-		log.L(ctx).Errorf("Error sending state produced event: %s", err)
+		log.L(ctx).Errorf("Error sending prepared transaction produced event: %s", err)
 		return err
 	}
 
