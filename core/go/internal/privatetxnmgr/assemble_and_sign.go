@@ -56,7 +56,7 @@ func (s *Sequencer) assembleForRemoteCoordinator(ctx context.Context, transactio
 	return postAssembly, nil
 }
 
-func (s *Sequencer) AssembleForLocalCoordinator(ctx context.Context, requestID string, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, preAssembly *components.TransactionPreAssembly) {
+func (s *Sequencer) AssembleLocal(ctx context.Context, requestID string, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, preAssembly *components.TransactionPreAssembly) {
 
 	log.L(ctx).Debugf("assembleForLocalCoordinator: Assembling transaction %s ", transactionID)
 

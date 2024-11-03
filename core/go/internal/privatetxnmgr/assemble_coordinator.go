@@ -17,36 +17,15 @@ package privatetxnmgr
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
-
-// AssembleCoordinator is a component that is responsible for coordinating the assembly of all transactions for a given domain contract instance
-// requests to assemble transactions are accepted and the actual assembly is performed asynchronously
-type AssembleCoordinator interface {
-	Start()
-	Stop()
-	RequestAssemble(ctx context.Context, assemblingNode string, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, transactionPreAssembly *components.TransactionPreAssembly, callbacks AssembleRequestCallbacks)
-	Commit(requestID string, stateDistributions []*statedistribution.StateDistribution)
-}
-
-// TODO should the pass a channel or a callback to the requestor to signal that the request is complete?
-type AssembleRequestCompleteCallback func(requestID string, postAssembly *components.TransactionPostAssembly)
-type AssembleRequestFailedCallback func(requestID string, err error)
-type AssembleRequestCallbacks struct {
-	OnComplete AssembleRequestCompleteCallback
-	OnFail     AssembleRequestFailedCallback
-}
 
 type assembleCoordinator struct {
 	ctx                  context.Context
@@ -62,6 +41,7 @@ type assembleCoordinator struct {
 	sequencerEnvironment ptmgrtypes.SequencerEnvironment
 	requestTimeout       time.Duration
 	stateDistributer     statedistribution.StateDistributer
+	localAssembler       ptmgrtypes.LocalAssembler
 }
 
 type assembleRequest struct {
@@ -70,10 +50,9 @@ type assembleRequest struct {
 	transactionID          uuid.UUID
 	transactionInputs      *components.TransactionInputs
 	transactionPreassembly *components.TransactionPreAssembly
-	callbacks              AssembleRequestCallbacks
 }
 
-func NewAssembleCoordinator(ctx context.Context, nodeName string, maxPendingRequests int, components components.AllComponents, domainAPI components.DomainSmartContract, domainContext components.DomainContext, transportWriter ptmgrtypes.TransportWriter, contractAddress tktypes.EthAddress, sequencerEnvironment ptmgrtypes.SequencerEnvironment, requestTimeout time.Duration, stateDistributer statedistribution.StateDistributer) AssembleCoordinator {
+func NewAssembleCoordinator(ctx context.Context, nodeName string, maxPendingRequests int, components components.AllComponents, domainAPI components.DomainSmartContract, domainContext components.DomainContext, transportWriter ptmgrtypes.TransportWriter, contractAddress tktypes.EthAddress, sequencerEnvironment ptmgrtypes.SequencerEnvironment, requestTimeout time.Duration, stateDistributer statedistribution.StateDistributer, localAssembler ptmgrtypes.LocalAssembler) ptmgrtypes.AssembleCoordinator {
 	return &assembleCoordinator{
 		ctx:                  ctx,
 		nodeName:             nodeName,
@@ -88,10 +67,11 @@ func NewAssembleCoordinator(ctx context.Context, nodeName string, maxPendingRequ
 		sequencerEnvironment: sequencerEnvironment,
 		requestTimeout:       requestTimeout,
 		stateDistributer:     stateDistributer,
+		localAssembler:       localAssembler,
 	}
 }
 
-func (ac *assembleCoordinator) Commit(requestID string, stateDistributions []*statedistribution.StateDistribution) {
+func (ac *assembleCoordinator) Complete(requestID string, stateDistributions []*statedistribution.StateDistribution) {
 
 	log.L(ac.ctx).Debugf("AssembleCoordinator:Commit %s", requestID)
 	ac.stateDistributer.DistributeStates(ac.ctx, stateDistributions)
@@ -111,10 +91,13 @@ func (ac *assembleCoordinator) Start() {
 					err := req.processRemote(ac.ctx, req.assemblingNode, requestID)
 					if err != nil {
 						log.L(ac.ctx).Errorf("AssembleCoordinator request failed: %s", err)
+						//we failed sending the request so we continue to the next request
+						// without waiting for this one to complete
+						// the sequencer event loop is responsible for requesting a new assemble
 						continue
 					}
-
 				}
+
 				//The actual response is processed on the sequencer event loop.  We just need to know when it is safe to proceed
 				// to the next request
 				ac.waitForDone(requestID)
@@ -172,65 +155,25 @@ func (ac *assembleCoordinator) Stop() {
 // to allow us to do the assemble on a separate thread and without worrying about locking the PrivateTransaction objects
 // we copy the pertinent structures out of the PrivateTransaction and pass them to the assemble thread
 // and then use them to create another private transaction object that is passed to the domain manager which then just unpicks it again
-func (ac *assembleCoordinator) RequestAssemble(ctx context.Context, assemblingNode string, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, transactionPreAssembly *components.TransactionPreAssembly, callbacks AssembleRequestCallbacks) {
+func (ac *assembleCoordinator) QueueAssemble(ctx context.Context, assemblingNode string, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, transactionPreAssembly *components.TransactionPreAssembly) {
 
 	ac.requests <- &assembleRequest{
 		assemblingNode:         assemblingNode,
 		assembleCoordinator:    ac,
 		transactionID:          transactionID,
-		callbacks:              callbacks,
 		transactionInputs:      transactionInputs,
 		transactionPreassembly: transactionPreAssembly,
 	}
-	log.L(ctx).Debugf("RequestAssemble: assemble request for %s queued", transactionID)
+	log.L(ctx).Debugf("QueueAssemble: assemble request for %s queued", transactionID)
 
 }
 
 func (req *assembleRequest) processLocal(ctx context.Context, requestID string) {
 	log.L(ctx).Debug("assembleRequest:processLocal")
-	// we are the node that is responsible for assembling this transaction
-	readTX := req.assembleCoordinator.components.Persistence().DB() // no DB transaction required here
 
-	transaction := &components.PrivateTransaction{
-		ID:          req.transactionID,
-		Inputs:      req.transactionInputs,
-		PreAssembly: req.transactionPreassembly,
-	}
-
-	err := req.assembleCoordinator.domainAPI.AssembleTransaction(req.assembleCoordinator.domainContext, readTX, transaction)
-	if err != nil {
-		req.callbacks.OnFail(requestID, err)
-		return
-	}
-	if transaction.PostAssembly == nil {
-		// This is most likely a programming error in the domain
-		err := i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "AssembleTransaction returned nil PostAssembly")
-		req.callbacks.OnFail(requestID, err)
-		return
-	}
-
-	// Some validation that we are confident we can execute the given attestation plan
-	for _, attRequest := range transaction.PostAssembly.AttestationPlan {
-		switch attRequest.AttestationType {
-		case prototk.AttestationType_ENDORSE:
-		case prototk.AttestationType_SIGN:
-		case prototk.AttestationType_GENERATE_PROOF:
-			errorMessage := "AttestationType_GENERATE_PROOF is not implemented yet"
-			log.L(ctx).Error(errorMessage)
-			err := i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
-			req.callbacks.OnFail(requestID, err)
-
-		default:
-			errorMessage := fmt.Sprintf("Unsupported attestation type: %s", attRequest.AttestationType)
-			log.L(ctx).Error(errorMessage)
-			err := i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
-			req.callbacks.OnFail(requestID, err)
-		}
-	}
+	req.assembleCoordinator.localAssembler.AssembleLocal(ctx, requestID, req.transactionID, req.transactionInputs, req.transactionPreassembly)
 
 	log.L(ctx).Debug("assembleRequest:processLocal complete")
-
-	req.callbacks.OnComplete(requestID, transaction.PostAssembly)
 
 }
 
@@ -247,7 +190,6 @@ func (req *assembleRequest) processRemote(ctx context.Context, assemblingNode st
 
 	stateLocksJSON, err := req.assembleCoordinator.domainContext.ExportStateLocks()
 	if err != nil {
-		req.callbacks.OnFail(requestID, err)
 		return err
 	}
 
@@ -259,7 +201,6 @@ func (req *assembleRequest) processRemote(ctx context.Context, assemblingNode st
 	err = req.assembleCoordinator.transportWriter.SendAssembleRequest(ctx, assemblingNode, requestID, req.transactionID, contractAddressString, req.transactionInputs, req.transactionPreassembly, stateLocksJSON, blockHeight)
 	if err != nil {
 		log.L(ctx).Errorf("assembleRequest:processRemote error from sendAssembleRequest: %s", err)
-		req.callbacks.OnFail(requestID, err)
 		return err
 	}
 	return nil

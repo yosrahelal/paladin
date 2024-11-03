@@ -125,7 +125,7 @@ type Sequencer struct {
 	requestTimeout           time.Duration
 	coordinatorSelector      ptmgrtypes.CoordinatorSelector
 	newBlockEvents           chan int64
-	assembleCoordinator      AssembleCoordinator
+	assembleCoordinator      ptmgrtypes.AssembleCoordinator
 	environment              *sequencerEnvironment
 }
 
@@ -222,6 +222,7 @@ func NewSequencer(
 		newSequencer.environment,
 		confutil.DurationMin(sequencerConfig.AssembleRequestTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.AssembleRequestTimeout),
 		stateDistributer,
+		newSequencer,
 	)
 
 	return newSequencer, nil

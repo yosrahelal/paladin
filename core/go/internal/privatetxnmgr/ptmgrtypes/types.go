@@ -144,3 +144,22 @@ type CoordinatorSelector interface {
 type SequencerEnvironment interface {
 	GetBlockHeight() int64
 }
+
+// AssembleCoordinator is a component that is responsible for coordinating the assembly of all transactions for a given domain contract instance
+// requests to assemble transactions are queued and the queue is processed on a single thread that blocks until one assemble completes before starting the next
+type AssembleCoordinator interface {
+	Start()
+	Stop()
+	QueueAssemble(ctx context.Context, assemblingNode string, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, transactionPreAssembly *components.TransactionPreAssembly)
+	Complete(requestID string, stateDistributions []*statedistribution.StateDistribution)
+}
+
+type LocalAssembler interface {
+	AssembleLocal(
+		ctx context.Context,
+		requestID string,
+		transactionID uuid.UUID,
+		transactionInputs *components.TransactionInputs,
+		preAssembly *components.TransactionPreAssembly,
+	)
+}

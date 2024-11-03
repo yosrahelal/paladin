@@ -46,7 +46,7 @@ func NewTransactionFlow(
 	transportWriter ptmgrtypes.TransportWriter,
 	requestTimeout time.Duration,
 	selectCoordinator ptmgrtypes.CoordinatorSelector,
-	assembleCoordinator AssembleCoordinator,
+	assembleCoordinator ptmgrtypes.AssembleCoordinator,
 	environment ptmgrtypes.SequencerEnvironment,
 ) ptmgrtypes.TransactionFlow {
 
@@ -113,7 +113,7 @@ type transactionFlow struct {
 	clock                       ptmgrtypes.Clock
 	requestTimeout              time.Duration
 	selectCoordinator           ptmgrtypes.CoordinatorSelector
-	assembleCoordinator         AssembleCoordinator
+	assembleCoordinator         ptmgrtypes.AssembleCoordinator
 	environment                 ptmgrtypes.SequencerEnvironment
 }
 

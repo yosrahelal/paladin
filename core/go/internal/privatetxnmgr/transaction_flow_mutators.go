@@ -103,7 +103,7 @@ func (tf *transactionFlow) applyTransactionAssembledEvent(ctx context.Context, e
 	tf.status = "assembled"
 	tf.writeAndLockStates(ctx)
 	//allow assembly thread to proceed
-	tf.assembleCoordinator.Commit(event.AssembleRequestID, tf.GetStateDistributions(ctx))
+	tf.assembleCoordinator.Complete(event.AssembleRequestID, tf.GetStateDistributions(ctx))
 
 }
 
@@ -113,7 +113,7 @@ func (tf *transactionFlow) applyTransactionAssembleFailedEvent(ctx context.Conte
 	tf.latestError = event.Error
 	// set assemblePending to false so that the transaction can be re-assembled
 	tf.assemblePending = false
-	tf.assembleCoordinator.Commit(event.AssembleRequestID, nil)
+	tf.assembleCoordinator.Complete(event.AssembleRequestID, nil)
 }
 
 func (tf *transactionFlow) applyTransactionSignedEvent(ctx context.Context, event *ptmgrtypes.TransactionSignedEvent) {

@@ -22,7 +22,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -416,29 +415,13 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 	transactionInputsCopy := *tf.transaction.Inputs
 	preAssemblyCopy := *tf.transaction.PreAssembly
 
-	tf.assembleCoordinator.RequestAssemble(ctx, assemblingNode,
+	tf.assembleCoordinator.QueueAssemble(
+		ctx,
+		assemblingNode,
 		tf.transaction.ID,
 		&transactionInputsCopy,
 		&preAssemblyCopy,
-
-		AssembleRequestCallbacks{
-			OnComplete: func(requestID string, postAssembly *components.TransactionPostAssembly) {
-
-				tf.publisher.PublishTransactionAssembledEvent(ctx,
-					tf.transaction.ID.String(),
-					postAssembly,
-					requestID,
-				)
-			},
-			OnFail: func(requestID string, err error) {
-				log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
-				tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
-					tf.transaction.ID.String(),
-					i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), err.Error()),
-					requestID,
-				)
-			},
-		})
+	)
 	tf.assemblePending = true
 
 }
