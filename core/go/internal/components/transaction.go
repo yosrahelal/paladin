@@ -53,6 +53,7 @@ type TransactionPreAssembly struct {
 	RequiredVerifiers        []*prototk.ResolveVerifierRequest `json:"required_verifiers"`
 	Verifiers                []*prototk.ResolvedVerifier       `json:"verifiers"`
 }
+
 type FullState struct {
 	ID     tktypes.HexBytes `json:"id"`
 	Schema tktypes.Bytes32  `json:"schema"`

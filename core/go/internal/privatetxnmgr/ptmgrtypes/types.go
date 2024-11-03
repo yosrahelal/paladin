@@ -110,7 +110,7 @@ type TransactionFlow interface {
 	Action(ctx context.Context)
 
 	PrepareTransaction(ctx context.Context, defaultSigner string) (*components.PrivateTransaction, error)
-	GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution
+	GetStateDistributions(ctx context.Context) (*statedistribution.StateDistributionSet, error)
 	CoordinatingLocally() bool
 	IsComplete() bool
 	ReadyForSequencing() bool

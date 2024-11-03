@@ -17,6 +17,7 @@ CREATE TABLE state_distributions (
     "contract_address"  TEXT    NOT NULL,
     "identity_locator"  TEXT    NOT NULL,
     "id"                TEXT    NOT NULL,
+    "nullifier_spec"    TEXT,
     PRIMARY KEY ("id"),
     FOREIGN KEY ("domain_name", "state_id") REFERENCES states ("domain_name", "id") ON DELETE CASCADE
 );

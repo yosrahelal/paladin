@@ -29,7 +29,6 @@ import (
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func NewTransactionFlow(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter, requestTimeout time.Duration) ptmgrtypes.TransactionFlow {
@@ -145,58 +144,8 @@ func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState
 	return endorsableList
 }
 
-func (tf *transactionFlow) GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution {
-	log.L(ctx).Debug("transactionFlow:GetStateDistributions")
-
-	stateDistributions := make([]*statedistribution.StateDistribution, 0)
-	if tf.transaction.PostAssembly == nil {
-		log.L(ctx).Error("PostAssembly is nil")
-		return stateDistributions
-	}
-	if tf.transaction.PostAssembly.OutputStates == nil {
-		log.L(ctx).Debug("OutputStates is nil")
-		return stateDistributions
-	}
-
-	type stateAndDistributionList struct {
-		State            *components.FullState
-		DistributionList []string
-	}
-
-	//need the output state for the state ID and need the outputStatePotential for the distribution list
-	statesToDistribute := make([]stateAndDistributionList, 0, len(tf.transaction.PostAssembly.OutputStates)+len(tf.transaction.PostAssembly.OutputStates))
-	for stateIndex, outputState := range tf.transaction.PostAssembly.OutputStates {
-		statePotential := tf.transaction.PostAssembly.OutputStatesPotential[stateIndex]
-		statesToDistribute = append(statesToDistribute, stateAndDistributionList{outputState, statePotential.DistributionList})
-	}
-	for stateIndex, infoState := range tf.transaction.PostAssembly.InfoStates {
-		statePotential := tf.transaction.PostAssembly.InfoStatesPotential[stateIndex]
-		statesToDistribute = append(statesToDistribute, stateAndDistributionList{infoState, statePotential.DistributionList})
-	}
-
-	for _, s := range statesToDistribute {
-		// We don't need to send to our local node
-		localNodeName := tf.components.TransportManager().LocalNodeName()
-		for _, party := range s.DistributionList {
-			nodeName, err := tktypes.PrivateIdentityLocator(party).Node(ctx, true)
-			if err != nil || nodeName == "" || nodeName == localNodeName {
-				log.L(ctx).Debugf("skipping unnecessary state distribution party='%s' nodeName='%s' localNodeName='%s'", party, nodeName, localNodeName)
-				continue
-			}
-
-			stateDistributions = append(stateDistributions, &statedistribution.StateDistribution{
-				ID:              uuid.New().String(),
-				StateID:         s.State.ID.String(),
-				IdentityLocator: party,
-				Domain:          tf.domainAPI.Domain().Name(),
-				ContractAddress: tf.transaction.Inputs.To.String(),
-				SchemaID:        s.State.Schema.String(),
-				StateDataJson:   string(s.State.Data), // the state data json is available on both but we take it
-				// from the outputState to make sure it is the same json that was used to generate the hash
-			})
-		}
-	}
-	return stateDistributions
+func (tf *transactionFlow) GetStateDistributions(ctx context.Context) (*statedistribution.StateDistributionSet, error) {
+	return newStateDistributionBuilder(tf.components, tf.transaction).Build(ctx)
 }
 
 func (tf *transactionFlow) InputStateIDs() []string {

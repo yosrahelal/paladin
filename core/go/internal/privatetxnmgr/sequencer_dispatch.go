@@ -99,7 +99,11 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				return err
 			}
 
-			stateDistributions = append(stateDistributions, txProcessor.GetStateDistributions(ctx)...)
+			sds, err := txProcessor.GetStateDistributions(ctx)
+			if err != nil {
+				return err
+			}
+			stateDistributions = append(stateDistributions, sds.Remote...)
 		}
 
 		preparedTransactionPayloads := make([]*pldapi.TransactionInput, len(publicTransactionsToSend))

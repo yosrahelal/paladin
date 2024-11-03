@@ -313,7 +313,7 @@ message NewState {
 }
 
 message NullifierSpec {
-  string identity = 1; // The fully qualified identity lookup string - must match an entry in the distribution list
+  string party = 1; // The fully qualified identity lookup string of the party that needs the nullifier - must match an entry in the distribution list
   string algorithm = 2; // An algorithm string to pass to the proof/siging technology to instruct its operation - likely a domain specific signing request
   string verifier_type = 3; // When resolving the identity for signing this verifier type will be used, and then passed to the signer in the nullifier generation request
   string payload_type = 5; // A string to instruct the signer to prepare a nullifier of the correct type. Note the payload itself will always be the JSON state data for a nullifier request

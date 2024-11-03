@@ -56,15 +56,25 @@ type StateDistributionPersisted struct {
 	ContractAddress tktypes.EthAddress `json:"contractAddress"`
 }
 
+type StateDistributionSet struct {
+	LocalNode  string
+	SenderNode string
+	Remote     []*StateDistribution
+	Local      []*StateDistribution
+}
+
 // A StateDistribution is an intent to send private data for a given state to a remote party
 type StateDistribution struct {
-	ID              string
-	StateID         string
-	IdentityLocator string
-	Domain          string
-	ContractAddress string
-	SchemaID        string
-	StateDataJson   string
+	ID                    string
+	StateID               string
+	IdentityLocator       string
+	Domain                string
+	ContractAddress       string
+	SchemaID              string
+	StateDataJson         string
+	NullifierAlgorithm    *string
+	NullifierVerifierType *string
+	NullifierPayloadType  *string
 }
 
 /*
