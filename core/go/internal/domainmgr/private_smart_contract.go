@@ -107,12 +107,20 @@ func (dc *domainContract) processTxInputs(ctx context.Context, txi *components.T
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFunctionParams, txi.Function.SolString())
 	}
+
+	// We need to fully qualify the from address
+	identity, node, err := tktypes.PrivateIdentityLocator(txi.From).Validate(ctx, dc.dm.transportMgr.LocalNodeName(), false)
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFromAddress)
+	}
+	fullyQualifiedFromAddress := fmt.Sprintf("%s@%s", identity, node)
+
 	return &prototk.TransactionSpecification{
 		ContractInfo: &prototk.ContractInfo{
 			ContractAddress:    dc.info.Address.String(),
 			ContractConfigJson: dc.config.ContractConfigJson,
 		},
-		From:               txi.From,
+		From:               fullyQualifiedFromAddress,
 		FunctionAbiJson:    string(abiJSON),
 		FunctionParamsJson: string(paramsJSON),
 		FunctionSignature:  txi.Function.SolString(), // we use the proprietary "Solidity inspired" form that is very specific, including param names and nested struct defs

@@ -189,3 +189,109 @@ func TestStateDistributionWithNullifiersAllRemote(t *testing.T) {
 	checkCommon(sds.Remote[2], false)
 
 }
+
+func TestStateDistributionNonFullyQualifiedSender(t *testing.T) {
+
+	ctx, sd := newTestStateDistributionBuilder(t, &components.PrivateTransaction{
+		Inputs: &components.TransactionInputs{
+			From:   "bob",
+			Domain: "domain1",
+		},
+	})
+
+	_, err := sd.Build(ctx)
+	assert.Regexp(t, "PD011830", err)
+
+}
+
+func TestStateDistributionInvalidAssembly(t *testing.T) {
+
+	ctx, sd := newTestStateDistributionBuilder(t, &components.PrivateTransaction{
+		Inputs: &components.TransactionInputs{
+			From:   "bob@node1",
+			Domain: "domain1",
+		},
+		PostAssembly: &components.TransactionPostAssembly{
+			OutputStatesPotential: []*prototk.NewState{
+				{SchemaId: "schema1"},
+			},
+			// but no full states
+		},
+	})
+
+	_, err := sd.Build(ctx)
+	assert.Regexp(t, "PD011831", err)
+
+}
+
+func TestStateDistributionInvalidNullifiers(t *testing.T) {
+
+	schema1ID := tktypes.Bytes32(tktypes.RandBytes(32))
+	state1ID := tktypes.HexBytes(tktypes.RandBytes(32))
+	contractAddr := *tktypes.RandAddress()
+	ctx, sd := newTestStateDistributionBuilder(t, &components.PrivateTransaction{
+		Inputs: &components.TransactionInputs{
+			From:   "bob@node2",
+			Domain: "domain1",
+			To:     contractAddr,
+		},
+		PostAssembly: &components.TransactionPostAssembly{
+			OutputStates: []*components.FullState{
+				{
+					ID:     state1ID,
+					Schema: schema1ID,
+					Data:   tktypes.RawJSON(`{"some":"coin"}`),
+				},
+			},
+			OutputStatesPotential: []*prototk.NewState{
+				{
+					DistributionList: []string{"bob@node2"},
+					NullifierSpecs: []*prototk.NullifierSpec{
+						{
+							Party:        "not.bob@node2",
+							Algorithm:    "nullifier_algo",
+							VerifierType: "nullifier_verifier_type",
+							PayloadType:  "nullifier_payload_type",
+						},
+					},
+				},
+			},
+		},
+	})
+
+	_, err := sd.Build(ctx)
+	assert.Regexp(t, "PD011833", err)
+
+}
+
+func TestStateDistributionInfoStateNoNodeName(t *testing.T) {
+
+	schema1ID := tktypes.Bytes32(tktypes.RandBytes(32))
+	state1ID := tktypes.HexBytes(tktypes.RandBytes(32))
+	contractAddr := *tktypes.RandAddress()
+	ctx, sd := newTestStateDistributionBuilder(t, &components.PrivateTransaction{
+		Inputs: &components.TransactionInputs{
+			From:   "bob@node2",
+			Domain: "domain1",
+			To:     contractAddr,
+		},
+		PostAssembly: &components.TransactionPostAssembly{
+			InfoStates: []*components.FullState{
+				{
+					ID:     state1ID,
+					Schema: schema1ID,
+					Data:   tktypes.RawJSON(`{"some":"coin"}`),
+				},
+			},
+			InfoStatesPotential: []*prototk.NewState{
+				{
+					DistributionList: []string{"no.node.name"},
+				},
+			},
+		},
+	})
+
+	_, err := sd.Build(ctx)
+	assert.Regexp(t, "PD011832", err)
+
+}

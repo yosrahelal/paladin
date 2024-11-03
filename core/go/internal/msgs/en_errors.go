@@ -274,6 +274,7 @@ var (
 	MsgDomainDomainReceiptNoStatesAvailable   = ffe("PD011658", "A domain receipt is not yet available for transaction %s as none of the private state data is available on the local node")
 	MsgDomainSingingKeyMustBeLocalEthSign     = ffe("PD011659", "Singing key must be local for ethereum transaction signing")
 	MsgDomainNullifierForPartyOutsideDistro   = ffe("PD011660", "A nullifier was requested for a party that is not in the distribution list")
+	MsgDomainInvalidFromAddress               = ffe("PD011661", "Invalid from identity in transaction")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")
