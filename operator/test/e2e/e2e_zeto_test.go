@@ -37,7 +37,10 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
-var _ = Describe("zeto - anon/nullifiers", Ordered, func() {
+const tokenType = "Zeto_AnonNullifier"
+const isNullifier = true
+
+var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 	BeforeAll(func() {
 	})
 
@@ -91,7 +94,6 @@ var _ = Describe("zeto - anon/nullifiers", Ordered, func() {
 
 		var zetoContract *tktypes.EthAddress
 		operator := "zeto.operator@node1"
-		tokenType := "Zeto_AnonNullifier"
 		It("deploys a zeto", func() {
 			deploy := rpc["node1"].ForABI(ctx, zetotypes.ZetoABI).
 				Private().
@@ -126,8 +128,12 @@ var _ = Describe("zeto - anon/nullifiers", Ordered, func() {
 			var addr tktypes.HexBytes
 			err := rpc[node].CallRPC(ctx, &addr, "ptx_resolveVerifier", identity, "domain:zeto:snark:babyjubjub", "iden3_pubkey_babyjubjub_compressed_0x")
 			Expect(err).To(BeNil())
+			method := "pstate_queryContractStates"
+			if isNullifier {
+				method = "pstate_queryContractNullifiers"
+			}
 			var coins []*zetotypes.ZetoCoinState
-			err = rpc[node].CallRPC(ctx, &coins, "pstate_queryContractNullifiers", "zeto", zetoContract, zetoCoinSchemaID,
+			err = rpc[node].CallRPC(ctx, &coins, method, "zeto", zetoContract, zetoCoinSchemaID,
 				query.NewQueryBuilder().Equal("owner", addr).Limit(100).Query(),
 				"available")
 			Expect(err).To(BeNil())
