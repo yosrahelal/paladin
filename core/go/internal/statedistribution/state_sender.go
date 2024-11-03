@@ -34,16 +34,29 @@ func (sd *stateDistributer) DistributeStates(ctx context.Context, stateDistribut
 }
 
 func (sd *stateDistributer) sendState(ctx context.Context, stateDistribution *StateDistribution) {
-	log.L(ctx).Debugf("stateDistributer:sendState %s %s %s %s %s %s", stateDistribution.Domain, stateDistribution.ContractAddress, stateDistribution.SchemaID, stateDistribution.StateID, stateDistribution.IdentityLocator, stateDistribution.ID)
+	log.L(ctx).Debugf("stateDistributer:sendState id=%s,domain=%s contractAddress=%s schemaId=%s stateId=%s identity=%s, nullifierAlgorithm=%v nullifierVerifierType=%v nullifierPayloadType=%v]",
+		stateDistribution.ID,
+		stateDistribution.Domain,
+		stateDistribution.ContractAddress,
+		stateDistribution.SchemaID,
+		stateDistribution.StateID,
+		stateDistribution.IdentityLocator,
+		stateDistribution.NullifierAlgorithm,
+		stateDistribution.NullifierVerifierType,
+		stateDistribution.NullifierPayloadType,
+	)
 
 	stateProducedEvent := &pb.StateProducedEvent{
-		DomainName:      stateDistribution.Domain,
-		ContractAddress: stateDistribution.ContractAddress,
-		SchemaId:        stateDistribution.SchemaID,
-		StateId:         stateDistribution.StateID,
-		StateDataJson:   stateDistribution.StateDataJson,
-		Party:           stateDistribution.IdentityLocator,
-		DistributionId:  stateDistribution.ID,
+		DistributionId:        stateDistribution.ID,
+		DomainName:            stateDistribution.Domain,
+		ContractAddress:       stateDistribution.ContractAddress,
+		SchemaId:              stateDistribution.SchemaID,
+		StateId:               stateDistribution.StateID,
+		StateDataJson:         stateDistribution.StateDataJson,
+		Party:                 stateDistribution.IdentityLocator,
+		NullifierAlgorithm:    stateDistribution.NullifierAlgorithm,
+		NullifierVerifierType: stateDistribution.NullifierVerifierType,
+		NullifierPayloadType:  stateDistribution.NullifierPayloadType,
 	}
 	stateProducedEventBytes, err := proto.Marshal(stateProducedEvent)
 	if err != nil {

@@ -55,7 +55,14 @@ func (sd *stateDistributer) handleStateProducedEvent(ctx context.Context, messag
 		return
 	}
 
-	err = sd.receivedStateWriter.QueueAndWait(ctx, stateProducedEvent.DomainName, *tktypes.MustEthAddress(stateProducedEvent.ContractAddress), tktypes.MustParseBytes32(stateProducedEvent.SchemaId), tktypes.RawJSON(stateProducedEvent.StateDataJson))
+	// We need to build any nullifiers that are required, before we dispatch to persistence
+
+	err = sd.receivedStateWriter.QueueAndWait(ctx,
+		stateProducedEvent.DomainName,
+		*tktypes.MustEthAddress(stateProducedEvent.ContractAddress),
+		tktypes.MustParseBytes32(stateProducedEvent.SchemaId),
+		tktypes.RawJSON(stateProducedEvent.StateDataJson),
+	)
 	if err != nil {
 		log.L(ctx).Errorf("Error writing state: %s", err)
 		//don't send the acknowledgement, with a bit of luck, the sender will retry and we will get it next time

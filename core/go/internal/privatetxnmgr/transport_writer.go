@@ -83,14 +83,26 @@ func (tw *transportWriter) SendDelegationRequest(
 	return nil
 }
 
-func (tw *transportWriter) SendState(ctx context.Context, stateId string, schemaId string, stateDataJson string, party string) error {
+func (tw *transportWriter) SendState(
+	ctx context.Context,
+	stateId string,
+	schemaId string,
+	stateDataJson string,
+	party string,
+	nullifierAlgorithm *string,
+	nullifierVerifierType *string,
+	nullifierPayloadType *string,
+) error {
 	stateProducedEvent := &pb.StateProducedEvent{
-		DomainName:      tw.domainName,
-		ContractAddress: tw.contractAddress.String(),
-		SchemaId:        schemaId,
-		StateId:         stateId,
-		StateDataJson:   stateDataJson,
-		Party:           party,
+		DomainName:            tw.domainName,
+		ContractAddress:       tw.contractAddress.String(),
+		SchemaId:              schemaId,
+		StateId:               stateId,
+		StateDataJson:         stateDataJson,
+		Party:                 party,
+		NullifierAlgorithm:    nullifierAlgorithm,
+		NullifierVerifierType: nullifierVerifierType,
+		NullifierPayloadType:  nullifierPayloadType,
 	}
 	stateProducedEventBytes, err := proto.Marshal(stateProducedEvent)
 	if err != nil {
