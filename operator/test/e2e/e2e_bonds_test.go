@@ -404,6 +404,7 @@ var _ = Describe("controller", Ordered, func() {
 				Inputs(map[string]any{
 					"to":     alice.id,
 					"amount": with18Decimals(100000),
+					"data":   "0x",
 				}).
 				Send().
 				Wait(5 * time.Second)
@@ -421,6 +422,7 @@ var _ = Describe("controller", Ordered, func() {
 				Inputs(map[string]any{
 					"to":     bondCustodian.id,
 					"amount": 1000,
+					"data":   "0x",
 				}).
 				Send().
 				Wait(5 * time.Second)
@@ -526,6 +528,7 @@ var _ = Describe("controller", Ordered, func() {
 				Inputs(map[string]any{
 					"to":     alice.id,
 					"amount": 1000,
+					"data":   "0x",
 				}).
 				Prepare().
 				Wait(5 * time.Second)
@@ -539,8 +542,6 @@ var _ = Describe("controller", Ordered, func() {
 		var preparedPaymentTransfer *pldapi.PreparedTransaction
 		It("prepare transfer of cash from alice to custodian", func() {
 
-			Skip("until code updated so the prepared transaction gets moved back from the bond issuer node, to the alice node")
-
 			tx := rpc[alice.node].ForABI(ctx, nototypes.NotoABI).
 				Private().
 				Domain("noto").
@@ -550,6 +551,7 @@ var _ = Describe("controller", Ordered, func() {
 				Inputs(map[string]any{
 					"to":     bondCustodian.id,
 					"amount": 1000,
+					"data":   "0x",
 				}).
 				Prepare().
 				Wait(5 * time.Second)
@@ -557,7 +559,7 @@ var _ = Describe("controller", Ordered, func() {
 			Expect(tx.Error()).To(BeNil())
 			preparedPaymentTransfer = tx.PreparedTransaction()
 			Expect(preparedPaymentTransfer).ToNot(BeNil())
-			Expect(preparedPaymentTransfer.Domain).To(BeEmpty( /* e.g. pubic */ ))
+			Expect(preparedPaymentTransfer.Transaction.Domain).To(BeEmpty( /* e.g. pubic */ ))
 		})
 	})
 })

@@ -96,13 +96,18 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, err
 	}
-	outputCoins, outputStates, err := h.noto.prepareOutputs(notary, params.To, toAddress, params.Amount)
+	outputCoins, outputStates, err := h.noto.prepareOutputs(toAddress, params.Amount, []string{notary, tx.Transaction.From, params.To})
 	if err != nil {
 		return nil, err
 	}
+	infoStates, err := h.noto.prepareInfo(params.Data, []string{notary, tx.Transaction.From, params.To})
+	if err != nil {
+		return nil, err
+	}
+
 	if total.Cmp(params.Amount.Int()) == 1 {
 		remainder := big.NewInt(0).Sub(total, params.Amount.Int())
-		returnedCoins, returnedStates, err := h.noto.prepareOutputs(notary, tx.Transaction.From, fromAddress, (*tktypes.HexUint256)(remainder))
+		returnedCoins, returnedStates, err := h.noto.prepareOutputs(fromAddress, (*tktypes.HexUint256)(remainder), []string{notary, tx.Transaction.From})
 		if err != nil {
 			return nil, err
 		}
@@ -166,6 +171,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		AssembledTransaction: &prototk.AssembledTransaction{
 			InputStates:  inputStates,
 			OutputStates: outputStates,
+			InfoStates:   infoStates,
 		},
 		AttestationPlan: attestation,
 	}, nil
@@ -205,7 +211,7 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 			for i, state := range req.Outputs {
 				outputIDs[i] = state.Id
 			}
-			data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
+			data, err := h.noto.encodeTransactionData(req.Transaction, req.Info)
 			if err != nil {
 				return nil, err
 			}
@@ -261,7 +267,7 @@ func (h *transferHandler) baseLedgerTransfer(ctx context.Context, tx *types.Pars
 		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 
-	data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
+	data, err := h.noto.encodeTransactionData(req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +349,7 @@ func (h *transferHandler) hookTransfer(ctx context.Context, tx *types.ParsedTran
 }
 
 func (h *transferHandler) makeExtraData(ctx context.Context, withApprovalTX *TransactionWrapper, req *prototk.PrepareTransactionRequest) ([]byte, error) {
-	data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
+	data, err := h.noto.encodeTransactionData(req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, err
 	}

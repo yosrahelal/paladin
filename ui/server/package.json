@@ -4,6 +4,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon",
+    "dev:node1": "PORT=3555 PALADIN_NODE_URI=http://127.0.0.1:31548 nodemon",
+    "dev:node2": "PORT=3556 PALADIN_NODE_URI=http://127.0.0.1:31648 nodemon",
+    "dev:node3": "PORT=3557 PALADIN_NODE_URI=http://127.0.0.1:31748 nodemon",
     "build": "tsc",
     "start": "node ./build/index.js"
   },

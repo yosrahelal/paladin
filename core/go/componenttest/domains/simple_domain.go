@@ -752,8 +752,9 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 					newCoins = append(newCoins, &coin)
 
 					newStates = append(newStates, &prototk.NewState{
-						SchemaId:      simpleTokenSchemaID,
-						StateDataJson: toJSONString(t, &coin),
+						SchemaId:         simpleTokenSchemaID,
+						StateDataJson:    toJSONString(t, &coin),
+						DistributionList: []string{req.Transaction.From, config.NotaryLocator},
 					})
 				}
 				if toAddr != nil && amount.Sign() > 0 {
@@ -767,7 +768,7 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 					newStates = append(newStates, &prototk.NewState{
 						SchemaId:         simpleTokenSchemaID,
 						StateDataJson:    toJSONString(t, &coin),
-						DistributionList: []string{txInputs.To},
+						DistributionList: []string{req.Transaction.From, txInputs.To, config.NotaryLocator},
 					})
 				}
 				eip712Payload, err := typedDataV4TransferWithSalts(contractAddr, coinsToSpend, newCoins)
