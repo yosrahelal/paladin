@@ -169,12 +169,17 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 		expectedCoins = 3
 	}
 	require.Len(t, coins, expectedCoins)
-	// assert.Equal(t, int64(10), coins[0].Amount.Int64())
-	// assert.Equal(t, recipient1Name, coins[0].Owner)
-	// assert.Equal(t, int64(25), coins[1].Amount.Int64())
-	// assert.Equal(t, recipient1Name, coins[1].Owner)
-	// assert.Equal(t, int64(5), coins[2].Amount.Int64())
-	// assert.Equal(t, controllerName, coins[2].Owner)
+
+	if useBatch {
+		assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64()) // state for recipient1
+		assert.Equal(t, int64(40), coins[1].Data.Amount.Int().Int64()) // state for recipient2
+		assert.Equal(t, int64(10), coins[2].Data.Amount.Int().Int64()) // change for controller
+		assert.Equal(t, controllerAddr.String(), coins[2].Data.Owner.String())
+	} else {
+		assert.Equal(t, int64(25), coins[0].Data.Amount.Int().Int64()) // state for recipient1
+		assert.Equal(t, int64(5), coins[1].Data.Amount.Int().Int64())  // change for controller
+		assert.Equal(t, controllerAddr.String(), coins[1].Data.Owner.String())
+	}
 }
 
 func (s *zetoDomainTestSuite) setupContractsAbi(t *testing.T, ctx context.Context, tokenName string) {
