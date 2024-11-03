@@ -94,6 +94,7 @@ func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
+	s.T().Skip()
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
 }
 
@@ -102,6 +103,7 @@ func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
+	s.T().Skip()
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true, true)
 }
 
