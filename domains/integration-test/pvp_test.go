@@ -28,6 +28,7 @@ import (
 	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	zetotests "github.com/kaleido-io/paladin/domains/zeto/integration-test"
 	zetotypes "github.com/kaleido-io/paladin/domains/zeto/pkg/types"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -210,6 +211,12 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withHooks b
 	}
 }
 
+func resolveZetoKey(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, domainName, identity string) (verifier string) {
+	err := rpc.CallRPC(ctx, &verifier, "ptx_resolveVerifier", identity, zetosignerapi.AlgoDomainZetoSnarkBJJ(domainName), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X)
+	require.Nil(t, err)
+	return
+}
+
 func findAvailableCoins[T any](t *testing.T, ctx context.Context, rpc rpcbackend.Backend, domainName, coinSchemaID string, address *tktypes.EthAddress, jq *query.QueryJSON, readiness ...func(coins []*T) bool) []*T {
 	if jq == nil {
 		jq = query.NewQueryBuilder().Limit(100).Query()
@@ -311,7 +318,8 @@ func TestNotoForZeto(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, zetoCoins, 1)
 	assert.Equal(t, int64(10), zetoCoins[0].Data.Amount.Int().Int64())
-	assert.Equal(t, bob, zetoCoins[0].Data.Owner) // TODO: this should really be bob's key, not by name
+	bobsKey := resolveZetoKey(t, ctx, rpc, zetoDomain.Name(), bob)
+	assert.Equal(t, bobsKey, zetoCoins[0].Data.Owner.String())
 
 	// TODO: this should be a Pente private contract, instead of a base ledger contract
 	log.L(ctx).Infof("Propose a trade of 1 Noto for 1 Zeto")
@@ -417,7 +425,8 @@ func TestNotoForZeto(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, zetoCoins, 2)
 	assert.Equal(t, int64(1), zetoCoins[0].Data.Amount.Int().Int64())
-	assert.Equal(t, alice, zetoCoins[0].Data.Owner)
+	alicesKey := resolveZetoKey(t, ctx, rpc, zetoDomain.Name(), alice)
+	assert.Equal(t, alicesKey, zetoCoins[0].Data.Owner.String())
 	assert.Equal(t, int64(9), zetoCoins[1].Data.Amount.Int().Int64())
-	assert.Equal(t, bob, zetoCoins[1].Data.Owner)
+	assert.Equal(t, bobsKey, zetoCoins[1].Data.Owner.String())
 }
