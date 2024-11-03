@@ -296,7 +296,7 @@ var (
 	MsgContractAddressNotProvided               = ffe("PD011811", "Contract address (To) not found in the transaction input")
 	MsgPrivTxMgrPublicTxFail                    = ffe("PD011812", "Public transaction rejected")
 	MsgResolveVerifierRemoteFailed              = ffe("PD011813", "Failed to resolve verifier on remote node with lookup %s algorithm %s: Error %s")
-	MsgPrivateTxManagerAssembleRevert           = ffe("PD011814", "Domain reverted transaction on assemble")
+	MsgPrivateTxManagerAssembleRevert           = ffe("PD011814", "Domain reverted transaction on assemble: %s")
 	MsgPrivateTxManagerResolveError             = ffe("PD011815", "Failed to resolve local signer for party %s (verifier=%s,algorithm=%s): %s")
 	MsgPrivateTxManagerSignError                = ffe("PD011816", "Failed to sign for party %s (verifier=%s,algorithm=%s): %s")
 	MsgPrivateTxManagerEndorsementRequestError  = ffe("PD011817", "Failed to request endorsement from %s: %s")

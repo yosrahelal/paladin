@@ -843,7 +843,7 @@ func (p *privateTxManager) handleAssembleRequest(ctx context.Context, messagePay
 		return
 	}
 
-	postAssembly, err := sequencer.assembleForCoordinator(ctx, transactionID, transactionInputs, preAssembly, assembleRequest.StateLocks, assembleRequest.BlockHeight)
+	postAssembly, err := sequencer.assembleForRemoteCoordinator(ctx, transactionID, transactionInputs, preAssembly, assembleRequest.StateLocks, assembleRequest.BlockHeight)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to assemble for coordinator: %s", err)
 		p.sendAssembleError(ctx, replyTo, assembleRequest.AssembleRequestId, assembleRequest.ContractAddress, assembleRequest.TransactionId, err)

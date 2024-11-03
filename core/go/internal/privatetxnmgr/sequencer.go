@@ -347,51 +347,6 @@ func (s *Sequencer) GetTxStatus(ctx context.Context, txID string) (status compon
 	return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Transaction not found")
 }
 
-// assemble a transaction that we are not coordinating, using the provided state locks
-// all errors are assumed to be transient and the request should be retried
-// if the domain as deemed the request as invalid then it will communicate the `revert` directive via the AssembleTransactionResponse_REVERT result without any error
-func (s *Sequencer) assembleForCoordinator(ctx context.Context, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, preAssembly *components.TransactionPreAssembly, stateLocksJSON []byte, blockHeight int64) (*components.TransactionPostAssembly, error) {
-
-	log.L(ctx).Debugf("assembleForCoordinator: Assembling transaction %s ", transactionID)
-	transaction := &components.PrivateTransaction{
-		ID:          transactionID,
-		Inputs:      transactionInputs,
-		PreAssembly: preAssembly,
-	}
-
-	log.L(ctx).Debugf("assembleForCoordinator: resetting domain context with state locks from the coordinator which assumes a block height of %d compared with local blockHeight of %d", blockHeight, s.environment.GetBlockHeight())
-	//If our block height is behind the coordinator, there are some states that would otherwise be available to us but we wont see
-	// if our block height is ahead of the coordinator, there is a small chance that we we assemble a transaction that the coordinator will not be able to
-	// endorse yet but it is better to wait around on the endorsement flow than to wait around on the assemble flow which is single threaded per domain
-
-	err := s.delegateDomainContext.ImportStateLocks(stateLocksJSON)
-	if err != nil {
-		log.L(ctx).Errorf("assembleForCoordinator: Error importing state locks: %s", err)
-		return nil, err
-	}
-
-	readTX := s.components.Persistence().DB()
-	err = s.domainAPI.AssembleTransaction(s.delegateDomainContext, readTX, transaction)
-	if err != nil {
-		log.L(ctx).Errorf("assembleForCoordinator: Error assembling transaction: %s", err)
-		return nil, err
-	}
-	if transaction.PostAssembly == nil {
-		log.L(ctx).Errorf("assembleForCoordinator: AssembleTransaction returned nil PostAssembly")
-		// This is most likely a programming error in the domain
-		err := i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "AssembleTransaction returned nil PostAssembly")
-		log.L(ctx).Error(err)
-		return nil, err
-	}
-
-	stateIDs := ""
-	for _, state := range transaction.PostAssembly.OutputStates {
-		stateIDs += "," + state.ID.String()
-	}
-	log.L(ctx).Debugf("assembleForCoordinator: Assembled transaction %s : %s", transactionID, stateIDs)
-	return transaction.PostAssembly, nil
-}
-
 func (s *Sequencer) HandleStateProducedEvent(ctx context.Context, stateProducedEvent *pbEngine.StateProducedEvent) {
 	readTX := s.components.Persistence().DB() // no DB transaction required here for the reads from the DB
 	log.L(ctx).Debug("Sequencer:HandleStateProducedEvent Upserting state to delegateDomainContext")
