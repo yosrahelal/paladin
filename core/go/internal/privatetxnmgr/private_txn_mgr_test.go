@@ -1663,6 +1663,7 @@ type dependencyMocks struct {
 	transportManager    *componentmocks.TransportManager
 	stateStore          *componentmocks.StateManager
 	keyManager          *componentmocks.KeyManager
+	keyResolver         *componentmocks.KeyResolver
 	publicTxManager     components.PublicTxManager /* could be fake or mock */
 	identityResolver    *componentmocks.IdentityResolver
 	txManager           *componentmocks.TXManager
@@ -1829,6 +1830,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 		transportManager:    componentmocks.NewTransportManager(t),
 		stateStore:          componentmocks.NewStateManager(t),
 		keyManager:          componentmocks.NewKeyManager(t),
+		keyResolver:         componentmocks.NewKeyResolver(t),
 		publicTxManager:     publicTxMgr,
 		identityResolver:    componentmocks.NewIdentityResolver(t),
 		txManager:           componentmocks.NewTXManager(t),
@@ -1844,6 +1846,11 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
 	mocks.domainMgr.On("GetDomainByName", mock.Anything, "domain1").Return(mocks.domain, nil).Maybe()
 	mocks.domain.On("Name").Return("domain1").Maybe()
+	mkrc := componentmocks.NewKeyResolutionContextLazyDB(t)
+	mkrc.On("KeyResolverLazyDB").Return(mocks.keyResolver).Maybe()
+	mkrc.On("Commit").Return(nil).Maybe()
+	mkrc.On("Rollback").Return().Maybe()
+	mocks.keyManager.On("NewKeyResolutionContextLazyDB", mock.Anything).Return(mkrc).Maybe()
 
 	mocks.domainContext.On("Ctx").Return(ctx).Maybe()
 	mocks.domainContext.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()

@@ -72,6 +72,7 @@ func (p *privateTxManager) PostInit(c components.AllComponents) error {
 		p.ctx,
 		p.components.TransportManager(),
 		p.components.StateManager(),
+		p.components.KeyManager(),
 		p.components.Persistence(),
 		&p.config.StateDistributer)
 	err := p.stateDistributer.Start(p.ctx)

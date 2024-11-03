@@ -170,15 +170,20 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 		dispatchBatch.PublicDispatches = append(dispatchBatch.PublicDispatches, sequence)
 	}
 
+	// TODO: per notes in endorsementGatherer determine if that's the right place to hold the domain context
+	dCtx := s.endorsementGatherer.DomainContext()
+
 	// Determine if there are any local nullifiers that need to be built and put into the domain context
 	// before we persist the dispatch batch
 	localNullifiers, err := s.stateDistributer.BuildNullifiers(ctx, localStateDistributions)
+	if err == nil && len(localNullifiers) > 0 {
+		err = dCtx.UpsertNullifiers(localNullifiers...)
+	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// TODO: per notes in endorsementGatherer determine if that's the right place to hold the domain context
-	err := s.syncPoints.PersistDispatchBatch(s.endorsementGatherer.DomainContext(), s.contractAddress, dispatchBatch, stateDistributions)
+	err = s.syncPoints.PersistDispatchBatch(dCtx, s.contractAddress, dispatchBatch, stateDistributions)
 	if err != nil {
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return err
