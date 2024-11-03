@@ -58,12 +58,15 @@ func NewStateDistributer(
 }
 
 type StateDistributionPersisted struct {
-	Created         tktypes.Timestamp  `json:"created" gorm:"column:created;autoCreateTime:nano"`
-	ID              string             `json:"id"`
-	StateID         tktypes.HexBytes   `json:"stateID"`
-	IdentityLocator string             `json:"identityLocator"`
-	DomainName      string             `json:"domainName"`
-	ContractAddress tktypes.EthAddress `json:"contractAddress"`
+	Created               tktypes.Timestamp  `json:"created" gorm:"column:created;autoCreateTime:nano"`
+	ID                    string             `json:"id"`
+	StateID               tktypes.HexBytes   `json:"stateID"`
+	IdentityLocator       string             `json:"identityLocator"`
+	DomainName            string             `json:"domainName"`
+	ContractAddress       tktypes.EthAddress `json:"contractAddress"`
+	NullifierAlgorithm    *string            `json:"nullifierAlgorithm,omitempty"`
+	NullifierVerifierType *string            `json:"nullifierVerifierType,omitempty"`
+	NullifierPayloadType  *string            `json:"nullifierPayloadType,omitempty"`
 }
 
 type StateDistributionSet struct {
@@ -174,13 +177,16 @@ func (sd *stateDistributer) Start(bgCtx context.Context) error {
 					}
 
 					sd.inputChan <- &StateDistribution{
-						ID:              stateDistribution.ID,
-						StateID:         stateDistribution.StateID.String(),
-						IdentityLocator: stateDistribution.IdentityLocator,
-						Domain:          stateDistribution.DomainName,
-						ContractAddress: stateDistribution.ContractAddress.String(),
-						SchemaID:        state.Schema.String(),
-						StateDataJson:   string(state.Data),
+						ID:                    stateDistribution.ID,
+						StateID:               stateDistribution.StateID.String(),
+						IdentityLocator:       stateDistribution.IdentityLocator,
+						Domain:                stateDistribution.DomainName,
+						ContractAddress:       stateDistribution.ContractAddress.String(),
+						SchemaID:              state.Schema.String(),
+						StateDataJson:         string(state.Data),
+						NullifierAlgorithm:    stateDistribution.NullifierAlgorithm,
+						NullifierVerifierType: stateDistribution.NullifierVerifierType,
+						NullifierPayloadType:  stateDistribution.NullifierPayloadType,
 					}
 
 					dispatched++
