@@ -123,8 +123,8 @@ var _ = Describe("zeto - anon/nullifiers", Ordered, func() {
 		})
 
 		logWallet := func(identity, node string) {
-			var addr *tktypes.EthAddress
-			err := rpc[node].CallRPC(ctx, &addr, "keymgr_resolveEthAddress", identity)
+			var addr tktypes.HexBytes
+			err := rpc[node].CallRPC(ctx, &addr, "ptx_resolveVerifier", identity, "domain:zeto:snark:babyjubjub", "iden3_pubkey_babyjubjub_compressed_0x")
 			Expect(err).To(BeNil())
 			var coins []*zetotypes.ZetoCoinState
 			err = rpc[node].CallRPC(ctx, &coins, "pstate_queryContractNullifiers", "zeto", zetoContract, zetoCoinSchemaID,
