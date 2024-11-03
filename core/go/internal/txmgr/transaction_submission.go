@@ -289,7 +289,7 @@ func (tm *txManager) callTransactionPublic(ctx context.Context, result any, call
 			Output(result)
 		if call.From != "" {
 			var senderAddr *tktypes.EthAddress
-			senderAddr, err = tm.keyManager.ResolveEthAddressNewDatabaseTX(ctx, call.From)
+			senderAddr, err = tm.keyManager.ResolveEthAddressNewDatabaseTX(ctx, txi.LocalFrom)
 			if err == nil {
 				callReq = callReq.Signer(senderAddr.String())
 			}
@@ -389,7 +389,7 @@ func (tm *txManager) processNewTransactions(ctx context.Context, txs []*pldapi.T
 					PublicTxOptions: tx.PublicTxOptions,
 				},
 			})
-			publicTxSenders = append(publicTxSenders, tx.From)
+			publicTxSenders = append(publicTxSenders, txi.LocalFrom)
 		}
 	}
 
@@ -508,7 +508,17 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, t
 		return nil, err
 	}
 
+	identifier := tx.From
+	if submitMode != pldapi.SubmitModeCall /* only call is allowed to not have a from */ || identifier != "" {
+		identifier, node, err := tktypes.PrivateIdentityLocator(tx.From).Validate(ctx, tm.localNodeName, false)
+		if err != nil || node != tm.localNodeName {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrPublicSenderNotValidLocal, tx.From)
+		}
+		tx.From = fmt.Sprintf("%s@%s", identifier, node)
+	}
+
 	return &components.ValidatedTransaction{
+		LocalFrom: identifier,
 		Transaction: &pldapi.Transaction{
 			TransactionBase: tx.TransactionBase,
 			ID:              &txID,

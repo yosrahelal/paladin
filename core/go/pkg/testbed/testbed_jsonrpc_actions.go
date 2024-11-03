@@ -289,6 +289,11 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 		return err
 	}
 
+	// Build any nullifiers
+	if err := tb.writeNullifiersToContext(dCtx, tx); err != nil {
+		return err
+	}
+
 	// Flush the context
 	dbTXResultCB, err := dCtx.Flush(tb.c.Persistence().DB())
 	if err != nil {

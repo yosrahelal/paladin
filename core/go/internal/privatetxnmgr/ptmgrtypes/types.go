@@ -27,7 +27,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
@@ -109,7 +108,7 @@ type TransactionFlow interface {
 	Action(ctx context.Context)
 
 	PrepareTransaction(ctx context.Context, defaultSigner string) (*components.PrivateTransaction, error)
-	GetStateDistributions(ctx context.Context) (*statedistribution.StateDistributionSet, error)
+	GetStateDistributions(ctx context.Context) (*components.StateDistributionSet, error)
 	CoordinatingLocally() bool
 	IsComplete() bool
 	ReadyForSequencing() bool

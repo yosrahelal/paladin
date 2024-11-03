@@ -400,6 +400,7 @@ var (
 	MsgTxMgrDecodeCallDataNoABI          = ffe("PD012227", "Unable to decode call data using stored ABIs (%d matched function selector)")
 	MsgTxMgrDecodeEventAnonymous         = ffe("PD012228", "Unable to decode event with no topics (anonymous events cannot be decoded)")
 	MsgTxMgrDecodeEventNoABI             = ffe("PD012229", "Unable to decode event data using stored ABIs (%d matched signature)")
+	MsgTxMgrPublicSenderNotValidLocal    = ffe("PD012230", "The from identity '%s' must be a valid identity local to the node")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")

@@ -530,7 +530,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 				contractAddr, notaryLocator, txInputs := validateTransferTransactionInput(req.Transaction)
 				senderAddr, fromAddr, toAddr := extractTransferVerifiers(req.Transaction, txInputs, req.ResolvedVerifiers)
 				assert.Equal(t, req.EndorsementVerifier.Lookup, req.EndorsementRequest.Parties[0])
-				assert.Equal(t, req.EndorsementVerifier.Lookup, notaryLocator)
+				assert.Equal(t, req.EndorsementVerifier.Lookup, notaryLocator+"@node1" /* all identities get fully qualified on the journey */)
 
 				inCoins := make([]*fakeCoinParser, len(req.Inputs))
 				for i, input := range req.Inputs {

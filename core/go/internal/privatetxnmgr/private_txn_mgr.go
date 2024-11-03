@@ -814,3 +814,7 @@ func (p *privateTxManager) CallPrivateSmartContract(ctx context.Context, call *c
 	// Do the actual call
 	return psc.ExecCall(dCtx, p.components.Persistence().DB(), call, verifiers)
 }
+
+func (p *privateTxManager) BuildStateDistributions(ctx context.Context, tx *components.PrivateTransaction) (*components.StateDistributionSet, error) {
+	return newStateDistributionBuilder(p.components, tx).Build(ctx)
+}

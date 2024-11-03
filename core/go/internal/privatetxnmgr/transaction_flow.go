@@ -25,7 +25,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
-	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -144,7 +143,7 @@ func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState
 	return endorsableList
 }
 
-func (tf *transactionFlow) GetStateDistributions(ctx context.Context) (*statedistribution.StateDistributionSet, error) {
+func (tf *transactionFlow) GetStateDistributions(ctx context.Context) (*components.StateDistributionSet, error) {
 	return newStateDistributionBuilder(tf.components, tf.transaction).Build(ctx)
 }
 

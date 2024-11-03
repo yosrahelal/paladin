@@ -24,7 +24,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
-	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -43,8 +42,8 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 		PublicDispatches: make([]*syncpoints.PublicDispatch, 0, len(dispatchableTransactions)),
 	}
 
-	stateDistributions := make([]*statedistribution.StateDistribution, 0)
-	localStateDistributions := make([]*statedistribution.StateDistribution, 0)
+	stateDistributions := make([]*components.StateDistribution, 0)
+	localStateDistributions := make([]*components.StateDistribution, 0)
 
 	completed := false // and include whether we committed the DB transaction or not
 	for signingAddress, transactionIDs := range dispatchableTransactions {

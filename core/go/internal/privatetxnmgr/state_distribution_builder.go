@@ -22,25 +22,24 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func newStateDistributionBuilder(components components.AllComponents, tx *components.PrivateTransaction) *stateDistributionBuilder {
+func newStateDistributionBuilder(c components.AllComponents, tx *components.PrivateTransaction) *stateDistributionBuilder {
 	return &stateDistributionBuilder{
 		tx: tx,
-		StateDistributionSet: statedistribution.StateDistributionSet{
-			LocalNode: components.TransportManager().LocalNodeName(),
-			Remote:    []*statedistribution.StateDistribution{},
-			Local:     []*statedistribution.StateDistribution{},
+		StateDistributionSet: components.StateDistributionSet{
+			LocalNode: c.TransportManager().LocalNodeName(),
+			Remote:    []*components.StateDistribution{},
+			Local:     []*components.StateDistribution{},
 		},
 	}
 }
 
 type stateDistributionBuilder struct {
-	statedistribution.StateDistributionSet
+	components.StateDistributionSet
 	tx *components.PrivateTransaction
 }
 
@@ -78,7 +77,7 @@ func (sd *stateDistributionBuilder) processStateForDistribution(ctx context.Cont
 		}
 		remainingNullifiers = newRemainingNullifiers
 
-		distribution := &statedistribution.StateDistribution{
+		distribution := &components.StateDistribution{
 			ID:              uuid.New().String(),
 			IdentityLocator: recipient,
 			Domain:          tx.Inputs.Domain,
@@ -123,7 +122,7 @@ func (sd *stateDistributionBuilder) processStateForDistribution(ctx context.Cont
 // This function is called by the coordinator to validate the new states produced in the postAssembly.
 // It knows who the local node is, and who the sender is.
 // It is aware of nullifiers and distribution lists, and produces a set of instructions for who needs what.
-func (sd *stateDistributionBuilder) Build(ctx context.Context) (sds *statedistribution.StateDistributionSet, err error) {
+func (sd *stateDistributionBuilder) Build(ctx context.Context) (sds *components.StateDistributionSet, err error) {
 
 	log.L(ctx).Debug("privateTxManager:ProcessTransactionStatesForDistribution")
 

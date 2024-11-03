@@ -55,7 +55,7 @@ func (sd *stateDistributer) handleStateProducedEvent(ctx context.Context, messag
 		return
 	}
 
-	s := &StateDistribution{
+	s := &components.StateDistribution{
 		ID:                    stateProducedEvent.DistributionId,
 		StateID:               stateProducedEvent.StateId,
 		IdentityLocator:       stateProducedEvent.Party,

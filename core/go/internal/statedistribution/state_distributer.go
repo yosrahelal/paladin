@@ -41,10 +41,10 @@ func NewStateDistributer(
 ) StateDistributer {
 	sd := &stateDistributer{
 		persistence:      persistence,
-		inputChan:        make(chan *StateDistribution),
+		inputChan:        make(chan *components.StateDistribution),
 		retryChan:        make(chan string),
 		acknowledgedChan: make(chan string),
-		pendingMap:       make(map[string]*StateDistribution),
+		pendingMap:       make(map[string]*components.StateDistribution),
 		stateManager:     stateManager,
 		keyManager:       keyManager,
 		transportManager: transportManager,
@@ -69,27 +69,6 @@ type StateDistributionPersisted struct {
 	NullifierPayloadType  *string            `json:"nullifierPayloadType,omitempty"`
 }
 
-type StateDistributionSet struct {
-	LocalNode  string
-	SenderNode string
-	Remote     []*StateDistribution
-	Local      []*StateDistribution
-}
-
-// A StateDistribution is an intent to send private data for a given state to a remote party
-type StateDistribution struct {
-	ID                    string
-	StateID               string
-	IdentityLocator       string
-	Domain                string
-	ContractAddress       string
-	SchemaID              string
-	StateDataJson         string
-	NullifierAlgorithm    *string
-	NullifierVerifierType *string
-	NullifierPayloadType  *string
-}
-
 /*
 StateDistributer is a component that is responsible for distributing state to remote parties
 
@@ -102,8 +81,8 @@ type StateDistributer interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context)
 	AcknowledgeState(ctx context.Context, stateID string)
-	DistributeStates(ctx context.Context, stateDistributions []*StateDistribution)
-	BuildNullifiers(ctx context.Context, stateDistributions []*StateDistribution) ([]*components.NullifierUpsert, error)
+	DistributeStates(ctx context.Context, stateDistributions []*components.StateDistribution)
+	BuildNullifiers(ctx context.Context, stateDistributions []*components.StateDistribution) ([]*components.NullifierUpsert, error)
 }
 
 type stateDistributer struct {
@@ -112,10 +91,10 @@ type stateDistributer struct {
 	persistence           persistence.Persistence
 	stateManager          components.StateManager
 	keyManager            components.KeyManager
-	inputChan             chan *StateDistribution
+	inputChan             chan *components.StateDistribution
 	retryChan             chan string
 	acknowledgedChan      chan string
-	pendingMap            map[string]*StateDistribution
+	pendingMap            map[string]*components.StateDistribution
 	acknowledgementWriter *acknowledgementWriter
 	receivedStateWriter   *receivedStateWriter
 	transportManager      components.TransportManager
@@ -176,7 +155,7 @@ func (sd *stateDistributer) Start(bgCtx context.Context) error {
 						continue
 					}
 
-					sd.inputChan <- &StateDistribution{
+					sd.inputChan <- &components.StateDistribution{
 						ID:                    stateDistribution.ID,
 						StateID:               stateDistribution.StateID.String(),
 						IdentityLocator:       stateDistribution.IdentityLocator,
@@ -243,7 +222,7 @@ func (sd *stateDistributer) Start(bgCtx context.Context) error {
 	return nil
 }
 
-func (sd *stateDistributer) buildNullifier(ctx context.Context, krc components.KeyResolutionContextLazyDB, s *StateDistribution) (*components.NullifierUpsert, error) {
+func (sd *stateDistributer) buildNullifier(ctx context.Context, krc components.KeyResolutionContextLazyDB, s *components.StateDistribution) (*components.NullifierUpsert, error) {
 	// We need to call the signing engine with the local identity to build the nullifier
 	log.L(ctx).Infof("Generating nullifier for state %s on node %s (algorithm=%s,verifierType=%s,payloadType=%s)",
 		s.StateID, sd.localNodeName, *s.NullifierAlgorithm, *s.NullifierVerifierType, *s.NullifierPayloadType)
@@ -286,7 +265,7 @@ func (sd *stateDistributer) withKeyResolutionContext(ctx context.Context, fn fun
 	return err // note we require err to be set before return
 }
 
-func (sd *stateDistributer) BuildNullifiers(ctx context.Context, stateDistributions []*StateDistribution) (nullifiers []*components.NullifierUpsert, err error) {
+func (sd *stateDistributer) BuildNullifiers(ctx context.Context, stateDistributions []*components.StateDistribution) (nullifiers []*components.NullifierUpsert, err error) {
 
 	nullifiers = []*components.NullifierUpsert{}
 	err = sd.withKeyResolutionContext(ctx, func(krc components.KeyResolutionContextLazyDB) error {

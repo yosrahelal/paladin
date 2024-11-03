@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -154,7 +153,7 @@ func TestStateDistributionWithNullifiersAllRemote(t *testing.T) {
 	// in this example the local coordinator node isn't involved
 	require.Empty(t, sds.Local)
 
-	checkCommon := func(s *statedistribution.StateDistribution, withNullifier bool) {
+	checkCommon := func(s *components.StateDistribution, withNullifier bool) {
 		if withNullifier {
 			require.Equal(t, "nullifier_algo", *s.NullifierAlgorithm)
 			require.Equal(t, "nullifier_verifier_type", *s.NullifierVerifierType)
