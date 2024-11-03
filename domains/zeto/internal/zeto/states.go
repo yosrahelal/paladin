@@ -84,7 +84,7 @@ func (z *Zeto) makeNewState(ctx context.Context, useNullifiers bool, coin *types
 	if useNullifiers {
 		newState.NullifierSpecs = []*pb.NullifierSpec{
 			{
-				Identity:     owner,
+				Party:        owner,
 				Algorithm:    z.getAlgoZetoSnarkBJJ(),
 				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 				PayloadType:  zetosignerapi.PAYLOAD_DOMAIN_ZETO_NULLIFIER,
