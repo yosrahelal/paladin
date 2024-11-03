@@ -248,7 +248,7 @@ public class DomainIntegrationTests {
             String notoInstanceAddress = testbed.getRpcClient().request("testbed_deploy",
                     "noto", "notary",
                     new NotoConstructorParamsJSON(
-                            "notary",
+                            "notary@node1",
                             new NotoHookParamsJSON(
                                     penteInstanceAddress,
                                     notoTrackerAddress,

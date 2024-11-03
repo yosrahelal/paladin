@@ -148,7 +148,7 @@ public class BondTest {
             // Create Noto cash token
             var notoCash = NotoHelper.deploy("noto", cashIssuer, testbed,
                     new NotoHelper.ConstructorParams(
-                            cashIssuer,
+                            cashIssuer + "@node1",
                             null,
                             true));
             assertFalse(notoCash.address().isBlank());
@@ -177,7 +177,7 @@ public class BondTest {
             // Create Noto bond token
             var notoBond = NotoHelper.deploy("noto", bondCustodian, testbed,
                     new NotoHelper.ConstructorParams(
-                            bondCustodian,
+                            bondCustodian + "@node1",
                             new NotoHelper.HookParams(
                                     issuerCustodianInstance.address(),
                                     bondTracker.address(),
