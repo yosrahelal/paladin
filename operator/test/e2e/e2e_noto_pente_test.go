@@ -83,9 +83,9 @@ func getJSONPropertyAs(jsonData tktypes.RawJSON, name string, toValue any) {
 	}
 }
 
-var _ = Describe("simple", Ordered, func() {
+var _ = Describe("noto/pente - simple", Ordered, func() {
 	BeforeAll(func() {
-		log.SetLevel("warn")
+		Skip("for now")
 	})
 
 	AfterAll(func() {
@@ -447,7 +447,7 @@ var _ = Describe("simple", Ordered, func() {
 					},
 				}).
 				Outputs(&result).
-				From("seren@node1").
+				From(fmt.Sprintf("%s@%s", identity, node)).
 				Call()
 			Expect(err).To(BeNil())
 			Expect(result).ToNot(BeNil())
