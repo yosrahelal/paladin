@@ -106,7 +106,8 @@ public class DomainIntegrationTests {
             "mint",
             JsonABI.newParameters(
                     JsonABI.newParameter("to", "string"),
-                    JsonABI.newParameter("amount", "uint256")
+                    JsonABI.newParameter("amount", "uint256"),
+                    JsonABI.newParameter("data", "bytes")
             ),
             JsonABI.newParameters()
     );
@@ -154,7 +155,9 @@ public class DomainIntegrationTests {
     @JsonIgnoreProperties(ignoreUnknown = true)
     record StateSchema(
             @JsonProperty
-            JsonHex.Bytes32 id
+            JsonHex.Bytes32 id,
+            @JsonProperty
+            String signature
     ) {
     }
 
@@ -206,8 +209,10 @@ public class DomainIntegrationTests {
             var mapper = new ObjectMapper();
             List<JsonNode> notoSchemas = testbed.getRpcClient().request("pstate_listSchemas",
                     "noto");
-            assertEquals(1, notoSchemas.size());
-            var notoSchema = mapper.convertValue(notoSchemas.getFirst(), StateSchema.class);
+            assertEquals(2, notoSchemas.size());
+            var notoSchema = mapper.convertValue(notoSchemas.getLast(), StateSchema.class);
+            assertEquals("type=NotoCoin(bytes32 salt,string owner,uint256 amount),labels=[owner,amount]",
+                    notoSchema.signature());
 
             // Create the privacy group
             String penteInstanceAddress = testbed.getRpcClient().request("testbed_deploy",
@@ -264,6 +269,7 @@ public class DomainIntegrationTests {
                             new HashMap<>() {{
                                 put("to", "alice");
                                 put("amount", 1000000);
+                                put("data", "0x");
                             }}
                     ), true);
 

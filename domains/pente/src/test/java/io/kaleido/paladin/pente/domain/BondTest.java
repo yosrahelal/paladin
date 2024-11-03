@@ -82,7 +82,9 @@ public class BondTest {
     @JsonIgnoreProperties(ignoreUnknown = true)
     record StateSchema(
             @JsonProperty
-            JsonHex.Bytes32 id
+            JsonHex.Bytes32 id,
+            @JsonProperty
+            String signature
     ) {
     }
 
@@ -118,8 +120,10 @@ public class BondTest {
             var mapper = new ObjectMapper();
             List<JsonNode> notoSchemas = testbed.getRpcClient().request("pstate_listSchemas",
                     "noto");
-            assertEquals(1, notoSchemas.size());
-            var notoSchema = mapper.convertValue(notoSchemas.getFirst(), StateSchema.class);
+            assertEquals(2, notoSchemas.size());
+            var notoSchema = mapper.convertValue(notoSchemas.getLast(), StateSchema.class);
+            assertEquals("type=NotoCoin(bytes32 salt,string owner,uint256 amount),labels=[owner,amount]",
+                    notoSchema.signature());
 
             String bondTrackerPublicBytecode = ResourceLoader.jsonResourceEntryText(
                     this.getClass().getClassLoader(),
@@ -142,7 +146,7 @@ public class BondTest {
                     "pente", alice, testbed, issuerCustodianGroup, true);
             assertFalse(issuerCustodianInstance.address().isBlank());
             var aliceCustodianInstance = PenteHelper.newPrivacyGroup(
-                    "pente", alice,  testbed, aliceCustodianGroup, true);
+                    "pente", alice, testbed, aliceCustodianGroup, true);
             assertFalse(aliceCustodianInstance.address().isBlank());
 
             // Create Noto cash token

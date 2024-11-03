@@ -20,6 +20,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"encoding/pem"
@@ -164,6 +165,33 @@ func newNodeConfiguration(t *testing.T, nodeName string) *nodeConfiguration {
 	}
 }
 
+func initPostgres(t *testing.T, ctx context.Context) (dns string, cleanup func()) {
+	dbDSN := func(dbname string) string {
+		return fmt.Sprintf("postgres://postgres:my-secret@localhost:5432/%s?sslmode=disable", dbname)
+	}
+	componentTestdbName := "ct_" + uuid.New().String()
+	log.L(ctx).Infof("Component test Postgres DB: %s", componentTestdbName)
+
+	// First create the database - using the super user
+
+	adminDB, err := sql.Open("postgres", dbDSN("postgres"))
+	if err == nil {
+		_, err = adminDB.Exec(fmt.Sprintf(`CREATE DATABASE "%s";`, componentTestdbName))
+	}
+	if err == nil {
+		err = adminDB.Close()
+	}
+	require.NoError(t, err)
+
+	return dbDSN(componentTestdbName), func() {
+		adminDB, err := sql.Open("postgres", dbDSN("postgres"))
+		if err == nil {
+			_, _ = adminDB.Exec(fmt.Sprintf(`DROP DATABASE "%s" WITH(FORCE);`, componentTestdbName))
+			adminDB.Close()
+		}
+	}
+}
+
 func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes.EthAddress, binding *nodeConfiguration, peerNodes []*nodeConfiguration, domainConfig *domains.SimpleDomainConfig) *componentTestInstance {
 	if binding == nil {
 		binding = newNodeConfiguration(t, "default")
@@ -254,7 +282,15 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 
 	//uncomment for debugging
 	//i.conf.DB.SQLite.DSN = "./sql." + i.name + ".db"
+	//uncomment to use postgres - TODO once all tests are using postgres, we can parameterize this and run in both modes
+	//i.conf.DB.Type = "postgres"
 	i.conf.Log.Level = confutil.P("debug")
+
+	if i.conf.DB.Type == "postgres" {
+		dns, cleanUp := initPostgres(t, context.Background())
+		i.conf.DB.Postgres.DSN = dns
+		t.Cleanup(cleanUp)
+	}
 
 	var pl plugins.UnitTestPluginLoader
 

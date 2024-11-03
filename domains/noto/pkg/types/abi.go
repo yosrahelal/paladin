@@ -28,6 +28,7 @@ var NotoABI = abi.ABI{
 		Inputs: abi.ParameterArray{
 			{Name: "to", Type: "string"},
 			{Name: "amount", Type: "uint256"},
+			{Name: "data", Type: "bytes"},
 		},
 	},
 	{
@@ -36,6 +37,7 @@ var NotoABI = abi.ABI{
 		Inputs: abi.ParameterArray{
 			{Name: "to", Type: "string"},
 			{Name: "amount", Type: "uint256"},
+			{Name: "data", Type: "bytes"},
 		},
 	},
 	{
@@ -85,11 +87,13 @@ type HookParams struct {
 type MintParams struct {
 	To     string              `json:"to"`
 	Amount *tktypes.HexUint256 `json:"amount"`
+	Data   tktypes.HexBytes    `json:"data"`
 }
 
 type TransferParams struct {
 	To     string              `json:"to"`
 	Amount *tktypes.HexUint256 `json:"amount"`
+	Data   tktypes.HexBytes    `json:"data"`
 }
 
 type ApproveParams struct {

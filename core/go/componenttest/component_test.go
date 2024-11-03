@@ -808,6 +808,137 @@ func TestNotaryDelegated(t *testing.T) {
 
 }
 
+func TestNotaryDelegatedPrepare(t *testing.T) {
+	//Similar to the TestNotaryDelegated test except in this case, the transaction is not submitted to the base ledger by the notary.
+	//instead, the assembled and prepared transaction is returned to the sender node to submit to the base ledger whenever it is deemed appropriate
+	// NOTE the use of ptx_prepareTransaction instead of ptx_sendTransaction on the transfer
+
+	ctx := context.Background()
+
+	aliceNodeConfig := newNodeConfiguration(t, "alice")
+	bobNodeConfig := newNodeConfiguration(t, "bob")
+	notaryNodeConfig := newNodeConfiguration(t, "notary")
+
+	domainRegistryAddress := deployDomainRegistry(t)
+
+	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, aliceNodeConfig, []*nodeConfiguration{bobNodeConfig, notaryNodeConfig}, nil)
+	client1 := instance1.client
+	aliceIdentity := "wallets.org1.alice@" + instance1.name
+
+	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, bobNodeConfig, []*nodeConfiguration{aliceNodeConfig, notaryNodeConfig}, nil)
+	bobIdentity := "wallets.org2.bob@" + instance2.name
+
+	instance3 := newInstanceForComponentTesting(t, domainRegistryAddress, notaryNodeConfig, []*nodeConfiguration{aliceNodeConfig, bobNodeConfig}, nil)
+	client3 := instance3.client
+	notaryIdentity := "wallets.org3.notary@" + instance3.name
+
+	// send JSON RPC message to node 3 ( notary) to deploy a private contract
+	var dplyTxID uuid.UUID
+	err := client3.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenConstructorABI(domains.NotaryEndorsement),
+		TransactionBase: pldapi.TransactionBase{
+			IdempotencyKey: "deploy1",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			Domain:         "domain1",
+			From:           notaryIdentity,
+			Data: tktypes.RawJSON(`{
+					"notary": "` + notaryIdentity + `",
+					"name": "FakeToken1",
+					"symbol": "FT1",
+					"endorsementMode": "NotaryEndorsement",
+					"deleteSubmitToSender": true
+				}`),
+		},
+	})
+	require.NoError(t, err)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, dplyTxID, client3, true),
+		transactionLatencyThreshold(t)+5*time.Second, //TODO deploy transaction seems to take longer than expected
+		100*time.Millisecond,
+		"Deploy transaction did not receive a receipt",
+	)
+
+	// As notary, mint some tokens to alice
+	var dplyTxFull pldapi.TransactionFull
+	err = client3.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
+	require.NoError(t, err)
+	contractAddress := dplyTxFull.Receipt.ContractAddress
+
+	// Start a private transaction on notary node
+	// this is a mint to alice so alice should later be able to do a transfer to bob
+	var mintTxID uuid.UUID
+	err = client3.CallRPC(ctx, &mintTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		TransactionBase: pldapi.TransactionBase{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "tx1-mint",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			From:           notaryIdentity,
+			Data: tktypes.RawJSON(`{
+					"from": "",
+					"to": "` + aliceIdentity + `",
+					"amount": "100"
+				}`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, mintTxID)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, mintTxID, client3, false),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not receive a receipt",
+	)
+
+	// Prepare a private transaction on alices node to transfer to bob
+	var transferA2BTxId uuid.UUID
+	err = client1.CallRPC(ctx, &transferA2BTxId, "ptx_prepareTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		TransactionBase: pldapi.TransactionBase{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "transferA2B1",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			From:           aliceIdentity,
+			Data: tktypes.RawJSON(`{
+					"from": "` + aliceIdentity + `",
+					"to": "` + bobIdentity + `",
+					"amount": "25"
+				}`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, transferA2BTxId)
+
+	txFull1 := pldapi.TransactionFull{}
+	err = client1.CallRPC(ctx, &txFull1, "ptx_getTransactionFull", transferA2BTxId)
+	require.NoError(t, err)
+	txFull2 := pldapi.TransactionFull{}
+
+	err = client3.CallRPC(ctx, &txFull2, "ptx_getTransactionFull", transferA2BTxId)
+	require.NoError(t, err)
+
+	assert.Eventually(t,
+		func() bool {
+			preparedTx := pldapi.PreparedTransaction{}
+
+			err = client1.CallRPC(ctx, &preparedTx, "ptx_getPreparedTransaction", transferA2BTxId)
+			require.NoError(t, err)
+			assert.Empty(t, preparedTx.Transaction.Domain)
+
+			return preparedTx.ID == transferA2BTxId && len(preparedTx.States.Spent) == 1 && len(preparedTx.States.Confirmed) == 2
+
+		},
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Prepared transaction not available on sender node",
+	)
+
+}
+
 func TestPrivateTransactions100PercentEndorsement(t *testing.T) {
 	// This test is intended to emulate the pente domain where all transactions must be endorsed by all parties in the predefined privacy group
 	// in this case, we have 3 nodes, each representing a different party in the privacy group

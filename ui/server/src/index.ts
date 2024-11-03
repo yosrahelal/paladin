@@ -18,29 +18,30 @@ import express from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import type { Request, Response } from 'express';
 import path from 'path';
-import pino from "pino";
+import pino from 'pino';
 
-const PORT = 3555;
-const PALADIN_NODE_URI = 'http://127.0.0.1:31548';
+const PORT = process.env['PORT'] ?? 3555;
+const PALADIN_NODE_URI =
+  process.env['PALADIN_NODE_URI'] ?? 'http://127.0.0.1:31548';
 const logger = pino({ transport: { target: 'pino-pretty' } });
 
 const app = express();
 
 const proxyMiddleware = createProxyMiddleware<Request, Response>({
-    target: PALADIN_NODE_URI,
-    changeOrigin: true
+  target: PALADIN_NODE_URI,
+  changeOrigin: true,
 });
 
-const router = express.Router()
+const router = express.Router();
 
 app.post('/', proxyMiddleware);
 router.use(express.static('../client/dist'));
 router.get('*', (_req, res) => {
-    res.sendFile(path.resolve(__dirname + '/../../client/dist/index.html'));
+  res.sendFile(path.resolve(__dirname + '/../../client/dist/index.html'));
 });
 
 app.use('/ui', router);
 
 app.listen(PORT, () => {
-    logger.info(`Paladin UI server running on port ${PORT}`);
+  logger.info(`Paladin UI server running on port ${PORT}`);
 });

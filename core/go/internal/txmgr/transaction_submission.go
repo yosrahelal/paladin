@@ -509,7 +509,10 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, t
 	}
 
 	var localFrom string
-	if submitMode != pldapi.SubmitModeCall /* only call is allowed to not have a from */ || tx.From != "" {
+	bypassFromCheck := submitMode == pldapi.SubmitModePrepare || /* no checking on from for prepare */
+		(submitMode == pldapi.SubmitModeCall && tx.From == "") /* call is allowed no sender */
+	if !bypassFromCheck {
+
 		identifier, node, err := tktypes.PrivateIdentityLocator(tx.From).Validate(ctx, tm.localNodeName, false)
 		if err != nil || node != tm.localNodeName {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrPublicSenderNotValidLocal, tx.From)

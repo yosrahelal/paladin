@@ -159,7 +159,7 @@ func (tb *testbed) writeNullifiersToContext(dCtx components.DomainContext, tx *c
 		tb.c.StateManager(),
 		tb.c.KeyManager(),
 		tb.c.Persistence(),
-		&pldconf.StateDistributerConfig{},
+		&pldconf.DistributerConfig{},
 	)
 	nullifiers, err := sd.BuildNullifiers(tb.ctx, distributions.Local)
 	if err != nil {

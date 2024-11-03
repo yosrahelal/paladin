@@ -131,7 +131,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 		To:     &contractAddressDomain1,
 		Transaction: &pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
-				From:           "me",
+				From:           "me@node1",
 				IdempotencyKey: "child_txn",
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				Domain:         "domain2",

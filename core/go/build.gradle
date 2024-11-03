@@ -235,11 +235,17 @@ task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
         outputPackage 'ethclientmocks'
         outputDir 'mocks/ethclientmocks'
     }
-        mock {
+    mock {
         inputDir 'internal/statedistribution'
         includeAll true
         outputPackage 'statedistributionmocks'
         outputDir 'mocks/statedistributionmocks'
+    }
+    mock {
+        inputDir 'internal/preparedtxdistribution'
+        includeAll true
+        outputPackage 'preparedtxdistributionmocks'
+        outputDir 'mocks/preparedtxdistributionmocks'
     }
 }
 

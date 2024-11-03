@@ -13,8 +13,18 @@ contract BondTrackerPublic is Ownable {
     enum Status {
         INITIALIZED,
         ISSUED,
-        DISTRIBUTION_STARTED
+        DISTRIBUTION_STARTED,
+        DISTRIBUTION_COMPLETE
     }
+
+    event StatusChanged(Status newStatus);
+    event CustodianChanged(address indexed newCustodian);
+    event BondDetailsChanged(
+        uint256 indexed issueDate,
+        uint256 indexed maturityDate,
+        uint256 indexed faceValue,
+        address currencyToken
+    );
 
     address public custodian;
     TokenDistribution public distribution;
@@ -42,11 +52,21 @@ contract BondTrackerPublic is Ownable {
         _issueDate = issueDate_;
         _maturityDate = maturityDate_;
         _faceValue = faceValue_;
+        emit StatusChanged(_status);
+        emit BondDetailsChanged(
+            issueDate_,
+            maturityDate_,
+            faceValue_,
+            currencyToken
+        );
     }
 
     function onIssue(address to, uint256 amount) external onlyOwner {
         custodian = to;
         totalSupply = amount;
+        _status = Status.ISSUED;
+        emit StatusChanged(_status);
+        emit CustodianChanged(to);
     }
 
     function beginDistribution(
@@ -65,6 +85,7 @@ contract BondTrackerPublic is Ownable {
             minimumDenomination
         );
         _status = Status.DISTRIBUTION_STARTED;
+        emit StatusChanged(_status);
     }
 
     function onDistribute(uint256 amount) external onlyOwner {
@@ -73,5 +94,9 @@ contract BondTrackerPublic is Ownable {
             "Distribution has not been initialized"
         );
         distribution.purchase(amount);
+        if (distribution.availableUnits() == 0) {
+            _status = Status.DISTRIBUTION_COMPLETE;
+            emit StatusChanged(_status);
+        }
     }
 }

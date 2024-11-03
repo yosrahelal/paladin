@@ -61,7 +61,7 @@ func newTestStateDistributor(t *testing.T) (context.Context, *mockComponents, *s
 	require.NoError(t, err)
 	mc.db = mdb
 
-	sd := NewStateDistributer(ctx, mc.transportManager, mc.stateManager, mc.keyManager, mc.db.P, &pldconf.StateDistributerConfig{})
+	sd := NewStateDistributer(ctx, mc.transportManager, mc.stateManager, mc.keyManager, mc.db.P, &pldconf.DistributerConfig{})
 
 	return ctx, mc, sd.(*stateDistributer)
 

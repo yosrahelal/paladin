@@ -64,7 +64,12 @@ var NotoConfigABI_V0 = &abi.ParameterArray{
 	{Name: "data", Type: "bytes"},
 }
 
-var NotoTransactionData_V0 = tktypes.MustParseHexBytes("0x00010000")
+var NotoTransactionDataID_V0 = tktypes.MustParseHexBytes("0x00010000")
+
+type NotoTransactionData_V0 struct {
+	TransactionID string   `json:"transactionId"`
+	InfoStates    []string `json:"infoStates"`
+}
 
 type DomainHandler = domain.DomainHandler[NotoParsedConfig]
 type ParsedTransaction = domain.ParsedTransaction[NotoParsedConfig]

@@ -37,7 +37,7 @@ func NewStateDistributer(
 	stateManager components.StateManager,
 	keyManager components.KeyManager,
 	persistence persistence.Persistence,
-	conf *pldconf.StateDistributerConfig,
+	conf *pldconf.DistributerConfig,
 ) StateDistributer {
 	sd := &stateDistributer{
 		persistence:      persistence,
@@ -52,7 +52,7 @@ func NewStateDistributer(
 		retry:            retry.NewRetryIndefinite(&pldconf.RetryConfig{}, &pldconf.GenericRetryDefaults.RetryConfig),
 	}
 	sd.acknowledgementWriter = NewAcknowledgementWriter(ctx, sd.persistence, &conf.AcknowledgementWriter)
-	sd.receivedStateWriter = NewReceivedStateWriter(ctx, stateManager, persistence, &conf.ReceivedStateWriter)
+	sd.receivedStateWriter = NewReceivedStateWriter(ctx, stateManager, persistence, &conf.ReceivedObjectWriter)
 
 	return sd
 }
@@ -75,14 +75,13 @@ StateDistributer is a component that is responsible for distributing state to re
 	it runs in its own goroutine and periodically sends states to the intended recipients
 	until each recipient has acknowledged receipt of the state.
 
-	This operates on in-memory data but will initialise from persistent storage on startup
+	This operates on in-memory data but will initialize from persistent storage on startup
 */
 type StateDistributer interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context)
-	AcknowledgeState(ctx context.Context, stateID string)
-	DistributeStates(ctx context.Context, stateDistributions []*components.StateDistribution)
 	BuildNullifiers(ctx context.Context, stateDistributions []*components.StateDistribution) ([]*components.NullifierUpsert, error)
+	DistributeStates(ctx context.Context, stateDistributions []*components.StateDistribution)
 }
 
 type stateDistributer struct {

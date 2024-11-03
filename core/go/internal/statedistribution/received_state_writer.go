@@ -45,7 +45,7 @@ func NewReceivedStateWriter(ctx context.Context, stateManager components.StateMa
 	rsw := &receivedStateWriter{
 		stateManager: stateManager,
 	}
-	rsw.flushWriter = flushwriter.NewWriter(ctx, rsw.runBatch, persistence, conf, &pldconf.StateDistributerWriterConfigDefaults)
+	rsw.flushWriter = flushwriter.NewWriter(ctx, rsw.runBatch, persistence, conf, &pldconf.DistributerWriterConfigDefaults)
 	return rsw
 }
 
