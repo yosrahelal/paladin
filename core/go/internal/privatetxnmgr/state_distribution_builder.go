@@ -28,28 +28,23 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func newStateDistributionBuilder(components components.AllComponents, tx *components.PrivateTransaction) *stateDistribution {
-	return &stateDistribution{
-		localNode: components.TransportManager().LocalNodeName(),
-		tx:        tx,
+func newStateDistributionBuilder(components components.AllComponents, tx *components.PrivateTransaction) *stateDistributionBuilder {
+	return &stateDistributionBuilder{
+		tx: tx,
 		StateDistributionSet: statedistribution.StateDistributionSet{
-			Remote: []*statedistribution.StateDistribution{},
-			Local:  []*statedistribution.StateDistribution{},
+			LocalNode: components.TransportManager().LocalNodeName(),
+			Remote:    []*statedistribution.StateDistribution{},
+			Local:     []*statedistribution.StateDistribution{},
 		},
 	}
 }
 
-type stateDistribution struct {
+type stateDistributionBuilder struct {
 	statedistribution.StateDistributionSet
-	localNode string
-	tx        *components.PrivateTransaction
+	tx *components.PrivateTransaction
 }
 
-func (sd *stateDistribution) SDS() *statedistribution.StateDistributionSet {
-	return &sd.StateDistributionSet
-}
-
-func (sd *stateDistribution) processStateForDistribution(ctx context.Context, fullState *components.FullState, instruction *prototk.NewState) error {
+func (sd *stateDistributionBuilder) processStateForDistribution(ctx context.Context, fullState *components.FullState, instruction *prototk.NewState) error {
 	tx := sd.tx
 
 	// We enforce that the sender gets a distribution
@@ -85,13 +80,13 @@ func (sd *stateDistribution) processStateForDistribution(ctx context.Context, fu
 
 		distribution := &statedistribution.StateDistribution{
 			ID:              uuid.New().String(),
-			StateID:         fullState.ID.String(),
 			IdentityLocator: recipient,
 			Domain:          tx.Inputs.Domain,
 			ContractAddress: tx.Inputs.To.String(),
-			SchemaID:        fullState.Schema.String(),
 			// the state data json is available on both but we take it
 			// from the outputState to make sure it is the same json that was used to generate the hash
+			StateID:       fullState.ID.String(),
+			SchemaID:      fullState.Schema.String(),
 			StateDataJson: string(fullState.Data),
 		}
 
@@ -115,7 +110,7 @@ func (sd *stateDistribution) processStateForDistribution(ctx context.Context, fu
 	// We require that
 	// - All nullifier specs match an recipient in the distribution list
 	// - There is a maximum of one nullifier spec per recipient
-	if remainingNullifiers != nil {
+	if len(remainingNullifiers) != 0 {
 		// .. the rules must have been broken
 		log.L(ctx).Errorf("Invalid nullifier / distribution list combination: %+v", instruction)
 		return i18n.NewError(ctx, msgs.MsgPrivateTxMgrInvalidNullifierSpecInDistro)
@@ -128,7 +123,7 @@ func (sd *stateDistribution) processStateForDistribution(ctx context.Context, fu
 // This function is called by the coordinator to validate the new states produced in the postAssembly.
 // It knows who the local node is, and who the sender is.
 // It is aware of nullifiers and distribution lists, and produces a set of instructions for who needs what.
-func (sd *stateDistribution) Build(ctx context.Context) (sds *statedistribution.StateDistributionSet, err error) {
+func (sd *stateDistributionBuilder) Build(ctx context.Context) (sds *statedistribution.StateDistributionSet, err error) {
 
 	log.L(ctx).Debug("privateTxManager:ProcessTransactionStatesForDistribution")
 
@@ -158,5 +153,5 @@ func (sd *stateDistribution) Build(ctx context.Context) (sds *statedistribution.
 			return nil, err
 		}
 	}
-	return sd.SDS(), nil
+	return &sd.StateDistributionSet, nil
 }
