@@ -405,4 +405,8 @@ var (
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")
 	MsgFlushWriterInvalidResults = ffe("PD012301", "Error in handler produced invalid write results")
 	MsgFlushWriterOpInvalid      = ffe("PD012302", "Write operation missing key")
+
+	// State distributor PD0124XX
+	MsgStateDistributorNullifierNotLocal = ffe("PD012400", "Request to generate a nullifier with an identity that is not fully qualified for the local node")
+	MsgStateDistributorNullifierFail     = ffe("PD012401", "Failed to generate nullifier for state %s")
 )

@@ -70,7 +70,6 @@ func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.syncPoints = syncpoints.NewSyncPoints(p.ctx, &p.config.Writer, c.Persistence(), c.TxManager())
 	p.stateDistributer = statedistribution.NewStateDistributer(
 		p.ctx,
-		p.nodeName,
 		p.components.TransportManager(),
 		p.components.StateManager(),
 		p.components.Persistence(),

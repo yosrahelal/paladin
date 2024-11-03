@@ -62,7 +62,7 @@ func (sd *stateDistributer) sendState(ctx context.Context, stateDistribution *St
 		Payload:     stateProducedEventBytes,
 		Node:        targetNode,
 		Component:   STATE_DISTRIBUTER_DESTINATION,
-		ReplyTo:     sd.nodeID,
+		ReplyTo:     sd.localNodeName,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("Error sending state produced event: %s", err)

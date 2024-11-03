@@ -19,8 +19,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
@@ -29,7 +31,14 @@ import (
 
 const RETRY_TIMEOUT = 5 * time.Second
 
-func NewStateDistributer(ctx context.Context, nodeID string, transportManager components.TransportManager, stateManager components.StateManager, persistence persistence.Persistence, conf *pldconf.StateDistributerConfig) StateDistributer {
+func NewStateDistributer(
+	ctx context.Context,
+	transportManager components.TransportManager,
+	stateManager components.StateManager,
+	keyManager components.KeyManager,
+	persistence persistence.Persistence,
+	conf *pldconf.StateDistributerConfig,
+) StateDistributer {
 	sd := &stateDistributer{
 		persistence:      persistence,
 		inputChan:        make(chan *StateDistribution),
@@ -37,8 +46,9 @@ func NewStateDistributer(ctx context.Context, nodeID string, transportManager co
 		acknowledgedChan: make(chan string),
 		pendingMap:       make(map[string]*StateDistribution),
 		stateManager:     stateManager,
+		keyManager:       keyManager,
 		transportManager: transportManager,
-		nodeID:           nodeID,
+		localNodeName:    transportManager.LocalNodeName(),
 		retry:            retry.NewRetryIndefinite(&pldconf.RetryConfig{}, &pldconf.GenericRetryDefaults.RetryConfig),
 	}
 	sd.acknowledgementWriter = NewAcknowledgementWriter(ctx, sd.persistence, &conf.AcknowledgementWriter)
@@ -90,6 +100,7 @@ type StateDistributer interface {
 	Stop(ctx context.Context)
 	AcknowledgeState(ctx context.Context, stateID string)
 	DistributeStates(ctx context.Context, stateDistributions []*StateDistribution)
+	BuildNullifiers(ctx context.Context, stateDistributions []*StateDistribution) ([]*components.NullifierUpsert, error)
 }
 
 type stateDistributer struct {
@@ -97,6 +108,7 @@ type stateDistributer struct {
 	stopRunCtx            context.CancelFunc
 	persistence           persistence.Persistence
 	stateManager          components.StateManager
+	keyManager            components.KeyManager
 	inputChan             chan *StateDistribution
 	retryChan             chan string
 	acknowledgedChan      chan string
@@ -104,7 +116,7 @@ type stateDistributer struct {
 	acknowledgementWriter *acknowledgementWriter
 	receivedStateWriter   *receivedStateWriter
 	transportManager      components.TransportManager
-	nodeID                string
+	localNodeName         string
 	retry                 *retry.Retry
 }
 
@@ -223,6 +235,53 @@ func (sd *stateDistributer) Start(bgCtx context.Context) error {
 		}
 	}()
 	return nil
+}
+
+func (sd *stateDistributer) BuildNullifiers(ctx context.Context, stateDistributions []*StateDistribution) (nullifiers []*components.NullifierUpsert, err error) {
+
+	// Unlikely we'll be resolving any new identities on this path - if we do, we'll start a new DB transaction
+	// Note: This requires we're not on an existing DB TX coming into this function
+	krc := sd.keyManager.NewKeyResolutionContextLazyDB(ctx)
+	defer func() {
+		if err == nil {
+			err = krc.Commit()
+		} else {
+			krc.Rollback()
+		}
+	}()
+
+	nullifiers = []*components.NullifierUpsert{}
+	for _, s := range stateDistributions {
+		if s.NullifierAlgorithm == nil || s.NullifierVerifierType == nil || s.NullifierPayloadType == nil {
+			log.L(ctx).Debugf("No nullifier required for state %s on node %s", s.ID, sd.localNodeName)
+			continue
+		}
+
+		// We need to call the signing engine with the local identity to build the nullifier
+		log.L(ctx).Infof("Generating nullifier for state %s on node %s (algorithm=%s,verifierType=%s,payloadType=%s)",
+			s.StateID, sd.localNodeName, *s.NullifierAlgorithm, *s.NullifierVerifierType, *s.NullifierPayloadType)
+
+		// We require a fully qualified identifier for the local node in this function
+		identifier, node, err := tktypes.PrivateIdentityLocator(s.IdentityLocator).Validate(ctx, "", false)
+		if err != nil || node != sd.localNodeName {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgStateDistributorNullifierNotLocal)
+		}
+
+		// Call the signing engine to build the nullifier
+		var nulliferBytes []byte
+		mapping, err := krc.KeyResolverLazyDB().ResolveKey(identifier, *s.NullifierAlgorithm, *s.NullifierVerifierType)
+		if err == nil {
+			nulliferBytes, err = sd.keyManager.Sign(ctx, mapping, *s.NullifierPayloadType, []byte(s.StateDataJson))
+		}
+		if err != nil || len(nulliferBytes) == 0 {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgStateDistributorNullifierFail, s.StateID)
+		}
+		nullifiers = append(nullifiers, &components.NullifierUpsert{
+			ID:    nulliferBytes,
+			State: tktypes.MustParseHexBytes(s.StateID),
+		})
+	}
+	return nullifiers, err
 }
 
 func (sd *stateDistributer) Stop(ctx context.Context) {

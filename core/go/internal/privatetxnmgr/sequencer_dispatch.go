@@ -44,6 +44,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 	}
 
 	stateDistributions := make([]*statedistribution.StateDistribution, 0)
+	localStateDistributions := make([]*statedistribution.StateDistribution, 0)
 
 	completed := false // and include whether we committed the DB transaction or not
 	for signingAddress, transactionIDs := range dispatchableTransactions {
@@ -104,6 +105,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				return err
 			}
 			stateDistributions = append(stateDistributions, sds.Remote...)
+			localStateDistributions = append(localStateDistributions, sds.Local...)
 		}
 
 		preparedTransactionPayloads := make([]*pldapi.TransactionInput, len(publicTransactionsToSend))
@@ -166,6 +168,13 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 		}
 
 		dispatchBatch.PublicDispatches = append(dispatchBatch.PublicDispatches, sequence)
+	}
+
+	// Determine if there are any local nullifiers that need to be built and put into the domain context
+	// before we persist the dispatch batch
+	localNullifiers, err := s.stateDistributer.BuildNullifiers(ctx, localStateDistributions)
+	if err != nil {
+		return nil, err
 	}
 
 	// TODO: per notes in endorsementGatherer determine if that's the right place to hold the domain context
