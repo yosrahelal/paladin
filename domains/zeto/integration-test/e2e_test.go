@@ -81,35 +81,31 @@ func (s *zetoDomainTestSuite) TearDownSuite() {
 }
 
 func (s *zetoDomainTestSuite) TestZeto_Anon() {
-	s.T().Skip()
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON, false)
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON, false, false)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonBatch() {
 	s.T().Skip()
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true)
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true, false)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-	s.T().Skip()
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false)
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false, false)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
-	s.T().Skip()
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true)
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false)
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false, true)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
-	s.T().Skip()
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true)
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true, true)
 }
 
-func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, useBatch bool) {
+func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, useBatch bool, isNullifiersToken bool) {
 	ctx := context.Background()
 	log.L(ctx).Infof("Deploying an instance of the %s token", tokenName)
 	s.setupContractsAbi(t, ctx, tokenName)
@@ -131,7 +127,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	rpcerr = s.rpc.CallRPC(ctx, &controllerAddr, "ptx_resolveVerifier", controllerName, zetosignerapi.AlgoDomainZetoSnarkBJJ(s.domainName), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X)
 	require.Nil(t, rpcerr)
 
-	coins := findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
+	coins := findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
 	require.Len(t, coins, 2)
 	assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64())
 	assert.Equal(t, controllerAddr.String(), coins[0].Data.Owner.String())
@@ -165,7 +161,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	}
 
 	// check that we now only have one unspent coin, of value 5
-	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
+	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
 	// one for the controller from the successful transaction as change (value=5)
 	// one for the recipient (value=25)
 	require.Len(t, coins, 2)
@@ -243,12 +239,16 @@ func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.
 	return &invokeResult, nil
 }
 
-func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.ZetoCoinState {
+func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON, useNullifiers bool) []*types.ZetoCoinState {
 	if jq == nil {
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
+	methodName := "pstate_queryContractStates"
+	if useNullifiers {
+		methodName = "pstate_queryContractNullifiers"
+	}
 	var zetoCoins []*types.ZetoCoinState
-	rpcerr := rpc.CallRPC(ctx, &zetoCoins, "pstate_queryContractStates",
+	rpcerr := rpc.CallRPC(ctx, &zetoCoins, methodName,
 		zeto.Name(),
 		address,
 		zeto.CoinSchemaID(),
