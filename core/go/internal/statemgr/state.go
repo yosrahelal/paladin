@@ -249,6 +249,16 @@ func (ss *stateManager) FindStates(ctx context.Context, dbTX *gorm.DB, domainNam
 	return s, err
 }
 
+func (ss *stateManager) FindContractNullifiers(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (s []*pldapi.State, err error) {
+	_, s, err = ss.findNullifiers(ctx, dbTX, domainName, &contractAddress, schemaID, query, status, nil, nil)
+	return s, err
+}
+
+func (ss *stateManager) FindNullifiers(ctx context.Context, dbTX *gorm.DB, domainName string, schemaID tktypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (s []*pldapi.State, err error) {
+	_, s, err = ss.findNullifiers(ctx, dbTX, domainName, nil, schemaID, query, status, nil, nil)
+	return s, err
+}
+
 func (ss *stateManager) findStates(
 	ctx context.Context,
 	dbTX *gorm.DB,
@@ -259,7 +269,7 @@ func (ss *stateManager) findStates(
 	status pldapi.StateStatusQualifier,
 	excluded ...tktypes.HexBytes,
 ) (schema components.Schema, s []*pldapi.State, err error) {
-	whereClause, isPlainDB := whereClauseForQual(dbTX, status)
+	whereClause, isPlainDB := whereClauseForQual(dbTX, status, "Spent")
 	if isPlainDB {
 		return ss.findStatesCommon(ctx, dbTX, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
 			q = q.Joins("Confirmed", dbTX.Select("transaction")).
@@ -289,38 +299,52 @@ func (ss *stateManager) findStates(
 	return dc.FindAvailableStates(dbTX, schemaID, jq)
 }
 
-func (ss *stateManager) findAvailableNullifiers(
+func (ss *stateManager) findNullifiers(
 	ctx context.Context,
 	dbTX *gorm.DB,
 	domainName string,
 	contractAddress *tktypes.EthAddress,
 	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
+	status pldapi.StateStatusQualifier,
 	spendingStates []tktypes.HexBytes,
 	spendingNullifiers []tktypes.HexBytes,
 ) (schema components.Schema, s []*pldapi.State, err error) {
-	return ss.findStatesCommon(ctx, dbTX, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
-		hasNullifier := dbTX.Where(`"Nullifier"."id" IS NOT NULL`)
+	whereClause, isPlainDB := whereClauseForQual(dbTX, status, "Nullifier__Spent")
+	if isPlainDB {
+		return ss.findStatesCommon(ctx, dbTX, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
+			hasNullifier := dbTX.Where(`"Nullifier"."id" IS NOT NULL`)
 
-		q = q.Joins("Confirmed", dbTX.Select("transaction")).
-			Joins("Nullifier", dbTX.Select(`"Nullifier"."id"`)).
-			Joins("Nullifier.Spent", dbTX.Select("transaction")).
-			Where(hasNullifier)
+			q = q.Joins("Confirmed", dbTX.Select("transaction")).
+				Joins("Nullifier", dbTX.Select(`"Nullifier"."id"`)).
+				Joins("Nullifier.Spent", dbTX.Select("transaction")).
+				Where(hasNullifier)
 
-		if len(spendingStates) > 0 {
-			q = q.Not(`"states"."id" IN(?)`, spendingStates)
+			if len(spendingStates) > 0 {
+				q = q.Not(`"states"."id" IN(?)`, spendingStates)
+			}
+			if len(spendingNullifiers) > 0 {
+				q = q.Not(`"Nullifier"."id" IN(?)`, spendingNullifiers)
+			}
+
+			// Scope to only unspent
+			q = q.Where(whereClause)
+			return q
+		})
+	}
+
+	// Otherwise, we need to run it against the specified domain context
+	var dc components.DomainContext
+	dcID, err := uuid.Parse(string(status))
+	if err == nil {
+		if dc = ss.GetDomainContext(ctx, dcID); dc == nil {
+			err = i18n.NewError(ctx, msgs.MsgStateDomainContextNotActive, dcID)
 		}
-		if len(spendingNullifiers) > 0 {
-			q = q.Not(`"Nullifier"."id" IN(?)`, spendingNullifiers)
-		}
-
-		// Scope to only unspent
-		q = q.Where(`"Nullifier__Spent"."transaction" IS NULL`).
-			Where(dbTX.
-				Or(`"Confirmed"."transaction" IS NOT NULL`),
-			)
-		return q
-	})
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return dc.FindAvailableNullifiers(dbTX, schemaID, jq)
 }
 
 func (ss *stateManager) findStatesCommon(
