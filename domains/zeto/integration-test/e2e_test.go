@@ -94,7 +94,6 @@ func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
-	s.T().Skip()
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
 }
 
@@ -103,7 +102,6 @@ func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
-	s.T().Skip()
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true, true)
 }
 
@@ -166,7 +164,11 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
 	// one for the controller from the successful transaction as change (value=5)
 	// one for the recipient (value=25)
-	require.Len(t, coins, 2)
+	expectedCoins := 2
+	if useBatch {
+		expectedCoins = 3
+	}
+	require.Len(t, coins, expectedCoins)
 	// assert.Equal(t, int64(10), coins[0].Amount.Int64())
 	// assert.Equal(t, recipient1Name, coins[0].Owner)
 	// assert.Equal(t, int64(25), coins[1].Amount.Int64())
