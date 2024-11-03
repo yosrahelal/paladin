@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -113,14 +114,14 @@ func (dc *domainContract) processTxInputs(ctx context.Context, txi *components.T
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFromAddress)
 	}
-	fullyQualifiedFromAddress := fmt.Sprintf("%s@%s", identity, node)
+	txi.From = fmt.Sprintf("%s@%s", identity, node)
 
 	return &prototk.TransactionSpecification{
 		ContractInfo: &prototk.ContractInfo{
 			ContractAddress:    dc.info.Address.String(),
 			ContractConfigJson: dc.config.ContractConfigJson,
 		},
-		From:               fullyQualifiedFromAddress,
+		From:               txi.From,
 		FunctionAbiJson:    string(abiJSON),
 		FunctionParamsJson: string(paramsJSON),
 		FunctionSignature:  txi.Function.SolString(), // we use the proprietary "Solidity inspired" form that is very specific, including param names and nested struct defs
@@ -162,6 +163,38 @@ func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.Pr
 	return nil
 }
 
+func setLocalNode(localNode, lookup string) string {
+	if strings.Contains(lookup, "@") {
+		return lookup
+	}
+	return fmt.Sprintf("%s@%s", lookup, localNode)
+}
+
+func (dc *domainContract) fullyQualifyAssemblyIdentities(res *prototk.AssembleTransactionResponse) {
+	localNode := dc.dm.transportMgr.LocalNodeName()
+	for _, ap := range res.AttestationPlan {
+		for i := range ap.Parties {
+			ap.Parties[i] = setLocalNode(localNode, ap.Parties[i])
+		}
+	}
+	for _, sp := range res.AssembledTransaction.OutputStates {
+		for i := range sp.DistributionList {
+			sp.DistributionList[i] = setLocalNode(localNode, sp.DistributionList[i])
+		}
+		for i := range sp.NullifierSpecs {
+			sp.NullifierSpecs[i].Party = setLocalNode(localNode, sp.NullifierSpecs[i].Party)
+		}
+	}
+	for _, sp := range res.AssembledTransaction.InfoStates {
+		for i := range sp.DistributionList {
+			sp.DistributionList[i] = setLocalNode(localNode, sp.DistributionList[i])
+		}
+		for i := range sp.NullifierSpecs {
+			sp.NullifierSpecs[i].Party = setLocalNode(localNode, sp.NullifierSpecs[i].Party)
+		}
+	}
+}
+
 func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) error {
 	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompleteAssembleTransaction)
@@ -200,6 +233,12 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 		if err != nil {
 			return err
 		}
+
+		// At this point we resolve all verifiers to their fully qualified variants - as the local node needs to be the assembling node.
+		// - Attestation plan identities
+		// - State distributions
+		// - Associated nullifier requests
+		dc.fullyQualifyAssemblyIdentities(res)
 
 		// Note the states at this point are just potential states - depending on the analysis
 		// of the result, and the locking on the input states, the engine might decide to

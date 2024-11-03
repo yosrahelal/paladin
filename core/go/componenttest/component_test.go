@@ -85,7 +85,7 @@ wallets:
 
 	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil)
 	cm := instance.cm
-	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(100 * time.Microsecond)
+	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(100 * time.Millisecond)
 
 	build, err := solutils.LoadBuild(ctx, simpleStorageBuildJSON)
 	require.NoError(t, err)
