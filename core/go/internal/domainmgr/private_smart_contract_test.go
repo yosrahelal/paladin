@@ -792,11 +792,13 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 			Transaction: &prototk.PreparedTransaction{
 				FunctionAbiJson: fakeCoinExecuteABI,
 				ParamsJson:      string(params),
+				RequiredSigner:  &tx.Inputs.From,
 			},
 			Metadata: confutil.P(`{"some":"data"}`),
 		}, nil
 	}
 
+	// Pass in a random signer - which will be overridden in this case
 	tx.Signer = tktypes.RandAddress().String()
 
 	// And now prepare
@@ -804,6 +806,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, tx.PreparedPublicTransaction.ABI, 1)
 	assert.NotNil(t, tx.PreparedPublicTransaction.Data)
+	assert.Equal(t, "txSigner", tx.Signer)
 
 	// Confirm the remaining unspent states
 	stillAvailable, err = domain.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{

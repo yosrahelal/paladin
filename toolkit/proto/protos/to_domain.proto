@@ -385,6 +385,7 @@ message PreparedTransaction {
   string params_json = 2; // The parameters to pass to the base smart contract function, in JSON format. Paladin will submit this transaction to the base blockchain
   optional string contract_address = 3; // The target contract address (defaults to the domain's public contract address if omitted)
   TransactionType type = 4; // Indicates whether this is a public (base ledger) or private transaction
+  optional string required_signer = 5; // If the prepare requires use of a specific signer for this particular transaction (requires the domain to understand and accept any potential anonymity leakage)
 }
 
 message BaseLedgerDeployTransaction {

@@ -505,6 +505,10 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 		}
 	}
 
+	if res.Transaction.RequiredSigner != nil && len(*res.Transaction.RequiredSigner) > 0 {
+		tx.Signer = *res.Transaction.RequiredSigner
+	}
+
 	if res.Transaction.Type == prototk.PreparedTransaction_PRIVATE {
 		psc, err := dc.dm.GetSmartContractByAddress(dCtx.Ctx(), *contractAddress)
 		if err != nil {

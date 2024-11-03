@@ -139,6 +139,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		Transaction: &pb.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
+			RequiredSigner:  &req.Transaction.From, // must be signed by the authorized minter on-chain
 		},
 	}, nil
 }
