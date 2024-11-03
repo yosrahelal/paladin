@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -266,5 +267,54 @@ func TestWriteNullifiersForReceivedStatesBadDomain(t *testing.T) {
 		},
 	})
 	assert.Regexp(t, "not found", err)
+
+}
+
+func TestFindNullifiersInContext(t *testing.T) {
+	ctx, ss, db, _, done := newDBMockStateManager(t)
+	defer done()
+
+	db.ExpectQuery("SELECT.*states").WillReturnRows(sqlmock.NewRows([]string{}))
+
+	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
+	cacheKey := schemaCacheKey("domain1", schemaID)
+	ss.abiSchemaCache.Set(cacheKey, &abiSchema{
+		definition: &abi.Parameter{},
+		Schema:     &pldapi.Schema{},
+	})
+
+	td := componentmocks.NewDomain(t)
+	td.On("Name").Return("domain1")
+	td.On("CustomHashFunction").Return(false)
+
+	dCtx := ss.NewDomainContext(ctx, td, *tktypes.RandAddress())
+	defer dCtx.Close()
+
+	contractAddress := tktypes.RandAddress()
+	results, err := ss.FindContractNullifiers(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID,
+		query.NewQueryBuilder().Limit(1).Query(), pldapi.StateStatusQualifier(dCtx.Info().ID.String()))
+	require.NoError(t, err)
+	require.Empty(t, results)
+
+}
+
+func TestFindNullifiersUnknownContext(t *testing.T) {
+	ctx, ss, _, _, done := newDBMockStateManager(t)
+	defer done()
+
+	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
+	contractAddress := tktypes.RandAddress()
+	_, err := ss.FindContractNullifiers(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
+		Statements: query.Statements{
+			Ops: query.Ops{
+				GreaterThan: []*query.OpSingleVal{
+					{Op: query.Op{
+						Field: ".created",
+					}, Value: tktypes.RawJSON(fmt.Sprintf("%d", time.Now().UnixNano()))},
+				},
+			},
+		},
+	}, pldapi.StateStatusQualifier(uuid.NewString()))
+	assert.Regexp(t, "PD010123", err)
 
 }
