@@ -1133,13 +1133,14 @@ func TestExportStateLocks(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	dc.AddStateLocks(
+	err = dc.AddStateLocks(
 		&pldapi.StateLock{
 			Type:        pldapi.StateLockTypeSpend.Enum(),
 			State:       s2.ID,
 			Transaction: transactionID3,
 		},
 	)
+	assert.NoError(t, err)
 
 	json, err := dc.ExportStateLocks()
 	require.NoError(t, err)
