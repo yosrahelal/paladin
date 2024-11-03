@@ -243,7 +243,33 @@ func (sd *stateDistributer) Start(bgCtx context.Context) error {
 	return nil
 }
 
-func (sd *stateDistributer) BuildNullifiers(ctx context.Context, stateDistributions []*StateDistribution) (nullifiers []*components.NullifierUpsert, err error) {
+func (sd *stateDistributer) buildNullifier(ctx context.Context, krc components.KeyResolutionContextLazyDB, s *StateDistribution) (*components.NullifierUpsert, error) {
+	// We need to call the signing engine with the local identity to build the nullifier
+	log.L(ctx).Infof("Generating nullifier for state %s on node %s (algorithm=%s,verifierType=%s,payloadType=%s)",
+		s.StateID, sd.localNodeName, *s.NullifierAlgorithm, *s.NullifierVerifierType, *s.NullifierPayloadType)
+
+	// We require a fully qualified identifier for the local node in this function
+	identifier, node, err := tktypes.PrivateIdentityLocator(s.IdentityLocator).Validate(ctx, "", false)
+	if err != nil || node != sd.localNodeName {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgStateDistributorNullifierNotLocal)
+	}
+
+	// Call the signing engine to build the nullifier
+	var nulliferBytes []byte
+	mapping, err := krc.KeyResolverLazyDB().ResolveKey(identifier, *s.NullifierAlgorithm, *s.NullifierVerifierType)
+	if err == nil {
+		nulliferBytes, err = sd.keyManager.Sign(ctx, mapping, *s.NullifierPayloadType, []byte(s.StateDataJson))
+	}
+	if err != nil || len(nulliferBytes) == 0 {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgStateDistributorNullifierFail, s.StateID)
+	}
+	return &components.NullifierUpsert{
+		ID:    nulliferBytes,
+		State: tktypes.MustParseHexBytes(s.StateID),
+	}, nil
+}
+
+func (sd *stateDistributer) withKeyResolutionContext(ctx context.Context, fn func(krc components.KeyResolutionContextLazyDB) error) (err error) {
 
 	// Unlikely we'll be resolving any new identities on this path - if we do, we'll start a new DB transaction
 	// Note: This requires we're not on an existing DB TX coming into this function
@@ -256,37 +282,29 @@ func (sd *stateDistributer) BuildNullifiers(ctx context.Context, stateDistributi
 		}
 	}()
 
+	err = fn(krc)
+	return err // note we require err to be set before return
+}
+
+func (sd *stateDistributer) BuildNullifiers(ctx context.Context, stateDistributions []*StateDistribution) (nullifiers []*components.NullifierUpsert, err error) {
+
 	nullifiers = []*components.NullifierUpsert{}
-	for _, s := range stateDistributions {
-		if s.NullifierAlgorithm == nil || s.NullifierVerifierType == nil || s.NullifierPayloadType == nil {
-			log.L(ctx).Debugf("No nullifier required for state %s on node %s", s.ID, sd.localNodeName)
-			continue
-		}
+	err = sd.withKeyResolutionContext(ctx, func(krc components.KeyResolutionContextLazyDB) error {
+		for _, s := range stateDistributions {
+			if s.NullifierAlgorithm == nil || s.NullifierVerifierType == nil || s.NullifierPayloadType == nil {
+				log.L(ctx).Debugf("No nullifier required for state %s on node %s", s.ID, sd.localNodeName)
+				continue
+			}
 
-		// We need to call the signing engine with the local identity to build the nullifier
-		log.L(ctx).Infof("Generating nullifier for state %s on node %s (algorithm=%s,verifierType=%s,payloadType=%s)",
-			s.StateID, sd.localNodeName, *s.NullifierAlgorithm, *s.NullifierVerifierType, *s.NullifierPayloadType)
+			nullifier, err := sd.buildNullifier(ctx, krc, s)
+			if err != nil {
+				return err
+			}
 
-		// We require a fully qualified identifier for the local node in this function
-		identifier, node, err := tktypes.PrivateIdentityLocator(s.IdentityLocator).Validate(ctx, "", false)
-		if err != nil || node != sd.localNodeName {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgStateDistributorNullifierNotLocal)
+			nullifiers = append(nullifiers, nullifier)
 		}
-
-		// Call the signing engine to build the nullifier
-		var nulliferBytes []byte
-		mapping, err := krc.KeyResolverLazyDB().ResolveKey(identifier, *s.NullifierAlgorithm, *s.NullifierVerifierType)
-		if err == nil {
-			nulliferBytes, err = sd.keyManager.Sign(ctx, mapping, *s.NullifierPayloadType, []byte(s.StateDataJson))
-		}
-		if err != nil || len(nulliferBytes) == 0 {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgStateDistributorNullifierFail, s.StateID)
-		}
-		nullifiers = append(nullifiers, &components.NullifierUpsert{
-			ID:    nulliferBytes,
-			State: tktypes.MustParseHexBytes(s.StateID),
-		})
-	}
+		return nil
+	})
 	return nullifiers, err
 }
 

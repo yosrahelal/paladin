@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -227,5 +228,43 @@ func TestWriteReceivedStatesValidateHashOkInsertFail(t *testing.T) {
 			tktypes.RandHex(32)))},
 	})
 	assert.Regexp(t, "pop", err)
+
+}
+
+func TestWriteNullifiersForReceivedStatesOkRealDB(t *testing.T) {
+	ctx, ss, m, done := newDBTestStateManager(t)
+	defer done()
+
+	md := componentmocks.NewDomain(t)
+	md.On("Name").Return("domain1")
+	m.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
+
+	err := ss.WriteNullifiersForReceivedStates(ctx, ss.p.DB(), "domain1", []*components.NullifierUpsert{
+		{
+			ID:    tktypes.HexBytes(tktypes.RandHex(32)),
+			State: tktypes.HexBytes(tktypes.RandHex(32)),
+		},
+		{
+			ID:    tktypes.HexBytes(tktypes.RandHex(32)),
+			State: tktypes.HexBytes(tktypes.RandHex(32)),
+		},
+	})
+	require.NoError(t, err)
+
+}
+
+func TestWriteNullifiersForReceivedStatesBadDomain(t *testing.T) {
+	ctx, ss, _, m, done := newDBMockStateManager(t)
+	defer done()
+
+	m.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(nil, fmt.Errorf("not found"))
+
+	err := ss.WriteNullifiersForReceivedStates(ctx, ss.p.DB(), "domain1", []*components.NullifierUpsert{
+		{
+			ID:    tktypes.HexBytes(tktypes.RandHex(32)),
+			State: tktypes.HexBytes(tktypes.RandHex(32)),
+		},
+	})
+	assert.Regexp(t, "not found", err)
 
 }

@@ -86,6 +86,34 @@ func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, 
 	return ss.processInsertStates(ctx, dbTX, d, states)
 }
 
+func (ss *stateManager) WriteNullifiersForReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, upserts []*components.NullifierUpsert) (err error) {
+	d, err := ss.domainManager.GetDomainByName(ctx, domainName)
+	if err != nil {
+		return err
+	}
+
+	stateNullifiers := make([]*pldapi.StateNullifier, len(upserts))
+	for i, n := range upserts {
+		stateNullifiers[i] = &pldapi.StateNullifier{
+			DomainName: d.Name(),
+			ID:         n.ID,
+			State:      n.State,
+		}
+	}
+
+	if len(stateNullifiers) > 0 {
+		err = dbTX.
+			Table("state_nullifiers").
+			Clauses(clause.OnConflict{
+				DoNothing: true, // immutable
+			}).
+			Create(stateNullifiers).
+			Error
+	}
+
+	return err
+}
+
 func (ss *stateManager) processInsertStates(ctx context.Context, dbTX *gorm.DB, d components.Domain, inStates []*components.StateUpsertOutsideContext) (processedStates []*pldapi.State, err error) {
 
 	processedStates = make([]*pldapi.State, len(inStates))
