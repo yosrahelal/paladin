@@ -94,7 +94,7 @@ func (z *Zeto) makeNewState(ctx context.Context, useNullifiers bool, coin *types
 	return newState, nil
 }
 
-func (z *Zeto) prepareInputs(ctx context.Context, useNullifiers bool, stateQueryContext, sender string, params []*types.TransferParamEntry) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
+func (z *Zeto) prepareInputs(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, params []*types.TransferParamEntry) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
@@ -109,7 +109,7 @@ func (z *Zeto) prepareInputs(ctx context.Context, useNullifiers bool, stateQuery
 		queryBuilder := query.NewQueryBuilder().
 			Limit(10).
 			Sort(".created").
-			Equal("owner", sender)
+			Equal("owner", senderKey)
 
 		if lastStateTimestamp > 0 {
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)
@@ -160,10 +160,9 @@ func (z *Zeto) prepareOutputs(ctx context.Context, useNullifiers bool, params []
 		salt := crypto.NewSalt()
 		compressedKeyStr := zetosigner.EncodeBabyJubJubPublicKey(recipientKey)
 		newCoin := &types.ZetoCoin{
-			Salt:     (*tktypes.HexUint256)(salt),
-			Owner:    param.To,
-			OwnerKey: tktypes.MustParseHexBytes(compressedKeyStr),
-			Amount:   param.Amount,
+			Salt:   (*tktypes.HexUint256)(salt),
+			Owner:  tktypes.MustParseHexBytes(compressedKeyStr),
+			Amount: param.Amount,
 		}
 
 		newState, err := z.makeNewState(ctx, useNullifiers, newCoin, param.To)

@@ -349,7 +349,7 @@ func TestPrepareTransaction(t *testing.T) {
 		},
 		OutputStates: []*prototk.EndorsableState{
 			{
-				StateDataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}",
+				StateDataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}",
 			},
 		},
 	}
@@ -387,7 +387,7 @@ func TestFindCoins(t *testing.T) {
 		return &prototk.FindAvailableStatesResponse{
 			States: []*prototk.StoredState{
 				{
-					DataJson: "{\"salt\":\"0x13de02d64a5736a56b2d35d2a83dd60397ba70aae6f8347629f0960d4fee5d58\",\"owner\":\"Alice\",\"ownerKey\":\"0xc1d218cf8993f940e75eabd3fee23dadc4e89cd1de479f03a61e91727959281b\",\"amount\":\"0x0a\"}",
+					DataJson: "{\"salt\":\"0x13de02d64a5736a56b2d35d2a83dd60397ba70aae6f8347629f0960d4fee5d58\",\"owner\":\"0xc1d218cf8993f940e75eabd3fee23dadc4e89cd1de479f03a61e91727959281b\",\"amount\":\"0x0a\"}",
 				},
 			},
 		}, nil
@@ -580,10 +580,9 @@ func TestSign(t *testing.T) {
 	// Test with nullifiers
 	salt := crypto.NewSalt()
 	fakeCoin := types.ZetoCoin{
-		Salt:     (*tktypes.HexUint256)(salt),
-		Owner:    "Alice",
-		OwnerKey: tktypes.MustParseHexBytes(alicePubKey),
-		Amount:   tktypes.Int64ToInt256(12345),
+		Salt:   (*tktypes.HexUint256)(salt),
+		Owner:  tktypes.MustParseHexBytes(alicePubKey),
+		Amount: tktypes.Int64ToInt256(12345),
 	}
 	req = &prototk.SignRequest{
 		Algorithm:   z.getAlgoZetoSnarkBJJ(),
@@ -610,11 +609,11 @@ func TestValidateStateHashes(t *testing.T) {
 	_, err := z.ValidateStateHashes(ctx, req)
 	assert.ErrorContains(t, err, "PD210087: Failed to unmarshal state data. invalid character 'b' looking for beginning of value")
 
-	req.States[0].StateDataJson = "{\"salt\":\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\"}"
+	req.States[0].StateDataJson = "{\"salt\":\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"owner\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\"}"
 	_, err = z.ValidateStateHashes(ctx, req)
 	assert.ErrorContains(t, err, "PD210048: Failed to create Poseidon hash for an output coin. inputs values not inside Finite Field")
 
-	req.States[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\"}"
+	req.States[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\"}"
 	res, err := z.ValidateStateHashes(ctx, req)
 	assert.NoError(t, err)
 	assert.Len(t, res.StateIds, 1)

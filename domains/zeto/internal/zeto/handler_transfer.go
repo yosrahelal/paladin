@@ -146,7 +146,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	}
 
 	useNullifiers := isNullifiersToken(tx.DomainConfig.TokenName)
-	inputCoins, inputStates, _, remainder, err := h.zeto.prepareInputs(ctx, useNullifiers, req.StateQueryContext, tx.Transaction.From, params)
+	inputCoins, inputStates, _, remainder, err := h.zeto.prepareInputs(ctx, useNullifiers, req.StateQueryContext, resolvedSender.Verifier, params)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxInputs, err)
 	}
@@ -315,7 +315,7 @@ func (h *transferHandler) formatProvingRequest(ctx context.Context, inputCoins, 
 	inputCommitments := make([]string, inputSize)
 	inputValueInts := make([]uint64, inputSize)
 	inputSalts := make([]string, inputSize)
-	inputOwner := inputCoins[0].OwnerKey.String()
+	inputOwner := inputCoins[0].Owner.String()
 	for i := 0; i < inputSize; i++ {
 		if i < len(inputCoins) {
 			coin := inputCoins[i]
@@ -340,7 +340,7 @@ func (h *transferHandler) formatProvingRequest(ctx context.Context, inputCoins, 
 			coin := outputCoins[i]
 			outputValueInts[i] = coin.Amount.Int().Uint64()
 			outputSalts[i] = coin.Salt.Int().Text(16)
-			outputOwners[i] = coin.OwnerKey.String()
+			outputOwners[i] = coin.Owner.String()
 		} else {
 			outputSalts[i] = "0"
 		}
@@ -404,7 +404,7 @@ func (h *transferHandler) generateMerkleProofs(ctx context.Context, tokenName st
 	// and generate a merkle proof for each
 	var indexes []*big.Int
 	for _, coin := range inputCoins {
-		pubKey, err := zetosigner.DecodeBabyJubJubPublicKey(coin.OwnerKey.String())
+		pubKey, err := zetosigner.DecodeBabyJubJubPublicKey(coin.Owner.String())
 		if err != nil {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
 		}

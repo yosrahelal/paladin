@@ -155,7 +155,7 @@ func TestTransferAssemble(t *testing.T) {
 			return &prototk.FindAvailableStatesResponse{
 				States: []*prototk.StoredState{
 					{
-						DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}",
+						DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}",
 					},
 				},
 			}, nil
@@ -180,7 +180,7 @@ func TestTransferAssemble(t *testing.T) {
 		return &prototk.FindAvailableStatesResponse{
 			States: []*prototk.StoredState{
 				{
-					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}",
+					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}",
 				},
 			},
 		}, nil
@@ -193,7 +193,7 @@ func TestTransferAssemble(t *testing.T) {
 	var coin1 types.ZetoCoin
 	err = json.Unmarshal([]byte(res.AssembledTransaction.OutputStates[0].StateDataJson), &coin1)
 	assert.NoError(t, err)
-	assert.Equal(t, "Alice", coin1.Owner)
+	assert.Equal(t, "0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922", coin1.Owner.String())
 	assert.Equal(t, "0x09", coin1.Amount.String())
 
 	assert.Len(t, res.AssembledTransaction.OutputStates[0].DistributionList, 1)
@@ -202,20 +202,20 @@ func TestTransferAssemble(t *testing.T) {
 	var coin2 types.ZetoCoin
 	err = json.Unmarshal([]byte(res.AssembledTransaction.OutputStates[1].StateDataJson), &coin2)
 	assert.NoError(t, err)
-	assert.Equal(t, "Bob", coin2.Owner)
+	assert.Equal(t, "0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025", coin2.Owner.String())
 	assert.Equal(t, "0x06", coin2.Amount.String())
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
 			States: []*prototk.StoredState{
 				{
-					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x04\"}",
+					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x04\"}",
 				},
 				{
-					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x04\"}",
+					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x04\"}",
 				},
 				{
-					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0a\"}",
+					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0a\"}",
 				},
 			},
 		}, nil
@@ -231,7 +231,7 @@ func TestTransferAssemble(t *testing.T) {
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		var dataJson string
 		if called == 0 {
-			dataJson = "{\"salt\":\"0x13de02d64a5736a56b2d35d2a83dd60397ba70aae6f8347629f0960d4fee5d58\",\"owner\":\"Alice\",\"ownerKey\":\"0xc1d218cf8993f940e75eabd3fee23dadc4e89cd1de479f03a61e91727959281b\",\"amount\":\"0x0a\"}"
+			dataJson = "{\"salt\":\"0x13de02d64a5736a56b2d35d2a83dd60397ba70aae6f8347629f0960d4fee5d58\",\"owner\":\"0xc1d218cf8993f940e75eabd3fee23dadc4e89cd1de479f03a61e91727959281b\",\"amount\":\"0x0a\"}"
 		} else if called == 1 {
 			dataJson = "{\"rootIndex\": \"0x28025a624a1e83687e84451d04190f081d79d470f9d50a7059508476be02d401\"}"
 		} else {
@@ -351,11 +351,11 @@ func TestTransferPrepare(t *testing.T) {
 	_, err = h.Prepare(ctx, tx, req)
 	assert.EqualError(t, err, "PD210045: Failed to parse input states. invalid character 'b' looking for beginning of value")
 
-	req.InputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}"
+	req.InputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}"
 	_, err = h.Prepare(ctx, tx, req)
 	assert.EqualError(t, err, "PD210047: Failed to parse output states. invalid character 'b' looking for beginning of value")
 
-	req.OutputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Bob\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}"
+	req.OutputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}"
 	_, err = h.Prepare(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id. PD020007: Invalid hex:")
 
@@ -413,10 +413,9 @@ func TestGenerateMerkleProofs(t *testing.T) {
 	assert.NoError(t, err)
 	inputCoins := []*types.ZetoCoin{
 		{
-			Salt:     tktypes.MustParseHexUint256("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
-			Owner:    "Alice",
-			OwnerKey: tktypes.MustParseHexBytes("0x1234"),
-			Amount:   tktypes.MustParseHexUint256("0x0f"),
+			Salt:   tktypes.MustParseHexUint256("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+			Owner:  tktypes.MustParseHexBytes("0x1234"),
+			Amount: tktypes.MustParseHexUint256("0x0f"),
 		},
 	}
 	ctx := context.Background()
@@ -436,7 +435,7 @@ func TestGenerateMerkleProofs(t *testing.T) {
 	_, _, err = h.generateMerkleProofs(ctx, "Zeto_Anon", queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "PD210037: Failed load owner public key. PD210072: Invalid compressed public key length: 2")
 
-	inputCoins[0].OwnerKey = tktypes.MustParseHexBytes("0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
+	inputCoins[0].Owner = tktypes.MustParseHexBytes("0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
 	_, _, err = h.generateMerkleProofs(ctx, "Zeto_Anon", queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "PD210054: Failed to create new leaf node. inputs values not inside Finite Field")
 

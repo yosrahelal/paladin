@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -126,12 +127,16 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	_, err := s.mint(ctx, zetoAddress, controllerName, []int64{10, 20})
 	require.NoError(t, err)
 
+	var controllerAddr tktypes.Bytes32
+	rpcerr = s.rpc.CallRPC(ctx, &controllerAddr, "ptx_resolveVerifier", controllerName, zetosignerapi.AlgoDomainZetoSnarkBJJ(s.domainName), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X)
+	require.Nil(t, rpcerr)
+
 	coins := findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
 	require.Len(t, coins, 2)
 	assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64())
-	assert.Equal(t, controllerName, coins[0].Data.Owner)
+	assert.Equal(t, controllerAddr.String(), coins[0].Data.Owner.String())
 	assert.Equal(t, int64(20), coins[1].Data.Amount.Int().Int64())
-	assert.Equal(t, controllerName, coins[1].Data.Owner)
+	assert.Equal(t, controllerAddr.String(), coins[1].Data.Owner.String())
 
 	// for testing the batch circuits, we mint the 3rd UTXO
 	if useBatch {
@@ -161,11 +166,9 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 
 	// check that we now only have one unspent coin, of value 5
 	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
-	// one for the controller from the failed transaction
 	// one for the controller from the successful transaction as change (value=5)
 	// one for the recipient (value=25)
-	// TODO: re-enable this test after the nullifiers handling is sorted
-	require.Len(t, coins, 3)
+	require.Len(t, coins, 2)
 	// assert.Equal(t, int64(10), coins[0].Amount.Int64())
 	// assert.Equal(t, recipient1Name, coins[0].Owner)
 	// assert.Equal(t, int64(25), coins[1].Amount.Int64())
