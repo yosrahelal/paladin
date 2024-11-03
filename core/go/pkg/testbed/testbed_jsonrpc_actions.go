@@ -18,6 +18,7 @@ package testbed
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -220,6 +221,11 @@ func (tb *testbed) resolveTXSigner(tx *components.PrivateTransaction) error {
 }
 
 func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.DomainSmartContract, tx *components.PrivateTransaction) error {
+
+	if !strings.Contains(tx.Inputs.From, "@") {
+		// Transaction manager normally does the full version of this
+		tx.Inputs.From = fmt.Sprintf("%s@%s", tx.Inputs.From, tb.c.TransportManager().LocalNodeName())
+	}
 
 	// Testbed just uses a domain context for the duration of the TX, and flushes before returning
 	dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
