@@ -1232,29 +1232,6 @@ func TestInitCallBadInput(t *testing.T) {
 	assert.Regexp(t, "PD011612", err)
 }
 
-func TestInitCallBadFrom(t *testing.T) {
-	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
-	defer done()
-	assert.Nil(t, td.d.initError.Load())
-
-	psc := goodPSC(t, td)
-
-	_, err := psc.InitCall(td.ctx, &components.TransactionInputs{
-		To: psc.info.Address,
-		Function: &abi.Entry{
-			Type: abi.Function,
-			Name: "getBalance",
-			Inputs: abi.ParameterArray{
-				{Name: "address", Type: "address"},
-			},
-		},
-		Inputs: tktypes.RawJSON(`{
-			"address": "0xf2C41ae275A9acE65e1Fb78B97270a61D86Aa0Ed"
-		}`),
-	})
-	assert.Regexp(t, "PD011661", err)
-}
-
 func TestInitCallError(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
 	defer done()

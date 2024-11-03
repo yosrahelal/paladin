@@ -508,17 +508,18 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, t
 		return nil, err
 	}
 
-	identifier := tx.From
-	if submitMode != pldapi.SubmitModeCall /* only call is allowed to not have a from */ || identifier != "" {
+	var localFrom string
+	if submitMode != pldapi.SubmitModeCall /* only call is allowed to not have a from */ || tx.From != "" {
 		identifier, node, err := tktypes.PrivateIdentityLocator(tx.From).Validate(ctx, tm.localNodeName, false)
 		if err != nil || node != tm.localNodeName {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrPublicSenderNotValidLocal, tx.From)
 		}
+		localFrom = identifier
 		tx.From = fmt.Sprintf("%s@%s", identifier, node)
 	}
 
 	return &components.ValidatedTransaction{
-		LocalFrom: identifier,
+		LocalFrom: localFrom,
 		Transaction: &pldapi.Transaction{
 			TransactionBase: tx.TransactionBase,
 			ID:              &txID,

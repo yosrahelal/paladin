@@ -109,13 +109,6 @@ func (dc *domainContract) processTxInputs(ctx context.Context, txi *components.T
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFunctionParams, txi.Function.SolString())
 	}
 
-	// We need to fully qualify the from address
-	identity, node, err := tktypes.PrivateIdentityLocator(txi.From).Validate(ctx, dc.dm.transportMgr.LocalNodeName(), false)
-	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFromAddress)
-	}
-	txi.From = fmt.Sprintf("%s@%s", identity, node)
-
 	return &prototk.TransactionSpecification{
 		ContractInfo: &prototk.ContractInfo{
 			ContractAddress:    dc.info.Address.String(),
