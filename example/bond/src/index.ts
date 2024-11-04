@@ -352,5 +352,6 @@ if (require.main === module) {
   main().catch((err) => {
     console.error("Exiting with uncaught error");
     console.error(err);
+    process.exit(1);
   });
 }
