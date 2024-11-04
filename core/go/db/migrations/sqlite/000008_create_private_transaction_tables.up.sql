@@ -9,12 +9,15 @@ CREATE TABLE dispatches (
 CREATE UNIQUE INDEX dispatches_public_private ON dispatches("public_transaction_address","public_transaction_nonce","private_transaction_id");
 
 CREATE TABLE state_distributions (
-    "created"           BIGINT  NOT NULL,
-    "state_id"          TEXT    NOT NULL,
-    "domain_name"       TEXT    NOT NULL,
-    "contract_address"  TEXT    NOT NULL,
-    "identity_locator"  TEXT    NOT NULL,
-    "id"                TEXT    NOT NULL,
+    "created"                 BIGINT  NOT NULL,
+    "state_id"                TEXT    NOT NULL,
+    "domain_name"             TEXT    NOT NULL,
+    "contract_address"        TEXT    NOT NULL,
+    "identity_locator"        TEXT    NOT NULL,
+    "id"                      TEXT    NOT NULL,
+    "nullifier_algorithm"     TEXT,
+    "nullifier_verifier_type" TEXT,
+    "nullifier_payload_type"  TEXT,
     PRIMARY KEY ("id"),
     FOREIGN KEY ("domain_name", "state_id") REFERENCES states ("domain_name", "id") ON DELETE CASCADE
 );

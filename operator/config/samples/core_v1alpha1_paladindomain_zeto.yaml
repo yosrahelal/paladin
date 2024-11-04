@@ -8,8 +8,30 @@ metadata:
   name: zeto
 spec:
   smartContractDeployment: zeto-factory
+  allowSigning: true
   plugin:
     type: c-shared
     library: /app/domains/libzeto.so
   configJSON: |
-    {}
+    {
+      "domainContracts": {
+        "Implementations": [
+          {
+            "CircuitId": "anon",
+            "Name": "Zeto_Anon"
+          },
+          {
+            "CircuitId": "anon_enc",
+            "Name": "Zeto_AnonEnc"
+          },
+          {
+            "CircuitId": "anon_nullifier",
+            "Name": "Zeto_AnonNullifier"
+          }
+        ]
+      },
+      "snarkProver": {
+        "circuitsDir": "/app/domains/zeto/zkp",
+        "provingKeysDir": "/app/domains/zeto/zkp"
+      }
+    }

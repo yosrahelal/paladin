@@ -23,10 +23,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alecthomas/assert"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 

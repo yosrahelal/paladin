@@ -77,6 +77,7 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 	componentMocks.On("TxManager").Return(mc.txManager)
 	componentMocks.On("PrivateTxManager").Return(mc.privateTxManager)
 	componentMocks.On("TransportManager").Return(mc.transportMgr)
+	mc.transportMgr.On("LocalNodeName").Return("node1").Maybe()
 
 	var p persistence.Persistence
 	var err error

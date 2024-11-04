@@ -27,7 +27,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/preparedtxdistribution"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
-	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -46,7 +45,8 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 		PublicDispatches: make([]*syncpoints.PublicDispatch, 0, len(dispatchableTransactions)),
 	}
 
-	stateDistributions := make([]*statedistribution.StateDistribution, 0)
+	stateDistributions := make([]*components.StateDistribution, 0)
+	localStateDistributions := make([]*components.StateDistribution, 0)
 	preparedTxnDistributions := make([]*preparedtxdistribution.PreparedTxnDistribution, 0)
 
 	completed := false // and include whether we committed the DB transaction or not
@@ -120,7 +120,12 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				return err
 			}
 
-			stateDistributions = append(stateDistributions, txProcessor.GetStateDistributions(ctx)...)
+			sds, err := txProcessor.GetStateDistributions(ctx)
+			if err != nil {
+				return err
+			}
+			stateDistributions = append(stateDistributions, sds.Remote...)
+			localStateDistributions = append(localStateDistributions, sds.Local...)
 		}
 
 		preparedTransactionPayloads := make([]*pldapi.TransactionInput, len(publicTransactionsToSend))
@@ -186,7 +191,19 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 	}
 
 	// TODO: per notes in endorsementGatherer determine if that's the right place to hold the domain context
-	err := s.syncPoints.PersistDispatchBatch(s.endorsementGatherer.DomainContext(), s.contractAddress, dispatchBatch, stateDistributions, preparedTxnDistributions)
+	dCtx := s.endorsementGatherer.DomainContext()
+
+	// Determine if there are any local nullifiers that need to be built and put into the domain context
+	// before we persist the dispatch batch
+	localNullifiers, err := s.stateDistributer.BuildNullifiers(ctx, localStateDistributions)
+	if err == nil && len(localNullifiers) > 0 {
+		err = dCtx.UpsertNullifiers(localNullifiers...)
+	}
+	if err != nil {
+		return err
+	}
+
+	err = s.syncPoints.PersistDispatchBatch(s.endorsementGatherer.DomainContext(), s.contractAddress, dispatchBatch, stateDistributions, preparedTxnDistributions)
 	if err != nil {
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return err

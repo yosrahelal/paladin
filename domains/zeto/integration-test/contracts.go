@@ -32,7 +32,7 @@ import (
 )
 
 type ZetoDomainContracts struct {
-	factoryAddress       *tktypes.EthAddress
+	FactoryAddress       *tktypes.EthAddress
 	factoryAbi           abi.ABI
 	deployedContracts    map[string]*tktypes.EthAddress
 	deployedContractAbis map[string]abi.ABI
@@ -76,7 +76,7 @@ func deployDomainContracts(ctx context.Context, rpc rpcbackend.Backend, deployer
 	log.L(ctx).Infof("Deployed factory contract to %s", factoryAddr.String())
 
 	ctrs := newZetoDomainContracts()
-	ctrs.factoryAddress = factoryAddr
+	ctrs.FactoryAddress = factoryAddr
 	ctrs.deployedContracts = deployedContracts
 	ctrs.deployedContractAbis = deployedContractAbis
 	ctrs.cloneableContracts = cloneableContracts
@@ -152,7 +152,7 @@ func configureFactoryContract(ctx context.Context, tb testbed.Testbed, deployer 
 
 	// Send the transaction
 	for contractName := range domainContracts.cloneableContracts {
-		err := registerImpl(ctx, contractName, domainContracts, abiFunc, deployer, domainContracts.factoryAddress, tb)
+		err := registerImpl(ctx, contractName, domainContracts, abiFunc, deployer, domainContracts.FactoryAddress, tb)
 		if err != nil {
 			return err
 		}

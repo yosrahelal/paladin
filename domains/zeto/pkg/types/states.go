@@ -35,16 +35,15 @@ type ZetoCoinState struct {
 }
 
 type ZetoCoin struct {
-	Salt     *tktypes.HexUint256 `json:"salt"`
-	Owner    string              `json:"owner"`
-	OwnerKey tktypes.HexBytes    `json:"ownerKey"`
-	Amount   *tktypes.HexUint256 `json:"amount"`
-	hash     *tktypes.HexUint256
+	Salt   *tktypes.HexUint256 `json:"salt"`
+	Owner  tktypes.HexBytes    `json:"owner"`
+	Amount *tktypes.HexUint256 `json:"amount"`
+	hash   *tktypes.HexUint256
 }
 
 func (z *ZetoCoin) Hash(ctx context.Context) (*tktypes.HexUint256, error) {
 	if z.hash == nil {
-		ownerKey, err := zetosigner.DecodeBabyJubJubPublicKey(z.OwnerKey.HexString())
+		ownerKey, err := zetosigner.DecodeBabyJubJubPublicKey(z.Owner.HexString())
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeBJJKey, err)
 		}
@@ -67,8 +66,7 @@ var ZetoCoinABI = &abi.Parameter{
 	InternalType: "struct ZetoCoin",
 	Components: abi.ParameterArray{
 		{Name: "salt", Type: "uint256"},
-		{Name: "owner", Type: "string", Indexed: true},
-		{Name: "ownerKey", Type: "bytes32"},
+		{Name: "owner", Type: "bytes32", Indexed: true},
 		{Name: "amount", Type: "uint256", Indexed: true},
 	},
 }

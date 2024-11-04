@@ -33,6 +33,7 @@ type receivedStateWriteOperation struct {
 	ContractAddress tktypes.EthAddress
 	SchemaID        tktypes.Bytes32
 	StateDataJson   tktypes.RawJSON
+	Nullifier       *components.NullifierUpsert
 }
 
 type receivedStateWriter struct {
@@ -59,23 +60,47 @@ func (rsw *receivedStateWriter) runBatch(ctx context.Context, tx *gorm.DB, value
 		return nil, nil, nil
 	}
 
-	stateUpserts := make([]*components.StateUpsertOutsideContext, len(values))
-	for i, receivedStateWriteOperation := range values {
-		stateUpserts[i] = &components.StateUpsertOutsideContext{
+	type insertsForDomain struct {
+		nullifiers   []*components.NullifierUpsert
+		stateUpserts []*components.StateUpsertOutsideContext
+	}
+
+	byDomain := make(map[string]*insertsForDomain)
+
+	for _, receivedStateWriteOperation := range values {
+
+		domainOps := byDomain[receivedStateWriteOperation.DomainName]
+		if domainOps == nil {
+			domainOps = &insertsForDomain{}
+			byDomain[receivedStateWriteOperation.DomainName] = domainOps
+		}
+
+		domainOps.stateUpserts = append(domainOps.stateUpserts, &components.StateUpsertOutsideContext{
 			ContractAddress: receivedStateWriteOperation.ContractAddress,
 			SchemaID:        receivedStateWriteOperation.SchemaID,
 			Data:            receivedStateWriteOperation.StateDataJson,
+		})
+		if receivedStateWriteOperation.Nullifier != nil {
+			domainOps.nullifiers = append(domainOps.nullifiers, receivedStateWriteOperation.Nullifier)
 		}
 	}
 
-	_, err := rsw.stateManager.WriteReceivedStates(ctx, tx, values[0].DomainName, stateUpserts)
+	for domainName, domainOps := range byDomain {
+		_, err := rsw.stateManager.WriteReceivedStates(ctx, tx, domainName, domainOps.stateUpserts)
 
-	if err != nil {
-		log.L(ctx).Errorf("Error writing received states: %s", err)
+		if err == nil && len(domainOps.nullifiers) > 0 {
+			err = rsw.stateManager.WriteNullifiersForReceivedStates(ctx, tx, domainName, domainOps.nullifiers)
+		}
+
+		if err != nil {
+			log.L(ctx).Errorf("Error writing received states: %s", err)
+			return nil, nil, err
+		}
+
 	}
 
 	// We don't actually provide any result, so just build an array of nil results
-	return nil, make([]flushwriter.Result[*receivedStateWriterNoResult], len(values)), err
+	return nil, make([]flushwriter.Result[*receivedStateWriterNoResult], len(values)), nil
 
 }
 
@@ -87,13 +112,14 @@ func (rsw *receivedStateWriter) Stop() {
 	rsw.flushWriter.Shutdown()
 }
 
-func (rsw *receivedStateWriter) QueueAndWait(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, stateDataJson tktypes.RawJSON) error {
+func (rsw *receivedStateWriter) QueueAndWait(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, stateDataJson tktypes.RawJSON, nullifier *components.NullifierUpsert) error {
 	log.L(ctx).Debugf("receivedStateWriter:QueueAndWait %s %s %s", domainName, contractAddress, schemaID)
 	op := rsw.flushWriter.Queue(ctx, &receivedStateWriteOperation{
 		DomainName:      domainName,
 		ContractAddress: contractAddress,
 		SchemaID:        schemaID,
 		StateDataJson:   stateDataJson,
+		Nullifier:       nullifier,
 	})
 	_, err := op.WaitFlushed(ctx)
 	if err != nil {

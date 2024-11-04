@@ -277,6 +277,7 @@ func TestSendTransactionPrivateDeploy(t *testing.T) {
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
+			From:   "me",
 			Type:   pldapi.TransactionTypePrivate.Enum(),
 			Domain: "domain1",
 			Data:   tktypes.JSONString(tktypes.HexBytes(callData)),
@@ -298,6 +299,7 @@ func TestSendTransactionPrivateInvoke(t *testing.T) {
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
+			From:     "me",
 			Type:     pldapi.TransactionTypePrivate.Enum(),
 			Domain:   "domain1",
 			Function: "doIt",
@@ -321,6 +323,7 @@ func TestSendTransactionPrivateInvokeFail(t *testing.T) {
 
 	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
+			From:     "me",
 			Type:     pldapi.TransactionTypePrivate.Enum(),
 			Domain:   "domain1",
 			Function: "doIt",
@@ -418,6 +421,28 @@ func TestParseInputsBadTxType(t *testing.T) {
 		ABI: exampleABI,
 	})
 	assert.Regexp(t, "PD012211", err)
+}
+
+func TestParseInputsBadFromRemoteNode(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	defer done()
+
+	exampleABI := abi.ABI{
+		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{}},
+	}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type: pldapi.TransactionTypePublic.Enum(),
+			From: "me@node2",
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "PD012230", err)
 }
 
 func TestParseInputsBytecodeNonConstructor(t *testing.T) {
@@ -835,6 +860,7 @@ var testInternalTransactionFn = &abi.Entry{Type: abi.Function, Name: "doStuff"}
 func newTestInternalTransaction(idempotencyKey string) *pldapi.TransactionInput {
 	return &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
+			From:           "me",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			Function:       "doStuff",

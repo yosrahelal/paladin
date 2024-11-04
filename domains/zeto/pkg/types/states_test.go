@@ -25,7 +25,7 @@ import (
 
 func TestCoinHash(t *testing.T) {
 	coin := &ZetoCoin{
-		OwnerKey: tktypes.MustParseHexBytes("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+		Owner: tktypes.MustParseHexBytes("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 	}
 	ctx := context.Background()
 	_, err := coin.Hash(ctx)

@@ -90,12 +90,8 @@ github.com/huandu/xstrings v1.5.0 h1:2ag3IFq9ZDANvthTwTiqSSZLjDc+BedvHPAp5tJy2TI
 github.com/huandu/xstrings v1.5.0/go.mod h1:y5/lhBue+AyNmUVz9RLU9xbLR0o4KIIExikq4ovT0aE=
 github.com/hyperledger/firefly-common v1.4.11 h1:WKv2hQuNpS7yP51THxzpzrqU3jkln23C9vq5iminzBk=
 github.com/hyperledger/firefly-common v1.4.11/go.mod h1:E7w/RxNtVnX52WXLQW9f2xVAgZnW70voZeE9sZrx/q0=
-github.com/hyperledger/firefly-signer v1.1.18 h1:W3ED5LSUQOBa9OkWnkv9Sn8iJs6hJ1AU6RidUkgh0/A=
-github.com/hyperledger/firefly-signer v1.1.18/go.mod h1:HDaDdht94JypRTunRGrcPL5Pvxfh4yigjatTrie5JUI=
-github.com/hyperledger/firefly-signer v1.1.19-0.20241024004807-eafd71c97692 h1:M/GpUfc4UyuWytZBKnDl9Qs7mjCkWDPQ3OJ/K7ivbE8=
-github.com/hyperledger/firefly-signer v1.1.19-0.20241024004807-eafd71c97692/go.mod h1:HDaDdht94JypRTunRGrcPL5Pvxfh4yigjatTrie5JUI=
-github.com/hyperledger/firefly-signer v1.1.19-0.20241024010504-13d52d4241be h1:d74qwNo0KzAfBdjn0VcTYKTulgIXWsGgh0y6HQPOS/4=
-github.com/hyperledger/firefly-signer v1.1.19-0.20241024010504-13d52d4241be/go.mod h1:HDaDdht94JypRTunRGrcPL5Pvxfh4yigjatTrie5JUI=
+github.com/hyperledger/firefly-signer v1.1.19-0.20241027192206-656dd986267e h1:iqIs0NPtE9h1Vy4WBm2dsS4XbBIdpZPMNprlwdmIC0U=
+github.com/hyperledger/firefly-signer v1.1.19-0.20241027192206-656dd986267e/go.mod h1:HDaDdht94JypRTunRGrcPL5Pvxfh4yigjatTrie5JUI=
 github.com/imdario/mergo v0.3.6 h1:xTNEAn+kxVO7dTZGu0CegyqKZmoWFI0rF8UxjlB2d28=
 github.com/imdario/mergo v0.3.6/go.mod h1:2EnlNZ0deacrJVfApfmtdGgDfMuh/nq6Ok1EcJh5FfA=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=

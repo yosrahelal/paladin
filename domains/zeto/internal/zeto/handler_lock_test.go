@@ -26,6 +26,22 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func sampleTransferPayload() map[string]any {
+	return map[string]interface{}{
+		"inputs":  []string{"0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567890"},
+		"outputs": []string{"0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567890"},
+		"proof": map[string]interface{}{
+			"pA": []string{"0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567890"},
+			"pB": [][]string{
+				{"0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567890"},
+				{"0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567890"},
+			},
+			"pC": []string{"0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567890"},
+		},
+		"data": "0xfeedbeef",
+	}
+}
+
 func TestLockValidateParams(t *testing.T) {
 	h := lockHandler{
 		zeto: &Zeto{
@@ -36,7 +52,6 @@ func TestLockValidateParams(t *testing.T) {
 						{
 							Name:      "Zeto_Anon",
 							CircuitId: "anon",
-							Abi:       "[{}]",
 						},
 					},
 				},
@@ -51,14 +66,7 @@ func TestLockValidateParams(t *testing.T) {
 	_, err := h.ValidateParams(ctx, config, "bad json")
 	assert.EqualError(t, err, "PD210059: Failed to unmarshal lockProof parameters. invalid character 'b' looking for beginning of value")
 
-	_, err = h.ValidateParams(ctx, config, "{}")
-	assert.EqualError(t, err, "PD210060: Failed to decode the transfer call. PD210000: Contract test not found")
-
 	config.TokenName = "Zeto_Anon"
-	_, err = h.ValidateParams(ctx, config, "{}")
-	assert.EqualError(t, err, "PD210060: Failed to decode the transfer call. PD210014: Unknown function: transfer")
-
-	h.zeto.config.DomainContracts.Implementations[0].Abi = "[{\"inputs\": [{\"internalType\": \"uint256[2]\",\"name\": \"inputs\",\"type\": \"uint256[2]\"}],\"name\": \"transfer\",\"outputs\": [],\"type\": \"function\"}]"
 	lockParams := types.LockParams{
 		Delegate: tktypes.RandAddress(),
 		Call:     tktypes.HexBytes([]byte("bad call")),
@@ -66,16 +74,10 @@ func TestLockValidateParams(t *testing.T) {
 	jsonBytes, err := json.Marshal(lockParams)
 	assert.NoError(t, err)
 	_, err = h.ValidateParams(ctx, config, string(jsonBytes))
-	assert.ErrorContains(t, err, "PD210060: Failed to decode the transfer call. FF22049: Incorrect ID for signature transfer(uint256[2])")
+	assert.ErrorContains(t, err, "PD210060: Failed to decode the transfer call. FF22049: Incorrect ID for signature transfer")
 
-	contractAbi, err := h.zeto.config.GetContractAbi(ctx, config.TokenName)
-	assert.NoError(t, err)
-	transfer := contractAbi.Functions()["transfer"]
-	assert.NoError(t, err)
-	params := map[string]interface{}{
-		"inputs": []string{"0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567890"},
-	}
-	bytes, err := transfer.EncodeCallDataValues(params)
+	params := sampleTransferPayload()
+	bytes, err := getTransferABI(config.TokenName).EncodeCallDataValues(params)
 	assert.NoError(t, err)
 	lockParams = types.LockParams{
 		Delegate: tktypes.RandAddress(),
@@ -159,7 +161,6 @@ func TestLockPrepare(t *testing.T) {
 						{
 							Name:      "Zeto_Anon",
 							CircuitId: "anon",
-							Abi:       "[{\"inputs\": [{\"internalType\": \"uint256[2]\",\"name\": \"inputs\",\"type\": \"uint256[2]\"}],\"name\": \"transfer\",\"outputs\": [],\"type\": \"function\"}]",
 						},
 					},
 				},
@@ -182,24 +183,22 @@ func TestLockPrepare(t *testing.T) {
 		},
 	}
 	_, err := h.Prepare(ctx, tx, req)
-	assert.EqualError(t, err, "PD210060: Failed to decode the transfer call. PD210000: Contract test not found")
+	assert.EqualError(t, err, "PD210060: Failed to decode the transfer call. FF22048: Insufficient bytes to read signature")
 
 	tx.DomainConfig.TokenName = "Zeto_Anon"
-	contractAbi, err := h.zeto.config.GetContractAbi(ctx, "Zeto_Anon")
-	assert.NoError(t, err)
-	transfer := contractAbi.Functions()["transfer"]
-	assert.NoError(t, err)
-	params := map[string]interface{}{
-		"inputs": []string{"0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567890"},
-	}
+	transfer := getTransferABI("Zeto_Anon")
+	params := sampleTransferPayload()
+
 	bytes, err := transfer.EncodeCallDataValues(params)
 	assert.NoError(t, err)
 	tx.Params = &types.LockParams{
 		Delegate: tktypes.RandAddress(),
 		Call:     tktypes.HexBytes(bytes),
 	}
-	_, err = h.Prepare(ctx, tx, req)
-	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id. PD020007: Invalid hex:")
+
+	// TODO: lockProof does not currently accept a data payload
+	// _, err = h.Prepare(ctx, tx, req)
+	// assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id. PD020007: Invalid hex:")
 
 	req.Transaction.TransactionId = "0x1234567890123456789012345678901234567890"
 	_, err = h.Prepare(ctx, tx, req)

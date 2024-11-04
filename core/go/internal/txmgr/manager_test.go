@@ -41,6 +41,7 @@ type mockComponents struct {
 	privateTxMgr     *componentmocks.PrivateTxManager
 	stateMgr         *componentmocks.StateManager
 	identityResolver *componentmocks.IdentityResolver
+	transportManager *componentmocks.TransportManager
 }
 
 func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pldconf.TxManagerConfig, mc *mockComponents)) (context.Context, *txManager, func()) {
@@ -59,6 +60,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 		privateTxMgr:     componentmocks.NewPrivateTxManager(t),
 		stateMgr:         componentmocks.NewStateManager(t),
 		identityResolver: componentmocks.NewIdentityResolver(t),
+		transportManager: componentmocks.NewTransportManager(t),
 	}
 
 	componentMocks := mc.c
@@ -70,6 +72,8 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 	componentMocks.On("StateManager").Return(mc.stateMgr).Maybe()
 	componentMocks.On("IdentityResolver").Return(mc.identityResolver).Maybe()
 	componentMocks.On("EthClientFactory").Return(mc.ethClientFactory).Maybe()
+	componentMocks.On("TransportManager").Return(mc.transportManager).Maybe()
+	mc.transportManager.On("LocalNodeName").Return("node1").Maybe()
 
 	var p persistence.Persistence
 	var err error

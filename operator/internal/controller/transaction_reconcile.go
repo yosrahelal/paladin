@@ -130,7 +130,7 @@ func (r *transactionReconcile) submitTransactionAndRequeue(ctx context.Context, 
 func (r *transactionReconcile) queryTxByIdempotencyKeyAndRequeue(ctx context.Context, paladinRPC rpcclient.Client) error {
 	var txns []*pldapi.Transaction
 	err := paladinRPC.CallRPC(ctx, &txns, "ptx_queryTransactions",
-		query.NewQueryBuilder().Equal("idempotencyKey", r.pStatus.IdempotencyKey).Limit(1))
+		query.NewQueryBuilder().Equal("idempotencyKey", r.pStatus.IdempotencyKey).Limit(1).Query())
 	if err != nil {
 		return err
 	}

@@ -242,8 +242,8 @@ type StateLock struct {
 // nullifier (not for the state) when it is spent.
 // Immutable once written
 type StateNullifier struct {
-	DomainName string            `json:"domain"          gorm:"primaryKey"`
-	ID         tktypes.HexBytes  `json:"id"              gorm:"primaryKey"`
+	DomainName string            `json:"-"               gorm:"primaryKey"`
 	State      tktypes.HexBytes  `json:"-"`
+	ID         tktypes.HexBytes  `json:"id"              gorm:"primaryKey"`
 	Spent      *StateSpendRecord `json:"spent,omitempty" gorm:"foreignKey:state;references:id;"`
 }

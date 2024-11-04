@@ -17,22 +17,24 @@
 package statemgr
 
 import (
+	"fmt"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"gorm.io/gorm"
 )
 
 // Only called for one of the static qualifiers - not for a domain context
-func whereClauseForQual(db *gorm.DB /* must be the DB not the query */, q pldapi.StateStatusQualifier) (*gorm.DB, bool) {
+func whereClauseForQual(db *gorm.DB /* must be the DB not the query */, q pldapi.StateStatusQualifier, spentColumn string) (*gorm.DB, bool) {
 	switch q {
 	case pldapi.StateStatusAvailable:
 		return db.
-				Where(`"Spent"."transaction" IS NULL`).
+				Where(fmt.Sprintf(`"%s"."transaction" IS NULL`, spentColumn)).
 				Where(`"Confirmed"."transaction" IS NOT NULL`),
 			true
 	case pldapi.StateStatusConfirmed:
 		return db.
 				Where(`"Confirmed"."transaction" IS NOT NULL`).
-				Where(`"Spent"."transaction" IS NULL`),
+				Where(fmt.Sprintf(`"%s"."transaction" IS NULL`, spentColumn)),
 			true
 	case pldapi.StateStatusUnconfirmed:
 		return db.
@@ -40,7 +42,7 @@ func whereClauseForQual(db *gorm.DB /* must be the DB not the query */, q pldapi
 			true
 	case pldapi.StateStatusSpent:
 		return db.
-				Where(`"Spent"."transaction" IS NOT NULL`),
+				Where(fmt.Sprintf(`"%s"."transaction" IS NOT NULL`, spentColumn)),
 			true
 	case pldapi.StateStatusAll:
 		return db.Where("TRUE"),

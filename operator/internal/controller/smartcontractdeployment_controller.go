@@ -68,11 +68,13 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 	}
 
 	// Check all our deps are resolved
-	depsChanged, err := checkSmartContractDeps(ctx, r.Client, scd.Namespace, scd.Spec.RequiredContractDeployments, &scd.Status.ContactDependenciesStatus)
+	depsChanged, ready, err := checkSmartContractDeps(ctx, r.Client, scd.Namespace, scd.Spec.RequiredContractDeployments, &scd.Status.ContactDependenciesStatus)
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if depsChanged {
 		return r.updateStatusAndRequeue(ctx, &scd)
+	} else if !ready {
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
 	// Reconcile the deployment transaction
