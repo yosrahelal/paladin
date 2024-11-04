@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package statedistribution
+package preparedtxdistribution
 
 import (
 	"context"
@@ -29,7 +29,7 @@ import (
 
 type acknowledgementWriterNoResult struct{}
 type acknowledgementWriteOperation struct {
-	StateDistributionID string
+	PreparedTxnDistributionID string
 }
 
 type acknowledgementWriter struct {
@@ -44,34 +44,34 @@ func NewAcknowledgementWriter(ctx context.Context, persistence persistence.Persi
 
 func (wo *acknowledgementWriteOperation) WriteKey() string {
 	//no ordering requirements so just assign a worker at random for each write
-	return wo.StateDistributionID
+	return wo.PreparedTxnDistributionID
 }
 
-type stateDistributionAcknowledgement struct {
-	StateDistribution string `json:"stateDistribution" gorm:"column:state_distribution"`
-	ID                string `json:"id"                gorm:"column:id"`
+type preparedTxnDistributionAcknowledgement struct {
+	PreparedTxnDistribution string `json:"preparedTxnDistribution" gorm:"column:prepared_txn_distribution"`
+	ID                      string `json:"id"                gorm:"column:id"`
 }
 
 func (aw *acknowledgementWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*acknowledgementWriteOperation) (func(error), []flushwriter.Result[*acknowledgementWriterNoResult], error) {
 	log.L(ctx).Debugf("acknowledgementWriter:runBatch %d acknowledgements", len(values))
 
-	acknowledgements := make([]*stateDistributionAcknowledgement, 0, len(values))
+	acknowledgements := make([]*preparedTxnDistributionAcknowledgement, 0, len(values))
 	for _, value := range values {
-		acknowledgements = append(acknowledgements, &stateDistributionAcknowledgement{
-			StateDistribution: value.StateDistributionID,
-			ID:                uuid.New().String(),
+		acknowledgements = append(acknowledgements, &preparedTxnDistributionAcknowledgement{
+			PreparedTxnDistribution: value.PreparedTxnDistributionID,
+			ID:                      uuid.New().String(),
 		})
 	}
 
 	err := tx.
-		Table("state_distribution_acknowledgments").
+		Table("prepared_txn_distribution_acknowledgments").
 		Clauses(clause.OnConflict{
 			DoNothing: true, // immutable
 		}).
 		Create(acknowledgements).
 		Error
 	if err != nil {
-		log.L(ctx).Errorf("Error persisting state distribution acknowledgements: %s", err)
+		log.L(ctx).Errorf("Error persisting prepared transaction distribution acknowledgements: %s", err)
 	}
 
 	// We don't actually provide any result, so just build an array of nil results
@@ -87,8 +87,8 @@ func (aw *acknowledgementWriter) Stop() {
 	aw.flushWriter.Shutdown()
 }
 
-func (aw *acknowledgementWriter) Queue(ctx context.Context, stateDistributionID string) {
+func (aw *acknowledgementWriter) Queue(ctx context.Context, preparedTxnDistributionID string) {
 	aw.flushWriter.Queue(ctx, &acknowledgementWriteOperation{
-		StateDistributionID: stateDistributionID,
+		PreparedTxnDistributionID: preparedTxnDistributionID,
 	})
 }

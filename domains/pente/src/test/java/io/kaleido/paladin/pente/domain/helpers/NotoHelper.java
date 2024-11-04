@@ -105,7 +105,8 @@ public class NotoHelper {
             "mint",
             JsonABI.newParameters(
                     JsonABI.newParameter("to", "string"),
-                    JsonABI.newParameter("amount", "uint256")
+                    JsonABI.newParameter("amount", "uint256"),
+                    JsonABI.newParameter("data", "bytes")
             ),
             JsonABI.newParameters()
     );
@@ -114,7 +115,8 @@ public class NotoHelper {
             "transfer",
             JsonABI.newParameters(
                     JsonABI.newParameter("to", "string"),
-                    JsonABI.newParameter("amount", "uint256")
+                    JsonABI.newParameter("amount", "uint256"),
+                    JsonABI.newParameter("data", "bytes")
             ),
             JsonABI.newParameters()
     );
@@ -172,6 +174,7 @@ public class NotoHelper {
                 new HashMap<>() {{
                     put("to", to);
                     put("amount", amount);
+                    put("data", "0x");
                 }}
         ), true);
     }
@@ -184,6 +187,7 @@ public class NotoHelper {
                 new HashMap<>() {{
                     put("to", to);
                     put("amount", amount);
+                    put("data", "0x");
                 }}
         ), true);
     }
@@ -197,6 +201,7 @@ public class NotoHelper {
                         new HashMap<>() {{
                             put("to", to);
                             put("amount", amount);
+                            put("data", "0x");
                         }}
                 )));
     }

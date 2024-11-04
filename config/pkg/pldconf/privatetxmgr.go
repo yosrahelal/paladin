@@ -17,15 +17,22 @@ package pldconf
 import "github.com/kaleido-io/paladin/config/pkg/confutil"
 
 type PrivateTxManagerConfig struct {
-	Writer           FlushWriterConfig               `json:"writer"`
-	Sequencer        PrivateTxManagerSequencerConfig `json:"sequencer"`
-	StateDistributer StateDistributerConfig          `json:"stateDistributer"`
-	RequestTimeout   *string                         `json:"requestTimeout"`
+	Writer                         FlushWriterConfig               `json:"writer"`
+	Sequencer                      PrivateTxManagerSequencerConfig `json:"sequencer"`
+	StateDistributer               DistributerConfig               `json:"stateDistributer"`
+	PreparedTransactionDistributer DistributerConfig               `json:"preparedTransactionDistributer"`
+	RequestTimeout                 *string                         `json:"requestTimeout"`
 }
 
-type StateDistributerConfig struct {
+type DistributerConfig struct {
 	AcknowledgementWriter FlushWriterConfig `json:"acknowledgementWriter"`
-	ReceivedStateWriter   FlushWriterConfig `json:"receivedStateWriter"`
+	ReceivedObjectWriter  FlushWriterConfig `json:"receivedStateWriter"`
+}
+
+var DistributerWriterConfigDefaults = FlushWriterConfig{
+	WorkerCount:  confutil.P(10),
+	BatchTimeout: confutil.P("25ms"),
+	BatchMaxSize: confutil.P(100),
 }
 
 var PrivateTxManagerDefaults = &PrivateTxManagerConfig{

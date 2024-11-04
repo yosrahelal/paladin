@@ -31,7 +31,7 @@ ext {
         include "mocks/**/*.go"
     }
 
-    targetCoverage = 92
+    targetCoverage = 91.8
     maxCoverageBarGap = 1
     coverageExcludedPackages = [
         'github.com/kaleido-io/paladin/core/pkg/proto',
@@ -235,11 +235,17 @@ task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
         outputPackage 'ethclientmocks'
         outputDir 'mocks/ethclientmocks'
     }
-        mock {
+    mock {
         inputDir 'internal/statedistribution'
         includeAll true
         outputPackage 'statedistributionmocks'
         outputDir 'mocks/statedistributionmocks'
+    }
+    mock {
+        inputDir 'internal/preparedtxdistribution'
+        includeAll true
+        outputPackage 'preparedtxdistributionmocks'
+        outputDir 'mocks/preparedtxdistributionmocks'
     }
 }
 

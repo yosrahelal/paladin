@@ -276,9 +276,10 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	}
 
 	//uncomment for debugging
-	//i.conf.DB.SQLite.DSN = "./sql." + i.name + uuid.New().String() + ".db"
-	i.conf.Log.Level = confutil.P("debug")
+	//i.conf.DB.SQLite.DSN = "./sql." + i.name + ".db"
+	//uncomment to use postgres - TODO once all tests are using postgres, we can parameterize this and run in both modes
 	//i.conf.DB.Type = "postgres"
+	i.conf.Log.Level = confutil.P("debug")
 
 	if i.conf.DB.Type == "postgres" {
 		dns, cleanUp := initPostgres(t, context.Background())

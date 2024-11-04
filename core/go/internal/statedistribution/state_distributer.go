@@ -30,7 +30,7 @@ import (
 
 const RETRY_TIMEOUT = 5 * time.Second
 
-func NewStateDistributer(ctx context.Context, nodeID string, transportManager components.TransportManager, stateManager components.StateManager, persistence persistence.Persistence, conf *pldconf.StateDistributerConfig) StateDistributer {
+func NewStateDistributer(ctx context.Context, nodeID string, transportManager components.TransportManager, stateManager components.StateManager, persistence persistence.Persistence, conf *pldconf.DistributerConfig) StateDistributer {
 	sd := &stateDistributer{
 		persistence:      persistence,
 		inputChan:        make(chan *StateDistribution),
@@ -43,7 +43,7 @@ func NewStateDistributer(ctx context.Context, nodeID string, transportManager co
 		retry:            retry.NewRetryIndefinite(&pldconf.RetryConfig{}, &pldconf.GenericRetryDefaults.RetryConfig),
 	}
 	sd.acknowledgementWriter = NewAcknowledgementWriter(ctx, sd.persistence, &conf.AcknowledgementWriter)
-	sd.receivedStateWriter = NewReceivedStateWriter(ctx, stateManager, persistence, &conf.ReceivedStateWriter)
+	sd.receivedStateWriter = NewReceivedStateWriter(ctx, stateManager, persistence, &conf.ReceivedObjectWriter)
 
 	return sd
 }
@@ -79,7 +79,6 @@ StateDistributer is a component that is responsible for distributing state to re
 type StateDistributer interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context)
-	AcknowledgeState(ctx context.Context, stateID string)
 	DistributeStates(ctx context.Context, stateDistributions []*StateDistribution)
 	HandleStateProducedEvent(ctx context.Context, stateProducedEvent *pb.StateProducedEvent, distributingNode string)
 	HandleStateAcknowledgedEvent(ctx context.Context, messagePayload []byte)

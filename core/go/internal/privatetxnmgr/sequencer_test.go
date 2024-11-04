@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/preparedtxdistributionmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	"github.com/kaleido-io/paladin/core/mocks/statedistributionmocks"
 
@@ -38,21 +39,22 @@ import (
 )
 
 type sequencerDepencyMocks struct {
-	allComponents       *componentmocks.AllComponents
-	privateTxManager    *componentmocks.PrivateTxManager
-	domainSmartContract *componentmocks.DomainSmartContract
-	domainContext       *componentmocks.DomainContext
-	domainMgr           *componentmocks.DomainManager
-	domain              *componentmocks.Domain
-	transportManager    *componentmocks.TransportManager
-	stateStore          *componentmocks.StateManager
-	keyManager          *componentmocks.KeyManager
-	endorsementGatherer *privatetxnmgrmocks.EndorsementGatherer
-	publisher           *privatetxnmgrmocks.Publisher
-	identityResolver    *componentmocks.IdentityResolver
-	stateDistributer    *statedistributionmocks.StateDistributer
-	txManager           *componentmocks.TXManager
-	transportWriter     *privatetxnmgrmocks.TransportWriter
+	allComponents                  *componentmocks.AllComponents
+	privateTxManager               *componentmocks.PrivateTxManager
+	domainSmartContract            *componentmocks.DomainSmartContract
+	domainContext                  *componentmocks.DomainContext
+	domainMgr                      *componentmocks.DomainManager
+	domain                         *componentmocks.Domain
+	transportManager               *componentmocks.TransportManager
+	stateStore                     *componentmocks.StateManager
+	keyManager                     *componentmocks.KeyManager
+	endorsementGatherer            *privatetxnmgrmocks.EndorsementGatherer
+	publisher                      *privatetxnmgrmocks.Publisher
+	identityResolver               *componentmocks.IdentityResolver
+	stateDistributer               *statedistributionmocks.StateDistributer
+	preparedTransactionDistributer *preparedtxdistributionmocks.PreparedTransactionDistributer
+	txManager                      *componentmocks.TXManager
+	transportWriter                *privatetxnmgrmocks.TransportWriter
 }
 
 func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Sequencer, *sequencerDepencyMocks, func()) {
@@ -61,21 +63,22 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 	}
 
 	mocks := &sequencerDepencyMocks{
-		allComponents:       componentmocks.NewAllComponents(t),
-		privateTxManager:    componentmocks.NewPrivateTxManager(t),
-		domainSmartContract: componentmocks.NewDomainSmartContract(t),
-		domainContext:       componentmocks.NewDomainContext(t),
-		domainMgr:           componentmocks.NewDomainManager(t),
-		domain:              componentmocks.NewDomain(t),
-		transportManager:    componentmocks.NewTransportManager(t),
-		stateStore:          componentmocks.NewStateManager(t),
-		keyManager:          componentmocks.NewKeyManager(t),
-		endorsementGatherer: privatetxnmgrmocks.NewEndorsementGatherer(t),
-		publisher:           privatetxnmgrmocks.NewPublisher(t),
-		identityResolver:    componentmocks.NewIdentityResolver(t),
-		stateDistributer:    statedistributionmocks.NewStateDistributer(t),
-		txManager:           componentmocks.NewTXManager(t),
-		transportWriter:     privatetxnmgrmocks.NewTransportWriter(t),
+		allComponents:                  componentmocks.NewAllComponents(t),
+		privateTxManager:               componentmocks.NewPrivateTxManager(t),
+		domainSmartContract:            componentmocks.NewDomainSmartContract(t),
+		domainContext:                  componentmocks.NewDomainContext(t),
+		domainMgr:                      componentmocks.NewDomainManager(t),
+		domain:                         componentmocks.NewDomain(t),
+		transportManager:               componentmocks.NewTransportManager(t),
+		stateStore:                     componentmocks.NewStateManager(t),
+		keyManager:                     componentmocks.NewKeyManager(t),
+		endorsementGatherer:            privatetxnmgrmocks.NewEndorsementGatherer(t),
+		publisher:                      privatetxnmgrmocks.NewPublisher(t),
+		identityResolver:               componentmocks.NewIdentityResolver(t),
+		stateDistributer:               statedistributionmocks.NewStateDistributer(t),
+		preparedTransactionDistributer: preparedtxdistributionmocks.NewPreparedTransactionDistributer(t),
+		txManager:                      componentmocks.NewTXManager(t),
+		transportWriter:                privatetxnmgrmocks.NewTransportWriter(t),
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -97,7 +100,7 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 	//mocks.domain.On("Configuration").Return(&prototk.DomainConfig{}).Maybe()
 
 	syncPoints := syncpoints.NewSyncPoints(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager)
-	o, err := NewSequencer(ctx, mocks.privateTxManager, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerSequencerConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.transportWriter, 30*time.Second, 0)
+	o, err := NewSequencer(ctx, mocks.privateTxManager, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerSequencerConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.preparedTransactionDistributer, mocks.transportWriter, 30*time.Second, 0)
 	require.NoError(t, err)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
