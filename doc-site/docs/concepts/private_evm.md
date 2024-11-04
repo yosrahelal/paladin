@@ -1,0 +1,1 @@
+![Private EVM - Pente](../images/private_evm_pente.svg)
