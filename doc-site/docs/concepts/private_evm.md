@@ -62,12 +62,12 @@ The flow in Pente to form each transaction is summarized as follows:
     - Proposing the existing account states that will be read/updated
     - Proposing the new account states that will be produced
 - Consensus is formed through endorsement signatures
-    - Members of privacy group re-execute the same transaction
+    - Members of privacy group re-execute the signed transaction
     - The same exact account states are used by every member who endorses
-    - A signature is only provided if the execution results are identical
+    - A signature is only provided if the execution results are identical to the proposal
 - The base ledger enforces the transition
     - A masked record of every account state is held on-chain
-    - The existing account states that are modified/read must still exist
+    - All account states that are modified/read in a transaction must exist
     - Once executed, no other transaction can use any modified account state
     > - This is a derivation of a UTXO model, where each account state is a UTXO
 
@@ -87,9 +87,11 @@ This is a very powerful feature of the Pente privacy group technology that allow
 - Coordinating the result of a DvP/PvP or other settlement activity inside of a smart contract, with another smart contract
     - For example settling a leg of a private transaction with a public ERC-20 token transfer
 
-### Works on any EVM, using ephemeral Besu EVM instances
+### Run on any EVM base ledger, with ephemeral Besu EVM instances
 
-Pente operates by creating Besu EVM instances on-demand whenever a transaction requires one.
+Pente is purely "app layer" technology from the perspective of the base ledger. No special functions are required - the EVM smart contract that backs the privacy group is completely normal EVM logic.
+
+Pente then operates by creating Besu EVM instances on-demand whenever a transaction requires one, running inside the Paladin engine (separate to the blockchain node).
 
 The account states that are needed to run the transaction are loaded on-demand as the transaction executes inside of the EVM, in order to prepare the transactions. The exact states that were loaded are recorded, and using a hash-based identifier that is based on the full account state at the time of execution.
 
@@ -98,4 +100,3 @@ Then when endorsing the transaction, exactly those same account states are pre-l
 Generating a receipt containing all the events from a transaction, or performing a `call` operation, work in similar ways to the above - hot loading an EVM in just to perform that one task.
 
 This approach allows for a huge scale of number of separate EVM privacy groups, each with a complete and independent "world state". These privacy groups might be extremely short lived, only spanning an individual business transaction. Or they might be long lived, but limited in their privacy scope - such as maintaining the private issuer state of an issuance of assets.
-

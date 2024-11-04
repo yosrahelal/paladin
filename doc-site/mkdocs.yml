@@ -101,13 +101,13 @@ nav:
   - Architecture:
     - Overview: architecture/overview.md
     - Programming model: architecture/programming_model.md
+    - Domains: architecture/domains.md
     - Zeto - ZKP Tokens: architecture/zeto.md
     - Noto - Notarized Tokens: architecture/noto.md
     - Pente - EVM Privacy Groups: architecture/pente.md
     - Key management: architecture/key_management.md
     - State store: architecture/state_store.md
     - Atomic interop: architecture/atomic_interop.md
-    - Runtime Architecture: architecture/runtime_architecture.md
     - Data Transports & Registry: architecture/data_and_registry.md
     - Ledger Layers: architecture/ledger_layers.md
   - Getting Started:

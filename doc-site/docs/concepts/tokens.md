@@ -30,9 +30,11 @@ To build enterprise use cases meaningfully that use tokens, the data must be seg
 
 The token itself needs to have a wide reach, to be a provably unique record of ownership across the whole ledger/blockchain. This is what makes a token so powerful.
 
-However, this cannot mean that all history of all tokens is available to anyone with access to the chain. Or that in order to trust receipt of a token that I need to see all previous history. As such the existing open models of ERC-20 and ERC-721 derived standards to not fit a privacy preserving use cases.
+In a privacy preserving use case, it is necessary to avoid the history of ownership of a token being directly or indirectly available to those with access to the chain. However, it must still be true that when I receive a token that I can trust the legitimacy of the toke within the scope of the ledger.
 
-Alternative approaches described below using issuer-private data, or zero-knowledge proofs, are required to protect the confidentiality and anonymity of the parties transacting.
+As such the existing open models of ERC-20 and ERC-721 derived standards to not fit a privacy preserving use cases, as these tokens require access to the token account state to validate the token, and this account state is a product of all previous transactions that occurred for that token. So I need complete historical visibility to trust the authenticity of any token I receive.
+
+Alternative approaches described below using issuer-private data, or zero-knowledge proofs, are required to protect the confidentiality and anonymity of the parties transacting. These approaches are of course not new to EVM, but they do not currently have the same standardization, programmability or interoperability of ERC-20 / ERC-721, and that is something the Paladin project aims to address.
 
 ### Token and token holder data
 
