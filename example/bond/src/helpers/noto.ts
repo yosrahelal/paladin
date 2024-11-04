@@ -1,3 +1,7 @@
+import PaladinClient, { IGroupInfo, TransactionType } from "paladin-sdk";
+
+const POLL_TIMEOUT_MS = 10000;
+
 export const groupTuple = {
   name: "group",
   type: "tuple",
@@ -80,36 +84,57 @@ export const notoABI = (withHooks: boolean) => [
   },
 ];
 
-export const penteConstructorABI = {
-  type: "constructor",
-  inputs: [
-    {
-      name: "group",
-      type: "tuple",
-      components: [
-        { name: "salt", type: "bytes32" },
-        { name: "members", type: "string[]" },
-      ],
-    },
-    { name: "evmVersion", type: "string" },
-    { name: "endorsementType", type: "string" },
-    { name: "externalCallsEnabled", type: "bool" },
-  ],
+export interface NotoConstructorParams {
+  notary: string;
+  hooks?: {
+    privateGroup?: IGroupInfo;
+    publicAddress?: string;
+    privateAddress?: string;
+  };
+  restrictMinting?: boolean;
+}
+
+export interface NotoMintParams {
+  to: string;
+  amount: string | number;
+  data: string;
+}
+
+export const newNoto = async (
+  paladin: PaladinClient,
+  domain: string,
+  from: string,
+  data: NotoConstructorParams
+) => {
+  const txID = await paladin.sendTransaction({
+    type: TransactionType.PRIVATE,
+    domain,
+    abi: notoABI(false),
+    function: "",
+    from,
+    data,
+  });
+  const receipt = await paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+  return receipt?.contractAddress === undefined
+    ? undefined
+    : new NotoHelper(paladin, receipt.contractAddress);
 };
 
-export const penteDeployABI = (inputComponents: any) => ({
-  name: "deploy",
-  type: "function",
-  inputs: [
-    {
-      name: "group",
-      type: "tuple",
-      components: [
-        { name: "salt", type: "bytes32" },
-        { name: "members", type: "string[]" },
-      ],
-    },
-    { name: "bytecode", type: "bytes" },
-    { name: "inputs", type: "tuple", components: inputComponents },
-  ],
-});
+export class NotoHelper {
+  constructor(
+    private paladin: PaladinClient,
+    public readonly address: string
+  ) {}
+
+  async mint(from: string, data: NotoMintParams) {
+    const txID = await this.paladin.sendTransaction({
+      type: TransactionType.PRIVATE,
+      abi: notoABI(false),
+      function: "mint",
+      to: this.address,
+      from,
+      data,
+    });
+    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+  }
+}
