@@ -23,11 +23,16 @@ configurations {
         canBeConsumed = false
         canBeResolved = true
     }
+    poseidonArtifacts {
+        canBeConsumed = false
+        canBeResolved = true
+    }
 }
 
 dependencies {
     contractCompile project(path: ":solidity", configuration: "compiledContracts")
     zetoArtifacts project(path: ":domains:zeto", configuration: "zetoArtifacts")
+    poseidonArtifacts project(path: ":domains:zeto", configuration: "poseidonArtifacts")
 }
 
 ext {
@@ -95,11 +100,16 @@ task copySolidity(type: Copy) {
 
 task copyZetoSolidity(type: Copy) {
     inputs.files(configurations.zetoArtifacts)
+    inputs.files(configurations.poseidonArtifacts)
     inputs.files(configurations.contractCompile)
     from fileTree(configurations.zetoArtifacts.asPath) {
         include 'artifacts/contracts/**/*.json'
         include 'artifacts/@iden3/contracts/**/*.json'
         exclude '**/*.dbg.json'
+    }
+    from fileTree(configurations.poseidonArtifacts.asPath) {
+        include 'Poseidon2.json'
+        include 'Poseidon3.json'
     }
     from fileTree(configurations.contractCompile.asPath) {
         include 'contracts/registry/IdentityRegistry.sol/IdentityRegistry.json'

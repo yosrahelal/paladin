@@ -36,10 +36,10 @@
         "filename": "test/e2e/abis/zeto/Groth16Verifier_CheckInputsOutputsValueBatch.json"
     },
     "zeto_poseidon_unit2l": {
-        "filename": "test/e2e/abis/zeto/PoseidonUnit2L.json"
+        "filename": "test/e2e/abis/zeto/Poseidon2.json"
     },
     "zeto_poseidon_unit3l": {
-        "filename": "test/e2e/abis/zeto/PoseidonUnit3L.json"
+        "filename": "test/e2e/abis/zeto/Poseidon3.json"
     },
     "zeto_smt_lib": {
         "filename": "test/e2e/abis/zeto/SmtLib.json",
