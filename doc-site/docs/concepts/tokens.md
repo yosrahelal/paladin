@@ -87,10 +87,10 @@ This is based on the principal that the success of the EVM community, and existi
 
 Paladin tackles deficiencies in previous generations of technology for tokens head on, by providing:
 
-- Next generation implementations of each token type
+- EVM native, modern, robust implementations of each token type
     - ZKP backed tokens (Zeto)
     - Notarized / issuer-backed tokens (Noto)
-- Providing programmability for the private transaction workflows between tokens
+- Programmability for the private transaction workflows between tokens
     - Private EVM execution in privacy groups (Pente)
 - The extensibility to add new implementations as technologies as they evolve
     - New cryptography
