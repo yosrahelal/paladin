@@ -8,7 +8,7 @@ export interface ISchema {
   labels: string[];
 }
 
-export type SchemaType = 'abi';
+export type SchemaType = "abi";
 
 export interface IStateBase {
   id: string;
@@ -24,6 +24,12 @@ export interface IState extends IStateBase {
   spent?: IStateSpend;
   locks?: IStateLock[];
   nullifier?: IStateNullifier;
+}
+
+export interface IStateWithData {
+  id: string;
+  schema: string;
+  data: string;
 }
 
 export interface IStateLabel {
@@ -48,7 +54,7 @@ export interface IStateSpend {
   transaction: string;
 }
 
-type StateLockType = 'create' | 'read' | 'spend';
+type StateLockType = "create" | "read" | "spend";
 
 export interface IStateLock {
   transaction: string;

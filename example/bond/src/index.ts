@@ -3,16 +3,15 @@ import { ethers } from "ethers";
 import PaladinClient, {
   Algorithms,
   IGroupInfo,
-  IStateBase,
   TransactionType,
   Verifiers,
 } from "paladin-sdk";
 import bondTrackerPublicJson from "./abis/BondTrackerPublic.json";
 import { newBondSubscription } from "./helpers/bondsubscription";
 import { newBondTracker } from "./helpers/bondtracker";
-import { newNoto } from "./helpers/noto";
+import { encodeStates, newNoto } from "./helpers/noto";
 import { newPentePrivacyGroup } from "./helpers/pente";
-import { encodeHex } from "./utils";
+import { newTransactionId } from "./utils";
 
 const logger = console;
 
@@ -301,25 +300,11 @@ async function main() {
   }
   logger.log("Success!");
 
-  const mapStates = (states: IStateBase[]) => {
-    return states.map((state) => ({
-      id: state.id,
-      schema: state.schema,
-      data: encodeHex(
-        JSON.stringify({
-          salt: state.data["salt"],
-          owner: state.data["owner"],
-          amount: state.data["amount"],
-        })
-      ),
-    }));
-  };
-
   // Approve the payment transfer
   logger.log("Approving payment transfer...");
   receipt = await notoCash.approveTransfer(investor, {
-    inputs: mapStates(paymentTransfer.states.spent ?? []),
-    outputs: mapStates(paymentTransfer.states.confirmed ?? []),
+    inputs: encodeStates(paymentTransfer.states.spent ?? []),
+    outputs: encodeStates(paymentTransfer.states.confirmed ?? []),
     data: paymentTransfer.metadata.approvalParams.data,
     delegate: investorCustodianGroup.address,
   });
@@ -334,10 +319,10 @@ async function main() {
   receipt = await issuerCustodianGroup.approveTransition(
     bondCustodianUnqualified,
     {
-      txId: "0x0000000000000000000000000000000000000000000000000000000000000000",
-      delegate: investorCustodianGroup.address,
+      txId: newTransactionId(),
       transitionHash: bondTransfer2.metadata.approvalParams.transitionHash,
       signatures: bondTransfer2.metadata.approvalParams.signatures,
+      delegate: investorCustodianGroup.address,
     }
   );
   if (receipt === undefined) {

@@ -1,5 +1,11 @@
 import { ethers } from "ethers";
-import PaladinClient, { IGroupInfo, TransactionType } from "paladin-sdk";
+import PaladinClient, {
+  IGroupInfo,
+  IStateBase,
+  IStateWithData,
+  TransactionType,
+} from "paladin-sdk";
+import { encodeHex } from "../utils";
 import { penteGroupABI } from "./pente";
 
 const POLL_TIMEOUT_MS = 5000;
@@ -99,18 +105,26 @@ export interface NotoTransferParams {
   data: string;
 }
 
-interface State {
-  id: string;
-  schema: string;
-  data: string;
-}
-
 export interface NotoApproveTransferParams {
-  inputs: State[];
-  outputs: State[];
+  inputs: IStateWithData[];
+  outputs: IStateWithData[];
   data: string;
   delegate: string;
 }
+
+export interface NotoCoinData {
+  salt: string;
+  owner: string;
+  amount: string;
+}
+
+export const encodeStates = (states: IStateBase[]): IStateWithData[] => {
+  return states.map((state) => ({
+    id: state.id,
+    schema: state.schema,
+    data: encodeHex(JSON.stringify(state.data as NotoCoinData)),
+  }));
+};
 
 export const newNoto = async (
   paladin: PaladinClient,
