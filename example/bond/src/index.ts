@@ -1,19 +1,23 @@
+import { randomBytes } from "crypto";
 import PaladinClient, {
   Algorithms,
   IGroupInfo,
   TransactionType,
   Verifiers,
 } from "paladin-sdk";
-import { randomBytes } from "crypto";
-import bondTrackerPublic from "./abis/BondTrackerPublic.json";
-import bondTracker from "./abis/BondTracker.json";
+import bondTrackerPublicJson from "./abis/BondTrackerPublic.json";
+import { newBondTracker } from "./helpers/bondtracker";
 import { newNoto } from "./helpers/noto";
-import { newPentePrivacyGroup, penteDeployABI } from "./helpers/pente";
+import { newPentePrivacyGroup } from "./helpers/pente";
+import { newBondSubscription } from "./helpers/bondsubscription";
 
 async function main() {
   const logger = console;
-  const paladin = new PaladinClient({
+  const paladin1 = new PaladinClient({
     url: "http://127.0.0.1:31548",
+  });
+  const paladin2 = new PaladinClient({
+    url: "http://127.0.0.1:31648",
   });
 
   const cashIssuer = "static_bank1@node1";
@@ -22,7 +26,7 @@ async function main() {
   const bondCustodian = "static_bank2@node2";
   const investor = "static_bank1@node1";
 
-  const bondCustodianAddress = await paladin.resolveVerifier(
+  const bondCustodianAddress = await paladin1.resolveVerifier(
     bondCustodian,
     Algorithms.ECDSA_SECP256K1,
     Verifiers.ETH_ADDRESS
@@ -30,7 +34,7 @@ async function main() {
 
   // Create a Noto token to represent cash
   logger.log("Deploying Noto cash token...");
-  const notoCash = await newNoto(paladin, "noto", cashIssuer, {
+  const notoCash = await newNoto(paladin1, "noto", cashIssuer, {
     notary: cashIssuer,
     restrictMinting: true,
   });
@@ -60,7 +64,7 @@ async function main() {
     members: [bondIssuer, bondCustodian],
   };
   const issuerCustodianGroup = await newPentePrivacyGroup(
-    paladin,
+    paladin1,
     "pente",
     bondIssuer,
     [issuerCustodianGroupInfo, "shanghai", "group_scoped_identities", true]
@@ -75,10 +79,10 @@ async function main() {
   logger.log("Creating public bond tracker...");
   const issueDate = Math.floor(Date.now() / 1000);
   const maturityDate = issueDate + 60 * 60 * 24;
-  let txID = await paladin.sendTransaction({
+  let txID = await paladin1.sendTransaction({
     type: TransactionType.PUBLIC,
-    abi: bondTrackerPublic.abi,
-    bytecode: bondTrackerPublic.bytecode,
+    abi: bondTrackerPublicJson.abi,
+    bytecode: bondTrackerPublicJson.bytecode,
     function: "",
     from: bondIssuerUnqualified,
     data: {
@@ -89,8 +93,8 @@ async function main() {
       faceValue_: 1,
     },
   });
-  receipt = await paladin.pollForReceipt(txID, 10000);
-  if (receipt === undefined) {
+  receipt = await paladin1.pollForReceipt(txID, 10000);
+  if (receipt?.contractAddress === undefined) {
     logger.error(`Failed! tx: ${txID}`);
     return;
   }
@@ -99,37 +103,26 @@ async function main() {
 
   // Deploy private bond tracker to the issuer/custodian privacy group
   logger.log("Creating private bond tracker...");
-  const bondTrackerConstructor = bondTracker.abi.find(
-    (entry) => entry.type === "constructor"
-  );
-  receipt = await issuerCustodianGroup.deploy(
-    bondIssuer,
-    bondTrackerConstructor,
-    bondTracker.bytecode,
-    {
-      name: "BOND",
-      symbol: "BOND",
-      custodian: bondCustodianAddress,
-      publicTracker: bondTrackerPublicAddress,
-    }
-  );
-  if (receipt === undefined || receipt.domainReceipt === undefined) {
+  const bondTracker = await newBondTracker(issuerCustodianGroup, bondIssuer, {
+    name: "BOND",
+    symbol: "BOND",
+    custodian: bondCustodianAddress,
+    publicTracker: bondTrackerPublicAddress,
+  });
+  if (bondTracker === undefined) {
     logger.error("Failed!");
     return;
   }
-  logger.log(
-    `Success! address: ${receipt.domainReceipt.receipt.contractAddress}`
-  );
-  const bondTrackerAddress = receipt.domainReceipt.receipt.contractAddress;
+  logger.log(`Success! address: ${bondTracker.address}`);
 
   // Deploy Noto token to represent bond
   logger.log("Deploying Noto bond token...");
-  const notoBond = await newNoto(paladin, "noto", bondIssuer, {
+  const notoBond = await newNoto(paladin1, "noto", bondIssuer, {
     notary: bondCustodian,
     hooks: {
       privateGroup: issuerCustodianGroupInfo,
       publicAddress: issuerCustodianGroup.address,
-      privateAddress: bondTrackerAddress,
+      privateAddress: bondTracker.address,
     },
     restrictMinting: false,
   });
@@ -151,6 +144,52 @@ async function main() {
     return;
   }
   logger.log("Success!");
+
+  // Begin bond distribution to investors
+  logger.log("Beginning distribution...");
+  receipt = await bondTracker.using(paladin2).beginDistribution(bondCustodian, {
+    discountPrice: 1,
+    minimumDenomination: 1,
+  });
+  if (receipt === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log("Success!");
+
+  // Create a Pente privacy group between the bond investor and bond custodian
+  logger.log("Creating investor+custodian privacy group...");
+  const investorCustodianGroupInfo: IGroupInfo = {
+    salt: "0x" + Buffer.from(randomBytes(32)).toString("hex"),
+    members: [investor, bondCustodian],
+  };
+  const investorCustodianGroup = await newPentePrivacyGroup(
+    paladin1,
+    "pente",
+    investor,
+    [investorCustodianGroupInfo, "shanghai", "group_scoped_identities", true]
+  );
+  if (investorCustodianGroup === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log(`Success! address: ${investorCustodianGroup.address}`);
+
+  // Deploy bond subscription to the investor/custodian privacy group
+  logger.log("Creating private bond subscription...");
+  const bondSubscription = await newBondSubscription(
+    investorCustodianGroup,
+    bondIssuer,
+    {
+      bondAddress_: notoBond.address,
+      units_: 100,
+    }
+  );
+  if (bondSubscription === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log(`Success! address: ${bondSubscription.address}`);
 }
 
 if (require.main === module) {

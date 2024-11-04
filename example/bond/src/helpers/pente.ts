@@ -19,6 +19,15 @@ export const penteConstructorABI = {
   ],
 };
 
+export const groupTuple = {
+  name: "group",
+  type: "tuple",
+  components: [
+    { name: "salt", type: "bytes32" },
+    { name: "members", type: "string[]" },
+  ],
+};
+
 export const penteDeployABI = (inputComponents: any) => ({
   name: "deploy",
   type: "function",
@@ -32,6 +41,16 @@ export const penteDeployABI = (inputComponents: any) => ({
       ],
     },
     { name: "bytecode", type: "bytes" },
+    { name: "inputs", type: "tuple", components: inputComponents },
+  ],
+});
+
+const penteInvokeABI = (name: string, inputComponents: any) => ({
+  name,
+  type: "function",
+  inputs: [
+    groupTuple,
+    { name: "to", type: "address" },
     { name: "inputs", type: "tuple", components: inputComponents },
   ],
 });
@@ -65,6 +84,10 @@ export class PentePrivacyGroupHelper {
     public readonly address: string
   ) {}
 
+  using(paladin: PaladinClient) {
+    return new PentePrivacyGroupHelper(paladin, this.group, this.address);
+  }
+
   async deploy(
     from: string,
     constructorAbi: any,
@@ -73,7 +96,7 @@ export class PentePrivacyGroupHelper {
   ) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
-      abi: [penteDeployABI(constructorAbi?.inputs)],
+      abi: [penteDeployABI(constructorAbi.inputs)],
       function: "deploy",
       to: this.address,
       from,
@@ -84,5 +107,21 @@ export class PentePrivacyGroupHelper {
       },
     });
     return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS, true);
+  }
+
+  async invoke(from: string, to: string, methodAbi: any, inputs: any) {
+    const txID = await this.paladin.sendTransaction({
+      type: TransactionType.PRIVATE,
+      abi: [penteInvokeABI("beginDistribution", methodAbi.inputs)],
+      function: "",
+      to: this.address,
+      from,
+      data: {
+        group: this.group,
+        to,
+        inputs,
+      },
+    });
+    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
   }
 }

@@ -1,15 +1,7 @@
 import PaladinClient, { IGroupInfo, TransactionType } from "paladin-sdk";
+import { groupTuple } from "./pente";
 
 const POLL_TIMEOUT_MS = 10000;
-
-export const groupTuple = {
-  name: "group",
-  type: "tuple",
-  components: [
-    { name: "salt", type: "bytes32" },
-    { name: "members", type: "string[]" },
-  ],
-};
 
 export const notoABI = (withHooks: boolean) => [
   {
@@ -125,6 +117,10 @@ export class NotoHelper {
     private paladin: PaladinClient,
     public readonly address: string
   ) {}
+
+  using(paladin: PaladinClient) {
+    return new NotoHelper(paladin, this.address);
+  }
 
   async mint(from: string, data: NotoMintParams) {
     const txID = await this.paladin.sendTransaction({
