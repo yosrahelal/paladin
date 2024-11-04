@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
@@ -40,6 +41,64 @@ import (
 
 type transferHandler struct {
 	zeto *Zeto
+}
+
+var proofComponents = abi.ParameterArray{
+	{Name: "pA", Type: "uint256[2]"},
+	{Name: "pB", Type: "uint256[2][2]"},
+	{Name: "pC", Type: "uint256[2]"},
+}
+
+var transferABI = &abi.Entry{
+	Type: abi.Function,
+	Name: "transfer",
+	Inputs: abi.ParameterArray{
+		{Name: "inputs", Type: "uint256[]"},
+		{Name: "outputs", Type: "uint256[]"},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "data", Type: "bytes"},
+	},
+}
+
+var transferABI_nullifiers = &abi.Entry{
+	Type: abi.Function,
+	Name: "transfer",
+	Inputs: abi.ParameterArray{
+		{Name: "nullifiers", Type: "uint256[]"},
+		{Name: "outputs", Type: "uint256[]"},
+		{Name: "root", Type: "uint256"},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "data", Type: "bytes"},
+	},
+}
+
+var transferABI_withEncryption = &abi.Entry{
+	Type: abi.Function,
+	Name: "transfer",
+	Inputs: abi.ParameterArray{
+		{Name: "inputs", Type: "uint256[]"},
+		{Name: "outputs", Type: "uint256[]"},
+		{Name: "encryptionNonce", Type: "uint256"},
+		{Name: "ecdhPublicKey", Type: "uint256[2]"},
+		{Name: "encryptedValues", Type: "uint256[]"},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "data", Type: "bytes"},
+	},
+}
+
+var transferABI_withEncryption_nullifiers = &abi.Entry{
+	Type: abi.Function,
+	Name: "transfer",
+	Inputs: abi.ParameterArray{
+		{Name: "nullifiers", Type: "uint256[]"},
+		{Name: "outputs", Type: "uint256[]"},
+		{Name: "root", Type: "uint256"},
+		{Name: "encryptionNonce", Type: "uint256"},
+		{Name: "ecdhPublicKey", Type: "uint256[2]"},
+		{Name: "encryptedValues", Type: "uint256[]"},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "data", Type: "bytes"},
+	},
 }
 
 func (h *transferHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
@@ -86,11 +145,12 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, tx.Transaction.From)
 	}
 
-	inputCoins, inputStates, _, remainder, err := h.zeto.prepareInputs(ctx, req.StateQueryContext, tx.Transaction.From, params)
+	useNullifiers := isNullifiersToken(tx.DomainConfig.TokenName)
+	inputCoins, inputStates, _, remainder, err := h.zeto.prepareInputs(ctx, useNullifiers, req.StateQueryContext, resolvedSender.Verifier, params)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxInputs, err)
 	}
-	outputCoins, outputStates, err := h.zeto.prepareOutputs(ctx, params, req.ResolvedVerifiers)
+	outputCoins, outputStates, err := h.zeto.prepareOutputs(ctx, useNullifiers, params, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
@@ -103,7 +163,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 				Amount: &remainderHex,
 			},
 		}
-		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(ctx, remainderParams, req.ResolvedVerifiers)
+		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(ctx, useNullifiers, remainderParams, req.ResolvedVerifiers)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxChange, err)
 		}
@@ -151,6 +211,19 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 	return &pb.EndorseTransactionResponse{
 		EndorsementResult: pb.EndorseTransactionResponse_ENDORSER_SUBMIT,
 	}, nil
+}
+
+func getTransferABI(tokenName string) *abi.Entry {
+	transferFunction := transferABI
+	if isEncryptionToken(tokenName) {
+		transferFunction = transferABI_withEncryption
+		if isNullifiersToken(tokenName) {
+			transferFunction = transferABI_withEncryption_nullifiers
+		}
+	} else if isNullifiersToken(tokenName) {
+		transferFunction = transferABI_nullifiers
+	}
+	return transferFunction
 }
 
 func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
@@ -209,11 +282,13 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		"proof":   h.encodeProof(proofRes.Proof),
 		"data":    data,
 	}
+	transferFunction := getTransferABI(tx.DomainConfig.TokenName)
 	if isEncryptionToken(tx.DomainConfig.TokenName) {
 		params["ecdhPublicKey"] = strings.Split(proofRes.PublicInputs["ecdhPublicKey"], ",")
 		params["encryptionNonce"] = proofRes.PublicInputs["encryptionNonce"]
 		params["encryptedValues"] = strings.Split(proofRes.PublicInputs["encryptedValues"], ",")
-	} else if isNullifiersToken(tx.DomainConfig.TokenName) {
+	}
+	if isNullifiersToken(tx.DomainConfig.TokenName) {
 		delete(params, "inputs")
 		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
 		params["root"] = proofRes.PublicInputs["root"]
@@ -222,11 +297,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalPrepedParams, err)
 	}
-	contractAbi, err := h.zeto.config.GetContractAbi(ctx, tx.DomainConfig.TokenName)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorFindTokenAbi, tx.DomainConfig.TokenName, err)
-	}
-	functionJSON, err := json.Marshal(contractAbi.Functions()["transfer"])
+	functionJSON, err := json.Marshal(transferFunction)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +315,7 @@ func (h *transferHandler) formatProvingRequest(ctx context.Context, inputCoins, 
 	inputCommitments := make([]string, inputSize)
 	inputValueInts := make([]uint64, inputSize)
 	inputSalts := make([]string, inputSize)
-	inputOwner := inputCoins[0].OwnerKey.String()
+	inputOwner := inputCoins[0].Owner.String()
 	for i := 0; i < inputSize; i++ {
 		if i < len(inputCoins) {
 			coin := inputCoins[i]
@@ -269,7 +340,7 @@ func (h *transferHandler) formatProvingRequest(ctx context.Context, inputCoins, 
 			coin := outputCoins[i]
 			outputValueInts[i] = coin.Amount.Int().Uint64()
 			outputSalts[i] = coin.Salt.Int().Text(16)
-			outputOwners[i] = coin.OwnerKey.String()
+			outputOwners[i] = coin.Owner.String()
 		} else {
 			outputSalts[i] = "0"
 		}
@@ -333,7 +404,7 @@ func (h *transferHandler) generateMerkleProofs(ctx context.Context, tokenName st
 	// and generate a merkle proof for each
 	var indexes []*big.Int
 	for _, coin := range inputCoins {
-		pubKey, err := zetosigner.DecodeBabyJubJubPublicKey(coin.OwnerKey.String())
+		pubKey, err := zetosigner.DecodeBabyJubJubPublicKey(coin.Owner.String())
 		if err != nil {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
 		}

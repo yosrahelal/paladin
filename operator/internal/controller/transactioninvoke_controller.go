@@ -74,11 +74,13 @@ func (r *TransactionInvokeReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// Check all our deps are resolved
-	depsChanged, err := checkSmartContractDeps(ctx, r.Client, txi.Namespace, txi.Spec.ContractDeploymentDeps, &txi.Status.ContactDependenciesStatus)
+	depsChanged, ready, err := checkSmartContractDeps(ctx, r.Client, txi.Namespace, txi.Spec.ContractDeploymentDeps, &txi.Status.ContactDependenciesStatus)
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if depsChanged {
 		return r.updateStatusAndRequeue(ctx, &txi)
+	} else if !ready {
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
 	// Reconcile the deployment transaction
@@ -161,12 +163,12 @@ func (r *TransactionInvokeReconciler) buildDeployTransaction(txi *corev1alpha1.T
 
 }
 
-func checkSmartContractDeps(ctx context.Context, c client.Client, namespace string, requiredContractDeployments []string, pStatus *corev1alpha1.ContactDependenciesStatus) (bool, error) {
+func checkSmartContractDeps(ctx context.Context, c client.Client, namespace string, requiredContractDeployments []string, pStatus *corev1alpha1.ContactDependenciesStatus) (bool, bool, error) {
 
 	if pStatus.ContractDepsSummary != "" &&
 		len(pStatus.ResolvedContractAddresses) == len(requiredContractDeployments) {
-		// Nothing to do - we're resolved
-		return false, nil
+		// We have persisted the status change with the full dependencies reconciled
+		return false, true, nil
 	}
 
 	// If our status has changed if we've never built it before, or we find a missing dep below
@@ -181,7 +183,7 @@ func checkSmartContractDeps(ctx context.Context, c client.Client, namespace stri
 		if pStatus.ResolvedContractAddresses[dep] == "" {
 			contractAddress, err := getContractDeploymentAddress(ctx, c, dep, namespace)
 			if err != nil {
-				return false, err
+				return false, false, err
 			}
 			if contractAddress != "" {
 				statusChanged = true
@@ -192,7 +194,7 @@ func checkSmartContractDeps(ctx context.Context, c client.Client, namespace stri
 
 	// Rebuild this string every time, but statusChanged calc'd above decides if we store it back
 	pStatus.ContractDepsSummary = fmt.Sprintf("%d/%d", len(pStatus.ResolvedContractAddresses), len(requiredContractDeployments))
-	return statusChanged, nil
+	return statusChanged, false /* only return true once we've persisted the status change */, nil
 
 }
 

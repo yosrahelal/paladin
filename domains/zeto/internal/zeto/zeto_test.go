@@ -24,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
@@ -48,7 +47,6 @@ func TestNew(t *testing.T) {
 func TestConfigureDomain(t *testing.T) {
 	z := &Zeto{}
 	dfConfig := &types.DomainFactoryConfig{
-		FactoryAddress: "0x1234",
 		SnarkProver: zetosignerapi.SnarkProverConfig{
 			CircuitsDir: "circuit-dir",
 		},
@@ -161,7 +159,6 @@ func TestPrepareDeploy(t *testing.T) {
 	assert.EqualError(t, err, "PD210007: Failed to find circuit ID based on the token name. PD210000: Contract  not found")
 
 	req.Transaction.ConstructorParamsJson = "{\"tokenName\":\"testToken1\"}"
-	z.factoryABI = abi.ABI{}
 	_, err = z.PrepareDeploy(context.Background(), req)
 	assert.NoError(t, err)
 }
@@ -338,7 +335,6 @@ func TestPrepareTransaction(t *testing.T) {
 				{
 					Name:      "testToken1",
 					CircuitId: "circuit1",
-					Abi:       "[{\"inputs\": [{\"internalType\": \"bytes32\",\"name\": \"transactionId\",\"type\": \"bytes32\"}],\"name\": \"transfer\",\"outputs\": [],\"type\": \"function\"}]",
 				},
 			},
 		},
@@ -353,7 +349,7 @@ func TestPrepareTransaction(t *testing.T) {
 		},
 		OutputStates: []*prototk.EndorsableState{
 			{
-				StateDataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}",
+				StateDataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}",
 			},
 		},
 	}
@@ -382,20 +378,21 @@ func TestFindCoins(t *testing.T) {
 	z.coinSchema = &prototk.StateSchema{
 		Id: "coin",
 	}
+	useNullifiers := false
 	addr, _ := tktypes.ParseEthAddress("0x1234567890123456789012345678901234567890")
-	_, err := findCoins(context.Background(), z, addr, "{}")
+	_, err := findCoins(context.Background(), z, useNullifiers, addr, "{}")
 	assert.EqualError(t, err, "find coins error")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
 			States: []*prototk.StoredState{
 				{
-					DataJson: "{\"salt\":\"0x13de02d64a5736a56b2d35d2a83dd60397ba70aae6f8347629f0960d4fee5d58\",\"owner\":\"Alice\",\"ownerKey\":\"0xc1d218cf8993f940e75eabd3fee23dadc4e89cd1de479f03a61e91727959281b\",\"amount\":\"0x0a\"}",
+					DataJson: "{\"salt\":\"0x13de02d64a5736a56b2d35d2a83dd60397ba70aae6f8347629f0960d4fee5d58\",\"owner\":\"0xc1d218cf8993f940e75eabd3fee23dadc4e89cd1de479f03a61e91727959281b\",\"amount\":\"0x0a\"}",
 				},
 			},
 		}, nil
 	}
-	res, err := findCoins(context.Background(), z, addr, "{}")
+	res, err := findCoins(context.Background(), z, useNullifiers, addr, "{}")
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 }
@@ -523,9 +520,16 @@ func TestSign(t *testing.T) {
 	z.snarkProver = snarkProver
 
 	req := &prototk.SignRequest{
-		Algorithm: "bad algo",
+		PayloadType: "bad payload",
 	}
 	_, err := z.Sign(context.Background(), req)
+	assert.ErrorContains(t, err, "PD210103: Sign payload type 'bad payload' not recognized")
+
+	req = &prototk.SignRequest{
+		PayloadType: "domain:zeto:snark",
+		Algorithm:   "bad algo",
+	}
+	_, err = z.Sign(context.Background(), req)
 	assert.ErrorContains(t, err, "PD210023: Failed to sign. PD210088: 'bad algo' does not match supported algorithm")
 
 	bytes, err := hex.DecodeString("7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
@@ -572,6 +576,23 @@ func TestSign(t *testing.T) {
 	res, err := z.Sign(context.Background(), req)
 	assert.NoError(t, err)
 	assert.Len(t, res.Payload, 36)
+
+	// Test with nullifiers
+	salt := crypto.NewSalt()
+	fakeCoin := types.ZetoCoin{
+		Salt:   (*tktypes.HexUint256)(salt),
+		Owner:  tktypes.MustParseHexBytes(alicePubKey),
+		Amount: tktypes.Int64ToInt256(12345),
+	}
+	req = &prototk.SignRequest{
+		Algorithm:   z.getAlgoZetoSnarkBJJ(),
+		PayloadType: "domain:zeto:nullifier",
+		PrivateKey:  bytes,
+		Payload:     tktypes.JSONString(fakeCoin),
+	}
+	res, err = z.Sign(context.Background(), req)
+	assert.NoError(t, err)
+	assert.Len(t, res.Payload, 32)
 }
 
 func TestValidateStateHashes(t *testing.T) {
@@ -588,11 +609,11 @@ func TestValidateStateHashes(t *testing.T) {
 	_, err := z.ValidateStateHashes(ctx, req)
 	assert.ErrorContains(t, err, "PD210087: Failed to unmarshal state data. invalid character 'b' looking for beginning of value")
 
-	req.States[0].StateDataJson = "{\"salt\":\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\"}"
+	req.States[0].StateDataJson = "{\"salt\":\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"owner\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\"}"
 	_, err = z.ValidateStateHashes(ctx, req)
 	assert.ErrorContains(t, err, "PD210048: Failed to create Poseidon hash for an output coin. inputs values not inside Finite Field")
 
-	req.States[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\"}"
+	req.States[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\"}"
 	res, err := z.ValidateStateHashes(ctx, req)
 	assert.NoError(t, err)
 	assert.Len(t, res.StateIds, 1)
@@ -607,8 +628,8 @@ func TestValidateStateHashes(t *testing.T) {
 	assert.Len(t, res.StateIds, 1)
 }
 
-func findCoins(ctx context.Context, z *Zeto, contractAddress *tktypes.EthAddress, query string) ([]*types.ZetoCoin, error) {
-	states, err := z.findAvailableStates(ctx, contractAddress.String(), query)
+func findCoins(ctx context.Context, z *Zeto, useNullifiers bool, contractAddress *tktypes.EthAddress, query string) ([]*types.ZetoCoin, error) {
+	states, err := z.findAvailableStates(ctx, useNullifiers, contractAddress.String(), query)
 	if err != nil {
 		return nil, err
 	}

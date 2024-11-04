@@ -153,8 +153,31 @@ func doDomainInitAssembleTransactionOK(t *testing.T, td *testDomainContext) (*do
 	psc, tx := doDomainInitTransactionOK(t, td)
 	td.tp.Functions.AssembleTransaction = func(ctx context.Context, atr *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 		return &prototk.AssembleTransactionResponse{
-			AssemblyResult:       prototk.AssembleTransactionResponse_OK,
-			AssembledTransaction: &prototk.AssembledTransaction{},
+			AssemblyResult: prototk.AssembleTransactionResponse_OK,
+			AssembledTransaction: &prototk.AssembledTransaction{
+				OutputStates: []*prototk.NewState{
+					{
+						SchemaId:         "schema1",
+						DistributionList: []string{"party1"},
+						NullifierSpecs: []*prototk.NullifierSpec{
+							{
+								Party: "party1",
+							},
+						},
+					},
+				},
+				InfoStates: []*prototk.NewState{
+					{
+						SchemaId:         "schema2",
+						DistributionList: []string{"party2@node2"},
+						NullifierSpecs: []*prototk.NullifierSpec{
+							{
+								Party: "party2@node2",
+							},
+						},
+					},
+				},
+			},
 			AttestationPlan: []*prototk.AttestationRequest{
 				{
 					Name:            "ensorsement1",
@@ -170,6 +193,12 @@ func doDomainInitAssembleTransactionOK(t *testing.T, td *testDomainContext) (*do
 	require.NoError(t, err)
 	tx.PreAssembly.Verifiers = []*prototk.ResolvedVerifier{}
 	tx.PostAssembly.Signatures = []*prototk.AttestationResult{}
+	// Check we resolved the identities to local node
+	require.Equal(t, "endorser1@node1", tx.PostAssembly.AttestationPlan[0].Parties[0])
+	require.Equal(t, "party1@node1", tx.PostAssembly.OutputStatesPotential[0].DistributionList[0])
+	require.Equal(t, "party1@node1", tx.PostAssembly.OutputStatesPotential[0].NullifierSpecs[0].Party)
+	require.Equal(t, "party2@node2", tx.PostAssembly.InfoStatesPotential[0].DistributionList[0])
+	require.Equal(t, "party2@node2", tx.PostAssembly.InfoStatesPotential[0].NullifierSpecs[0].Party)
 	return psc, tx
 }
 
@@ -763,11 +792,13 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 			Transaction: &prototk.PreparedTransaction{
 				FunctionAbiJson: fakeCoinExecuteABI,
 				ParamsJson:      string(params),
+				RequiredSigner:  &tx.Inputs.From,
 			},
 			Metadata: confutil.P(`{"some":"data"}`),
 		}, nil
 	}
 
+	// Pass in a random signer - which will be overridden in this case
 	tx.Signer = tktypes.RandAddress().String()
 
 	// And now prepare
@@ -775,6 +806,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, tx.PreparedPublicTransaction.ABI, 1)
 	assert.NotNil(t, tx.PreparedPublicTransaction.Data)
+	assert.Equal(t, "txSigner", tx.Signer)
 
 	// Confirm the remaining unspent states
 	stillAvailable, err = domain.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
@@ -1131,7 +1163,8 @@ func TestIncompleteStages(t *testing.T) {
 
 func goodPrivateCallWithInputsAndOutputs(psc *domainContract) *components.TransactionInputs {
 	return &components.TransactionInputs{
-		To: psc.info.Address,
+		From: "me",
+		To:   psc.info.Address,
 		Function: &abi.Entry{
 			Type: abi.Function,
 			Name: "getBalance",

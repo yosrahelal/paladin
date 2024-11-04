@@ -43,9 +43,9 @@ import (
 var notoSelfSubmitJSON []byte
 
 var (
-	notaryName     = "notary"
-	recipient1Name = "recipient1"
-	recipient2Name = "recipient2"
+	notaryName     = "notary@node1"
+	recipient1Name = "recipient1@node1"
+	recipient2Name = "recipient2@node1"
 )
 
 func toJSON(t *testing.T, v any) []byte {

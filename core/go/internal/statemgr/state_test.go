@@ -21,9 +21,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -227,5 +229,92 @@ func TestWriteReceivedStatesValidateHashOkInsertFail(t *testing.T) {
 			tktypes.RandHex(32)))},
 	})
 	assert.Regexp(t, "pop", err)
+
+}
+
+func TestWriteNullifiersForReceivedStatesOkRealDB(t *testing.T) {
+	ctx, ss, m, done := newDBTestStateManager(t)
+	defer done()
+
+	md := componentmocks.NewDomain(t)
+	md.On("Name").Return("domain1")
+	m.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
+
+	err := ss.WriteNullifiersForReceivedStates(ctx, ss.p.DB(), "domain1", []*components.NullifierUpsert{
+		{
+			ID:    tktypes.HexBytes(tktypes.RandHex(32)),
+			State: tktypes.HexBytes(tktypes.RandHex(32)),
+		},
+		{
+			ID:    tktypes.HexBytes(tktypes.RandHex(32)),
+			State: tktypes.HexBytes(tktypes.RandHex(32)),
+		},
+	})
+	require.NoError(t, err)
+
+}
+
+func TestWriteNullifiersForReceivedStatesBadDomain(t *testing.T) {
+	ctx, ss, _, m, done := newDBMockStateManager(t)
+	defer done()
+
+	m.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(nil, fmt.Errorf("not found"))
+
+	err := ss.WriteNullifiersForReceivedStates(ctx, ss.p.DB(), "domain1", []*components.NullifierUpsert{
+		{
+			ID:    tktypes.HexBytes(tktypes.RandHex(32)),
+			State: tktypes.HexBytes(tktypes.RandHex(32)),
+		},
+	})
+	assert.Regexp(t, "not found", err)
+
+}
+
+func TestFindNullifiersInContext(t *testing.T) {
+	ctx, ss, db, _, done := newDBMockStateManager(t)
+	defer done()
+
+	db.ExpectQuery("SELECT.*states").WillReturnRows(sqlmock.NewRows([]string{}))
+
+	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
+	cacheKey := schemaCacheKey("domain1", schemaID)
+	ss.abiSchemaCache.Set(cacheKey, &abiSchema{
+		definition: &abi.Parameter{},
+		Schema:     &pldapi.Schema{},
+	})
+
+	td := componentmocks.NewDomain(t)
+	td.On("Name").Return("domain1")
+	td.On("CustomHashFunction").Return(false)
+
+	dCtx := ss.NewDomainContext(ctx, td, *tktypes.RandAddress())
+	defer dCtx.Close()
+
+	contractAddress := tktypes.RandAddress()
+	results, err := ss.FindContractNullifiers(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID,
+		query.NewQueryBuilder().Limit(1).Query(), pldapi.StateStatusQualifier(dCtx.Info().ID.String()))
+	require.NoError(t, err)
+	require.Empty(t, results)
+
+}
+
+func TestFindNullifiersUnknownContext(t *testing.T) {
+	ctx, ss, _, _, done := newDBMockStateManager(t)
+	defer done()
+
+	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
+	contractAddress := tktypes.RandAddress()
+	_, err := ss.FindContractNullifiers(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
+		Statements: query.Statements{
+			Ops: query.Ops{
+				GreaterThan: []*query.OpSingleVal{
+					{Op: query.Op{
+						Field: ".created",
+					}, Value: tktypes.RawJSON(fmt.Sprintf("%d", time.Now().UnixNano()))},
+				},
+			},
+		},
+	}, pldapi.StateStatusQualifier(uuid.NewString()))
+	assert.Regexp(t, "PD010123", err)
 
 }

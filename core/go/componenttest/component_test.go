@@ -87,7 +87,7 @@ wallets:
 
 	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil)
 	cm := instance.cm
-	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(100 * time.Microsecond)
+	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(100 * time.Millisecond)
 
 	build, err := solutils.LoadBuild(ctx, simpleStorageBuildJSON)
 	require.NoError(t, err)
@@ -845,7 +845,8 @@ func TestNotaryDelegatedPrepare(t *testing.T) {
 					"notary": "` + notaryIdentity + `",
 					"name": "FakeToken1",
 					"symbol": "FT1",
-					"endorsementMode": "NotaryEndorsement"
+					"endorsementMode": "NotaryEndorsement",
+					"deleteSubmitToSender": true
 				}`),
 		},
 	})

@@ -309,6 +309,14 @@ message NewState {
   string state_data_json = 2; // The data for this state that will be recorded by Paladin, and uniquely identified by Paladin using a hash (which might be additional to any hashing done in a unique way by the domain)
   repeated string distribution_list = 3; // A list of Paladin recipients that should receive a copy of this state in parallel to transaction submission, once it has been successfully prepared
   optional string id = 4; // The hash id to uniquely identify this state (a default hashing algorithm will be used by Paladin if omitted)
+  repeated NullifierSpec nullifier_specs = 5; // Zero or more entries specifying nullifier generation intructions. Each must be for a party in the distribution list.
+}
+
+message NullifierSpec {
+  string party = 1; // The fully qualified identity lookup string of the party that needs the nullifier - must match an entry in the distribution list
+  string algorithm = 2; // An algorithm string to pass to the proof/siging technology to instruct its operation - likely a domain specific signing request
+  string verifier_type = 3; // When resolving the identity for signing this verifier type will be used, and then passed to the signer in the nullifier generation request
+  string payload_type = 5; // A string to instruct the signer to prepare a nullifier of the correct type. Note the payload itself will always be the JSON state data for a nullifier request
 }
 
 // a state generated in the event handler, which will be added immediately locally with an implicit confirmation on the transaction
@@ -377,6 +385,7 @@ message PreparedTransaction {
   string params_json = 2; // The parameters to pass to the base smart contract function, in JSON format. Paladin will submit this transaction to the base blockchain
   optional string contract_address = 3; // The target contract address (defaults to the domain's public contract address if omitted)
   TransactionType type = 4; // Indicates whether this is a public (base ledger) or private transaction
+  optional string required_signer = 5; // If the prepare requires use of a specific signer for this particular transaction (requires the domain to understand and accept any potential anonymity leakage)
 }
 
 message BaseLedgerDeployTransaction {

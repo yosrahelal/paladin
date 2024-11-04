@@ -71,6 +71,14 @@ func with18Decimals(x int64) *tktypes.HexUint256 {
 	return (*tktypes.HexUint256)(bx)
 }
 
+func with10Decimals(x int64) *tktypes.HexUint256 {
+	bx := new(big.Int).Mul(
+		big.NewInt(x),
+		new(big.Int).Exp(big.NewInt(10), big.NewInt(10), big.NewInt(0)),
+	)
+	return (*tktypes.HexUint256)(bx)
+}
+
 func getJSONPropertyAs(jsonData tktypes.RawJSON, name string, toValue any) {
 	var mapProp map[string]tktypes.RawJSON
 	err := json.Unmarshal(jsonData, &mapProp)
@@ -83,9 +91,8 @@ func getJSONPropertyAs(jsonData tktypes.RawJSON, name string, toValue any) {
 	}
 }
 
-var _ = Describe("simple", Ordered, func() {
+var _ = Describe("noto/pente - simple", Ordered, func() {
 	BeforeAll(func() {
-		log.SetLevel("warn")
 	})
 
 	AfterAll(func() {
@@ -447,7 +454,7 @@ var _ = Describe("simple", Ordered, func() {
 					},
 				}).
 				Outputs(&result).
-				From("seren@node1").
+				From(fmt.Sprintf("%s@%s", identity, node)).
 				Call()
 			Expect(err).To(BeNil())
 			Expect(result).ToNot(BeNil())

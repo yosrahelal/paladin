@@ -44,7 +44,7 @@ func (sd *stateDistributer) sendStateAcknowledgement(ctx context.Context, domain
 		Payload:     stateAcknowledgedEventBytes,
 		Node:        distributingNode,
 		Component:   components.PRIVATE_TX_MANAGER_DESTINATION,
-		ReplyTo:     sd.nodeID,
+		ReplyTo:     sd.localNodeName,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("Error sending state produced event: %s", err)

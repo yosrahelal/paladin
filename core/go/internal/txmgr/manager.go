@@ -37,6 +37,7 @@ func NewTXManager(ctx context.Context, conf *pldconf.TxManagerConfig) components
 
 type txManager struct {
 	p                persistence.Persistence
+	localNodeName    string
 	ethClientFactory ethclient.EthClientFactory
 	keyManager       components.KeyManager
 	publicTxMgr      components.PublicTxManager
@@ -58,6 +59,7 @@ func (tm *txManager) PostInit(c components.AllComponents) error {
 	tm.domainMgr = c.DomainManager()
 	tm.stateMgr = c.StateManager()
 	tm.identityResolver = c.IdentityResolver()
+	tm.localNodeName = c.TransportManager().LocalNodeName()
 	return nil
 }
 

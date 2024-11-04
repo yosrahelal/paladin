@@ -19,8 +19,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -30,16 +32,24 @@ import (
 
 const RETRY_TIMEOUT = 5 * time.Second
 
-func NewStateDistributer(ctx context.Context, nodeID string, transportManager components.TransportManager, stateManager components.StateManager, persistence persistence.Persistence, conf *pldconf.DistributerConfig) StateDistributer {
+func NewStateDistributer(
+	ctx context.Context,
+	transportManager components.TransportManager,
+	stateManager components.StateManager,
+	keyManager components.KeyManager,
+	persistence persistence.Persistence,
+	conf *pldconf.DistributerConfig,
+) StateDistributer {
 	sd := &stateDistributer{
 		persistence:      persistence,
-		inputChan:        make(chan *StateDistribution),
+		inputChan:        make(chan *components.StateDistribution),
 		retryChan:        make(chan string),
 		acknowledgedChan: make(chan string),
-		pendingMap:       make(map[string]*StateDistribution),
+		pendingMap:       make(map[string]*components.StateDistribution),
 		stateManager:     stateManager,
+		keyManager:       keyManager,
 		transportManager: transportManager,
-		nodeID:           nodeID,
+		localNodeName:    transportManager.LocalNodeName(),
 		retry:            retry.NewRetryIndefinite(&pldconf.RetryConfig{}, &pldconf.GenericRetryDefaults.RetryConfig),
 	}
 	sd.acknowledgementWriter = NewAcknowledgementWriter(ctx, sd.persistence, &conf.AcknowledgementWriter)
@@ -49,23 +59,15 @@ func NewStateDistributer(ctx context.Context, nodeID string, transportManager co
 }
 
 type StateDistributionPersisted struct {
-	Created         tktypes.Timestamp  `json:"created" gorm:"column:created;autoCreateTime:nano"`
-	ID              string             `json:"id"`
-	StateID         tktypes.HexBytes   `json:"stateID"`
-	IdentityLocator string             `json:"identityLocator"`
-	DomainName      string             `json:"domainName"`
-	ContractAddress tktypes.EthAddress `json:"contractAddress"`
-}
-
-// A StateDistribution is an intent to send private data for a given state to a remote party
-type StateDistribution struct {
-	ID              string
-	StateID         string
-	IdentityLocator string
-	Domain          string
-	ContractAddress string
-	SchemaID        string
-	StateDataJson   string
+	Created               tktypes.Timestamp  `json:"created" gorm:"column:created;autoCreateTime:nano"`
+	ID                    string             `json:"id"`
+	StateID               tktypes.HexBytes   `json:"stateID"`
+	IdentityLocator       string             `json:"identityLocator"`
+	DomainName            string             `json:"domainName"`
+	ContractAddress       tktypes.EthAddress `json:"contractAddress"`
+	NullifierAlgorithm    *string            `json:"nullifierAlgorithm,omitempty"`
+	NullifierVerifierType *string            `json:"nullifierVerifierType,omitempty"`
+	NullifierPayloadType  *string            `json:"nullifierPayloadType,omitempty"`
 }
 
 /*
@@ -79,7 +81,8 @@ StateDistributer is a component that is responsible for distributing state to re
 type StateDistributer interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context)
-	DistributeStates(ctx context.Context, stateDistributions []*StateDistribution)
+	BuildNullifiers(ctx context.Context, stateDistributions []*components.StateDistribution) ([]*components.NullifierUpsert, error)
+	DistributeStates(ctx context.Context, stateDistributions []*components.StateDistribution)
 	HandleStateProducedEvent(ctx context.Context, stateProducedEvent *pb.StateProducedEvent, distributingNode string)
 	HandleStateAcknowledgedEvent(ctx context.Context, messagePayload []byte)
 }
@@ -89,14 +92,15 @@ type stateDistributer struct {
 	stopRunCtx            context.CancelFunc
 	persistence           persistence.Persistence
 	stateManager          components.StateManager
-	inputChan             chan *StateDistribution
+	keyManager            components.KeyManager
+	inputChan             chan *components.StateDistribution
 	retryChan             chan string
 	acknowledgedChan      chan string
-	pendingMap            map[string]*StateDistribution
+	pendingMap            map[string]*components.StateDistribution
 	acknowledgementWriter *acknowledgementWriter
 	receivedStateWriter   *receivedStateWriter
 	transportManager      components.TransportManager
-	nodeID                string
+	localNodeName         string
 	retry                 *retry.Retry
 }
 
@@ -147,14 +151,17 @@ func (sd *stateDistributer) Start(bgCtx context.Context) error {
 						continue
 					}
 
-					sd.inputChan <- &StateDistribution{
-						ID:              stateDistribution.ID,
-						StateID:         stateDistribution.StateID.String(),
-						IdentityLocator: stateDistribution.IdentityLocator,
-						Domain:          stateDistribution.DomainName,
-						ContractAddress: stateDistribution.ContractAddress.String(),
-						SchemaID:        state.Schema.String(),
-						StateDataJson:   string(state.Data),
+					sd.inputChan <- &components.StateDistribution{
+						ID:                    stateDistribution.ID,
+						StateID:               stateDistribution.StateID.String(),
+						IdentityLocator:       stateDistribution.IdentityLocator,
+						Domain:                stateDistribution.DomainName,
+						ContractAddress:       stateDistribution.ContractAddress.String(),
+						SchemaID:              state.Schema.String(),
+						StateDataJson:         string(state.Data),
+						NullifierAlgorithm:    stateDistribution.NullifierAlgorithm,
+						NullifierVerifierType: stateDistribution.NullifierVerifierType,
+						NullifierPayloadType:  stateDistribution.NullifierPayloadType,
 					}
 
 					dispatched++
@@ -209,6 +216,71 @@ func (sd *stateDistributer) Start(bgCtx context.Context) error {
 		}
 	}()
 	return nil
+}
+
+func (sd *stateDistributer) buildNullifier(ctx context.Context, krc components.KeyResolutionContextLazyDB, s *components.StateDistribution) (*components.NullifierUpsert, error) {
+	// We need to call the signing engine with the local identity to build the nullifier
+	log.L(ctx).Infof("Generating nullifier for state %s on node %s (algorithm=%s,verifierType=%s,payloadType=%s)",
+		s.StateID, sd.localNodeName, *s.NullifierAlgorithm, *s.NullifierVerifierType, *s.NullifierPayloadType)
+
+	// We require a fully qualified identifier for the local node in this function
+	identifier, node, err := tktypes.PrivateIdentityLocator(s.IdentityLocator).Validate(ctx, "", false)
+	if err != nil || node != sd.localNodeName {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgStateDistributorNullifierNotLocal)
+	}
+
+	// Call the signing engine to build the nullifier
+	var nulliferBytes []byte
+	mapping, err := krc.KeyResolverLazyDB().ResolveKey(identifier, *s.NullifierAlgorithm, *s.NullifierVerifierType)
+	if err == nil {
+		nulliferBytes, err = sd.keyManager.Sign(ctx, mapping, *s.NullifierPayloadType, []byte(s.StateDataJson))
+	}
+	if err != nil || len(nulliferBytes) == 0 {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgStateDistributorNullifierFail, s.StateID)
+	}
+	return &components.NullifierUpsert{
+		ID:    nulliferBytes,
+		State: tktypes.MustParseHexBytes(s.StateID),
+	}, nil
+}
+
+func (sd *stateDistributer) withKeyResolutionContext(ctx context.Context, fn func(krc components.KeyResolutionContextLazyDB) error) (err error) {
+
+	// Unlikely we'll be resolving any new identities on this path - if we do, we'll start a new DB transaction
+	// Note: This requires we're not on an existing DB TX coming into this function
+	krc := sd.keyManager.NewKeyResolutionContextLazyDB(ctx)
+	defer func() {
+		if err == nil {
+			err = krc.Commit()
+		} else {
+			krc.Rollback()
+		}
+	}()
+
+	err = fn(krc)
+	return err // note we require err to be set before return
+}
+
+func (sd *stateDistributer) BuildNullifiers(ctx context.Context, stateDistributions []*components.StateDistribution) (nullifiers []*components.NullifierUpsert, err error) {
+
+	nullifiers = []*components.NullifierUpsert{}
+	err = sd.withKeyResolutionContext(ctx, func(krc components.KeyResolutionContextLazyDB) error {
+		for _, s := range stateDistributions {
+			if s.NullifierAlgorithm == nil || s.NullifierVerifierType == nil || s.NullifierPayloadType == nil {
+				log.L(ctx).Debugf("No nullifier required for state %s on node %s", s.ID, sd.localNodeName)
+				continue
+			}
+
+			nullifier, err := sd.buildNullifier(ctx, krc, s)
+			if err != nil {
+				return err
+			}
+
+			nullifiers = append(nullifiers, nullifier)
+		}
+		return nil
+	})
+	return nullifiers, err
 }
 
 func (sd *stateDistributer) Stop(ctx context.Context) {

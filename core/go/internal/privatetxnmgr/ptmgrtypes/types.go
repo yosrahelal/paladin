@@ -27,7 +27,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
@@ -89,7 +88,6 @@ type ContentionResolver interface {
 }
 
 type TransportWriter interface {
-	SendState(ctx context.Context, stateId string, schemaId string, stateDataJson string, party string) error
 	SendDelegationRequest(ctx context.Context, delegationId string, delegateNodeId string, transaction *components.PrivateTransaction) error
 	SendEndorsementRequest(ctx context.Context, idempotencyKey string, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState, infoStates []*components.FullState) error
 	SendAssembleRequest(ctx context.Context, assemblingNode string, assembleRequestID string, txID uuid.UUID, contractAddress string, transactionInputs *components.TransactionInputs, preAssembly *components.TransactionPreAssembly, stateLocksJSON []byte, blockHeight int64) error
@@ -111,7 +109,7 @@ type TransactionFlow interface {
 	Action(ctx context.Context)
 
 	PrepareTransaction(ctx context.Context, defaultSigner string) (*components.PrivateTransaction, error)
-	GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution
+	GetStateDistributions(ctx context.Context) (*components.StateDistributionSet, error)
 	CoordinatingLocally(ctx context.Context) bool
 	IsComplete(ctx context.Context) bool
 	ReadyForSequencing(ctx context.Context) bool
@@ -151,7 +149,7 @@ type AssembleCoordinator interface {
 	Start()
 	Stop()
 	QueueAssemble(ctx context.Context, assemblingNode string, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, transactionPreAssembly *components.TransactionPreAssembly)
-	Complete(requestID string, stateDistributions []*statedistribution.StateDistribution)
+	Complete(requestID string, stateDistributions []*components.StateDistribution)
 }
 
 type LocalAssembler interface {

@@ -85,7 +85,7 @@ func newNotoDomain(t *testing.T, config *nototypes.DomainConfig) (chan noto.Noto
 	return waitForDomain, tbd
 }
 
-func newZetoDomain(t *testing.T, config *zetotypes.DomainFactoryConfig) (chan zeto.Zeto, *testbed.TestbedDomain) {
+func newZetoDomain(t *testing.T, config *zetotypes.DomainFactoryConfig, factoryAddress *tktypes.EthAddress) (chan zeto.Zeto, *testbed.TestbedDomain) {
 	waitForDomain := make(chan zeto.Zeto, 1)
 	tbd := &testbed.TestbedDomain{
 		Config: mapConfig(t, config),
@@ -94,7 +94,7 @@ func newZetoDomain(t *testing.T, config *zetotypes.DomainFactoryConfig) (chan ze
 			waitForDomain <- domain
 			return domain
 		}),
-		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
+		RegistryAddress: factoryAddress,
 		AllowSigning:    true,
 	}
 	return waitForDomain, tbd

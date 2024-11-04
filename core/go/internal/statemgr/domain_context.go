@@ -284,7 +284,7 @@ func (dc *domainContext) FindAvailableNullifiers(dbTX *gorm.DB, schemaID tktypes
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findAvailableNullifiers(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, spending, nullifierIDs)
+	schema, states, err := dc.ss.findNullifiers(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, pldapi.StateStatusAvailable, spending, nullifierIDs)
 	if err != nil {
 		return nil, nil, err
 	}

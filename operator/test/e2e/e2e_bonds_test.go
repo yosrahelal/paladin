@@ -33,7 +33,6 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
@@ -54,7 +53,6 @@ var _ = Describe("controller", Ordered, func() {
 	defer GinkgoRecover()
 
 	BeforeAll(func() {
-		log.SetLevel("warn")
 	})
 
 	AfterAll(func() {

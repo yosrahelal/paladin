@@ -18,6 +18,7 @@ package statedistribution
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/core/internal/components"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -27,10 +28,41 @@ import (
 func (sd *stateDistributer) HandleStateProducedEvent(ctx context.Context, stateProducedEvent *pb.StateProducedEvent, distributingNode string) {
 	log.L(ctx).Debugf("stateDistributer:handleStateProducedEvent")
 
-	err := sd.receivedStateWriter.QueueAndWait(ctx, stateProducedEvent.DomainName, *tktypes.MustEthAddress(stateProducedEvent.ContractAddress), tktypes.MustParseBytes32(stateProducedEvent.SchemaId), tktypes.RawJSON(stateProducedEvent.StateDataJson))
+	var err error
+	s := &components.StateDistribution{
+		ID:                    stateProducedEvent.DistributionId,
+		StateID:               stateProducedEvent.StateId,
+		IdentityLocator:       stateProducedEvent.Party,
+		Domain:                stateProducedEvent.DomainName,
+		ContractAddress:       stateProducedEvent.ContractAddress,
+		SchemaID:              stateProducedEvent.SchemaId,
+		StateDataJson:         stateProducedEvent.StateDataJson,
+		NullifierAlgorithm:    stateProducedEvent.NullifierAlgorithm,
+		NullifierVerifierType: stateProducedEvent.NullifierVerifierType,
+		NullifierPayloadType:  stateProducedEvent.NullifierPayloadType,
+	}
+
+	// We need to build any nullifiers that are required, before we dispatch to persistence
+	var nullifier *components.NullifierUpsert
+	if stateProducedEvent.NullifierAlgorithm != nil && stateProducedEvent.NullifierVerifierType != nil && stateProducedEvent.NullifierPayloadType != nil {
+		err = sd.withKeyResolutionContext(ctx, func(krc components.KeyResolutionContextLazyDB) (err error) {
+			nullifier, err = sd.buildNullifier(ctx, krc, s)
+			return err
+		})
+	}
+
+	if err == nil {
+		err = sd.receivedStateWriter.QueueAndWait(ctx,
+			s.Domain,
+			*tktypes.MustEthAddress(s.ContractAddress),
+			tktypes.MustParseBytes32(s.SchemaID),
+			tktypes.RawJSON(s.StateDataJson),
+			nullifier,
+		)
+	}
 	if err != nil {
 		log.L(ctx).Errorf("Error writing state: %s", err)
-		//don't send the acknowledgement, with a bit of luck, the sender will retry and we will get it next time
+		//don't send the acknowledgement, we rely on the sender to retry
 		return
 	}
 

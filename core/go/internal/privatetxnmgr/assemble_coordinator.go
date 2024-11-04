@@ -71,7 +71,7 @@ func NewAssembleCoordinator(ctx context.Context, nodeName string, maxPendingRequ
 	}
 }
 
-func (ac *assembleCoordinator) Complete(requestID string, stateDistributions []*statedistribution.StateDistribution) {
+func (ac *assembleCoordinator) Complete(requestID string, stateDistributions []*components.StateDistribution) {
 
 	log.L(ac.ctx).Debugf("AssembleCoordinator:Commit %s", requestID)
 	ac.stateDistributer.DistributeStates(ac.ctx, stateDistributions)

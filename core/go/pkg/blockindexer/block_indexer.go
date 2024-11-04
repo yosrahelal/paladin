@@ -17,6 +17,7 @@
 package blockindexer
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -273,28 +274,33 @@ func (bi *blockIndexer) setFromBlock(ctx context.Context, conf *pldconf.BlockInd
 	if fromBlock == nil {
 		fromBlock = pldconf.BlockIndexerDefaults.FromBlock
 	}
-	if err := json.Unmarshal(fromBlock, &vUntyped); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(fromBlock))
+	dec.UseNumber()
+	if err := dec.Decode(&vUntyped); err != nil {
 		return i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
 	}
 	switch vTyped := vUntyped.(type) {
 	case string:
-		if strings.EqualFold(vTyped, "latest") {
-			bi.fromBlock = nil
-			return nil
-		}
-		uint64Val, err := strconv.ParseUint(vTyped, 0, 64)
-		if err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
-		}
-		bi.fromBlock = (*ethtypes.HexUint64)(&uint64Val)
-		return nil
-	case float64:
-		uint64Val := uint64(vTyped)
-		bi.fromBlock = (*ethtypes.HexUint64)(&uint64Val)
-		return nil
+		return bi.setFromBlockStr(ctx, vTyped)
+	case json.Number:
+		return bi.setFromBlockStr(ctx, vTyped.String())
 	default:
 		return i18n.NewError(ctx, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
 	}
+}
+
+func (bi *blockIndexer) setFromBlockStr(ctx context.Context, fromBlock string) error {
+	log.L(ctx).Infof("From block: %s", fromBlock)
+	if strings.EqualFold(fromBlock, "latest") {
+		bi.fromBlock = nil
+		return nil
+	}
+	uint64Val, err := strconv.ParseUint(fromBlock, 0, 64)
+	if err != nil {
+		return i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, fromBlock)
+	}
+	bi.fromBlock = (*ethtypes.HexUint64)(&uint64Val)
+	return nil
 }
 
 func (bi *blockIndexer) restoreCheckpoint() error {

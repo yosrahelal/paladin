@@ -84,9 +84,9 @@ func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.syncPoints = syncpoints.NewSyncPoints(p.ctx, &p.config.Writer, c.Persistence(), c.TxManager())
 	p.stateDistributer = statedistribution.NewStateDistributer(
 		p.ctx,
-		p.nodeName,
 		p.components.TransportManager(),
 		p.components.StateManager(),
+		p.components.KeyManager(),
 		p.components.Persistence(),
 		&p.config.StateDistributer)
 	p.preparedTransactionDistributer = preparedtxdistribution.NewPreparedTransactionDistributer(
@@ -1089,4 +1089,8 @@ func (p *privateTxManager) CallPrivateSmartContract(ctx context.Context, call *c
 
 	// Do the actual call
 	return psc.ExecCall(dCtx, p.components.Persistence().DB(), call, verifiers)
+}
+
+func (p *privateTxManager) BuildStateDistributions(ctx context.Context, tx *components.PrivateTransaction) (*components.StateDistributionSet, error) {
+	return newStateDistributionBuilder(p.components, tx).Build(ctx)
 }

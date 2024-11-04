@@ -84,42 +84,6 @@ func (tw *transportWriter) SendDelegationRequest(
 	return nil
 }
 
-func (tw *transportWriter) SendState(ctx context.Context, stateId string, schemaId string, stateDataJson string, party string) error {
-	stateProducedEvent := &pb.StateProducedEvent{
-		DomainName:      tw.domainName,
-		ContractAddress: tw.contractAddress.String(),
-		SchemaId:        schemaId,
-		StateId:         stateId,
-		StateDataJson:   stateDataJson,
-		Party:           party,
-	}
-	stateProducedEventBytes, err := proto.Marshal(stateProducedEvent)
-	if err != nil {
-		log.L(ctx).Errorf("Error marshalling state distribution message: %s", err)
-		return err
-	}
-
-	targetNode, err := tktypes.PrivateIdentityLocator(party).Node(ctx, false)
-	if err != nil {
-		log.L(ctx).Errorf("Error getting node for party %s", party)
-		return err
-	}
-
-	err = tw.transportManager.Send(ctx, &components.TransportMessage{
-		MessageType: "StateProducedEvent",
-		Payload:     stateProducedEventBytes,
-		Component:   components.PRIVATE_TX_MANAGER_DESTINATION,
-		Node:        targetNode,
-		ReplyTo:     tw.nodeID,
-	})
-	if err != nil {
-		log.L(ctx).Errorf("Error sending state produced event: %s", err)
-		return err
-	}
-
-	return nil
-}
-
 // TODO do we have duplication here?  contractAddress and transactionID are in the transactionSpecification
 func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, idempotencyKey string, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState, infoStates []*components.FullState) error {
 	attRequestAny, err := anypb.New(attRequest)

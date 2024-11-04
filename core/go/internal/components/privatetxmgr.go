@@ -45,6 +45,27 @@ type PrivateTxStatus struct {
 // but currently there is only 2 ( the other being IDENTITY_RESOLVER_DESTINATION )
 const PRIVATE_TX_MANAGER_DESTINATION = "private-tx-manager"
 
+type StateDistributionSet struct {
+	LocalNode  string
+	SenderNode string
+	Remote     []*StateDistribution
+	Local      []*StateDistribution
+}
+
+// A StateDistribution is an intent to send private data for a given state to a remote party
+type StateDistribution struct {
+	ID                    string
+	StateID               string
+	IdentityLocator       string
+	Domain                string
+	ContractAddress       string
+	SchemaID              string
+	StateDataJson         string
+	NullifierAlgorithm    *string
+	NullifierVerifierType *string
+	NullifierPayloadType  *string
+}
+
 type PrivateTxManager interface {
 	ManagerLifecycle
 	TransportClient
@@ -63,4 +84,6 @@ type PrivateTxManager interface {
 	NotifyFailedPublicTx(ctx context.Context, dbTX *gorm.DB, confirms []*PublicTxMatch) error
 
 	PrivateTransactionConfirmed(ctx context.Context, receipt *TxCompletion)
+
+	BuildStateDistributions(ctx context.Context, tx *PrivateTransaction) (*StateDistributionSet, error)
 }
