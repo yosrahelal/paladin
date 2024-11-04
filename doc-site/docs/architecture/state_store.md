@@ -9,7 +9,7 @@ manage the relationships between these states is a the Unspent Transaction Outpu
 > This includes domains like [Pente](./pente.md) that implement EVM programmability on top of these states,
 > with each UTXO representing the current state of a private EVM smart contract
 
-![UTXO DAG](./diagrams/private_utxo_model.jpg)
+![UTXO DAG](../images/private_utxo_model.jpg)
 
 ## Guiding architectural principals
 
@@ -28,7 +28,7 @@ Some guiding principles that underpin this architecture are as follows:
 
 ### Architecture
 
-![State Store Architecture](./diagrams/state_store.jpg)
+![State Store Architecture](../images/state_store.jpg)
 
 Due to the fact that we cannot rely on the consensus algorithm and validators of the base ledger
 to retain backup copies of private data, Paladin is optimized for enterprise RDBMS systems that

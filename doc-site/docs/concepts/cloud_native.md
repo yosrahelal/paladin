@@ -1,0 +1,1 @@
+![Paladin deployment model](../images/paladin_deployment.svg)

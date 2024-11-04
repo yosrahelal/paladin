@@ -1,0 +1,1 @@
+![Paladin stack](../images/paladin_runtime.svg)

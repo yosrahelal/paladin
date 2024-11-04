@@ -25,7 +25,7 @@ Walking through a simple token transfer scenario, where Party A has some fungibl
 
 No information is leaked to Party C, that allows them to infer that Party A and Party B previously transacted.
 
-![Noto transaction walkthrough](./diagrams/noto_transaction_flow_example.png)
+![Noto transaction walkthrough](../images/noto_transaction_flow_example.png)
 
 1. `Party A` has three existing private states in their wallet and proposes to the notary:
    - Spend states `S1`, `S2` & `S3`

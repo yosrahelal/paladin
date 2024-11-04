@@ -1,6 +1,6 @@
 # Paladin programming model
 
-![Programming Model Layers](./diagrams/programming_model_layers.jpg)
+![Programming Model Layers](../images/programming_model_layers.jpg)
 
 There are three layers of programmability in Paladin for building privacy preserving smart contracts
 
@@ -21,7 +21,7 @@ The code that exists at this layer must not require access to the private data, 
 
 Because the base ledger smart contract cannot access or leak the data involved in the transaction, there are two fundamental approaches to finalization of transactions.
 
-![ZKP vs. Notary models](./diagrams/zkp_vs_notary.jpg)
+![ZKP vs. Notary models](../images/zkp_vs_notary.jpg)
 
 1. The transaction is pre-verified off-chain before submission
     - The smart contract records the proof of the pre-verification, but cannot directly verify it
@@ -55,7 +55,7 @@ The diagram below shows the fundamental anatomy of the EVM smart contract. There
 
 > TODO: Provide link to detailed developer guidance / samples / instructions
 
-![EVM Smart Contract - Layer A](./diagrams/evm_smart_contract_layer_a.jpg)
+![EVM Smart Contract - Layer A](../images/evm_smart_contract_layer_a.jpg)
 
 ## Layer B: Private state and transaction management
 
@@ -94,7 +94,7 @@ The UTXO model works extremely well for **tokens** - both fungible value, and no
 - **Programmability**: Complex transactions can be orchestrated on UTXO values that are locked of many different types, backed by different privacy mechanism
    - We will see in Layer C how EVM programmability can be layered back on top to aid complex stateful workflow on top of a C-UTXO model, for the token programmability layer required for token ecosystem use cases such as DvP
 
-![Confidential UTXO models](./diagrams/confidential_utxo_model.png)
+![Confidential UTXO models](../images/confidential_utxo_model.png)
 
 > Note that projects do exist (such as [Anonymous Zether](https://github.com/kaleido-io/anonymous-zether-client)) that implement tokens with an account model using advanced cryptography to protect global state. The Paladin architecture supports such models, although at time of writing no project has been onboarded.
 
@@ -119,13 +119,13 @@ What better programming model to enable for such programmability, than EVM itsel
 
 If we recap on the fundamental programming model of an EVM based blockchain, we see it moves a single world state forwards in a set of blocks.
 
-![EVM Programming Model](./diagrams/evm_programming_model.png)
+![EVM Programming Model](../images/evm_programming_model.png)
 
 ### EVM Private Smart Contracts in Privacy Group
 
 The same programming model can be replicated many times in a privacy preserving way on a single base ledger, by having a chain of transactions shared within a **privacy group**.
 
-![Private Smart Contracts backed by C-UTXO](./diagrams/private_smart_contract_overview.png)
+![Private Smart Contracts backed by C-UTXO](../images/private_smart_contract_overview.png)
 
 As long as all parties of the privacy group pre-verify and endorse **all transitions on a private smart contract** (a simple 100% endorsement form of consensus) the transitions can be finalized by the blockchain using UTXO states.
 
