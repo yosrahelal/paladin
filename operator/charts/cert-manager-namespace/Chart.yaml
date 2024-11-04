@@ -1,0 +1,9 @@
+apiVersion: v2
+name: cert-manager-namespace
+description: A chart that pre-creates the cert-manager namespace for the Paladin Operator dependencies
+
+type: application
+
+version: 0.0.0
+
+appVersion: "0.0.0"

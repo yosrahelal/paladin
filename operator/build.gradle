@@ -122,8 +122,8 @@ task copyZetoSolidity(type: Copy) {
     includeEmptyDirs = false
 }
 
-task buildContractSamples(type: Exec, dependsOn: [copySolidity,copyZetoSolidity]) {
-    commandLine "go", "run", "./contractpkg", "./contractpkg/contract_map.json"
+task buildContractSamples(type: Exec, dependsOn: [copySolidity, copyZetoSolidity]) {
+    commandLine "go", "run", "./contractpkg", "./contractpkg/contract_map.json", "true"
 }
 
 // Task to build the Paladin image from the parent project
@@ -164,14 +164,24 @@ task promoteKindImages(type: Exec, dependsOn: [
     args "CLUSTER_NAME=${clusterName}"
 }
 
+task prepareCRDsChart(type: Exec) {
+    executable 'make'
+    args 'prepare-crd-chart'
+}
+
 // Task to install Helm CRDs
-task installCrds(type: Exec, dependsOn: [startKindCluster]){
+task installCrds(type: Exec, dependsOn: [startKindCluster, prepareCRDsChart]){
     executable 'make'
     args 'install-crds'
 }
 
+task prepareOperatorChart(type: Exec, dependsOn: [buildContractSamples]) {
+    executable 'make'
+    args 'prepare-operator-chart'
+}
+
 // Task to install the operator using Helm
-task installOperator(type: Exec, dependsOn: [installCrds, promoteKindImages]) {
+task installOperator(type: Exec, dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
     executable 'make'
     args 'helm-install'
     args "NAMESPACE=${namespace}"
@@ -186,12 +196,12 @@ task verifyOperator(dependsOn: installOperator) {
     }
 }
 
-// Task to create the nodes
-task createNode(type: Exec, dependsOn: verifyOperator) {
-    executable 'make'
-    args 'create-node'
-    args "NAMESPACE=${namespace}"
-}
+// // Task to create the nodes
+// task createNode(type: Exec, dependsOn: verifyOperator) {
+//     executable 'make'
+//     args 'create-node'
+//     args "NAMESPACE=${namespace}"
+// }
 
 // // Task to verify the besu statefulSet
 // task verifyBesu(dependsOn: createNode) {
@@ -214,7 +224,7 @@ task createNode(type: Exec, dependsOn: verifyOperator) {
 // }
 
 // The 'deplay' runs the whole flow
-task deploy(dependsOn: [copySolidity, copyZetoSolidity, createNode]) {
+task deploy(dependsOn: [copySolidity, copyZetoSolidity, verifyOperator]) {
     doLast {
         println 'Deplopy setup completed. Operator is running in the paladin namespace.'
     }
@@ -243,7 +253,7 @@ task clean {
 }
 
 // Existing 'make' task
-task make(type: Exec, dependsOn: [copySolidity,":toolkit:go:protoc"]) {
+task make(type: Exec, dependsOn: [copySolidity, ":toolkit:go:protoc"]) {
     executable 'make'
 }
 
