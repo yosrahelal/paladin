@@ -1,33 +1,43 @@
 import { randomBytes } from "crypto";
+import { ethers } from "ethers";
 import PaladinClient, {
   Algorithms,
   IGroupInfo,
+  IStateBase,
   TransactionType,
   Verifiers,
 } from "paladin-sdk";
 import bondTrackerPublicJson from "./abis/BondTrackerPublic.json";
+import { newBondSubscription } from "./helpers/bondsubscription";
 import { newBondTracker } from "./helpers/bondtracker";
 import { newNoto } from "./helpers/noto";
 import { newPentePrivacyGroup } from "./helpers/pente";
-import { newBondSubscription } from "./helpers/bondsubscription";
+import { encodeHex } from "./utils";
+
+const logger = console;
+
+const paladin1 = new PaladinClient({
+  url: "http://127.0.0.1:31548",
+});
+const paladin2 = new PaladinClient({
+  url: "http://127.0.0.1:31648",
+});
 
 async function main() {
-  const logger = console;
-  const paladin1 = new PaladinClient({
-    url: "http://127.0.0.1:31548",
-  });
-  const paladin2 = new PaladinClient({
-    url: "http://127.0.0.1:31648",
-  });
-
-  const cashIssuer = "static_bank1@node1";
-  const bondIssuerUnqualified = "static_bank1";
+  const cashIssuer = "bank1@node1";
+  const bondIssuerUnqualified = "bank1";
   const bondIssuer = `${bondIssuerUnqualified}@node1`;
-  const bondCustodian = "static_bank2@node2";
-  const investor = "static_bank1@node1";
+  const bondCustodianUnqualified = "bank2";
+  const bondCustodian = `${bondCustodianUnqualified}@node2`;
+  const investor = "bank1@node1";
 
-  const bondCustodianAddress = await paladin1.resolveVerifier(
+  const bondCustodianAddress = await paladin2.resolveVerifier(
     bondCustodian,
+    Algorithms.ECDSA_SECP256K1,
+    Verifiers.ETH_ADDRESS
+  );
+  const investorAddress = await paladin1.resolveVerifier(
+    investor,
     Algorithms.ECDSA_SECP256K1,
     Verifiers.ETH_ADDRESS
   );
@@ -95,10 +105,10 @@ async function main() {
   });
   receipt = await paladin1.pollForReceipt(txID, 10000);
   if (receipt?.contractAddress === undefined) {
-    logger.error(`Failed! tx: ${txID}`);
+    logger.error("Failed!");
     return;
   }
-  logger.log(`Success! tx: ${txID}, address: ${receipt.contractAddress}`);
+  logger.log(`Success! address: ${receipt.contractAddress}`);
   const bondTrackerPublicAddress = receipt.contractAddress;
 
   // Deploy private bond tracker to the issuer/custodian privacy group
@@ -157,6 +167,12 @@ async function main() {
   }
   logger.log("Success!");
 
+  // Add allowed investors
+  const investorRegistry = await bondTracker.investorRegistry(bondIssuer);
+  await investorRegistry
+    .using(paladin2)
+    .addInvestor(bondCustodian, { addr: investorAddress });
+
   // Create a Pente privacy group between the bond investor and bond custodian
   logger.log("Creating investor+custodian privacy group...");
   const investorCustodianGroupInfo: IGroupInfo = {
@@ -183,6 +199,7 @@ async function main() {
     {
       bondAddress_: notoBond.address,
       units_: 100,
+      custodian_: bondCustodianAddress,
     }
   );
   if (bondSubscription === undefined) {
@@ -190,10 +207,160 @@ async function main() {
     return;
   }
   logger.log(`Success! address: ${bondSubscription.address}`);
+
+  // Prepare the payment transfer (investor -> custodian)
+  logger.log("Preparing payment transfer...");
+  const paymentTransfer = await notoCash.prepareTransfer(investor, {
+    to: bondCustodian,
+    amount: 100,
+    data: "0x",
+  });
+  if (paymentTransfer === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log("Success!");
+
+  if (paymentTransfer.transaction.to === undefined) {
+    logger.error("Prepared payment transfer had no 'to' address");
+    return;
+  }
+
+  // Prepare the bond transfer (custodian -> investor)
+  // Requires 2 calls to prepare, as the Noto transaction spawns a Pente transaction to wrap it
+  logger.log("Preparing bond transfer (step 1/2)...");
+  const bondTransfer1 = await notoBond
+    .using(paladin2)
+    .prepareTransfer(bondCustodian, {
+      to: investor,
+      amount: 100,
+      data: "0x",
+    });
+  if (bondTransfer1 === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log("Success!");
+
+  if (bondTransfer1.transaction.type !== TransactionType.PRIVATE) {
+    logger.error(
+      `Prepared bond transfer did not result in a private Pente transaction: ${bondTransfer1.transaction}`
+    );
+    return;
+  }
+
+  logger.log("Preparing bond transfer (step 2/2)...");
+  txID = await paladin2.prepareTransaction(bondTransfer1.transaction);
+  const bondTransfer2 = await paladin2.pollForPreparedTransaction(txID, 10000);
+  if (bondTransfer2 === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log("Success!");
+
+  if (bondTransfer2.transaction.to === undefined) {
+    logger.error("Prepared bond transfer had no 'to' address");
+    return;
+  }
+  if (!bondTransfer2.transaction.function.startsWith("transition(")) {
+    logger.error(
+      `Prepared bond transfer did not seem to be a Pente transition: ${bondTransfer2.transaction}`
+    );
+    return;
+  }
+
+  // Pass the prepared payment transfer to the subscription contract
+  logger.log("Adding payment information to subscription request...");
+  receipt = await bondSubscription.preparePayment(investor, {
+    to: paymentTransfer.transaction.to,
+    encodedCall: paymentTransfer.metadata?.transferWithApproval?.encodedCall,
+  });
+  if (receipt === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log("Success!");
+
+  // Pass the prepared bond transfer to the subscription contract
+  logger.log("Adding bond information to subscription request...");
+  const bondTransferParams = [
+    bondTransfer2.transaction.data.txId,
+    bondTransfer2.transaction.data.states,
+    bondTransfer2.transaction.data.externalCalls,
+  ];
+  const encodedBondTransfer = new ethers.Interface([
+    bondTransfer2.metadata.transitionWithApproval.functionABI,
+  ]).encodeFunctionData("transitionWithApproval", bondTransferParams);
+  receipt = await bondSubscription.using(paladin2).prepareBond(bondCustodian, {
+    to: bondTransfer2.transaction.to,
+    encodedCall: encodedBondTransfer,
+  });
+  if (receipt === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log("Success!");
+
+  const mapStates = (states: IStateBase[]) => {
+    return states.map((state) => ({
+      id: state.id,
+      schema: state.schema,
+      data: encodeHex(
+        JSON.stringify({
+          salt: state.data["salt"],
+          owner: state.data["owner"],
+          amount: state.data["amount"],
+        })
+      ),
+    }));
+  };
+
+  // Approve the payment transfer
+  logger.log("Approving payment transfer...");
+  receipt = await notoCash.approveTransfer(investor, {
+    inputs: mapStates(paymentTransfer.states.spent ?? []),
+    outputs: mapStates(paymentTransfer.states.confirmed ?? []),
+    data: paymentTransfer.metadata.approvalParams.data,
+    delegate: investorCustodianGroup.address,
+  });
+  if (receipt === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log("Success!");
+
+  // Approve the bond transfer
+  logger.log("Approving bond transfer...");
+  receipt = await issuerCustodianGroup.approveTransition(
+    bondCustodianUnqualified,
+    {
+      txId: "0x0000000000000000000000000000000000000000000000000000000000000000",
+      delegate: investorCustodianGroup.address,
+      transitionHash: bondTransfer2.metadata.approvalParams.transitionHash,
+      signatures: bondTransfer2.metadata.approvalParams.signatures,
+    }
+  );
+  if (receipt === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log("Success!");
+
+  // Distribute the bond (performs atomic swap of payment and bond units)
+  logger.log("Distributing bond...");
+  receipt = await bondSubscription.using(paladin2).distribute(bondCustodian, {
+    units_: 100,
+  });
+  if (receipt === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log("Success!");
 }
 
 if (require.main === module) {
-  main().catch(() => {
+  main().catch((err) => {
     console.error("Exiting with uncaught error");
+    console.error(err);
   });
 }

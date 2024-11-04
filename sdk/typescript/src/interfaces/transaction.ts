@@ -1,4 +1,5 @@
-import { IStateBase } from './states';
+import { IStateBase } from "./states";
+import { ethers } from "ethers";
 
 export interface IBlock {
   number: number;
@@ -7,8 +8,8 @@ export interface IBlock {
 }
 
 export enum TransactionType {
-  PUBLIC = 'public',
-  PRIVATE = 'private',
+  PUBLIC = "public",
+  PRIVATE = "private",
 }
 
 export interface ITransactionBase {
@@ -46,7 +47,7 @@ export interface IPreparedTransaction {
 
 export interface ITransactionInput extends ITransactionBase {
   abiReference?: string;
-  abi?: any[];
+  abi?: ethers.InterfaceAbi;
   bytecode?: string;
 }
 
@@ -120,6 +121,6 @@ export interface ITransactionActivityRecord {
 }
 
 export enum TransactionType {
-  Private = 'private',
-  Public = 'public',
+  Private = "private",
+  Public = "public",
 }

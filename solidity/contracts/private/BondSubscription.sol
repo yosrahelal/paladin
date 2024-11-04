@@ -10,6 +10,7 @@ import {IPenteExternalCall} from "./interfaces/IPenteExternalCall.sol";
  */
 contract BondSubscription is Ownable, IPenteExternalCall {
     address public bondAddress;
+    address public custodian;
     uint256 public requestedUnits;
     uint256 public receivedUnits;
 
@@ -18,24 +19,38 @@ contract BondSubscription is Ownable, IPenteExternalCall {
     address internal distributePaymentAddress;
     bytes internal distributePaymentCall;
 
-    constructor(address bondAddress_, uint256 units_) Ownable(_msgSender()) {
+    modifier onlyCustodian() {
+        require(_msgSender() == custodian, "Sender is not custodian");
+        _;
+    }
+
+    constructor(
+        address bondAddress_,
+        uint256 units_,
+        address custodian_
+    ) Ownable(_msgSender()) {
         bondAddress = bondAddress_;
         requestedUnits = units_;
+        custodian = custodian_;
     }
 
-    // TODO: add permissions
-    function prepareBond(address to, bytes calldata encodedCall) external {
-        distributeBondAddress = to;
-        distributeBondCall = encodedCall;
-    }
-
-    // TODO: add permissions
-    function preparePayment(address to, bytes calldata encodedCall) external {
+    function preparePayment(
+        address to,
+        bytes calldata encodedCall
+    ) external onlyOwner {
         distributePaymentAddress = to;
         distributePaymentCall = encodedCall;
     }
 
-    function distribute(uint256 units_) external onlyOwner {
+    function prepareBond(
+        address to,
+        bytes calldata encodedCall
+    ) external onlyCustodian {
+        distributeBondAddress = to;
+        distributeBondCall = encodedCall;
+    }
+
+    function distribute(uint256 units_) external onlyCustodian {
         require(
             units_ <= requestedUnits &&
                 receivedUnits <= requestedUnits - units_,

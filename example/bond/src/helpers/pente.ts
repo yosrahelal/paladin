@@ -1,6 +1,8 @@
 import PaladinClient, { IGroupInfo, TransactionType } from "paladin-sdk";
+import { ethers } from "ethers";
+import pente from "../abis/PentePrivacyGroup.json";
 
-const POLL_TIMEOUT_MS = 10000;
+const POLL_TIMEOUT_MS = 5000;
 
 export const penteConstructorABI = {
   type: "constructor",
@@ -19,7 +21,7 @@ export const penteConstructorABI = {
   ],
 };
 
-export const groupTuple = {
+export const penteGroupABI = {
   name: "group",
   type: "tuple",
   components: [
@@ -28,7 +30,9 @@ export const groupTuple = {
   ],
 };
 
-export const penteDeployABI = (inputComponents: any) => ({
+export const penteDeployABI = (
+  inputComponents: ReadonlyArray<ethers.JsonFragmentType>
+): ethers.JsonFragment => ({
   name: "deploy",
   type: "function",
   inputs: [
@@ -45,17 +49,42 @@ export const penteDeployABI = (inputComponents: any) => ({
   ],
 });
 
-const penteInvokeABI = (name: string, inputComponents: any) => ({
+const penteInvokeABI = (
+  name: string,
+  inputComponents: ReadonlyArray<ethers.JsonFragmentType>
+): ethers.JsonFragment => ({
   name,
   type: "function",
   inputs: [
-    groupTuple,
+    penteGroupABI,
     { name: "to", type: "address" },
     { name: "inputs", type: "tuple", components: inputComponents },
   ],
 });
 
+const penteCallABI = (
+  name: string,
+  inputComponents: ReadonlyArray<ethers.JsonFragmentType>,
+  outputComponents: ReadonlyArray<ethers.JsonFragmentType>
+): ethers.JsonFragment => ({
+  name,
+  type: "function",
+  inputs: [
+    penteGroupABI,
+    { name: "to", type: "address" },
+    { name: "inputs", type: "tuple", components: inputComponents },
+  ],
+  outputs: outputComponents,
+});
+
 export type PentePrivacyGroupParams = [IGroupInfo, string, string, boolean];
+
+export interface PenteApproveTransitionParams {
+  txId: string;
+  delegate: string;
+  transitionHash: string;
+  signatures: string[];
+}
 
 export const newPentePrivacyGroup = async (
   paladin: PaladinClient,
@@ -90,7 +119,9 @@ export class PentePrivacyGroupHelper {
 
   async deploy(
     from: string,
-    constructorAbi: any,
+    constructorAbi: ethers.JsonFragment & {
+      inputs: ReadonlyArray<ethers.JsonFragmentType>;
+    },
     bytecode: string,
     inputs: any
   ) {
@@ -109,10 +140,17 @@ export class PentePrivacyGroupHelper {
     return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS, true);
   }
 
-  async invoke(from: string, to: string, methodAbi: any, inputs: any) {
+  async invoke(
+    from: string,
+    to: string,
+    methodAbi: ethers.JsonFragment & {
+      inputs: ReadonlyArray<ethers.JsonFragmentType>;
+    },
+    inputs: any
+  ) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
-      abi: [penteInvokeABI("beginDistribution", methodAbi.inputs)],
+      abi: [penteInvokeABI(methodAbi.name ?? "", methodAbi.inputs)],
       function: "",
       to: this.address,
       from,
@@ -121,6 +159,43 @@ export class PentePrivacyGroupHelper {
         to,
         inputs,
       },
+    });
+    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+  }
+
+  async call(
+    from: string,
+    to: string,
+    methodAbi: ethers.JsonFragment & {
+      inputs: ReadonlyArray<ethers.JsonFragmentType>;
+      outputs: ReadonlyArray<ethers.JsonFragmentType>;
+    },
+    inputs: any
+  ) {
+    return this.paladin.call({
+      type: TransactionType.PRIVATE,
+      abi: [
+        penteCallABI(methodAbi.name ?? "", methodAbi.inputs, methodAbi.outputs),
+      ],
+      function: "",
+      to: this.address,
+      from,
+      data: {
+        group: this.group,
+        to,
+        inputs,
+      },
+    });
+  }
+
+  async approveTransition(from: string, data: PenteApproveTransitionParams) {
+    const txID = await this.paladin.sendTransaction({
+      type: TransactionType.PUBLIC,
+      abi: pente.abi,
+      function: "approveTransition",
+      to: this.address,
+      from,
+      data,
     });
     return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
   }

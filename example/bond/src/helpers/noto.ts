@@ -1,9 +1,10 @@
+import { ethers } from "ethers";
 import PaladinClient, { IGroupInfo, TransactionType } from "paladin-sdk";
-import { groupTuple } from "./pente";
+import { penteGroupABI } from "./pente";
 
-const POLL_TIMEOUT_MS = 10000;
+const POLL_TIMEOUT_MS = 5000;
 
-export const notoABI = (withHooks: boolean) => [
+export const notoABI = (withHooks: boolean): ethers.InterfaceAbi => [
   {
     type: "constructor",
     inputs: [
@@ -18,7 +19,7 @@ export const notoABI = (withHooks: boolean) => [
                 {
                   name: "privateGroup",
                   type: "tuple",
-                  components: groupTuple.components,
+                  components: penteGroupABI.components,
                 },
                 { name: "publicAddress", type: "address" },
                 { name: "privateAddress", type: "address" },
@@ -92,6 +93,25 @@ export interface NotoMintParams {
   data: string;
 }
 
+export interface NotoTransferParams {
+  to: string;
+  amount: string | number;
+  data: string;
+}
+
+interface State {
+  id: string;
+  schema: string;
+  data: string;
+}
+
+export interface NotoApproveTransferParams {
+  inputs: State[];
+  outputs: State[];
+  data: string;
+  delegate: string;
+}
+
 export const newNoto = async (
   paladin: PaladinClient,
   domain: string,
@@ -101,7 +121,7 @@ export const newNoto = async (
   const txID = await paladin.sendTransaction({
     type: TransactionType.PRIVATE,
     domain,
-    abi: notoABI(false),
+    abi: notoABI(!!data.hooks),
     function: "",
     from,
     data,
@@ -127,6 +147,42 @@ export class NotoHelper {
       type: TransactionType.PRIVATE,
       abi: notoABI(false),
       function: "mint",
+      to: this.address,
+      from,
+      data,
+    });
+    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+  }
+
+  async transfer(from: string, data: NotoTransferParams) {
+    const txID = await this.paladin.sendTransaction({
+      type: TransactionType.PRIVATE,
+      abi: notoABI(false),
+      function: "transfer",
+      to: this.address,
+      from,
+      data,
+    });
+    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+  }
+
+  async prepareTransfer(from: string, data: NotoTransferParams) {
+    const txID = await this.paladin.prepareTransaction({
+      type: TransactionType.PRIVATE,
+      abi: notoABI(false),
+      function: "transfer",
+      to: this.address,
+      from,
+      data,
+    });
+    return this.paladin.pollForPreparedTransaction(txID, POLL_TIMEOUT_MS);
+  }
+
+  async approveTransfer(from: string, data: NotoApproveTransferParams) {
+    const txID = await this.paladin.sendTransaction({
+      type: TransactionType.PRIVATE,
+      abi: notoABI(false),
+      function: "approveTransfer",
       to: this.address,
       from,
       data,

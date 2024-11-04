@@ -1,6 +1,7 @@
-import { PentePrivacyGroupHelper } from "./pente";
-import bondTracker from "../abis/BondTracker.json";
 import PaladinClient from "paladin-sdk";
+import bondTracker from "../abis/BondTracker.json";
+import { InvestorRegistryHelper } from "./investorregistry";
+import { PentePrivacyGroupHelper } from "./pente";
 
 const bondTrackerConstructor = bondTracker.abi.find(
   (entry) => entry.type === "constructor"
@@ -23,6 +24,9 @@ export const newBondTracker = async (
   from: string,
   params: BondTrackerConstructorParams
 ) => {
+  if (bondTrackerConstructor === undefined) {
+    throw new Error("Bond tracker constructor not found");
+  }
   const receipt = await pente.deploy(
     from,
     bondTrackerConstructor,
@@ -48,14 +52,23 @@ export class BondTrackerHelper {
   }
 
   async beginDistribution(from: string, params: BeginDistributionParams) {
-    const beginDistributionMethod = bondTracker.abi.find(
+    const method = bondTracker.abi.find(
       (entry) => entry.name === "beginDistribution"
     );
-    return this.pente.invoke(
-      from,
-      this.address,
-      beginDistributionMethod,
-      params
+    if (method === undefined) {
+      throw new Error("Method 'beginDistribution' not found");
+    }
+    return this.pente.invoke(from, this.address, method, params);
+  }
+
+  async investorRegistry(from: string) {
+    const method = bondTracker.abi.find(
+      (entry) => entry.name === "investorRegistry"
     );
+    if (method === undefined || method.outputs === undefined) {
+      throw new Error("Method 'investorRegistry' not found");
+    }
+    const result = await this.pente.call(from, this.address, method, []);
+    return new InvestorRegistryHelper(this.pente, result[0]);
   }
 }
