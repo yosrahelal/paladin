@@ -151,10 +151,10 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 
 		It("mints some zetos to bob on node1", func() {
 			for _, amount := range []*tktypes.HexUint256{
-				with18Decimals(15),
-				with18Decimals(25), // 40
-				with18Decimals(30), // 70
-				with18Decimals(42), // 112
+				with10Decimals(15),
+				with10Decimals(25), // 40
+				with10Decimals(30), // 70
+				with10Decimals(42), // 112
 			} {
 				txn := rpc["node1"].ForABI(ctx, zetotypes.ZetoABI).
 					Private().
@@ -179,11 +179,9 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 		})
 
 		It("sends some zetos to sally on node2", func() {
-			Skip("for now")
-
 			for _, amount := range []*tktypes.HexUint256{
-				with18Decimals(33), // 79
-				with18Decimals(66), // 13
+				with10Decimals(33), // 79
+				with10Decimals(66), // 13
 			} {
 				txn := rpc["node1"].ForABI(ctx, zetotypes.ZetoABI).
 					Private().
@@ -208,25 +206,29 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 			}
 		})
 
-		// It("sally on node2 sends some zetos to fred on node3", func() {
-		// 	txn := rpc["node2"].ForABI(ctx, zetotypes.NotoABI).
-		// 		Private().
-		// 		Domain("zeto").
-		// 		Function("transfer").
-		// 		To(zetoContract).
-		// 		From("sally@node2").
-		// 		Inputs(&zetotypes.TransferParams{
-		// 			To:     "fred@node3",
-		// 			Amount: with18Decimals(6),
-		// 		}).
-		// 		Send().
-		// 		Wait(5 * time.Second)
-		// 	testLog("Noto transfer transaction %s", txn.ID())
-		// 	Expect(txn.Error()).To(BeNil())
-		// 	logWallet("sally", "node2")
-		// 	logWallet("fred", "node3")
-		// 	testLog("done testing zeto in isolation")
-		// })
+		It("sally on node2 sends some zetos to fred on node3", func() {
+			txn := rpc["node2"].ForABI(ctx, zetotypes.ZetoABI).
+				Private().
+				Domain("zeto").
+				Function("transfer").
+				To(zetoContract).
+				From("sally@node2").
+				Inputs(&zetotypes.TransferParams{
+					Transfers: []*zetotypes.TransferParamEntry{
+						{
+							To:     "fred@node3",
+							Amount: with10Decimals(20),
+						},
+					},
+				}).
+				Send().
+				Wait(5 * time.Second)
+			testLog("Noto transfer transaction %s", txn.ID())
+			Expect(txn.Error()).To(BeNil())
+			logWallet("sally", "node2")
+			logWallet("fred", "node3")
+			testLog("done testing zeto in isolation")
+		})
 
 	})
 })
