@@ -1,0 +1,76 @@
+name: Release
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  deployments: read
+  discussions: read
+  id-token: write
+  issues: read
+  packages: write
+  pages: read
+  pull-requests: read
+  repository-projects: read
+  statuses: read
+  security-events: read
+  
+on:
+  release:
+    types: [released, prereleased]
+
+jobs:
+  image-tags:
+    runs-on: ubuntu-latest
+    env:
+      LATEST_TAG: ""
+      TAGS: ${{ github.ref_name }}
+    steps:
+    - name: Get the latest tag
+      run: |
+        git fetch --tags
+        latest_tag=$(git tag -l | sort -V | tail -n 1)
+        echo "latest tag: $latest_tag"
+        echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
+
+    - name: Set latest tag
+      if: github.event.action == 'released' && github.ref_name == env.LATEST_TAG
+      run: |
+        echo "TAGS=${{ env.TAGS }},latest" >> $GITHUB_ENV
+
+    - name: Set alpha tag
+      if: github.event.action == 'prereleased' && contains(github.ref, 'alpha')
+      run: |
+        echo "TAGS=${{ env.TAGS }},alpha" >> $GITHUB_ENV
+
+    - name: Set beta tag
+      if: github.event.action == 'prereleased' && contains(github.ref, 'beta')
+      run: |
+        echo "TAGS=${{ env.TAGS }},beta" >> $GITHUB_ENV
+
+    - name: Set rc tag
+      if: github.event.action == 'prereleased' && contains(github.ref, 'rc')
+      run: |
+        echo "TAGS=${{ env.TAGS }},rc" >> $GITHUB_ENV
+  push-to-dockerhub:
+    uses: ./.github/workflows/cross-build-images.yaml
+    needs: image-tags
+    with:
+      registry: docker.io
+      repository: ${{ github.repository_owner }}
+      image_tag: ${{ github.ref_name }} 
+      # image_tag: ${{ needs.image-tags.env.TAGS }} # TODO: Support multiple tags
+    secrets:
+      username: ${{ secrets.DOCKERHUB_USERNAME }}
+      password: ${{ secrets.DOCKERHUB_TOKEN }}
+  push-to-ghcr:
+    uses: ./.github/workflows/cross-build-images.yaml
+    needs: image-tags
+    with:
+      registry: ghcr.io
+      repository: ${{ github.repository_owner }}
+      image_tag: ${{ github.ref_name }}
+      # image_tag: ${{ needs.image-tags.env.TAGS }} # TODO: Support multiple tags
+    secrets:
+      username: ${{ github.actor }}
+      password: ${{ secrets.GITHUB_TOKEN }}
