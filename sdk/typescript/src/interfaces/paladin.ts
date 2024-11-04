@@ -1,4 +1,4 @@
-import { AxiosRequestConfig } from "axios";
+import { AxiosError, AxiosRequestConfig } from "axios";
 import { Logger } from "./logger";
 
 export interface PaladinConfig {
@@ -6,6 +6,11 @@ export interface PaladinConfig {
   wsUrl?: string;
   requestConfig?: AxiosRequestConfig;
   logger?: Logger;
+  onError?: PaladinErrorHandler;
+}
+
+export interface PaladinErrorHandler {
+  (method: string, err: AxiosError): void | Promise<void>;
 }
 
 export interface JsonRpcResult<T> {

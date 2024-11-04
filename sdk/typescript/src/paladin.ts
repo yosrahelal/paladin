@@ -1,5 +1,9 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
-import { JsonRpcResult, PaladinConfig } from "./interfaces/paladin";
+import {
+  JsonRpcResult,
+  PaladinConfig,
+  PaladinErrorHandler,
+} from "./interfaces/paladin";
 import { Logger } from "./interfaces/logger";
 import { IQuery } from "./interfaces/query";
 import {
@@ -12,11 +16,12 @@ import {
 } from "./interfaces/transaction";
 import { Algorithms, Verifiers } from "./interfaces";
 
-const WAIT_INCREMENT_MS = 100; // for status polling
+const POLL_INTERVAL_MS = 100;
 
 export default class PaladinClient {
   protected http: AxiosInstance;
   private logger: Logger;
+  private onError: PaladinErrorHandler;
 
   constructor(options: PaladinConfig) {
     this.http = axios.create({
@@ -24,6 +29,14 @@ export default class PaladinClient {
       baseURL: options.url,
     });
     this.logger = options.logger ?? console;
+    this.onError =
+      options.onError ??
+      ((method: string, err: AxiosError) => {
+        this.logger.error(
+          `JSON-RPC error from ${method} (${err.response?.status} ${err.response?.statusText})`,
+          this.parseAxiosErrorMessage(err)
+        );
+      });
   }
 
   protected defaultHeaders() {
@@ -40,9 +53,9 @@ export default class PaladinClient {
     };
   }
 
-  private parseAxiosErrorMessage(err: any) {
+  parseAxiosErrorMessage(err: any) {
     if (err instanceof AxiosError && err.response?.data?.error) {
-      return err.response.data.error;
+      return err.response.data.error?.message || err.response.data.error;
     }
     return `${err}`;
   }
@@ -53,34 +66,29 @@ export default class PaladinClient {
       { ...this.defaultPayload(), method, params },
       { ...config, headers: this.defaultHeaders() }
     );
-    res.catch((err: AxiosError) => {
-      this.logger.error(
-        `JSON-RPC error from ${method}: ${err.response?.status} ${err.response?.statusText}`,
-        this.parseAxiosErrorMessage(err)
-      );
-    });
+    res.catch((err: AxiosError) => this.onError(method, err));
     return res;
   }
 
-  async waitForReceipt(txID: string, waitMs: number, full?: boolean) {
-    for (let i = 0; i < waitMs; i += WAIT_INCREMENT_MS) {
+  async pollForReceipt(txID: string, waitMs: number, full?: boolean) {
+    for (let i = 0; i < waitMs; i += POLL_INTERVAL_MS) {
       var receipt = await this.getTransactionReceipt(txID, full);
       if (receipt != undefined) {
         return receipt;
       }
-      await new Promise((resolve) => setTimeout(resolve, WAIT_INCREMENT_MS));
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
     this.logger.error(`Failed while waiting for receipt: ${txID}`);
     return undefined;
   }
 
-  async waitForPrepare(txID: string, waitMs: number) {
-    for (let i = 0; i < waitMs; i += WAIT_INCREMENT_MS) {
+  async pollForPreparedTransaction(txID: string, waitMs: number) {
+    for (let i = 0; i < waitMs; i += POLL_INTERVAL_MS) {
       var receipt = await this.getPreparedTransaction(txID);
       if (receipt != undefined) {
         return receipt;
       }
-      await new Promise((resolve) => setTimeout(resolve, WAIT_INCREMENT_MS));
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
     this.logger.error(`Failed while waiting for prepare: ${txID}`);
     return undefined;
