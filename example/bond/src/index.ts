@@ -21,6 +21,9 @@ const paladin1 = new PaladinClient({
 const paladin2 = new PaladinClient({
   url: "http://127.0.0.1:31648",
 });
+const paladin3 = new PaladinClient({
+  url: "http://127.0.0.1:31748",
+});
 
 async function main() {
   const cashIssuer = "bank1@node1";
@@ -28,7 +31,7 @@ async function main() {
   const bondIssuer = `${bondIssuerUnqualified}@node1`;
   const bondCustodianUnqualified = "bank2";
   const bondCustodian = `${bondCustodianUnqualified}@node2`;
-  const investor = "bank1@node1";
+  const investor = "bank3@node3";
 
   const bondCustodianAddress = await paladin2.resolveVerifier(
     bondCustodian,
@@ -179,7 +182,7 @@ async function main() {
     members: [investor, bondCustodian],
   };
   const investorCustodianGroup = await newPentePrivacyGroup(
-    paladin1,
+    paladin3,
     "pente",
     investor,
     [investorCustodianGroupInfo, "shanghai", "group_scoped_identities", true]
@@ -194,7 +197,7 @@ async function main() {
   logger.log("Creating private bond subscription...");
   const bondSubscription = await newBondSubscription(
     investorCustodianGroup,
-    bondIssuer,
+    investor,
     {
       bondAddress_: notoBond.address,
       units_: 100,
@@ -209,11 +212,13 @@ async function main() {
 
   // Prepare the payment transfer (investor -> custodian)
   logger.log("Preparing payment transfer...");
-  const paymentTransfer = await notoCash.prepareTransfer(investor, {
-    to: bondCustodian,
-    amount: 100,
-    data: "0x",
-  });
+  const paymentTransfer = await notoCash
+    .using(paladin3)
+    .prepareTransfer(investor, {
+      to: bondCustodian,
+      amount: 100,
+      data: "0x",
+    });
   if (paymentTransfer === undefined) {
     logger.error("Failed!");
     return;
@@ -270,7 +275,7 @@ async function main() {
 
   // Pass the prepared payment transfer to the subscription contract
   logger.log("Adding payment information to subscription request...");
-  receipt = await bondSubscription.preparePayment(investor, {
+  receipt = await bondSubscription.using(paladin3).preparePayment(investor, {
     to: paymentTransfer.transaction.to,
     encodedCall: paymentTransfer.metadata?.transferWithApproval?.encodedCall,
   });
@@ -302,7 +307,7 @@ async function main() {
 
   // Approve the payment transfer
   logger.log("Approving payment transfer...");
-  receipt = await notoCash.approveTransfer(investor, {
+  receipt = await notoCash.using(paladin3).approveTransfer(investor, {
     inputs: encodeStates(paymentTransfer.states.spent ?? []),
     outputs: encodeStates(paymentTransfer.states.confirmed ?? []),
     data: paymentTransfer.metadata.approvalParams.data,
