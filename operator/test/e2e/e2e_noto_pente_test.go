@@ -85,7 +85,6 @@ func getJSONPropertyAs(jsonData tktypes.RawJSON, name string, toValue any) {
 
 var _ = Describe("noto/pente - simple", Ordered, func() {
 	BeforeAll(func() {
-		Skip("for now")
 	})
 
 	AfterAll(func() {

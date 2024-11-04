@@ -53,7 +53,6 @@ var _ = Describe("controller", Ordered, func() {
 	defer GinkgoRecover()
 
 	BeforeAll(func() {
-		Skip("for now")
 	})
 
 	AfterAll(func() {
