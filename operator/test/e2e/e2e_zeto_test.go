@@ -175,29 +175,33 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 			}
 		})
 
-		// It("sends some zetos to sally on node2", func() {
-		// 	for _, amount := range []*tktypes.HexUint256{
-		// 		with18Decimals(33), // 79
-		// 		with18Decimals(66), // 13
-		// 	} {
-		// 		txn := rpc["node1"].ForABI(ctx, zetotypes.NotoABI).
-		// 			Private().
-		// 			Domain("zeto").
-		// 			Function("transfer").
-		// 			To(zetoContract).
-		// 			From("bob@node1").
-		// 			Inputs(&zetotypes.TransferParams{
-		// 				To:     "sally@node2",
-		// 				Amount: amount,
-		// 			}).
-		// 			Send().
-		// 			Wait(5 * time.Second)
-		// 		testLog("Noto transfer transaction %s", txn.ID())
-		// 		Expect(txn.Error()).To(BeNil())
-		// 		logWallet("bob", "node1")
-		// 		logWallet("sally", "node2")
-		// 	}
-		// })
+		It("sends some zetos to sally on node2", func() {
+			for _, amount := range []*tktypes.HexUint256{
+				with18Decimals(33), // 79
+				with18Decimals(66), // 13
+			} {
+				txn := rpc["node1"].ForABI(ctx, zetotypes.ZetoABI).
+					Private().
+					Domain("zeto").
+					Function("transfer").
+					To(zetoContract).
+					From("bob@node1").
+					Inputs(&zetotypes.TransferParams{
+						Transfers: []*zetotypes.TransferParamEntry{
+							{
+								To:     "sally@node2",
+								Amount: amount,
+							},
+						},
+					}).
+					Send().
+					Wait(5 * time.Second)
+				testLog("Noto transfer transaction %s", txn.ID())
+				Expect(txn.Error()).To(BeNil())
+				logWallet("bob", "node1")
+				logWallet("sally", "node2")
+			}
+		})
 
 		// It("sally on node2 sends some zetos to fred on node3", func() {
 		// 	txn := rpc["node2"].ForABI(ctx, zetotypes.NotoABI).

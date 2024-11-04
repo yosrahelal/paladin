@@ -22,24 +22,6 @@ def transports = [
 def uiClient = [
     'ui/client/dist',
 ]
-
-// These can be very large binaries, so adding to this list in the base image should be done with care.
-// Likely if the range of circuits grows, a separate docker tag will be required for builds
-// of Paladin that have a wider range of pre-built circuits included.
-def zetoZKP = [
-    // anon
-    'domains/zeto/zkp/anon.zkey',
-    'domains/zeto/zkp/anon-vkey.json',
-    'domains/zeto/zkp/anon_js',
-    // anon_enc
-    'domains/zeto/zkp/anon_enc.zkey',
-    'domains/zeto/zkp/anon_enc-vkey.json',
-    'domains/zeto/zkp/anon_enc_js',
-    // anon_nullifier
-    'domains/zeto/zkp/anon_nullifier.zkey',
-    'domains/zeto/zkp/anon_nullifier-vkey.json',
-    'domains/zeto/zkp/anon_nullifier_js',
-]
  
 def assembleSubprojects = [
     ':core:go',
@@ -210,8 +192,21 @@ task copyZetoZKPFiles(type: Copy) {
         zetoZkpDir.mkdirs()
     }
 
-    zetoZKP.each { file ->
-        from file
+    // These can be very large binaries, so adding to this list in the base image should be done with care.
+    // Likely if the range of circuits grows, a separate docker tag will be required for builds
+    // of Paladin that have a wider range of pre-built circuits included.
+    from fileTree('domains/zeto/zkp') {
+        include 'anon.zkey'
+        include 'anon-vkey.json'
+        include 'anon_js/anon.wasm'
+        // anon_enc
+        include 'anon_enc.zkey'
+        include 'anon_enc-vkey.json'
+        include 'anon_enc_js/anon_enc.wasm'
+        // anon_nullifier
+        include 'anon_nullifier.zkey'
+        include 'anon_nullifier-vkey.json'
+        include 'anon_nullifier_js/anon_nullifier.wasm'
     }
     into zetoZkpDir
 
