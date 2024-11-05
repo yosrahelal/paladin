@@ -16,7 +16,7 @@ with `"type": "private"`.
 
 ### constructor
 
-The constructor is invoked by specifying `"function": ""`.
+Creates a new Noto token, with a new address on the base ledger.
 
 ```json
 {
@@ -47,7 +47,7 @@ Inputs:
 
 ### mint
 
-Mint new value.
+Mint new value. New UTXO state(s) will automatically be created to fulfill the requested mint.
 
 ```json
 {
@@ -69,7 +69,8 @@ Inputs:
 
 ### transfer
 
-Transfer value from the sender to another recipient.
+Transfer value from the sender to another recipient. Available UTXO states will be selected for spending, and
+new UTXO states will be created, in order to facilitate the requested transfer of value.
 
 ```json
 {
@@ -127,10 +128,15 @@ Inputs:
 
 ## Public ABI
 
-The public ABI of Noto is implemented in Solidity, and can be accessed by calling `ptx_sendTransaction`
-with `"type": "public"`. However, it is not often required to invoke the public ABI directly.
+The public ABI of Noto is implemented in Solidity by [Noto.sol](../../solidity/contracts/domains/noto/Noto.sol),
+and can be accessed by calling `ptx_sendTransaction` with `"type": "public"`. However, it is not often required
+to invoke the public ABI directly.
 
 ### mint
+
+Mint new UTXO states. Generally should not be called directly.
+
+May only be invoked by the notary address.
 
 ```json
 {
@@ -144,7 +150,17 @@ with `"type": "public"`. However, it is not often required to invoke the public 
 }
 ```
 
+Inputs:
+
+* **outputs** - output states that will be created
+* **signature** - sender's signature (not verified on-chain, but can be verified by anyone with the private state data)
+* **data** - encoded Paladin and/or user data
+
 ### transfer
+
+Spend some UTXO states and create new ones. Generally should not be called directly.
+
+May only be invoked by the notary address.
 
 ```json
 {
@@ -159,7 +175,22 @@ with `"type": "public"`. However, it is not often required to invoke the public 
 }
 ```
 
+Inputs:
+
+* **inputs** - input states that will be spent
+* **outputs** - output states that will be created
+* **signature** - sender's signature (not verified on-chain, but can be verified by anyone with the private state data)
+* **data** - encoded Paladin and/or user data
+
 ### approveTransfer
+
+Approve a specific `transfer` transaction to be executed by a specific `delegate` address.
+Generally should not be called directly.
+
+The `txhash` should be computed as the EIP-712 hash of the intended transfer, using type:
+`Transfer(bytes32[] inputs,bytes32[] outputs,bytes data)`.
+
+May only be invoked by the notary address.
 
 ```json
 {
@@ -174,7 +205,19 @@ with `"type": "public"`. However, it is not often required to invoke the public 
 }
 ```
 
+Inputs:
+
+* **delegate** - address of the delegate party that will be able to execute this transaction once approved
+* **txhash** - EIP-712 hash of the intended transfer, using type `Transfer(bytes32[] inputs,bytes32[] outputs,bytes data)`
+* **signature** - sender's signature (not verified on-chain, but can be verified by anyone with the private state data)
+* **data** - encoded Paladin and/or user data
+
 ### transferWithApproval
+
+Execute a transfer that was previously approved.
+
+The values of `inputs`, `outputs`, and `data` will be used to (re-)compute a `txhash`, which must exactly
+match a `txhash` that was previously delegated to the sender via `approveTransfer`.
 
 ```json
 {
@@ -188,3 +231,10 @@ with `"type": "public"`. However, it is not often required to invoke the public 
       ]
 }
 ```
+
+Inputs:
+
+* **inputs** - input states that will be spent
+* **outputs** - output states that will be created
+* **signature** - sender's signature (not verified on-chain, but can be verified by anyone with the private state data)
+* **data** - encoded Paladin and/or user data
