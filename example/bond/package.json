@@ -1,0 +1,24 @@
+{
+  "name": "paladin-example-bond",
+  "version": "0.0.1",
+  "description": "",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node ./src/index.ts",
+    "start:prod": "node ./build/index.js",
+    "abi": "node scripts/abi.mjs"
+  },
+  "author": "",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^22.8.7",
+    "copy-file": "^11.0.0",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "ethers": "^6.13.4",
+    "paladin-sdk": "file:../../sdk/typescript",
+    "uuid": "^11.0.2"
+  }
+}

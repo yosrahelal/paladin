@@ -220,6 +220,7 @@ public class BondTest {
             var bondSubscription = BondSubscriptionHelper.deploy(aliceCustodianInstance, alice, new HashMap<>() {{
                 put("bondAddress_", notoBond.address());
                 put("units_", 1000);
+                put("custodian_", custodianAddress);
             }});
 
             // Prepare the bond transfer (requires 2 calls to prepare, as the Noto transaction spawns a Pente transaction to wrap it)
@@ -258,7 +259,7 @@ public class BondTest {
             // so that it requires approval.
 
             // Alice receives full bond distribution
-            bondSubscription.distribute(alice, 1000);
+            bondSubscription.distribute(bondCustodian, 1000);
 
             // TODO: figure out how to test negative cases (such as when Pente reverts due to a non-allowed investor)
 
