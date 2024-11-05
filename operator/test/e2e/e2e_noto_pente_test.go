@@ -71,6 +71,14 @@ func with18Decimals(x int64) *tktypes.HexUint256 {
 	return (*tktypes.HexUint256)(bx)
 }
 
+func with10Decimals(x int64) *tktypes.HexUint256 {
+	bx := new(big.Int).Mul(
+		big.NewInt(x),
+		new(big.Int).Exp(big.NewInt(10), big.NewInt(10), big.NewInt(0)),
+	)
+	return (*tktypes.HexUint256)(bx)
+}
+
 func getJSONPropertyAs(jsonData tktypes.RawJSON, name string, toValue any) {
 	var mapProp map[string]tktypes.RawJSON
 	err := json.Unmarshal(jsonData, &mapProp)
