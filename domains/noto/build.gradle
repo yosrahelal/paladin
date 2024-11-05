@@ -14,9 +14,9 @@
  */
 
 ext {
-    goFiles = fileTree(".") {
-        include "internal/**/*.go"
-        include "pkg/**/*.go"
+    goFiles = fileTree('.') {
+        include 'internal/**/*.go'
+        include 'pkg/**/*.go'
     }
 }
 
@@ -47,37 +47,45 @@ configurations {
 }
 
 dependencies {
-    contractCompile project(path: ":solidity", configuration: "compiledContracts")
-    toolkitGo project(path: ":toolkit:go", configuration: "goSource")
-    coreGo project(path: ":core:go", configuration: "goSource")
+    contractCompile project(path: ':solidity', configuration: 'compiledContracts')
+    toolkitGo project(path: ':toolkit:go', configuration: 'goSource')
+    coreGo project(path: ':core:go', configuration: 'goSource')
 }
 
-task copySolidity(type: Copy) {
+task copyInternalSolidity(type: Copy) {
     inputs.files(configurations.contractCompile)
-    into projectDir
 
-    into('internal/noto/abis') {
-        from fileTree(configurations.contractCompile.asPath) {
-            include 'contracts/domains/interfaces/INoto.sol/INoto.json'
-            include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
-            include 'contracts/domains/noto/Noto.sol/Noto.json'
-            include 'contracts/domains/noto/NotoSelfSubmit.sol/NotoSelfSubmit.json'
-            include 'contracts/private/interfaces/INotoHooks.sol/INotoHooks.json'
-        }
-        eachFile { path = 'internal/noto/abis/' + name }
+    into 'internal/noto/abis'
+    from fileTree(configurations.contractCompile.asPath) {
+        include 'contracts/domains/interfaces/INoto.sol/INoto.json'
+        include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
+        include 'contracts/domains/noto/Noto.sol/Noto.json'
+        include 'contracts/domains/noto/NotoSelfSubmit.sol/NotoSelfSubmit.json'
+        include 'contracts/private/interfaces/INotoHooks.sol/INotoHooks.json'
     }
 
-    into('pkg/types/abis') {
-        from fileTree(configurations.contractCompile.asPath) {
-            include 'contracts/domains/interfaces/INotoPrivate.sol/INotoPrivate.json'
-        }
-        eachFile { path = 'pkg/types/abis/' + name }
-    }
-
+    // Flatten all paths into the destination folder
+    eachFile { path = name }
     includeEmptyDirs = false
 }
 
-task test(type: Exec, dependsOn: [":core:go:makeMocks", copySolidity]) {
+task copyPkgSolidity(type: Copy) {
+    inputs.files(configurations.contractCompile)
+
+    into 'pkg/types/abis'
+    from fileTree(configurations.contractCompile.asPath) {
+        include 'contracts/domains/interfaces/INotoPrivate.sol/INotoPrivate.json'
+    }
+
+    // Flatten all paths into the destination folder
+    eachFile { path = name }
+    includeEmptyDirs = false
+}
+
+task copySolidity(dependsOn: [copyInternalSolidity, copyPkgSolidity]) {
+}
+
+task test(type: Exec, dependsOn: [':core:go:makeMocks', copySolidity]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
@@ -100,10 +108,10 @@ task test(type: Exec, dependsOn: [":core:go:makeMocks", copySolidity]) {
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task buildGo(type: GoLib, dependsOn: [":toolkit:go:protoc", copySolidity]) {
+task buildGo(type: GoLib, dependsOn: [':toolkit:go:protoc', copySolidity]) {
     inputs.files(configurations.coreGo)
     inputs.files(configurations.toolkitGo)
-    baseName "noto"
+    baseName 'noto'
     sources goFiles
     mainFile 'noto.go'
 }

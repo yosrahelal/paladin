@@ -41,7 +41,7 @@ helm upgrade --install paladin-crds paladin/paladin-operator-crd
 
 ### Step 2: Install cert-manager CRDs
 
-[Install the cert-manager CRDs](https://artifacthub.io/packages/helm/cert-manager/cert-manager):
+Install the [cert-manager](https://artifacthub.io/packages/helm/cert-manager/cert-manager) CRDs:
 
 ```bash
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml

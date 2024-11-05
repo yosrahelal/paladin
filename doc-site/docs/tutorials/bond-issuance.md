@@ -4,6 +4,8 @@ The code for this tutorial can be found in [example/bond](https://github.com/LF-
 
 This shows how to leverage the [Noto](../../architecture/noto/) and [Pente](../../architecture/pente/) domains together in order to build a bond issuance process, illustrating multiple aspects of Paladin's privacy capabilities.
 
+![Bond issuance](../../images/paladin_bond.png)
+
 ## Running the example
 
 Follow the [Getting Started](../../getting-started/installation/) instructions to set up a Paldin environment, and
@@ -50,13 +52,12 @@ allowed to do this.
 ### Create issuer+custodian private group
 
 ```typescript
-const issuerCustodianGroupInfo: IGroupInfo = {
-  salt: "0x" + Buffer.from(randomBytes(32)).toString("hex"),
-  members: [bondIssuer, bondCustodian],
-};
 const penteFactory = new PenteFactory(paladin1, "pente");
 const issuerCustodianGroup = await penteFactory.newPrivacyGroup(bondIssuer, {
-  group: issuerCustodianGroupInfo,
+  group: {
+    salt: newGroupSalt(),
+    members: [bondIssuer, bondCustodian],
+  },
   evmVersion: "shanghai",
   endorsementType: "group_scoped_identities",
   externalCallsEnabled: true,
@@ -123,7 +124,7 @@ visible to the bond issuer and custodian, but will be atomically linked to the N
 const notoBond = await notoFactory.newNoto(bondIssuer, {
   notary: bondCustodian,
   hooks: {
-    privateGroup: issuerCustodianGroupInfo,
+    privateGroup: issuerCustodianGroup.group,
     publicAddress: issuerCustodianGroup.address,
     privateAddress: bondTracker.address,
   },
@@ -132,8 +133,189 @@ const notoBond = await notoFactory.newNoto(bondIssuer, {
 ```
 
 Now that the public and private tracking contracts have been deployed, the actual Noto token for the bond can be created.
-The "hooks" configuration points it to the private hooks implementation that was deployed in the previous step.
+The "hooks" configuration points it to the private hooks contract that was deployed in the previous step.
 
 For this token, "restrictMinting" is disabled, because the hooks can enforce more flexible rules on both mint and transfer.
 
-... to be continued
+### Issue bond to custodian
+
+```typescript
+await notoBond.mint(bondIssuer, {
+  to: bondCustodian,
+  amount: 1000,
+  data: "0x",
+});
+```
+
+This issues the bond to the bond custodian.
+
+The Noto "mint" request will be prepared and encoded within a call to the "onMint" hook in the private bond tracker
+contract. The logic in that contract will validate that the mint is allowed, and then will trigger two external calls
+on the base ledger: 1) to perform the Noto mint, and 2) to notify the public bond tracker that issuance has started.
+
+### Begin distribution of bond
+
+```typescript
+await bondTracker.using(paladin2).beginDistribution(bondCustodian, {
+  discountPrice: 1,
+  minimumDenomination: 1,
+});
+const investorRegistry = await bondTracker.investorRegistry(bondIssuer);
+await investorRegistry
+  .using(paladin2)
+  .addInvestor(bondCustodian, { addr: investorAddress });
+```
+
+This allows the bond custodian to begin distributing the bond to potential investors. Each investor must be added
+to the allow list before they will be allowed to subscribe to the bond.
+
+Both the bond tracker and the investor registry are private contracts, visible only within the privacy group
+between the issuer and custodian.
+
+### Create investor+custodian private group
+
+```typescript
+const investorCustodianGroup = await penteFactory
+  .using(paladin3)
+  .newPrivacyGroup(investor, {
+    group: {
+      salt: newGroupSalt(),
+      members: [investor, bondCustodian],
+    },
+    evmVersion: "shanghai",
+    endorsementType: "group_scoped_identities",
+    externalCallsEnabled: true,
+  });
+```
+
+This create another instance of the Pente domain, scoped to only the investor and the custodian.
+
+### Create private bond subscription
+
+```typescript
+const bondSubscription = await newBondSubscription(
+  investorCustodianGroup,
+  investor,
+  {
+    bondAddress_: notoBond.address,
+    units_: 100,
+    custodian_: bondCustodianAddress,
+  }
+);
+```
+
+An investor may request to subscribe to the bond by creating a [private subscription contract](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/solidity/contracts/private/BondSubscription.sol)
+in their private EVM with the bond custodian.
+
+### Prepare tokens for exchange
+
+```typescript
+const paymentTransfer = await notoCash
+  .using(paladin3)
+  .prepareTransfer(investor, {
+    to: bondCustodian,
+    amount: 100,
+    data: "0x",
+  });
+
+const bondTransfer1 = await notoBond
+  .using(paladin2)
+  .prepareTransfer(bondCustodian, {
+    to: investor,
+    amount: 100,
+    data: "0x",
+  });
+txID = await paladin2.prepareTransaction(bondTransfer1.transaction);
+const bondTransfer2 = await paladin2.pollForPreparedTransaction(txID, 10000);
+```
+
+The investor prepares (but does not submit) a cash payment. This results in a public transaction
+containing prepared UTXO states. The transaction can be delegated to another party or contract to
+allow them to execute the payment transfer.
+
+The bond custodian prepares a similar transaction for the bond transfer. Because the bond token
+uses Pente hooks, the result of the first "prepare" is a private Pente transaction. This can
+be prepared again to receive a public transaction that wraps both the Pente hook transition and
+the Noto bond token transfer.
+
+### Share the prepared transactions with the private contract
+
+```typescript
+await bondSubscription.using(paladin3).preparePayment(investor, {
+  to: paymentTransfer.transaction.to,
+  encodedCall: paymentTransfer.metadata?.transferWithApproval?.encodedCall,
+});
+
+const encodedBondTransfer = new ethers.Interface([
+  bondTransfer2.metadata.transitionWithApproval.functionABI,
+]).encodeFunctionData("transitionWithApproval", [
+  bondTransfer2.transaction.data.txId,
+  bondTransfer2.transaction.data.states,
+  bondTransfer2.transaction.data.externalCalls,
+]);
+await bondSubscription.using(paladin2).prepareBond(bondCustodian, {
+  to: bondTransfer2.transaction.to,
+  encodedCall: encodedBondTransfer,
+});
+```
+
+The `preparePayment` and `prepareBond` methods on the bond subscription contract allow the
+respective parties to encode their prepared transactions, in preparation for triggering an
+atomic DvP (delivery vs. payment).
+
+### Approve delegation via the private contract
+
+```typescript
+await notoCash.using(paladin3).approveTransfer(investor, {
+  inputs: encodeNotoStates(paymentTransfer.states.spent ?? []),
+  outputs: encodeNotoStates(paymentTransfer.states.confirmed ?? []),
+  data: paymentTransfer.metadata.approvalParams.data,
+  delegate: investorCustodianGroup.address,
+});
+
+await issuerCustodianGroup.approveTransition(
+  bondCustodianUnqualified,
+  {
+    txId: newTransactionId(),
+    transitionHash: bondTransfer2.metadata.approvalParams.transitionHash,
+    signatures: bondTransfer2.metadata.approvalParams.signatures,
+    delegate: investorCustodianGroup.address,
+  }
+);
+```
+
+In order for the private subscription contract to be able to facilitate the token exchange,
+the base ledger address of the investor+custodian group must be designated as the approved
+delegate for both the payment transfer and the bond transfer.
+
+In the case of the payment, we use the `approveTransfer` method of Noto. For the bond,
+which uses Pente custom logic to wrap the Noto token, we use the `approveTransition` method
+of Pente.
+
+### Distribute the bond units by performing swap
+
+```typescript
+await bondSubscription.using(paladin2).distribute(bondCustodian, {
+  units_: 100,
+});
+```
+
+Finally, the custodian uses the `distribute` method on the bond subscription contract to
+trigger the exchange of the bond and payment.
+
+This private transaction will trigger the previously-prepared transactions for the cash
+transfer and the bond transfer, and it will also trigger an external call to the public
+bond tracker to decrease the advertised available supply of the bond.
+
+## Conclusion
+
+This scenario shows how to work with the following concepts:
+
+- Basic Noto tokens
+- Noto tokens with custom hooks via Pente
+- Multiple Pente privacy groups used for sharing private data
+- Pente private smart contracts that trigger external calls to contracts on the base ledger
+
+By using these features together, it's possible to build a robust issuance process that
+tracks all state on the base EVM ledger, while still keeping all private data scoped to
+only the proper parties.
