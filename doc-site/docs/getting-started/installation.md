@@ -1,53 +1,57 @@
-# Installation
+# Installation Guide
 
-## Install 
+## Installation Steps
 
-Run the helm install command
-```
-helm install paladin ... -n paladin --create-namespace
-```
+### Prerequisites
+* Access to a running Kubernetes cluster (e.g. kind, minikube, ecr, etc.)
+* Helm installed
+* Kubectl installed
 
-This will:
-
-1. Install CRD chart
-2. Install cert-manager chart
-3. Install paladin-operator chart
-
-
-## Create blockchain network
-
-```
-kubectl apply -f https://github/<path to CR - besu>
-kubectl apply -f https://github/<path to CR - genasis>
-kubectl apply -f https://github/<path to CR - paladin>
+### Step 1: Install the CRD Chart
+Install the CRD chart that contains the necessary Custom Resource Definitions (CRDs) for the Paladin operator:
+```bash
+helm repo add paladin https://LF-Decentralized-Trust-labs.github.io/paladin --force-update
+helm upgrade --install paladin-crds paladin/paladin-operator-crd
 ```
 
-## Deploy smart contracts
-
-```
-kubectl apply -f https://github/<path to CR - noto>
-kubectl apply -f https://github/<path to CR - zeto>
-kubectl apply -f https://github/<path to CR - pente>
-```
-
-## Create private transaction
-
-```
-kubectl apply -f https://github/<path to CR - transaction>
+### Step 2: Install cert-manager CRDs
+[Install the cert-manager CRDs](https://artifacthub.io/packages/helm/cert-manager/cert-manager):
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml
+helm install cert-manager --namespace cert-manager --version v1.16.1 jetstack/cert-manager --create-namespace
 ```
 
-### Proof of privacy
+### Step 3: Install the Paladin Operator Chart
+Install the Paladin operator chart:
+```bash
+helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace \
+    --set paladin.namespace=paladin \
+    --set cert-manager.enabled=false
+```
 
-#### UI
+### Outcome
+This process will:
+1. Install the cert-manager chart.
+2. Install the paladin-operator chart.
+3. Create a Besu network with 3 nodes.
+4. Create a Paladin network with 3 nodes, each associated with one of the Besu nodes.
+5. Deploy smart contracts to the blockchain.
 
-Open paladin UI in browser - http://127.0.0.1:1234/ui
+## Accessing the UI
 
-1. Navigate to node1 view. Transaction is visible in node1
-2. Navigate to node2 view. Transaction is visible in node2
-3. Navigate to node3 view. Transaction is not visible in node3  
+To open the Paladin UI in your browser, go to:
+```
+http://<cluster IP>:<paladin service port>/ui
+```
 
-#### Command line
+## Uninstallation Steps
 
-1. View node1 transaction: `curl GET <>` > the transaction is visible
-1. View node2 transaction: `curl GET <>` > the transaction is visible
-1. View node3 transaction: `curl GET <>` > the transaction is NOT visible/encrypted
+To remove the Paladin operator and related resources, run the following commands:
+```bash
+helm uninstall paladin -n paladin
+helm uninstall paladin-crds
+kubectl delete namespace paladin
+helm uninstall cert-manager -n cert-manager
+kubectl delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml
+kubectl delete namespace cert-manager
+```

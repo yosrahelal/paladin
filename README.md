@@ -16,7 +16,7 @@ Learn more about Paladin here:
 
 Get a 3-node Paladin network running with Besu on your laptop:
 
-- https://lf-decentralized-trust-labs.github.io/paladin/head/getting-started
+- https://lf-decentralized-trust-labs.github.io/paladin/head/getting-started/installation
 
 ![Paladin](doc-site/docs/images/paladin_deployment.svg)
 
