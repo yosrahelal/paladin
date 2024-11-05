@@ -54,17 +54,26 @@ dependencies {
 
 task copySolidity(type: Copy) {
     inputs.files(configurations.contractCompile)
-    from fileTree(configurations.contractCompile.asPath) {
-        include 'contracts/domains/interfaces/INoto.sol/INoto.json'
-        include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
-        include 'contracts/domains/noto/Noto.sol/Noto.json'
-        include 'contracts/domains/noto/NotoSelfSubmit.sol/NotoSelfSubmit.json'
-        include 'contracts/private/interfaces/INotoHooks.sol/INotoHooks.json'
-    }
-    into 'internal/noto/abis'
+    into projectDir
 
-    // Flatten all paths into the destination folder
-    eachFile { path = name }
+    into('internal/noto/abis') {
+        from fileTree(configurations.contractCompile.asPath) {
+            include 'contracts/domains/interfaces/INoto.sol/INoto.json'
+            include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
+            include 'contracts/domains/noto/Noto.sol/Noto.json'
+            include 'contracts/domains/noto/NotoSelfSubmit.sol/NotoSelfSubmit.json'
+            include 'contracts/private/interfaces/INotoHooks.sol/INotoHooks.json'
+        }
+        eachFile { path = 'internal/noto/abis/' + name }
+    }
+
+    into('pkg/types/abis') {
+        from fileTree(configurations.contractCompile.asPath) {
+            include 'contracts/domains/interfaces/INotoPrivate.sol/INotoPrivate.json'
+        }
+        eachFile { path = 'pkg/types/abis/' + name }
+    }
+
     includeEmptyDirs = false
 }
 

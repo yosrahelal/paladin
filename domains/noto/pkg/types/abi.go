@@ -16,59 +16,31 @@
 package types
 
 import (
+	_ "embed"
+	"encoding/json"
+
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-var NotoABI = abi.ABI{
-	{
-		Name: "mint",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{Name: "to", Type: "string"},
-			{Name: "amount", Type: "uint256"},
-			{Name: "data", Type: "bytes"},
-		},
-	},
-	{
-		Name: "transfer",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{Name: "to", Type: "string"},
-			{Name: "amount", Type: "uint256"},
-			{Name: "data", Type: "bytes"},
-		},
-	},
-	{
-		Name: "approveTransfer",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{
-				Name:         "inputs",
-				Type:         "tuple[]",
-				InternalType: "struct FullState[]",
-				Components: abi.ParameterArray{
-					{Name: "id", Type: "bytes"},
-					{Name: "schema", Type: "bytes32"},
-					{Name: "data", Type: "bytes"},
-				},
-			},
-			{
-				Name:         "outputs",
-				Type:         "tuple[]",
-				InternalType: "struct FullState[]",
-				Components: abi.ParameterArray{
-					{Name: "id", Type: "bytes"},
-					{Name: "schema", Type: "bytes32"},
-					{Name: "data", Type: "bytes"},
-				},
-			},
-			{Name: "data", Type: "bytes"},
-			{Name: "delegate", Type: "address"},
-		},
-	},
+//go:embed abis/INotoPrivate.json
+var notoPrivateJSON []byte
+
+func mustParseBuildABI(buildJSON []byte) abi.ABI {
+	var buildParsed map[string]tktypes.RawJSON
+	var buildABI abi.ABI
+	err := json.Unmarshal(buildJSON, &buildParsed)
+	if err == nil {
+		err = json.Unmarshal(buildParsed["abi"], &buildABI)
+	}
+	if err != nil {
+		panic(err)
+	}
+	return buildABI
 }
+
+var NotoABI = mustParseBuildABI(notoPrivateJSON)
 
 type ConstructorParams struct {
 	Notary          string      `json:"notary"`                    // Lookup string for the notary identity

@@ -5,83 +5,38 @@ import PaladinClient, {
   IStateWithData,
   TransactionType,
 } from "paladin-sdk";
+import * as notoPrivateABI from "../abis/INotoPrivate.json";
 import { encodeHex } from "../utils";
 import { penteGroupABI } from "./pente";
 
 const POLL_TIMEOUT_MS = 5000;
 
-export const notoABI = (withHooks: boolean): ethers.InterfaceAbi => [
-  {
-    type: "constructor",
-    inputs: [
-      { name: "notary", type: "string" },
-      { name: "restrictMinting", type: "bool" },
-      ...(withHooks
-        ? [
-            {
-              name: "hooks",
-              type: "tuple",
-              components: [
-                {
-                  name: "privateGroup",
-                  type: "tuple",
-                  components: penteGroupABI.components,
-                },
-                { name: "publicAddress", type: "address" },
-                { name: "privateAddress", type: "address" },
-              ],
-            },
-          ]
-        : []),
-    ],
-  },
-  {
-    type: "function",
-    name: "mint",
-    inputs: [
-      { name: "to", type: "string" },
-      { name: "amount", type: "uint256" },
-      { name: "data", type: "bytes" },
-    ],
-  },
-  {
-    type: "function",
-    name: "transfer",
-    inputs: [
-      { name: "to", type: "string" },
-      { name: "amount", type: "uint256" },
-      { name: "data", type: "bytes" },
-    ],
-  },
-  {
-    type: "function",
-    name: "approveTransfer",
-    inputs: [
-      {
-        name: "inputs",
-        type: "tuple[]",
-        internalType: "struct FullState[]",
-        components: [
-          { name: "id", type: "bytes" },
-          { name: "schema", type: "bytes32" },
-          { name: "data", type: "bytes" },
-        ],
-      },
-      {
-        name: "outputs",
-        type: "tuple[]",
-        internalType: "struct FullState[]",
-        components: [
-          { name: "id", type: "bytes" },
-          { name: "schema", type: "bytes32" },
-          { name: "data", type: "bytes" },
-        ],
-      },
-      { name: "data", type: "bytes" },
-      { name: "delegate", type: "address" },
-    ],
-  },
-];
+export const notoConstructorABI = (
+  withHooks: boolean
+): ethers.JsonFragment => ({
+  type: "constructor",
+  inputs: [
+    { name: "notary", type: "string" },
+    { name: "restrictMinting", type: "bool" },
+    ...(withHooks
+      ? [
+          {
+            name: "hooks",
+            type: "tuple",
+            components: [
+              {
+                name: "privateGroup",
+                type: "tuple",
+                components: penteGroupABI.components,
+              },
+              { name: "publicAddress", type: "address" },
+              { name: "privateAddress", type: "address" },
+            ],
+          },
+        ]
+      : []),
+  ],
+});
 
 export interface NotoConstructorParams {
   notary: string;
@@ -135,7 +90,7 @@ export const newNoto = async (
   const txID = await paladin.sendTransaction({
     type: TransactionType.PRIVATE,
     domain,
-    abi: notoABI(!!data.hooks),
+    abi: [notoConstructorABI(!!data.hooks)],
     function: "",
     from,
     data,
@@ -159,7 +114,7 @@ export class NotoHelper {
   async mint(from: string, data: NotoMintParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
-      abi: notoABI(false),
+      abi: notoPrivateABI.abi,
       function: "mint",
       to: this.address,
       from,
@@ -171,7 +126,7 @@ export class NotoHelper {
   async transfer(from: string, data: NotoTransferParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
-      abi: notoABI(false),
+      abi: notoPrivateABI.abi,
       function: "transfer",
       to: this.address,
       from,
@@ -183,7 +138,7 @@ export class NotoHelper {
   async prepareTransfer(from: string, data: NotoTransferParams) {
     const txID = await this.paladin.prepareTransaction({
       type: TransactionType.PRIVATE,
-      abi: notoABI(false),
+      abi: notoPrivateABI.abi,
       function: "transfer",
       to: this.address,
       from,
@@ -195,7 +150,7 @@ export class NotoHelper {
   async approveTransfer(from: string, data: NotoApproveTransferParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
-      abi: notoABI(false),
+      abi: notoPrivateABI.abi,
       function: "approveTransfer",
       to: this.address,
       from,
