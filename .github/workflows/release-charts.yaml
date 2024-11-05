@@ -1,9 +1,6 @@
 name: Helm Chart release
 
 on:
-  push:
-    branches:
-      - helm-release-job # just for testing
   workflow_dispatch:
     inputs:
       latest:
