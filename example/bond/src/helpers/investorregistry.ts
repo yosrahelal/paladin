@@ -1,6 +1,8 @@
-import { PentePrivacyGroup, PentePrivateContract } from "./pente";
+import PaladinClient, {
+  PentePrivacyGroup,
+  PentePrivateContract,
+} from "paladin-sdk";
 import investorRegistry from "../abis/InvestorRegistry.json";
-import PaladinClient from "paladin-sdk";
 
 export interface AddInvestorParams {
   addr: string;

@@ -18,7 +18,6 @@
   },
   "dependencies": {
     "ethers": "^6.13.4",
-    "paladin-sdk": "file:../../sdk/typescript",
-    "uuid": "^11.0.2"
+    "paladin-sdk": "file:../../sdk/typescript"
   }
 }

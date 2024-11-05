@@ -1,6 +1,8 @@
-import { PentePrivacyGroup, PentePrivateContract } from "./pente";
+import PaladinClient, {
+  PentePrivacyGroup,
+  PentePrivateContract,
+} from "paladin-sdk";
 import bondSubscription from "../abis/BondSubscription.json";
-import PaladinClient from "paladin-sdk";
 
 const bondSubscriptionConstructor = bondSubscription.abi.find(
   (entry) => entry.type === "constructor"

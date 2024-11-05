@@ -1,7 +1,9 @@
-import PaladinClient from "paladin-sdk";
+import PaladinClient, {
+  PentePrivacyGroup,
+  PentePrivateContract,
+} from "paladin-sdk";
 import bondTracker from "../abis/BondTracker.json";
 import { InvestorRegistry } from "./investorregistry";
-import { PentePrivacyGroup, PentePrivateContract } from "./pente";
 
 export interface BondTrackerConstructorParams {
   name: string;

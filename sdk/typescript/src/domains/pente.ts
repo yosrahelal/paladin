@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
-import PaladinClient, { IGroupInfo, TransactionType } from "paladin-sdk";
-import pente from "../abis/PentePrivacyGroup.json";
+import { IGroupInfo, TransactionType } from "../interfaces";
+import PaladinClient from "../paladin";
+import * as penteJSON from "./abis/PentePrivacyGroup.json";
 
 const POLL_TIMEOUT_MS = 5000;
 
@@ -183,7 +184,7 @@ export class PentePrivacyGroup {
   async approveTransition(from: string, data: PenteApproveTransitionParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PUBLIC,
-      abi: pente.abi,
+      abi: penteJSON.abi,
       function: "approveTransition",
       to: this.address,
       from,
