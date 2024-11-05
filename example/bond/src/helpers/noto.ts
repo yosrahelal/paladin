@@ -81,25 +81,28 @@ export const encodeStates = (states: IStateBase[]): IStateWithData[] => {
   }));
 };
 
-export const newNoto = async (
-  paladin: PaladinClient,
-  domain: string,
-  from: string,
-  data: NotoConstructorParams
-) => {
-  const txID = await paladin.sendTransaction({
-    type: TransactionType.PRIVATE,
-    domain,
-    abi: [notoConstructorABI(!!data.hooks)],
-    function: "",
-    from,
-    data,
-  });
-  const receipt = await paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
-  return receipt?.contractAddress === undefined
-    ? undefined
-    : new NotoHelper(paladin, receipt.contractAddress);
-};
+export class NotoFactory {
+  constructor(private paladin: PaladinClient, public readonly domain: string) {}
+
+  using(paladin: PaladinClient) {
+    return new NotoFactory(paladin, this.domain);
+  }
+
+  async newNoto(from: string, data: NotoConstructorParams) {
+    const txID = await this.paladin.sendTransaction({
+      type: TransactionType.PRIVATE,
+      domain: this.domain,
+      abi: [notoConstructorABI(!!data.hooks)],
+      function: "",
+      from,
+      data,
+    });
+    const receipt = await this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    return receipt?.contractAddress === undefined
+      ? undefined
+      : new NotoHelper(this.paladin, receipt.contractAddress);
+  }
+}
 
 export class NotoHelper {
   constructor(
