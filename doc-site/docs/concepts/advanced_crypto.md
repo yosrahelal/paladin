@@ -65,7 +65,7 @@ Paladin supports the use coordination required for generation of nullifiers for 
 
 ### Snark friendly encryption and hashing
 
-The Babyjubjub curve is used for the public key cryptography. Public keys derived on this curve are used to represent ownership of the tokens. The hashing algorithm to construct onchain commitments and nullifiers is Poseidon.
+The Baby Jubjub curve is used for the public key cryptography. Public keys derived on this curve are used to represent ownership of the tokens. The hashing algorithm to construct onchain commitments and nullifiers is Poseidon.
 
 > See the Key Management section of the Paladin architecture docs for details of how key materials are made available to the Zeto engine for use in nullifier and proof generation.
 
