@@ -100,18 +100,18 @@ export class NotoFactory {
     const receipt = await this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
     return receipt?.contractAddress === undefined
       ? undefined
-      : new NotoHelper(this.paladin, receipt.contractAddress);
+      : new NotoInstance(this.paladin, receipt.contractAddress);
   }
 }
 
-export class NotoHelper {
+export class NotoInstance {
   constructor(
     private paladin: PaladinClient,
     public readonly address: string
   ) {}
 
   using(paladin: PaladinClient) {
-    return new NotoHelper(paladin, this.address);
+    return new NotoInstance(paladin, this.address);
   }
 
   async mint(from: string, data: NotoMintParams) {
