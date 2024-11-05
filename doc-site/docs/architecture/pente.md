@@ -10,7 +10,7 @@ Pente is a privacy preserving smart contract for Paladin, which provides a diffe
 
 _Each smart contract is its own world state._
 
-![Private Smart Contracts backed by C-UTXO](./diagrams/private_smart_contract_overview.png)
+![Private Smart Contracts backed by C-UTXO](../images/private_smart_contract_overview.png)
 
 - Private smart contracts exists uniquely within a privacy group
 - The transactions are confirmed by spending UTXO states on the base EVM ledger

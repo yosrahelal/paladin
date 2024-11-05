@@ -47,7 +47,7 @@ See the [Programming Model](./programming_model.md) section for more information
 
 The first type of atomic interop supported by Paladin is approval-based atomic transactions.
 
-![Approval-based atomic transaction flow](./diagrams/approval_based_atomic_tx.jpg)
+![Approval-based atomic transaction flow](../images/approval_based_atomic_tx.jpg)
 
 In the above example Bob and Sally are performing a DvP of some privacy preserving cash tokens, and some privacy preserving bond tokens, in coordination with a programmed EVM private smart contract that _only Bob and Sally are party to_.
 

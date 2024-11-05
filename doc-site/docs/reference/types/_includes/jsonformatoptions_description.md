@@ -13,13 +13,13 @@ mode=object&number=string&bytes=hex&address=hex
 The following `mode` options can be used for the overall structure of the JSON returned:
 
 - `object` (default) - the top-level JSON and all `tuples` fields (Solidity `struct`) will be JSON objects
-   - The key will be the `name` as defined in the ABI
-   - If no `name` is provided for a field in the ABI, then the numeric index `0`,`1`,`2` etc. will be used
+    - The key will be the `name` as defined in the ABI
+    -  If no `name` is provided for a field in the ABI, then the numeric index `0`,`1`,`2` etc. will be used
 - `array` - the top-level JSON and all `tuple` fields will be JSON arrays
 - `self-describing`  - each level is an array that contains the following fields
-   - `name` - the name of the field from the ABI
-   - `type` - the type of the field from the ABI, with a falst signature format for `tuple` children
-   - `value` - the value of the field, which will be a self-describing sub-array in the case of `tuple` types
+    - `name` - the name of the field from the ABI
+    - `type` - the type of the field from the ABI, with a falst signature format for `tuple` children
+    - `value` - the value of the field, which will be a self-describing sub-array in the case of `tuple` types
 
 ### Number
 
@@ -28,9 +28,9 @@ The following `number` options can be used for formatting of numbers - `uint256`
 - `string` (default) - a decimal (base-10) formatted string
 - `hex` or`hex-0x` - a hexidecimal (base-16) formatted string prefixed with `0x`
 - `number` - a JSON number of arbitrary precision
-   - _Be careful if using this option_ that your JSON parsing library has been configured to support big integers
-   - Ethereum token balances regularly use 18 decimals, meaning 100 would be `{"value": 100000000000000000000}`
-   - Many default implementations of JSON parsing fail in obscure ways when parsing large numbers like this
+    - _Be careful if using this option_ that your JSON parsing library has been configured to support big integers
+    - Ethereum token balances regularly use 18 decimals, meaning 100 would be `{"value": 100000000000000000000}`
+    - Many default implementations of JSON parsing fail in obscure ways when parsing large numbers like this
 
 ### Bytes
 
