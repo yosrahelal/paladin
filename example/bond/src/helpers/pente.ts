@@ -77,7 +77,12 @@ const penteCallABI = (
   outputs: outputComponents,
 });
 
-export type PentePrivacyGroupParams = [IGroupInfo, string, string, boolean];
+export interface PentePrivacyGroupParams {
+  group: IGroupInfo;
+  evmVersion: string;
+  endorsementType: string;
+  externalCallsEnabled: boolean;
+}
 
 export interface PenteApproveTransitionParams {
   txId: string;

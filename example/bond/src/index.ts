@@ -77,12 +77,12 @@ async function main() {
     members: [bondIssuer, bondCustodian],
   };
   const penteFactory = new PenteFactory(paladin1, "pente");
-  const issuerCustodianGroup = await penteFactory.newPrivacyGroup(bondIssuer, [
-    issuerCustodianGroupInfo,
-    "shanghai",
-    "group_scoped_identities",
-    true,
-  ]);
+  const issuerCustodianGroup = await penteFactory.newPrivacyGroup(bondIssuer, {
+    group: issuerCustodianGroupInfo,
+    evmVersion: "shanghai",
+    endorsementType: "group_scoped_identities",
+    externalCallsEnabled: true,
+  });
   if (issuerCustodianGroup === undefined) {
     logger.error("Failed!");
     return;
@@ -185,12 +185,12 @@ async function main() {
   };
   const investorCustodianGroup = await penteFactory
     .using(paladin3)
-    .newPrivacyGroup(investor, [
-      investorCustodianGroupInfo,
-      "shanghai",
-      "group_scoped_identities",
-      true,
-    ]);
+    .newPrivacyGroup(investor, {
+      group: investorCustodianGroupInfo,
+      evmVersion: "shanghai",
+      endorsementType: "group_scoped_identities",
+      externalCallsEnabled: true,
+    });
   if (investorCustodianGroup === undefined) {
     logger.error("Failed!");
     return;

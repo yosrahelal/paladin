@@ -115,9 +115,7 @@ nav:
     - Running: getting-started/running.md
   - Tutorials:
     - Introduction: tutorials/index.md
-    - Tutorial 1: tutorials/tutorial-1.md
-    - Tutorial 2: tutorials/tutorial-2.md
-    - Tutorial 3: tutorials/tutorial-3.md
+    - Bond Issuance: tutorials/bond-issuance.md
   - Reference:
     - APIs: reference/apis/*.md
     - Types: reference/types/*.md
