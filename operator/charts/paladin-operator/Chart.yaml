@@ -23,18 +23,29 @@ version: 0.0.0
 # It is recommended to use it with quotes.
 appVersion: "0.0.0"
 
-# dependencies:
-#   - name: paladin-operator-crds
-#     version: 0.0.0
-#     repository: "file://../paladin-operator-crds/"
-#     condition: installCRDs
-
 dependencies:
+  - name: paladin-operator-crd
+    version: 0.0.0
+    repository: "file://../paladin-operator-crd/"
+    condition: installCRDs
+
+# install cert-manager dependencies if cert-manager is enabled
+  - name: cert-manager-namespace
+    version: 0.0.0
+    repository: "file://../cert-manager-namespace/"
+    condition: cert-manager.enabled
   - name: cert-manager
     version: v1.16.1
     repository: https://charts.jetstack.io
     condition: cert-manager.enabled
+
+# install prometheus dependencies if prometheus is enabled
+  - name: prometheus-namespace
+    version: 0.0.0
+    repository: "file://../prometheus-namespace/"
+    condition: prometheus.enabled
   - name: prometheus
     version: "15.8.0"  # Update this to the version you prefer
     repository: "https://prometheus-community.github.io/helm-charts"
     condition: prometheus.enabled
+
