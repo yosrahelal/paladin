@@ -66,7 +66,7 @@ Paladin not only uses EVM as the base ledger it runs against (it is compatible w
 
 ### The building blocks
 
-Constructing a tokenization use case has historically mean choosing between three very different approaches to maintaining privacy:
+Constructing a tokenization use case has historically meant choosing between three very different approaches to maintaining privacy:
 
 1. Zero-knowledge proof (ZKP) based tokens
     - These obey the purest principals of decentralization, where mathematics enforces the rules of the token. No individual party is required to be involved in any processing, and by the nature of that no party can prevent a valid transaction from executing.
