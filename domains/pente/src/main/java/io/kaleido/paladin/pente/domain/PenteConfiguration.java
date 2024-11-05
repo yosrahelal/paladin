@@ -205,7 +205,7 @@ public class PenteConfiguration {
             @JsonProperty
             Address contractAddress,
             @JsonProperty
-            byte[] encodedCall
+            JsonHex.Bytes encodedCall
     ) {
     }
 
