@@ -15,6 +15,15 @@ npm install
 npm run compile
 ```
 
+Build [TypeScript SDK](../../sdk/typescript):
+
+```shell
+cd ../../sdk/typescript
+npm install
+npm run abi
+npm run build
+```
+
 Run example:
 
 ```shell

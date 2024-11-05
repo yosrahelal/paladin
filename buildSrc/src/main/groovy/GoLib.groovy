@@ -25,8 +25,8 @@ class GoLib extends DefaultTask {
     @OutputFile
     File outputLib
 
-    @Internal
-    String outputHeader
+    @OutputFile
+    File outputHeader
 
     void sources(Object... sources) {
         if (this.sources == null) {
@@ -51,9 +51,7 @@ class GoLib extends DefaultTask {
         // Updated paths for outputs
         outputDir = project.layout.buildDirectory.dir("libs").get().asFile
         outputLib = new File(outputDir, libName)
-        outputHeader = "${outputDir}/lib${libName}.h"
-
-        outputs.files(outputLib, outputHeader)
+        outputHeader = new File(outputDir, "lib${baseName}.h")
     }
 
     void mainFile(String mainFile) {

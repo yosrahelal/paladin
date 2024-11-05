@@ -1,12 +1,13 @@
 import { ethers } from "ethers";
-import PaladinClient, {
+import {
   IGroupInfo,
   IStateBase,
   IStateWithData,
   TransactionType,
-} from "paladin-sdk";
-import * as notoPrivateABI from "../abis/INotoPrivate.json";
+} from "../interfaces";
+import PaladinClient from "../paladin";
 import { encodeHex } from "../utils";
+import * as notoPrivateJSON from "./abis/INotoPrivate.json";
 import { penteGroupABI } from "./pente";
 
 const POLL_TIMEOUT_MS = 5000;
@@ -73,7 +74,7 @@ export interface NotoCoinData {
   amount: string;
 }
 
-export const encodeStates = (states: IStateBase[]): IStateWithData[] => {
+export const encodeNotoStates = (states: IStateBase[]): IStateWithData[] => {
   return states.map((state) => ({
     id: state.id,
     schema: state.schema,
@@ -100,24 +101,24 @@ export class NotoFactory {
     const receipt = await this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
     return receipt?.contractAddress === undefined
       ? undefined
-      : new NotoHelper(this.paladin, receipt.contractAddress);
+      : new NotoInstance(this.paladin, receipt.contractAddress);
   }
 }
 
-export class NotoHelper {
+export class NotoInstance {
   constructor(
     private paladin: PaladinClient,
     public readonly address: string
   ) {}
 
   using(paladin: PaladinClient) {
-    return new NotoHelper(paladin, this.address);
+    return new NotoInstance(paladin, this.address);
   }
 
   async mint(from: string, data: NotoMintParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
-      abi: notoPrivateABI.abi,
+      abi: notoPrivateJSON.abi,
       function: "mint",
       to: this.address,
       from,
@@ -129,7 +130,7 @@ export class NotoHelper {
   async transfer(from: string, data: NotoTransferParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
-      abi: notoPrivateABI.abi,
+      abi: notoPrivateJSON.abi,
       function: "transfer",
       to: this.address,
       from,
@@ -141,7 +142,7 @@ export class NotoHelper {
   async prepareTransfer(from: string, data: NotoTransferParams) {
     const txID = await this.paladin.prepareTransaction({
       type: TransactionType.PRIVATE,
-      abi: notoPrivateABI.abi,
+      abi: notoPrivateJSON.abi,
       function: "transfer",
       to: this.address,
       from,
@@ -153,7 +154,7 @@ export class NotoHelper {
   async approveTransfer(from: string, data: NotoApproveTransferParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
-      abi: notoPrivateABI.abi,
+      abi: notoPrivateJSON.abi,
       function: "approveTransfer",
       to: this.address,
       from,
