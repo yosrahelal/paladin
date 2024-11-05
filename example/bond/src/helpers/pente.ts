@@ -112,7 +112,7 @@ export class PenteFactory {
       ? undefined
       : new PentePrivacyGroupHelper(
           this.paladin,
-          data[0],
+          data.group,
           receipt.contractAddress
         );
   }
