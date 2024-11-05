@@ -11,10 +11,10 @@ export default defineConfig(({ mode }) => ({
       '/': {
         target:
           mode === 'node2'
-            ? 'http://localhost:3557'
+            ? 'http://localhost:31648'
             : mode === 'node1'
-            ? 'http://localhost:3556'
-            : 'http://localhost:3555',
+            ? 'http://localhost:31548'
+            : 'http://localhost:31748',
         secure: false,
         bypass: (req, _resolveConfig, _options) =>
           req.method === 'POST' ? undefined : req.url,
