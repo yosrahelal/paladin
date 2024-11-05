@@ -1,6 +1,6 @@
 {
   "paladin": {
-    "image": "paladin:test",
+    "image": "kaleidoinc/paladin:release",
     "labels": {
       "app": "paladin"
     }
