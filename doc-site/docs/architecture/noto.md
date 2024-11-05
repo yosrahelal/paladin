@@ -40,10 +40,10 @@ Creates a new Noto token, with a new address on the base ledger.
 
 Inputs:
 
-* **notary** - lookup string for the identity that will serve as the notary for this token instance. May be located at this node or another node.
-* **implementation** - (optional) the name of a non-default Noto implementation that has previously been registered.
-* **restrictMinting** - (optional - default true) only allow the notary to request mint.
-* **hooks** - (optional) specify a [Pente](../pente) private smart contract that will be called for each Noto transaction, to provide custom logic and policies.
+* **notary** - lookup string for the identity that will serve as the notary for this token instance. May be located at this node or another node
+* **implementation** - (optional) the name of a non-default Noto implementation that has previously been registered
+* **restrictMinting** - (optional - default true) only allow the notary to request mint
+* **hooks** - (optional) specify a [Pente](../pente) private smart contract that will be called for each Noto transaction, to provide custom logic and policies
 
 ### mint
 
