@@ -26,10 +26,17 @@ Welcome!
 
 ### Building locally
 
-The build is coordinated via Gradle:
+Install the following pre-reqs:
+- JDK - https://adoptium.net/download/
+- Protoc - https://grpc.io/docs/protoc-installation/
+- Docker - https://docs.docker.com/compose/install/
+- NodeJS - https://nodejs.org/en/download/package-manager
 
-```
-gradle build
+
+Then the following command to build Paladin via Gradle:
+
+```shell
+./gradlew build
 ```
 
 ### Running a full development environment
