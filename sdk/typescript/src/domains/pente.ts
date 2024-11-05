@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { ethers } from "ethers";
 import { IGroupInfo, TransactionType } from "../interfaces";
 import PaladinClient from "../paladin";
@@ -77,6 +78,9 @@ export interface PenteApproveTransitionParams {
   transitionHash: string;
   signatures: string[];
 }
+
+export const newGroupSalt = () =>
+  "0x" + Buffer.from(randomBytes(32)).toString("hex");
 
 export class PenteFactory {
   constructor(private paladin: PaladinClient, public readonly domain: string) {}

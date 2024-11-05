@@ -4,6 +4,7 @@ import PaladinClient, {
   Algorithms,
   encodeNotoStates,
   IGroupInfo,
+  newGroupSalt,
   newTransactionId,
   NotoFactory,
   PenteFactory,
@@ -73,13 +74,12 @@ async function main() {
 
   // Create a Pente privacy group between the bond issuer and bond custodian
   logger.log("Creating issuer+custodian privacy group...");
-  const issuerCustodianGroupInfo: IGroupInfo = {
-    salt: "0x" + Buffer.from(randomBytes(32)).toString("hex"),
-    members: [bondIssuer, bondCustodian],
-  };
   const penteFactory = new PenteFactory(paladin1, "pente");
   const issuerCustodianGroup = await penteFactory.newPrivacyGroup(bondIssuer, {
-    group: issuerCustodianGroupInfo,
+    group: {
+      salt: newGroupSalt(),
+      members: [bondIssuer, bondCustodian],
+    },
     evmVersion: "shanghai",
     endorsementType: "group_scoped_identities",
     externalCallsEnabled: true,
@@ -135,7 +135,7 @@ async function main() {
   const notoBond = await notoFactory.newNoto(bondIssuer, {
     notary: bondCustodian,
     hooks: {
-      privateGroup: issuerCustodianGroupInfo,
+      privateGroup: issuerCustodianGroup.group,
       publicAddress: issuerCustodianGroup.address,
       privateAddress: bondTracker.address,
     },
@@ -180,14 +180,13 @@ async function main() {
 
   // Create a Pente privacy group between the bond investor and bond custodian
   logger.log("Creating investor+custodian privacy group...");
-  const investorCustodianGroupInfo: IGroupInfo = {
-    salt: "0x" + Buffer.from(randomBytes(32)).toString("hex"),
-    members: [investor, bondCustodian],
-  };
   const investorCustodianGroup = await penteFactory
     .using(paladin3)
     .newPrivacyGroup(investor, {
-      group: investorCustodianGroupInfo,
+      group: {
+        salt: newGroupSalt(),
+        members: [investor, bondCustodian],
+      },
       evmVersion: "shanghai",
       endorsementType: "group_scoped_identities",
       externalCallsEnabled: true,
@@ -292,14 +291,13 @@ async function main() {
 
   // Pass the prepared bond transfer to the subscription contract
   logger.log("Adding bond information to subscription request...");
-  const bondTransferParams = [
+  const encodedBondTransfer = new ethers.Interface([
+    bondTransfer2.metadata.transitionWithApproval.functionABI,
+  ]).encodeFunctionData("transitionWithApproval", [
     bondTransfer2.transaction.data.txId,
     bondTransfer2.transaction.data.states,
     bondTransfer2.transaction.data.externalCalls,
-  ];
-  const encodedBondTransfer = new ethers.Interface([
-    bondTransfer2.metadata.transitionWithApproval.functionABI,
-  ]).encodeFunctionData("transitionWithApproval", bondTransferParams);
+  ]);
   receipt = await bondSubscription.using(paladin2).prepareBond(bondCustodian, {
     to: bondTransfer2.transaction.to,
     encodedCall: encodedBondTransfer,

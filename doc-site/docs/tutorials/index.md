@@ -14,4 +14,3 @@ ensure you're familiar with running Paladin before walking through any of the tu
     Learn how Noto and Pente work together to represent a bond issuance process.
 
 </div>
-
