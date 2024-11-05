@@ -19,21 +19,21 @@ configurations {
         canBeConsumed = false
         canBeResolved = true
     }
-
-    // Consumable configurations
     buildSDK {
-        canBeConsumed = true
-        canBeResolved = false
+        canBeConsumed = false
+        canBeResolved = true
     }
 }
 
 dependencies {
     contractCompile project(path: ":solidity", configuration: "compiledContracts")
+    buildSDK project(path: ":sdk:typescript", configuration: "buildSDK")
 }
 
 task install(type: Exec) {
     executable 'npm'
     args 'install'
+    inputs.files(configurations.buildSDK)
     inputs.files("package.json")
     outputs.files("package-lock.json")
     outputs.dir("node_modules")
@@ -58,8 +58,4 @@ task build(type: Exec, dependsOn: [install, copyABI]) {
 task clean(type: Delete) {
     delete "node_modules"
     delete "build"
-}
-
-dependencies {
-    buildSDK files(build)
 }
