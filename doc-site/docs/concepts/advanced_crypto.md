@@ -19,22 +19,23 @@ Trust in a token received, is based on trust of the issuer/pre-verifier, as you 
 ### Potential challenges with issuer-backed model
 
 1. Centralization of data/trust
-    - This is sometimes considered a significant benefit, rather than a challenge. Particularly if a party is required legally to maintain a record of every transaction. As regardless of the technology there is some centralization of trust in that party.
-    - Note that with Paladin it is possible for a pre-verification model to atomically interoperate with Private EVM state, and ZKP backed tokens in a single transaction. So trusting an issue for one token, does not mean they need to have access to all business data in a transaction
+   - This is sometimes considered a significant benefit, rather than a challenge. Particularly if a party is required legally to maintain a record of every transaction. As regardless of the technology there is some centralization of trust in that party.
+   - Note that with Paladin it is possible for a pre-verification model to atomically interoperate with Private EVM state, and ZKP backed tokens in a single transaction. So trusting an issue for one token, does not mean they need to have access to all business data in a transaction
 2. Operational coupling
-    - Availability to transact, is based on availability of the pre-verifier infrastructure. Again this is sometimes considered a benefit, if the pre-verifier has a role that includes preventing transactions completing that do not conform to certain rules only it can enforce.
+   - Availability to transact, is based on availability of the pre-verifier infrastructure. Again this is sometimes considered a benefit, if the pre-verifier has a role that includes preventing transactions completing that do not conform to certain rules only it can enforce.
 
 ## Zero-knowledge proofs (ZKP)
 
 The alternative approach is to use a ZKP circuit to cryptographically verify the business transaction conformed to the rules of the smart contract.
 
 This use of advanced cryptography has the following benefits:
+
 - Fully decentralized - any party can generate a proof, and submit a transaction, as long as that transaction meets the rules of the contract
 - Full enforcement on-chain - any transaction that does not conform is rejected directly via the base ledger
 
 ### Paladin and Zeto
 
-Paladin has a sibling project [zeto](https://github.com/hyperledger-labs/zeto), which contains a set of ZKP written in Circom and has been undergoing peer review for some time before the availability of Paladin itself.
+Paladin has a sibling project [zeto](https://github.com/hyperledger-labs/zeto), which contains a set of ZKP circuits written in Circom, along with sample Solidity-based token implementations that make use of the ZKP verifiers. Zeto has been undergoing peer review for some time before the availability of Paladin itself.
 
 The following features are part of the Zeto project, and Paladin provides the client for these.
 
@@ -54,7 +55,7 @@ The separation of the data from the proof submitted on-chain, requiring separate
 
 ### On-chain encryption of data
 
-Options using on-chain encryption are also provided.
+Options using on-chain encryption are also provided. Encryptions are performed inside the ZKP circuit such that they are guaranteed to be decipherable by the receiver.
 
 ### Nullifiers for additional anonymity
 
@@ -64,7 +65,7 @@ Paladin supports the use coordination required for generation of nullifiers for 
 
 ### Snark friendly encryption and hashing
 
-Babyjubjub encryption and Poseidon hashing is used.
+The Babyjubjub curve is used for the public key cryptography. Public keys derived on this curve are used to represent ownership of the tokens. The hashing algorithm to construct onchain commitments and nullifiers is Poseidon.
 
 > See the Key Management section of the Paladin architecture docs for details of how key materials are made available to the Zeto engine for use in nullifier and proof generation.
 
@@ -72,7 +73,7 @@ Babyjubjub encryption and Poseidon hashing is used.
 
 Paladin supports multiple different execution environments for components, all in a single process through its runtime architecture.
 
-Zeto uses this to run high performance execution of Circom compiled circuits.
+Zeto circuits are compiled into WebAssembly modules (WASM) which are loaded by Paladin to calculate witnesses, which are then used in proof generations.
 
 ### Governance requirements
 
@@ -102,4 +103,3 @@ These properties make a UTXO model a great fit for performing _atomic operations
 As such all of the tokens, and the Private EVM Privacy Groups, in Paladin are based on a UTXO state storage and distribution system, with confidentiality built in based on selectively disclosing those states only to those parties with a right to have access to them.
 
 ![UTXO states](../images/confidential_utxo_model.png)
-
