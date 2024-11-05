@@ -61,7 +61,7 @@ Options using on-chain encryption are also provided. Encryptions are performed i
 
 Nullifiers mask the spending of a coin in a way that only the spender knows which coin was spent - providing increased levels of anonymity.
 
-Paladin supports the use coordination required for generation of nullifiers for states by the owners of those states, as an advanced wallet and distributed state management function.
+Paladin supports the coordination required for generation of nullifiers for states by the owners of those states, as an advanced wallet and distributed state management function.
 
 ### Snark friendly encryption and hashing
 
