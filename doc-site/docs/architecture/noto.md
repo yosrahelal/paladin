@@ -11,8 +11,8 @@ transfer.
 
 ## Private ABI
 
-The private ABI of Noto is implemented in Go, and can be accessed by calling `ptx_sendTransaction`
-with `"type": "private"`.
+The private ABI of Noto is implemented in [Go](https://github.com/LF-Decentralized-Trust-labs/paladin/tree/main/domains/noto),
+and can be accessed by calling `ptx_sendTransaction` with `"type": "private"`.
 
 ### constructor
 
