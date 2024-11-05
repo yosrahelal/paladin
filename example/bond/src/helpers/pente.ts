@@ -77,7 +77,12 @@ const penteCallABI = (
   outputs: outputComponents,
 });
 
-export type PentePrivacyGroupParams = [IGroupInfo, string, string, boolean];
+export interface PentePrivacyGroupParams {
+  group: IGroupInfo;
+  evmVersion: string;
+  endorsementType: string;
+  externalCallsEnabled: boolean;
+}
 
 export interface PenteApproveTransitionParams {
   txId: string;
@@ -86,25 +91,32 @@ export interface PenteApproveTransitionParams {
   signatures: string[];
 }
 
-export const newPentePrivacyGroup = async (
-  paladin: PaladinClient,
-  domain: string,
-  from: string,
-  data: PentePrivacyGroupParams
-) => {
-  const txID = await paladin.sendTransaction({
-    type: TransactionType.PRIVATE,
-    domain: "pente",
-    abi: [penteConstructorABI],
-    function: "",
-    from,
-    data,
-  });
-  const receipt = await paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
-  return receipt?.contractAddress === undefined
-    ? undefined
-    : new PentePrivacyGroupHelper(paladin, data[0], receipt.contractAddress);
-};
+export class PenteFactory {
+  constructor(private paladin: PaladinClient, public readonly domain: string) {}
+
+  using(paladin: PaladinClient) {
+    return new PenteFactory(paladin, this.domain);
+  }
+
+  async newPrivacyGroup(from: string, data: PentePrivacyGroupParams) {
+    const txID = await this.paladin.sendTransaction({
+      type: TransactionType.PRIVATE,
+      domain: this.domain,
+      abi: [penteConstructorABI],
+      function: "",
+      from,
+      data,
+    });
+    const receipt = await this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    return receipt?.contractAddress === undefined
+      ? undefined
+      : new PentePrivacyGroupHelper(
+          this.paladin,
+          data[0],
+          receipt.contractAddress
+        );
+  }
+}
 
 export class PentePrivacyGroupHelper {
   constructor(

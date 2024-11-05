@@ -1,6 +1,6 @@
 # Installation Guide
 
-## Installation Steps
+## Installation
 
 ### Prerequisites
 * Access to a running Kubernetes cluster (e.g. kind, minikube, ecr, etc.)
@@ -18,6 +18,7 @@ helm upgrade --install paladin-crds paladin/paladin-operator-crd
 [Install the cert-manager CRDs](https://artifacthub.io/packages/helm/cert-manager/cert-manager):
 ```bash
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml
+helm repo add jetstack https://charts.jetstack.io --force-update
 helm install cert-manager --namespace cert-manager --version v1.16.1 jetstack/cert-manager --create-namespace
 ```
 
@@ -30,7 +31,9 @@ helm upgrade --install paladin paladin/paladin-operator -n paladin --create-name
 ```
 
 ### Outcome
+
 This process will:
+
 1. Install the cert-manager chart.
 2. Install the paladin-operator chart.
 3. Create a Besu network with 3 nodes.
@@ -44,7 +47,7 @@ To open the Paladin UI in your browser, go to:
 http://<cluster IP>:<paladin service port>/ui
 ```
 
-## Uninstallation Steps
+## Uninstall
 
 To remove the Paladin operator and related resources, run the following commands:
 ```bash

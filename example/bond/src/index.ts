@@ -9,8 +9,8 @@ import PaladinClient, {
 import bondTrackerPublicJson from "./abis/BondTrackerPublic.json";
 import { newBondSubscription } from "./helpers/bondsubscription";
 import { newBondTracker } from "./helpers/bondtracker";
-import { encodeStates, newNoto } from "./helpers/noto";
-import { newPentePrivacyGroup } from "./helpers/pente";
+import { encodeStates, NotoFactory } from "./helpers/noto";
+import { PenteFactory } from "./helpers/pente";
 import { newTransactionId } from "./utils";
 
 const logger = console;
@@ -46,7 +46,8 @@ async function main() {
 
   // Create a Noto token to represent cash
   logger.log("Deploying Noto cash token...");
-  const notoCash = await newNoto(paladin1, "noto", cashIssuer, {
+  const notoFactory = new NotoFactory(paladin1, "noto");
+  const notoCash = await notoFactory.newNoto(cashIssuer, {
     notary: cashIssuer,
     restrictMinting: true,
   });
@@ -75,12 +76,13 @@ async function main() {
     salt: "0x" + Buffer.from(randomBytes(32)).toString("hex"),
     members: [bondIssuer, bondCustodian],
   };
-  const issuerCustodianGroup = await newPentePrivacyGroup(
-    paladin1,
-    "pente",
-    bondIssuer,
-    [issuerCustodianGroupInfo, "shanghai", "group_scoped_identities", true]
-  );
+  const penteFactory = new PenteFactory(paladin1, "pente");
+  const issuerCustodianGroup = await penteFactory.newPrivacyGroup(bondIssuer, {
+    group: issuerCustodianGroupInfo,
+    evmVersion: "shanghai",
+    endorsementType: "group_scoped_identities",
+    externalCallsEnabled: true,
+  });
   if (issuerCustodianGroup === undefined) {
     logger.error("Failed!");
     return;
@@ -129,7 +131,7 @@ async function main() {
 
   // Deploy Noto token to represent bond
   logger.log("Deploying Noto bond token...");
-  const notoBond = await newNoto(paladin1, "noto", bondIssuer, {
+  const notoBond = await notoFactory.newNoto(bondIssuer, {
     notary: bondCustodian,
     hooks: {
       privateGroup: issuerCustodianGroupInfo,
@@ -181,12 +183,14 @@ async function main() {
     salt: "0x" + Buffer.from(randomBytes(32)).toString("hex"),
     members: [investor, bondCustodian],
   };
-  const investorCustodianGroup = await newPentePrivacyGroup(
-    paladin3,
-    "pente",
-    investor,
-    [investorCustodianGroupInfo, "shanghai", "group_scoped_identities", true]
-  );
+  const investorCustodianGroup = await penteFactory
+    .using(paladin3)
+    .newPrivacyGroup(investor, {
+      group: investorCustodianGroupInfo,
+      evmVersion: "shanghai",
+      endorsementType: "group_scoped_identities",
+      externalCallsEnabled: true,
+    });
   if (investorCustodianGroup === undefined) {
     logger.error("Failed!");
     return;

@@ -79,7 +79,7 @@ def verifyResourceReady(String namespace, String resourceType, String resourceNa
     printClusterStatus(namespace)
 }
 
-task copySolidity(type: Copy) {
+task copySolidity(type: Copy, dependsOn: [":domains:noto:copySolidity"]) {
     inputs.files(configurations.contractCompile)
     from fileTree(configurations.contractCompile.asPath) {
         include 'contracts/registry/IdentityRegistry.sol/IdentityRegistry.json'
