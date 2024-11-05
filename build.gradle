@@ -239,3 +239,11 @@ task docker(type: Exec) {
     args '-t', 'paladin:test'
     args '.'
 }
+
+task dockerx(type: Exec) {
+    executable 'docker'
+    args 'buildx', 'build'
+    args '--platform', 'linux/amd64,linux/arm64'
+    args '-t', 'paladin:test'
+    args '.'
+}

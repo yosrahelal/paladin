@@ -1,15 +1,17 @@
 
 
-# Default values for paladin-operator
+# Install CRDs as part of the chart installation
+# When this is set to false, the CRDs are expected to be installed separately
+installCRDs: false
 
 # Default values for paladin-operator
 operator:
   name: paladin-operator
   namespace: paladin
   image:
-    repository: paladin-operator
-    tag: latest
-    pullPolicy: IfNotPresent
+    repository: kaleidoinc/paladin-operator
+    tag: release
+    pullPolicy: Always
 
   serviceAccount:
     create: true
@@ -84,7 +86,7 @@ cert-manager:
 
 # Prometheus dependencies
 prometheus:
-  enabled: true
+  enabled: false
   prometheus:
     namespace: prometheus 
   alertmanager:

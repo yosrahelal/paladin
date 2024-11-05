@@ -1,0 +1,9 @@
+apiVersion: v2
+name: prometheus-namespace
+description: A chart that pre-creates the prometheus namespace for the Paladin Operator dependencies
+
+type: application
+
+version: 0.0.0
+
+appVersion: "0.0.0"
