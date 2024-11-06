@@ -64,10 +64,6 @@ Mint new value. New UTXO state(s) will automatically be created to fulfill the r
           "internalType": "uint256"
         }
       ]
-    },
-    {
-      "name": "data",
-      "type": "bytes"
     }
   ]
 }
@@ -78,7 +74,6 @@ Inputs:
 - **mints** - list of mints, each with a receiver name and amount
   - **to** - lookup string for the identity that will receive minted value
   - **amount** - amount of new value to create
-- **data** - user/application data to include with the transaction (will be accessible from an "info" state in the state receipt)
 
 ### transfer
 
@@ -104,10 +99,6 @@ Transfer value from the sender to another recipient. Available UTXO states will 
           "internalType": "uint256"
         }
       ]
-    },
-    {
-      "name": "data",
-      "type": "bytes"
     }
   ],
   "outputs": null
@@ -119,4 +110,30 @@ Inputs:
 - **transfers** - list of transfers, each with a receiver name and amount
   - **to** - lookup string for the identity that will receive transferred value
   - **amount** - amount of value to transfer
-- **data** - user/application data to include with the transaction (will be accessible from an "info" state in the state receipt)
+
+### lockProof
+
+This is a special purpose function used in coordinating multi-party transactions, such as [Delivery-vs-Payment (DvP) contracts](https://github.com/hyperledger-labs/zeto/blob/main/solidity/contracts/zkDvP.sol). When a party commits to the trade first by uploading the ZK proof to the orchestration contract, they must be protected from a malicious party seeing the proof and using it to unilaterally execute the token transfer. The `lockProof()` function allows an account, which can be a smart contract address, to designate the finaly submitter of the proof, thus protecting anybody else from abusing the proof outside of the atomic settlement of the multi-leg trade.
+
+```json
+{
+  "type": "function",
+  "name": "lockProof",
+  "inputs": [
+    {
+      "name": "delegate",
+      "type": "address"
+    },
+    {
+      "name": "call",
+      "type": "bytes"
+    }
+  ],
+  "outputs": null
+}
+```
+
+Inputs:
+
+- **delegate** - set to the Ethereum account, which can be an externally owned account or a smart contract address, that is allowed to submit the transaction to use the locked proof to execute the Zeto tokent transfer
+- **call** - this is an abi encoded bytes from a call to the `transfer()` function of the target Zeto token smart contract. Refer to the [PvP test case](../../../domains/integration-test/pvp_test.go) for an example of how to construct the encode call bytes
