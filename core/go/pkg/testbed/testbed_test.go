@@ -67,7 +67,7 @@ db:
     dsn:           ":memory:"
     autoMigrate:   true
     migrationsDir: any
-    debugQueries:  true
+    debugQueries:  false
 wallets:
 - name: wallet1
   keySelector: .*
