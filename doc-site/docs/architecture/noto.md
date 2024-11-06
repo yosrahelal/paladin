@@ -1,4 +1,4 @@
-# Noto: Notarized Tokens
+# Noto - Notarized Tokens
 
 The Noto domain provides confidential UTXO tokens which are managed by a single party, referred
 to as the notary. Each UTXO state (sometimes referred to as a "coin") encodes an owning address,
