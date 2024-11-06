@@ -119,8 +119,13 @@ kind-promote: kind-start ## Load Docker images into Kind cluster.
 	$(KIND_CLUSTER) load docker-image ${PALADIN_IMG_NAME}:${PALADIN_IMG_TAG}  --name "${CLUSTER_NAME}"
 
 .PHONY: kind-delete
-kind-delete:	## Delete the Kind cluster.
-	$(KIND_CLUSTER) delete cluster --name "${CLUSTER_NAME}" || true
+kind-delete: ## Delete the Kind cluster.
+	@if $(KUBECTL) version --client=false > /dev/null 2>&1; then \
+		$(KIND_CLUSTER) delete cluster --name "${CLUSTER_NAME}" > /dev/null 2>&1 || true; \
+	else \
+		echo "No Kubernetes cluster detected. Skipping Kind cluster deletion."; \
+	fi
+
 
 ##@ Build
 .PHONY: build
@@ -183,7 +188,12 @@ install-crds: prepare-crd-chart ## Install CRDs using Helm.
 
 .PHONY: uninstall-crds
 uninstall-crds: ## Uninstall CRDs.
-	$(HELM) uninstall ${CHART_NAME_CRD} || true
+	@if $(KUBECTL) version --client=false > /dev/null 2>&1; then \
+		$(HELM) uninstall ${CHART_NAME_CRD} > /dev/null 2>&1 || true; \
+	else \
+		echo "No Kubernetes cluster detected. Skipping CRD uninstallation."; \
+	fi
+
 
 .PHONY: helm-template
 helm-template: ## Install operator using Helm.
@@ -217,15 +227,23 @@ helm-install: helm-install-dependencies ## Install operator using Helm.
 
 .PHONY: helm-uninstall-dependencies
 helm-uninstall-dependencies:
-	$(HELM) uninstall cert-manager --namespace cert-manager || true
-	$(KUBECTL) delete namespace cert-manager || true
-	$(KUBECTL) delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml
+	@if $(KUBECTL) version --client=false > /dev/null 2>&1; then \
+		$(HELM) uninstall cert-manager --namespace cert-manager > /dev/null 2>&1 || true; \
+		$(KUBECTL) delete namespace cert-manager > /dev/null 2>&1 || true; \
+		$(KUBECTL) delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml > /dev/null 2>&1 || true; \
+	else \
+		echo "No Kubernetes cluster detected. Skipping dependencies uninstallation."; \
+	fi
 
 .PHONY: helm-uninstall
 helm-uninstall: helm-uninstall-dependencies ## Uninstall operator using Helm.
-	$(HELM) uninstall ${CHART_NAME_OPERATOR} -n ${NAMESPACE} || true
-	$(KUBECTL) delete namespace ${NAMESPACE} || true
-	$(KUBECTL) delete namespace prometheus || true
+	@if $(KUBECTL) version --client=false > /dev/null 2>&1; then \
+		$(HELM) uninstall ${CHART_NAME_OPERATOR} -n ${NAMESPACE} > /dev/null 2>&1 || true; \
+		$(KUBECTL) delete namespace ${NAMESPACE} > /dev/null 2>&1 || true; \
+		$(KUBECTL) delete namespace prometheus > /dev/null 2>&1 || true; \
+	else \
+		echo "No Kubernetes cluster detected. Skipping chart uninstallation."; \
+	fi
 
 .PHONY: helm-pause
 helm-pause: ## Pause the operator (set replica count to 0).
