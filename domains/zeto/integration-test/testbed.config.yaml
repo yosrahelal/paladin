@@ -31,6 +31,9 @@ blockchain:
     initialConnectAttempts: 25
 log:
   level: debug
+  output: file
+  file:
+    filename: build/testbed.zeto.log
 wallets:
 - name: wallet1
   keySelector: .*

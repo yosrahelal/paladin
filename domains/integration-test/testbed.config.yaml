@@ -22,6 +22,11 @@ blockchain:
     url: ws://localhost:8546
     initialConnectAttempts: 25
     shutdownTimeout: 0s
+log:
+  level: debug
+  output: file
+  file:
+    filename: build/testbed.domain-integration-test.log
 wallets:
 - name: wallet1
   keySelector: .*
