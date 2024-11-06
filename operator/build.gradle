@@ -246,7 +246,7 @@ task deploy(dependsOn: [copySolidity, copyZetoSolidity, verifyOperator]) {
 }
 
 // The 'e2e' task runs the whole flow
-task e2e(type: Exec, dependsOn: [buildContractSamples, deploy]) {
+task e2e(type: Exec, dependsOn: [deploy]) {
     executable 'make'
     args 'test-e2e'
     args "NAMESPACE=${namespace}"

@@ -76,14 +76,6 @@ operator:
   configMap:
     # Referring to the external config.yaml file
     dataFile: assets/config.json
-    
-# cert-manager dependencies
-cert-manager:
-  namespace: cert-manager
-  enabled: true
-  crds:
-    enabled: true
-
 # Prometheus dependencies
 prometheus:
   enabled: false
@@ -95,3 +87,19 @@ prometheus:
     enabled: false
   pushgateway:
     enabled: false  # Enable if you need the push gateway
+
+paladin:
+  image:
+    repository: kaleidoinc/paladin
+    tag: release
+    pullPolicy: Always
+besu:
+  image:
+    repository: hyperledger/besu
+    tag: latest
+    pullPolicy: Always
+postgres:
+  image:
+    repository: postgres
+    tag: latest
+    pullPolicy: Always

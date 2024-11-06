@@ -5,10 +5,11 @@ CLUSTER_NAME ?= paladin
 NAMESPACE ?= default
 
 # IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
-IMAGE_TAG_BASE ?= paladin.io/paladin-operator
+IMAGE_TAG_BASE ?= paladin-operator
 OPERATOR_IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
 BUNDLE_OPERATOR_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
-PALADIN_IMG ?= paladin:test 
+PALADIN_IMG_NAME ?= paladin
+PALADIN_IMG_TAG ?= test 
 
 # USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
 USE_IMAGE_DIGESTS ?= false
@@ -115,7 +116,7 @@ kind-start:	## Create a Kind cluster.
 kind-promote: kind-start ## Load Docker images into Kind cluster.
 	echo "Loading images into Kind cluster..."
 	$(KIND_CLUSTER) load docker-image ${OPERATOR_IMG} --name "${CLUSTER_NAME}"
-	$(KIND_CLUSTER) load docker-image ${PALADIN_IMG} --name "${CLUSTER_NAME}"
+	$(KIND_CLUSTER) load docker-image ${PALADIN_IMG_NAME}:${PALADIN_IMG_TAG}  --name "${CLUSTER_NAME}"
 
 .PHONY: kind-delete
 kind-delete:	## Delete the Kind cluster.
@@ -195,23 +196,35 @@ prepare-operator-chart: ## Copy samples to the Helm chart.
 	cp config/samples/cert* charts/paladin-operator/templates/samples/
 	ls -la charts/paladin-operator/templates/samples
 
+.PHONY: helm-install-dependencies
+helm-install-dependencies: ## Install operator using Helm.
+	$(HELM) repo add jetstack https://charts.jetstack.io --force-update
+	$(HELM) install cert-manager --namespace cert-manager --version v1.16.1 jetstack/cert-manager --create-namespace --set crds.enabled=true
+
 .PHONY: helm-install
-helm-install: ## Install operator using Helm.
+helm-install: helm-install-dependencies ## Install operator using Helm.
 	$(HELM) dependency build ${CHART_PATH_OPERATOR} || true
 	$(HELM) upgrade --install ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} \
 		-n ${NAMESPACE} --create-namespace \
 		--set operator.namespace=${NAMESPACE} \
 		--set operator.image.repository=${IMAGE_TAG_BASE} \
+		--set operator.image.pullPolicy=IfNotPresent \
 		--set operator.image.tag=${VERSION} \
-		--set certManager.enabled=true \
-		--set certManager.namespace=cert-manager \
+		--set paladin.image.repository=${PALADIN_IMG_NAME} \
+		--set paladin.image.tag=:${PALADIN_IMG_TAG} \
+		--set paladin.image.pullPolicy=IfNotPresent \
 		--set prometheus.enabled=false
 
+.PHONY: helm-uninstall-dependencies
+helm-install-dependencies:
+	$(HELM) uninstallcert-manager --namespace || true
+	$(KUBECTL) delete namespace cert-manager || true
+	$(KUBECTL) delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml
+
 .PHONY: helm-uninstall
-helm-uninstall: ## Uninstall operator using Helm.
+helm-uninstall: helm-uninstall-dependencies ## Uninstall operator using Helm.
 	$(HELM) uninstall ${CHART_NAME_OPERATOR} -n ${NAMESPACE} || true
 	$(KUBECTL) delete namespace ${NAMESPACE} || true
-	$(KUBECTL) delete namespace cert-manager || true
 	$(KUBECTL) delete namespace prometheus || true
 
 .PHONY: helm-pause
