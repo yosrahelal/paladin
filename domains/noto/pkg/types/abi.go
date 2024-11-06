@@ -69,10 +69,10 @@ type TransferParams struct {
 }
 
 type ApproveParams struct {
-	Inputs   []*pldapi.StateWithData `json:"inputs"`
-	Outputs  []*pldapi.StateWithData `json:"outputs"`
-	Data     tktypes.HexBytes        `json:"data"`
-	Delegate *tktypes.EthAddress     `json:"delegate"`
+	Inputs   []*pldapi.StateEncoded `json:"inputs"`
+	Outputs  []*pldapi.StateEncoded `json:"outputs"`
+	Data     tktypes.HexBytes       `json:"data"`
+	Delegate *tktypes.EthAddress    `json:"delegate"`
 }
 
 type ApproveExtraParams struct {

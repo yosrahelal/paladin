@@ -1,9 +1,7 @@
-import { randomBytes } from "crypto";
 import { ethers } from "ethers";
 import PaladinClient, {
   Algorithms,
-  encodeNotoStates,
-  IGroupInfo,
+  encodeStates,
   newGroupSalt,
   newTransactionId,
   NotoFactory,
@@ -311,8 +309,8 @@ async function main() {
   // Approve the payment transfer
   logger.log("Approving payment transfer...");
   receipt = await notoCash.using(paladin3).approveTransfer(investor, {
-    inputs: encodeNotoStates(paymentTransfer.states.spent ?? []),
-    outputs: encodeNotoStates(paymentTransfer.states.confirmed ?? []),
+    inputs: encodeStates(paymentTransfer.states.spent ?? []),
+    outputs: encodeStates(paymentTransfer.states.confirmed ?? []),
     data: paymentTransfer.metadata.approvalParams.data,
     delegate: investorCustodianGroup.address,
   });

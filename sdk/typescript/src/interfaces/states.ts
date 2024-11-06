@@ -19,17 +19,20 @@ export interface IStateBase {
   data: object;
 }
 
+export interface IStateEncoded {
+  id: string;
+  created: string;
+  domain: string;
+  schema: string;
+  contractAddress: string;
+  data: string;
+}
+
 export interface IState extends IStateBase {
   confirmed?: IStateConfirm;
   spent?: IStateSpend;
   locks?: IStateLock[];
   nullifier?: IStateNullifier;
-}
-
-export interface IStateWithData {
-  id: string;
-  schema: string;
-  data: string;
 }
 
 export interface IStateLabel {

@@ -20,15 +20,17 @@ interface INotoPrivate {
     ) external;
 
     function approveTransfer(
-        FullState[] calldata inputs,
-        FullState[] calldata outputs,
+        StateEncoded[] calldata inputs,
+        StateEncoded[] calldata outputs,
         bytes calldata data,
         address delegate
     ) external;
 
-    struct FullState {
+    struct StateEncoded {
         bytes id;
+        string domain;
         bytes32 schema;
+        address contractAddress;
         bytes data;
     }
 }
