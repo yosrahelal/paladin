@@ -29,7 +29,7 @@ export const fetchLatestBlockWithTxs = async (): Promise<ITransaction[]> => {
 
   return <Promise<ITransaction[]>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
       i18next.t("errorFetchingLatestBlock")
     )
   );

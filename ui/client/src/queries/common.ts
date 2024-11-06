@@ -26,16 +26,13 @@ export const generatePostReq = (stringBody: string): RequestInit => {
 };
 
 export const returnResponse = async (
-  res: Response,
+  resFn: () => Promise<Response>,
   errorMsg: string,
   ignoreStatuses: number[] = []
 ) => {
+  const res = await resFn();
   if (!res.ok && !ignoreStatuses.includes(res.status)) {
     throw new Error(errorMsg);
   }
-  try {
-    return (await res.json()).result;
-  } catch {
-    return {};
-  }
+  return (await res.json()).result;
 };
