@@ -914,7 +914,7 @@ issuerRef:
 	if tlsConf.CertSpecTemplate != "" {
 		specTemplate = tlsConf.CertSpecTemplate
 	}
-	template, err := template.New("").Option("missingkey=error").Funcs(sprig.FuncMap()).Parse(specTemplate)
+	template, err := template.New("").Option("missingkey=error").Funcs(sprig.FuncMap()).Parse(adjustTemplatePlaceholders(specTemplate))
 	if err != nil {
 		return fmt.Errorf("invalid certSpecTemplate: %s", err)
 	}

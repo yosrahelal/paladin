@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"sort"
+	"strings"
 
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -164,4 +165,10 @@ func setCondition(
 
 	// Update or append the condition
 	meta.SetStatusCondition(conditions, condition)
+}
+
+func adjustTemplatePlaceholders(str string) string {
+	str = strings.ReplaceAll(str, "'{{`{{", "\"{{")
+	str = strings.ReplaceAll(str, "}}`}}'", "}}\"")
+	return str
 }
