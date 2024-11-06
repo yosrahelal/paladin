@@ -1,6 +1,8 @@
-import { PentePrivacyGroupHelper } from "./pente";
+import PaladinClient, {
+  PentePrivacyGroup,
+  PentePrivateContract,
+} from "paladin-sdk";
 import bondSubscription from "../abis/BondSubscription.json";
-import PaladinClient from "paladin-sdk";
 
 const bondSubscriptionConstructor = bondSubscription.abi.find(
   (entry) => entry.type === "constructor"
@@ -27,64 +29,43 @@ export interface DistributeParams {
 }
 
 export const newBondSubscription = async (
-  pente: PentePrivacyGroupHelper,
+  pente: PentePrivacyGroup,
   from: string,
   params: BondSubscriptionConstructorParams
 ) => {
   if (bondSubscriptionConstructor === undefined) {
     throw new Error("Bond subscription constructor not found");
   }
-  const receipt = await pente.deploy(
-    from,
-    bondSubscriptionConstructor,
+  const address = await pente.deploy(
+    bondSubscription.abi,
     bondSubscription.bytecode,
+    from,
     params
   );
-  return receipt?.domainReceipt?.receipt.contractAddress === undefined
-    ? undefined
-    : new BondSubscriptionHelper(
-        pente,
-        receipt.domainReceipt.receipt.contractAddress
-      );
+  return address ? new BondSubscription(pente, address) : undefined;
 };
 
-export class BondSubscriptionHelper {
+export class BondSubscription extends PentePrivateContract<BondSubscriptionConstructorParams> {
   constructor(
-    private pente: PentePrivacyGroupHelper,
+    protected evm: PentePrivacyGroup,
     public readonly address: string
-  ) {}
+  ) {
+    super(evm, bondSubscription.abi, address);
+  }
 
   using(paladin: PaladinClient) {
-    return new BondSubscriptionHelper(this.pente.using(paladin), this.address);
+    return new BondSubscription(this.evm.using(paladin), this.address);
   }
 
-  async preparePayment(from: string, params: PreparePaymentParams) {
-    const method = bondSubscription.abi.find(
-      (entry) => entry.name === "preparePayment"
-    );
-    if (method === undefined) {
-      throw new Error("Method 'preparePayment' not found");
-    }
-    return this.pente.invoke(from, this.address, method, params);
+  preparePayment(from: string, params: PreparePaymentParams) {
+    return this.invoke(from, "preparePayment", params);
   }
 
-  async prepareBond(from: string, params: PrepareBondParams) {
-    const method = bondSubscription.abi.find(
-      (entry) => entry.name === "prepareBond"
-    );
-    if (method === undefined) {
-      throw new Error("Method 'prepareBond' not found");
-    }
-    return this.pente.invoke(from, this.address, method, params);
+  prepareBond(from: string, params: PrepareBondParams) {
+    return this.invoke(from, "prepareBond", params);
   }
 
   async distribute(from: string, params: DistributeParams) {
-    const method = bondSubscription.abi.find(
-      (entry) => entry.name === "distribute"
-    );
-    if (method === undefined) {
-      throw new Error("Method 'distribute' not found");
-    }
-    return this.pente.invoke(from, this.address, method, params);
+    return this.invoke(from, "distribute", params);
   }
 }

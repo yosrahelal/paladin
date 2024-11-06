@@ -1,28 +1,26 @@
-import { PentePrivacyGroupHelper } from "./pente";
+import PaladinClient, {
+  PentePrivacyGroup,
+  PentePrivateContract,
+} from "paladin-sdk";
 import investorRegistry from "../abis/InvestorRegistry.json";
-import PaladinClient from "paladin-sdk";
 
 export interface AddInvestorParams {
   addr: string;
 }
 
-export class InvestorRegistryHelper {
+export class InvestorRegistry extends PentePrivateContract<{}> {
   constructor(
-    private pente: PentePrivacyGroupHelper,
+    protected evm: PentePrivacyGroup,
     public readonly address: string
-  ) {}
-
-  using(paladin: PaladinClient) {
-    return new InvestorRegistryHelper(this.pente.using(paladin), this.address);
+  ) {
+    super(evm, investorRegistry.abi, address);
   }
 
-  async addInvestor(from: string, params: AddInvestorParams) {
-    const method = investorRegistry.abi.find(
-      (entry) => entry.name === "addInvestor"
-    );
-    if (method === undefined) {
-      throw new Error("Method 'addInvestor' not found");
-    }
-    return this.pente.invoke(from, this.address, method, params);
+  using(paladin: PaladinClient) {
+    return new InvestorRegistry(this.evm.using(paladin), this.address);
+  }
+
+  addInvestor(from: string, params: AddInvestorParams) {
+    return this.invoke(from, "addInvestor", params);
   }
 }

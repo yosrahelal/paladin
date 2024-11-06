@@ -11,8 +11,8 @@ transfer.
 
 ## Private ABI
 
-The private ABI of Noto is implemented in Go, and can be accessed by calling `ptx_sendTransaction`
-with `"type": "private"`.
+The private ABI of Noto is implemented in [Go](https://github.com/LF-Decentralized-Trust-labs/paladin/tree/main/domains/noto),
+and can be accessed by calling `ptx_sendTransaction` with `"type": "private"`.
 
 ### constructor
 
@@ -40,10 +40,10 @@ Creates a new Noto token, with a new address on the base ledger.
 
 Inputs:
 
-* **notary** - lookup string for the identity that will serve as the notary for this token instance. May be located at this node or another node.
-* **implementation** - (optional) the name of a non-default Noto implementation that has previously been registered.
-* **restrictMinting** - (optional - default true) only allow the notary to request mint.
-* **hooks** - (optional) specify a [Pente](../pente) private smart contract that will be called for each Noto transaction, to provide custom logic and policies.
+* **notary** - lookup string for the identity that will serve as the notary for this token instance. May be located at this node or another node
+* **implementation** - (optional) the name of a non-default Noto implementation that has previously been registered
+* **restrictMinting** - (optional - default true) only allow the notary to request mint
+* **hooks** - (optional) specify a [Pente](../pente) private smart contract that will be called for each Noto transaction, to provide custom logic and policies
 
 ### mint
 

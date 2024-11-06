@@ -19,6 +19,18 @@ configurations {
         canBeConsumed = false
         canBeResolved = true
     }
+    toolkitGo {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+    notoGo {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+    zetoGo {
+        canBeConsumed = false
+        canBeResolved = true
+    }
     zetoArtifacts {
         canBeConsumed = false
         canBeResolved = true
@@ -31,6 +43,9 @@ configurations {
 
 dependencies {
     contractCompile project(path: ":solidity", configuration: "compiledContracts")
+    toolkitGo project(path: ':toolkit:go', configuration: 'goSource')
+    notoGo project(path: ":domains:noto", configuration: "goSource")
+    zetoGo project(path: ":domains:zeto", configuration: "goSource")
     zetoArtifacts project(path: ":domains:zeto", configuration: "zetoArtifacts")
     poseidonArtifacts project(path: ":domains:zeto", configuration: "poseidonArtifacts")
 }
@@ -79,7 +94,7 @@ def verifyResourceReady(String namespace, String resourceType, String resourceNa
     printClusterStatus(namespace)
 }
 
-task copySolidity(type: Copy, dependsOn: [":domains:noto:copySolidity"]) {
+task copySolidity(type: Copy) {
     inputs.files(configurations.contractCompile)
     from fileTree(configurations.contractCompile.asPath) {
         include 'contracts/registry/IdentityRegistry.sol/IdentityRegistry.json'
@@ -253,7 +268,10 @@ task clean {
 }
 
 // Existing 'make' task
-task make(type: Exec, dependsOn: [copySolidity, ":toolkit:go:protoc"]) {
+task make(type: Exec, dependsOn: copySolidity) {
+    inputs.files(configurations.toolkitGo)
+    inputs.files(configurations.notoGo)
+    inputs.files(configurations.zetoGo)
     executable 'make'
 }
 
