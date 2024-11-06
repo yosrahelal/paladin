@@ -33,7 +33,7 @@ export const Submissions: React.FC = () => {
   const { data: transactions } = useQuery({
     queryKey: ["pendingTransactions", tab, lastBlockWithTransactions],
     queryFn: () => fetchSubmissions(tab),
-    retry: false
+    retry: true
   });
 
   return (

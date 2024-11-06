@@ -32,7 +32,7 @@ export const Registries: React.FC = () => {
   const { data: registries } = useQuery({
     queryKey: ["registries", lastBlockWithTransactions],
     queryFn: () => fetchRegistries(),
-    retry: false
+    retry: true
   });
 
   return (
