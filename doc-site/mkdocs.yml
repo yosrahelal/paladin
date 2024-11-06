@@ -87,6 +87,7 @@ extra:
     property: !ENV GOOGLE_ANALYTICS_KEY
   version:
     provider: mike
+  generator: false
 exclude_docs: |
   _includes/
 nav:
@@ -112,6 +113,7 @@ nav:
     - Ledger Layers: architecture/ledger_layers.md
   - Getting Started:
     - Installation: getting-started/installation.md
+    - User Interface: getting-started/user-interface.md
   - Tutorials:
     - Introduction: tutorials/index.md
     - Bond Issuance: tutorials/bond-issuance.md

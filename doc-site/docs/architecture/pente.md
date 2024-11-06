@@ -8,7 +8,7 @@ The world moves forwards block-by-block.
 
 Pente is a privacy preserving smart contract for Paladin, which provides a different model for _Private EVM Smart Contracts_, where many worlds can exist isolated from each other all validated by the same shared ledger.
 
-_Each smart contract is its own world state._
+Each smart contract is its own world state.
 
 ![Private Smart Contracts backed by C-UTXO](../images/private_smart_contract_overview.png)
 
@@ -17,7 +17,9 @@ _Each smart contract is its own world state._
 - The data required for each transition is confidential
 - These state transitions can be verified as part of atomic transactions with other tokens
 
-## History of EVM Private Smart Contracts
+## Overview
+
+### History of EVM Private Smart Contracts
 
 The concept of Private EVM Smart Contracts is not new.
 
@@ -58,7 +60,7 @@ There are two closely related problems with the EVM Private Smart Contract model
     - The "Private state validation" feature (Quorum only) was a step towards solving this issue, by preventing mis-use of private smart contracts across different privacy groups.
     - Read more about these challenges [here](https://www.kaleido.io/blockchain-blog/why-tokens-dont-work-using-private-transactions)
 
-## The updated model in Pente
+### The updated model in Pente
 
 Pente combined with the sophisticated state management engine of Paladin improves upon the model by using a Confidential-UTXO model to manage the private smart contracts.
 
@@ -79,6 +81,218 @@ The guiding principals are:
     - This is the single most important enhancement. Because Pente is just another privacy preserving smart contract in Paladin, it can atomically interoperate with Token smart contracts. 
     - See the [Atomic Interop](./atomic_interop.md) section for how this enables sophisticated DvP scenarios to be programmed via Private EVM
 
-## Cross-contract invocation rules
+## Private ABI
 
-> TODO: More to come here (Lead: Peter Broadhurst)
+The private ABI of Pente is implemented in [Java](https://github.com/LF-Decentralized-Trust-labs/paladin/tree/main/domains/pente),
+and can be accessed by calling `ptx_sendTransaction` with `"type": "private"`.
+
+### constructor
+
+Creates a new Pente private EVM group, with a new address on the base ledger.
+
+```json
+{
+    "name": "",
+    "type": "constructor",
+    "inputs": [
+        {"name": "group", "type": "tuple", "components": [
+            {"name": "salt", "type": "bytes32"},
+            {"name": "members", "type": "string[]"}
+        ]},
+        {"name": "evmVersion", "type": "string"},
+        {"name": "endorsementType", "type": "string"},
+        {"name": "externalCallsEnabled", "type": "boolean"},
+    ]
+}
+```
+
+Inputs:
+
+* **group** - group details, including member lookup strings and a randomly-chosen group salt
+* **evmVersion** - EVM version to run (such as "shanghai", "paris", "london")
+* **endorsementType** - only supported type is "group_scoped_identities" (100% endorsement on each transaction from all group members)
+* **externalCallsEnabled** - true to allow this privacy group to trigger external calls to other contracts on the base ledger
+
+### deploy
+
+Deploys a new contract into the private EVM group.
+
+```json
+{
+    "name": "deploy",
+    "type": "function",
+    "inputs": [
+        {"name": "group", "type": "tuple", "components": [
+            {"name": "salt", "type": "bytes32"},
+            {"name": "members", "type": "string[]"}
+        ]},
+        {"name": "bytecode", "type": "bytes"},
+        {"name": "inputs", "type": "tuple", "components": [
+            // variable - see below
+        ]}
+    ]
+}
+```
+
+Inputs:
+
+* **group** - group details, including member lookup strings and a randomly-chosen group salt (must exactly match what was passed at group creation)
+* **bytecode** - the compiled contract bytecode
+* **inputs** - ABI constructor parameters for the contract (must be filled in to match the contract being deployed)
+
+### invoke
+
+Send an encoded transaction to a private smart contract.
+
+```json
+{
+    "name": "invoke",
+    "type": "function",
+    "inputs": [
+        {"name": "group", "type": "tuple", "components": [
+            {"name": "salt", "type": "bytes32"},
+            {"name": "members", "type": "string[]"}
+        ]},
+        {"name": "to", "type": "address"},
+        {"name": "data", "type": "bytes"}
+    ]
+}
+```
+
+Inputs:
+
+* **group** - group details, including member lookup strings and a randomly-chosen group salt (must exactly match what was passed at group creation)
+* **to** - the address of the private contract
+* **data** - an encoded transation (like the `data` of `eth_sendTransaction`)
+
+### &lt;custom function&gt;
+
+Perform an invoke or call to any function in a private smart contract.
+
+```json
+{
+    "name": "<variable - see below>"
+    "type": "function",
+    "inputs": [
+        {"name": "group", "type": "tuple", "components": [
+            {"name": "salt", "type": "bytes32"},
+            {"name": "members", "type": "string[]"}
+        ]},
+        {"name": "to", "type": "address"},
+        {"name": "inputs", "type": "tuple", "components": [
+            // variable - see below
+        ]}
+    ]
+    {"name": "outputs", "type": "tuple", "components": [
+        // variable - see below
+    ]}
+}
+```
+
+Inputs:
+
+* **group** - group details, including member lookup strings and a randomly-chosen group salt (must exactly match what was passed at group creation)
+* **to** - the address of the private contract
+* **inputs** - ABI method inputs for the contract (must be filled in to match the contract)
+
+Other fields:
+
+* **name** - name of the method to invoke on the contract.
+* **outputs** - ABI method outputs for the contract (only valid for `ptx_call`, must be filled in to match the contract).
+
+## Public ABI
+
+The public ABI of Pente is implemented in Solidity by [PentePrivacyGroup.sol](../../solidity/contracts/domains/pente/PentePrivacyGroup.sol),
+and can be accessed by calling `ptx_sendTransaction` with `"type": "public"`. However, it is not often required
+to invoke the public ABI directly.
+
+### transition
+
+Transition the world state of this privacy group.
+Generally should not be called directly.
+
+```json
+{
+    "name": "mint",
+    "type": "function",
+    "inputs": [
+        {"name": "txId", "type": "bytes32"},
+        {"name": "states", "type": "tuple", "components": [
+            {"name": "inputs", "type": "bytes32[]"},
+            {"name": "reads", "type": "bytes32[]"},
+            {"name": "outputs", "type": "bytes32[]"},
+            {"name": "info", "type": "bytes32[]"}
+        ]},
+        {"name": "externalCalls", "type": "tuple[]", "components": [
+            {"name": "contractAddress", "type": "address"},
+            {"name": "encodedCall", "type": "bytes"}
+        ]},
+        {"name": "signatures", "type": "bytes[]"}
+    ]
+}
+```
+
+Inputs:
+
+* **txId** - Paladin transaction identifier
+* **states** - list of states (input states will be spent, output states will be created, read states will be verified to exist, and info states will not be checked)
+* **externalCalls** - list of encoded EVM calls against other external contracts, which will be executed as a side-effect of the transition
+* **signatures** - EIP-712 signatures from all parties in the privacy group to validate the state transition
+
+### approveTransition
+
+Approve a specific `transition` transaction to be executed by a specific `delegate` address.
+Generally should not be called directly.
+
+```json
+{
+    "name": "approveTransition",
+    "type": "function",
+    "inputs": [
+        {"name": "txId", "type": "bytes32"},
+        {"name": "delegate", "type": "address"},
+        {"name": "transitionHash", "type": "bytes32"},
+        {"name": "signatures", "type": "bytes[]"}
+    ]
+}
+```
+
+Inputs:
+
+* **txId** - Paladin transaction identifier
+* **delegate** - address of the delegate party that will be able to execute this transaction once approved
+* **transitionHash** - EIP-712 hash of the intended transition, using types `Transition(bytes32[] inputs,bytes32[] reads,bytes32[] outputs,bytes32[] info,ExternalCall[] externalCalls)` and `ExternalCall(address contractAddress,bytes encodedCall)`
+* **signatures** - EIP-712 signatures from all parties in the privacy group to validate the state transition
+
+### transitionWithApproval
+
+Execute a transition that was previously approved.
+
+The values of `states` and `externalCalls` will be used to (re-)compute a `transitionHash`, which must exactly
+match a `transitionHash` that was previously delegated to the sender via `approveTransition`.
+
+```json
+{
+    "name": "transitionWithApproval",
+    "type": "function",
+    "inputs": [
+        {"name": "txId", "type": "bytes32"},
+        {"name": "states", "type": "tuple", "components": [
+            {"name": "inputs", "type": "bytes32[]"},
+            {"name": "reads", "type": "bytes32[]"},
+            {"name": "outputs", "type": "bytes32[]"},
+            {"name": "info", "type": "bytes32[]"}
+        ]},
+        {"name": "externalCalls", "type": "tuple[]", "components": [
+            {"name": "contractAddress", "type": "address"},
+            {"name": "encodedCall", "type": "bytes"}
+        ]},
+      ]
+}
+```
+
+Inputs:
+
+* **txId** - Paladin transaction identifier
+* **states** - list of states (input states will be spent, output states will be created, read states will be verified to exist, and info states will not be checked)
+* **externalCalls** - list of encoded EVM calls against other external contracts, which will be executed as a side-effect of the transition

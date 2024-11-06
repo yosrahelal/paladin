@@ -5,8 +5,15 @@
     --md-primary-bg-color:  #107070;
     --md-primary-bg-color--light: #9E9E9E;
     --md-primary-bg-color--dark:  #9E9E9E;
-    --md-typeset-a-color: #1EC4C4;
+    --md-typeset-border-color: #1EC4C4;
 }
+
+[data-md-color-scheme="paladin"] footer {
+    border-top: solid 1px #1EC4C4;
+    color: #107070;
+    background-color: #F4FCFC;
+}
+
 [data-md-color-scheme="paladin"] img[src$="#only-dark"] {
     display: none;
 }

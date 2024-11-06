@@ -51,7 +51,7 @@ import java.util.concurrent.ExecutionException;
  *  // TODO: consider paladin providing privacy group storage to avoid needing the "group" parameter
  * - group:    { "name": "group",   "type": "tuple", "components": [ { "name": "salt", "type": "bytes32" }, { "members": "type": "string[]" } ] }
  * Optionally you can have these additional top-level fields:
- * - to:       { "name": "to",      "type": "string" } OR { "name": "to", "type": "address" } // exclude this for deployments
+ * - to:       { "name": "to",      "type": "address" } // exclude this for deployments
  * - gas:      { "name": "gas",     "type": "uint256" } // if you exclude this then gas estimation will be performed for you by Pente
  * - value:    { "name": "value",   "type": "uint256" } // only if you want to transfer tokens in the privacy group (each group has separate base "eth" tokens)
  * If you want to pre-encode your calldata (or bytecode + params) yourself, then you can add an ABI param as follows:
