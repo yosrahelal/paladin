@@ -135,5 +135,5 @@ This is a special purpose function used in coordinating multi-party transactions
 
 Inputs:
 
-- **delegate** - set to the Ethereum account, which can be an externally owned account or a smart contract address, that is allowed to submit the transaction to use the locked proof to execute the Zeto tokent transfer
+- **delegate** - set to the Ethereum account, which can be an externally owned account or a smart contract address, that is allowed to submit the transaction to use the locked proof to execute the Zeto token transfer
 - **call** - this is an abi encoded bytes from a call to the `transfer()` function of the target Zeto token smart contract. Refer to the [PvP test case](../../../domains/integration-test/pvp_test.go) for an example of how to construct the encode call bytes
