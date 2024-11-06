@@ -291,6 +291,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 			Filename: confutil.P("build/testbed.component-test.log"),
 		},
 	}
+	log.InitConfig(&i.conf.Log)
 
 	if i.conf.DB.Type == "postgres" {
 		dns, cleanUp := initPostgres(t, context.Background())

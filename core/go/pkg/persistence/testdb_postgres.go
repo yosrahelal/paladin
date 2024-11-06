@@ -156,7 +156,7 @@ func NewUnitTestPersistence(ctx context.Context, suite string) (p Persistence, c
 				DSN:           dbDSN(utDBName),
 				MigrationsDir: migrationsDirRelative,
 				AutoMigrate:   &autoMigrate,
-				DebugQueries:  true,
+				DebugQueries:  false,
 			},
 		},
 	})
