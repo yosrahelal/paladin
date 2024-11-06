@@ -246,16 +246,9 @@ await bondSubscription.using(paladin3).preparePayment(investor, {
   encodedCall: paymentTransfer.metadata?.transferWithApproval?.encodedCall,
 });
 
-const encodedBondTransfer = new ethers.Interface([
-  bondTransfer2.metadata.transitionWithApproval.functionABI,
-]).encodeFunctionData("transitionWithApproval", [
-  bondTransfer2.transaction.data.txId,
-  bondTransfer2.transaction.data.states,
-  bondTransfer2.transaction.data.externalCalls,
-]);
 await bondSubscription.using(paladin2).prepareBond(bondCustodian, {
   to: bondTransfer2.transaction.to,
-  encodedCall: encodedBondTransfer,
+  encodedCall: bondTransfer2.metadata.transitionWithApproval.encodedCall,
 });
 ```
 
@@ -267,8 +260,8 @@ atomic DvP (delivery vs. payment).
 
 ```typescript
 await notoCash.using(paladin3).approveTransfer(investor, {
-  inputs: encodeNotoStates(paymentTransfer.states.spent ?? []),
-  outputs: encodeNotoStates(paymentTransfer.states.confirmed ?? []),
+  inputs: encodeStates(paymentTransfer.states.spent ?? []),
+  outputs: encodeStates(paymentTransfer.states.confirmed ?? []),
   data: paymentTransfer.metadata.approvalParams.data,
   delegate: investorCustodianGroup.address,
 });

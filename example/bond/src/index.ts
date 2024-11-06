@@ -1,4 +1,3 @@
-import { ethers } from "ethers";
 import PaladinClient, {
   Algorithms,
   encodeStates,
@@ -289,16 +288,9 @@ async function main() {
 
   // Pass the prepared bond transfer to the subscription contract
   logger.log("Adding bond information to subscription request...");
-  const encodedBondTransfer = new ethers.Interface([
-    bondTransfer2.metadata.transitionWithApproval.functionABI,
-  ]).encodeFunctionData("transitionWithApproval", [
-    bondTransfer2.transaction.data.txId,
-    bondTransfer2.transaction.data.states,
-    bondTransfer2.transaction.data.externalCalls,
-  ]);
   receipt = await bondSubscription.using(paladin2).prepareBond(bondCustodian, {
     to: bondTransfer2.transaction.to,
-    encodedCall: encodedBondTransfer,
+    encodedCall: bondTransfer2.metadata.transitionWithApproval.encodedCall,
   });
   if (receipt === undefined) {
     logger.error("Failed!");
