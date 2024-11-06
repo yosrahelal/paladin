@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { useContext } from "react";
@@ -34,22 +34,30 @@ export const Transactions: React.FC = () => {
   const theme = useTheme();
   const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
-  const { data: transactions } = useQuery({
+  const { data: transactions, error: transactionError, isRefetching: transactionFetching } = useQuery({
     queryKey: ["transactions", lastBlockWithTransactions],
     queryFn: () => fetchIndexedTransactions(),
   });
 
-  const { data: transactionReceipts } = useQuery({
+  const { data: transactionReceipts, error: receiptError, isFetching: receiptFetching } = useQuery({
     queryKey: ["transactionReceipts", transactions],
     queryFn: () => fetchTransactionReceipts(transactions ?? []),
     enabled: transactions !== undefined,
   });
 
-  const { data: paladinTransactions } = useQuery({
+  const { data: paladinTransactions, error: paladinTransactionError, isFetching: paladinTransactionFetching } = useQuery({
     queryKey: ["paladinTransactions", transactionReceipts],
     queryFn: () => fetchPaladinTransactions(transactionReceipts ?? []),
     enabled: transactionReceipts !== undefined,
   });
+
+  if(transactionFetching || receiptFetching || paladinTransactionFetching) {
+    return <></>;
+  }
+
+  if (transactionError || receiptError || paladinTransactionError) {
+    return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{transactionError?.message ?? receiptError?.message ?? paladinTransactionError?.message}</Alert>
+  }
 
   return (
     <>
