@@ -45,7 +45,7 @@ GOLANGCI_LINT_VERSION ?= v1.57.2
 CHART_PATH_CRD = charts/paladin-operator-crd
 CHART_NAME_CRD = paladin-crds
 CHART_PATH_OPERATOR = charts/paladin-operator
-CHART_NAME_OPERATOR = paladin
+CHART_NAME_OPERATOR = paladin-ci
 
 # SHELL setup to allow bash commands
 SHELL = /usr/bin/env bash -o pipefail
@@ -199,7 +199,7 @@ prepare-operator-chart: ## Copy samples to the Helm chart.
 .PHONY: helm-install-dependencies
 helm-install-dependencies: ## Install operator using Helm.
 	$(HELM) repo add jetstack https://charts.jetstack.io --force-update
-	$(HELM) install cert-manager --namespace cert-manager --version v1.16.1 jetstack/cert-manager --create-namespace --set crds.enabled=true
+	$(HELM) upgrade --install cert-manager --namespace cert-manager --version v1.16.1 jetstack/cert-manager --create-namespace --set crds.enabled=true
 
 .PHONY: helm-install
 helm-install: helm-install-dependencies ## Install operator using Helm.
@@ -211,13 +211,13 @@ helm-install: helm-install-dependencies ## Install operator using Helm.
 		--set operator.image.pullPolicy=IfNotPresent \
 		--set operator.image.tag=${VERSION} \
 		--set paladin.image.repository=${PALADIN_IMG_NAME} \
-		--set paladin.image.tag=:${PALADIN_IMG_TAG} \
+		--set paladin.image.tag=${PALADIN_IMG_TAG} \
 		--set paladin.image.pullPolicy=IfNotPresent \
 		--set prometheus.enabled=false
 
 .PHONY: helm-uninstall-dependencies
-helm-install-dependencies:
-	$(HELM) uninstallcert-manager --namespace || true
+helm-uninstall-dependencies:
+	$(HELM) uninstall cert-manager --namespace cert-manager || true
 	$(KUBECTL) delete namespace cert-manager || true
 	$(KUBECTL) delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml
 
@@ -284,12 +284,10 @@ delete-node:
 DELETE_CLUSTER ?= false
 .PHONY: clean
 clean: helm-uninstall uninstall-crds ## Clean up all resources.
+	rm -rf charts/paladin-operator/Chart.lock || true
+	rm -rf charts/paladin-operator/charts || true
 	@if [ "$(DELETE_CLUSTER)" = "true" ]; then \
 		$(MAKE) kind-delete; \
 	else \
 		echo "Skipping Kind cluster deletion. Use DELETE_CLUSTER=true to delete it."; \
 	fi
-
-
-
-# kubectl wait deployment.apps/cert-manager-webhook --for condition=Available --namespace cert-manager --timeout 5m
