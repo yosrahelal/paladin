@@ -297,7 +297,8 @@ public class PenteDomain extends DomainInstance {
             for (var read : request.getReadsList()) {
                 readAccounts.add(PersistedAccount.deserialize(read.getStateDataJson().getBytes(StandardCharsets.UTF_8)));
             }
-            if (request.getInfoCount() != 1) throw new IllegalArgumentException("Expected exactly one info state containing the transaction input");
+            if (request.getInfoCount() != 1)
+                throw new IllegalArgumentException("Expected exactly one info state containing the transaction input");
 
             // Recover the input from the signed rawTransaction that is in the "info" state recorded alongside the transaction
             var tx = new PenteTransaction(this, request.getTransaction());
@@ -421,13 +422,23 @@ public class PenteDomain extends DomainInstance {
                     put("states", params.get("states"));
                     put("externalCalls", externalCalls);
                 }};
+                var transitionWithApprovalParamsJSON = new ObjectMapper().writeValueAsString(transitionWithApprovalParams);
+
+                var encodeRequest = FromDomain.EncodeDataRequest.newBuilder().
+                        setEncodingType(FromDomain.EncodingType.FUNCTION_CALL_DATA).
+                        setDefinition(transitionWithApprovalABI.toJSON(false)).
+                        setBody(transitionWithApprovalParamsJSON).
+                        build();
+                var encodeResponse = encodeData(encodeRequest).get();
+
                 var metadata = new PenteConfiguration.PenteTransitionMetadata(
                         new PenteConfiguration.PenteApprovalParams(
                                 new JsonHex.Bytes32(transitionHash),
                                 signatures.stream().map(r -> JsonHex.wrap(r.getPayload().toByteArray())).toList()),
                         new PenteConfiguration.PentePublicTransaction(
                                 transitionWithApprovalABI,
-                                new ObjectMapper().writeValueAsString(transitionWithApprovalParams)));
+                                transitionWithApprovalParamsJSON,
+                                JsonHex.wrap(encodeResponse.getData().toByteArray())));
 
                 result.setMetadata(new ObjectMapper().writeValueAsString(metadata));
             }
@@ -559,7 +570,8 @@ public class PenteDomain extends DomainInstance {
             for (var read : request.getReadStatesList()) {
                 readAccounts.add(PersistedAccount.deserialize(read.getStateDataJson().getBytes(StandardCharsets.UTF_8)));
             }
-            if (request.getInfoStatesCount() != 1) throw new IllegalArgumentException("Expected exactly one info state containing the transaction input");
+            if (request.getInfoStatesCount() != 1)
+                throw new IllegalArgumentException("Expected exactly one info state containing the transaction input");
 
             // Recover the input from the signed rawTransaction that is in the "info" state recorded alongside the transaction
             var evmTxn = PenteEVMTransaction.buildFromInput(this, request.getInfoStates(0).getStateDataJson().getBytes(StandardCharsets.UTF_8));
