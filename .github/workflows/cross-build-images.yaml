@@ -1,4 +1,4 @@
-name: Cross build paladin and operator images
+name: Paladin Buildx
 permissions:
   actions: read
   checks: read
