@@ -138,7 +138,7 @@ task copyZetoSolidity(type: Copy) {
 }
 
 task buildContractSamples(type: Exec, dependsOn: [copySolidity, copyZetoSolidity]) {
-    commandLine "go", "run", "./contractpkg", "./contractpkg/contract_map.json"
+    commandLine "go", "run", "./contractpkg", "generate", "./contractpkg/contract_map.json"
 }
 
 // Task to build the Paladin image from the parent project
@@ -191,8 +191,7 @@ task installCrds(type: Exec, dependsOn: [startKindCluster, prepareCRDsChart]){
 }
 
 task prepareOperatorChart(type: Exec, dependsOn: [buildContractSamples]) {
-    executable 'make'
-    args 'prepare-operator-chart'
+    commandLine "go", "run", "./contractpkg", "template", "config/samples", "charts/paladin-operator/templates/samples"
 }
 
 // Task to install the operator using Helm

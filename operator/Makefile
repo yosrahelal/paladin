@@ -198,21 +198,6 @@ uninstall-crds: ## Uninstall CRDs.
 helm-template: ## Install operator using Helm.
 	$(HELM) template ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} --set operator.namespace=${NAMESPACE} 
 
-.PHONY: copy-crs-files
-copy-crs-files: ## Copy samples to the Helm chart.
-	mkdir -p charts/paladin-operator/templates/samples; \
-	cp config/samples/core_v1* charts/paladin-operator/templates/samples/; \
-	cp config/samples/cert* charts/paladin-operator/templates/samples/; \
-	
-.PHONY: prepare-operator-chart
-prepare-operator-chart: copy-crs-files ## Copy samples to the Helm chart.
-	@for file in $(shell ls charts/paladin-operator/templates/samples/*.yaml ) ; do \
-		mv "$${file}" "$${file}.tmp"; \
-		sed -r 's/{{(.*)}}/{{ `{{\1}}` }}/g' "$${file}.tmp" > "$${file}"; \
-		rm "$${file}.tmp"; \
-		echo "Processed $${file}"; \
-	done
-
 .PHONY: helm-install-dependencies
 helm-install-dependencies: ## Install operator using Helm.
 	$(HELM) repo add jetstack https://charts.jetstack.io --force-update
