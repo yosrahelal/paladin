@@ -34,7 +34,6 @@ export const SingleValue: React.FC<Props> = ({ label, value }) => {
         <Typography color="textSecondary">{label}</Typography>
       </Box>
       <Typography sx={{ marginLeft: '10px', flexGrow: 1 }} color="textPrimary">{value}</Typography>
-
       <Tooltip title={t(copyLabel)} arrow placement="bottom" onMouseLeave={() => setTimeout(() => setCopyLabel('copyToClipboard'), 200)}>
         <IconButton onClick={() => { navigator.clipboard.writeText(value); setCopyLabel('copied') }}>
           <ContentCopyIcon />
