@@ -145,7 +145,7 @@ func (h *approveHandler) baseLedgerApprove(ctx context.Context, tx *types.Parsed
 		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 	}
 
-	data, err := h.noto.encodeTransactionData(req.Transaction, req.InfoStates)
+	data, err := h.noto.encodeTransactionData(ctx, req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, err
 	}

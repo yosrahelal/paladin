@@ -104,7 +104,6 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 					return err
 				}
 				preparedTxnDistributions = append(preparedTxnDistributions, &preparedtxdistribution.PreparedTxnDistribution{
-
 					ID:                      uuid.New().String(),
 					PreparedTxnID:           preparedTransactionWithRefs.ID.String(),
 					IdentityLocator:         preparedTransactionWithRefs.Sender,

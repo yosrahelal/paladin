@@ -24,6 +24,9 @@ export const darkThemeOptions: ThemeOptions = {
       main: '#20dfdf',
       dark: '#6D6D6D'
     },
+    secondary: {
+      main: '#20dfdf',
+    },
     background: {
       default: 'black',
       paper: '#1E242B',
@@ -37,6 +40,9 @@ export const lightThemeOptions: ThemeOptions = {
     primary: {
       main: '#107070',
       dark: '#6D6D6D'
+    },
+    secondary: {
+      main: '#BBEDED'
     },
     background: {
       default: '#F0F0F0',

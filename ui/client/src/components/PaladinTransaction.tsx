@@ -26,6 +26,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { EllapsedTime } from "./EllapsedTime";
 import VisibilityIcon from '@mui/icons-material/VisibilityOutlined';
 import { PaladinTransactionsDetailsDialog } from "../dialogs/TransactionDetails";
+import { Captions, Tag } from 'lucide-react';
 
 daysjs.extend(relativeTime);
 
@@ -63,13 +64,13 @@ export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
         <Box sx={{ padding: '10px', paddingLeft: '20px', paddingRight: '20px', borderBottom: theme => `solid 1px ${theme.palette.divider}` }}>
           <Grid2 container justifyContent="space-between" alignItems="center" spacing={2}>
             <Grid2 textAlign="center" size={{ md: 2.5 }}>
-              <Hash title={t("id")} hash={paladinTransaction.id} />
+              <Hash Icon={<Tag size="18px" />} title={t("id")} hash={paladinTransaction.id} />
             </Grid2>
             <Grid2 textAlign="center" size={{ md: 2.5 }}>
-              <Hash hash={paladinTransaction.from} title={t('from')} />
+              <Hash Icon={<Captions size="18px" />} hash={paladinTransaction.from} title={t('from')} />
             </Grid2>
             <Grid2 textAlign="center" size={{ md: 2.5 }}>
-              <Hash hash={paladinTransaction.to ?? '--'} title={t('to')} />
+              <Hash Icon={<Captions size="18px" />} hash={paladinTransaction.to ?? '--'} title={t('to')} />
             </Grid2>
             <Grid2 size={{ md: 2.25 }}>
               <Typography align="center" variant="h6">
@@ -119,7 +120,7 @@ export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
                   fullWidth
                   size="small"
                   sx={{ marginTop: '12px' }}
-                  slotProps={{ htmlInput: { style: { fontSize: '12px', color: `${theme.palette.text.secondary}`}  }}}
+                  slotProps={{ htmlInput: { style: { fontSize: '12px', color: `${theme.palette.text.secondary}` } } }}
                   value={formatProperty(paladinTransaction.data[property])}
                 />
               ))}

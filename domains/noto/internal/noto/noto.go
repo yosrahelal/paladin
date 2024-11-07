@@ -456,28 +456,40 @@ func (n *Noto) gatherCoins(ctx context.Context, inputs, outputs []*prototk.Endor
 	}, nil
 }
 
-func (n *Noto) encodeTransactionData(transaction *prototk.TransactionSpecification, infoStates []*prototk.EndorsableState) (tktypes.HexBytes, error) {
-	stateIDs := make([]string, len(infoStates))
+func (n *Noto) encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification, infoStates []*prototk.EndorsableState) (tktypes.HexBytes, error) {
+	var err error
+	stateIDs := make([]tktypes.Bytes32, len(infoStates))
 	for i, state := range infoStates {
-		stateIDs[i] = state.Id
+		stateIDs[i], err = tktypes.ParseBytes32Ctx(ctx, state.Id)
+		if err != nil {
+			return nil, err
+		}
 	}
 
+	transactionID, err := tktypes.ParseBytes32Ctx(ctx, transaction.TransactionId)
+	if err != nil {
+		return nil, err
+	}
 	dataValues := &types.NotoTransactionData_V0{
-		TransactionID: transaction.TransactionId,
+		TransactionID: transactionID,
 		InfoStates:    stateIDs,
 	}
 	dataJSON, err := json.Marshal(dataValues)
 	if err != nil {
 		return nil, err
 	}
+	dataABI, err := types.NotoTransactionDataABI_V0.EncodeABIDataJSONCtx(ctx, dataJSON)
+	if err != nil {
+		return nil, err
+	}
 
 	var data []byte
 	data = append(data, types.NotoTransactionDataID_V0...)
-	data = append(data, dataJSON...)
+	data = append(data, dataABI...)
 	return data, nil
 }
 
-func (n *Noto) decodeTransactionData(data tktypes.HexBytes) (*types.NotoTransactionData_V0, error) {
+func (n *Noto) decodeTransactionData(ctx context.Context, data tktypes.HexBytes) (*types.NotoTransactionData_V0, error) {
 	if len(data) < 4 {
 		return nil, nil
 	}
@@ -485,17 +497,25 @@ func (n *Noto) decodeTransactionData(data tktypes.HexBytes) (*types.NotoTransact
 	if dataPrefix.String() != types.NotoTransactionDataID_V0.String() {
 		return nil, nil
 	}
-	var decoded types.NotoTransactionData_V0
-	err := json.Unmarshal(data[4:], &decoded)
-	return &decoded, err
+	dataDecoded, err := types.NotoTransactionDataABI_V0.DecodeABIDataCtx(ctx, data, 4)
+	if err != nil {
+		return nil, err
+	}
+	dataJSON, err := dataDecoded.JSON()
+	if err != nil {
+		return nil, err
+	}
+	var dataValues types.NotoTransactionData_V0
+	err = json.Unmarshal(dataJSON, &dataValues)
+	return &dataValues, err
 }
 
-func (n *Noto) parseStatesFromEvent(txID string, states []tktypes.Bytes32) []*prototk.StateUpdate {
+func (n *Noto) parseStatesFromEvent(txID tktypes.Bytes32, states []tktypes.Bytes32) []*prototk.StateUpdate {
 	refs := make([]*prototk.StateUpdate, len(states))
 	for i, state := range states {
 		refs[i] = &prototk.StateUpdate{
 			Id:            state.String(),
-			TransactionId: txID,
+			TransactionId: txID.String(),
 		}
 	}
 	return refs
@@ -508,20 +528,20 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		case n.transferSignature:
 			var transfer NotoTransfer_Event
 			if err := json.Unmarshal([]byte(ev.DataJson), &transfer); err == nil {
-				txData, err := n.decodeTransactionData(transfer.Data)
+				txData, err := n.decodeTransactionData(ctx, transfer.Data)
 				if err != nil {
 					return nil, err
 				}
 				res.TransactionsComplete = append(res.TransactionsComplete, &prototk.CompletedTransaction{
-					TransactionId: txData.TransactionID,
+					TransactionId: txData.TransactionID.String(),
 					Location:      ev.Location,
 				})
 				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(txData.TransactionID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(txData.TransactionID, transfer.Outputs)...)
 				for _, state := range txData.InfoStates {
 					res.InfoStates = append(res.InfoStates, &prototk.StateUpdate{
-						Id:            state,
-						TransactionId: txData.TransactionID,
+						Id:            state.String(),
+						TransactionId: txData.TransactionID.String(),
 					})
 				}
 			}
@@ -529,18 +549,18 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		case n.approvedSignature:
 			var approved NotoApproved_Event
 			if err := json.Unmarshal([]byte(ev.DataJson), &approved); err == nil {
-				txData, err := n.decodeTransactionData(approved.Data)
+				txData, err := n.decodeTransactionData(ctx, approved.Data)
 				if err != nil {
 					return nil, err
 				}
 				res.TransactionsComplete = append(res.TransactionsComplete, &prototk.CompletedTransaction{
-					TransactionId: txData.TransactionID,
+					TransactionId: txData.TransactionID.String(),
 					Location:      ev.Location,
 				})
 				for _, state := range txData.InfoStates {
 					res.InfoStates = append(res.InfoStates, &prototk.StateUpdate{
-						Id:            state,
-						TransactionId: txData.TransactionID,
+						Id:            state.String(),
+						TransactionId: txData.TransactionID.String(),
 					})
 				}
 			}

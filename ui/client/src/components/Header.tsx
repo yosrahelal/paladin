@@ -57,8 +57,9 @@ export const Header: React.FC = () => {
     <>
       <AppBar>
         <Toolbar sx={{ backgroundColor: theme => theme.palette.background.paper }}>
-          <Grid2 container alignItems="center" size={{ xs: 12 }}>
-            <Grid2 size={{ xs: 12, sm: 12, md: 4 }} textAlign="center">
+          <Box sx={{ width: '100%', maxWidth: '1270px', marginLeft: 'auto', marginRight: 'auto' }}>
+          <Grid2 container alignItems="center" >
+            <Grid2 size={{ xs: 12, sm: 12, md: 4 }}>
               <img src={theme.palette.mode === 'dark' ?
                 '/ui/paladin-title-dark.svg' : '/ui/paladin-title-light.svg'
               } style={{ marginTop: '7px' }} />
@@ -70,7 +71,7 @@ export const Header: React.FC = () => {
                 <Tab sx={{ textTransform: 'none' }} label={t('registry')} />
               </Tabs>
             </Grid2>
-            <Grid2 size={{ xs: 12, sm: 12, md: 4 }} textAlign="center">
+            <Grid2 size={{ xs: 12, sm: 12, md: 4 }} textAlign="right">
               <Tooltip arrow title={t('switchThemeMode')}>
                 <IconButton onClick={() => colorMode.toggleColorMode()}>
                   <Brightness4Icon />
@@ -78,6 +79,7 @@ export const Header: React.FC = () => {
               </Tooltip>
             </Grid2>
           </Grid2>
+          </Box>
         </Toolbar>
       </AppBar>
       <Box sx={{ height: theme => lessThanMedium? '134px' :

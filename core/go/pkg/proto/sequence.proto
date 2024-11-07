@@ -17,7 +17,6 @@ syntax = "proto3";
 
 package io.kaleido.paladin.kata;
 option go_package = "pkg/proto/sequence";
-import "google/protobuf/any.proto";
 
 /* all definititions in here are ear marked for deletion in an upcoming refactor / consolidation of orchestrator and sequencer code*/
 

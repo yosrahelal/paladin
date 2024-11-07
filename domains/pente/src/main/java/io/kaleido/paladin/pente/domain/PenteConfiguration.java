@@ -147,9 +147,11 @@ public class PenteConfiguration {
 
     record PentePublicTransaction(
             @JsonProperty
-            JsonABI.Entry functionABI
-            , @JsonProperty
-            String paramsJSON
+            JsonABI.Entry functionABI,
+            @JsonProperty
+            String paramsJSON,
+            @JsonProperty
+            JsonHex.Bytes encodedCall
     ) {
     }
 
