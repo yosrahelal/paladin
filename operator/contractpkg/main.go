@@ -19,7 +19,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
@@ -31,8 +35,25 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+
+	if len(os.Args) < 2 {
+		fmt.Fprintln(os.Stderr, fmt.Errorf("usage: go run ./contractpkg generate|template [ARGS]"))
+		os.Exit(1)
+		return
+	}
+	switch os.Args[1] {
+	case "generate":
+		if err := generateSmartContracts(); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
+	case "template":
+		if err := template(); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
+	default:
+		fmt.Fprintln(os.Stderr, fmt.Errorf("usage: go run ./contractpkg generate|template [ARGS]"))
 		os.Exit(1)
 	}
 	os.Exit(0)
@@ -46,13 +67,13 @@ type ContractMapBuild struct {
 	Params     any               `json:"params"`
 }
 
-func run() error {
-	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: go run ./contractpkg [path/to/contractMap.json]")
+func generateSmartContracts() error {
+	if len(os.Args) < 3 {
+		return fmt.Errorf("usage: go run ./contractpkg generate [path/to/contractMap.json]")
 	}
 
 	var buildMap ContractMap
-	mapFileData, err := os.ReadFile(os.Args[1])
+	mapFileData, err := os.ReadFile(os.Args[2])
 	if err == nil {
 		err = json.Unmarshal(mapFileData, &buildMap)
 	}
@@ -171,4 +192,110 @@ func (m *ContractMap) process(name string, b *ContractMapBuild) error {
 
 	return os.WriteFile(outPath, outData, 0664)
 
+}
+
+// adjust all .yaml files in the directory to use the new template syntax
+func template() error {
+	if len(os.Args) < 4 {
+		return fmt.Errorf("usage: go run ./contractpkg template [src] [dist]")
+	}
+	srcDir := os.Args[2]
+	destDir := os.Args[3]
+
+	// Remove the destination directory if it exists
+	os.RemoveAll(destDir)
+
+	// Step 1: Create the destination directory if it doesn't exist
+	err := os.MkdirAll(destDir, 0755)
+	if err != nil {
+		return fmt.Errorf("Error creating directory %s: %v", destDir, err)
+	}
+
+	// Step 2: Copy files from source patterns to the destination directory
+	sourcePatterns := []string{
+		"core_v1*",
+		"cert*",
+	}
+
+	for _, pattern := range sourcePatterns {
+		pattern = filepath.Join(srcDir, pattern)
+		files, err := filepath.Glob(pattern)
+		if err != nil {
+			return fmt.Errorf("Error finding files with pattern %s: %v", pattern, err)
+		}
+
+		for _, srcFile := range files {
+			dstFile := filepath.Join(destDir, filepath.Base(srcFile))
+			err := copyFile(srcFile, dstFile)
+			if err != nil {
+				return fmt.Errorf("Error copying file from %s to %s: %v", srcFile, dstFile, err)
+			}
+		}
+	}
+
+	// Step 3: Process all .yaml files in the destination directory
+	files, err := filepath.Glob(filepath.Join(destDir, "*.yaml"))
+	if err != nil {
+		return fmt.Errorf("Error finding files: %v", err)
+	}
+
+	if len(files) == 0 {
+		return fmt.Errorf("No '.yaml' files found in the directory")
+	}
+
+	// Compile the regular expression pattern
+	pattern := regexp.MustCompile(`\{\{([^}]*)\}\}`)
+
+	// Iterate over each file
+	for _, file := range files {
+		// Read the file content
+		content, err := os.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("Error reading file %s: %v", file, err)
+		}
+
+		// Perform the regex replacement
+		newContent := pattern.ReplaceAllString(string(content), "{{ `{{${1}}}` }}")
+
+		// Write the modified content back to the same file
+		err = os.WriteFile(file, []byte(newContent), fs.FileMode(0644))
+		if err != nil {
+			return fmt.Errorf("Error writing file %s: %v", file, err)
+		}
+
+		// Print a message indicating the file has been processed
+		fmt.Printf("Processed %s\n", file)
+	}
+	return nil
+}
+
+// Helper function to copy a file from src to dst
+func copyFile(src, dst string) error {
+	// Open the source file
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("Error opening source file %s: %w", src, err)
+	}
+	defer srcFile.Close()
+
+	// Create the destination file
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("Error creating destination file %s: %w", dst, err)
+	}
+	defer dstFile.Close()
+
+	// Copy the content from source to destination
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		return fmt.Errorf("Error copying from %s to %s: %w", src, dst, err)
+	}
+
+	// Flush and close the files
+	err = dstFile.Sync()
+	if err != nil {
+		return fmt.Errorf("Error syncing destination file %s: %w", dst, err)
+	}
+
+	return nil
 }
