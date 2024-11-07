@@ -152,7 +152,7 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			// if the configsum differs, we need to queue up the change for later
 			if previousConfigSum != configSum {
 				_ = r.Changes.Insert(resourceID)
-				return ctrl.Result{RequeueAfter: 20 * time.Second}, nil
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 			} else {
 				// configsums are the same, so we can proceed in case different changes need to be made
 				changeable = true
