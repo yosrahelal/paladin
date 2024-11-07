@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Fade, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Fade, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { useContext } from "react";
@@ -24,16 +24,23 @@ import { fetchRegistries } from "../queries/registry";
 import { altDarkModeScrollbarStyle, altLightModeScrollbarStyle } from "../themes/default";
 
 export const Registries: React.FC = () => {
-  const { lastBlockWithTransactions } = useContext(ApplicationContext);
 
+  const { lastBlockWithTransactions } = useContext(ApplicationContext);
   const theme = useTheme();
   const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
-  const { data: registries } = useQuery({
+  const { data: registries, error, isFetching } = useQuery({
     queryKey: ["registries", lastBlockWithTransactions],
-    queryFn: () => fetchRegistries(),
-    retry: false
+    queryFn: () => fetchRegistries()
   });
+
+  if(isFetching) {
+    return <></>;
+  }
+
+  if (error) {
+    return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
+  }
 
   return (
     <Fade timeout={600} in={true}>
@@ -45,9 +52,9 @@ export const Registries: React.FC = () => {
           marginRight: "auto",
         }}
       >
-      <Typography align="center" variant="h5" sx={{ marginBottom: '20px' }}>
-        {t("entries")}
-      </Typography>
+        <Typography align="center" variant="h5" sx={{ marginBottom: '20px' }}>
+          {t("entries")}
+        </Typography>
         <Box
           sx={{
             paddingRight: '15px',
