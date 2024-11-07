@@ -99,10 +99,9 @@ type StateBase struct {
 	Data            tktypes.RawJSON    `docstruct:"State" json:"data"`
 }
 
-// Same as StateBase, but encodes Data as HexBytes
+// Like StateBase, but encodes Data as HexBytes
 type StateEncoded struct {
 	ID              tktypes.HexBytes   `json:"id"`
-	Created         tktypes.Timestamp  `docstruct:"State" json:"created"`
 	DomainName      string             `json:"domain"`
 	Schema          tktypes.Bytes32    `json:"schema"`
 	ContractAddress tktypes.EthAddress `json:"contractAddress"`
