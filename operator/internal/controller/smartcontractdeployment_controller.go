@@ -158,7 +158,7 @@ func (r *SmartContractDeploymentReconciler) buildLinkReferences(scd *corev1alpha
 
 	for libName, addrTemplateStr := range scd.Spec.LinkedContracts {
 
-		t, err := template.New("").Option("missingkey=error").Funcs(sprig.FuncMap()).Parse(adjustTemplatePlaceholders(addrTemplateStr))
+		t, err := template.New("").Option("missingkey=error").Funcs(sprig.FuncMap()).Parse(addrTemplateStr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid Go template for linked contract %s: %s", libName, err)
 		}

@@ -138,7 +138,7 @@ task copyZetoSolidity(type: Copy) {
 }
 
 task buildContractSamples(type: Exec, dependsOn: [copySolidity, copyZetoSolidity]) {
-    commandLine "go", "run", "./contractpkg", "./contractpkg/contract_map.json", "true"
+    commandLine "go", "run", "./contractpkg", "./contractpkg/contract_map.json"
 }
 
 // Task to build the Paladin image from the parent project

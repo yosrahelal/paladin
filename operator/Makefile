@@ -204,7 +204,11 @@ prepare-operator-chart: ## Copy samples to the Helm chart.
 	mkdir -p charts/paladin-operator/templates/samples
 	cp config/samples/core_v1* charts/paladin-operator/templates/samples/
 	cp config/samples/cert* charts/paladin-operator/templates/samples/
-	ls -la charts/paladin-operator/templates/samples
+	@for file in $(shell ls charts/paladin-operator/templates/samples/*.yaml ) ; do \
+		mv "$${file}" "$${file}.tmp"; \
+		sed -r 's/{{(.*)}}/{{ `{{\1}}` }}/g' "$${file}.tmp" > "$${file}"; \
+		rm "$${file}.tmp"; \
+	done
 
 .PHONY: helm-install-dependencies
 helm-install-dependencies: ## Install operator using Helm.
