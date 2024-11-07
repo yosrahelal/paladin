@@ -209,7 +209,7 @@ copy-crs-files: ## Copy samples to the Helm chart.
 prepare-operator-chart: copy-crs-files ## Copy samples to the Helm chart.
 	@for file in $(shell ls charts/paladin-operator/templates/samples/*.yaml ) ; do \
 		mv "$${file}" "$${file}.tmp"; \
-		sed -r 's/{{(.*)}}/{{ "{{\1}}" }}/g' "$${file}.tmp" > "$${file}"; \
+		sed -r 's/{{(.*)}}/{{ `{{\1}}` }}/g' "$${file}.tmp" > "$${file}"; \
 		rm "$${file}.tmp"; \
 		echo "Processed $${file}"; \
 	done
