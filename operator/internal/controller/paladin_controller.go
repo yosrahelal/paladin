@@ -152,7 +152,7 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			// if the configsum differs, we need to queue up the change for later
 			if previousConfigSum != configSum {
 				_ = r.Changes.Insert(resourceID)
-				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 			} else {
 				// configsums are the same, so we can proceed in case different changes need to be made
 				changeable = true
@@ -171,6 +171,9 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return ctrl.Result{}, err
 		}
 		log.Info("Created Paladin StatefulSet", "Name", ss.Name, "Namespace", ss.Namespace)
+		if changeable {
+			r.Changes.Delete(resourceID)
+		}
 	}
 
 	// Update condition to Succeeded
@@ -192,7 +195,12 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		setCondition(&node.Status.Conditions, corev1alpha1.ConditionHealthy, metav1.ConditionTrue, corev1alpha1.ReasonSSReady, fmt.Sprintf("Name: %s", name))
 	}
 
-	return ctrl.Result{}, nil
+	if changeable {
+		// level-trigger, we want to check back in every so often in case we missed something
+		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+	}
+	// requeue after a bit to check if the change is released
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
