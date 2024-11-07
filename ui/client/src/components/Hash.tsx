@@ -38,7 +38,7 @@ export const Hash: React.FC<Props> = ({ title, hash }) => {
 
   return (
     <>
-      <Button disableElevation onClick={() => setHashDialogOpen(true)} fullWidth variant="contained" sx={{ paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400'}} size="small">
+      <Button disableElevation onClick={() => setHashDialogOpen(true)} fullWidth variant="contained" sx={{ paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400', whiteSpace: 'nowrap'}} size="small">
         {`${title} | ${getHash(hash)}`}
       </Button>
       <HashDialog dialogOpen={hashDialogOpen} setDialogOpen={setHashDialogOpen} title={title} hash={hash} />
