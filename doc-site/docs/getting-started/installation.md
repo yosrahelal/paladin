@@ -44,9 +44,8 @@ helm upgrade --install paladin-crds paladin/paladin-operator-crd
 Install the [cert-manager](https://artifacthub.io/packages/helm/cert-manager/cert-manager) CRDs:
 
 ```bash
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml
 helm repo add jetstack https://charts.jetstack.io --force-update
-helm install cert-manager --namespace cert-manager --version v1.16.1 jetstack/cert-manager --create-namespace
+helm install cert-manager --namespace cert-manager --version v1.16.1 jetstack/cert-manager --create-namespace --set crds.enabled=true
 ```
 
 ### Step 3: Install the Paladin Operator Chart
@@ -54,9 +53,7 @@ helm install cert-manager --namespace cert-manager --version v1.16.1 jetstack/ce
 Install the Paladin operator chart:
 
 ```bash
-helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace \
-    --set paladin.namespace=paladin \
-    --set cert-manager.enabled=false
+helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace
 ```
 
 ### Outcome

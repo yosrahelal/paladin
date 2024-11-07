@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -309,7 +310,7 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 						{
 							Name:            "paladin",
 							Image:           r.config.Paladin.Image, // Use the image from the config
-							ImagePullPolicy: corev1.PullIfNotPresent,
+							ImagePullPolicy: r.config.Paladin.ImagePullPolicy,
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "config",
@@ -360,7 +361,7 @@ func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordS
 	ss.Spec.Template.Spec.Containers = append(ss.Spec.Template.Spec.Containers, corev1.Container{
 		Name:            "postgres",
 		Image:           r.config.Postgres.Image, // Use the image from the config
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: r.config.Postgres.ImagePullPolicy,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "pgdata",

@@ -48,12 +48,7 @@ type ContractMapBuild struct {
 
 func run() error {
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: go run ./contractpkg [path/to/contractMap.json] [true|false]")
-	}
-
-	helmCompatible := false
-	if len(os.Args) >= 3 {
-		helmCompatible = os.Args[2] == "true"
+		return fmt.Errorf("usage: go run ./contractpkg [path/to/contractMap.json]")
 	}
 
 	var buildMap ContractMap
@@ -66,7 +61,7 @@ func run() error {
 	}
 
 	for name, build := range buildMap {
-		if err := buildMap.process(name, build, helmCompatible); err != nil {
+		if err := buildMap.process(name, build); err != nil {
 			return err
 		}
 	}
@@ -97,7 +92,7 @@ func run() error {
 	return nil
 }
 
-func (m *ContractMap) process(name string, b *ContractMapBuild, helmCompatible bool) error {
+func (m *ContractMap) process(name string, b *ContractMapBuild) error {
 	outPath := fmt.Sprintf("config/samples/core_v1alpha1_smartcontractdeployment_%s.yaml", name)
 
 	var build solutils.SolidityBuildWithLinks
@@ -136,9 +131,6 @@ func (m *ContractMap) process(name string, b *ContractMapBuild, helmCompatible b
 			link = strings.ReplaceAll(link, "_", "-")
 			requiredBuilds = append(requiredBuilds, link)
 			l := fmt.Sprintf(`{{index .status.resolvedContractAddresses "%s"}}`, link)
-			if helmCompatible {
-				l = fmt.Sprintf("{{`%s`}}", l)
-			}
 			linkedContracts[libName] = l
 		}
 
