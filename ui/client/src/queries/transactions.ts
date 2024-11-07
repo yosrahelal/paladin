@@ -39,7 +39,7 @@ export const fetchIndexedTransactions = async (): Promise<ITransaction[]> => {
 
   return <Promise<ITransaction[]>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
       i18next.t("errorFetchingTransactions")
     )
   );
@@ -67,7 +67,7 @@ export const fetchSubmissions = async (
 
   return <Promise<IPaladinTransaction[]>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
       i18next.t("errorFetchingSubmissions")
     )
   );
@@ -85,7 +85,7 @@ export const fetchTransactionReceipt = async (
 
   return <Promise<ITransactionReceipt>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
       i18next.t("errorFetchingTransactionReceipt")
     )
   );
@@ -115,7 +115,7 @@ export const fetchTransactionReceipts = async (
 
   return <Promise<ITransactionReceipt[]>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
       i18next.t("errorFetchingTransactionReceipts")
     )
   );
@@ -143,7 +143,7 @@ export const fetchPaladinTransactions = async (
 
   return <Promise<IPaladinTransaction[]>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
       i18next.t("errorFetchingPaladinTransactions")
     )
   );

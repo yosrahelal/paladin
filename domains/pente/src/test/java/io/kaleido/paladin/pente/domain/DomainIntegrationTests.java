@@ -38,7 +38,10 @@ public class DomainIntegrationTests {
 
     private static final Logger LOGGER = LogManager.getLogger(DomainIntegrationTests.class);
 
-    private final Testbed.Setup testbedSetup = new Testbed.Setup("../../core/go/db/migrations/sqlite", 5000);
+    private final Testbed.Setup testbedSetup = new Testbed.Setup(
+            "../../core/go/db/migrations/sqlite",
+            "build/testbed.java-domain-integration.log",
+            5000);
 
     JsonHex.Address deployPenteFactory() throws Exception {
         try (Testbed deployBed = new Testbed(testbedSetup)) {
