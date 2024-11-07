@@ -398,7 +398,7 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 }
 
 func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordSecret string) {
-	// we prepend the sidecar so that we can have the prestart hook run before the main container starts
+	// We prepend the sidecar so that we can have the prestart hook run before the main container starts, see below.
 	ss.Spec.Template.Spec.Containers = append([]corev1.Container{
 		{
 			Name:            "postgres",
@@ -417,6 +417,10 @@ func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordS
 					Protocol:      corev1.ProtocolTCP,
 				},
 			},
+			// This is another ugly hack - we want to better ensure Postgres is ready before Paladin starts
+			// postStart may run immediately after the container starts, but before the container is live/ready,
+			// but it must complete before starting the subsequent container (according to https://medium.com/@marko.luksa/delaying-application-start-until-sidecar-is-ready-2ec2d21a7b74).
+			// So we run a script that checks if Postgres is ready, and if not, sleeps for a bit and retries.
 			Lifecycle: &corev1.Lifecycle{
 				PostStart: &corev1.LifecycleHandler{
 					Exec: &corev1.ExecAction{
