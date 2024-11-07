@@ -20,6 +20,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
@@ -168,6 +169,14 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	if useBatch {
 		expectedCoins = 3
 	}
+
+	// some tokens like Zeto_AnonNullifier with batch can take some time to process
+	// so we need to retry at least once
+	if len(coins) != expectedCoins {
+		time.Sleep(1 * time.Second)
+		coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
+	}
+
 	require.Len(t, coins, expectedCoins)
 
 	if useBatch {
