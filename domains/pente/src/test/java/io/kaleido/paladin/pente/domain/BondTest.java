@@ -35,7 +35,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class BondTest {
 
-    private final Testbed.Setup testbedSetup = new Testbed.Setup("../../core/go/db/migrations/sqlite", 5000);
+    private final Testbed.Setup testbedSetup = new Testbed.Setup(
+            "../../core/go/db/migrations/sqlite",
+            "build/testbed.java-bond.log",
+            5000);
 
     JsonHex.Address deployPenteFactory() throws Exception {
         try (Testbed deployBed = new Testbed(testbedSetup)) {

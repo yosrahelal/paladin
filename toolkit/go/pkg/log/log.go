@@ -32,10 +32,7 @@ import (
 )
 
 var (
-	rootLogger = logrus.NewEntry(
-		// we use our own root logger rather than logrus.StandardLogger, so any code that does logrus.SetLevel does not disrupt our logging
-		logrus.New(),
-	)
+	rootLogger = logrus.NewEntry(logrus.StandardLogger())
 
 	// L accesses the current logger from the context
 	L = loggerFromContext
@@ -65,11 +62,11 @@ func InitConfig(conf *pldconf.LogConfig) {
 			MaxAge:     int(math.Ceil(float64(maxAgeDuration) / float64(time.Hour) / 24)), /* round up in days */
 			Compress:   confutil.Bool(conf.File.Compress, *pldconf.LogDefaults.File.Compress),
 		}
-		rootLogger.Logger.SetOutput(lumberjack)
+		logrus.SetOutput(lumberjack)
 	case "stderr":
-		rootLogger.Logger.SetOutput(os.Stderr)
+		logrus.SetOutput(os.Stderr)
 	case "stdout":
-		rootLogger.Logger.SetOutput(os.Stdout)
+		logrus.SetOutput(os.Stdout)
 		fallthrough
 	default:
 	}
@@ -89,11 +86,11 @@ func InitConfig(conf *pldconf.LogConfig) {
 }
 
 func IsDebugEnabled() bool {
-	return rootLogger.Logger.IsLevelEnabled(logrus.DebugLevel)
+	return logrus.IsLevelEnabled(logrus.DebugLevel)
 }
 
 func IsTraceEnabled() bool {
-	return rootLogger.Logger.IsLevelEnabled(logrus.TraceLevel)
+	return logrus.IsLevelEnabled(logrus.TraceLevel)
 }
 
 func ensureInit() {
@@ -142,7 +139,7 @@ func SetLevel(level string) {
 	default:
 		l = logrus.InfoLevel
 	}
-	rootLogger.Logger.SetLevel(l)
+	logrus.SetLevel(l)
 }
 
 type Formatting struct {
@@ -189,7 +186,7 @@ func setFormatting(format *Formatting) {
 			DisableSorting:  false,
 			FullTimestamp:   true,
 		}
-		rootLogger.Logger.SetReportCaller(true)
+		logrus.SetReportCaller(true)
 	case "simple":
 		fallthrough
 	default:
@@ -205,5 +202,5 @@ func setFormatting(format *Formatting) {
 	if format.UTC {
 		formatter = &utcFormat{f: formatter}
 	}
-	rootLogger.Logger.SetFormatter(formatter)
+	logrus.SetFormatter(formatter)
 }

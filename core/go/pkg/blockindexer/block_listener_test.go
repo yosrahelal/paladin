@@ -34,7 +34,6 @@ import (
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -53,8 +52,6 @@ func newTestBlockListener(t *testing.T) (context.Context, *blockListener, *rpccl
 }
 
 func newTestBlockListenerConf(t *testing.T, ctx context.Context, config *pldconf.BlockIndexerConfig) (*blockListener, *rpcclientmocks.WSClient) {
-
-	logrus.SetLevel(logrus.DebugLevel)
 
 	mRPC := rpcclientmocks.NewWSClient(t)
 

@@ -67,6 +67,11 @@ blockchain:
   ws:
     url: ws://localhost:8546
     initialConnectAttempts: 25
+log:
+  level: debug
+  output: file
+  file:
+    filename: build/testbed.component-test.log
 wallets:
 - name: wallet1
   keySelector: .*
