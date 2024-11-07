@@ -176,8 +176,7 @@ build-installer: manifests generate kustomize ## Build consolidated installer YA
 ##@ Helm Chart - Deployment
 .PHONY: prepare-crd-chart
 prepare-crd-chart: manifests kustomize helmify ## Build CRDs using helmify.
-	$(KUSTOMIZE) build config/default | $(HELMIFY) ${CHART_PATH_CRD}
-	find ${CHART_PATH_CRD}/templates/ -type f ! \( -name '*-crd.yaml' -o -name '_helpers.tpl' \) -exec rm -f {} +
+	$(KUSTOMIZE) build config/crd | $(HELMIFY) ${CHART_PATH_CRD}
 	rm -f ${CHART_PATH_CRD}/values.yaml
 	touch ${CHART_PATH_CRD}/values.yaml
 	ls -la charts/paladin-operator-crd/templates
