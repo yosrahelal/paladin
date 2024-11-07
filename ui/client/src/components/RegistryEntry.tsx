@@ -25,6 +25,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { IRegistryEntry } from "../interfaces";
 import VisibilityIcon from '@mui/icons-material/VisibilityOutlined';
 import { ViewDetailsDialog } from "../dialogs/ViewDetails";
+import { Captions, Tag } from 'lucide-react';
 
 type Props = {
   registryEntry: IRegistryEntry;
@@ -59,10 +60,11 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
 
           <Grid2 container justifyContent="space-between" alignItems="center" spacing={2}>
             <Grid2 size={{ xs: 3 }}>
-              <Hash title={t("id")} hash={registryEntry.id} />
+              <Hash Icon={<Tag size="18px" />} title={t("id")} hash={registryEntry.id} />
             </Grid2>
             <Grid2 size={{ xs: 3 }}>
               <Hash
+                Icon={<Captions size="18px" />}
                 title={t("owner")}
                 hash={registryEntry.properties.$owner}
               />

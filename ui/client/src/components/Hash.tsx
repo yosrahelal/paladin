@@ -21,24 +21,34 @@ import { HashDialog } from "../dialogs/Hash";
 const MAX_LENGTH_WITHOUT_COLLAPSE = 16;
 
 type Props = {
+  Icon?: JSX.Element
   title: string
   hash: string
 }
 
-export const Hash: React.FC<Props> = ({ title, hash }) => {
+export const Hash: React.FC<Props> = ({ Icon, title, hash }) => {
 
   const [hashDialogOpen, setHashDialogOpen] = useState(false);
 
   const getHash = (value: string) => {
-    if(value.length < MAX_LENGTH_WITHOUT_COLLAPSE) {
+    if (value.length < MAX_LENGTH_WITHOUT_COLLAPSE) {
       return hash;
     }
     return `${value.substring(0, 5)}...${value.substring(value.length - 3)}`
   };
 
+
   return (
     <>
-      <Button disableElevation onClick={() => setHashDialogOpen(true)} fullWidth variant="contained" sx={{ paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400', whiteSpace: 'nowrap'}} size="small">
+      <Button
+        startIcon={Icon}
+        disableElevation
+        onClick={() => setHashDialogOpen(true)}
+        fullWidth
+        variant="contained"
+        color="secondary"
+        sx={{ paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400', whiteSpace: 'nowrap' }}
+        size="small">
         {`${title} | ${getHash(hash)}`}
       </Button>
       <HashDialog dialogOpen={hashDialogOpen} setDialogOpen={setHashDialogOpen} title={title} hash={hash} />
