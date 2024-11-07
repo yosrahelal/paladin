@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"os"
 	"text/template"
+	"time"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
@@ -60,8 +61,9 @@ var checkPsqlScript string
 // PaladinReconciler reconciles a Paladin object
 type PaladinReconciler struct {
 	client.Client
-	config *config.Config
-	Scheme *runtime.Scheme
+	config          *config.Config
+	Scheme          *runtime.Scheme
+	ChangesInflight *InFlight
 }
 
 // allows generic functions by giving a mapping between the types and interfaces for the CR
@@ -103,15 +105,6 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}()
 
-	// Create ConfigMap
-	configSum, tlsSecrets, _, err := r.createConfigMap(ctx, &node, name)
-	if err != nil {
-		log.Error(err, "Failed to create Paladin config map")
-		setCondition(&node.Status.Conditions, corev1alpha1.ConditionCM, metav1.ConditionFalse, corev1alpha1.ReasonCMCreationFailed, err.Error())
-		return ctrl.Result{}, err
-	}
-	log.Info("Created Paladin config map", "Name", name)
-
 	// Create Service
 	if _, err := r.createService(ctx, &node, name); err != nil {
 		log.Error(err, "Failed to create Paladin Service")
@@ -128,20 +121,61 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	log.Info("Created Paladin pod disruption budget", "Name", name)
 
-	// Create StatefulSet
-	ss, err := r.createStatefulSet(ctx, &node, name, tlsSecrets, configSum)
+	// Create ConfigMap
+	configSum, tlsSecrets, _, err := r.createConfigMap(ctx, &node, name)
 	if err != nil {
-		log.Error(err, "Failed to create Paladin StatefulSet")
-		setCondition(&node.Status.Conditions, corev1alpha1.ConditionSS, metav1.ConditionFalse, corev1alpha1.ReasonSSCreationFailed, err.Error())
+		log.Error(err, "Failed to create Paladin config map")
+		setCondition(&node.Status.Conditions, corev1alpha1.ConditionCM, metav1.ConditionFalse, corev1alpha1.ReasonCMCreationFailed, err.Error())
 		return ctrl.Result{}, err
 	}
-	log.Info("Created Paladin StatefulSet", "Name", ss.Name, "Namespace", ss.Namespace)
+	log.Info("Created Paladin config map", "Name", name)
+
+	// first we need to detect if the STS and the configsum differs
+	resourceID := fmt.Sprintf("paladin/%s", name)
+	existing := false
+	changeable := false
+	sts := &appsv1.StatefulSet{}
+	err = r.Client.Get(ctx, types.NamespacedName{
+		Name:      name,
+		Namespace: node.Namespace,
+	}, sts)
+	// it exists, so we need to check if it's config differs
+	if err == nil {
+		existing = true
+		// if it's already changing, we need to see if we should wait or finally reconcile
+		if r.ChangesInflight.IsChanging(resourceID) {
+			changeable = r.ChangesInflight.IsReadyForChange(resourceID)
+		} else { // if it's not changing, we need to check if the configsum differs
+			previousConfigSum := sts.Spec.Template.Annotations["core.paladin.io/config-sum"]
+			// if the configsum differs, we need to queue up the change for later
+			if previousConfigSum != configSum {
+				_ = r.ChangesInflight.Insert(resourceID)
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			} else {
+				// configsums are the same, so we can proceed in case different changes need to be made
+				changeable = true
+			}
+		}
+	} else if !errors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	if !existing || changeable {
+		// Create StatefulSet
+		ss, err := r.createStatefulSet(ctx, &node, name, tlsSecrets, configSum)
+		if err != nil {
+			log.Error(err, "Failed to create Paladin StatefulSet")
+			setCondition(&node.Status.Conditions, corev1alpha1.ConditionSS, metav1.ConditionFalse, corev1alpha1.ReasonSSCreationFailed, err.Error())
+			return ctrl.Result{}, err
+		}
+		log.Info("Created Paladin StatefulSet", "Name", ss.Name, "Namespace", ss.Namespace)
+	}
 
 	// Update condition to Succeeded
 	node.Status.Phase = corev1alpha1.StatusPhasePending
 	setCondition(&node.Status.Conditions, corev1alpha1.ConditionHealthy, metav1.ConditionFalse, corev1alpha1.ReasonSSPending, fmt.Sprintf("Name: %s", name))
 
-	sts := &appsv1.StatefulSet{}
+	sts = &appsv1.StatefulSet{}
 	err = r.Client.Get(ctx, types.NamespacedName{
 		Name:      name,
 		Namespace: node.Namespace,
@@ -363,18 +397,6 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 								InitialDelaySeconds: 5,
 								TimeoutSeconds:      2,
 								PeriodSeconds:       5,
-							},
-							// This is a no good horrible hack
-							// If we have lots of config reloads all at once, we don't want to restart the pod
-							// too many times / quickly because there could be SCDs trying to run that would only
-							// lead to more config changes / restarts. So we sleep for a bit before shutting down
-							// until dynamic reload is implemented.
-							Lifecycle: &corev1.Lifecycle{
-								PreStop: &corev1.LifecycleHandler{
-									Sleep: &corev1.SleepAction{
-										Seconds: 15,
-									},
-								},
 							},
 						},
 					},
