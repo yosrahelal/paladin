@@ -50,7 +50,12 @@ import (
 
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 	"github.com/kaleido-io/paladin/operator/pkg/config"
+
+	_ "embed"
 )
+
+//go:embed check-psql.sh
+var checkPsqlScript string
 
 // PaladinReconciler reconciles a Paladin object
 type PaladinReconciler struct {
@@ -336,6 +341,42 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 								},
 							},
 							Env: buildEnv(r.config.Paladin.Envs),
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{
+											"sh",
+											"-c",
+											"pidof java",
+										},
+									},
+								},
+								InitialDelaySeconds: 3,
+								TimeoutSeconds:      1,
+								PeriodSeconds:       2,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Port: intstr.FromInt(8548),
+									},
+								},
+								InitialDelaySeconds: 5,
+								TimeoutSeconds:      2,
+								PeriodSeconds:       5,
+							},
+							// This is a no good horrible hack
+							// If we have lots of config reloads all at once, we don't want to restart the pod
+							// too many times / quickly because there could be SCDs trying to run that would only
+							// lead to more config changes / restarts. So we sleep for a bit before shutting down
+							// until dynamic reload is implemented.
+							Lifecycle: &corev1.Lifecycle{
+								PreStop: &corev1.LifecycleHandler{
+									Sleep: &corev1.SleepAction{
+										Seconds: 15,
+									},
+								},
+							},
 						},
 					},
 					Volumes: []corev1.Volume{
@@ -357,39 +398,63 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 }
 
 func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordSecret string) {
-	ss.Spec.Template.Spec.Containers = append(ss.Spec.Template.Spec.Containers, corev1.Container{
-		Name:            "postgres",
-		Image:           r.config.Postgres.Image, // Use the image from the config
-		ImagePullPolicy: corev1.PullIfNotPresent,
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "pgdata",
-				MountPath: "/pgdata",
+	// we prepend the sidecar so that we can have the prestart hook run before the main container starts
+	ss.Spec.Template.Spec.Containers = append([]corev1.Container{
+		{
+			Name:            "postgres",
+			Image:           r.config.Postgres.Image, // Use the image from the config
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "pgdata",
+					MountPath: "/pgdata",
+				},
 			},
-		},
-		Ports: []corev1.ContainerPort{
-			{
-				Name:          "postgres",
-				ContainerPort: 5432,
-				Protocol:      corev1.ProtocolTCP,
+			Ports: []corev1.ContainerPort{
+				{
+					Name:          "postgres",
+					ContainerPort: 5432,
+					Protocol:      corev1.ProtocolTCP,
+				},
 			},
-		},
-		Env: append([]corev1.EnvVar{
-			{
-				Name: "POSTGRES_PASSWORD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: passwordSecret,
+			Lifecycle: &corev1.Lifecycle{
+				PostStart: &corev1.LifecycleHandler{
+					Exec: &corev1.ExecAction{
+						Command: []string{
+							"/bin/sh",
+							"-c",
+							checkPsqlScript,
 						},
-						Key: "password",
 					},
 				},
 			},
-		}, buildEnv(r.config.Postgres.Envs, map[string]string{
-			"PGDATA": "/pgdata",
-		})...),
-	})
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(5432),
+					},
+				},
+				InitialDelaySeconds: 3,
+				TimeoutSeconds:      1,
+				PeriodSeconds:       5,
+			},
+			Env: append([]corev1.EnvVar{
+				{
+					Name: "POSTGRES_PASSWORD",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: passwordSecret,
+							},
+							Key: "password",
+						},
+					},
+				},
+			}, buildEnv(r.config.Postgres.Envs, map[string]string{
+				"PGDATA": "/pgdata",
+			})...),
+		},
+	}, ss.Spec.Template.Spec.Containers...)
 	ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
 		Name: "pgdata",
 		VolumeSource: corev1.VolumeSource{
@@ -1105,7 +1170,7 @@ func generatePaladinServiceHostname(nodeName, namespace string) string {
 }
 
 func getPaladinURLEndpoint(ctx context.Context, c client.Client, name, namespace string) (string, error) {
-	if os.Getenv("USE_NODEPORTS_IN_DEBUGGER") == "true" {
+	if os.Getenv("KUBE_LOCAL") == "true" {
 		// Running outside of kubernetes, so we require a nodeport to be defined and exposed from Kind
 		var svc corev1.Service
 		err := c.Get(ctx, types.NamespacedName{Name: generatePaladinName(name), Namespace: namespace}, &svc)

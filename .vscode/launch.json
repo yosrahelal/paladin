@@ -1,0 +1,24 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Controller",
+            "type": "go",
+            "preLaunchTask": "check-running-on-kind",
+            "request": "launch",
+            "mode": "debug",
+            "cwd": "${workspaceRoot}/operator",
+            "program": "${workspaceRoot}/operator/cmd/main.go",
+            "env": { 
+                "KUBE_LOCAL": "true",
+                "WATCH_NAMESPACE": "paladin"
+            },
+            "presentation": {
+                "hidden": false
+            }
+        }
+    ]
+}
