@@ -34,6 +34,7 @@ dependencies {
 task install(type: Exec) {
     executable 'npm'
     args 'install'
+
     inputs.files("package.json")
     outputs.files("package-lock.json")
     outputs.dir("node_modules")
@@ -43,7 +44,9 @@ task copyABI(type: Exec, dependsOn: install) {
     executable 'npm'
     args 'run'
     args 'abi'
+
     inputs.files(configurations.contractCompile)
+    outputs.dir('src/domains/abis')
 }
 
 task build(type: Exec, dependsOn: [install, copyABI]) {

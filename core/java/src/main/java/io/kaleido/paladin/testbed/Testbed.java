@@ -64,11 +64,15 @@ public class Testbed implements Closeable {
 
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record StateWithData(
+    public record StateEncoded(
             @JsonProperty
             JsonHex.Bytes id,
             @JsonProperty
+            String domain,
+            @JsonProperty
             JsonHex.Bytes32 schema,
+            @JsonProperty
+            JsonHex.Address contractAddress,
             @JsonProperty
             JsonHex.Bytes data
     ) {
@@ -113,11 +117,11 @@ public class Testbed implements Closeable {
             @JsonProperty
             JsonNode preparedMetadata,
             @JsonProperty
-            List<StateWithData> inputStates,
+            List<StateEncoded> inputStates,
             @JsonProperty
-            List<StateWithData> outputStates,
+            List<StateEncoded> outputStates,
             @JsonProperty
-            List<StateWithData> readStates,
+            List<StateEncoded> readStates,
             @JsonProperty
             JsonNode assembleExtraData
     ) {

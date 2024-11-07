@@ -1,6 +1,6 @@
 # Temaplte from: https://github.com/hyperledger-labs/documentation-template
 
-name: 'Close stale issues and PRs'
+name: 'Label stale issues and PRs'
 on:
   schedule:
     - cron: '30 1 * * *'

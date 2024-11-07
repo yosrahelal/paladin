@@ -34,6 +34,7 @@ import java.util.List;
 public class NotoHelper {
     final String domainName;
     final Testbed testbed;
+    final JsonABI abi;
     final String address;
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -101,53 +102,20 @@ public class NotoHelper {
     ) {
     }
 
-    static final JsonABI.Entry mintABI = JsonABI.newFunction(
-            "mint",
-            JsonABI.newParameters(
-                    JsonABI.newParameter("to", "string"),
-                    JsonABI.newParameter("amount", "uint256"),
-                    JsonABI.newParameter("data", "bytes")
-            ),
-            JsonABI.newParameters()
-    );
-
-    static final JsonABI.Entry transferABI = JsonABI.newFunction(
-            "transfer",
-            JsonABI.newParameters(
-                    JsonABI.newParameter("to", "string"),
-                    JsonABI.newParameter("amount", "uint256"),
-                    JsonABI.newParameter("data", "bytes")
-            ),
-            JsonABI.newParameters()
-    );
-
-    static final JsonABI.Entry approveTransferABI = JsonABI.newFunction(
-            "approveTransfer",
-            JsonABI.newParameters(
-                    JsonABI.newTupleArray("inputs", "FullState", JsonABI.newParameters(
-                            JsonABI.newParameter("id", "bytes"),
-                            JsonABI.newParameter("schema", "bytes32"),
-                            JsonABI.newParameter("data", "bytes")
-                    )),
-                    JsonABI.newTupleArray("outputs", "FullState", JsonABI.newParameters(
-                            JsonABI.newParameter("id", "bytes"),
-                            JsonABI.newParameter("schema", "bytes32"),
-                            JsonABI.newParameter("data", "bytes")
-                    )),
-                    JsonABI.newParameter("data", "bytes"),
-                    JsonABI.newParameter("delegate", "address")
-            ),
-            JsonABI.newParameters()
-    );
-
     public static NotoHelper deploy(String domainName, String from, Testbed testbed, ConstructorParams params) throws IOException {
         String address = testbed.getRpcClient().request("testbed_deploy", domainName, from, params);
-        return new NotoHelper(domainName, testbed, address);
+        JsonABI abi = JsonABI.fromJSONResourceEntry(
+                NotoHelper.class.getClassLoader(),
+                "contracts/domains/interfaces/INotoPrivate.sol/INotoPrivate.json",
+                "abi"
+        );
+        return new NotoHelper(domainName, testbed, abi, address);
     }
 
-    private NotoHelper(String domainName, Testbed testbed, String address) {
+    private NotoHelper(String domainName, Testbed testbed, JsonABI abi, String address) {
         this.domainName = domainName;
         this.testbed = testbed;
+        this.abi = abi;
         this.address = address;
     }
 
@@ -167,10 +135,11 @@ public class NotoHelper {
     }
 
     public void mint(String sender, String to, int amount) throws IOException {
+        var method = abi.getABIEntry("function", "mint");
         testbed.getRpcClient().request("testbed_invoke", new Testbed.TransactionInput(
                 sender,
                 JsonHex.addressFrom(address),
-                mintABI,
+                method,
                 new HashMap<>() {{
                     put("to", to);
                     put("amount", amount);
@@ -180,10 +149,11 @@ public class NotoHelper {
     }
 
     public void transfer(String sender, String to, int amount) throws IOException {
+        var method = abi.getABIEntry("function", "transfer");
         testbed.getRpcClient().request("testbed_invoke", new Testbed.TransactionInput(
                 sender,
                 JsonHex.addressFrom(address),
-                transferABI,
+                method,
                 new HashMap<>() {{
                     put("to", to);
                     put("amount", amount);
@@ -193,11 +163,12 @@ public class NotoHelper {
     }
 
     public Testbed.TransactionResult prepareTransfer(String sender, String to, int amount) throws IOException {
+        var method = abi.getABIEntry("function", "transfer");
         return getTransactionInfo(
                 testbed.getRpcClient().request("testbed_prepare", new Testbed.TransactionInput(
                         sender,
                         JsonHex.addressFrom(address),
-                        transferABI,
+                        method,
                         new HashMap<>() {{
                             put("to", to);
                             put("amount", amount);
@@ -206,11 +177,12 @@ public class NotoHelper {
                 )));
     }
 
-    public void approveTransfer(String sender, List<Testbed.StateWithData> inputs, List<Testbed.StateWithData> outputs, JsonHex.Bytes data, String delegate) throws IOException {
+    public void approveTransfer(String sender, List<Testbed.StateEncoded> inputs, List<Testbed.StateEncoded> outputs, JsonHex.Bytes data, String delegate) throws IOException {
+        var method = abi.getABIEntry("function", "approveTransfer");
         testbed.getRpcClient().request("testbed_invoke", new Testbed.TransactionInput(
                 sender,
                 JsonHex.addressFrom(address),
-                approveTransferABI,
+                method,
                 new HashMap<>() {{
                     put("inputs", inputs);
                     put("outputs", outputs);
