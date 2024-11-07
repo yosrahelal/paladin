@@ -40,7 +40,7 @@ func NewUnitTestPersistence(ctx context.Context, suite string) (Persistence, fun
 				DSN:           ":memory:",
 				AutoMigrate:   confutil.P(true),
 				MigrationsDir: "../../db/migrations/sqlite",
-				DebugQueries:  true,
+				DebugQueries:  false,
 			},
 		},
 	})

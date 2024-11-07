@@ -33,7 +33,7 @@ public class TestStartTestbedWithNoopDomains {
         System.out.println(System.getProperty("java.library.path"));
 
         Testbed testBed = new Testbed(
-                new Testbed.Setup("../go/db/migrations/sqlite", 5000),
+                new Testbed.Setup("../go/db/migrations/sqlite", "build/test.java-noop-domain.txt", 5000),
                 new Testbed.ConfigDomain(
                         "domain1",
                         JsonHex.Address.addressFrom("0x1234567890abcdef1234567890abcdef12345678"),

@@ -56,7 +56,6 @@ assemble.dependsOn jar
 
 test {
     testLogging {
-        showStandardStreams = true
         testLogging {
             events("passed", "skipped", "failed")
             showStackTraces = true
