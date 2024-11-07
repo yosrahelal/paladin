@@ -30,7 +30,7 @@ export const fetchDecodedCallData = async (
 
   return <Promise<IABIDecodedEntry>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))), "", [500]
+      () =>  fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))), "", [500]
     )
   );
 };
@@ -48,7 +48,7 @@ export const fetchDecodedEvent = async (
 
   return <Promise<IABIDecodedEntry>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))), "", [500]
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))), "", [500]
     )
   );
 };

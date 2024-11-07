@@ -94,7 +94,7 @@ func (r *BesuGenesisReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}, nil
 
 	}
-	genesis.Status.Phase = corev1alpha1.StatusPhaseCompleted
+	genesis.Status.Phase = corev1alpha1.StatusPhaseReady
 
 	return ctrl.Result{}, nil
 }

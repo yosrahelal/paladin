@@ -29,7 +29,7 @@ export const fetchRegistries = async (): Promise<string[]> => {
 
   return <Promise<string[]>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
       i18next.t("errorFetchingRegistries")
     )
   );
@@ -51,7 +51,7 @@ export const fetchRegistryEntries = async (
 
   return <Promise<IRegistryEntry[]>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
       i18next.t("errorFetchingRegistryEntries")
     )
   );

@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/Masterminds/sprig/v3"
@@ -86,8 +87,9 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 	)
 	err = txReconcile.reconcile(ctx)
 	if err != nil {
-		// There's nothing to notify us when the world changes other than polling, so we keep re-trying
-		return ctrl.Result{}, err
+		// There's nothing to notify us when the world changes other than polling, so we keep re-tryingat
+		// a fixed rate to avoid any exponential backoff
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 	} else if txReconcile.statusChanged {
 		// Common TX reconciler does everything for us apart from grab the receipt
 		if scd.Status.TransactionStatus == corev1alpha1.TransactionStatusSuccess && scd.Status.ContractAddress == "" {
@@ -188,11 +190,34 @@ func (r *SmartContractDeploymentReconciler) buildLinkReferences(scd *corev1alpha
 	return linkedAddresses, nil
 }
 
+func (r *SmartContractDeploymentReconciler) reconcilePaladin(ctx context.Context, obj client.Object) []ctrl.Request {
+	paladin, ok := obj.(*corev1alpha1.Paladin)
+	if !ok {
+		log.FromContext(ctx).Error(fmt.Errorf("unexpected object type"), "expected Paladin")
+		return nil
+	}
+
+	if paladin.Status.Phase != corev1alpha1.StatusPhaseReady {
+		return nil
+	}
+
+	scds := &corev1alpha1.SmartContractDeploymentList{}
+	r.Client.List(ctx, scds, client.InNamespace(paladin.Namespace))
+	reqs := make([]ctrl.Request, 0, len(scds.Items))
+
+	for _, scd := range scds.Items {
+		if scd.Spec.Node == paladin.Name {
+			reqs = append(reqs, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&scd)})
+		}
+	}
+	return reqs
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *SmartContractDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.SmartContractDeployment{}).
 		// Reconcile when any node status changes
-		Watches(&corev1alpha1.Paladin{}, reconcileAll(SmartContractDeploymentCRMap, r.Client), reconcileEveryChange()).
+		Watches(&corev1alpha1.Paladin{}, handler.EnqueueRequestsFromMapFunc(r.reconcilePaladin), reconcileEveryChange()).
 		Complete(r)
 }

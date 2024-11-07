@@ -10,11 +10,11 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       '/': {
         target:
-          mode === 'node2'
+          mode === 'node3'
+            ? 'http://localhost:31748'
+            : mode === 'node2'
             ? 'http://localhost:31648'
-            : mode === 'node1'
-            ? 'http://localhost:31548'
-            : 'http://localhost:31748',
+            : 'http://localhost:31548',
         secure: false,
         bypass: (req, _resolveConfig, _options) =>
           req.method === 'POST' ? undefined : req.url,

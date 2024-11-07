@@ -31,7 +31,7 @@ export const fetchStateReceipt = async (
 
   return <Promise<IStateReceipt>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
       i18next.t("errorFetchingStateReceipt")
     )
   );

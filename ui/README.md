@@ -4,30 +4,23 @@
 This is a light-weight compact UI used for development/debugging purposes.
 
 ### Setup
-1. Install client dependencies
+1. Install dependencies
 ```
 cd client
 npm i
 ```
-2. Build client
+2. Run UI against Paladin node 1
 ```
-npm run build
+npm run dev:node1
 ```
-3. Install server dependencies
+3. Run UI against Paladin node 2
 ```
-cd ..
-cd server
-npm i
+npm run dev:node2
 ```
-4. Build server
+4. Run UI against Paladin node 3
 ```
-npm run build
-```
-5. Start server
-```
-npm run start
+npm run dev:node3
 ```
 
 ### Using the UI
-Open a web browser and navigate to `http://localhost:3555`
-Transactions and events are shown on screen. These are updated automatically.
+Open a web browser and navigate to `http://localhost:3000`, `http://localhost:3002` and `http://localhost:3003` for nodes 1, 2 and 3 respectively.

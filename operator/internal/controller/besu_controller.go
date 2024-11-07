@@ -156,7 +156,7 @@ func (r *BesuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	log.Info("Created Besu StatefulSet", "Name", ss.Name, "Namespace", ss.Namespace)
 
 	// Update condition to Succeeded
-	node.Status.Phase = corev1alpha1.StatusPhaseCompleted
+	node.Status.Phase = corev1alpha1.StatusPhaseReady
 
 	return ctrl.Result{}, nil
 }

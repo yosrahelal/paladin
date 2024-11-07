@@ -57,6 +57,7 @@ public class Testbed implements Closeable {
 
     public record Setup(
             String dbMigrationsDir,
+            String logFile,
             long startTimeoutMS
     ) {
     }
@@ -218,10 +219,14 @@ public class Testbed implements Closeable {
                   debug: true
                 log:
                   level: debug
+                  output: file
+                  file:
+                    filename: %s
                 """.formatted(
                 new File(testbedSetup.dbMigrationsDir).getAbsolutePath(),
                 JsonHex.randomBytes32(),
-                availableRPCPort
+                availableRPCPort,
+                new File(testbedSetup.logFile).getAbsolutePath()
         );
     }
 

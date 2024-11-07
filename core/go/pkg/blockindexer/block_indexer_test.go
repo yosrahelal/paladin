@@ -38,7 +38,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -117,8 +116,6 @@ func newTestBlockIndexer(t *testing.T) (context.Context, *blockIndexer, *rpcclie
 }
 
 func newTestBlockIndexerConf(t *testing.T, config *pldconf.BlockIndexerConfig) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, func()) {
-	logrus.SetLevel(logrus.DebugLevel)
-
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	p, pDone, err := persistence.NewUnitTestPersistence(ctx, "blockindexer")
