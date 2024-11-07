@@ -177,7 +177,7 @@ func getPaladinRPC(ctx context.Context, c client.Client, nodeName, namespace str
 		log.Info(fmt.Sprintf("Waiting for paladin node '%s' to become available to deploy", nodeName))
 		return nil, nil
 	}
-	ready := node.Status.Phase == corev1alpha1.StatusPhaseCompleted
+	ready := node.Status.Phase == corev1alpha1.StatusPhaseReady
 	if !ready {
 		log.Info(fmt.Sprintf("Waiting for paladin node '%s' to reach completed phase (%s)", nodeName, node.Status.Phase))
 		return nil, nil
