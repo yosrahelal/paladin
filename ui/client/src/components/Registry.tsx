@@ -31,6 +31,7 @@ export const Registry: React.FC<Props> = ({ registryName }) => {
       fetchRegistryEntries(registryName).then((entries) =>
         entries.sort((a, b) => (a.name < b.name ? -1 : 0))
       ),
+      retry: true
   });
 
   return (

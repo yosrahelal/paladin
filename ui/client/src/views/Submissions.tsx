@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Fade, ToggleButton, ToggleButtonGroup, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Fade, ToggleButton, ToggleButtonGroup, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { useContext, useState } from "react";
@@ -30,11 +30,18 @@ export const Submissions: React.FC = () => {
   const theme = useTheme();
   const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
-  const { data: transactions } = useQuery({
+  const { data: transactions, error, isFetching } = useQuery({
     queryKey: ["pendingTransactions", tab, lastBlockWithTransactions],
-    queryFn: () => fetchSubmissions(tab),
-    retry: false
+    queryFn: () => fetchSubmissions(tab)
   });
+
+  if(isFetching) {
+    return <></>;
+  }
+
+  if (error) {
+    return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
+  }
 
   return (
     <Fade timeout={600} in={true}>
