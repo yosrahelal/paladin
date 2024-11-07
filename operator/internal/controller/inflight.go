@@ -17,7 +17,7 @@ func NewInFlight() *InFlight {
 	return &InFlight{
 		mux:                &sync.RWMutex{},
 		inFlight:           make(map[string]time.Time),
-		changeWaitDuration: 5 * time.Second,
+		changeWaitDuration: 30 * time.Second,
 	}
 }
 
