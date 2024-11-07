@@ -87,8 +87,9 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 	)
 	err = txReconcile.reconcile(ctx)
 	if err != nil {
-		// There's nothing to notify us when the world changes other than polling, so we keep re-trying
-		return ctrl.Result{}, err
+		// There's nothing to notify us when the world changes other than polling, so we keep re-tryingat
+		// a fixed rate to avoid any exponential backoff
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 	} else if txReconcile.statusChanged {
 		// Common TX reconciler does everything for us apart from grab the receipt
 		if scd.Status.TransactionStatus == corev1alpha1.TransactionStatusSuccess && scd.Status.ContractAddress == "" {
