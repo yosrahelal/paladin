@@ -170,8 +170,8 @@ public class PenteDomainTests {
                                     simpleStorageDeployABI,
                                     deployValues
                             ), true));
-            var extraData = new ObjectMapper().convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
-            var expectedContractAddress = extraData.contractAddress();
+            var domainData = new ObjectMapper().convertValue(tx.domainData(), PenteConfiguration.DomainData.class);
+            var expectedContractAddress = domainData.contractAddress();
 
             // Invoke set on Simple Storage
             Map<String, Object> setValues = new HashMap<>() {{
@@ -253,8 +253,8 @@ public class PenteDomainTests {
                                     simpleStorageDeployABI,
                                     deployValues
                             ), true));
-            var extraData = mapper.convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
-            var expectedContractAddress = extraData.contractAddress();
+            var domainData = mapper.convertValue(tx.domainData(), PenteConfiguration.DomainData.class);
+            var expectedContractAddress = domainData.contractAddress();
 
             // Prepare a "set" on Simple Storage
             Map<String, Object> setValues = new HashMap<>() {{
@@ -377,8 +377,8 @@ public class PenteDomainTests {
                                         }});
                                     }}
                             ), true));
-            var extraData = new ObjectMapper().convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
-            var ssLinkedAddr = extraData.contractAddress();
+            var domainData = new ObjectMapper().convertValue(tx.domainData(), PenteConfiguration.DomainData.class);
+            var ssLinkedAddr = domainData.contractAddress();
 
             testbed.getRpcClient().request("testbed_invoke",
                     new Testbed.TransactionInput(

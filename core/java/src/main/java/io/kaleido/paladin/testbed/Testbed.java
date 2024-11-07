@@ -123,7 +123,7 @@ public class Testbed implements Closeable {
             @JsonProperty
             List<StateEncoded> readStates,
             @JsonProperty
-            JsonNode assembleExtraData
+            JsonNode domainData
     ) {
     }
 

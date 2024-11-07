@@ -212,7 +212,7 @@ public class PenteConfiguration {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record TransactionExtraData(
+    public record DomainData(
             @JsonProperty
             Address contractAddress,
             @JsonProperty

@@ -93,8 +93,8 @@ public class PenteHelper {
                             put("inputs", inputValues);
                         }}
                 ), true));
-        var extraData = new ObjectMapper().convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
-        return extraData.contractAddress();
+        var domainData = new ObjectMapper().convertValue(tx.domainData(), PenteConfiguration.DomainData.class);
+        return domainData.contractAddress();
     }
 
     public void invoke(String methodName, JsonABI.Parameters inputParams, String sender, JsonHex.Address privateAddress, Object inputValues) throws IOException {

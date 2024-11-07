@@ -388,9 +388,9 @@ func (tb *testbed) mapTransaction(ctx context.Context, tx *components.PrivateTra
 		return nil, err
 	}
 
-	var assembleExtraData []byte
-	if tx.PostAssembly.ExtraData != nil {
-		assembleExtraData = []byte(*tx.PostAssembly.ExtraData)
+	var domainData []byte
+	if tx.PostAssembly.DomainData != nil {
+		domainData = []byte(*tx.PostAssembly.DomainData)
 	}
 
 	return &TransactionResult{
@@ -401,7 +401,7 @@ func (tb *testbed) mapTransaction(ctx context.Context, tx *components.PrivateTra
 		OutputStates:        outputStates,
 		ReadStates:          readStates,
 		InfoStates:          infoStates,
-		AssembleExtraData:   assembleExtraData,
+		DomainData:          domainData,
 	}, nil
 }
 

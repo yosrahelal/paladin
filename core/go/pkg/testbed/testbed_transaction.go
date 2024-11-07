@@ -37,5 +37,5 @@ type TransactionResult struct {
 	OutputStates        []*pldapi.StateEncoded   `json:"outputStates"`
 	ReadStates          []*pldapi.StateEncoded   `json:"readStates"`
 	InfoStates          []*pldapi.StateEncoded   `json:"infoStates"`
-	AssembleExtraData   tktypes.RawJSON          `json:"assembleExtraData"` // TODO: remove (only used for finding Pente contract address)
+	DomainData          tktypes.RawJSON          `json:"domainData"` // TODO: remove (only used for finding Pente contract address)
 }

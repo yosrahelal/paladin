@@ -249,8 +249,8 @@ public class DomainIntegrationTests {
                                         }});
                                     }}
                             ), true));
-            var extraData = new ObjectMapper().convertValue(tx.assembleExtraData(), PenteConfiguration.TransactionExtraData.class);
-            var notoTrackerAddress = extraData.contractAddress();
+            var domainData = new ObjectMapper().convertValue(tx.domainData(), PenteConfiguration.DomainData.class);
+            var notoTrackerAddress = domainData.contractAddress();
 
             // Create Noto token
             String notoInstanceAddress = testbed.getRpcClient().request("testbed_deploy",
