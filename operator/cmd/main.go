@@ -95,6 +95,7 @@ func main() {
 		TLSOpts: tlsOpts,
 	})
 	namespace := getWatchNamespace()
+	setupLog.Info("watching namespace", "namespace", namespace)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,

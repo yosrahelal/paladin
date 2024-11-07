@@ -14,7 +14,7 @@
             "program": "${workspaceRoot}/operator/cmd/main.go",
             "env": { 
                 "KUBE_LOCAL": "true",
-                "WATCH_NAMESPACE": "paladin"
+                "WATCH_NAMESPACE": "default"
             },
             "presentation": {
                 "hidden": false

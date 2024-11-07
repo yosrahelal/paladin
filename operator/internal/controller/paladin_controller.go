@@ -356,7 +356,7 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 							},
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
+									TCPSocket: &corev1.TCPSocketAction{
 										Port: intstr.FromInt(8548),
 									},
 								},
@@ -504,7 +504,7 @@ func (r *PaladinReconciler) createPostgresPVC(ctx context.Context, node *corev1a
 }
 
 func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, signers []corev1alpha1.SecretBackedSigner) {
-	paladinContainer := &ss.Spec.Template.Spec.Containers[0]
+	paladinContainer := &ss.Spec.Template.Spec.Containers[1] // TODO this changes depending on PG mode
 	for _, s := range signers {
 		paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("keystore-%s", s.Name),
@@ -522,7 +522,7 @@ func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, sign
 }
 
 func (r *PaladinReconciler) addTLSSecretMounts(ss *appsv1.StatefulSet, tlsSecrets []string) {
-	paladinContainer := &ss.Spec.Template.Spec.Containers[0]
+	paladinContainer := &ss.Spec.Template.Spec.Containers[1]
 	for tlsIdx, tlsSecretName := range tlsSecrets {
 		paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("cert%.3d", tlsIdx),
@@ -545,7 +545,7 @@ func (r *PaladinReconciler) addPaladinDBSecret(ctx context.Context, ss *appsv1.S
 		return fmt.Errorf("failed to extract username/password from DB password secret '%s': %s", secretName, err)
 	}
 
-	paladinContainer := &ss.Spec.Template.Spec.Containers[0]
+	paladinContainer := &ss.Spec.Template.Spec.Containers[1]
 	paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
 		Name:      "db-creds",
 		MountPath: "/db-creds",
