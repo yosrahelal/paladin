@@ -11,6 +11,8 @@ spec:
     kind: Paladin
     listKind: PaladinList
     plural: paladins
+    shortNames:
+    - pld
     singular: paladin
   scope: Namespaced
   versions:

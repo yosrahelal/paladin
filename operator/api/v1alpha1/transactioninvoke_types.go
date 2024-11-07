@@ -69,7 +69,7 @@ type TransactionInvokeStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-//+kubebuilder:resource:shortName="txinvoke"
+//+kubebuilder:resource:shortName="txn"
 //+kubebuilder:printcolumn:name="Status",type="string",JSONPath=`.status.transactionStatus`
 //+kubebuilder:printcolumn:name="Deps",type="string",JSONPath=`.status.contractDepsSummary`
 //+kubebuilder:printcolumn:name="TransactionID",type="string",JSONPath=`.status.transactionID`
