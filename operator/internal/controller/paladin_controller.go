@@ -240,16 +240,17 @@ func (r *PaladinReconciler) createStatefulSet(ctx context.Context, node *corev1a
 		}
 	}
 
+	paladinContainer := r.getPaladinContainer(statefulSet)
 	// Used by Postgres sidecar, but also custom DB creation - a DB secret needs wiring up to env vars for DSNParams
 	if node.Spec.Database.PasswordSecret != nil {
-		if err := r.addPaladinDBSecret(ctx, statefulSet, *node.Spec.Database.PasswordSecret); err != nil {
+		if err := r.addPaladinDBSecret(ctx, statefulSet, paladinContainer, *node.Spec.Database.PasswordSecret); err != nil {
 			return nil, err
 		}
 	}
 
-	r.addKeystoreSecretMounts(statefulSet, node.Spec.SecretBackedSigners)
+	r.addKeystoreSecretMounts(statefulSet, paladinContainer, node.Spec.SecretBackedSigners)
 
-	r.addTLSSecretMounts(statefulSet, tlsSecrets)
+	r.addTLSSecretMounts(statefulSet, paladinContainer, tlsSecrets)
 
 	// Check if the StatefulSet already exists, create if not
 	var foundStatefulSet appsv1.StatefulSet
@@ -538,10 +539,20 @@ func (r *PaladinReconciler) createPostgresPVC(ctx context.Context, node *corev1a
 	return nil
 }
 
-func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, signers []corev1alpha1.SecretBackedSigner) {
-	paladinContainer := &ss.Spec.Template.Spec.Containers[1] // TODO this changes depending on PG mode
+func (r *PaladinReconciler) getPaladinContainer(sts *appsv1.StatefulSet) *corev1.Container {
+	var paladinContainer *corev1.Container
+	for i, c := range sts.Spec.Template.Spec.Containers {
+		if c.Name == "paladin" {
+			paladinContainer = &sts.Spec.Template.Spec.Containers[i]
+			break
+		}
+	}
+	return paladinContainer
+}
+
+func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, ct *corev1.Container, signers []corev1alpha1.SecretBackedSigner) {
 	for _, s := range signers {
-		paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
+		ct.VolumeMounts = append(ct.VolumeMounts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("keystore-%s", s.Name),
 			MountPath: fmt.Sprintf("/keystores/%s", s.Name),
 		})
@@ -556,10 +567,9 @@ func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, sign
 	}
 }
 
-func (r *PaladinReconciler) addTLSSecretMounts(ss *appsv1.StatefulSet, tlsSecrets []string) {
-	paladinContainer := &ss.Spec.Template.Spec.Containers[1]
+func (r *PaladinReconciler) addTLSSecretMounts(ss *appsv1.StatefulSet, ct *corev1.Container, tlsSecrets []string) {
 	for tlsIdx, tlsSecretName := range tlsSecrets {
-		paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
+		ct.VolumeMounts = append(ct.VolumeMounts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("cert%.3d", tlsIdx),
 			MountPath: fmt.Sprintf("/cert%.3d", tlsIdx),
 		})
@@ -574,14 +584,13 @@ func (r *PaladinReconciler) addTLSSecretMounts(ss *appsv1.StatefulSet, tlsSecret
 	}
 }
 
-func (r *PaladinReconciler) addPaladinDBSecret(ctx context.Context, ss *appsv1.StatefulSet, secretName string) error {
+func (r *PaladinReconciler) addPaladinDBSecret(ctx context.Context, ss *appsv1.StatefulSet, ct *corev1.Container, secretName string) error {
 	_, _, err := r.retrieveUsernamePasswordSecret(ctx, ss.Namespace, secretName)
 	if err != nil {
 		return fmt.Errorf("failed to extract username/password from DB password secret '%s': %s", secretName, err)
 	}
 
-	paladinContainer := &ss.Spec.Template.Spec.Containers[1]
-	paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
+	ct.VolumeMounts = append(ct.VolumeMounts, corev1.VolumeMount{
 		Name:      "db-creds",
 		MountPath: "/db-creds",
 	})

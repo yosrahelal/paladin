@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -192,13 +193,33 @@ func (ec *ethClient) ChainID() int64 {
 	return ec.chainID
 }
 
+// setupChainID is a helper to get the chain ID from the node
+// we assume the node could intermittently have issues, be starting up
+// in paralle, etc. and therefore implement an expotential backoff mechanism
+// in the event of initial failure.
 func (ec *ethClient) setupChainID(ctx context.Context) error {
 	var chainID ethtypes.HexUint64
-	if rpcErr := ec.rpc.CallRPC(ctx, &chainID, "eth_chainId"); rpcErr != nil {
+	var rpcErr error
+
+	const maxRetries = 5
+	const baseDelay = 1 * time.Second
+	for retries := int64(0); retries < maxRetries; retries++ {
+		rpcErr = ec.rpc.CallRPC(ctx, &chainID, "eth_chainId")
+		if rpcErr == nil {
+			break
+		}
+		log.L(ctx).Warnf("eth_chainId failed, retrying: %+v", rpcErr)
+		// Calculate exponential backoff delay
+		backoff := baseDelay * time.Duration(1<<retries)
+		time.Sleep(backoff)
+	}
+
+	if rpcErr != nil {
 		log.L(ctx).Errorf("eth_chainId failed: %+v", rpcErr)
 		return i18n.WrapError(ctx, rpcErr, msgs.MsgEthClientChainIDFailed)
 	}
 	ec.chainID = int64(chainID.Uint64())
+
 	return nil
 }
 
