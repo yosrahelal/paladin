@@ -291,12 +291,10 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 	// Define the StatefulSet to run Paladin using the ConfigMap
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: node.Namespace,
-			Labels:    r.getLabels(node),
-			Annotations: r.withStandardAnnotations(map[string]string{
-				"kubectl.kubernetes.io/default-container": "paladin",
-			}),
+			Name:        name,
+			Namespace:   node.Namespace,
+			Labels:      r.getLabels(node),
+			Annotations: r.withStandardAnnotations(map[string]string{}),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
@@ -306,7 +304,8 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: r.getLabels(node),
 					Annotations: r.withStandardAnnotations(map[string]string{
-						"core.paladin.io/config-sum": fmt.Sprintf("md5-%s", configSum),
+						"kubectl.kubernetes.io/default-container": "paladin",
+						"core.paladin.io/config-sum":              fmt.Sprintf("md5-%s", configSum),
 					}),
 				},
 				Spec: corev1.PodSpec{
