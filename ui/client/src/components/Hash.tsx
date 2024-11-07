@@ -47,7 +47,7 @@ export const Hash: React.FC<Props> = ({ Icon, title, hash }) => {
         fullWidth
         variant="contained"
         color="secondary"
-        sx={{ paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400' }}
+        sx={{ paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400', whiteSpace: 'nowrap' }}
         size="small">
         {`${title} | ${getHash(hash)}`}
       </Button>

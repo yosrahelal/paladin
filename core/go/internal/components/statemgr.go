@@ -52,6 +52,9 @@ type StateManager interface {
 	// Write a batch of states that have been received over the network. ID hash calculation will be validated by the domain as prior to storage
 	WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*StateUpsertOutsideContext) ([]*pldapi.State, error)
 
+	// Write a batch of nullifiers that correspond to states just received
+	WriteNullifiersForReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, nullifiers []*NullifierUpsert) error
+
 	// GetState returns a state by ID, with optional labels
 	GetState(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*pldapi.State, error)
 

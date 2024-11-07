@@ -142,4 +142,6 @@ var (
 	MsgErrorCalcWitness                    = ffe("PD210100", "failed to calculate the witness. %s")
 	MsgErrorGenerateProof                  = ffe("PD210101", "failed to generate proof. %s")
 	MsgNoDomainReceipt                     = ffe("PD210102", "Not implemented. See state receipt for coin transfers")
+	MsgUnknownSignPayload                  = ffe("PD210103", "Sign payload type '%s' not recognized")
+	MsgNullifierGenerationFailed           = ffe("PD210104", "Failed to generate nullifier for coin")
 )

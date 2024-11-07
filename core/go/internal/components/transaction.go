@@ -46,6 +46,7 @@ type PrepareTransactionWithRefs struct {
 	States      TransactionStateRefs     // the states associated with the original private transaction
 	Metadata    tktypes.RawJSON          // metadta produced from the prepare of the original private transaction, in addition to the prepared transaction
 	Transaction *pldapi.TransactionInput // the downstream transaction - might be public or private
+	Sender      string                   // the sender of the original private transaction
 }
 
 type TransactionPreAssembly struct {
@@ -53,6 +54,7 @@ type TransactionPreAssembly struct {
 	RequiredVerifiers        []*prototk.ResolveVerifierRequest `json:"required_verifiers"`
 	Verifiers                []*prototk.ResolvedVerifier       `json:"verifiers"`
 }
+
 type FullState struct {
 	ID     tktypes.HexBytes `json:"id"`
 	Schema tktypes.Bytes32  `json:"schema"`

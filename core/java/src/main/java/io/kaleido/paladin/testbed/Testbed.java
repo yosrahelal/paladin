@@ -57,17 +57,22 @@ public class Testbed implements Closeable {
 
     public record Setup(
             String dbMigrationsDir,
+            String logFile,
             long startTimeoutMS
     ) {
     }
 
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record StateWithData(
+    public record StateEncoded(
             @JsonProperty
             JsonHex.Bytes id,
             @JsonProperty
+            String domain,
+            @JsonProperty
             JsonHex.Bytes32 schema,
+            @JsonProperty
+            JsonHex.Address contractAddress,
             @JsonProperty
             JsonHex.Bytes data
     ) {
@@ -112,11 +117,11 @@ public class Testbed implements Closeable {
             @JsonProperty
             JsonNode preparedMetadata,
             @JsonProperty
-            List<StateWithData> inputStates,
+            List<StateEncoded> inputStates,
             @JsonProperty
-            List<StateWithData> outputStates,
+            List<StateEncoded> outputStates,
             @JsonProperty
-            List<StateWithData> readStates,
+            List<StateEncoded> readStates,
             @JsonProperty
             JsonNode assembleExtraData
     ) {
@@ -214,10 +219,14 @@ public class Testbed implements Closeable {
                   debug: true
                 log:
                   level: debug
+                  output: file
+                  file:
+                    filename: %s
                 """.formatted(
                 new File(testbedSetup.dbMigrationsDir).getAbsolutePath(),
                 JsonHex.randomBytes32(),
-                availableRPCPort
+                availableRPCPort,
+                new File(testbedSetup.logFile).getAbsolutePath()
         );
     }
 

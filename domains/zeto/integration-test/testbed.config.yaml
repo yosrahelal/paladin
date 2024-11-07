@@ -5,6 +5,7 @@ db:
     dsn: ':memory:'
     autoMigrate: true
     migrationsDir: '../../../core/go/db/migrations/sqlite'
+    debugQueries: false
   # type: postgres
   # postgres:
   #   dsn: 'postgres://postgres:my-secret@localhost:5432/postgres?sslmode=disable'
@@ -30,6 +31,9 @@ blockchain:
     initialConnectAttempts: 25
 log:
   level: debug
+  output: file
+  file:
+    filename: build/testbed.zeto.log
 wallets:
 - name: wallet1
   keySelector: .*

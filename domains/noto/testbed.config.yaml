@@ -23,7 +23,10 @@ blockchain:
     url: ws://localhost:8546
     initialConnectAttempts: 25
 log:
-  level: info
+  level: debug
+  output: file
+  file:
+    filename: build/testbed.domain-noto.log
 wallets:
 - name: wallet1
   keySelector: .*

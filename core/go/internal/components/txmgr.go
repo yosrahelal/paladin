@@ -54,6 +54,7 @@ type TxCompletion struct {
 
 // This is a transaction read for insertion into the Paladin database with all pre-verification completed.
 type ValidatedTransaction struct {
+	LocalFrom    string
 	Transaction  *pldapi.Transaction
 	DependsOn    []uuid.UUID
 	Function     *ResolvedFunction

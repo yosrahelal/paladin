@@ -7,10 +7,10 @@ import (
 type StatusPhase string
 
 const (
-	StatusPhasePending   StatusPhase = "Pending"
-	StatusPhaseCompleted StatusPhase = "Completed"
-	StatusPhaseFailed    StatusPhase = "Failed"
-	StatusPhaseUnknown   StatusPhase = "Unknown"
+	StatusPhasePending StatusPhase = "Pending"
+	StatusPhaseReady   StatusPhase = "Ready"
+	StatusPhaseFailed  StatusPhase = "Failed"
+	StatusPhaseUnknown StatusPhase = "Unknown"
 )
 
 type ConditionType string
@@ -18,19 +18,16 @@ type ConditionType string
 const (
 
 	// generic conditions
-	ConditionCM     ConditionType = "ConfigMap"
-	ConditionSS     ConditionType = "StatefulSet"
-	ConditionSecret ConditionType = "Secret"
-	ConditionSVC    ConditionType = "Service"
-	ConditionPDB    ConditionType = "PodDisruptionBudget"
-	ConditionPVC    ConditionType = "PersistentVolumeClaim"
+	ConditionCM      ConditionType = "ConfigMap"
+	ConditionSS      ConditionType = "StatefulSet"
+	ConditionSecret  ConditionType = "Secret"
+	ConditionSVC     ConditionType = "Service"
+	ConditionPDB     ConditionType = "PodDisruptionBudget"
+	ConditionPVC     ConditionType = "PersistentVolumeClaim"
+	ConditionHealthy ConditionType = "Healthy"
 
 	ConditionGenesisAvailable ConditionType = "GenesisAvailable"
 )
-
-// const (
-// 	ConditionDependentResources ConditionType = "DependentResourcesReady"
-// )
 
 type ConditionReason string
 
@@ -57,6 +54,12 @@ const (
 	ReasonSecretUpdated ConditionReason = "SecretUpdated"
 	ReasonSVCUpdated    ConditionReason = "ServiceUpdated"
 	ReasonPDBUpdated    ConditionReason = "PodDisruptionBudgetUpdated"
+
+	// pending
+	ReasonSSPending ConditionReason = "StatefulSetPending"
+
+	// ready
+	ReasonSSReady ConditionReason = "StatefulSetReady"
 
 	ReasonSuccess         ConditionReason = "Success"
 	ReasonGenesisNotFound ConditionReason = "GenesisNotFound"

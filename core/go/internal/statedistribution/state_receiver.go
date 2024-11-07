@@ -24,11 +24,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (sd *stateDistributer) AcknowledgeState(ctx context.Context, stateDistributionID string) {
-	log.L(ctx).Debugf("stateDistributer:AcknowledgeState %s ", stateDistributionID)
-	sd.acknowledgedChan <- stateDistributionID
-}
-
 func (sd *stateDistributer) sendStateAcknowledgement(ctx context.Context, domainName string, contractAddress string, stateId string, receivingParty string, distributingNode string, distributionID string) error {
 	log.L(ctx).Debugf("stateDistributer:sendStateAcknowledgement %s %s %s %s %s %s", domainName, contractAddress, stateId, receivingParty, distributingNode, distributionID)
 	stateAcknowledgedEvent := &pb.StateAcknowledgedEvent{
@@ -49,7 +44,7 @@ func (sd *stateDistributer) sendStateAcknowledgement(ctx context.Context, domain
 		Payload:     stateAcknowledgedEventBytes,
 		Node:        distributingNode,
 		Component:   STATE_DISTRIBUTER_DESTINATION,
-		ReplyTo:     sd.nodeID,
+		ReplyTo:     sd.localNodeName,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("Error sending state produced event: %s", err)

@@ -111,9 +111,10 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	domainAddressString := domainAddress.String()
 
 	// unqualified lookup string because everything is local
-	aliceIdentity := "alice"
+	aliceIdentity := "alice@node1"
 	aliceVerifier := tktypes.RandAddress().String()
-	notaryIdentity := "domain1.contract1.notary"
+	notaryIdentityLocal := "domain1.contract1.notary"
+	notaryIdentity := notaryIdentityLocal + "@node1"
 	notaryVerifier := tktypes.RandAddress().String()
 	notaryKeyHandle := "notaryKeyHandle"
 
@@ -123,7 +124,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
-					Lookup:       aliceIdentity, // unqualified lookup string because everything is local
+					Lookup:       aliceIdentity,
 					Algorithm:    algorithms.ECDSA_SECP256K1,
 					VerifierType: verifiers.ETH_ADDRESS,
 				},
@@ -182,12 +183,12 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	notaryKeyMapping := &pldapi.KeyMappingAndVerifier{
 		KeyMappingWithPath: &pldapi.KeyMappingWithPath{KeyMapping: &pldapi.KeyMapping{
-			Identifier: notaryIdentity,
+			Identifier: notaryIdentityLocal,
 			KeyHandle:  notaryKeyHandle,
 		}},
 		Verifier: &pldapi.KeyVerifier{Verifier: notaryVerifier},
 	}
-	mocks.keyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, notaryIdentity, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return(notaryKeyMapping, nil)
+	mocks.keyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, notaryIdentityLocal, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return(notaryKeyMapping, nil)
 
 	//TODO match endorsement request and verifier args
 	mocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
@@ -376,12 +377,12 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
-					Lookup:       alice.identity,
+					Lookup:       alice.identityLocator,
 					Algorithm:    algorithms.ECDSA_SECP256K1,
 					VerifierType: verifiers.ETH_ADDRESS,
 				},
 				{
-					Lookup:       notary.identityLocator, // as it is a remote id, we need to use the locator
+					Lookup:       notary.identityLocator,
 					Algorithm:    algorithms.ECDSA_SECP256K1,
 					VerifierType: verifiers.ETH_ADDRESS,
 				},
@@ -481,7 +482,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
 			To:     *domainAddress,
-			From:   alice.identity,
+			From:   alice.identityLocator, // domain manager would insert the local node name for us, but we've mocked that
 		},
 	}
 
@@ -746,7 +747,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
 			To:     *domainAddress,
-			From:   alice.identity,
+			From:   alice.identityLocator,
 		},
 	}
 
@@ -860,7 +861,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
 			To:     *domainAddress,
-			From:   alice.identity,
+			From:   alice.identityLocator,
 		},
 	}
 
@@ -869,7 +870,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
 			To:     *domainAddress,
-			From:   alice.identity,
+			From:   alice.identityLocator,
 		},
 	}
 
@@ -1662,6 +1663,7 @@ type dependencyMocks struct {
 	transportManager    *componentmocks.TransportManager
 	stateStore          *componentmocks.StateManager
 	keyManager          *componentmocks.KeyManager
+	keyResolver         *componentmocks.KeyResolver
 	publicTxManager     components.PublicTxManager /* could be fake or mock */
 	identityResolver    *componentmocks.IdentityResolver
 	txManager           *componentmocks.TXManager
@@ -1828,6 +1830,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 		transportManager:    componentmocks.NewTransportManager(t),
 		stateStore:          componentmocks.NewStateManager(t),
 		keyManager:          componentmocks.NewKeyManager(t),
+		keyResolver:         componentmocks.NewKeyResolver(t),
 		publicTxManager:     publicTxMgr,
 		identityResolver:    componentmocks.NewIdentityResolver(t),
 		txManager:           componentmocks.NewTXManager(t),
@@ -1843,6 +1846,11 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
 	mocks.domainMgr.On("GetDomainByName", mock.Anything, "domain1").Return(mocks.domain, nil).Maybe()
 	mocks.domain.On("Name").Return("domain1").Maybe()
+	mkrc := componentmocks.NewKeyResolutionContextLazyDB(t)
+	mkrc.On("KeyResolverLazyDB").Return(mocks.keyResolver).Maybe()
+	mkrc.On("Commit").Return(nil).Maybe()
+	mkrc.On("Rollback").Return().Maybe()
+	mocks.keyManager.On("NewKeyResolutionContextLazyDB", mock.Anything).Return(mkrc).Maybe()
 
 	mocks.domainContext.On("Ctx").Return(ctx).Maybe()
 	mocks.domainContext.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()

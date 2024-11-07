@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/Masterminds/sprig/v3"
@@ -74,11 +75,13 @@ func (r *TransactionInvokeReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// Check all our deps are resolved
-	depsChanged, err := checkSmartContractDeps(ctx, r.Client, txi.Namespace, txi.Spec.ContractDeploymentDeps, &txi.Status.ContactDependenciesStatus)
+	depsChanged, ready, err := checkSmartContractDeps(ctx, r.Client, txi.Namespace, txi.Spec.ContractDeploymentDeps, &txi.Status.ContactDependenciesStatus)
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if depsChanged {
 		return r.updateStatusAndRequeue(ctx, &txi)
+	} else if !ready {
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
 	// Reconcile the deployment transaction
@@ -90,8 +93,9 @@ func (r *TransactionInvokeReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	)
 	err = txReconcile.reconcile(ctx)
 	if err != nil {
-		// There's nothing to notify us when the world changes other than polling, so we keep re-trying
-		return ctrl.Result{}, err
+		// There's nothing to notify us when the world changes other than polling, so we keep re-trying at
+		// a fixed rate to avoid any exponential backoff
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 	} else if txReconcile.statusChanged {
 		return r.updateStatusAndRequeue(ctx, &txi)
 	} else if !txReconcile.failed && !txReconcile.succeeded {
@@ -161,12 +165,12 @@ func (r *TransactionInvokeReconciler) buildDeployTransaction(txi *corev1alpha1.T
 
 }
 
-func checkSmartContractDeps(ctx context.Context, c client.Client, namespace string, requiredContractDeployments []string, pStatus *corev1alpha1.ContactDependenciesStatus) (bool, error) {
+func checkSmartContractDeps(ctx context.Context, c client.Client, namespace string, requiredContractDeployments []string, pStatus *corev1alpha1.ContactDependenciesStatus) (bool, bool, error) {
 
 	if pStatus.ContractDepsSummary != "" &&
 		len(pStatus.ResolvedContractAddresses) == len(requiredContractDeployments) {
-		// Nothing to do - we're resolved
-		return false, nil
+		// We have persisted the status change with the full dependencies reconciled
+		return false, true, nil
 	}
 
 	// If our status has changed if we've never built it before, or we find a missing dep below
@@ -181,7 +185,7 @@ func checkSmartContractDeps(ctx context.Context, c client.Client, namespace stri
 		if pStatus.ResolvedContractAddresses[dep] == "" {
 			contractAddress, err := getContractDeploymentAddress(ctx, c, dep, namespace)
 			if err != nil {
-				return false, err
+				return false, false, err
 			}
 			if contractAddress != "" {
 				statusChanged = true
@@ -192,7 +196,7 @@ func checkSmartContractDeps(ctx context.Context, c client.Client, namespace stri
 
 	// Rebuild this string every time, but statusChanged calc'd above decides if we store it back
 	pStatus.ContractDepsSummary = fmt.Sprintf("%d/%d", len(pStatus.ResolvedContractAddresses), len(requiredContractDeployments))
-	return statusChanged, nil
+	return statusChanged, false /* only return true once we've persisted the status change */, nil
 
 }
 
@@ -210,12 +214,38 @@ func getContractDeploymentAddress(ctx context.Context, c client.Client, name, na
 
 }
 
+// TODO this is duplicated btwn here and SmartContractDeploymentReconciler, as reconcileAll alludes to, generics
+//
+//	are challenging and we need to refer to a common spec.node field. We'll try to fix this eventually.
+func (r *TransactionInvokeReconciler) reconcilePaladin(ctx context.Context, obj client.Object) []ctrl.Request {
+	paladin, ok := obj.(*corev1alpha1.Paladin)
+	if !ok {
+		log.FromContext(ctx).Error(fmt.Errorf("unexpected object type"), "expected Paladin")
+		return nil
+	}
+
+	if paladin.Status.Phase != corev1alpha1.StatusPhaseReady {
+		return nil
+	}
+
+	tis := &corev1alpha1.TransactionInvokeList{}
+	r.Client.List(ctx, tis, client.InNamespace(paladin.Namespace))
+	reqs := make([]ctrl.Request, 0, len(tis.Items))
+
+	for _, ti := range tis.Items {
+		if ti.Spec.Node == paladin.Name {
+			reqs = append(reqs, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&ti)})
+		}
+	}
+	return reqs
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *TransactionInvokeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.TransactionInvoke{}).
 		// Reconcile when any node status changes
-		Watches(&corev1alpha1.Paladin{}, reconcileAll(TransactionInvokeCRMap, r.Client), reconcileEveryChange()).
+		Watches(&corev1alpha1.Paladin{}, handler.EnqueueRequestsFromMapFunc(r.reconcilePaladin), reconcileEveryChange()).
 		// Reconcile when any smart contract deploy changes
 		Watches(&corev1alpha1.SmartContractDeployment{}, reconcileAll(TransactionInvokeCRMap, r.Client), reconcileEveryChange()).
 		Complete(r)

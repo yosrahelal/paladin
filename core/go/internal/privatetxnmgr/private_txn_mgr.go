@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/preparedtxdistribution"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
@@ -45,18 +46,19 @@ import (
 )
 
 type privateTxManager struct {
-	ctx                  context.Context
-	ctxCancel            func()
-	config               *pldconf.PrivateTxManagerConfig
-	sequencers           map[string]*Sequencer
-	sequencersLock       sync.RWMutex
-	endorsementGatherers map[string]ptmgrtypes.EndorsementGatherer
-	components           components.AllComponents
-	nodeName             string
-	subscribers          []components.PrivateTxEventSubscriber
-	subscribersLock      sync.Mutex
-	syncPoints           syncpoints.SyncPoints
-	stateDistributer     statedistribution.StateDistributer
+	ctx                            context.Context
+	ctxCancel                      func()
+	config                         *pldconf.PrivateTxManagerConfig
+	sequencers                     map[string]*Sequencer
+	sequencersLock                 sync.RWMutex
+	endorsementGatherers           map[string]ptmgrtypes.EndorsementGatherer
+	components                     components.AllComponents
+	nodeName                       string
+	subscribers                    []components.PrivateTxEventSubscriber
+	subscribersLock                sync.Mutex
+	syncPoints                     syncpoints.SyncPoints
+	stateDistributer               statedistribution.StateDistributer
+	preparedTransactionDistributer preparedtxdistribution.PreparedTransactionDistributer
 }
 
 // Init implements Engine.
@@ -70,12 +72,24 @@ func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.syncPoints = syncpoints.NewSyncPoints(p.ctx, &p.config.Writer, c.Persistence(), c.TxManager())
 	p.stateDistributer = statedistribution.NewStateDistributer(
 		p.ctx,
-		p.nodeName,
 		p.components.TransportManager(),
 		p.components.StateManager(),
+		p.components.KeyManager(),
 		p.components.Persistence(),
 		&p.config.StateDistributer)
+	p.preparedTransactionDistributer = preparedtxdistribution.NewPreparedTransactionDistributer(
+		p.ctx,
+		p.nodeName,
+		p.components.TransportManager(),
+		p.components.TxManager(),
+		p.components.Persistence(),
+		&p.config.PreparedTransactionDistributer)
+
 	err := p.stateDistributer.Start(p.ctx)
+	if err != nil {
+		return err
+	}
+	err = p.preparedTransactionDistributer.Start(p.ctx)
 	if err != nil {
 		return err
 	}
@@ -143,6 +157,7 @@ func (p *privateTxManager) getSequencerForContract(ctx context.Context, contract
 					p.syncPoints,
 					p.components.IdentityResolver(),
 					p.stateDistributer,
+					p.preparedTransactionDistributer,
 					transportWriter,
 					confutil.DurationMin(p.config.RequestTimeout, 0, *pldconf.PrivateTxManagerDefaults.RequestTimeout),
 				)
@@ -813,4 +828,8 @@ func (p *privateTxManager) CallPrivateSmartContract(ctx context.Context, call *c
 
 	// Do the actual call
 	return psc.ExecCall(dCtx, p.components.Persistence().DB(), call, verifiers)
+}
+
+func (p *privateTxManager) BuildStateDistributions(ctx context.Context, tx *components.PrivateTransaction) (*components.StateDistributionSet, error) {
+	return newStateDistributionBuilder(p.components, tx).Build(ctx)
 }

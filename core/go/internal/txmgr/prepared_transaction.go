@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // DB persisted record for a prepared transaction
@@ -82,8 +83,7 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 			Metadata: p.Metadata,
 		}
 		// We do the work for the ABI validation etc. before we insert the TX
-		resolved, err := tm.resolveNewTransaction(ctx, dbTX, p.Transaction,
-			pldapi.SubmitModeAuto /* seems counter intuitive here, but this is the _result_ of a prepare (not the input for a prepare) */)
+		resolved, err := tm.resolveNewTransaction(ctx, dbTX, p.Transaction, pldapi.SubmitModePrepare)
 		if err == nil {
 			p.Transaction.ABI = nil // move to the reference
 			p.Transaction.ABIReference = resolved.Function.ABIReference
@@ -136,6 +136,10 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 
 	if len(preparedTxInserts) > 0 {
 		err = dbTX.WithContext(ctx).
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "id"}},
+				DoNothing: true, // immutable
+			}).
 			Create(preparedTxInserts).
 			Error
 	}

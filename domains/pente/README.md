@@ -1,3 +1,5 @@
 # Pente
 
-Development and testing for a new Java code module that provides the "Tessera++" capabilities for the Paladin project.
+Java domain that provides "Tessera++" private EVM capabilities.
+
+Please see https://lf-decentralized-trust-labs.github.io/paladin/head/architecture/pente/

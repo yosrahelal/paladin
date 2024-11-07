@@ -31,7 +31,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class PenteDomainTests {
 
-    private final Testbed.Setup testbedSetup = new Testbed.Setup("../../core/go/db/migrations/sqlite", 5000);
+    private final Testbed.Setup testbedSetup = new Testbed.Setup(
+            "../../core/go/db/migrations/sqlite",
+            "build/testbed.java-pente.log",
+            5000);
 
     JsonHex.Address deployFactory() throws Exception {
         try (Testbed deployBed = new Testbed(testbedSetup)) {

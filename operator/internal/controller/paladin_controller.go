@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -133,7 +134,23 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	log.Info("Created Paladin StatefulSet", "Name", ss.Name, "Namespace", ss.Namespace)
 
 	// Update condition to Succeeded
-	node.Status.Phase = corev1alpha1.StatusPhaseCompleted
+	node.Status.Phase = corev1alpha1.StatusPhasePending
+	setCondition(&node.Status.Conditions, corev1alpha1.ConditionHealthy, metav1.ConditionFalse, corev1alpha1.ReasonSSPending, fmt.Sprintf("Name: %s", name))
+
+	sts := &appsv1.StatefulSet{}
+	err = r.Client.Get(ctx, types.NamespacedName{
+		Name:      name,
+		Namespace: node.Namespace,
+	}, sts)
+	if err != nil {
+		log.Error(err, "Failed to get StatefulSet for status checking")
+		return ctrl.Result{}, err
+	}
+
+	if sts.Status.ReadyReplicas == sts.Status.Replicas {
+		node.Status.Phase = corev1alpha1.StatusPhaseReady
+		setCondition(&node.Status.Conditions, corev1alpha1.ConditionHealthy, metav1.ConditionTrue, corev1alpha1.ReasonSSReady, fmt.Sprintf("Name: %s", name))
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -149,6 +166,7 @@ func (r *PaladinReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.Paladin{}).
+		Owns(&appsv1.StatefulSet{}).
 		// reconcile all paladin nodes, for any change to any domain
 		Watches(&corev1alpha1.PaladinDomain{}, reconcileAll(PaladinCRMap, r.Client), reconcileEveryChange()).
 		// reconcile all paladin nodes, for any change to any registry
@@ -292,7 +310,7 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 						{
 							Name:            "paladin",
 							Image:           r.config.Paladin.Image, // Use the image from the config
-							ImagePullPolicy: corev1.PullIfNotPresent,
+							ImagePullPolicy: r.config.Paladin.ImagePullPolicy,
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "config",
@@ -343,7 +361,7 @@ func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordS
 	ss.Spec.Template.Spec.Containers = append(ss.Spec.Template.Spec.Containers, corev1.Container{
 		Name:            "postgres",
 		Image:           r.config.Postgres.Image, // Use the image from the config
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: r.config.Postgres.ImagePullPolicy,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "pgdata",
@@ -1004,6 +1022,7 @@ func (r *PaladinReconciler) createService(ctx context.Context, node *corev1alpha
 			return svc, fmt.Errorf("failed to create service: %s", err)
 		}
 		setCondition(&node.Status.Conditions, corev1alpha1.ConditionSVC, metav1.ConditionTrue, corev1alpha1.ReasonSVCCreated, fmt.Sprintf("Name: %s", name))
+		return svc, nil
 	} else if err != nil {
 		return svc, err
 	}

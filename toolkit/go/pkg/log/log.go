@@ -126,19 +126,20 @@ func loggerFromContext(ctx context.Context) *logrus.Entry {
 }
 
 func SetLevel(level string) {
-	ensureInit()
+	var l logrus.Level
 	switch strings.ToLower(level) {
 	case "error":
-		logrus.SetLevel(logrus.ErrorLevel)
+		l = logrus.ErrorLevel
 	case "warn", "warning":
-		logrus.SetLevel(logrus.WarnLevel)
+		l = logrus.WarnLevel
 	case "debug":
-		logrus.SetLevel(logrus.DebugLevel)
+		l = logrus.DebugLevel
 	case "trace":
-		logrus.SetLevel(logrus.TraceLevel)
+		l = logrus.TraceLevel
 	default:
-		logrus.SetLevel(logrus.InfoLevel)
+		l = logrus.InfoLevel
 	}
+	logrus.SetLevel(l)
 }
 
 type Formatting struct {

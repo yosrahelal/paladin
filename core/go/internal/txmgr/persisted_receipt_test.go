@@ -127,6 +127,7 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 
 	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
+			From:     "me",
 			Type:     pldapi.TransactionTypePrivate.Enum(),
 			Domain:   "domain1",
 			Function: "doIt",
@@ -178,6 +179,7 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 
 	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
+			From:     "me",
 			Type:     pldapi.TransactionTypePrivate.Enum(),
 			Domain:   "domain1",
 			Function: "doIt",

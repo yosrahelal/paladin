@@ -18,6 +18,7 @@ package testbed
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -221,6 +222,11 @@ func (tb *testbed) resolveTXSigner(tx *components.PrivateTransaction) error {
 
 func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.DomainSmartContract, tx *components.PrivateTransaction) error {
 
+	if !strings.Contains(tx.Inputs.From, "@") {
+		// Transaction manager normally does the full version of this
+		tx.Inputs.From = fmt.Sprintf("%s@%s", tx.Inputs.From, tb.c.TransportManager().LocalNodeName())
+	}
+
 	// Testbed just uses a domain context for the duration of the TX, and flushes before returning
 	dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
 	defer dCtx.Close()
@@ -289,6 +295,11 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 		return err
 	}
 
+	// Build any nullifiers
+	if err := tb.writeNullifiersToContext(dCtx, tx); err != nil {
+		return err
+	}
+
 	// Flush the context
 	dbTXResultCB, err := dCtx.Flush(tb.c.Persistence().DB())
 	if err != nil {
@@ -339,38 +350,32 @@ func mapDirectlyToInternalPrivateTX(etx *pldapi.TransactionInput, intent prototk
 	}
 }
 
+func mapTransactionState(state *components.FullState, tx *components.TransactionInputs) *pldapi.StateEncoded {
+	return &pldapi.StateEncoded{
+		DomainName:      tx.Domain,
+		ContractAddress: tx.To,
+		ID:              state.ID,
+		Schema:          state.Schema,
+		Data:            state.Data.Bytes(),
+	}
+}
+
 func (tb *testbed) mapTransaction(ctx context.Context, tx *components.PrivateTransaction) (*TransactionResult, error) {
-	inputStates := make([]*pldapi.StateWithData, len(tx.PostAssembly.InputStates))
+	inputStates := make([]*pldapi.StateEncoded, len(tx.PostAssembly.InputStates))
 	for i, state := range tx.PostAssembly.InputStates {
-		inputStates[i] = &pldapi.StateWithData{
-			ID:     state.ID,
-			Schema: state.Schema,
-			Data:   []byte(state.Data),
-		}
+		inputStates[i] = mapTransactionState(state, tx.Inputs)
 	}
-	outputStates := make([]*pldapi.StateWithData, len(tx.PostAssembly.OutputStates))
+	outputStates := make([]*pldapi.StateEncoded, len(tx.PostAssembly.OutputStates))
 	for i, state := range tx.PostAssembly.OutputStates {
-		outputStates[i] = &pldapi.StateWithData{
-			ID:     state.ID,
-			Schema: state.Schema,
-			Data:   []byte(state.Data),
-		}
+		outputStates[i] = mapTransactionState(state, tx.Inputs)
 	}
-	readStates := make([]*pldapi.StateWithData, len(tx.PostAssembly.ReadStates))
+	readStates := make([]*pldapi.StateEncoded, len(tx.PostAssembly.ReadStates))
 	for i, state := range tx.PostAssembly.ReadStates {
-		readStates[i] = &pldapi.StateWithData{
-			ID:     state.ID,
-			Schema: state.Schema,
-			Data:   []byte(state.Data),
-		}
+		readStates[i] = mapTransactionState(state, tx.Inputs)
 	}
-	infoStates := make([]*pldapi.StateWithData, len(tx.PostAssembly.InfoStates))
+	infoStates := make([]*pldapi.StateEncoded, len(tx.PostAssembly.InfoStates))
 	for i, state := range tx.PostAssembly.InfoStates {
-		infoStates[i] = &pldapi.StateWithData{
-			ID:     state.ID,
-			Schema: state.Schema,
-			Data:   []byte(state.Data),
-		}
+		infoStates[i] = mapTransactionState(state, tx.Inputs)
 	}
 
 	preparedTransaction := tx.PreparedPublicTransaction

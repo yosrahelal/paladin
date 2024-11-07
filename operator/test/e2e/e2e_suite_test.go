@@ -20,12 +20,17 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sirupsen/logrus"
 )
 
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
+	log.SetLevel("warn")
+	logrus.SetLevel(logrus.WarnLevel)
+
 	RegisterFailHandler(Fail)
 	fmt.Fprintf(GinkgoWriter, "Starting operator-go suite\n")
 	RunSpecs(t, "e2e suite")

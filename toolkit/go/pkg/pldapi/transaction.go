@@ -46,6 +46,7 @@ const (
 	SubmitModeAuto     SubmitMode = "auto"     // automatically submitted transaction by paladin
 	SubmitModeExternal SubmitMode = "external" // the transaction will result in a prepared transaction, that can be downloaded and externally obtained
 	SubmitModeCall     SubmitMode = "call"     // just a call (never persisted to a transaction in the DB)
+	SubmitModePrepare  SubmitMode = "prepare"  // occurs when writing the prepared TXN back to the DB - does not get persisted
 )
 
 func (tt SubmitMode) Enum() tktypes.Enum[SubmitMode] {

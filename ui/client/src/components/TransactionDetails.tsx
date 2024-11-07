@@ -45,16 +45,16 @@ export const PaladinTransactionsDetails: React.FC<Props> = ({
 
   const { data: stateReceipt } = useQuery({
     enabled: !!transactionId,
-    queryKey: ["stateReceipt", paladinTransaction],
+    queryKey: ["stateReceipt", transactionId],
     queryFn: () => fetchStateReceipt(transactionId),
-    retry: false
+    retry: true
   });
 
   const { data: domainReceipt } = useQuery({
     enabled: !!domain && !!transactionId,
-    queryKey: ["domainReceipt", paladinTransaction],
+    queryKey: ["domainReceipt", domain, transactionId],
     queryFn: () => fetchDomainReceipt(domain, transactionId),
-    retry: false
+    retry: true
   });
 
   return (

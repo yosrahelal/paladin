@@ -26,24 +26,37 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (sd *stateDistributer) DistributeStates(ctx context.Context, stateDistributions []*StateDistribution) {
+func (sd *stateDistributer) DistributeStates(ctx context.Context, stateDistributions []*components.StateDistribution) {
 	log.L(ctx).Debugf("stateDistributer:DistributeStates %d state distributions", len(stateDistributions))
 	for _, stateDistribution := range stateDistributions {
 		sd.inputChan <- stateDistribution
 	}
 }
 
-func (sd *stateDistributer) sendState(ctx context.Context, stateDistribution *StateDistribution) {
-	log.L(ctx).Debugf("stateDistributer:sendState %s %s %s %s %s %s", stateDistribution.Domain, stateDistribution.ContractAddress, stateDistribution.SchemaID, stateDistribution.StateID, stateDistribution.IdentityLocator, stateDistribution.ID)
+func (sd *stateDistributer) sendState(ctx context.Context, stateDistribution *components.StateDistribution) {
+	log.L(ctx).Debugf("stateDistributer:sendState id=%s,domain=%s contractAddress=%s schemaId=%s stateId=%s identity=%s, nullifierAlgorithm=%v nullifierVerifierType=%v nullifierPayloadType=%v]",
+		stateDistribution.ID,
+		stateDistribution.Domain,
+		stateDistribution.ContractAddress,
+		stateDistribution.SchemaID,
+		stateDistribution.StateID,
+		stateDistribution.IdentityLocator,
+		stateDistribution.NullifierAlgorithm,
+		stateDistribution.NullifierVerifierType,
+		stateDistribution.NullifierPayloadType,
+	)
 
 	stateProducedEvent := &pb.StateProducedEvent{
-		DomainName:      stateDistribution.Domain,
-		ContractAddress: stateDistribution.ContractAddress,
-		SchemaId:        stateDistribution.SchemaID,
-		StateId:         stateDistribution.StateID,
-		StateDataJson:   stateDistribution.StateDataJson,
-		Party:           stateDistribution.IdentityLocator,
-		DistributionId:  stateDistribution.ID,
+		DistributionId:        stateDistribution.ID,
+		DomainName:            stateDistribution.Domain,
+		ContractAddress:       stateDistribution.ContractAddress,
+		SchemaId:              stateDistribution.SchemaID,
+		StateId:               stateDistribution.StateID,
+		StateDataJson:         stateDistribution.StateDataJson,
+		Party:                 stateDistribution.IdentityLocator,
+		NullifierAlgorithm:    stateDistribution.NullifierAlgorithm,
+		NullifierVerifierType: stateDistribution.NullifierVerifierType,
+		NullifierPayloadType:  stateDistribution.NullifierPayloadType,
 	}
 	stateProducedEventBytes, err := proto.Marshal(stateProducedEvent)
 	if err != nil {
@@ -62,7 +75,7 @@ func (sd *stateDistributer) sendState(ctx context.Context, stateDistribution *St
 		Payload:     stateProducedEventBytes,
 		Node:        targetNode,
 		Component:   STATE_DISTRIBUTER_DESTINATION,
-		ReplyTo:     sd.nodeID,
+		ReplyTo:     sd.localNodeName,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("Error sending state produced event: %s", err)

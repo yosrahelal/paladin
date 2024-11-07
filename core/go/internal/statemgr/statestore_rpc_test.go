@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
@@ -108,7 +109,7 @@ func TestRPC(t *testing.T) {
 		  "value": "blue"
 		}]
 	}`), "all")
-	jsonTestLog(t, "pstate_storeState", states)
+	jsonTestLog(t, "pstate_queryContractStates", states)
 	assert.Nil(t, rpcErr)
 	assert.Len(t, states, 1)
 	assert.Equal(t, state, states[0])
@@ -119,9 +120,43 @@ func TestRPC(t *testing.T) {
 		  "value": "blue"
 		}]
 	}`), "all")
-	jsonTestLog(t, "pstate_storeState", states)
+	jsonTestLog(t, "pstate_queryStates", states)
 	assert.Nil(t, rpcErr)
 	assert.Len(t, states, 1)
 	assert.Equal(t, state, states[0])
+
+	// Write some nullifiers and query them back
+	nullifier1 := tktypes.HexBytes(tktypes.RandHex(32))
+	err = ss.WriteNullifiersForReceivedStates(ctx, ss.p.DB(), "domain1", []*components.NullifierUpsert{
+		{
+			ID:    nullifier1,
+			State: state.ID,
+		},
+	})
+	require.NoError(t, err)
+
+	rpcErr = c.CallRPC(ctx, &states, "pstate_queryContractNullifiers", "domain1", contractAddress.String(), schemas[0].ID, tktypes.RawJSON(`{
+		"eq": [{
+		  "field": "color",
+		  "value": "blue"
+		}]
+	}`), "all")
+	jsonTestLog(t, "pstate_queryContractNullifiers", states)
+	assert.Nil(t, rpcErr)
+	assert.Len(t, states, 1)
+	assert.Equal(t, state.ID, states[0].ID)
+	assert.Equal(t, nullifier1, states[0].Nullifier.ID)
+
+	rpcErr = c.CallRPC(ctx, &states, "pstate_queryNullifiers", "domain1", schemas[0].ID, tktypes.RawJSON(`{
+		"eq": [{
+		  "field": "color",
+		  "value": "blue"
+		}]
+	}`), "all")
+	jsonTestLog(t, "pstate_queryNullifiers", states)
+	assert.Nil(t, rpcErr)
+	assert.Len(t, states, 1)
+	assert.Equal(t, state.ID, states[0].ID)
+	assert.Equal(t, nullifier1, states[0].Nullifier.ID)
 
 }

@@ -50,6 +50,7 @@ func run() error {
 	if len(os.Args) < 2 {
 		return fmt.Errorf("usage: go run ./contractpkg [path/to/contractMap.json]")
 	}
+
 	var buildMap ContractMap
 	mapFileData, err := os.ReadFile(os.Args[1])
 	if err == nil {
@@ -129,7 +130,8 @@ func (m *ContractMap) process(name string, b *ContractMapBuild) error {
 		for libName, link := range b.LinkedLibs {
 			link = strings.ReplaceAll(link, "_", "-")
 			requiredBuilds = append(requiredBuilds, link)
-			linkedContracts[libName] = fmt.Sprintf(`{{index .status.resolvedContractAddresses "%s"}}`, link)
+			l := fmt.Sprintf(`{{index .status.resolvedContractAddresses "%s"}}`, link)
+			linkedContracts[libName] = l
 		}
 
 		if len(b.LinkedLibs) != libCount {

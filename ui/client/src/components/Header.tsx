@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { AppBar, Box, Grid2, IconButton, Tab, Tabs, Toolbar, Tooltip, useTheme } from "@mui/material";
+import { AppBar, Box, Grid2, IconButton, Tab, Tabs, Toolbar, Tooltip, useMediaQuery, useTheme } from "@mui/material";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -29,6 +29,7 @@ export const Header: React.FC = () => {
   const navigate = useNavigate();
   const pathname = useLocation().pathname.toLowerCase();
   const theme = useTheme();
+  const lessThanMedium = useMediaQuery(theme.breakpoints.down("md"));
 
   const getTabFromPath = (path: string) => {
     if (path.startsWith('/ui/indexer')) {
@@ -81,7 +82,8 @@ export const Header: React.FC = () => {
           </Box>
         </Toolbar>
       </AppBar>
-      <Box sx={{ height: theme => theme.mixins.toolbar }} />
+      <Box sx={{ height: theme => lessThanMedium? '134px' :
+         theme.mixins.toolbar }} />
     </>
   );
 

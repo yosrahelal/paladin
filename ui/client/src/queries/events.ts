@@ -35,7 +35,7 @@ export const fetchEvents = async (): Promise<IEvent[]> => {
 
   return <Promise<IEvent[]>>(
     returnResponse(
-      await fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
       i18next.t("errorFetchingLatestEvents")
     )
   );

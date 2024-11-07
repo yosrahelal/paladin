@@ -22,6 +22,15 @@ import (
 
 var ZetoABI = abi.ABI{
 	{
+		Type: abi.Constructor,
+		Inputs: abi.ParameterArray{
+			{
+				Name: "tokenName",
+				Type: "string",
+			},
+		},
+	},
+	{
 		Name: "mint",
 		Type: abi.Function,
 		Inputs: abi.ParameterArray{
@@ -60,9 +69,8 @@ var ZetoABI = abi.ABI{
 }
 
 type InitializerParams struct {
-	From         string `json:"from"`
-	TokenName    string `json:"tokenName"`
-	InitialOwner string `json:"initialOwner"`
+	TokenName string `json:"tokenName"`
+	// InitialOwner string `json:"initialOwner"` // TODO: allow the initial owner to be specified by the deploy request
 }
 
 type DeployParams struct {

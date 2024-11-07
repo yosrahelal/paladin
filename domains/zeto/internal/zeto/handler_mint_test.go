@@ -98,6 +98,9 @@ func TestMintAssemble(t *testing.T) {
 		Transaction: &prototk.TransactionSpecification{
 			From: "Bob",
 		},
+		DomainConfig: &types.DomainInstanceConfig{
+			TokenName: "Anon",
+		},
 	}
 	req := &prototk.AssembleTransactionRequest{
 		ResolvedVerifiers: []*prototk.ResolvedVerifier{},
@@ -188,12 +191,12 @@ func TestMintPrepare(t *testing.T) {
 		},
 		Transaction: txSpec,
 	}
-	// StateDataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}",
+	// StateDataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}",
 	ctx := context.Background()
 	_, err := h.Prepare(ctx, tx, req)
 	assert.EqualError(t, err, "invalid character 'b' looking for beginning of value")
 
-	req.OutputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}"
+	req.OutputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}"
 	_, err = h.Prepare(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id. PD020007: Invalid hex")
 
@@ -203,22 +206,14 @@ func TestMintPrepare(t *testing.T) {
 			Implementations: []*types.DomainContract{
 				{
 					Name: "tokenContract2",
-					Abi:  "{}",
 				},
 			},
 		},
 	}
-	_, err = h.Prepare(ctx, tx, req)
-	assert.EqualError(t, err, "PD210000: Contract tokenContract1 not found")
 
 	z.config.DomainContracts.Implementations = append(z.config.DomainContracts.Implementations, &types.DomainContract{
 		Name: "tokenContract1",
-		Abi:  "{}",
 	})
-	_, err = h.Prepare(ctx, tx, req)
-	assert.EqualError(t, err, "json: cannot unmarshal object into Go value of type abi.ABI")
-
-	z.config.DomainContracts.Implementations[1].Abi = "[{\"inputs\": [{\"internalType\": \"bytes32\",\"name\": \"transactionId\",\"type\": \"bytes32\"}],\"name\": \"mint\",\"outputs\": [],\"type\": \"function\"}]"
 	_, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
 }

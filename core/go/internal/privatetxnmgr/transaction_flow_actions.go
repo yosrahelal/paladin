@@ -75,6 +75,10 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 			log.L(ctx).Infof("Transaction %s not assembled. Waiting for assembler to return", tf.transaction.ID.String())
 			return
 		}
+		if tf.transaction.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_REVERT {
+			log.L(ctx).Infof("Transaction %s reverted. Waiting for revert event to be processed", tf.transaction.ID.String())
+			return
+		}
 	}
 
 	// Must be signed on the same node as it was assembled so do this before considering whether to delegate
@@ -472,7 +476,7 @@ func (tf *transactionFlow) requestSignatures(ctx context.Context) {
 		tf.transaction.PostAssembly.Signatures = make([]*prototk.AttestationResult, 0)
 	}
 	attPlan := tf.transaction.PostAssembly.AttestationPlan
-	attResults := tf.transaction.PostAssembly.Endorsements
+	attResults := tf.transaction.PostAssembly.Signatures
 
 	for _, attRequest := range attPlan {
 		switch attRequest.AttestationType {

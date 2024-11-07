@@ -35,7 +35,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class BondTest {
 
-    private final Testbed.Setup testbedSetup = new Testbed.Setup("../../core/go/db/migrations/sqlite", 5000);
+    private final Testbed.Setup testbedSetup = new Testbed.Setup(
+            "../../core/go/db/migrations/sqlite",
+            "build/testbed.java-bond.log",
+            5000);
 
     JsonHex.Address deployPenteFactory() throws Exception {
         try (Testbed deployBed = new Testbed(testbedSetup)) {
@@ -82,7 +85,9 @@ public class BondTest {
     @JsonIgnoreProperties(ignoreUnknown = true)
     record StateSchema(
             @JsonProperty
-            JsonHex.Bytes32 id
+            JsonHex.Bytes32 id,
+            @JsonProperty
+            String signature
     ) {
     }
 
@@ -118,8 +123,10 @@ public class BondTest {
             var mapper = new ObjectMapper();
             List<JsonNode> notoSchemas = testbed.getRpcClient().request("pstate_listSchemas",
                     "noto");
-            assertEquals(1, notoSchemas.size());
-            var notoSchema = mapper.convertValue(notoSchemas.getFirst(), StateSchema.class);
+            assertEquals(2, notoSchemas.size());
+            var notoSchema = mapper.convertValue(notoSchemas.getLast(), StateSchema.class);
+            assertEquals("type=NotoCoin(bytes32 salt,string owner,uint256 amount),labels=[owner,amount]",
+                    notoSchema.signature());
 
             String bondTrackerPublicBytecode = ResourceLoader.jsonResourceEntryText(
                     this.getClass().getClassLoader(),
@@ -142,13 +149,13 @@ public class BondTest {
                     "pente", alice, testbed, issuerCustodianGroup, true);
             assertFalse(issuerCustodianInstance.address().isBlank());
             var aliceCustodianInstance = PenteHelper.newPrivacyGroup(
-                    "pente", alice,  testbed, aliceCustodianGroup, true);
+                    "pente", alice, testbed, aliceCustodianGroup, true);
             assertFalse(aliceCustodianInstance.address().isBlank());
 
             // Create Noto cash token
             var notoCash = NotoHelper.deploy("noto", cashIssuer, testbed,
                     new NotoHelper.ConstructorParams(
-                            cashIssuer,
+                            cashIssuer + "@node1",
                             null,
                             true));
             assertFalse(notoCash.address().isBlank());
@@ -177,7 +184,7 @@ public class BondTest {
             // Create Noto bond token
             var notoBond = NotoHelper.deploy("noto", bondCustodian, testbed,
                     new NotoHelper.ConstructorParams(
-                            bondCustodian,
+                            bondCustodian + "@node1",
                             new NotoHelper.HookParams(
                                     issuerCustodianInstance.address(),
                                     bondTracker.address(),
@@ -216,6 +223,7 @@ public class BondTest {
             var bondSubscription = BondSubscriptionHelper.deploy(aliceCustodianInstance, alice, new HashMap<>() {{
                 put("bondAddress_", notoBond.address());
                 put("units_", 1000);
+                put("custodian_", custodianAddress);
             }});
 
             // Prepare the bond transfer (requires 2 calls to prepare, as the Noto transaction spawns a Pente transaction to wrap it)
@@ -254,7 +262,7 @@ public class BondTest {
             // so that it requires approval.
 
             // Alice receives full bond distribution
-            bondSubscription.distribute(alice, 1000);
+            bondSubscription.distribute(bondCustodian, 1000);
 
             // TODO: figure out how to test negative cases (such as when Pente reverts due to a non-allowed investor)
 

@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/preparedtxdistribution"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -32,10 +33,11 @@ import (
 )
 
 type dispatchOperation struct {
-	publicDispatches     []*PublicDispatch
-	privateDispatches    []*components.ValidatedTransaction
-	preparedTransactions []*components.PrepareTransactionWithRefs
-	stateDistributions   []*statedistribution.StateDistributionPersisted
+	publicDispatches         []*PublicDispatch
+	privateDispatches        []*components.ValidatedTransaction
+	preparedTransactions     []*components.PrepareTransactionWithRefs
+	preparedTxnDistributions []*preparedtxdistribution.PreparedTxnDistributionPersisted
+	stateDistributions       []*statedistribution.StateDistributionPersisted
 }
 
 type DispatchPersisted struct {
@@ -61,7 +63,7 @@ type DispatchBatch struct {
 
 // PersistDispatches persists the dispatches to the database and coordinates with the public transaction manager
 // to submit public transactions.
-func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error {
+func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*components.StateDistribution, preparedTxnDistributions []*preparedtxdistribution.PreparedTxnDistribution) error {
 
 	stateDistributionsPersisted := make([]*statedistribution.StateDistributionPersisted, 0, len(stateDistributions))
 	for _, stateDistribution := range stateDistributions {
@@ -73,15 +75,28 @@ func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contrac
 			ContractAddress: *tktypes.MustEthAddress(stateDistribution.ContractAddress),
 		})
 	}
+
+	preparedTxnDistributionsPersisted := make([]*preparedtxdistribution.PreparedTxnDistributionPersisted, 0, len(dispatchBatch.PreparedTransactions))
+	for _, preparedTxnDistribution := range preparedTxnDistributions {
+		preparedTxnDistributionsPersisted = append(preparedTxnDistributionsPersisted, &preparedtxdistribution.PreparedTxnDistributionPersisted{
+			ID:              preparedTxnDistribution.ID,
+			PreparedTxnID:   preparedTxnDistribution.PreparedTxnID,
+			IdentityLocator: preparedTxnDistribution.IdentityLocator,
+			DomainName:      preparedTxnDistribution.Domain,
+			ContractAddress: preparedTxnDistribution.ContractAddress,
+		})
+	}
+
 	// Send the write operation with all of the batch sequence operations to the flush worker
 	op := s.writer.Queue(dCtx.Ctx(), &syncPointOperation{
 		domainContext:   dCtx,
 		contractAddress: contractAddress,
 		dispatchOperation: &dispatchOperation{
-			publicDispatches:     dispatchBatch.PublicDispatches,
-			privateDispatches:    dispatchBatch.PrivateDispatches,
-			preparedTransactions: dispatchBatch.PreparedTransactions,
-			stateDistributions:   stateDistributionsPersisted,
+			publicDispatches:         dispatchBatch.PublicDispatches,
+			privateDispatches:        dispatchBatch.PrivateDispatches,
+			preparedTransactions:     dispatchBatch.PreparedTransactions,
+			preparedTxnDistributions: preparedTxnDistributionsPersisted,
+			stateDistributions:       stateDistributionsPersisted,
 		},
 	})
 
@@ -179,34 +194,59 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 		}
 
 		if len(op.preparedTransactions) > 0 {
+			log.L(ctx).Debugf("Writing prepared transactions locally  %d", len(op.preparedTransactions))
+
 			if err := s.txMgr.WritePreparedTransactions(ctx, dbTX, op.preparedTransactions); err != nil {
 				log.L(ctx).Errorf("Error persisting prepared transactions: %s", err)
 				return err
 			}
 		}
 
+		if len(op.preparedTxnDistributions) == 0 {
+			log.L(ctx).Debug("No prepared transaction distributions to persist")
+		} else {
+
+			log.L(ctx).Debugf("Writing distribution record to send prepared transaction to remote node %d", len(op.preparedTxnDistributions))
+			err := dbTX.
+				Table("prepared_txn_distributions").
+				Clauses(clause.OnConflict{
+					Columns: []clause.Column{
+						{Name: "prepared_txn_id"},
+						{Name: "identity_locator"},
+					},
+					DoNothing: true, // immutable
+				}).
+				Create(op.preparedTxnDistributions).
+				Error
+
+			if err != nil {
+				log.L(ctx).Errorf("Error persisting prepared transaction distributions: %s", err)
+				return err
+			}
+		}
+
 		if len(op.stateDistributions) == 0 {
 			log.L(ctx).Debug("No state distributions to persist")
-			continue
+		} else {
+			log.L(ctx).Debugf("Writing state distributions %d", len(op.stateDistributions))
+			err := dbTX.
+				Table("state_distributions").
+				Clauses(clause.OnConflict{
+					Columns: []clause.Column{
+						{Name: "state_id"},
+						{Name: "identity_locator"},
+					},
+					DoNothing: true, // immutable
+				}).
+				Create(op.stateDistributions).
+				Error
+
+			if err != nil {
+				log.L(ctx).Errorf("Error persisting state distributions: %s", err)
+				return err
+			}
 		}
 
-		log.L(ctx).Debugf("Writing state distributions %d", len(op.stateDistributions))
-		err := dbTX.
-			Table("state_distributions").
-			Clauses(clause.OnConflict{
-				Columns: []clause.Column{
-					{Name: "state_id"},
-					{Name: "identity_locator"},
-				},
-				DoNothing: true, // immutable
-			}).
-			Create(op.stateDistributions).
-			Error
-
-		if err != nil {
-			log.L(ctx).Errorf("Error persisting state distributions: %s", err)
-			return err
-		}
 	}
 	return nil
 }
