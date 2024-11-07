@@ -21,7 +21,7 @@ func NewInFlight() *InFlight {
 	}
 }
 
-func (db *InFlight) IsChanging(key string) bool {
+func (db *InFlight) IsQueued(key string) bool {
 	db.mux.RLock()
 	defer db.mux.RUnlock()
 
@@ -29,7 +29,7 @@ func (db *InFlight) IsChanging(key string) bool {
 	return ok
 }
 
-func (db *InFlight) IsReadyForChange(key string) bool {
+func (db *InFlight) IsReady(key string) bool {
 	db.mux.RLock()
 	defer db.mux.RUnlock()
 

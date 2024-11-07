@@ -45,6 +45,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
@@ -61,9 +62,9 @@ var checkPsqlScript string
 // PaladinReconciler reconciles a Paladin object
 type PaladinReconciler struct {
 	client.Client
-	config          *config.Config
-	Scheme          *runtime.Scheme
-	ChangesInflight *InFlight
+	config  *config.Config
+	Scheme  *runtime.Scheme
+	Changes *InFlight
 }
 
 // allows generic functions by giving a mapping between the types and interfaces for the CR
@@ -143,13 +144,13 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err == nil {
 		existing = true
 		// if it's already changing, we need to see if we should wait or finally reconcile
-		if r.ChangesInflight.IsChanging(resourceID) {
-			changeable = r.ChangesInflight.IsReadyForChange(resourceID)
+		if r.Changes.IsQueued(resourceID) {
+			changeable = r.Changes.IsReady(resourceID)
 		} else { // if it's not changing, we need to check if the configsum differs
 			previousConfigSum := sts.Spec.Template.Annotations["core.paladin.io/config-sum"]
 			// if the configsum differs, we need to queue up the change for later
 			if previousConfigSum != configSum {
-				_ = r.ChangesInflight.Insert(resourceID)
+				_ = r.Changes.Insert(resourceID)
 				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 			} else {
 				// configsums are the same, so we can proceed in case different changes need to be made
@@ -209,6 +210,9 @@ func (r *PaladinReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&corev1alpha1.PaladinDomain{}, reconcileAll(PaladinCRMap, r.Client), reconcileEveryChange()).
 		// reconcile all paladin nodes, for any change to any registry
 		Watches(&corev1alpha1.PaladinRegistry{}, reconcileAll(PaladinCRMap, r.Client), reconcileEveryChange()).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 2,
+		}).
 		Complete(r)
 }
 
