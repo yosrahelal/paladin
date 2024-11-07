@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import {
   IGroupInfo,
   IStateBase,
-  IStateWithData,
+  IStateEncoded,
   TransactionType,
 } from "../interfaces";
 import PaladinClient from "../paladin";
@@ -62,25 +62,11 @@ export interface NotoTransferParams {
 }
 
 export interface NotoApproveTransferParams {
-  inputs: IStateWithData[];
-  outputs: IStateWithData[];
+  inputs: IStateEncoded[];
+  outputs: IStateEncoded[];
   data: string;
   delegate: string;
 }
-
-export interface NotoCoinData {
-  salt: string;
-  owner: string;
-  amount: string;
-}
-
-export const encodeNotoStates = (states: IStateBase[]): IStateWithData[] => {
-  return states.map((state) => ({
-    id: state.id,
-    schema: state.schema,
-    data: encodeHex(JSON.stringify(state.data as NotoCoinData)),
-  }));
-};
 
 export class NotoFactory {
   constructor(private paladin: PaladinClient, public readonly domain: string) {}

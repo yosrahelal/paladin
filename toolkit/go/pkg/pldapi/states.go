@@ -99,6 +99,15 @@ type StateBase struct {
 	Data            tktypes.RawJSON    `docstruct:"State" json:"data"`
 }
 
+// Like StateBase, but encodes Data as HexBytes
+type StateEncoded struct {
+	ID              tktypes.HexBytes   `json:"id"`
+	DomainName      string             `json:"domain"`
+	Schema          tktypes.Bytes32    `json:"schema"`
+	ContractAddress tktypes.EthAddress `json:"contractAddress"`
+	Data            tktypes.HexBytes   `json:"data"`
+}
+
 type State struct {
 	StateBase
 	Labels      []*StateLabel       `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
@@ -113,12 +122,6 @@ type State struct {
 // TODO: Separate the GORM DTO from the external pldapi external type definition for States
 func (StateBase) TableName() string {
 	return "states"
-}
-
-type StateWithData struct {
-	ID     tktypes.HexBytes `json:"id"`
-	Schema tktypes.Bytes32  `json:"schema"`
-	Data   tktypes.HexBytes `json:"data"`
 }
 
 type StateLabel struct {
