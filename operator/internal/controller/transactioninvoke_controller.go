@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -94,8 +95,8 @@ func (r *TransactionInvokeReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	err = txReconcile.reconcile(ctx)
 	if err != nil {
 		// There's nothing to notify us when the world changes other than polling, so we keep re-trying at
-		// a fixed rate to avoid any exponential backoff
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+		// a fixed rate (matching the readiness probe period of Paladin) to avoid any exponential backoff
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 	} else if txReconcile.statusChanged {
 		return r.updateStatusAndRequeue(ctx, &txi)
 	} else if !txReconcile.failed && !txReconcile.succeeded {
@@ -248,5 +249,8 @@ func (r *TransactionInvokeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&corev1alpha1.Paladin{}, handler.EnqueueRequestsFromMapFunc(r.reconcilePaladin), reconcileEveryChange()).
 		// Reconcile when any smart contract deploy changes
 		Watches(&corev1alpha1.SmartContractDeployment{}, reconcileAll(TransactionInvokeCRMap, r.Client), reconcileEveryChange()).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 5,
+		}).
 		Complete(r)
 }

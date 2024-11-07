@@ -12,7 +12,7 @@ spec:
     listKind: TransactionInvokeList
     plural: transactioninvokes
     shortNames:
-    - txinvoke
+    - txn
     singular: transactioninvoke
   scope: Namespaced
   versions:

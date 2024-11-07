@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -88,8 +89,8 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 	err = txReconcile.reconcile(ctx)
 	if err != nil {
 		// There's nothing to notify us when the world changes other than polling, so we keep re-tryingat
-		// a fixed rate to avoid any exponential backoff
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+		// a fixed rate (matching the readiness probe period of Paladin) to avoid any exponential backoff
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 	} else if txReconcile.statusChanged {
 		// Common TX reconciler does everything for us apart from grab the receipt
 		if scd.Status.TransactionStatus == corev1alpha1.TransactionStatusSuccess && scd.Status.ContractAddress == "" {
@@ -219,5 +220,8 @@ func (r *SmartContractDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) e
 		For(&corev1alpha1.SmartContractDeployment{}).
 		// Reconcile when any node status changes
 		Watches(&corev1alpha1.Paladin{}, handler.EnqueueRequestsFromMapFunc(r.reconcilePaladin), reconcileEveryChange()).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 5,
+		}).
 		Complete(r)
 }

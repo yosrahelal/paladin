@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
@@ -111,5 +112,8 @@ func (r *PaladinDomainReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&corev1alpha1.PaladinDomain{}).
 		// Reconcile when any contract deployment changes status
 		Watches(&corev1alpha1.SmartContractDeployment{}, reconcileAll(PaladinDomainCRMap, r.Client), reconcileEveryChange()).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 2,
+		}).
 		Complete(r)
 }
