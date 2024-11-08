@@ -13,4 +13,10 @@ ensure you're familiar with running Paladin before walking through any of the tu
 
     Learn how Noto and Pente work together to represent a bond issuance process.
 
+-   :fontawesome-solid-stamp:{ .lg .middle } __[Wholesale CBDC](zkp-cbdc.md)__ 
+
+    ---
+
+    Learn how to implement a wholesale CBDC with Zeto.
+
 </div>
