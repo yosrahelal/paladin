@@ -44,38 +44,26 @@ export const fetchEvents = async (pageParam?: IEvent): Promise<IEvent[]> => {
         ]
       },
       {
-        "and": [
+        "equal": [{
+          "field": "blockNumber",
+          "value": pageParam.blockNumber
+        }],
+        "or": [
           {
-            "equal": {
-              "field": "blockNumber",
-              "value": pageParam.blockNumber
-            }
+            "lessThan": [{
+              "field": "transactionIndex",
+              "value": pageParam.transactionIndex
+            }]
           },
           {
-            "or": [
-              {
-                "lessThan": {
-                  "field": "transactionIndex",
-                  "value": pageParam.transactionIndex
-                }
-              },
-              {
-                "and": [
-                  {
-                    "equal": {
-                      "field": "transactionIndex",
-                      "value": pageParam.transactionIndex
-                    }
-                  },
-                  {
-                    "lessThan": {
-                      "field": "logIndex",
-                      "value": pageParam.logIndex
-                    }
-                  }
-                ]
-              }
-            ]
+            "equal": [{
+              "field": "transactionIndex",
+              "value": pageParam.transactionIndex
+            }],
+            "lessThan": [{
+              "field": "logIndex",
+              "value": pageParam.logIndex
+            }]
           }
         ]
       }
