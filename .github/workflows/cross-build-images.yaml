@@ -1,0 +1,142 @@
+name: Paladin Buildx
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  deployments: read
+  discussions: read
+  id-token: write
+  issues: read
+  packages: write
+  pages: read
+  pull-requests: read
+  repository-projects: read
+  statuses: read
+  security-events: read
+  
+on:
+  workflow_call:
+    inputs:
+      registry:
+        required: true
+        type: string
+      repository:
+        required: true
+        type: string
+      image_tag:
+        required: true
+        type: string
+      push:
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      username:
+        required: false
+      password:
+        required: false
+
+jobs:
+  core-macos:
+    uses: ./.github/workflows/build-image.yaml
+    with:
+      dockerfile: ./Dockerfile
+      registry: ${{ inputs.registry }}
+      image: ${{ inputs.repository }}/paladin
+      image_tag: "${{ inputs.image_tag }}-arm64"
+      push: ${{ inputs.push }}
+      platforms: linux/arm64
+      runs-on: ubuntu-latest
+    secrets:
+      username: ${{ secrets.username }}
+      password: ${{ secrets.password }}
+  core-ubuntu:
+    uses: ./.github/workflows/build-image.yaml
+    with:
+      dockerfile: ./Dockerfile
+      registry: ${{ inputs.registry }}
+      image: ${{ inputs.repository }}/paladin
+      image_tag: "${{ inputs.image_tag }}-amd64"
+      push: ${{ inputs.push }}
+      platforms: linux/amd64
+      runs-on: ubuntu-latest
+    secrets:
+      username: ${{ secrets.username }}
+      password: ${{ secrets.password }}
+
+  operator-ubuntu:
+    uses: ./.github/workflows/build-image.yaml
+    with:
+      dockerfile: ./operator/Dockerfile
+      registry: ${{ inputs.registry }}
+      image: ${{ inputs.repository }}/paladin-operator
+      image_tag: ${{ inputs.image_tag }}-amd64
+      push: ${{ inputs.push }}
+      platforms: linux/amd64
+      runs-on: ubuntu-latest
+    secrets:
+      username: ${{ secrets.username }}
+      password: ${{ secrets.password }}
+  operator-macos:
+    uses: ./.github/workflows/build-image.yaml
+    with:
+      dockerfile: ./operator/Dockerfile
+      registry: ${{ inputs.registry }}
+      image: ${{ inputs.repository }}/paladin-operator
+      image_tag: ${{ inputs.image_tag }}-arm64
+      push: ${{ inputs.push }}
+      platforms: linux/arm64
+      runs-on: ubuntu-latest
+    secrets:
+      username: ${{ secrets.username }}
+      password: ${{ secrets.password }}
+
+  core-docker-manifest:
+    if: ${{ inputs.push }}
+    needs: [core-macos, core-ubuntu]
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ inputs.registry }}/${{ inputs.repository }}/paladin:${{ inputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set lower case image name
+        run: |
+          echo "IMAGE=${IMAGE,,}" >>${GITHUB_ENV}
+      - name: Docker registry login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ secrets.username }}
+          password: ${{ secrets.password }}
+
+      - name: Create and push Paladin core Docker manifest
+        run: |
+          docker manifest create ${{ env.IMAGE }} \
+            --amend ${{ env.IMAGE }}-arm64 \
+            --amend ${{ env.IMAGE }}-amd64
+          docker manifest push ${{ env.IMAGE }}
+
+  operator-docker-manifest:
+    if: ${{ inputs.push }}
+    needs: [operator-macos, operator-ubuntu]
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ inputs.registry }}/${{ inputs.repository }}/paladin-operator:${{ inputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set lower case image name
+        run: |
+          echo "IMAGE=${IMAGE,,}" >>${GITHUB_ENV}
+      - name: Docker registry login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ secrets.username }}
+          password: ${{ secrets.password }}
+
+      - name: Create and push Operaotr Docker manifest
+        run: |
+          docker manifest create ${{ env.IMAGE }} \
+            --amend ${{ env.IMAGE }}-arm64 \
+            --amend ${{ env.IMAGE }}-amd64
+          docker manifest push ${{ env.IMAGE }}
