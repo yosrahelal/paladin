@@ -89,14 +89,25 @@ export const fetchIndexedTransactions = async (pageParam?: ITransaction): Promis
 };
 
 export const fetchSubmissions = async (
-  type: "all" | "pending"
+  type: "all" | "pending",
+  pageParam?: IPaladinTransaction
 ): Promise<IPaladinTransaction[]> => {
-  const allParams = [
+  let allParams: any = [
     {
-      limit: constants.PENDING_TRANSACTIONS_QUERY_LIMIT,
+      limit: constants.SUBMISSIONS_QUERY_LIMIT,
       sort: ["created DESC"],
     },
   ];
+
+  if(pageParam !== undefined) {
+    allParams[0].lessThan = [
+      {
+        "field": "created",
+        "value": pageParam.created
+      }
+    ];
+  }
+
   const pendingParams = [...allParams, true];
   const payload = {
     jsonrpc: "2.0",
@@ -107,6 +118,8 @@ export const fetchSubmissions = async (
         : RpcMethods.ptx_QueryPendingTransactions,
     params: type === "all" ? allParams : pendingParams,
   };
+
+  console.log(JSON.stringify(payload))
 
   return <Promise<IPaladinTransaction[]>>(
     returnResponse(

@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, LinearProgress, Typography, useTheme } from "@mui/material";
+import { Alert, Box, LinearProgress, Typography, useTheme } from "@mui/material";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { fetchEvents } from "../queries/events";
@@ -29,7 +29,7 @@ export const Events: React.FC = () => {
 
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
 
-  const { data: events, fetchNextPage, hasNextPage } = useInfiniteQuery({
+  const { data: events, fetchNextPage, hasNextPage, error } = useInfiniteQuery({
     queryKey: ["events", lastBlockWithTransactions],
     queryFn: ({ pageParam }) => fetchEvents(pageParam),
     initialPageParam: undefined as IEvent | undefined,
@@ -38,6 +38,10 @@ export const Events: React.FC = () => {
 
   const theme = useTheme();
   const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
+
+  if (error) {
+    return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
+  }
 
   if (events?.pages === undefined) {
     return <></>;
