@@ -117,6 +117,7 @@ nav:
   - Tutorials:
     - Introduction: tutorials/index.md
     - Bond Issuance: tutorials/bond-issuance.md
+    - Wholesale CBDC: tutorials/zkp-cbdc.md
   - Reference:
     - APIs: reference/apis/*.md
     - Types: reference/types/*.md

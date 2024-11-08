@@ -5,3 +5,4 @@ export * from "./interfaces/index";
 export * from "./utils";
 export * from "./domains/noto";
 export * from "./domains/pente";
+export * from "./domains/zeto";
