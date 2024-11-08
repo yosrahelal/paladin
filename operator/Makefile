@@ -176,8 +176,7 @@ build-installer: manifests generate kustomize ## Build consolidated installer YA
 ##@ Helm Chart - Deployment
 .PHONY: prepare-crd-chart
 prepare-crd-chart: manifests kustomize helmify ## Build CRDs using helmify.
-	$(KUSTOMIZE) build config/default | $(HELMIFY) ${CHART_PATH_CRD}
-	find ${CHART_PATH_CRD}/templates/ -type f ! \( -name '*-crd.yaml' -o -name '_helpers.tpl' \) -exec rm -f {} +
+	$(KUSTOMIZE) build config/crd | $(HELMIFY) ${CHART_PATH_CRD}
 	rm -f ${CHART_PATH_CRD}/values.yaml
 	touch ${CHART_PATH_CRD}/values.yaml
 	ls -la charts/paladin-operator-crd/templates
@@ -198,17 +197,6 @@ uninstall-crds: ## Uninstall CRDs.
 .PHONY: helm-template
 helm-template: ## Install operator using Helm.
 	$(HELM) template ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} --set operator.namespace=${NAMESPACE} 
-
-.PHONY: prepare-operator-chart
-prepare-operator-chart: ## Copy samples to the Helm chart.
-	mkdir -p charts/paladin-operator/templates/samples
-	cp config/samples/core_v1* charts/paladin-operator/templates/samples/
-	cp config/samples/cert* charts/paladin-operator/templates/samples/
-	@for file in $(shell ls charts/paladin-operator/templates/samples/*.yaml ) ; do \
-		mv "$${file}" "$${file}.tmp"; \
-		sed -r 's/{{(.*)}}/{{ `{{\1}}` }}/g' "$${file}.tmp" > "$${file}"; \
-		rm "$${file}.tmp"; \
-	done
 
 .PHONY: helm-install-dependencies
 helm-install-dependencies: ## Install operator using Helm.
