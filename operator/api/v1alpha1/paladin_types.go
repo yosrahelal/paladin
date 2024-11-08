@@ -146,6 +146,7 @@ type SecretBackedSigner struct {
 type StatusReason string
 
 //+kubebuilder:object:root=true
+//+kubebuilder:resource:shortName="pld"
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="Phase",type="string",JSONPath=`.status.phase`
 

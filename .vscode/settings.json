@@ -1,6 +1,7 @@
 {
     "go.formatFlags": ["-s"],
     "go.lintTool": "golangci-lint",
+    "go.lintFlags": ["--fast", "--allow-parallel-runners"],
     "cSpell.words": [
       "idempotency",
       "remoting",
