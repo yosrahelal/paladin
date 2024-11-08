@@ -1641,7 +1641,7 @@ func TestPrivacyGroupEndorsementConcurrent(t *testing.T) {
 	// This test is identical to TestPrivacyGroupEndorsement except that it sends the transactions concurrently
 	// For manual exploratory testing of longevity , it is possible to increase the number of iterations and the test should still be valid
 	// however, it is hard coded to a small number by default so that it can be run in CI
-	NUM_ITERATIONS := 
+	NUM_ITERATIONS := 4
 	ctx := context.Background()
 	domainRegistryAddress := deployDomainRegistry(t)
 
