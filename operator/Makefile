@@ -275,6 +275,7 @@ $(CRD_REF_DOCS): $(LOCALBIN)
 
 .PHONY: generate-reference-docs
 generate-reference-docs: crd-ref-docs ## Generate API reference documentation.
+	mkdir -p ${PWD}/../doc-site/docs/reference/crds/
 	${CRD_REF_DOCS} --source-path "${PWD}/api/" --config "${PWD}/docs/config.yaml" --renderer=markdown --output-path="${PWD}/../doc-site/docs/reference/crds/core.paladin.io.md"
 	./hack/prepare-crds-doc.sh
 
