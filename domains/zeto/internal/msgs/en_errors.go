@@ -144,4 +144,5 @@ var (
 	MsgNoDomainReceipt                     = ffe("PD210102", "Not implemented. See state receipt for coin transfers")
 	MsgUnknownSignPayload                  = ffe("PD210103", "Sign payload type '%s' not recognized")
 	MsgNullifierGenerationFailed           = ffe("PD210104", "Failed to generate nullifier for coin")
+	MsgParamTotalAmountInRange             = ffe("PD210105", "Total amount must be in the range (0, 2^100)")
 )

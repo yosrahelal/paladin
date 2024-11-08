@@ -67,6 +67,7 @@ func validateTransferParams(ctx context.Context, params []*types.TransferParamEn
 	if len(params) == 0 {
 		return i18n.NewError(ctx, msgs.MsgNoTransferParams)
 	}
+	total := big.NewInt(0)
 	for i, param := range params {
 		if param.To == "" {
 			return i18n.NewError(ctx, msgs.MsgNoParamTo, i)
@@ -77,10 +78,12 @@ func validateTransferParams(ctx context.Context, params []*types.TransferParamEn
 		if param.Amount.Int().Sign() != 1 {
 			return i18n.NewError(ctx, msgs.MsgParamAmountInRange, i)
 		}
-		if param.Amount.Int().Cmp(MAX_TRANSFER_AMOUNT) >= 0 {
-			return i18n.NewError(ctx, msgs.MsgParamAmountInRange, i)
-		}
+		total.Add(total, param.Amount.Int())
 	}
+	if total.Cmp(MAX_TRANSFER_AMOUNT) >= 0 {
+		return i18n.NewError(ctx, msgs.MsgParamTotalAmountInRange)
+	}
+
 	return nil
 }
 
