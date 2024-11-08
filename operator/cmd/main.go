@@ -95,6 +95,7 @@ func main() {
 		TLSOpts: tlsOpts,
 	})
 	namespace := getWatchNamespace()
+	setupLog.Info("watching namespace", "namespace", namespace)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
@@ -127,8 +128,9 @@ func main() {
 	}
 
 	if err = (&controller.PaladinReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Changes: controller.NewInFlight(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Paladin")
 		os.Exit(1)

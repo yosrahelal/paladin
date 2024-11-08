@@ -87,26 +87,37 @@ extra:
     property: !ENV GOOGLE_ANALYTICS_KEY
   version:
     provider: mike
+  generator: false
 exclude_docs: |
   _includes/
 nav:
-  - Introduction: index.md
-  - Concepts:
-    - Concept 1: concepts/concept-1.md
-    - Concept 2: concepts/concept-2.md
-    - Concept 3: concepts/concept-3.md
+  - Introduction:
+    - Introduction: index.md
+    - Privacy Preserving Tokens: concepts/tokens.md
+    - Private EVM Smart Contracts: concepts/private_evm.md
+    - Advanced Cryptography: concepts/advanced_crypto.md
+    - Atomic EVM Programmability: concepts/atomic_programmability.md
+    - Full Enterprise Privacy Stack: concepts/full_stack.md
+    - Cloud Native Runtime: concepts/cloud_native.md
+  - Architecture:
+    - Overview: architecture/overview.md
+    - Programming model: architecture/programming_model.md
+    - Domains: architecture/domains.md
+    - Zeto - ZKP Tokens: architecture/zeto.md
+    - Noto - Notarized Tokens: architecture/noto.md
+    - Pente - EVM Privacy Groups: architecture/pente.md
+    - Key management: architecture/key_management.md
+    - State store: architecture/state_store.md
+    - Atomic interop: architecture/atomic_interop.md
+    - Data Transports & Registry: architecture/data_and_registry.md
+    - Ledger Layers: architecture/ledger_layers.md
   - Getting Started:
     - Installation: getting-started/installation.md
-    - Running: getting-started/running.md
+    - User Interface: getting-started/user-interface.md
   - Tutorials:
     - Introduction: tutorials/index.md
-    - Tutorial 1: tutorials/tutorial-1.md
-    - Tutorial 2: tutorials/tutorial-2.md
-    - Tutorial 3: tutorials/tutorial-3.md
-  - Guides:
-    - Operations: guides/operations.md
-    - Developers: guides/developers.md
-    - Upgrading: guides/upgrading.md
+    - Bond Issuance: tutorials/bond-issuance.md
+    - Wholesale CBDC: tutorials/zkp-cbdc.md
   - Reference:
     - APIs: reference/apis/*.md
     - Types: reference/types/*.md

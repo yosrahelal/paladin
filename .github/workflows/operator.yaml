@@ -1,16 +1,15 @@
 name: Paladin Operator Build
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'operator/**'
-  # pull_request:
+  # push:
+  #   branches:
+  #     - main
   #   paths:
   #     - 'operator/**'
+  pull_request:
+    paths:
+      - 'operator/**'
   workflow_dispatch:
-
 
 jobs:
   operator-build:
@@ -20,17 +19,38 @@ jobs:
       NAMESPACE: paladin
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
 
+      # Install protoc only on non-Windows systems
+      - name: Install protoc
+        run: |
+          PB_REL="https://github.com/protocolbuffers/protobuf/releases"
+          curl -LO $PB_REL/download/v25.1/protoc-25.1-linux-x86_64.zip
+          unzip protoc-25.1-linux-x86_64.zip -d protoc
+          echo "${PWD}/protoc/bin" >> $GITHUB_PATH
+
+      # Set up Java
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 21
+
+      # Set up Go
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
           check-latest: true
+          cache-dependency-path: |
+            **/*.sum
+
+      # Set up Gradle
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       # - name: Go Lint
       #   working-directory: operator
@@ -40,16 +60,14 @@ jobs:
       #   working-directory: operator
       #   run: make test
 
-      - name: Create Kubernetes Kind Cluster
+      - name: Install Kind
         uses: helm/kind-action@v1
         with:
           install_only: true # only install kind, the cluster creation is managed by the deploy step
           ignore_failed_clean: true
 
-      - name: E2E Operator
-        working-directory: operator
-        run: gradle e2e -PclusterName=${{ env.CLUSTER_NAME }} -Pnamespace=${{ env.NAMESPACE }} 
+      - name: Deploy Operator
+        run: ./gradlew deploy -PclusterName=${{ env.CLUSTER_NAME }} -Pnamespace=${{ env.NAMESPACE }} 
 
       - name: Uninstall Operator
-        working-directory: operator
-        run: gradle clean -PclusterName=${{ env.CLUSTER_NAME }} -Pnamespace=${{ env.NAMESPACE }} -PdeleteCluster=true
+        run: ./gradlew clean -PclusterName=${{ env.CLUSTER_NAME }} -Pnamespace=${{ env.NAMESPACE }} -PdeleteCluster=true

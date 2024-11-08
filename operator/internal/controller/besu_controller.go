@@ -156,7 +156,7 @@ func (r *BesuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	log.Info("Created Besu StatefulSet", "Name", ss.Name, "Namespace", ss.Namespace)
 
 	// Update condition to Succeeded
-	node.Status.Phase = corev1alpha1.StatusPhaseCompleted
+	node.Status.Phase = corev1alpha1.StatusPhaseReady
 
 	return ctrl.Result{}, nil
 }
@@ -605,6 +605,30 @@ func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, na
 								},
 							},
 							Env: buildEnv(r.config.Besu.Envs),
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{
+											"sh",
+											"-c",
+											"pidof java",
+										},
+									},
+								},
+								InitialDelaySeconds: 3,
+								TimeoutSeconds:      1,
+								PeriodSeconds:       2,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									TCPSocket: &corev1.TCPSocketAction{
+										Port: intstr.FromInt(8545),
+									},
+								},
+								InitialDelaySeconds: 5,
+								TimeoutSeconds:      2,
+								PeriodSeconds:       5,
+							},
 						},
 					},
 					Volumes: []corev1.Volume{

@@ -54,8 +54,8 @@ type TradeRequestInput struct {
 }
 
 type StateData struct {
-	Inputs  []*pldapi.StateWithData `json:"inputs"`
-	Outputs []*pldapi.StateWithData `json:"outputs"`
+	Inputs  []*pldapi.StateEncoded `json:"inputs"`
+	Outputs []*pldapi.StateEncoded `json:"outputs"`
 }
 
 func DeploySwap(

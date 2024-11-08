@@ -77,7 +77,7 @@ const EVMPrivateTransaction: React.FC<EVMTxnProps> = ({
     enabled: !!dataString,
     queryKey: ["decodeEVMCall", transactionId],
     queryFn: () => fetchDecodedCallData(dataString),
-    retry: false
+    retry: true
   });
 
   return (
@@ -136,7 +136,7 @@ const EVMPrivateLog: React.FC<EVMLogProps> = ({
     enabled: !!log.topics && !!log.data,
     queryKey: ["decodeEVMLog", transactionId, logIndex],
     queryFn: () => fetchDecodedEvent(log.topics!, log.data!),
-    retry: false
+    retry: true
   });
 
   return (

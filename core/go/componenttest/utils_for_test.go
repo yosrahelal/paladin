@@ -279,7 +279,14 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	//i.conf.DB.SQLite.DSN = "./sql." + i.name + ".db"
 	//uncomment to use postgres - TODO once all tests are using postgres, we can parameterize this and run in both modes
 	//i.conf.DB.Type = "postgres"
-	i.conf.Log.Level = confutil.P("debug")
+	i.conf.Log = pldconf.LogConfig{
+		Level:  confutil.P("debug"),
+		Output: confutil.P("file"),
+		File: pldconf.LogFileConfig{
+			Filename: confutil.P("build/testbed.component-test.log"),
+		},
+	}
+	log.InitConfig(&i.conf.Log)
 
 	if i.conf.DB.Type == "postgres" {
 		dns, cleanUp := initPostgres(t, context.Background())

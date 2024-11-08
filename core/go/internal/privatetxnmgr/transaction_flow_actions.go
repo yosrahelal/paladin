@@ -104,6 +104,10 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 			tf.logActionInfo(ctx, "Transaction not assembled. Waiting for assembler to return")
 			return
 		}
+		if tf.transaction.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_REVERT {
+			log.L(ctx).Infof("Transaction %s reverted. Waiting for revert event to be processed", tf.transaction.ID.String())
+			return
+		}
 	}
 
 	// Must be signed on the same node as it was assembled so do this before considering whether to delegate

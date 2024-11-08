@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { fetchEvents } from "../queries/events";
@@ -24,14 +24,23 @@ import { ApplicationContext } from "../contexts/ApplicationContext";
 import { altDarkModeScrollbarStyle, altLightModeScrollbarStyle } from "../themes/default";
 
 export const Events: React.FC = () => {
+
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
-  const { data: events } = useQuery({
+  const theme = useTheme();
+  const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
+
+  const { data: events, error, isFetching } = useQuery({
     queryKey: ["events", lastBlockWithTransactions],
     queryFn: () => fetchEvents(),
   });
 
-  const theme = useTheme();
-  const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
+  if(isFetching) {
+    return <></>;
+  }
+
+  if (error) {
+    return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
+  }
 
   return (
     <>

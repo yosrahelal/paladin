@@ -211,7 +211,7 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 			for i, state := range req.Outputs {
 				outputIDs[i] = state.Id
 			}
-			data, err := h.noto.encodeTransactionData(req.Transaction, req.Info)
+			data, err := h.noto.encodeTransactionData(ctx, req.Transaction, req.Info)
 			if err != nil {
 				return nil, err
 			}
@@ -267,7 +267,7 @@ func (h *transferHandler) baseLedgerTransfer(ctx context.Context, tx *types.Pars
 		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 
-	data, err := h.noto.encodeTransactionData(req.Transaction, req.InfoStates)
+	data, err := h.noto.encodeTransactionData(ctx, req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +349,7 @@ func (h *transferHandler) hookTransfer(ctx context.Context, tx *types.ParsedTran
 }
 
 func (h *transferHandler) makeExtraData(ctx context.Context, withApprovalTX *TransactionWrapper, req *prototk.PrepareTransactionRequest) ([]byte, error) {
-	data, err := h.noto.encodeTransactionData(req.Transaction, req.InfoStates)
+	data, err := h.noto.encodeTransactionData(ctx, req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, err
 	}

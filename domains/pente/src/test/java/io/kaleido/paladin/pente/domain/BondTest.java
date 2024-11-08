@@ -35,7 +35,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class BondTest {
 
-    private final Testbed.Setup testbedSetup = new Testbed.Setup("../../core/go/db/migrations/sqlite", 5000);
+    private final Testbed.Setup testbedSetup = new Testbed.Setup(
+            "../../core/go/db/migrations/sqlite",
+            "build/testbed.java-bond.log",
+            5000);
 
     JsonHex.Address deployPenteFactory() throws Exception {
         try (Testbed deployBed = new Testbed(testbedSetup)) {
@@ -220,6 +223,7 @@ public class BondTest {
             var bondSubscription = BondSubscriptionHelper.deploy(aliceCustodianInstance, alice, new HashMap<>() {{
                 put("bondAddress_", notoBond.address());
                 put("units_", 1000);
+                put("custodian_", custodianAddress);
             }});
 
             // Prepare the bond transfer (requires 2 calls to prepare, as the Noto transaction spawns a Pente transaction to wrap it)
@@ -258,7 +262,7 @@ public class BondTest {
             // so that it requires approval.
 
             // Alice receives full bond distribution
-            bondSubscription.distribute(alice, 1000);
+            bondSubscription.distribute(bondCustodian, 1000);
 
             // TODO: figure out how to test negative cases (such as when Pente reverts due to a non-allowed investor)
 
