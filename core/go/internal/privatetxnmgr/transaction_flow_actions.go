@@ -622,6 +622,7 @@ func (tf *transactionFlow) requestVerifierResolution(ctx context.Context) {
 		tf.transaction.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, 0, len(tf.transaction.PreAssembly.RequiredVerifiers))
 	}
 	for _, v := range tf.transaction.PreAssembly.RequiredVerifiers {
+		tf.logActionDebugf(ctx, "Resolving verifier %s", v.Lookup)
 		tf.identityResolver.ResolveVerifierAsync(
 			ctx,
 			v.Lookup,

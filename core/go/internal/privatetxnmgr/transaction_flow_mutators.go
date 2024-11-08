@@ -134,6 +134,8 @@ func (tf *transactionFlow) applyTransactionSignedEvent(ctx context.Context, even
 
 func (tf *transactionFlow) applyTransactionEndorsedEvent(ctx context.Context, event *ptmgrtypes.TransactionEndorsedEvent) {
 	tf.latestEvent = "TransactionEndorsedEvent"
+	log.L(ctx).Debugf("transactionFlow:applyTransactionEndorsedEvent: TransactionID: '%s' IdempotencyKey: '%s' Party: %s ", event.TransactionID, event.IdempotencyKey, event.Party)
+
 	//if this response does not match a pending request, then we ignore it
 	pendingRequestsForAttRequestName, ok := tf.pendingEndorsementRequests[event.AttestationRequestName]
 	if !ok {
