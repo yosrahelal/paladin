@@ -22,6 +22,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Set up Go
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+          cache-dependency-path: |
+            **/*.sum
+
       - name: Setup Docs Deploy
         run: |
           git config --global user.name "GitHub Actions"
@@ -37,6 +46,10 @@ jobs:
       - name: Install docs dependencies
         working-directory: doc-site
         run: pip install -r requirements.txt
+
+      - name: Build CRD Reference Docs
+        working-directory: operator
+        run: make generate-reference-docs
 
       - name: Update doc site for release
         if: github.event.action == 'released' && github.ref_name != env.LATEST_TAG

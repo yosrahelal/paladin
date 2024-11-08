@@ -4,6 +4,18 @@ The tutorials on this page provide a starting point for running code on top of P
 
 If you haven't already, you should visit [Getting Started](../getting-started/installation/) to
 ensure you're familiar with running Paladin before walking through any of the tutorials.
+```
+
+## Pre-requisites
+
+* git
+* [NodeJS 20.x or newer](https://nodejs.org/en/download/package-manager) installed
+
+Clone the Paladin repository to access the examples:
+
+```shell
+git clone https://github.com/LF-Decentralized-Trust-labs/paladin.git
+```
 
 <div class="grid cards" markdown>
 

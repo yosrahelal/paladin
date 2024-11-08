@@ -275,7 +275,7 @@ $(CRD_REF_DOCS): $(LOCALBIN)
 
 .PHONY: generate-reference-docs
 generate-reference-docs: crd-ref-docs ## Generate API reference documentation.
-	${CRD_REF_DOCS} --source-path "${PWD}/api/" --config "${PWD}/docs/config.yaml" --renderer=markdown --output-path="${PWD}/docs/api.md"
+	${CRD_REF_DOCS} --source-path "${PWD}/api/" --config "${PWD}/docs/config.yaml" --renderer=markdown --output-path="${PWD}/../doc-site/docs/reference/crds/api.md"
 
 ##@ Paladin Operator
 
