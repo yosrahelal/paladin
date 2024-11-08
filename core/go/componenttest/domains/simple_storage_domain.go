@@ -368,7 +368,7 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 
 		}
 
-		endorseSetTransaction := func(ctx context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
+		endorseSetTransaction := func(_ context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
 			_, config, _ := validateSimpleStorageSetInput(req.Transaction)
 
 			//notaryLocator := config.NotaryLocator
