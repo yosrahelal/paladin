@@ -67,7 +67,7 @@ export const fetchEvents = async (pageParam?: IEvent): Promise<IEvent[]> => {
           }
         ]
       }
-    ]
+    ];
   }
 
   return <Promise<IEvent[]>>(

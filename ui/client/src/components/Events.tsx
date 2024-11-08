@@ -49,7 +49,7 @@ export const Events: React.FC = () => {
         {t("events")}
       </Typography>
       <Box
-        id="scrollableDiv"
+        id="scrollableDivEvents"
         sx={{
           height: "calc(100vh - 170px)",
           paddingRight: "15px",
@@ -57,7 +57,7 @@ export const Events: React.FC = () => {
         }}
       >
         <InfiniteScroll
-          scrollableTarget="scrollableDiv"
+          scrollableTarget="scrollableDivEvents"
           dataLength={events.pages.length}
           next={() => fetchNextPage()}
           hasMore={hasNextPage}
