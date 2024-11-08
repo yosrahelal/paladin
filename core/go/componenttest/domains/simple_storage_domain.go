@@ -41,14 +41,17 @@ const (
 	SimpleStorageDomainTooManyStates          = "SDE0102"
 )
 
-// Note, here we're simulating a domain that choose to support versions of a "Transfer" function
-// with "string" types (rather than "address") for the from/to address and to ask Paladin to do
-// verifier resolution for these. The same domain could also support "address" type inputs/outputs
-// in the same ABI.
+// The set function sets ( or overwrites) the value for a given key in the map
+// If no state for the given map name exists, this function will fail
+// Key may be already present in the map, or not.
 const simpleStorageSetABI = `{
 		"type": "function",
 		"name": "set",
 		"inputs": [
+		  {
+		    "name": "map",
+			"type": "string"
+		  },
 		  {
 		    "name": "key",
 			"type": "string"
@@ -64,6 +67,28 @@ const simpleStorageSetABI = `{
 func SimpleStorageSetABI() *abi.ABI {
 	return &abi.ABI{mustParseABIEntry(simpleStorageSetABI)}
 }
+
+const simpleStorageSetFunctionSignature = "function set(string memory map, string memory key, string memory value) external { }"
+
+// The init function initializes a new map
+// this fails if there is already a state for the given map name
+const simpleStorageInitABI = `{
+	"type": "function",
+	"name": "init",
+	"inputs": [
+	  {
+		"name": "map",
+		"type": "string"
+	  }
+	],
+	"outputs": null
+}`
+
+func SimpleStorageInitABI() *abi.ABI {
+	return &abi.ABI{mustParseABIEntry(simpleStorageInitABI)}
+}
+
+const simpleStorageInitFunctionSignature = "function init(string memory map) external { }"
 
 // ABI used by paladin to parse the constructor parameters
 // different for each endorsement mode
@@ -114,22 +139,32 @@ type SimpleStorageFactoryParameters struct {
 
 // JSON structure passed into the paladin transaction for the storage set function
 type simpleStorageSetParser struct {
-	From  string `json:"from,omitempty"`
-	To    string `json:"to,omitempty"`
+	Map   string `json:"map"`
 	Key   string `json:"key"`
 	Value string `json:"value"`
+}
+
+// JSON structure passed into the paladin transaction for the storage init function
+type simpleStorageInitParser struct {
+	Map string `json:"map"`
 }
 
 // JSON structure for the state data
 type StorageState struct {
 	Salt    tktypes.HexBytes `json:"salt"`
 	Records string           `json:"records"` //JSON string that can be parsed as a map of keys to values of StorageRecord
+	Map     string           `json:"map"`
 }
 
 const simpleStorageStateSchema = `{
 	"type": "tuple",
 	"internalType": "struct SimpleStorage",
 	"components": [
+	    {
+			"name": "map",
+			"type": "string",
+			"indexed": true
+		},
 		{
 			"name": "salt",
 			"type": "bytes32"
@@ -162,13 +197,19 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 	return plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
 
 		var simpleStorageSchemaID string
-		getAllStates := func(ctx context.Context, stateQueryContext string) ([]*prototk.StoredState, error) {
+		getAllStates := func(ctx context.Context, stateQueryContext string, mapName string) ([]*prototk.StoredState, error) {
 			var lastStateTimestamp int64
-			// There is only one state per domain instance
+			// There is only one state per map name per domain instance
 			jq := &query.QueryJSON{
-				Limit:      confutil.P(10),
-				Sort:       []string{".created"},
-				Statements: query.Statements{},
+				Limit: confutil.P(10),
+				Sort:  []string{".created"},
+				Statements: query.Statements{
+					Ops: query.Ops{
+						Eq: []*query.OpSingleVal{
+							{Op: query.Op{Field: "map"}, Value: tktypes.JSONString(mapName)},
+						},
+					},
+				},
 			}
 			if lastStateTimestamp > 0 {
 				jq.GT = []*query.OpSingleVal{
@@ -187,20 +228,27 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 			return res.States, nil
 
 		}
-		simpleStorageSelection := func(ctx context.Context, stateQueryContext string) (*StorageState, *prototk.StateRef, error) {
+		simpleStorageSelection := func(ctx context.Context, stateQueryContext string, mapName string) (*StorageState, *prototk.StateRef, error) {
 			var lastStateTimestamp int64
 			// There is only one state per domain instance
 			// (might be more realistic emulation of the Pente domain if we had one state per record / key name?)
 			jq := &query.QueryJSON{
-				Limit:      confutil.P(10),
-				Sort:       []string{".created"},
-				Statements: query.Statements{},
+				Limit: confutil.P(10),
+				Sort:  []string{".created"},
+				Statements: query.Statements{
+					Ops: query.Ops{
+						Eq: []*query.OpSingleVal{
+							{Op: query.Op{Field: "map"}, Value: tktypes.JSONString(mapName)},
+						},
+					},
+				},
 			}
 			if lastStateTimestamp > 0 {
 				jq.GT = []*query.OpSingleVal{
 					{Op: query.Op{Field: ".created"}, Value: tktypes.RawJSON(strconv.FormatInt(lastStateTimestamp, 10))},
 				}
 			}
+
 			res, err := callbacks.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
 				StateQueryContext: stateQueryContext,
 				SchemaId:          simpleStorageSchemaID,
@@ -249,6 +297,116 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 			return contractAddr, config, &inputs
 		}
 
+		validateSimpleStorageInitInput := func(tx *prototk.TransactionSpecification) (*ethtypes.Address0xHex, simpleStorageConfigParser, *simpleStorageInitParser) {
+			//assert.JSONEq(t, simpleTokenTransferABI, tx.FunctionAbiJson)
+			//assert.Equal(t, "function transfer(string memory from, string memory to, uint256 amount) external { }", tx.FunctionSignature)
+			var inputs simpleStorageInitParser
+			err := json.Unmarshal([]byte(tx.FunctionParamsJson), &inputs)
+			require.NoError(t, err)
+
+			contractAddr, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
+			require.NoError(t, err)
+
+			require.NoError(t, err)
+			var config simpleStorageConfigParser
+			err = json.Unmarshal([]byte(tx.ContractInfo.ContractConfigJson), &config)
+			require.NoError(t, err)
+
+			return contractAddr, config, &inputs
+		}
+
+		endorseInitTransaction := func(ctx context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
+			_, config, txInputs := validateSimpleStorageInitInput(req.Transaction)
+
+			states, err := getAllStates(ctx, req.StateQueryContext, txInputs.Map)
+			if err != nil {
+				return nil, err
+			}
+			if len(states) > 0 {
+				// if there is only one state and it is the output of this transaction then it is valid to have no inputs
+				// otherwise it is an error
+				if len(states) == 1 && states[0].Id == req.Outputs[0].Id {
+				} else {
+					return &prototk.EndorseTransactionResponse{
+						EndorsementResult: prototk.EndorseTransactionResponse_REVERT,
+						RevertReason:      confutil.P("already initialised"),
+					}, nil
+				}
+			}
+
+			if len(req.Outputs) != 1 {
+				return nil, fmt.Errorf("endorseSetTransaction: invalid number of outputs [%d]", len(req.Outputs))
+			}
+
+			if len(req.Inputs) == 1 {
+				inputState := &StorageState{}
+				if err := json.Unmarshal([]byte(req.Inputs[0].StateDataJson), &inputState); err != nil {
+					return nil, fmt.Errorf("endorseSetTransaction: invalid input (%s): %s", req.Inputs[0].Id, err)
+				}
+				assert.Equal(t, simpleStorageSchemaID, req.Inputs[0].SchemaId)
+
+			}
+
+			outputState := &StorageState{}
+			//TODO should validate that the diffs between inputState and outputState match the txInputs
+
+			if err := json.Unmarshal([]byte(req.Outputs[0].StateDataJson), &outputState); err != nil {
+				return nil, fmt.Errorf("invalid output (%s): %s", req.Outputs[0].Id, err)
+			}
+			assert.Equal(t, simpleStorageSchemaID, req.Outputs[0].SchemaId)
+
+			switch config.EndorsementMode {
+			case PrivacyGroupEndorsement:
+				return &prototk.EndorseTransactionResponse{
+					EndorsementResult: prototk.EndorseTransactionResponse_SIGN,
+					Payload:           tktypes.RandBytes(32),
+				}, nil
+			default:
+				return nil, fmt.Errorf("unsupported endorsement mode: %s", config.EndorsementMode)
+
+			}
+
+		}
+
+		endorseSetTransaction := func(ctx context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
+			_, config, _ := validateSimpleStorageSetInput(req.Transaction)
+
+			//notaryLocator := config.NotaryLocator
+			//senderAddr, fromAddr, toAddr := extractTransferVerifiers(req.Transaction, txInputs, req.ResolvedVerifiers)
+			//assert.Equal(t, req.EndorsementVerifier.Lookup, req.EndorsementRequest.Parties[0])
+			//assert.Equal(t, req.EndorsementVerifier.Lookup, notaryLocator)
+			if len(req.Inputs) != 1 {
+				return nil, fmt.Errorf("endorseSetTransaction: invalid number of inputs [%d]", len(req.Inputs))
+			}
+			if len(req.Outputs) != 1 {
+				return nil, fmt.Errorf("endorseSetTransaction: invalid number of outputs [%d]", len(req.Outputs))
+			}
+
+			inputState := &StorageState{}
+			if err := json.Unmarshal([]byte(req.Inputs[0].StateDataJson), &inputState); err != nil {
+				return nil, fmt.Errorf("invalid input (%s): %s", req.Inputs[0].Id, err)
+			}
+			assert.Equal(t, simpleStorageSchemaID, req.Inputs[0].SchemaId)
+
+			outputState := &StorageState{}
+			//TODO should validate that the diffs between inputState and outputState match the txInputs
+
+			if err := json.Unmarshal([]byte(req.Outputs[0].StateDataJson), &outputState); err != nil {
+				return nil, fmt.Errorf("invalid output (%s): %s", req.Outputs[0].Id, err)
+			}
+			assert.Equal(t, simpleStorageSchemaID, req.Outputs[0].SchemaId)
+
+			switch config.EndorsementMode {
+			case PrivacyGroupEndorsement:
+				return &prototk.EndorseTransactionResponse{
+					EndorsementResult: prototk.EndorseTransactionResponse_SIGN,
+					Payload:           tktypes.RandBytes(32),
+				}, nil
+			default:
+				return nil, fmt.Errorf("unsupported endorsement mode: %s", config.EndorsementMode)
+			}
+		}
+
 		return &plugintk.DomainAPIBase{Functions: &plugintk.DomainAPIFunctions{
 
 			ConfigureDomain: func(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
@@ -273,7 +431,7 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 			InitDomain: func(ctx context.Context, req *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error) {
 				assert.Len(t, req.AbiStateSchemas, 1)
 				simpleStorageSchemaID = req.AbiStateSchemas[0].Id
-				assert.Equal(t, "type=SimpleStorage(bytes32 salt,string records),labels=[]", req.AbiStateSchemas[0].Signature)
+				assert.Equal(t, "type=SimpleStorage(string map,bytes32 salt,string records),labels=[map]", req.AbiStateSchemas[0].Signature)
 				return &prototk.InitDomainResponse{}, nil
 			},
 
@@ -379,7 +537,16 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 			},
 
 			InitTransaction: func(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
-				_, config, txInputs := validateSimpleStorageSetInput(req.Transaction)
+				var config simpleStorageConfigParser
+				switch req.Transaction.FunctionSignature {
+				case simpleStorageInitFunctionSignature:
+					_, config, _ = validateSimpleStorageInitInput(req.Transaction)
+				case simpleStorageSetFunctionSignature:
+					_, config, _ = validateSimpleStorageSetInput(req.Transaction)
+				default:
+					return nil, fmt.Errorf("unknown function signature %s", req.Transaction.FunctionSignature)
+
+				}
 
 				requiredVerifiers := []*prototk.ResolveVerifierRequest{
 					{
@@ -387,22 +554,6 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 						Algorithm:    algorithms.ECDSA_SECP256K1,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
-				}
-				// We require ethereum addresses for the "from" and "to" addresses to actually
-				// execute the transaction. See notes above about this.
-				if txInputs.From != "" {
-					requiredVerifiers = append(requiredVerifiers, &prototk.ResolveVerifierRequest{
-						Lookup:       txInputs.From,
-						Algorithm:    algorithms.ECDSA_SECP256K1,
-						VerifierType: verifiers.ETH_ADDRESS,
-					})
-				}
-				if txInputs.To != "" && (txInputs.From == "" || txInputs.From != txInputs.To) {
-					requiredVerifiers = append(requiredVerifiers, &prototk.ResolveVerifierRequest{
-						Lookup:       txInputs.To,
-						Algorithm:    algorithms.ECDSA_SECP256K1,
-						VerifierType: verifiers.ETH_ADDRESS,
-					})
 				}
 
 				switch config.EndorsementMode {
@@ -425,29 +576,54 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 			},
 
 			AssembleTransaction: func(ctx context.Context, req *prototk.AssembleTransactionRequest) (_ *prototk.AssembleTransactionResponse, err error) {
-				_, config, txInputs := validateSimpleStorageSetInput(req.Transaction)
 
-				//_, fromAddr, toAddr := extractTransferVerifiers(req.Transaction, txInputs, req.ResolvedVerifiers)
-
-				stateToSpend, stateRefToSpend, err := simpleStorageSelection(ctx, req.StateQueryContext)
-				if err != nil {
-					return nil, err
-				}
-
-				stateRefsToSpend := make([]*prototk.StateRef, 0)
+				var config simpleStorageConfigParser
 				storage := make(map[string]string)
-				if stateToSpend != nil {
+				stateRefsToSpend := make([]*prototk.StateRef, 0)
+				var mapName string
+				switch req.Transaction.FunctionSignature {
+				case simpleStorageInitFunctionSignature:
+					_, c, txInputs := validateSimpleStorageInitInput(req.Transaction)
+					config = c
+					mapName = txInputs.Map
+
+					existingState, _, err := simpleStorageSelection(ctx, req.StateQueryContext, mapName)
+					if err != nil {
+						return nil, err
+					}
+					if existingState != nil {
+						return nil, fmt.Errorf("state already exists")
+					}
+
+				case simpleStorageSetFunctionSignature:
+					_, c, txInputs := validateSimpleStorageSetInput(req.Transaction)
+					config = c
+					mapName = txInputs.Map
+
+					stateToSpend, stateRefToSpend, err := simpleStorageSelection(ctx, req.StateQueryContext, mapName)
+					if err != nil {
+						return nil, err
+					}
+
+					if stateToSpend == nil {
+						return nil, fmt.Errorf("no state available for map %s ", mapName)
+					}
+
 					stateRefsToSpend = append(stateRefsToSpend, stateRefToSpend)
 					if err := json.Unmarshal([]byte(stateToSpend.Records), &storage); err != nil {
 						return nil, fmt.Errorf("invalid state data: %s", err)
 					}
-				}
 
-				storage[txInputs.Key] = txInputs.Value
+					storage[txInputs.Key] = txInputs.Value
+				default:
+					return nil, fmt.Errorf("unknown function signature %s", req.Transaction.FunctionSignature)
+
+				}
 
 				newStateData := &StorageState{
 					Records: toJSONString(t, storage),
 					Salt:    tktypes.RandBytes(32),
+					Map:     mapName,
 				}
 				newState := &prototk.NewState{
 					SchemaId:         simpleStorageSchemaID,
@@ -498,66 +674,16 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 			},
 
 			EndorseTransaction: func(ctx context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
-				_, config, _ := validateSimpleStorageSetInput(req.Transaction)
-				//notaryLocator := config.NotaryLocator
-				//senderAddr, fromAddr, toAddr := extractTransferVerifiers(req.Transaction, txInputs, req.ResolvedVerifiers)
-				//assert.Equal(t, req.EndorsementVerifier.Lookup, req.EndorsementRequest.Parties[0])
-				//assert.Equal(t, req.EndorsementVerifier.Lookup, notaryLocator)
-				if len(req.Inputs) == 0 {
-					//We allow 0 in the special case of the first transaction
-					//TODO is that a faithful emulation of the pente domain?
-					states, err := getAllStates(ctx, req.StateQueryContext)
-					if err != nil {
-						return nil, err
-					}
-					if len(states) > 0 {
-						// if there is only one state and it is the output of this transaction then it is valid to have no inputs
-						// otherwise it is an error
-						if len(states) == 1 && states[0].Id == req.Outputs[0].Id {
-						} else {
-							return &prototk.EndorseTransactionResponse{
-								EndorsementResult: prototk.EndorseTransactionResponse_REVERT,
-								RevertReason:      confutil.P("already initialised"),
-							}, nil
-						}
-					}
 
-				} else if len(req.Inputs) > 1 {
-
-					return nil, fmt.Errorf("invalid number of inputs [%d]", len(req.Inputs))
-				}
-				if len(req.Outputs) != 1 {
-					return nil, fmt.Errorf("invalid number of outputs [%d]", len(req.Outputs))
-				}
-
-				if len(req.Inputs) == 1 {
-					inputState := &StorageState{}
-					if err := json.Unmarshal([]byte(req.Inputs[0].StateDataJson), &inputState); err != nil {
-						return nil, fmt.Errorf("invalid input (%s): %s", req.Inputs[0].Id, err)
-					}
-					assert.Equal(t, simpleStorageSchemaID, req.Inputs[0].SchemaId)
-
-				}
-
-				outputState := &StorageState{}
-				//TODO should validate that the diffs between inputState and outputState match the txInputs
-
-				if err := json.Unmarshal([]byte(req.Outputs[0].StateDataJson), &outputState); err != nil {
-					return nil, fmt.Errorf("invalid output (%s): %s", req.Outputs[0].Id, err)
-				}
-				assert.Equal(t, simpleStorageSchemaID, req.Outputs[0].SchemaId)
-
-				switch config.EndorsementMode {
-				case PrivacyGroupEndorsement:
-					return &prototk.EndorseTransactionResponse{
-						EndorsementResult: prototk.EndorseTransactionResponse_SIGN,
-						Payload:           tktypes.RandBytes(32),
-					}, nil
+				switch req.Transaction.FunctionSignature {
+				case simpleStorageInitFunctionSignature:
+					return endorseInitTransaction(ctx, req)
+				case simpleStorageSetFunctionSignature:
+					return endorseSetTransaction(ctx, req)
 				default:
-					return nil, fmt.Errorf("unsupported endorsement mode: %s", config.EndorsementMode)
+					return nil, fmt.Errorf("unknown function signature %s", req.Transaction.FunctionSignature)
 
 				}
-
 			},
 
 			PrepareTransaction: func(ctx context.Context, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
