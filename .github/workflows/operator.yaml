@@ -1,11 +1,11 @@
 name: Paladin Operator Build
 
 on:
-  # push:
-  #   branches:
-  #     - main
-  #   paths:
-  #     - 'operator/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'operator/**'
   pull_request:
     paths:
       - 'operator/**'
