@@ -20,10 +20,8 @@ const paladin3 = new PaladinClient({
 
 async function main() {
   const cbdcIssuer = "centralbank@node3";
-  const bank1Unqualified = "bank1";
-  const bank1 = `${bank1Unqualified}@node1`;
-  const bank2Unqualified = "bank2";
-  const bank2 = `${bank2Unqualified}@node2`;
+  const bank1 = `bank1@node1`;
+  const bank2 = `bank2@node2`;
 
   // Deploy a Zeto token to represent cash (CBDC)
   logger.log("Deploying Zeto CBDC token...");
