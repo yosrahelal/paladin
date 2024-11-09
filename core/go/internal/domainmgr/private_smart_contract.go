@@ -74,6 +74,7 @@ func (d *domain) initSmartContract(ctx context.Context, def *PrivateSmartContrac
 		ContractConfig:  def.ConfigBytes,
 	})
 	if err != nil {
+		log.L(ctx).Errorf("Error initializing smart contract address: %s with config %s :  %s", def.Address, def.ConfigBytes.HexString(), err.Error())
 		return pscInitError, nil, err
 	}
 	if !res.Valid {

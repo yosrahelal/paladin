@@ -30,7 +30,7 @@ type Graph interface {
 	AddTransaction(ctx context.Context, transaction ptmgrtypes.TransactionFlow)
 	GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.DispatchableTransactions, error)
 	RemoveTransaction(ctx context.Context, txID string)
-	RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions)
+	RemoveTransactions(ctx context.Context, transactionsToRemove []string)
 	IncludesTransaction(txID string) bool
 }
 
@@ -138,7 +138,7 @@ func (g *graph) GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.Dis
 	queue := make([]int, 0, len(g.transactionsMatrix))
 	//find all independent transactions - that have no input states in this graph and then do a breadth first search
 	// of each of them to find all of its dependent transactions that are also dispatchable and recurse
-	dispatchable := make([]string, 0, len(g.transactionsMatrix))
+	dispatchable := make([]ptmgrtypes.TransactionFlow, 0, len(g.transactionsMatrix))
 	//i.e. the input states are the output of transactions that are either in the dispatch stage or have been confirmed
 
 	// calcaulate the number of dependencies of each transaction
@@ -182,7 +182,7 @@ func (g *graph) GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.Dis
 		}
 
 		//transaction can be dispatched
-		dispatchable = append(dispatchable, g.transactions[nextTransaction].ID(ctx).String())
+		dispatchable = append(dispatchable, g.transactions[nextTransaction])
 
 		//get this transaction's dependencies
 		dependencies := g.transactionsMatrix[nextTransaction]
@@ -206,22 +206,22 @@ func (g *graph) GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.Dis
 	// across signing keys
 
 	if len(dispatchable) > 0 {
-		signingAddress := g.allTransactions[dispatchable[0]].Signer(ctx)
+		signingAddress := g.allTransactions[dispatchable[0].ID(ctx).String()].Signer(ctx)
 		log.L(ctx).Debugf("Graph.GetDispatchableTransactions %d dispatchable transactions", len(dispatchable))
-		return map[string][]string{
+		return map[string][]ptmgrtypes.TransactionFlow{
 			signingAddress: dispatchable,
 		}, nil
 	}
 	log.L(ctx).Debug("Graph.GetDispatchableTransactions No dispatchable transactions")
 
-	return map[string][]string{}, nil
+	return map[string][]ptmgrtypes.TransactionFlow{}, nil
 }
 func (g *graph) RemoveTransaction(ctx context.Context, txID string) {
 	log.L(ctx).Debugf("Graph.RemoveTransaction Removing transaction %s from graph", txID)
 	delete(g.allTransactions, txID)
 }
 
-func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions) {
+func (g *graph) RemoveTransactions(ctx context.Context, transactionIDsToRemove []string) {
 	log.L(ctx).Debugf("Graph.RemoveTransactions Removing transactions from graph")
 	// no validation performed here
 	// it is valid to remove transactions that have dependents.  In fact that is normal.
@@ -230,13 +230,11 @@ func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove ptm
 	// maybe they got reverted before being endorsed or whatever it is not the concern of the graph to validate this
 	// the graph just gets redrawn based on the dependencies that remain after a transaction is removed
 
-	for _, sequence := range transactionsToRemove {
-		for _, txID := range sequence {
-			if g.allTransactions[txID] == nil {
-				log.L(ctx).Infof("Transaction %s already removed", txID)
-			} else {
-				delete(g.allTransactions, txID)
-			}
+	for _, transactionID := range transactionIDsToRemove {
+		if g.allTransactions[transactionID] == nil {
+			log.L(ctx).Infof("Transaction %s already removed", transactionID)
+		} else {
+			delete(g.allTransactions, transactionID)
 		}
 	}
 }

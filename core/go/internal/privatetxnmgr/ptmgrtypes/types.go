@@ -59,8 +59,19 @@ type Publisher interface {
 	PublishNudgeEvent(ctx context.Context, transactionId string)
 }
 
-// Map of signing address to an ordered list of transaction IDs that are ready to be dispatched by that signing address
-type DispatchableTransactions map[string][]string
+// Map of signing address to an ordered list of transaction flows that are ready to be dispatched by that signing address
+type DispatchableTransactions map[string][]TransactionFlow
+
+func (dtxs *DispatchableTransactions) IDs(ctx context.Context) []string {
+	var ids []string
+	for _, txs := range *dtxs {
+		for _, tx := range txs {
+			ids = append(ids, tx.ID(ctx).String())
+		}
+	}
+	return ids
+}
+
 type Dispatcher interface {
 	// Dispatcher is the component that takes responsibility for submitting the transactions in the sequence to the base ledger in the correct order
 	DispatchTransactions(context.Context, DispatchableTransactions) error

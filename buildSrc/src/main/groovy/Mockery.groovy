@@ -59,7 +59,11 @@ class Mockery extends DefaultTask {
         @Optional
         String outputPackage
 
+        @Input
+        boolean inpackage = false
+
         @OutputDirectory
+        @Optional
         File outputDir
 
         void inputDir(Object dir) {
@@ -82,6 +86,10 @@ class Mockery extends DefaultTask {
             outputDir = project.file(output)
         }
 
+        void inpackage(boolean inPackage) {
+            inpackage = inPackage
+        }
+
         protected void configure(ExecSpec spec) {
             if (inputDir != null) {
                 spec.args '--dir', inputDir
@@ -97,6 +105,9 @@ class Mockery extends DefaultTask {
             }
             if (outputDir != null) {
                 spec.args '--output', outputDir
+            }
+            if (inpackage) {
+                spec.args '--inpackage'
             }
         }
 

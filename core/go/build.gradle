@@ -247,6 +247,11 @@ task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
         outputPackage 'preparedtxdistributionmocks'
         outputDir 'mocks/preparedtxdistributionmocks'
     }
+     mock {
+        inputDir 'internal/privatetxnmgr/ptmgrtypes'
+        name "TransactionFlow"
+        inpackage true
+    }
 }
 
 task clean(type: Delete, dependsOn: ':testinfra:stopTestInfra') {

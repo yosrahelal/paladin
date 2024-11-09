@@ -50,26 +50,19 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 	preparedTxnDistributions := make([]*preparedtxdistribution.PreparedTxnDistribution, 0)
 
 	completed := false // and include whether we committed the DB transaction or not
-	for signingAddress, transactionIDs := range dispatchableTransactions {
-		log.L(ctx).Debugf("DispatchTransactions: %d transactions for signingAddress %s", len(transactionIDs), signingAddress)
+	for signingAddress, transactionFlows := range dispatchableTransactions {
+		log.L(ctx).Debugf("DispatchTransactions: %d transactions for signingAddress %s", len(transactionFlows), signingAddress)
 
-		publicTransactionsToSend := make([]*components.PrivateTransaction, 0, len(transactionIDs))
+		publicTransactionsToSend := make([]*components.PrivateTransaction, 0, len(transactionFlows))
 
 		sequence := &syncpoints.PublicDispatch{}
 
-		for _, transactionID := range transactionIDs {
-			// prepare all transactions for the given transaction IDs
-
-			txProcessor := s.getTransactionProcessor(transactionID)
-			if txProcessor == nil {
-				//TODO currently assume that all the transactions are in flight and in memory
-				// need to reload from database if not in memory
-				panic("Transaction not found")
-			}
+		for _, transactionFlow := range transactionFlows {
+			// prepare all transactions
 
 			// If we don't have a signing key for the TX at this point, we use our randomly assigned one
 			// TODO: Rotation
-			preparedTransaction, err := txProcessor.PrepareTransaction(ctx, s.defaultSigner)
+			preparedTransaction, err := transactionFlow.PrepareTransaction(ctx, s.defaultSigner)
 			if err != nil {
 				log.L(ctx).Errorf("Error preparing transaction: %s", err)
 				//TODO this is a really bad time to be getting an error.  need to think carefully about how to handle this
@@ -82,7 +75,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				log.L(ctx).Infof("Result of transaction %s is a prepared public transaction", preparedTransaction.ID)
 				publicTransactionsToSend = append(publicTransactionsToSend, preparedTransaction)
 				sequence.PrivateTransactionDispatches = append(sequence.PrivateTransactionDispatches, &syncpoints.DispatchPersisted{
-					PrivateTransactionID: transactionID,
+					PrivateTransactionID: transactionFlow.ID(ctx).String(),
 				})
 			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPrivateTransaction && !hasPublicTransaction:
 				log.L(ctx).Infof("Result of transaction %s is a chained private transaction", preparedTransaction.ID)
@@ -119,7 +112,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				return err
 			}
 
-			sds, err := txProcessor.GetStateDistributions(ctx)
+			sds, err := transactionFlow.GetStateDistributions(ctx)
 			if err != nil {
 				return err
 			}
@@ -214,8 +207,8 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 	}
 	completed = true
 	for signingAddress, sequence := range dispatchableTransactions {
-		for _, privateTransactionID := range sequence {
-			s.publisher.PublishTransactionDispatchedEvent(ctx, privateTransactionID, uint64(0) /*TODO*/, signingAddress)
+		for _, transactionFlow := range sequence {
+			s.publisher.PublishTransactionDispatchedEvent(ctx, transactionFlow.ID(ctx).String(), uint64(0) /*TODO*/, signingAddress)
 		}
 	}
 	for _, preparedTransaction := range dispatchBatch.PreparedTransactions {

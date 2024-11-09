@@ -97,7 +97,6 @@ func (s *Sequencer) handleTransactionEvent(ctx context.Context, event ptmgrtypes
 		it must either
 			- decide to ignore the event altogether
 			- completely apply the the event
-			- panic if the event data is partially applied and an unexpected error occurs before it can be completely applied
 	*/
 	transactionProcessor.ApplyEvent(ctx, event)
 
@@ -155,6 +154,6 @@ func (s *Sequencer) handleTransactionEvent(ctx context.Context, event ptmgrtypes
 	}
 
 	//DispatchTransactions is a persistence point so we can remove the transactions from our graph now that they are dispatched
-	s.graph.RemoveTransactions(ctx, dispatchableTransactions)
+	s.graph.RemoveTransactions(ctx, dispatchableTransactions.IDs(ctx))
 
 }
