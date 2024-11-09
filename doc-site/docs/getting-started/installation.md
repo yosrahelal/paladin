@@ -16,7 +16,8 @@ for kind which will open up the container ports used by the Paladin charts below
 You can create a new cluster with:
 
 ```bash
-kind create cluster --name paladin --config operator/paladin-kind.yaml
+curl https://raw.githubusercontent.com/LF-Decentralized-Trust-labs/paladin/refs/heads/main/operator/paladin-kind.yaml -L -O
+kind create cluster --name paladin --config paladin-kind.yaml
 ```
 
 If you need to start over, you can delete the cluster with:
@@ -170,6 +171,7 @@ Each Paladin node runs an instance of the Paladin UI at the path `/ui`. If you u
 * http://localhost:31648/ui
 * http://localhost:31748/ui
 
+Learn about interacting with the [UI](./user-interface.md), and try out the [Tutorials](./../tutorials/index.md).
 
 ## Uninstall
 
