@@ -67,7 +67,7 @@ type privateTxManager struct {
 // Init implements Engine.
 func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
 	return &components.ManagerInitResult{
-		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
+		PreCommitHandler: func(ctx context.Context, _ *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
 			log.L(ctx).Debug("PrivateTxManager PreCommitHandler")
 			latestBlockNumber := blocks[len(blocks)-1].Number
 			return func() {
@@ -250,6 +250,9 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.Vali
 	if txi.Transaction.SubmitMode.V() == pldapi.SubmitModeExternal {
 		intent = prototk.TransactionSpecification_PREPARE_TRANSACTION
 	}
+	if txi.Function == nil || txi.Function.Definition == nil {
+		return i18n.NewError(ctx, msgs.MsgPrivateTxMgrFunctionNotProvided)
+	}
 	return p.handleNewTx(ctx, &components.PrivateTransaction{
 		ID: *tx.ID,
 		Inputs: &components.TransactionInputs{
@@ -274,9 +277,6 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.Vali
 // In the meantime, we a single function to submit a transaction and there is currently no persistence of the submission record.  It is all held in memory only
 func (p *privateTxManager) handleNewTx(ctx context.Context, tx *components.PrivateTransaction) error {
 	log.L(ctx).Debugf("Handling new transaction: %v", tx)
-	if tx.Inputs == nil {
-		return i18n.NewError(ctx, msgs.MsgDomainNotProvided)
-	}
 
 	emptyAddress := tktypes.EthAddress{}
 	if tx.Inputs.To == emptyAddress {
