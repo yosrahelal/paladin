@@ -40,7 +40,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
-	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
@@ -1533,12 +1532,6 @@ func TestPrivateTxManagerDeployErrorInvalidSubmitMode(t *testing.T) {
 
 }
 
-func privateTransactionMatcher(txID uuid.UUID) func(*components.PrivateTransaction) bool {
-	return func(tx *components.PrivateTransaction) bool {
-		return tx.ID == txID
-	}
-}
-
 func privateDeployTransactionMatcher(txID uuid.UUID) func(*components.PrivateContractDeploy) bool {
 	return func(tx *components.PrivateContractDeploy) bool {
 		return tx.ID == txID
@@ -1839,29 +1832,6 @@ type dependencyMocks struct {
 	txManager           *componentmocks.TXManager
 }
 
-type fakePublicTxBatch struct {
-	t              *testing.T
-	transactions   []*components.PublicTxSubmission
-	accepted       []components.PublicTxAccepted
-	rejected       []components.PublicTxRejected
-	completeCalled bool
-	committed      bool
-	submitErr      error
-}
-
-func (f *fakePublicTxBatch) Accepted() []components.PublicTxAccepted {
-	return f.accepted
-}
-
-func (f *fakePublicTxBatch) Completed(ctx context.Context, committed bool) {
-	f.completeCalled = true
-	f.committed = committed
-}
-
-func (f *fakePublicTxBatch) Rejected() []components.PublicTxRejected {
-	return f.rejected
-}
-
 type fakePublicTx struct {
 	t         *components.PublicTxSubmission
 	rejectErr error
@@ -1896,15 +1866,6 @@ func (f *fakePublicTx) Bindings() []*components.PaladinTXReference {
 
 func (f *fakePublicTx) PublicTx() *pldapi.PublicTx {
 	return f.pubTx
-}
-
-// SubmitBatch implements components.PublicTxManager.
-func (f *fakePublicTxBatch) Submit(ctx context.Context, dbTX *gorm.DB) error {
-	nonceBase := 1000
-	for i, tx := range f.accepted {
-		tx.(*fakePublicTx).pubTx.Nonce = tktypes.HexUint64(nonceBase + i)
-	}
-	return f.submitErr
 }
 
 func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (components.PrivateTxManager, *dependencyMocks) {

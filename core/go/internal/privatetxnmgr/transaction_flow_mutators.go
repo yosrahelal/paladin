@@ -184,7 +184,7 @@ func (tf *transactionFlow) applyTransactionDispatchedEvent(ctx context.Context, 
 	tf.dispatched = true
 }
 
-func (tf *transactionFlow) applyTransactionPreparedEvent(ctx context.Context, event *ptmgrtypes.TransactionPreparedEvent) {
+func (tf *transactionFlow) applyTransactionPreparedEvent(ctx context.Context, _ *ptmgrtypes.TransactionPreparedEvent) {
 	log.L(ctx).Debugf("transactionFlow:applyTransactionPreparedEvent transactionID:%s ", tf.transaction.ID.String())
 	tf.latestEvent = "TransactionPreparedEvent"
 	tf.status = "prepared"
