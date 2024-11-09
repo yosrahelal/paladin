@@ -156,6 +156,12 @@ type TransactionFinalizedEvent struct {
 	PrivateTransactionEventBase
 }
 
+type TransactionNudgeEvent struct {
+	//used to trigger the sequence to re-evaluate a transaction's state and next action
+	//in lieu of a real event
+	PrivateTransactionEventBase
+}
+
 type TransactionFinalizeError struct {
 	PrivateTransactionEventBase
 	RevertReason string // reason we were trying to finalize the transaction

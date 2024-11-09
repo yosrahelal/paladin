@@ -56,6 +56,7 @@ type Publisher interface {
 	PublishTransactionFinalizedEvent(ctx context.Context, transactionId string)
 	PublishTransactionFinalizeError(ctx context.Context, transactionId string, revertReason string, err error)
 	PublishTransactionConfirmedEvent(ctx context.Context, transactionId string)
+	PublishNudgeEvent(ctx context.Context, transactionId string)
 }
 
 // Map of signing address to an ordered list of transaction IDs that are ready to be dispatched by that signing address

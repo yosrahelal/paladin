@@ -18,7 +18,6 @@ package privatetxnmgr
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/google/uuid"
@@ -339,6 +338,7 @@ func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, tx *c
 	contractAddr := tx.Inputs.To
 	domainAPI, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
 	if err != nil {
+		log.L(ctx).Errorf("handleDelegatedTransaction: Failed to get domain smart contract for contract address %s: %s", contractAddr, err)
 		return err
 	}
 	oc, err := p.getSequencerForContract(ctx, contractAddr, domainAPI)
@@ -536,9 +536,11 @@ func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string
 	defer p.sequencersLock.RUnlock()
 	targetSequencer := p.sequencers[domainAddress]
 	if targetSequencer == nil {
-		//TODO should be valid to query the status of a transaction that belongs to a domain instance that is not currently active
-		errorMessage := fmt.Sprintf("Sequencer not found for domain address %s", domainAddress)
-		return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
+		return components.PrivateTxStatus{
+			TxID:   txID,
+			Status: "unknown",
+		}, nil
+
 	} else {
 		return targetSequencer.GetTxStatus(ctx, txID)
 	}

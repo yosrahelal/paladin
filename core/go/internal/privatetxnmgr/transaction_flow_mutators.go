@@ -59,6 +59,8 @@ func (tf *transactionFlow) ApplyEvent(ctx context.Context, event ptmgrtypes.Priv
 		tf.applyTransactionFinalizedEvent(ctx, event)
 	case *ptmgrtypes.TransactionFinalizeError:
 		tf.applyTransactionFinalizeError(ctx, event)
+	case *ptmgrtypes.TransactionNudgeEvent:
+		tf.applyTransactionNudgeEvent(ctx, event)
 
 	default:
 		log.L(ctx).Warnf("Unknown event type: %T", event)
@@ -208,6 +210,12 @@ func (tf *transactionFlow) applyTransactionDelegatedEvent(ctx context.Context, _
 	log.L(ctx).Debugf("transactionFlow:applyTransactionDelegatedEvent transactionID:%s", tf.transaction.ID.String())
 	tf.latestEvent = "TransactionDelegatedEvent"
 	tf.status = "delegated"
+	tf.delegated = true
+	tf.delegatePending = false
+	if tf.delegateRequestTimer != nil {
+		tf.delegateRequestTimer.Stop()
+	}
+	tf.delegateRequestTimer = nil
 }
 
 func (tf *transactionFlow) applyResolveVerifierResponseEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierResponseEvent) {
@@ -250,4 +258,12 @@ func (tf *transactionFlow) applyTransactionFinalizeError(ctx context.Context, ev
 	tf.latestEvent = "TransactionFinalizeError"
 	tf.finalizeRequired = true
 	tf.finalizePending = false
+}
+
+func (tf *transactionFlow) applyTransactionNudgeEvent(ctx context.Context, event *ptmgrtypes.TransactionNudgeEvent) {
+	log.L(ctx).Errorf("applyTransactionNudgeEvent transaction %s", tf.transaction.ID)
+	tf.latestEvent = "TransactionNudgeEvent"
+
+	//nothing really changes here, we just trigger a re-evaluation of the transaction state and next actions
+
 }

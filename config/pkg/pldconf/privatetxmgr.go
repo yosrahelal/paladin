@@ -46,7 +46,7 @@ var PrivateTxManagerDefaults = &PrivateTxManagerConfig{
 		RoundRobinCoordinatorBlockRangeSize: confutil.P(100),
 		AssembleRequestTimeout:              confutil.P("1s"),
 	},
-	RequestTimeout: confutil.P("15s"),
+	RequestTimeout: confutil.P("1s"),
 }
 
 type PrivateTxManagerSequencerConfig struct {

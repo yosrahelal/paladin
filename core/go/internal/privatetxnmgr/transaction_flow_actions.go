@@ -44,6 +44,11 @@ func (tf *transactionFlow) logActionInfo(ctx context.Context, msg string) {
 	log.L(ctx).Infof("transactionFlow:Action TransactionID='%s' Status='%s' LatestEvent='%s' LatestError='%s' : %s", tf.transaction.ID, tf.status, tf.latestEvent, tf.latestError, msg)
 }
 
+func (tf *transactionFlow) logActionInfof(ctx context.Context, msg string, args ...interface{}) {
+	//centralize the debug logging to force a consistent format and make it easier to analyze the logs
+	log.L(ctx).Infof("transactionFlow:Action TransactionID='%s' Status='%s' LatestEvent='%s' LatestError='%s' : %s", tf.transaction.ID, tf.status, tf.latestEvent, tf.latestError, fmt.Sprintf(msg, args...))
+}
+
 func (tf *transactionFlow) logActionError(ctx context.Context, msg string, err error) {
 	//centralize the info logging to force a consistent format and make it easier to analyze the logs
 	log.L(ctx).Errorf("transactionFlow:Action TransactionID='%s' Status='%s' LatestEvent='%s' LatestError='%s' : %s.  %s", tf.transaction.ID, tf.status, tf.latestEvent, tf.latestError, msg, err.Error())
@@ -281,11 +286,16 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 }
 
 func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue bool) {
-	//TODO there may be a potential optimization we can add where, in certain domain configurations, we can optimistically proceed without delegation and only delegate once we detect
-	// potential contention with other active nodes.  For now, we keep it simple and strictly abide by the configuration of the domain
-	if tf.status == "delegating" {
-		tf.logActionInfo(ctx, "Transaction is delegating")
-		return false
+
+	tf.logActionInfof(ctx, "Transaction is delegating since %s", tf.delegateRequestTime)
+
+	if tf.delegatePending {
+		if tf.clock.Now().Before(tf.delegateRequestTime.Add(tf.requestTimeout)) {
+			tf.logActionDebug(ctx, "Delegation request not timed out")
+			return false
+		}
+		tf.logActionDebug(ctx, "Delegation request timed out")
+
 	}
 
 	if tf.status == "delegated" {
@@ -293,6 +303,9 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue b
 		tf.logActionInfo(ctx, "Transaction is delegated")
 		return false
 	}
+
+	// There may be a potential optimization we can add where, in certain domain configurations, we can optimistically proceed without delegation and only delegate once we detect
+	// potential contention with other active nodes.  For now, we keep it simple and strictly abide by the configuration of the domain
 	coordinatorNode, err := tf.selectCoordinator.SelectCoordinatorNode(ctx, tf.transaction, tf.environment)
 	if err != nil {
 		// errors from here are most likely a problem resolving the node name from the parties in the attestation plan
@@ -326,7 +339,6 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue b
 	}
 	tf.transaction.Inputs.From = fullQualifiedFrom.String()
 
-	// TODO update to "delegated" once the ack has been received
 	err = tf.transportWriter.SendDelegationRequest(
 		ctx,
 		uuid.New().String(),
@@ -336,8 +348,12 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue b
 	if err != nil {
 		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
 		tf.logActionError(ctx, "Failed to send delegation request", err)
-		//TODO implement retry so that it is ok to just carry on in case of this error
 	}
+	tf.delegatePending = true
+	tf.delegateRequestTime = tf.clock.Now()
+	tf.delegateRequestTimer = time.AfterFunc(tf.requestTimeout, func() {
+		tf.publisher.PublishNudgeEvent(ctx, tf.transaction.ID.String())
+	})
 	//we have initiated a delegation so we should not continue any further with the flow on this node
 	tf.logActionInfo(ctx, fmt.Sprintf("Delegating transaction to %s", coordinatorNode))
 	return false

@@ -181,3 +181,13 @@ func (p *publisher) PublishTransactionConfirmedEvent(ctx context.Context, transa
 	}
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }
+
+func (p *publisher) PublishNudgeEvent(ctx context.Context, transactionId string) {
+	event := &ptmgrtypes.TransactionNudgeEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
+	}
+	p.privateTxManager.HandleNewEvent(ctx, event)
+}

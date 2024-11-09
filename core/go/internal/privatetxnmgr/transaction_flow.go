@@ -102,6 +102,10 @@ type transactionFlow struct {
 	finalizeRevertReason        string
 	finalizeRequired            bool
 	finalizePending             bool
+	delegatePending             bool
+	delegateRequestTime         time.Time
+	delegated                   bool
+	delegateRequestTimer        *time.Timer
 	assemblePending             bool
 	complete                    bool
 	requestedVerifierResolution bool                                             //TODO add precision here so that we can track individual requests and implement retry as per endorsement
