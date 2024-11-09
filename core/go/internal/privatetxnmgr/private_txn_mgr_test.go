@@ -57,26 +57,6 @@ import (
  */
 
 /* Package level tests */
-var testABI = abi.ABI{
-	{
-		Name: "execute",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{
-				Name: "inputs",
-				Type: "bytes32[]",
-			},
-			{
-				Name: "outputs",
-				Type: "bytes32[]",
-			},
-			{
-				Name: "data",
-				Type: "bytes",
-			},
-		},
-	},
-}
 
 func TestPrivateTxManagerInit(t *testing.T) {
 
@@ -115,7 +95,7 @@ func TestPrivateTxManagerInvalidTransactionMissingDomain(t *testing.T) {
 	assert.Regexp(t, "PD011800", err)
 }
 
-func TestPrivateTxManagerInvalidTransactionMissmatchedDomain(t *testing.T) {
+func TestPrivateTxManagerInvalidTransactionMismatchedDomain(t *testing.T) {
 	ctx := context.Background()
 
 	privateTxManager, mocks := NewPrivateTransactionMgrForPackageTesting(t, "node1")
@@ -574,32 +554,6 @@ func TestPrivateTxManagerLocalEndorserSubmits(t *testing.T) {
 }
 
 func TestPrivateTxManagerRevertFromLocalEndorsement(t *testing.T) {
-}
-
-type identityForTesting struct {
-	identity        string
-	identityLocator string
-	verifier        string
-	keyHandle       string
-	mocks           *dependencyMocks
-	mockSign        func(signature []byte)
-}
-
-func (i *identityForTesting) mockResolve(ctx context.Context, other identityForTesting) {
-	// in addition to the default mocks set up in newPartyForTesting, we can set up mocks to resolve remote identitys
-	// we could have used a real IdentityResolver here but we are testing the private transaction manager in isolation and so we mock the IdentityResolver as we do with all other tests in this file
-	i.mocks.identityResolver.On(
-		"ResolveVerifierAsync",
-		mock.Anything,
-		other.identityLocator,
-		algorithms.ECDSA_SECP256K1,
-		verifiers.ETH_ADDRESS,
-		mock.Anything,
-		mock.Anything).
-		Run(func(args mock.Arguments) {
-			resolveFn := args.Get(4).(func(context.Context, string))
-			resolveFn(ctx, other.verifier)
-		}).Return(nil).Maybe()
 }
 
 func newPartyForTesting(ctx context.Context, name, node string, mocks *dependencyMocks) identityForTesting {
@@ -2138,3 +2092,51 @@ func TestCallPrivateSmartContractExecCallFail(t *testing.T) {
 }
 
 /* Unit tests */
+
+/* Utils */
+type identityForTesting struct {
+	identity        string
+	identityLocator string
+	verifier        string
+	keyHandle       string
+	mocks           *dependencyMocks
+	mockSign        func(signature []byte)
+}
+
+func (i *identityForTesting) mockResolve(ctx context.Context, other identityForTesting) {
+	// in addition to the default mocks set up in newPartyForTesting, we can set up mocks to resolve remote identitys
+	// we could have used a real IdentityResolver here but we are testing the private transaction manager in isolation and so we mock the IdentityResolver as we do with all other tests in this file
+	i.mocks.identityResolver.On(
+		"ResolveVerifierAsync",
+		mock.Anything,
+		other.identityLocator,
+		algorithms.ECDSA_SECP256K1,
+		verifiers.ETH_ADDRESS,
+		mock.Anything,
+		mock.Anything).
+		Run(func(args mock.Arguments) {
+			resolveFn := args.Get(4).(func(context.Context, string))
+			resolveFn(ctx, other.verifier)
+		}).Return(nil).Maybe()
+}
+
+var testABI = abi.ABI{
+	{
+		Name: "execute",
+		Type: abi.Function,
+		Inputs: abi.ParameterArray{
+			{
+				Name: "inputs",
+				Type: "bytes32[]",
+			},
+			{
+				Name: "outputs",
+				Type: "bytes32[]",
+			},
+			{
+				Name: "data",
+				Type: "bytes",
+			},
+		},
+	},
+}
