@@ -43,7 +43,6 @@ func (p *publisher) PublishTransactionBlockedEvent(ctx context.Context, transact
 			TransactionID:   transactionId,
 		},
 	})
-
 }
 
 func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string) {
@@ -61,7 +60,15 @@ func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, trans
 		Nonce:          nonce,
 		SigningAddress: signingAddress,
 	})
+}
 
+func (p *publisher) PublishTransactionPreparedEvent(ctx context.Context, transactionId string) {
+	p.privateTxManager.HandleNewEvent(ctx, &ptmgrtypes.TransactionPreparedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
+	})
 }
 
 func (p *publisher) PublishTransactionAssembledEvent(ctx context.Context, transactionId string, postAssembly *components.TransactionPostAssembly, requestID string) {

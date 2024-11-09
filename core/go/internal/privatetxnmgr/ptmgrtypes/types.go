@@ -46,6 +46,7 @@ type Publisher interface {
 	//Service for sending messages and events within the local node
 	PublishTransactionBlockedEvent(ctx context.Context, transactionId string)
 	PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string)
+	PublishTransactionPreparedEvent(ctx context.Context, transactionId string)
 	PublishTransactionAssembledEvent(ctx context.Context, transactionId string, postAssembly *components.TransactionPostAssembly, requestID string)
 	PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string, requestID string)
 	PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult)

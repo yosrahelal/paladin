@@ -96,6 +96,10 @@ type TransactionDispatchedEvent struct {
 	SigningAddress string
 }
 
+type TransactionPreparedEvent struct {
+	PrivateTransactionEventBase
+}
+
 type TransactionConfirmedEvent struct {
 	PrivateTransactionEventBase
 }

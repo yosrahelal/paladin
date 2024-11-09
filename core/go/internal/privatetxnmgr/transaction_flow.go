@@ -69,6 +69,7 @@ func NewTransactionFlow(
 		complete:                    false,
 		localCoordinator:            true,
 		dispatched:                  false,
+		prepared:                    false,
 		clock:                       ptmgrtypes.RealClock(),
 		requestTimeout:              requestTimeout,
 		selectCoordinator:           selectCoordinator,
@@ -108,6 +109,7 @@ type transactionFlow struct {
 	pendingEndorsementRequests  map[string]map[string]*pendingEndorsementRequest //map of attestationRequest names to a map of parties to a struct containing information about the active pending request
 	localCoordinator            bool
 	dispatched                  bool
+	prepared                    bool
 	clock                       ptmgrtypes.Clock
 	requestTimeout              time.Duration
 	selectCoordinator           ptmgrtypes.CoordinatorSelector

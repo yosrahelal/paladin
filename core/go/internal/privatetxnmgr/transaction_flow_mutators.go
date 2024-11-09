@@ -43,6 +43,8 @@ func (tf *transactionFlow) ApplyEvent(ctx context.Context, event ptmgrtypes.Priv
 		tf.applyTransactionAssembleFailedEvent(ctx, event)
 	case *ptmgrtypes.TransactionDispatchedEvent:
 		tf.applyTransactionDispatchedEvent(ctx, event)
+	case *ptmgrtypes.TransactionPreparedEvent:
+		tf.applyTransactionPreparedEvent(ctx, event)
 	case *ptmgrtypes.TransactionConfirmedEvent:
 		tf.applyTransactionConfirmedEvent(ctx, event)
 	case *ptmgrtypes.TransactionRevertedEvent:
@@ -180,6 +182,13 @@ func (tf *transactionFlow) applyTransactionDispatchedEvent(ctx context.Context, 
 	tf.latestEvent = "TransactionDispatchedEvent"
 	tf.status = "dispatched"
 	tf.dispatched = true
+}
+
+func (tf *transactionFlow) applyTransactionPreparedEvent(ctx context.Context, event *ptmgrtypes.TransactionPreparedEvent) {
+	log.L(ctx).Debugf("transactionFlow:applyTransactionPreparedEvent transactionID:%s ", tf.transaction.ID.String())
+	tf.latestEvent = "TransactionPreparedEvent"
+	tf.status = "prepared"
+	tf.prepared = true
 }
 
 func (tf *transactionFlow) applyTransactionConfirmedEvent(ctx context.Context, event *ptmgrtypes.TransactionConfirmedEvent) {
