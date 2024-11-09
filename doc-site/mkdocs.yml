@@ -121,6 +121,7 @@ nav:
   - Reference:
     - APIs: reference/apis/*.md
     - Types: reference/types/*.md
+    - Kubernetes CRDs: reference/crds/*.md
     - Architecture: reference/architecture.md
     - Commands: reference/commands.md
     - Roadmap: reference/roadmap.md
