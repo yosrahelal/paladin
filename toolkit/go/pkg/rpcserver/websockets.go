@@ -27,8 +27,8 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -151,6 +151,23 @@ func (s *rpcServer) EthPublish(eventType string, result interface{}) {
 			}
 		}
 	}
+}
+
+func (s *rpcServer) WSSubscriptionCount(eventType string) (count int) {
+	allSubs := s.ethSubList()
+
+	if eventType == "" {
+		return len(allSubs)
+	}
+
+	count = 0
+	for _, s := range allSubs {
+		if s.eventType == eventType {
+			count++
+		}
+	}
+
+	return count
 }
 
 type ethSubscription struct {

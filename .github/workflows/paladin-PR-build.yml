@@ -1,10 +1,25 @@
-name: Paladin CI build
+name: Paladin Build
+permissions:
+  contents: write
+  packages: write
+  id-token: write
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'operator/charts/**'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'operator/charts/**'
   workflow_dispatch:
+
+# Ensure this workflow only runs for the most recent commit of a pull-request
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -48,7 +63,6 @@ jobs:
       # It does run Go/Java/Solidity component and integration tests that use PostgreSQL and Besu
       - name: Build with Gradle
         run: ./gradlew -PcomposeLogs=true -PverboseTests=true --no-daemon --parallel --max-workers=5 build
-  
 
       - name: Upload logs
         uses: actions/upload-artifact@v4
@@ -58,55 +72,41 @@ jobs:
           path: |
             **/testbed.*.log
 
-  image-build:
-    runs-on: ubuntu-latest
-    env:
-      IMAGE_REGISTRY: kaleido.io  # just a placeholder
-      IMAGE_NAME: paladin
-      IMAGE_TAG: test  # just a placeholder, we should replace this with the workflow run number
-      BUILD_PLATFORM: linux/amd64
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: recursive
+  core-image-build:
+    # run only on PRs
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/build-image.yaml
+    with:
+      dockerfile: ./Dockerfile
+      registry: paladin.io
+      image: paladin
+      image_tag: test
+      push: false
+      platforms: linux/amd64
+      runs-on: ubuntu-latest
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+  operator-image-build:
+      # run only on PRs
+      if: github.event_name == 'pull_request'
+      uses: ./.github/workflows/build-image.yaml
+      with:
+        dockerfile: ./operator/Dockerfile
+        registry: paladin.io
+        image: paladin-operator
+        image_tag: test
+        push: false
+        platforms: linux/amd64
+        runs-on: ubuntu-latest
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-    # TODO: Setup docker registry
-    #   - name: Login to Docker registry
-    #     if: ${{ env.IMAGE_REGISTRY != '' }}
-    #     uses: docker/login-action@v3
-    #     with:
-    #       registry: ${{ env.IMAGE_REGISTRY }}
-    #       username: ${{ secrets.REGISTRY_USERNAME }}
-    #       password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Build
-        uses: docker/build-push-action@v3
-        with:
-          sbom: true
-          file: Dockerfile
-          tags: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          platforms: ${{ env.BUILD_PLATFORM }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          push: false
-      
-      # TODO: Run a basic test to make sure the image was built correctly
-      # This is just a placeholder, we should replace this with a real test
-      # - name: Test the image
-      #   run: |
-      #     docker run -d -p <>:<> --name paladin-test \
-      #     -v <path to config file on host>:<path to config file> \
-      #     ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-      #     -Djna.library.path=/app \
-      #     -jar paladin.jar <path to config file> <node name>
-      #     sleep 5
-      #     docker logs paladin-test | grep 'Started PaladinApplication' && echo 'Test passed' || echo 'Test failed'
-      #   timeout-minutes: 5
+  image-release:
+    # run only on pushes to main or manual triggers
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/cross-build-images.yaml
+    with:
+      registry: ghcr.io
+      repository: ${{ github.repository_owner }}
+      image_tags: ${{ github.ref_name }}
+    secrets:
+      username: ${{ github.actor }}
+      password: ${{ secrets.GITHUB_TOKEN }}
       

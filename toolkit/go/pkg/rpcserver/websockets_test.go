@@ -149,3 +149,63 @@ func TestWebSocketEthSubscribeUnsubscribe(t *testing.T) {
 	}
 
 }
+
+func TestRPCServerWSSubscriptionCount(t *testing.T) {
+	url, s, done := newTestServerWebSockets(t, &pldconf.RPCServerConfig{})
+	defer done()
+
+	subsCount := s.WSSubscriptionCount("")
+	assert.Equal(t, subsCount, 0)
+
+	client := rpcclient.WrapWSConfig(&wsclient.WSConfig{WebSocketURL: url, DisableReconnect: true})
+	defer client.Close()
+	err := client.Connect(context.Background())
+	require.NoError(t, err)
+
+	var wsConn *webSocketConnection
+	before := time.Now()
+	for wsConn == nil {
+		time.Sleep(1 * time.Millisecond)
+		for _, wsConn = range s.wsConnections {
+		}
+		if time.Since(before) > 1*time.Second {
+			panic("timed out waiting for connection")
+		}
+	}
+
+	subsCount = s.WSSubscriptionCount("")
+	assert.Equal(t, subsCount, 0)
+
+	sub1, rpcErr := client.Subscribe(context.Background(), "myEvents", map[string]interface{}{"extra": "params"})
+	assert.Nil(t, rpcErr)
+
+	subsCount = s.WSSubscriptionCount("")
+	assert.Equal(t, subsCount, 1)
+	subsCount = s.WSSubscriptionCount("myEvents")
+	assert.Equal(t, subsCount, 1)
+
+	_, rpcErr = client.Subscribe(context.Background(), "otherEvents")
+	assert.Nil(t, rpcErr)
+
+	subsCount = s.WSSubscriptionCount("")
+	assert.Equal(t, subsCount, 2)
+	subsCount = s.WSSubscriptionCount("otherEvents")
+	assert.Equal(t, subsCount, 1)
+
+	rpcErr = sub1.Unsubscribe(context.Background())
+	assert.Nil(t, rpcErr)
+
+	subsCount = s.WSSubscriptionCount("")
+	assert.Equal(t, subsCount, 1)
+	subsCount = s.WSSubscriptionCount("myEvents")
+	assert.Equal(t, subsCount, 0)
+	subsCount = s.WSSubscriptionCount("otherEvents")
+	assert.Equal(t, subsCount, 1)
+
+	// Close the connection
+	client.Close()
+	<-wsConn.closing
+	for !wsConn.closed {
+		time.Sleep(1 * time.Microsecond)
+	}
+}

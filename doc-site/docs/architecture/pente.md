@@ -34,8 +34,8 @@ When the block was confirmed by a node which already had the private input data,
 This model was evolved through a number of updates over the years, most significantly:
 
 - The re-building of the Haskell private state management runtime in Java
-   - [Orion](https://github.com/connsensys/orion): Started in 2019, abandoned in Sep 2021
-   - [Tessera](https://github.com/connsensys/tessera): Started in 2018, still maintained in 2024
+   - [Orion](https://github.com/consensys/orion): Started in 2019, abandoned in Sep 2021
+   - [Tessera](https://github.com/consensys/tessera): Started in 2018, still maintained in 2024
 - Support for private smart contract submission in Hyperledger Besu (additional to Quorum)
    - The modification to the base EVM was reduced, by avoiding modification of the `V` value of transactions, and rather using a special pre-compiled smart contract address
    - A different approach to Private transaction nonce management was adopted in Besu, where a separate nonce is managed in each privacy group
