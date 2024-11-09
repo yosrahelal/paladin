@@ -136,57 +136,63 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 		//Now we have the payloads, we can prepare the submission
 		publicTransactionEngine := s.components.PublicTxManager()
 
-		signers := make([]string, len(publicTransactionsToSend))
-		for i, pt := range publicTransactionsToSend {
-			unqualifiedSigner, err := tktypes.PrivateIdentityLocator(pt.Signer).Identity(ctx)
-			if err != nil {
-				errorMessage := fmt.Sprintf("failed to parse lookup key for signer %s : %s", pt.Signer, err)
-				log.L(ctx).Error(errorMessage)
-				return i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
+		// we may or may not have any transactions to send depending on the submit mode
+		if len(publicTransactionsToSend) == 0 {
+			log.L(ctx).Debugf("No public transactions to send for signing address %s", signingAddress)
+		} else {
+
+			signers := make([]string, len(publicTransactionsToSend))
+			for i, pt := range publicTransactionsToSend {
+				unqualifiedSigner, err := tktypes.PrivateIdentityLocator(pt.Signer).Identity(ctx)
+				if err != nil {
+					errorMessage := fmt.Sprintf("failed to parse lookup key for signer %s : %s", pt.Signer, err)
+					log.L(ctx).Error(errorMessage)
+					return i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
+				}
+
+				signers[i] = unqualifiedSigner
 			}
-
-			signers[i] = unqualifiedSigner
-		}
-		keyMgr := s.components.KeyManager()
-		resolvedAddrs, err := keyMgr.ResolveEthAddressBatchNewDatabaseTX(ctx, signers)
-		if err != nil {
-			return err
-		}
-
-		publicTXs := make([]*components.PublicTxSubmission, len(publicTransactionsToSend))
-		for i, pt := range publicTransactionsToSend {
-			log.L(ctx).Debugf("DispatchTransactions: creating PublicTxSubmission from %s", pt.Signer)
-			publicTXs[i] = &components.PublicTxSubmission{
-				Bindings: []*components.PaladinTXReference{{TransactionID: pt.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
-				PublicTxInput: pldapi.PublicTxInput{
-					From:            resolvedAddrs[i],
-					To:              &s.contractAddress,
-					PublicTxOptions: pldapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
-				},
-			}
-
-			// TODO: This aligning with submission in public Tx manage
-			data, err := pt.PreparedPublicTransaction.ABI[0].EncodeCallDataJSONCtx(ctx, pt.PreparedPublicTransaction.Data)
+			keyMgr := s.components.KeyManager()
+			resolvedAddrs, err := keyMgr.ResolveEthAddressBatchNewDatabaseTX(ctx, signers)
 			if err != nil {
 				return err
 			}
-			publicTXs[i].Data = tktypes.HexBytes(data)
-		}
-		pubBatch, err := publicTransactionEngine.PrepareSubmissionBatch(ctx, publicTXs)
-		if err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgPrivTxMgrPublicTxFail)
-		}
-		// Must make sure from this point we return the nonces
-		sequence.PublicTxBatch = pubBatch
-		defer func() {
-			pubBatch.Completed(ctx, completed)
-		}()
-		if len(pubBatch.Rejected()) > 0 {
-			// We do not handle partial success - roll everything back
-			return i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivTxMgrPublicTxFail)
-		}
 
-		dispatchBatch.PublicDispatches = append(dispatchBatch.PublicDispatches, sequence)
+			publicTXs := make([]*components.PublicTxSubmission, len(publicTransactionsToSend))
+			for i, pt := range publicTransactionsToSend {
+				log.L(ctx).Debugf("DispatchTransactions: creating PublicTxSubmission from %s", pt.Signer)
+				publicTXs[i] = &components.PublicTxSubmission{
+					Bindings: []*components.PaladinTXReference{{TransactionID: pt.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+					PublicTxInput: pldapi.PublicTxInput{
+						From:            resolvedAddrs[i],
+						To:              &s.contractAddress,
+						PublicTxOptions: pldapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
+					},
+				}
+
+				// TODO: This aligning with submission in public Tx manage
+				data, err := pt.PreparedPublicTransaction.ABI[0].EncodeCallDataJSONCtx(ctx, pt.PreparedPublicTransaction.Data)
+				if err != nil {
+					return err
+				}
+				publicTXs[i].Data = tktypes.HexBytes(data)
+			}
+			pubBatch, err := publicTransactionEngine.PrepareSubmissionBatch(ctx, publicTXs)
+			if err != nil {
+				return i18n.WrapError(ctx, err, msgs.MsgPrivTxMgrPublicTxFail)
+			}
+			// Must make sure from this point we return the nonces
+			sequence.PublicTxBatch = pubBatch
+			defer func() {
+				pubBatch.Completed(ctx, completed)
+			}()
+			if len(pubBatch.Rejected()) > 0 {
+				// We do not handle partial success - roll everything back
+				return i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivTxMgrPublicTxFail)
+			}
+
+			dispatchBatch.PublicDispatches = append(dispatchBatch.PublicDispatches, sequence)
+		}
 	}
 
 	dCtx := s.coordinatorDomainContext
@@ -211,6 +217,9 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 		for _, privateTransactionID := range sequence {
 			s.publisher.PublishTransactionDispatchedEvent(ctx, privateTransactionID, uint64(0) /*TODO*/, signingAddress)
 		}
+	}
+	for _, preparedTransaction := range dispatchBatch.PreparedTransactions {
+		s.publisher.PublishTransactionPreparedEvent(ctx, preparedTransaction.ID.String())
 	}
 	//now that the DB write has been persisted, we can trigger the in-memory distribution of the prepared transactions and states
 	s.stateDistributer.DistributeStates(ctx, stateDistributions)
