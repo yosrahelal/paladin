@@ -309,14 +309,21 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
 		Return([]*tktypes.EthAddress{signingAddr}, nil)
 
+	mockPublicTransaction := componentmocks.NewPublicTxAccepted(t)
+	mockPublicTransaction.On("PublicTx").Return(&pldapi.PublicTx{
+		From:    *signingAddr,
+		Created: tktypes.TimestampNow(),
+	}).Maybe()
+	mockPublicTransaction.On("Bindings").Return([]*components.PaladinTXReference{
+		{
+			TransactionID:   *testTransactionID,
+			TransactionType: pldapi.TransactionTypePrivate.Enum(),
+		},
+	}).Maybe()
 	publicTransactions := []components.PublicTxAccepted{
-		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: *testTransactionID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: pldapi.PublicTxInput{
-				From: signingAddr,
-			},
-		}, nil),
+		mockPublicTransaction,
 	}
+
 	mockPublicTxBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
 	mockPublicTxBatch.On("Rejected").Return([]components.PublicTxRejected{})
 	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
@@ -504,13 +511,21 @@ func TestPrivateTxManagerSimplePreparedTransaction(t *testing.T) {
 	mocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
 		Return([]*tktypes.EthAddress{signingAddr}, nil)
 
+	mockPublicTransaction := componentmocks.NewPublicTxAccepted(t)
+	mockPublicTransaction.On("PublicTx").Return(&pldapi.PublicTx{
+		From:    *signingAddr,
+		Created: tktypes.TimestampNow(),
+	}).Maybe()
+
+	mockPublicTransaction.On("Bindings").Return([]*components.PaladinTXReference{
+		{
+			TransactionID:   *testTransactionID,
+			TransactionType: pldapi.TransactionTypePrivate.Enum(),
+		},
+	}).Maybe()
+
 	publicTransactions := []components.PublicTxAccepted{
-		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: *testTransactionID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: pldapi.PublicTxInput{
-				From: signingAddr,
-			},
-		}, nil),
+		mockPublicTransaction,
 	}
 	mockPublicTxBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
 	mockPublicTxBatch.On("Rejected").Return([]components.PublicTxRejected{})
@@ -768,13 +783,20 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	remoteEngineMocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
 		Return([]*tktypes.EthAddress{signingAddr}, nil)
 
+	mockPublicTransaction := componentmocks.NewPublicTxAccepted(t)
+	mockPublicTransaction.On("PublicTx").Return(&pldapi.PublicTx{
+		From:    *signingAddr,
+		Created: tktypes.TimestampNow(),
+	}).Maybe()
+	mockPublicTransaction.On("Bindings").Return([]*components.PaladinTXReference{
+		{
+			TransactionID:   *testTransactionID,
+			TransactionType: pldapi.TransactionTypePrivate.Enum(),
+		},
+	}).Maybe()
+
 	publicTransactions := []components.PublicTxAccepted{
-		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: *testTransactionID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: pldapi.PublicTxInput{
-				From: signingAddr,
-			},
-		}, nil),
+		mockPublicTransaction,
 	}
 	mockPublicTxBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
 	mockPublicTxBatch.On("Rejected").Return([]components.PublicTxRejected{})
@@ -1038,14 +1060,21 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	aliceEngineMocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
 		Return([]*tktypes.EthAddress{signingAddr}, nil)
 
+	mockPublicTransaction := componentmocks.NewPublicTxAccepted(t)
+	mockPublicTransaction.On("PublicTx").Return(&pldapi.PublicTx{
+		From:    *signingAddr,
+		Created: tktypes.TimestampNow(),
+	}).Maybe()
+	mockPublicTransaction.On("Bindings").Return([]*components.PaladinTXReference{
+		{
+			TransactionID:   *testTransactionID,
+			TransactionType: pldapi.TransactionTypePrivate.Enum(),
+		},
+	}).Maybe()
 	publicTransactions := []components.PublicTxAccepted{
-		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: *testTransactionID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: pldapi.PublicTxInput{
-				From: signingAddr,
-			},
-		}, nil),
+		mockPublicTransaction,
 	}
+
 	mockPublicTxBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
 	mockPublicTxBatch.On("Rejected").Return([]components.PublicTxRejected{})
 	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
@@ -1238,9 +1267,6 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			}
 		},
 	)
-	tx := &components.PrivateTransaction{
-		ID: uuid.New(),
-	}
 
 	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
 	mockPublicTxBatch.On("Finalize", mock.Anything).Return().Maybe()
@@ -1252,20 +1278,33 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	aliceEngineMocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1", "signer1"}).
 		Return([]*tktypes.EthAddress{signingAddr, signingAddr}, nil)
 
+	mockPublicTransaction1 := componentmocks.NewPublicTxAccepted(t)
+	mockPublicTransaction1.On("PublicTx").Return(&pldapi.PublicTx{
+		From:    *signingAddr,
+		Created: tktypes.TimestampNow(),
+	}).Maybe()
+	mockPublicTransaction1.On("Bindings").Return([]*components.PaladinTXReference{
+		{
+			TransactionID:   *testTransactionID1,
+			TransactionType: pldapi.TransactionTypePrivate.Enum(),
+		},
+	}).Maybe()
+	mockPublicTransaction2 := componentmocks.NewPublicTxAccepted(t)
+	mockPublicTransaction2.On("PublicTx").Return(&pldapi.PublicTx{
+		From:    *signingAddr,
+		Created: tktypes.TimestampNow(),
+	}).Maybe()
+	mockPublicTransaction2.On("Bindings").Return([]*components.PaladinTXReference{
+		{
+			TransactionID:   *testTransactionID2,
+			TransactionType: pldapi.TransactionTypePrivate.Enum(),
+		},
+	}).Maybe()
 	publicTransactions := []components.PublicTxAccepted{
-		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: pldapi.PublicTxInput{
-				From: signingAddr,
-			},
-		}, nil),
-		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: pldapi.PublicTxInput{
-				From: signingAddr,
-			},
-		}, nil),
+		mockPublicTransaction1,
+		mockPublicTransaction2,
 	}
+
 	mockPublicTxBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
 	mockPublicTxBatch.On("Rejected").Return([]components.PublicTxRejected{})
 	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
@@ -1450,13 +1489,19 @@ func TestPrivateTxManagerDeploy(t *testing.T) {
 	mocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
 		Return([]*tktypes.EthAddress{signingAddr}, nil)
 
+	mockPublicTransaction := componentmocks.NewPublicTxAccepted(t)
+	mockPublicTransaction.On("PublicTx").Return(&pldapi.PublicTx{
+		From:    *signingAddr,
+		Created: tktypes.TimestampNow(),
+	}).Maybe()
+	mockPublicTransaction.On("Bindings").Return([]*components.PaladinTXReference{
+		{
+			TransactionID:   *testTransactionID,
+			TransactionType: pldapi.TransactionTypePrivate.Enum(),
+		},
+	}).Maybe()
 	publicTransactions := []components.PublicTxAccepted{
-		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: *testTransactionID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: pldapi.PublicTxInput{
-				From: signingAddr,
-			},
-		}, nil),
+		mockPublicTransaction,
 	}
 
 	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
@@ -1830,42 +1875,6 @@ type dependencyMocks struct {
 	publicTxManager     *componentmocks.PublicTxManager
 	identityResolver    *componentmocks.IdentityResolver
 	txManager           *componentmocks.TXManager
-}
-
-type fakePublicTx struct {
-	t         *components.PublicTxSubmission
-	rejectErr error
-	pubTx     *pldapi.PublicTx
-}
-
-func newFakePublicTx(t *components.PublicTxSubmission, rejectErr error) *fakePublicTx {
-	return &fakePublicTx{
-		t:         t,
-		rejectErr: rejectErr,
-		pubTx: &pldapi.PublicTx{
-			To:              t.To,
-			Data:            t.Data,
-			From:            *t.From,
-			Created:         tktypes.TimestampNow(),
-			PublicTxOptions: t.PublicTxOptions,
-		},
-	}
-}
-
-func (f *fakePublicTx) RejectedError() error {
-	return f.rejectErr
-}
-
-func (f *fakePublicTx) RevertData() tktypes.HexBytes {
-	return []byte("some data")
-}
-
-func (f *fakePublicTx) Bindings() []*components.PaladinTXReference {
-	return f.t.Bindings
-}
-
-func (f *fakePublicTx) PublicTx() *pldapi.PublicTx {
-	return f.pubTx
 }
 
 func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (components.PrivateTxManager, *dependencyMocks) {
