@@ -103,6 +103,7 @@ type transactionFlow struct {
 	finalizeRequired            bool
 	finalizePending             bool
 	delegatePending             bool
+	pendingDelegationRequestID  string
 	delegateRequestTime         time.Time
 	delegated                   bool
 	delegateRequestTimer        *time.Timer

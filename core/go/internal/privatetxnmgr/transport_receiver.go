@@ -40,7 +40,9 @@ func (p *privateTxManager) ReceiveTransportMessage(ctx context.Context, message 
 	case "EndorsementResponse":
 		go p.handleEndorsementResponse(p.ctx, messagePayload)
 	case "DelegationRequest":
-		go p.handleDelegationRequest(p.ctx, messagePayload)
+		go p.handleDelegationRequest(p.ctx, messagePayload, replyToDestination)
+	case "DelegationRequestAcknowledgment":
+		go p.handleDelegationRequestAcknowledgment(p.ctx, messagePayload)
 	case "AssembleRequest":
 		go p.handleAssembleRequest(p.ctx, messagePayload, replyToDestination)
 	case "AssembleResponse":

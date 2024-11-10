@@ -108,8 +108,9 @@ type TransactionRevertedEvent struct {
 	PrivateTransactionEventBase
 }
 
-type TransactionDelegatedEvent struct {
+type TransactionDelegationAcknowledgedEvent struct {
 	PrivateTransactionEventBase
+	DelegationRequestID string
 }
 
 type TransactionBlockedEvent struct {

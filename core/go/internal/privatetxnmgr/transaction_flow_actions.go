@@ -338,9 +338,11 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue b
 	}
 	tf.transaction.Inputs.From = fullQualifiedFrom.String()
 
+	delegationRequestID := uuid.New().String()
+
 	err = tf.transportWriter.SendDelegationRequest(
 		ctx,
-		uuid.New().String(),
+		delegationRequestID,
 		coordinatorNode,
 		tf.transaction,
 	)
@@ -348,6 +350,7 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue b
 		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
 		tf.logActionError(ctx, "Failed to send delegation request", err)
 	}
+	tf.pendingDelegationRequestID = delegationRequestID
 	tf.delegatePending = true
 	tf.delegateRequestTime = tf.clock.Now()
 	tf.delegateRequestTimer = time.AfterFunc(tf.requestTimeout, func() {

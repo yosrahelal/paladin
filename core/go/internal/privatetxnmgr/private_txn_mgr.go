@@ -332,7 +332,7 @@ func (p *privateTxManager) validateDelegatedTransaction(ctx context.Context, tx 
 
 }
 
-func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, tx *components.PrivateTransaction) error {
+func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, delegatingNodeName string, delegationId string, tx *components.PrivateTransaction) error {
 	log.L(ctx).Debugf("Handling delegated transaction: %v", tx)
 
 	contractAddr := tx.Inputs.To
@@ -341,13 +341,18 @@ func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, tx *c
 		log.L(ctx).Errorf("handleDelegatedTransaction: Failed to get domain smart contract for contract address %s: %s", contractAddr, err)
 		return err
 	}
-	oc, err := p.getSequencerForContract(ctx, contractAddr, domainAPI)
+	sequencer, err := p.getSequencerForContract(ctx, contractAddr, domainAPI)
 	if err != nil {
 		return err
 	}
-	queued := oc.ProcessInFlightTransaction(ctx, tx)
+	queued := sequencer.ProcessInFlightTransaction(ctx, tx)
 	if queued {
 		log.L(ctx).Debugf("Delegated Transaction with ID %s queued in database", tx.ID)
+	}
+	err = sequencer.transportWriter.SendDelegationRequestAcknowledgment(ctx, delegatingNodeName, delegationId, p.nodeName, tx.ID.String())
+	if err != nil {
+		log.L(ctx).Errorf("Failed to send delegation request acknowledgment: %s", err)
+		// if we can't send the acknowledgment, the sender will retry
 	}
 	return nil
 }
@@ -708,7 +713,7 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 	}
 }
 
-func (p *privateTxManager) handleDelegationRequest(ctx context.Context, messagePayload []byte) {
+func (p *privateTxManager) handleDelegationRequest(ctx context.Context, messagePayload []byte, replyTo string) {
 	delegationRequest := &pbEngine.DelegationRequest{}
 	err := proto.Unmarshal(messagePayload, delegationRequest)
 	if err != nil {
@@ -729,20 +734,36 @@ func (p *privateTxManager) handleDelegationRequest(ctx context.Context, messageP
 		return
 	}
 
-	//TODO persist the delegated transaction and only continue once it has been persisted
+	//TODO persist the delegated transaction and only continue with the acknowledgment once it has been persisted
 
 	//TODO not quite figured out how to receive an assembled transaction because it will have been assembled
 	// in the domain context of the sender.  In some cases, it will be using committed states so that will be ok.
 	// for now, in the interest of simplicity, we just trash the PostAssembly and start again
 	transaction.PostAssembly = nil
-	err = p.handleDelegatedTransaction(ctx, transaction)
+	err = p.handleDelegatedTransaction(ctx, replyTo, delegationRequest.DelegationId, transaction)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to handle delegated transaction: %s", err)
 		// do not send an ack and let the sender retry
 		return
 	}
+}
 
-	//TODO send an ack
+func (p *privateTxManager) handleDelegationRequestAcknowledgment(ctx context.Context, messagePayload []byte) {
+	delegationRequestAcknowledgment := &pbEngine.DelegationRequestAcknowledgment{}
+	err := proto.Unmarshal(messagePayload, delegationRequestAcknowledgment)
+	if err != nil {
+		log.L(ctx).Errorf("Failed to unmarshal delegation request acknowledgment: %s", err)
+		return
+	}
+
+	p.HandleNewEvent(ctx, &ptmgrtypes.TransactionDelegationAcknowledgedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			TransactionID:   delegationRequestAcknowledgment.TransactionId,
+			ContractAddress: delegationRequestAcknowledgment.ContractAddress,
+		},
+		DelegationRequestID: delegationRequestAcknowledgment.DelegationId,
+	})
+
 }
 
 func (p *privateTxManager) handleEndorsementResponse(ctx context.Context, messagePayload []byte) {

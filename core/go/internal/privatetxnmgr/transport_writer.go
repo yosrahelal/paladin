@@ -84,6 +84,39 @@ func (tw *transportWriter) SendDelegationRequest(
 	return nil
 }
 
+func (tw *transportWriter) SendDelegationRequestAcknowledgment(
+	ctx context.Context,
+	delegatingNodeName string,
+	delegationId string,
+	delegateNodeName string,
+	transactionID string,
+
+) error {
+
+	delegationRequestAcknowledgment := &pb.DelegationRequestAcknowledgment{
+		DelegationId:    delegationId,
+		TransactionId:   transactionID,
+		DelegateNodeId:  delegateNodeName,
+		ContractAddress: tw.contractAddress.String(),
+	}
+	delegationRequestAcknowledgmentBytes, err := proto.Marshal(delegationRequestAcknowledgment)
+	if err != nil {
+		log.L(ctx).Errorf("Error marshalling delegationRequestAcknowledgment  message: %s", err)
+		return err
+	}
+
+	if err = tw.transportManager.Send(ctx, &components.TransportMessage{
+		MessageType: "DelegationRequestAcknowledgment",
+		Payload:     delegationRequestAcknowledgmentBytes,
+		Component:   components.PRIVATE_TX_MANAGER_DESTINATION,
+		Node:        delegatingNodeName,
+		ReplyTo:     tw.nodeID,
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
 // TODO do we have duplication here?  contractAddress and transactionID are in the transactionSpecification
 func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, idempotencyKey string, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState, infoStates []*components.FullState) error {
 	attRequestAny, err := anypb.New(attRequest)

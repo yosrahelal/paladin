@@ -49,8 +49,8 @@ func (tf *transactionFlow) ApplyEvent(ctx context.Context, event ptmgrtypes.Priv
 		tf.applyTransactionConfirmedEvent(ctx, event)
 	case *ptmgrtypes.TransactionRevertedEvent:
 		tf.applyTransactionRevertedEvent(ctx, event)
-	case *ptmgrtypes.TransactionDelegatedEvent:
-		tf.applyTransactionDelegatedEvent(ctx, event)
+	case *ptmgrtypes.TransactionDelegationAcknowledgedEvent:
+		tf.applyTransactionDelegationAcknowledgedEvent(ctx, event)
 	case *ptmgrtypes.ResolveVerifierResponseEvent:
 		tf.applyResolveVerifierResponseEvent(ctx, event)
 	case *ptmgrtypes.ResolveVerifierErrorEvent:
@@ -206,9 +206,13 @@ func (tf *transactionFlow) applyTransactionRevertedEvent(ctx context.Context, _ 
 	tf.status = "reverted"
 }
 
-func (tf *transactionFlow) applyTransactionDelegatedEvent(ctx context.Context, _ *ptmgrtypes.TransactionDelegatedEvent) {
-	log.L(ctx).Debugf("transactionFlow:applyTransactionDelegatedEvent transactionID:%s", tf.transaction.ID.String())
-	tf.latestEvent = "TransactionDelegatedEvent"
+func (tf *transactionFlow) applyTransactionDelegationAcknowledgedEvent(ctx context.Context, event *ptmgrtypes.TransactionDelegationAcknowledgedEvent) {
+	log.L(ctx).Debugf("transactionFlow:applyTransactionDelegationAcknowledgedEvent transactionID:%s", tf.transaction.ID.String())
+	if event.DelegationRequestID != tf.pendingDelegationRequestID {
+		log.L(ctx).Warnf("Received delegation acknowledgment for unknown request %s", event.DelegationRequestID)
+		return
+	}
+	tf.latestEvent = "TransactionDelegationAcknowledgedEvent"
 	tf.status = "delegated"
 	tf.delegated = true
 	tf.delegatePending = false

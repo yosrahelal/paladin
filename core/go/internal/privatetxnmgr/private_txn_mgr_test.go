@@ -746,8 +746,8 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	err = privateTxManager.HandleNewTx(ctx, tx)
 	assert.NoError(t, err)
 
-	status := pollForStatus(ctx, t, "delegating", privateTxManager, domainAddressString, testTransactionID.String(), 200*time.Second)
-	assert.Equal(t, "delegating", status)
+	status := pollForStatus(ctx, t, "delegated", privateTxManager, domainAddressString, testTransactionID.String(), 200*time.Second)
+	assert.Equal(t, "delegated", status)
 
 	status = pollForStatus(ctx, t, "dispatched", remoteEngine, domainAddressString, testTransactionID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
@@ -956,8 +956,8 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 	err = privateTxManager.HandleNewTx(ctx, tx)
 	assert.NoError(t, err)
 
-	status := pollForStatus(ctx, t, "delegating", privateTxManager, domainAddressString, testTransactionID.String(), 200*time.Second)
-	assert.Equal(t, "delegating", status)
+	status := pollForStatus(ctx, t, "delegated", privateTxManager, domainAddressString, testTransactionID.String(), 200*time.Second)
+	assert.Equal(t, "delegated", status)
 
 	status = pollForStatus(ctx, t, "dispatched", remoteEngine, domainAddressString, testTransactionID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
@@ -1648,8 +1648,8 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 	err = aliceEngine.HandleNewTx(ctx, tx2)
 	assert.NoError(t, err)
 
-	status = pollForStatus(ctx, t, "delegating", aliceEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
-	assert.Equal(t, "delegating", status)
+	status = pollForStatus(ctx, t, "delegated", aliceEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
+	assert.Equal(t, "delegated", status)
 
 	status = pollForStatus(ctx, t, "dispatched", bobEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
