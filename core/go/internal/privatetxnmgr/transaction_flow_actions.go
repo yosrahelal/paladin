@@ -287,9 +287,8 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 
 func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue bool) {
 
-	tf.logActionInfof(ctx, "Transaction is delegating since %s", tf.delegateRequestTime)
-
 	if tf.delegatePending {
+		tf.logActionInfof(ctx, "Transaction is delegating since %s", tf.delegateRequestTime)
 		if tf.clock.Now().Before(tf.delegateRequestTime.Add(tf.requestTimeout)) {
 			tf.logActionDebug(ctx, "Delegation request not timed out")
 			return false
