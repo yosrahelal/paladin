@@ -1,8 +1,12 @@
 # Paladin
 
-Paladin brings true programmable privacy to the world's most popular smart contract platform.
+Paladin provides programmable privacy for EVM.
 
 ![Paladin overview](./images/paladin_overview.svg)
+
+Paladin gives enterprises control of sensitive information without compromising transparency or scalability.
+
+The Paladin code base is open source, Apache 2.0 licensing and is maintained in an open source community that provides open governance and open development, as part of [Linux Foundation Decentralized Trust](https://www.lfdecentralizedtrust.org).
 
 ## Programmable privacy for EVM
 
