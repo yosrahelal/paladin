@@ -31,9 +31,10 @@ ext {
         include "mocks/**/*.go"
     }
 
-    targetCoverage = 91.8
+    targetCoverage = 92.0
     maxCoverageBarGap = 1
     coverageExcludedPackages = [
+        'github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes/mock_transaction_flow.go',
         'github.com/kaleido-io/paladin/core/pkg/proto',
         'github.com/kaleido-io/paladin/core/pkg/proto/transaction',
         'github.com/kaleido-io/paladin/toolkit/prototk',
