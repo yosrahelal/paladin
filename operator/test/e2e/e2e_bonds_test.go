@@ -506,6 +506,7 @@ var _ = Describe("controller", Ordered, func() {
 					"inputs": map[string]any{
 						"bondAddress_": bondTokenContract,
 						"units_":       1000,
+						"custodian_":   bondCustodian.addr,
 					},
 				}).
 				Send().
