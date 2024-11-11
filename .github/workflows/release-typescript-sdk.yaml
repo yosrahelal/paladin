@@ -1,4 +1,4 @@
-name: CLI SDK Release
+name: TypeScript SDK Release
 on:
   workflow_call:
     secrets:

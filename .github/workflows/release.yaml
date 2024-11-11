@@ -68,8 +68,8 @@ jobs:
     secrets:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  release-cli-sdk:
+  release-typescript-sdk:
     needs: release-charts
-    uses: ./.github/workflows/release-cli-sdk.yaml
+    uses: ./.github/workflows/release-typescript-sdk.yaml
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
