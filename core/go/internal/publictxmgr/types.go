@@ -257,7 +257,8 @@ type InMemoryTxStateReadOnly interface {
 	GetCreatedTime() *tktypes.Timestamp
 	// get the transaction receipt from the in-memory state (note: the returned value should not be modified)
 	GetTransactionHash() *tktypes.Bytes32
-	GetNonce() uint64
+	GetPubTxnID() uint64
+	GetNonce() *uint64
 	GetFrom() tktypes.EthAddress
 	GetTo() *tktypes.EthAddress
 	GetValue() *tktypes.HexUint256

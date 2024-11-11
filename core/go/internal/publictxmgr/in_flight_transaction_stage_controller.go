@@ -315,7 +315,7 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 									rsc.InMemoryTx.GetGasPriceObject()
 									gasPriceJSON, _ := json.Marshal(rsc.InMemoryTx.GetGasPriceObject())
 									rsc.StageOutputsToBePersisted.TxUpdates.NewSubmission = &DBPubTxnSubmission{
-										SignerNonce:     rsc.InMemoryTx.GetSignerNonce(),
+										from:            rsc.InMemoryTx.GetFrom().String(),
 										Created:         tktypes.TimestampNow(),
 										TransactionHash: *rsc.StageOutput.SignOutput.TxHash,
 										GasPricing:      gasPriceJSON,

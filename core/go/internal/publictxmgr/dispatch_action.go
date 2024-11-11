@@ -85,7 +85,8 @@ func (oc *orchestrator) dispatchAction(ctx context.Context, nonce uint64, action
 	defer oc.inFlightTxsMux.Unlock()
 	var pending *inFlightTransactionStageController
 	for _, inflight := range oc.inFlightTxs {
-		if inflight.stateManager.GetNonce() == nonce {
+		pNonce := inflight.stateManager.GetNonce()
+		if pNonce != nil && *pNonce == nonce {
 			pending = inflight
 			break
 		}

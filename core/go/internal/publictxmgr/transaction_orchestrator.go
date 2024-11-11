@@ -24,6 +24,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -139,6 +140,9 @@ type orchestrator struct {
 
 	staleTimeout    time.Duration
 	lastQueueUpdate time.Time
+
+	lastNonceAlloc time.Time
+	nextNonce      *uint64
 }
 
 const veryShortMinimum = 50 * time.Millisecond
@@ -220,6 +224,84 @@ func (oc *orchestrator) getFirstInFlight() (ift *inFlightTransactionStageControl
 	return
 }
 
+func (oc *orchestrator) allocateNonces(ctx context.Context, txns []*DBPublicTxn, highestInFlightNonce *uint64) error {
+
+	// Of the the transactions might have nonces already
+	toAlloc := make([]*DBPublicTxn, 0, len(txns))
+	for _, tx := range txns {
+		if tx.Nonce == nil {
+			toAlloc = append(toAlloc, tx)
+		} else if highestInFlightNonce == nil || *tx.Nonce > *highestInFlightNonce {
+			newHighest := *tx.Nonce
+			highestInFlightNonce = &newHighest
+		}
+	}
+	if len(toAlloc) == 0 {
+		// Nothing to do
+		return nil
+	}
+
+	// We need to ensure we have the next nonce to allocate
+	if oc.nextNonce == nil || time.Since(oc.lastNonceAlloc) > oc.nonceCacheTimeout {
+		log.L(ctx).Debugf("no cached nonce, or nonce expired for %s (cached=%v)", oc.signingAddress, oc.lastNonceAlloc)
+		txCount, err := oc.ethClient.GetTransactionCount(ctx, oc.signingAddress)
+		if err != nil {
+			return err
+		}
+		// See if we have nonces in our DB that are ahead of the mempool.
+		if highestInFlightNonce != nil && txCount.Uint64() <= *highestInFlightNonce {
+			nextNonce := *highestInFlightNonce + 1
+			oc.nextNonce = &nextNonce
+			log.L(ctx).Infof("Next nonce for %s set to %d (after highest in-flight %d)", oc.signingAddress, nextNonce, *highestInFlightNonce)
+		} else {
+			// Otherwise take the node's answer
+			oc.nextNonce = (*uint64)(txCount)
+			log.L(ctx).Infof("Next nonce for %s set to %d (from eth_getTransactionCount)", oc.signingAddress, *oc.nextNonce)
+		}
+	}
+
+	// Set up the list of nonces we'll allocated, but until it's in the DB we do NOT update the oc.nextNonce beyond the first in the list
+	newNextNonce := *oc.nextNonce
+	newNonces := make([]uint64, len(toAlloc))
+	for i := range newNonces {
+		newNonces[i] = newNextNonce
+		newNextNonce++
+	}
+
+	// Run the DB TXN
+	err := oc.p.DB().Transaction(func(dbTX *gorm.DB) error {
+		sqlQuery := `UPDATE "public_txns" ` +
+			`SET "nonce" = nv."nonce" ` +
+			`FROM ` +
+			`( VALUES `
+		values := make([]any, 0, len(toAlloc)*2)
+		for i, tx := range toAlloc {
+			if i > 0 {
+				sqlQuery += `, `
+			}
+			sqlQuery += `( ? = ? ) `
+			values = append(values, tx.PublicTxnID)
+			values = append(values, newNonces[i])
+			log.L(ctx).Debugf("assigning %s:%s (pubTxnId=%d)", oc.signingAddress, newNonces[i], tx.PublicTxnID)
+		}
+		sqlQuery += `) as nv ("public_txn_id", "nonce") ` +
+			`WHERE "public_txns"."public_txn_id" = nv."public_txn_id";`
+		return dbTX.WithContext(ctx).Raw(sqlQuery, values...).Error
+	})
+	if err != nil {
+		return err
+	}
+
+	// Update the txns themselves, and our nextNonce
+	for i, tx := range toAlloc {
+		nonce := newNonces[i]
+		tx.Nonce = &nonce
+	}
+	oc.nextNonce = &newNextNonce
+
+	return nil
+}
+
 func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total int) {
 	pollStart := time.Now()
 	oc.inFlightTxsMux.Lock()
@@ -235,11 +317,12 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 		stageCounts[stageName] = 0
 	}
 
-	var highestInFlightNonce uint64
+	var highestInFlightNonce *uint64
 	// Run through copying across from the old InFlight list to the new one, those that aren't ready to be deleted
 	for _, p := range oldInFlight {
-		if p.stateManager.GetNonce() > highestInFlightNonce {
-			highestInFlightNonce = p.stateManager.GetNonce()
+		if highestInFlightNonce == nil || *p.stateManager.GetNonce() > *highestInFlightNonce {
+			newHighest := *p.stateManager.GetNonce()
+			highestInFlightNonce = &newHighest
 		}
 		if p.stateManager.CanBeRemoved(ctx) {
 			oc.totalCompleted = oc.totalCompleted + 1
@@ -273,13 +356,13 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				Where(`"Completed"."tx_hash" IS NULL`).
 				Where("suspended IS FALSE").
 				Where(`"from" = ?`, oc.signingAddress).
-				Order("nonce").
+				Order("public_txn_id").
 				Limit(spaces)
 			if len(oc.inFlightTxs) > 0 {
 				// We don't want to see any of the ones we already have in flight.
 				// The only way something leaves our in-flight list, is if we get a notification from the block indexer
 				// that it committed a DB transaction that removed it from our list.
-				q = q.Where("nonce > ?", highestInFlightNonce)
+				q = q.Where("(nonce IS NULL OR nonce > ?)", highestInFlightNonce)
 			}
 			// Note we do not use an explicit DB transaction to coordinate the read of the
 			// transactions table with the read of the submissions table,
@@ -294,6 +377,17 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			return -1, len(oc.inFlightTxs)
 		}
 
+		// Synchronously we ensure that we have a nonce for all of these.
+		// This is an indefinite retry, as we MUST not proceed until a nonce has been allocated+stored for every one
+		// of these transactions. Otherwise we might re-order transactions compared to their DB commit order
+		// (which is unacceptable for strict TX ordering).
+		if err := oc.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
+			return true, oc.allocateNonces(ctx, additional, highestInFlightNonce)
+		}); err != nil {
+			log.L(ctx).Warnf("Orchestrator context cancelled while allocating nonce: %s", err)
+			return
+		}
+
 		log.L(ctx).Debugf("Orchestrator poll and process: polled %d items, space: %d", len(additional), spaces)
 		for _, ptx := range additional {
 			queueUpdated = true
@@ -304,7 +398,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				txStage = InFlightTxStageQueued
 			}
 			stageCounts[string(txStage)] = stageCounts[string(txStage)] + 1
-			log.L(ctx).Debugf("Orchestrator added transaction with ID: %s", ptx.SignerNonce)
+			log.L(ctx).Debugf("Orchestrator added transaction with PublicTxnID=%d From=%s", ptx.PublicTxnID, ptx.From)
 		}
 		total = len(oc.inFlightTxs)
 		polled = total - oldLen

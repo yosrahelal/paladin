@@ -17,6 +17,8 @@ package publictxmgr
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
@@ -109,8 +111,16 @@ func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdate
 	}
 }
 
+func (imtxs *inMemoryTxState) GetPubTxnID() uint64 {
+	return imtxs.mtx.ptx.PublicTxnID
+}
+
 func (imtxs *inMemoryTxState) GetSignerNonce() string {
-	return imtxs.mtx.ptx.SignerNonce
+	nonceStr := "unassigned"
+	if imtxs.mtx.ptx.Nonce != nil {
+		nonceStr = strconv.FormatUint(*imtxs.mtx.ptx.Nonce, 10)
+	}
+	return fmt.Sprintf("%s:%s", imtxs.mtx.ptx.From, nonceStr)
 }
 
 func (imtxs *inMemoryTxState) GetCreatedTime() *tktypes.Timestamp {
@@ -121,7 +131,7 @@ func (imtxs *inMemoryTxState) GetTransactionHash() *tktypes.Bytes32 {
 	return imtxs.mtx.TransactionHash
 }
 
-func (imtxs *inMemoryTxState) GetNonce() uint64 {
+func (imtxs *inMemoryTxState) GetNonce() *uint64 {
 	return imtxs.mtx.ptx.Nonce
 }
 
@@ -142,7 +152,7 @@ func (imtxs *inMemoryTxState) BuildEthTX() *ethsigner.Transaction {
 	ptx := imtxs.mtx.ptx
 	return buildEthTX(
 		ptx.From,
-		&ptx.Nonce,
+		ptx.Nonce,
 		ptx.To,
 		ptx.Data,
 		&pldapi.PublicTxOptions{

@@ -169,9 +169,6 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 	require.NoError(t, err)
 
 	if mocks.disableManagerStart {
-		pmgr.nonceManager = newNonceCache(1*time.Hour, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
-			return mockBaseNonce, nil
-		})
 		pmgr.ethClient = pmgr.ethClientFactory.SharedWS()
 		pmgr.gasPriceClient.Init(ctx, pmgr.ethClient)
 	} else {

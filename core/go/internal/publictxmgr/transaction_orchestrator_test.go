@@ -52,11 +52,10 @@ func newTestOrchestrator(t *testing.T, cbs ...func(mocks *mocksAndTestControl, c
 
 func newInflightTransaction(o *orchestrator, nonce uint64, txMods ...func(tx *DBPublicTxn)) (*inFlightTransactionStageController, *inFlightTransactionState) {
 	tx := &DBPublicTxn{
-		SignerNonce: fmt.Sprintf("%s:%d", o.signingAddress, 1),
-		From:        o.signingAddress,
-		Nonce:       nonce,
-		Gas:         2000,
-		Created:     tktypes.TimestampNow(),
+		From:    o.signingAddress,
+		Nonce:   &nonce,
+		Gas:     2000,
+		Created: tktypes.TimestampNow(),
 	}
 	for _, txMod := range txMods {
 		txMod(tx)
