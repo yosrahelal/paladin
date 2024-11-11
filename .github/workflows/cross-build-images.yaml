@@ -107,21 +107,15 @@ jobs:
           password: ${{ secrets.password }}
 
       - name: Create and push core manifest
-        run: |
-          docker manifest create $TEMP_IMAGE \
-            --amend $TEMP_IMAGE-arm64 \
-            --amend $TEMP_IMAGE-amd64
-          docker manifest push $TEMP_IMAGE
-
-      - name: Retag and push core image
         env:
           IMAGE_TAGS: ${{ inputs.image_tags }}
         run: |
-          docker pull $TEMP_IMAGE
           IFS=',' read -ra TAG_ARRAY <<< "$IMAGE_TAGS"
           for tag in "${TAG_ARRAY[@]}"; do
-            docker tag $TEMP_IMAGE $IMAGE:$tag
-            docker push $IMAGE:$tag
+            docker manifest create $IMAGE:$tag \
+            --amend $TEMP_IMAGE-arm64 \
+            --amend $TEMP_IMAGE-amd64
+            docker manifest push $IMAGE:$tag
           done
 
   operator-docker-manifest:
@@ -149,19 +143,14 @@ jobs:
           password: ${{ secrets.password }}
 
       - name: Create and push operator manifest
-        run: |
-          docker manifest create $TEMP_IMAGE \
-            --amend $TEMP_IMAGE-arm64 \
-            --amend $TEMP_IMAGE-amd64
-          docker manifest push $TEMP_IMAGE
-
-      - name: Retag and push operator image
         env:
           IMAGE_TAGS: ${{ inputs.image_tags }}
         run: |
-          docker pull $TEMP_IMAGE
           IFS=',' read -ra TAG_ARRAY <<< "$IMAGE_TAGS"
           for tag in "${TAG_ARRAY[@]}"; do
-            docker tag $TEMP_IMAGE $IMAGE:$tag
-            docker push $IMAGE:$tag
+            docker manifest create $IMAGE:$tag \
+            --amend $TEMP_IMAGE-arm64 \
+            --amend $TEMP_IMAGE-amd64
+            docker manifest push $IMAGE:$tag
           done
+          
