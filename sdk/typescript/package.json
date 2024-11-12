@@ -1,5 +1,5 @@
 {
-  "name": "paladin-sdk",
+  "name": "@lfdecentralizedtrust-labs/paladin-sdk",
   "version": "0.0.1",
   "description": "",
   "main": "build/index.js",
