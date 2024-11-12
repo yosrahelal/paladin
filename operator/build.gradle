@@ -56,6 +56,11 @@ ext {
     deleteCluster = project.hasProperty('deleteCluster') ? project.deleteCluster.toBoolean() : false // By default, do not delete the cluster
     buildPaladin = project.hasProperty('buildPaladin') ? project.buildPaladin == 'true' : true // Default is to build Paladin
     buildOperator = project.hasProperty('buildOperator') ? project.buildOperator == 'true' : true // Default is to build the operator
+
+    operatorImageName = project.hasProperty('operatorImageName') ? project.operatorImageName : 'paladin-operator'
+    operatorImageTag = project.hasProperty('operatorImageTag') ? project.operatorImageTag : 'test'
+    paladinImageName = project.hasProperty('paladinImageName') ? project.paladinImageName : 'paladin'
+    paladinImageTag = project.hasProperty('paladinImageTag') ? project.paladinImageTag : 'test'
 }
 
 def printClusterStatus(String namespace) {
@@ -177,6 +182,10 @@ task promoteKindImages(type: Exec, dependsOn: [
     executable 'make'
     args 'kind-promote'
     args "CLUSTER_NAME=${clusterName}"
+    args "OPERATOR_IMAGE_NAME=${operatorImageName}"
+    args "OPERATOR_IMAGE_TAG=${operatorImageTag}"
+    args "PALADIN_IMAGE_NAME=${paladinImageName}"
+    args "PALADIN_IMAGE_TAG=${paladinImageTag}"
 }
 
 task prepareCRDsChart(type: Exec) {
@@ -199,6 +208,10 @@ task installOperator(type: Exec, dependsOn: [installCrds, promoteKindImages, pre
     executable 'make'
     args 'helm-install'
     args "NAMESPACE=${namespace}"
+    args "OPERATOR_IMAGE_NAME=${operatorImageName}"
+    args "OPERATOR_IMAGE_TAG=${operatorImageTag}"
+    args "PALADIN_IMAGE_NAME=${paladinImageName}"
+    args "PALADIN_IMAGE_TAG=${paladinImageTag}"
 }
 
 

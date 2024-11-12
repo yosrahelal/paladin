@@ -1,11 +1,11 @@
 CLUSTER_NAME ?= paladin
 NAMESPACE ?= default
 
-OPERATOR_IMG_NAME ?= paladin-operator
-OPERATOR_IMG_TAG ?= test
-OPERATOR_IMG ?= ${OPERATOR_IMG_NAME}:${OPERATOR_IMG_TAG}
-PALADIN_IMG_NAME ?= paladin
-PALADIN_IMG_TAG ?= test 
+OPERATOR_IMAGE_NAME ?= paladin-operator
+OPERATOR_IMAGE_TAG ?= test
+OPERATOR_IMG ?= ${OPERATOR_IMAGE_NAME}:${OPERATOR_IMAGE_TAG}
+PALADIN_IMAGE_NAME ?= paladin
+PALADIN_IMAGE_TAG ?= test 
 
 # USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
 USE_IMAGE_DIGESTS ?= false
@@ -112,7 +112,7 @@ kind-start:	## Create a Kind cluster.
 kind-promote: kind-start ## Load Docker images into Kind cluster.
 	echo "Loading images into Kind cluster..."
 	$(KIND_CLUSTER) load docker-image ${OPERATOR_IMG} --name "${CLUSTER_NAME}"
-	$(KIND_CLUSTER) load docker-image ${PALADIN_IMG_NAME}:${PALADIN_IMG_TAG}  --name "${CLUSTER_NAME}"
+	$(KIND_CLUSTER) load docker-image ${PALADIN_IMAGE_NAME}:${PALADIN_IMAGE_TAG}  --name "${CLUSTER_NAME}"
 
 .PHONY: kind-delete
 kind-delete: ## Delete the Kind cluster.
@@ -205,11 +205,11 @@ helm-install: helm-install-dependencies ## Install operator using Helm.
 	$(HELM) upgrade --install ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} \
 		-n ${NAMESPACE} --create-namespace \
 		--set operator.namespace=${NAMESPACE} \
-		--set operator.image.repository=${OPERATOR_IMG_NAME} \
+		--set operator.image.repository=${OPERATOR_IMAGE_NAME} \
 		--set operator.image.pullPolicy=IfNotPresent \
-		--set operator.image.tag=${OPERATOR_IMG_TAG} \
-		--set paladin.image.repository=${PALADIN_IMG_NAME} \
-		--set paladin.image.tag=${PALADIN_IMG_TAG} \
+		--set operator.image.tag=${OPERATOR_IMAGE_TAG} \
+		--set paladin.image.repository=${PALADIN_IMAGE_NAME} \
+		--set paladin.image.tag=${PALADIN_IMAGE_TAG} \
 		--set paladin.image.pullPolicy=IfNotPresent \
 		--set prometheus.enabled=false
 
