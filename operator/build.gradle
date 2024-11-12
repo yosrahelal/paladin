@@ -19,7 +19,23 @@ configurations {
         canBeConsumed = false
         canBeResolved = true
     }
+    toolkitGo {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+    notoGo {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+    zetoGo {
+        canBeConsumed = false
+        canBeResolved = true
+    }
     zetoArtifacts {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+    poseidonArtifacts {
         canBeConsumed = false
         canBeResolved = true
     }
@@ -27,7 +43,11 @@ configurations {
 
 dependencies {
     contractCompile project(path: ":solidity", configuration: "compiledContracts")
+    toolkitGo project(path: ':toolkit:go', configuration: 'goSource')
+    notoGo project(path: ":domains:noto", configuration: "goSource")
+    zetoGo project(path: ":domains:zeto", configuration: "goSource")
     zetoArtifacts project(path: ":domains:zeto", configuration: "zetoArtifacts")
+    poseidonArtifacts project(path: ":domains:zeto", configuration: "poseidonArtifacts")
 }
 
 ext {
@@ -81,6 +101,10 @@ task copySolidity(type: Copy) {
         include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
         include 'contracts/domains/pente/PenteFactory.sol/PenteFactory.json'
         include 'contracts/private/NotoTrackerERC20.sol/NotoTrackerERC20.json'
+        include 'contracts/testcontracts/ERC20Simple.sol/ERC20Simple.json'
+        include 'contracts/shared/BondTrackerPublic.sol/BondTrackerPublic.json'
+        include 'contracts/private/BondTracker.sol/BondTracker.json'
+        include 'contracts/private/BondSubscription.sol/BondSubscription.json'
     }
     into 'test/e2e/abis'
 
@@ -91,10 +115,20 @@ task copySolidity(type: Copy) {
 
 task copyZetoSolidity(type: Copy) {
     inputs.files(configurations.zetoArtifacts)
+    inputs.files(configurations.poseidonArtifacts)
+    inputs.files(configurations.contractCompile)
     from fileTree(configurations.zetoArtifacts.asPath) {
         include 'artifacts/contracts/**/*.json'
         include 'artifacts/@iden3/contracts/**/*.json'
         exclude '**/*.dbg.json'
+    }
+    from fileTree(configurations.poseidonArtifacts.asPath) {
+        include 'Poseidon2.json'
+        include 'Poseidon3.json'
+    }
+    from fileTree(configurations.contractCompile.asPath) {
+        include 'contracts/registry/IdentityRegistry.sol/IdentityRegistry.json'
+        include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
     into 'test/e2e/abis/zeto'
 
@@ -103,8 +137,8 @@ task copyZetoSolidity(type: Copy) {
     includeEmptyDirs = false
 }
 
-task buildContractSamples(type: Exec, dependsOn: [copySolidity,copyZetoSolidity]) {
-    commandLine "go", "run", "./contractpkg", "./contractpkg/contract_map.json"
+task buildContractSamples(type: Exec, dependsOn: [copySolidity, copyZetoSolidity]) {
+    commandLine "go", "run", "./contractpkg", "generate", "./contractpkg/contract_map.json"
 }
 
 // Task to build the Paladin image from the parent project
@@ -145,14 +179,23 @@ task promoteKindImages(type: Exec, dependsOn: [
     args "CLUSTER_NAME=${clusterName}"
 }
 
+task prepareCRDsChart(type: Exec) {
+    executable 'make'
+    args 'prepare-crd-chart'
+}
+
 // Task to install Helm CRDs
-task installCrds(type: Exec, dependsOn: [startKindCluster]){
+task installCrds(type: Exec, dependsOn: [startKindCluster, prepareCRDsChart]){
     executable 'make'
     args 'install-crds'
 }
 
+task prepareOperatorChart(type: Exec, dependsOn: [buildContractSamples]) {
+    commandLine "go", "run", "./contractpkg", "template", "config/samples", "charts/paladin-operator/templates/samples"
+}
+
 // Task to install the operator using Helm
-task installOperator(type: Exec, dependsOn: [installCrds, promoteKindImages]) {
+task installOperator(type: Exec, dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
     executable 'make'
     args 'helm-install'
     args "NAMESPACE=${namespace}"
@@ -167,12 +210,12 @@ task verifyOperator(dependsOn: installOperator) {
     }
 }
 
-// Task to create the nodes
-task createNode(type: Exec, dependsOn: verifyOperator) {
-    executable 'make'
-    args 'create-node'
-    args "NAMESPACE=${namespace}"
-}
+// // Task to create the nodes
+// task createNode(type: Exec, dependsOn: verifyOperator) {
+//     executable 'make'
+//     args 'create-node'
+//     args "NAMESPACE=${namespace}"
+// }
 
 // // Task to verify the besu statefulSet
 // task verifyBesu(dependsOn: createNode) {
@@ -195,14 +238,14 @@ task createNode(type: Exec, dependsOn: verifyOperator) {
 // }
 
 // The 'deplay' runs the whole flow
-task deploy(dependsOn: [copySolidity, copyZetoSolidity, createNode]) {
+task deploy(dependsOn: [copySolidity, copyZetoSolidity, verifyOperator]) {
     doLast {
         println 'Deplopy setup completed. Operator is running in the paladin namespace.'
     }
 }
 
 // The 'e2e' task runs the whole flow
-task e2e(type: Exec, dependsOn: [buildContractSamples, deploy]) {
+task e2e(type: Exec, dependsOn: [deploy]) {
     executable 'make'
     args 'test-e2e'
     args "NAMESPACE=${namespace}"
@@ -224,7 +267,10 @@ task clean {
 }
 
 // Existing 'make' task
-task make(type: Exec, dependsOn: [copySolidity,":toolkit:go:protoc"]) {
+task make(type: Exec, dependsOn: copySolidity) {
+    inputs.files(configurations.toolkitGo)
+    inputs.files(configurations.notoGo)
+    inputs.files(configurations.zetoGo)
     executable 'make'
 }
 
@@ -232,4 +278,20 @@ task build {
     // Default 'build' task just builds as part of the main Paladin build.
     // The operator primary build and test is all docker, and runs in separate builds
     dependsOn make
+}
+
+// Task to update the Paladin image in the Kind cluster
+task updatePaladinImage(type: Exec) {
+    doFirst {
+        buildOperator = false
+        buildPaladin = true
+    }
+    dependsOn promoteKindImages 
+    executable 'kubectl'
+    args "rollout" 
+    args "restart" 
+    args "sts"
+    args "paladin-node1"
+    args "paladin-node2"
+    args "paladin-node3"
 }

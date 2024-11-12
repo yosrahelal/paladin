@@ -22,7 +22,10 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/statedistribution"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -61,7 +64,7 @@ func (tb *testbed) execBaseLedgerDeployTransaction(ctx context.Context, signer s
 		}
 	}
 	tx := &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type: pldapi.TransactionTypePublic.Enum(),
 			From: signer,
 			Data: data,
@@ -81,7 +84,7 @@ func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string,
 		}
 	}
 	tx := &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: txInstruction.FunctionABI.String(),
 			From:     signer,
@@ -137,6 +140,36 @@ func (tb *testbed) gatherSignatures(ctx context.Context, tx *components.PrivateT
 	return nil
 }
 
+func (tb *testbed) writeNullifiersToContext(dCtx components.DomainContext, tx *components.PrivateTransaction) error {
+
+	distributions, err := tb.c.PrivateTxManager().BuildStateDistributions(tb.ctx, tx)
+	if err != nil {
+		return err
+	}
+
+	if len(distributions.Remote) > 0 {
+		log.L(tb.ctx).Errorf("States for remote nodes: %+v", distributions.Remote)
+		return fmt.Errorf("testbed does not support states for remote nodes")
+	}
+
+	// We construct a state distributor each time, but DO NOT START IT.
+	// TODO: State distributor needs to become a first class component with significant lifecycle activities
+	sd := statedistribution.NewStateDistributer(tb.ctx,
+		tb.c.TransportManager(),
+		tb.c.StateManager(),
+		tb.c.KeyManager(),
+		tb.c.Persistence(),
+		&pldconf.DistributerConfig{},
+	)
+	nullifiers, err := sd.BuildNullifiers(tb.ctx, distributions.Local)
+	if err != nil {
+		return err
+	}
+
+	return dCtx.UpsertNullifiers(nullifiers...)
+
+}
+
 func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState {
 	endorsableList := make([]*prototk.EndorsableState, len(states))
 	for i, input := range states {
@@ -169,6 +202,7 @@ func (tb *testbed) gatherEndorsements(dCtx components.DomainContext, psc compone
 					InputStates:              toEndorsableList(tx.PostAssembly.InputStates),
 					ReadStates:               toEndorsableList(tx.PostAssembly.ReadStates),
 					OutputStates:             toEndorsableList(tx.PostAssembly.OutputStates),
+					InfoStates:               toEndorsableList(tx.PostAssembly.InfoStates),
 					Endorsement:              ar,
 					Endorser: &prototk.ResolvedVerifier{
 						Lookup:       partyName,

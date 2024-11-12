@@ -25,11 +25,9 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
-	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func NewTransactionFlow(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter, requestTimeout time.Duration) ptmgrtypes.TransactionFlow {
@@ -116,7 +114,12 @@ func (tf *transactionFlow) CoordinatingLocally() bool {
 	return tf.localCoordinator
 }
 
-func (tf *transactionFlow) PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error) {
+func (tf *transactionFlow) PrepareTransaction(ctx context.Context, defaultSigner string) (*components.PrivateTransaction, error) {
+
+	if tf.transaction.Signer == "" {
+		log.L(ctx).Infof("Using random signing key from sequencer to prepare transaction: %s", defaultSigner)
+		tf.transaction.Signer = defaultSigner
+	}
 
 	readTX := tf.components.Persistence().DB() // no DB transaction required here
 	prepError := tf.domainAPI.PrepareTransaction(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
@@ -140,44 +143,8 @@ func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState
 	return endorsableList
 }
 
-func (tf *transactionFlow) GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution {
-	log.L(ctx).Debug("transactionFlow:GetStateDistributions")
-
-	stateDistributions := make([]*statedistribution.StateDistribution, 0)
-	if tf.transaction.PostAssembly == nil {
-		log.L(ctx).Error("PostAssembly is nil")
-		return stateDistributions
-	}
-	if tf.transaction.PostAssembly.OutputStates == nil {
-		log.L(ctx).Debug("OutputStates is nil")
-		return stateDistributions
-	}
-	for stateIndex, outputState := range tf.transaction.PostAssembly.OutputStates {
-		//need the output state for the state ID and need the outputStatePotential for the distribution list
-		outputStatePotential := tf.transaction.PostAssembly.OutputStatesPotential[stateIndex]
-
-		// We don't need to send to our local node
-		localNodeName := tf.components.TransportManager().LocalNodeName()
-		for _, party := range outputStatePotential.DistributionList {
-			nodeName, err := tktypes.PrivateIdentityLocator(party).Node(ctx, true)
-			if err != nil || nodeName == "" || nodeName == localNodeName {
-				log.L(ctx).Debugf("skipping unnecessary state distribution party='%s' nodeName='%s' localNodeName='%s'", party, nodeName, localNodeName)
-				continue
-			}
-
-			stateDistributions = append(stateDistributions, &statedistribution.StateDistribution{
-				ID:              uuid.New().String(),
-				StateID:         outputState.ID.String(),
-				IdentityLocator: party,
-				Domain:          tf.domainAPI.Domain().Name(),
-				ContractAddress: tf.transaction.Inputs.To.String(),
-				SchemaID:        outputState.Schema.String(),
-				StateDataJson:   string(outputState.Data), // the state data json is available on both but we take it
-				// from the outputState to make sure it is the same json that was used to generate the hash
-			})
-		}
-	}
-	return stateDistributions
+func (tf *transactionFlow) GetStateDistributions(ctx context.Context) (*components.StateDistributionSet, error) {
+	return newStateDistributionBuilder(tf.components, tf.transaction).Build(ctx)
 }
 
 func (tf *transactionFlow) InputStateIDs() []string {

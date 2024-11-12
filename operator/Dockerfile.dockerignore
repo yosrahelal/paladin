@@ -20,4 +20,6 @@
 operator/manager
 operator/test
 operator/deploy
-
+operator/config
+operator/charts
+operator/bin

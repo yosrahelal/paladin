@@ -17,6 +17,8 @@
 package io.kaleido.paladin.testbed;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
+import io.kaleido.paladin.toolkit.JsonABI;
 import io.kaleido.paladin.toolkit.JsonHex;
 import io.kaleido.paladin.toolkit.JsonRpcClient;
 
@@ -55,14 +57,64 @@ public class Testbed implements Closeable {
 
     public record Setup(
             String dbMigrationsDir,
+            String logFile,
             long startTimeoutMS
-    ) {}
+    ) {
+    }
+
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static record PrivateContractTransaction (
+    public record StateEncoded(
             @JsonProperty
-            String extraData
-    ) {}
+            JsonHex.Bytes id,
+            @JsonProperty
+            String domain,
+            @JsonProperty
+            JsonHex.Bytes32 schema,
+            @JsonProperty
+            JsonHex.Address contractAddress,
+            @JsonProperty
+            JsonHex.Bytes data
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record TransactionInput(
+            @JsonProperty
+            String type,
+            @JsonProperty
+            String domain,
+            @JsonProperty
+            String from,
+            @JsonProperty
+            JsonHex.Address to,
+            @JsonProperty
+            Map<String, Object> data,
+            @JsonProperty
+            JsonABI abi,
+            @JsonProperty
+            String function
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record TransactionResult(
+            @JsonProperty
+            JsonHex.Bytes encodedCall,
+            @JsonProperty
+            TransactionInput preparedTransaction,
+            @JsonProperty
+            JsonNode preparedMetadata,
+            @JsonProperty
+            List<StateEncoded> inputStates,
+            @JsonProperty
+            List<StateEncoded> outputStates,
+            @JsonProperty
+            List<StateEncoded> readStates,
+            @JsonProperty
+            JsonNode domainData
+    ) {
+    }
 
     public Testbed(Setup testbedSetup, ConfigDomain... domains) throws Exception {
         this.testbedSetup = testbedSetup;
@@ -85,7 +137,7 @@ public class Testbed implements Closeable {
         yamlConfigMerged = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(configMap);
         try {
             start();
-        } catch(Exception e) {
+        } catch (Exception e) {
             close();
             throw e;
         }
@@ -156,11 +208,15 @@ public class Testbed implements Closeable {
                   debug: true
                 log:
                   level: debug
+                  output: file
+                  file:
+                    filename: %s
                 """.formatted(
-                    new File(testbedSetup.dbMigrationsDir).getAbsolutePath(),
-                    JsonHex.randomBytes32(),
-                    availableRPCPort
-            );
+                new File(testbedSetup.dbMigrationsDir).getAbsolutePath(),
+                JsonHex.randomBytes32(),
+                availableRPCPort,
+                new File(testbedSetup.logFile).getAbsolutePath()
+        );
     }
 
     private void start() throws Exception {

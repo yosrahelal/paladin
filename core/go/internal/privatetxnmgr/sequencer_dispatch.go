@@ -17,21 +17,24 @@ package privatetxnmgr
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/preparedtxdistribution"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
-	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-// synchronously prepare and dispatch all given transactions to their associated signing address
+// synchronously prepare and dispatch all given transactions to their associated signing address / or deliver prepared transaction to their custodian
 func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransactions ptmgrtypes.DispatchableTransactions) error {
 	log.L(ctx).Debug("DispatchTransactions")
 	//prepare all transactions then dispatch them
@@ -39,27 +42,23 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 	// array of sequences with space for one per signing address
 	// dispatchableTransactions is a map of signing address to transaction IDs so we can group by signing address
 	dispatchBatch := &syncpoints.DispatchBatch{
-		DispatchSequences: make([]*syncpoints.DispatchSequence, 0, len(dispatchableTransactions)),
+		PublicDispatches: make([]*syncpoints.PublicDispatch, 0, len(dispatchableTransactions)),
 	}
 
-	stateDistributions := make([]*statedistribution.StateDistribution, 0)
+	stateDistributions := make([]*components.StateDistribution, 0)
+	localStateDistributions := make([]*components.StateDistribution, 0)
+	preparedTxnDistributions := make([]*preparedtxdistribution.PreparedTxnDistribution, 0)
 
 	completed := false // and include whether we committed the DB transaction or not
 	for signingAddress, transactionIDs := range dispatchableTransactions {
 		log.L(ctx).Debugf("DispatchTransactions: %d transactions for signingAddress %s", len(transactionIDs), signingAddress)
 
-		preparedTransactions := make([]*components.PrivateTransaction, len(transactionIDs))
+		publicTransactionsToSend := make([]*components.PrivateTransaction, 0, len(transactionIDs))
 
-		sequence := &syncpoints.DispatchSequence{
-			PrivateTransactionDispatches: make([]*syncpoints.DispatchPersisted, len(transactionIDs)),
-		}
+		sequence := &syncpoints.PublicDispatch{}
 
-		for i, transactionID := range transactionIDs {
+		for _, transactionID := range transactionIDs {
 			// prepare all transactions for the given transaction IDs
-
-			sequence.PrivateTransactionDispatches[i] = &syncpoints.DispatchPersisted{
-				PrivateTransactionID: transactionID,
-			}
 
 			txProcessor := s.getTransactionProcessor(transactionID)
 			if txProcessor == nil {
@@ -68,32 +67,77 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				panic("Transaction not found")
 			}
 
-			preparedTransaction, err := txProcessor.PrepareTransaction(ctx)
+			// If we don't have a signing key for the TX at this point, we use our randomly assigned one
+			// TODO: Rotation
+			preparedTransaction, err := txProcessor.PrepareTransaction(ctx, s.defaultSigner)
 			if err != nil {
 				log.L(ctx).Errorf("Error preparing transaction: %s", err)
 				//TODO this is a really bad time to be getting an error.  need to think carefully about how to handle this
 				return err
 			}
-			if preparedTransaction.PreparedPublicTransaction == nil {
-				// TODO: add handling
-				panic("private transactions triggering private transactions currently supported only in testbed")
-			}
-			preparedTransactions[i] = preparedTransaction
+			hasPublicTransaction := preparedTransaction.PreparedPublicTransaction != nil
+			hasPrivateTransaction := preparedTransaction.PreparedPrivateTransaction != nil
+			switch {
+			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPublicTransaction && !hasPrivateTransaction:
+				log.L(ctx).Infof("Result of transaction %s is a prepared public transaction", preparedTransaction.ID)
+				publicTransactionsToSend = append(publicTransactionsToSend, preparedTransaction)
+				sequence.PrivateTransactionDispatches = append(sequence.PrivateTransactionDispatches, &syncpoints.DispatchPersisted{
+					PrivateTransactionID: transactionID,
+				})
+			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPrivateTransaction && !hasPublicTransaction:
+				log.L(ctx).Infof("Result of transaction %s is a chained private transaction", preparedTransaction.ID)
+				validatedPrivateTx, err := s.components.TxManager().PrepareInternalPrivateTransaction(ctx, s.components.Persistence().DB(), preparedTransaction.PreparedPrivateTransaction, pldapi.SubmitModeAuto)
+				if err != nil {
+					log.L(ctx).Errorf("Error preparing transaction %s: %s", preparedTransaction.ID, err)
+					// TODO: this is just an error situation for one transaction - this function is a batch function
+					return err
+				}
+				dispatchBatch.PrivateDispatches = append(dispatchBatch.PrivateDispatches, validatedPrivateTx)
+			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION && (hasPublicTransaction || hasPrivateTransaction):
+				log.L(ctx).Infof("Result of transaction %s is a prepared transaction public=%t private=%t", preparedTransaction.ID, hasPublicTransaction, hasPrivateTransaction)
+				preparedTransactionWithRefs := mapPreparedTransaction(preparedTransaction)
+				dispatchBatch.PreparedTransactions = append(dispatchBatch.PreparedTransactions, preparedTransactionWithRefs)
+				preparedTransactionJSON, err := json.Marshal(preparedTransactionWithRefs)
+				if err != nil {
+					log.L(ctx).Errorf("Error marshalling prepared transaction: %s", err)
+					// TODO: this is just an error situation for one transaction - this function is a batch function
+					return err
+				}
+				preparedTxnDistributions = append(preparedTxnDistributions, &preparedtxdistribution.PreparedTxnDistribution{
+					ID:                      uuid.New().String(),
+					PreparedTxnID:           preparedTransactionWithRefs.ID.String(),
+					IdentityLocator:         preparedTransactionWithRefs.Sender,
+					Domain:                  preparedTransactionWithRefs.Domain,
+					ContractAddress:         preparedTransactionWithRefs.To.String(),
+					PreparedTransactionJSON: preparedTransactionJSON,
+				})
 
-			stateDistributions = append(stateDistributions, txProcessor.GetStateDistributions(ctx)...)
+			default:
+				err = i18n.NewError(ctx, msgs.MsgPrivateTxMgrInvalidPrepareOutcome, preparedTransaction.ID, preparedTransaction.Inputs.Intent, hasPublicTransaction, hasPrivateTransaction)
+				log.L(ctx).Errorf("Error preparing transaction %s: %s", preparedTransaction.ID, err)
+				// TODO: this is just an error situation for one transaction - this function is a batch function
+				return err
+			}
+
+			sds, err := txProcessor.GetStateDistributions(ctx)
+			if err != nil {
+				return err
+			}
+			stateDistributions = append(stateDistributions, sds.Remote...)
+			localStateDistributions = append(localStateDistributions, sds.Local...)
 		}
 
-		preparedTransactionPayloads := make([]*pldapi.TransactionInput, len(preparedTransactions))
+		preparedTransactionPayloads := make([]*pldapi.TransactionInput, len(publicTransactionsToSend))
 
-		for j, preparedTransaction := range preparedTransactions {
+		for j, preparedTransaction := range publicTransactionsToSend {
 			preparedTransactionPayloads[j] = preparedTransaction.PreparedPublicTransaction
 		}
 
 		//Now we have the payloads, we can prepare the submission
 		publicTransactionEngine := s.components.PublicTxManager()
 
-		signers := make([]string, len(preparedTransactions))
-		for i, pt := range preparedTransactions {
+		signers := make([]string, len(publicTransactionsToSend))
+		for i, pt := range publicTransactionsToSend {
 			unqualifiedSigner, err := tktypes.PrivateIdentityLocator(pt.Signer).Identity(ctx)
 			if err != nil {
 				errorMessage := fmt.Sprintf("failed to parse lookup key for signer %s : %s", pt.Signer, err)
@@ -109,8 +153,8 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 			return err
 		}
 
-		publicTXs := make([]*components.PublicTxSubmission, len(preparedTransactions))
-		for i, pt := range preparedTransactions {
+		publicTXs := make([]*components.PublicTxSubmission, len(publicTransactionsToSend))
+		for i, pt := range publicTransactionsToSend {
 			log.L(ctx).Debugf("DispatchTransactions: creating PublicTxSubmission from %s", pt.Signer)
 			publicTXs[i] = &components.PublicTxSubmission{
 				Bindings: []*components.PaladinTXReference{{TransactionID: pt.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
@@ -142,11 +186,23 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 			return i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivTxMgrPublicTxFail)
 		}
 
-		dispatchBatch.DispatchSequences = append(dispatchBatch.DispatchSequences, sequence)
+		dispatchBatch.PublicDispatches = append(dispatchBatch.PublicDispatches, sequence)
 	}
 
 	// TODO: per notes in endorsementGatherer determine if that's the right place to hold the domain context
-	err := s.syncPoints.PersistDispatchBatch(s.endorsementGatherer.DomainContext(), s.contractAddress, dispatchBatch, stateDistributions)
+	dCtx := s.endorsementGatherer.DomainContext()
+
+	// Determine if there are any local nullifiers that need to be built and put into the domain context
+	// before we persist the dispatch batch
+	localNullifiers, err := s.stateDistributer.BuildNullifiers(ctx, localStateDistributions)
+	if err == nil && len(localNullifiers) > 0 {
+		err = dCtx.UpsertNullifiers(localNullifiers...)
+	}
+	if err != nil {
+		return err
+	}
+
+	err = s.syncPoints.PersistDispatchBatch(s.endorsementGatherer.DomainContext(), s.contractAddress, dispatchBatch, stateDistributions, preparedTxnDistributions)
 	if err != nil {
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return err
@@ -157,9 +213,47 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 			s.publisher.PublishTransactionDispatchedEvent(ctx, privateTransactionID, uint64(0) /*TODO*/, signingAddress)
 		}
 	}
-	//now that the DB write has been persisted, we can trigger the in-memory state distribution
+	//now that the DB write has been persisted, we can trigger the in-memory distribution of the prepared transactions and states
 	s.stateDistributer.DistributeStates(ctx, stateDistributions)
 
+	s.preparedTransactionDistributer.DistributePreparedTransactions(ctx, preparedTxnDistributions)
+
+	// We also need to trigger ourselves for any private TX we chained
+	for _, tx := range dispatchBatch.PrivateDispatches {
+		if err := s.privateTxManager.HandleNewTx(ctx, tx); err != nil {
+			log.L(ctx).Errorf("Sequencer failed to notify private TX manager for chained transaction")
+		}
+	}
+
 	return nil
+
+}
+
+func mapPreparedTransaction(tx *components.PrivateTransaction) *components.PrepareTransactionWithRefs {
+	pt := &components.PrepareTransactionWithRefs{
+		ID:       tx.ID,
+		Domain:   tx.Inputs.Domain,
+		To:       &tx.Inputs.To,
+		Metadata: tx.PreparedMetadata,
+		Sender:   tx.Inputs.From,
+	}
+	for _, s := range tx.PostAssembly.InputStates {
+		pt.States.Spent = append(pt.States.Spent, s.ID)
+	}
+	for _, s := range tx.PostAssembly.ReadStates {
+		pt.States.Read = append(pt.States.Read, s.ID)
+	}
+	for _, s := range tx.PostAssembly.OutputStates {
+		pt.States.Confirmed = append(pt.States.Confirmed, s.ID)
+	}
+	for _, s := range tx.PostAssembly.InfoStates {
+		pt.States.Info = append(pt.States.Info, s.ID)
+	}
+	if tx.PreparedPublicTransaction != nil {
+		pt.Transaction = tx.PreparedPublicTransaction
+	} else {
+		pt.Transaction = tx.PreparedPrivateTransaction
+	}
+	return pt
 
 }

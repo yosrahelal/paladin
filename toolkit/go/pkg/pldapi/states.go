@@ -90,19 +90,38 @@ type Schema struct {
 	Labels     []string                 `docstruct:"Schema" json:"labels"      gorm:"type:text[]; serializer:json"`
 }
 
-type State struct {
+type StateBase struct {
 	ID              tktypes.HexBytes   `docstruct:"State" json:"id"                  gorm:"primaryKey"`
 	Created         tktypes.Timestamp  `docstruct:"State" json:"created"             gorm:"autoCreateTime:nano"`
 	DomainName      string             `docstruct:"State" json:"domain"              gorm:"primaryKey"`
 	Schema          tktypes.Bytes32    `docstruct:"State" json:"schema"`
 	ContractAddress tktypes.EthAddress `docstruct:"State" json:"contractAddress"`
 	Data            tktypes.RawJSON    `docstruct:"State" json:"data"`
-	Labels          []*StateLabel      `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Int64Labels     []*StateInt64Label `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Confirmed       *StateConfirm      `docstruct:"State" json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
-	Spent           *StateSpend        `docstruct:"State" json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
-	Locks           []*StateLock       `docstruct:"State" json:"locks,omitempty"     gorm:"-"` // in memory only processing here
-	Nullifier       *StateNullifier    `docstruct:"State" json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
+}
+
+// Like StateBase, but encodes Data as HexBytes
+type StateEncoded struct {
+	ID              tktypes.HexBytes   `json:"id"`
+	DomainName      string             `json:"domain"`
+	Schema          tktypes.Bytes32    `json:"schema"`
+	ContractAddress tktypes.EthAddress `json:"contractAddress"`
+	Data            tktypes.HexBytes   `json:"data"`
+}
+
+type State struct {
+	StateBase
+	Labels      []*StateLabel       `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
+	Int64Labels []*StateInt64Label  `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
+	Confirmed   *StateConfirmRecord `docstruct:"State" json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
+	Read        *StateReadRecord    `docstruct:"State" json:"read,omitempty"      gorm:"foreignKey:state;references:id;"`
+	Spent       *StateSpendRecord   `docstruct:"State" json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
+	Locks       []*StateLock        `docstruct:"State" json:"locks,omitempty"     gorm:"-"` // in memory only processing here
+	Nullifier   *StateNullifier     `docstruct:"State" json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
+}
+
+// TODO: Separate the GORM DTO from the external pldapi external type definition for States
+func (StateBase) TableName() string {
+	return "states"
 }
 
 type StateLabel struct {
@@ -119,22 +138,74 @@ type StateInt64Label struct {
 	Value      int64
 }
 
-// State record can be updated before, during and after confirm records are written
-// For example the confirmation of the existence of states will be coming all the time
-// from the base ledger, for which we will never receive the private state itself.
-// Immutable once written
-type StateConfirm struct {
+type TransactionStates struct {
+	None        bool               `docstruct:"TransactionStates" json:"none,omitempty"` // true if we know nothing about this transaction at all
+	Spent       []*StateBase       `docstruct:"TransactionStates" json:"spent,omitempty"`
+	Read        []*StateBase       `docstruct:"TransactionStates" json:"read,omitempty"`
+	Confirmed   []*StateBase       `docstruct:"TransactionStates" json:"confirmed,omitempty"`
+	Info        []*StateBase       `docstruct:"TransactionStates" json:"info,omitempty"`
+	Unavailable *UnavailableStates `docstruct:"TransactionStates" json:"unavailable,omitempty"` // nil if we have the data for all states
+}
+
+type UnavailableStates struct {
+	Confirmed []tktypes.HexBytes `docstruct:"UnavailableStates" json:"confirmed"`
+	Read      []tktypes.HexBytes `docstruct:"UnavailableStates" json:"read"`
+	Spent     []tktypes.HexBytes `docstruct:"UnavailableStates" json:"spent"`
+	Info      []tktypes.HexBytes `docstruct:"UnavailableStates" json:"info"`
+}
+
+// A confirm record is written when indexing the blockchain, and can be written regardless
+// of whether we currently have access to the private data of the state.
+// It is simply a join record between the Paladin transaction ID and the state.
+//
+// A state is "available" if we:
+// - have the confirm record
+// - have the private data for the state
+// - do not have a spend record
+//
+// Note that a Domain Context will track the creation of a state before it makes it to
+// the blockchain, allowing us to submit chains of transactions that create and spend
+// states all in a single block. In that case the state will only be "available" within
+// the in-memory domain context being managed by the sequencer for that smart contract.
+type StateConfirmRecord struct {
 	DomainName  string           `json:"-"                 gorm:"primaryKey"`
 	State       tktypes.HexBytes `json:"-"                 gorm:"primaryKey"`
 	Transaction uuid.UUID        `docstruct:"StateConfirm" json:"transaction"`
 }
 
-// State record can be updated before, during and after spend records are written
-// Immutable once written
-type StateSpend struct {
+// A spend record is written when indexing the blockchain, and can be written regardless
+// of whether we currently have access to the private data of the state.
+// It is simply a join record between the Paladin transaction ID and the state.
+//
+// Once a spend record has been index, a state is no longer available for any transaction
+// to consume (because we know the blockchain would reject if if we tried).
+//
+// Just like with the creation of new states, we keep an in-memory copy of the spend
+// in the Domain Context of the sequencer while we are assembling+endorsing+submitting
+// the transaction, to avoid us attempting to double-spend states (which of course will
+// be rejected by the blockchain).
+type StateSpendRecord struct {
 	DomainName  string           `json:"-"                 gorm:"primaryKey"`
 	State       tktypes.HexBytes `json:"-"                 gorm:"primaryKey"`
 	Transaction uuid.UUID        `docstruct:"StateSpend" json:"transaction"`
+}
+
+// We also record when we simply read a state during a transaction, without creating or
+// spending it. This is important for being able to re-execute the transaction in the future
+// against the exact state of the blockchain. We use this in receipt generation.
+type StateReadRecord struct {
+	DomainName  string           `json:"-"                 gorm:"primaryKey"`
+	State       tktypes.HexBytes `json:"-"                 gorm:"primaryKey"`
+	Transaction uuid.UUID        `docstruct:"StateRead" json:"transaction"`
+}
+
+// Transactions can also refer to state that never exists before or after the transaction.
+// It is part of the transaction that is required to fully process the transaction,
+// but it originated exclusively within that transaction
+type StateInfoRecord struct {
+	DomainName  string           `json:"-"                 gorm:"primaryKey"`
+	State       tktypes.HexBytes `json:"-"                 gorm:"primaryKey"`
+	Transaction uuid.UUID        `docstruct:"StateConfirm" json:"transaction"`
 }
 
 type StateLockType string
@@ -174,8 +245,8 @@ type StateLock struct {
 // nullifier (not for the state) when it is spent.
 // Immutable once written
 type StateNullifier struct {
-	DomainName string           `json:"domain"          gorm:"primaryKey"`
-	ID         tktypes.HexBytes `json:"id"              gorm:"primaryKey"`
-	State      tktypes.HexBytes `json:"-"`
-	Spent      *StateSpend      `json:"spent,omitempty" gorm:"foreignKey:state;references:id;"`
+	DomainName string            `json:"-"               gorm:"primaryKey"`
+	State      tktypes.HexBytes  `json:"-"`
+	ID         tktypes.HexBytes  `json:"id"              gorm:"primaryKey"`
+	Spent      *StateSpendRecord `json:"spent,omitempty" gorm:"foreignKey:state;references:id;"`
 }

@@ -17,6 +17,7 @@
 package blockindexer
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -58,12 +59,12 @@ type BlockIndexer interface {
 	QueryIndexedBlocks(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.IndexedBlock, error)
 	QueryIndexedEvents(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.IndexedEvent, error)
 	QueryIndexedTransactions(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.IndexedTransaction, error)
-	ListTransactionEvents(ctx context.Context, lastBlock int64, lastIndex, limit int, withTransaction, withBlock bool) ([]*pldapi.IndexedEvent, error)
+	ListTransactionEvents(ctx context.Context, lastBlock int64, lastIndex, limit int) ([]*pldapi.IndexedEvent, error)
 	DecodeTransactionEvents(ctx context.Context, hash tktypes.Bytes32, abi abi.ABI, resultFormat tktypes.JSONFormatOptions) ([]*pldapi.EventWithData, error)
 	WaitForTransactionSuccess(ctx context.Context, hash tktypes.Bytes32, errorABI abi.ABI) (*pldapi.IndexedTransaction, error)
 	WaitForTransactionAnyResult(ctx context.Context, hash tktypes.Bytes32) (*pldapi.IndexedTransaction, error)
 	GetBlockListenerHeight(ctx context.Context) (highest uint64, err error)
-	GetConfirmedBlockHeight(ctx context.Context) (confirmed uint64, err error)
+	GetConfirmedBlockHeight(ctx context.Context) (confirmed tktypes.HexUint64, err error)
 	RPCModule() *rpcserver.RPCModule
 }
 
@@ -255,12 +256,12 @@ func (bi *blockIndexer) Stop() {
 	}
 }
 
-func (bi *blockIndexer) GetConfirmedBlockHeight(ctx context.Context) (highest uint64, err error) {
+func (bi *blockIndexer) GetConfirmedBlockHeight(ctx context.Context) (highest tktypes.HexUint64, err error) {
 	highestConfirmedBlock := bi.highestConfirmedBlock.Load()
 	if highestConfirmedBlock < 0 {
 		return 0, i18n.NewError(ctx, msgs.MsgBlockIndexerNoBlocksIndexed)
 	}
-	return uint64(highestConfirmedBlock), nil
+	return tktypes.HexUint64(highestConfirmedBlock), nil
 }
 
 func (bi *blockIndexer) GetBlockListenerHeight(ctx context.Context) (confirmed uint64, err error) {
@@ -273,28 +274,33 @@ func (bi *blockIndexer) setFromBlock(ctx context.Context, conf *pldconf.BlockInd
 	if fromBlock == nil {
 		fromBlock = pldconf.BlockIndexerDefaults.FromBlock
 	}
-	if err := json.Unmarshal(fromBlock, &vUntyped); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(fromBlock))
+	dec.UseNumber()
+	if err := dec.Decode(&vUntyped); err != nil {
 		return i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
 	}
 	switch vTyped := vUntyped.(type) {
 	case string:
-		if strings.EqualFold(vTyped, "latest") {
-			bi.fromBlock = nil
-			return nil
-		}
-		uint64Val, err := strconv.ParseUint(vTyped, 0, 64)
-		if err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
-		}
-		bi.fromBlock = (*ethtypes.HexUint64)(&uint64Val)
-		return nil
-	case float64:
-		uint64Val := uint64(vTyped)
-		bi.fromBlock = (*ethtypes.HexUint64)(&uint64Val)
-		return nil
+		return bi.setFromBlockStr(ctx, vTyped)
+	case json.Number:
+		return bi.setFromBlockStr(ctx, vTyped.String())
 	default:
 		return i18n.NewError(ctx, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
 	}
+}
+
+func (bi *blockIndexer) setFromBlockStr(ctx context.Context, fromBlock string) error {
+	log.L(ctx).Infof("From block: %s", fromBlock)
+	if strings.EqualFold(fromBlock, "latest") {
+		bi.fromBlock = nil
+		return nil
+	}
+	uint64Val, err := strconv.ParseUint(fromBlock, 0, 64)
+	if err != nil {
+		return i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, fromBlock)
+	}
+	bi.fromBlock = (*ethtypes.HexUint64)(&uint64Val)
+	return nil
 }
 
 func (bi *blockIndexer) restoreCheckpoint() error {
@@ -563,8 +569,9 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 	for i, block := range batch.blocks {
 		newHighestBlock = int64(block.Number)
 		blocks = append(blocks, &pldapi.IndexedBlock{
-			Number: int64(block.Number),
-			Hash:   tktypes.NewBytes32FromSlice(block.Hash),
+			Timestamp: tktypes.Timestamp(block.Timestamp),
+			Number:    int64(block.Number),
+			Hash:      tktypes.NewBytes32FromSlice(block.Hash),
 		})
 		for txIndex, r := range batch.receipts[i] {
 			result := pldapi.TXResult_FAILURE.Enum()
@@ -894,24 +901,19 @@ func (bi *blockIndexer) GetTransactionEventsByHash(ctx context.Context, hash tkt
 	return events, err
 }
 
-func (bi *blockIndexer) ListTransactionEvents(ctx context.Context, lastBlock int64, lastIndex, limit int, withTransaction, withBlock bool) ([]*pldapi.IndexedEvent, error) {
+func (bi *blockIndexer) ListTransactionEvents(ctx context.Context, lastBlock int64, lastIndex, limit int) ([]*pldapi.IndexedEvent, error) {
 	var events []*pldapi.IndexedEvent
 	db := bi.persistence.DB()
 	q := db.
 		WithContext(ctx).
 		Table("indexed_events").
+		Joins("Block").
 		Where("indexed_events.block_number > ?", lastBlock).
 		Or(db.Where("indexed_events.block_number = ?", lastBlock).Where("indexed_events.log_index > ?", lastIndex)).
 		Order("indexed_events.block_number").
 		Order("indexed_events.transaction_index").
 		Order("indexed_events.log_index").
 		Limit(limit)
-	if withTransaction {
-		q = q.Joins("Transaction")
-	}
-	if withBlock {
-		q = q.Joins("Block")
-	}
 	err := q.Find(&events).Error
 	return events, err
 }
@@ -1018,7 +1020,7 @@ func (bi *blockIndexer) QueryIndexedTransactions(ctx context.Context, jq *query.
 		return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerLimitRequired)
 	}
 	db := bi.persistence.DB()
-	q := db.Table("indexed_transactions").WithContext(ctx)
+	q := db.Table("indexed_transactions").Joins("Block").WithContext(ctx)
 	if jq != nil {
 		q = filters.BuildGORM(ctx, jq, q, IndexedTransactionFilters)
 	}
@@ -1033,7 +1035,7 @@ func (bi *blockIndexer) QueryIndexedEvents(ctx context.Context, jq *query.QueryJ
 		return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerLimitRequired)
 	}
 	db := bi.persistence.DB()
-	q := db.Table("indexed_events").WithContext(ctx)
+	q := db.Table("indexed_events").Joins("Block").WithContext(ctx)
 	if jq != nil {
 		q = filters.BuildGORM(ctx, jq, q, IndexedEventFilters)
 	}

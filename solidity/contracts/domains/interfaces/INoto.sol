@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
+/**
+ * @title INoto
+ * @dev All implementations of Noto must conform to this interface.
+ */
 interface INoto {
     event NotoTransfer(
         bytes32[] inputs,
@@ -17,7 +21,6 @@ interface INoto {
     );
 
     function initialize(
-        bytes32 notaryType,
         address notaryAddress,
         bytes calldata data
     ) external returns (bytes memory);

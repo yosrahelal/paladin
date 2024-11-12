@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/preparedtxdistribution"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -32,8 +33,11 @@ import (
 )
 
 type dispatchOperation struct {
-	dispatches         []*DispatchSequence
-	stateDistributions []*statedistribution.StateDistributionPersisted
+	publicDispatches         []*PublicDispatch
+	privateDispatches        []*components.ValidatedTransaction
+	preparedTransactions     []*components.PrepareTransactionWithRefs
+	preparedTxnDistributions []*preparedtxdistribution.PreparedTxnDistributionPersisted
+	stateDistributions       []*statedistribution.StateDistributionPersisted
 }
 
 type DispatchPersisted struct {
@@ -44,7 +48,7 @@ type DispatchPersisted struct {
 }
 
 // A dispatch sequence is a collection of private transactions that are submitted together for a given signing address in order
-type DispatchSequence struct {
+type PublicDispatch struct {
 	PublicTxBatch                components.PublicTxBatch
 	PrivateTransactionDispatches []*DispatchPersisted
 }
@@ -52,12 +56,14 @@ type DispatchSequence struct {
 // a dispatch batch is a collection of dispatch sequences that are submitted together with no ordering requirements between sequences
 // purely for a database performance reason, they are included in the same transaction
 type DispatchBatch struct {
-	DispatchSequences []*DispatchSequence
+	PublicDispatches     []*PublicDispatch
+	PrivateDispatches    []*components.ValidatedTransaction
+	PreparedTransactions []*components.PrepareTransactionWithRefs
 }
 
 // PersistDispatches persists the dispatches to the database and coordinates with the public transaction manager
 // to submit public transactions.
-func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error {
+func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*components.StateDistribution, preparedTxnDistributions []*preparedtxdistribution.PreparedTxnDistribution) error {
 
 	stateDistributionsPersisted := make([]*statedistribution.StateDistributionPersisted, 0, len(stateDistributions))
 	for _, stateDistribution := range stateDistributions {
@@ -69,13 +75,28 @@ func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contrac
 			ContractAddress: *tktypes.MustEthAddress(stateDistribution.ContractAddress),
 		})
 	}
+
+	preparedTxnDistributionsPersisted := make([]*preparedtxdistribution.PreparedTxnDistributionPersisted, 0, len(dispatchBatch.PreparedTransactions))
+	for _, preparedTxnDistribution := range preparedTxnDistributions {
+		preparedTxnDistributionsPersisted = append(preparedTxnDistributionsPersisted, &preparedtxdistribution.PreparedTxnDistributionPersisted{
+			ID:              preparedTxnDistribution.ID,
+			PreparedTxnID:   preparedTxnDistribution.PreparedTxnID,
+			IdentityLocator: preparedTxnDistribution.IdentityLocator,
+			DomainName:      preparedTxnDistribution.Domain,
+			ContractAddress: preparedTxnDistribution.ContractAddress,
+		})
+	}
+
 	// Send the write operation with all of the batch sequence operations to the flush worker
 	op := s.writer.Queue(dCtx.Ctx(), &syncPointOperation{
 		domainContext:   dCtx,
 		contractAddress: contractAddress,
 		dispatchOperation: &dispatchOperation{
-			dispatches:         dispatchBatch.DispatchSequences,
-			stateDistributions: stateDistributionsPersisted,
+			publicDispatches:         dispatchBatch.PublicDispatches,
+			privateDispatches:        dispatchBatch.PrivateDispatches,
+			preparedTransactions:     dispatchBatch.PreparedTransactions,
+			preparedTxnDistributions: preparedTxnDistributionsPersisted,
+			stateDistributions:       stateDistributionsPersisted,
 		},
 	})
 
@@ -89,7 +110,7 @@ func (s *syncPoints) PersistDeployDispatchBatch(ctx context.Context, dispatchBat
 	// Send the write operation with all of the batch sequence operations to the flush worker
 	op := s.writer.Queue(ctx, &syncPointOperation{
 		dispatchOperation: &dispatchOperation{
-			dispatches: dispatchBatch.DispatchSequences,
+			publicDispatches: dispatchBatch.PublicDispatches,
 		},
 	})
 
@@ -108,7 +129,11 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 
 		//for each batchSequence operation, call the public transaction manager to allocate a nonce
 		//and persist the intent to send the states to the distribution list.
-		for _, dispatchSequenceOp := range op.dispatches {
+		for _, dispatchSequenceOp := range op.publicDispatches {
+			if len(dispatchSequenceOp.PrivateTransactionDispatches) == 0 {
+				continue
+			}
+
 			// Call the public transaction manager to allocate nonces for all transactions in the sequence
 			// and persist them to the database under the current transaction
 			pubBatch := dispatchSequenceOp.PublicTxBatch
@@ -138,6 +163,7 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 
 				dispatch.ID = uuid.New().String()
 			}
+
 			log.L(ctx).Debugf("Writing dispatch batch %d", len(dispatchSequenceOp.PrivateTransactionDispatches))
 
 			err = dbTX.
@@ -160,28 +186,67 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 
 		}
 
+		if len(op.privateDispatches) > 0 {
+			if err := s.txMgr.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, op.privateDispatches); err != nil {
+				log.L(ctx).Errorf("Error persisting private dispatches: %s", err)
+				return err
+			}
+		}
+
+		if len(op.preparedTransactions) > 0 {
+			log.L(ctx).Debugf("Writing prepared transactions locally  %d", len(op.preparedTransactions))
+
+			if err := s.txMgr.WritePreparedTransactions(ctx, dbTX, op.preparedTransactions); err != nil {
+				log.L(ctx).Errorf("Error persisting prepared transactions: %s", err)
+				return err
+			}
+		}
+
+		if len(op.preparedTxnDistributions) == 0 {
+			log.L(ctx).Debug("No prepared transaction distributions to persist")
+		} else {
+
+			log.L(ctx).Debugf("Writing distribution record to send prepared transaction to remote node %d", len(op.preparedTxnDistributions))
+			err := dbTX.
+				Table("prepared_txn_distributions").
+				Clauses(clause.OnConflict{
+					Columns: []clause.Column{
+						{Name: "prepared_txn_id"},
+						{Name: "identity_locator"},
+					},
+					DoNothing: true, // immutable
+				}).
+				Create(op.preparedTxnDistributions).
+				Error
+
+			if err != nil {
+				log.L(ctx).Errorf("Error persisting prepared transaction distributions: %s", err)
+				return err
+			}
+		}
+
 		if len(op.stateDistributions) == 0 {
 			log.L(ctx).Debug("No state distributions to persist")
-			continue
+		} else {
+			log.L(ctx).Debugf("Writing state distributions %d", len(op.stateDistributions))
+			err := dbTX.
+				Table("state_distributions").
+				Clauses(clause.OnConflict{
+					Columns: []clause.Column{
+						{Name: "state_id"},
+						{Name: "identity_locator"},
+					},
+					DoNothing: true, // immutable
+				}).
+				Create(op.stateDistributions).
+				Error
+
+			if err != nil {
+				log.L(ctx).Errorf("Error persisting state distributions: %s", err)
+				return err
+			}
 		}
 
-		log.L(ctx).Debugf("Writing state distributions %d", len(op.stateDistributions))
-		err := dbTX.
-			Table("state_distributions").
-			Clauses(clause.OnConflict{
-				Columns: []clause.Column{
-					{Name: "state_id"},
-					{Name: "identity_locator"},
-				},
-				DoNothing: true, // immutable
-			}).
-			Create(op.stateDistributions).
-			Error
-
-		if err != nil {
-			log.L(ctx).Errorf("Error persisting state distributions: %s", err)
-			return err
-		}
 	}
 	return nil
 }

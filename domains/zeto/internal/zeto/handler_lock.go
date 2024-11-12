@@ -41,6 +41,16 @@ type TransferParams struct {
 	Data    ethtypes.HexBytes0xPrefix `json:"data"`
 }
 
+var lockProofABI = &abi.Entry{
+	Type: abi.Function,
+	Name: "lockProof",
+	Inputs: abi.ParameterArray{
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "delegate", Type: "address"},
+		// {Name: "data", Type: "bytes"},
+	},
+}
+
 func (h *lockHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
 	var lockParams types.LockParams
 	if err := json.Unmarshal([]byte(params), &lockParams); err != nil {
@@ -59,15 +69,11 @@ func (h *lockHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 }
 
 func (h *lockHandler) decodeTransferCall(ctx context.Context, config *types.DomainInstanceConfig, encodedCall []byte) (*TransferParams, error) {
-	contractAbi, err := h.zeto.config.GetContractAbi(ctx, config.TokenName)
-	if err != nil {
-		return nil, err
-	}
-	transfer := contractAbi.Functions()["transfer"]
-	if transfer == nil {
+	transferABI := getTransferABI(config.TokenName)
+	if transferABI == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, "transfer")
 	}
-	paramsJSON, err := decodeParams(ctx, transfer, encodedCall)
+	paramsJSON, err := decodeParams(ctx, transferABI, encodedCall)
 	if err != nil {
 		return nil, err
 	}
@@ -116,24 +122,21 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeTransferCall, err)
 	}
 
-	data, err := encodeTransactionData(ctx, req.Transaction)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
-	}
+	// TODO: data currently not present on zeto ABI
+	// data, err := encodeTransactionData(ctx, req.Transaction)
+	// if err != nil {
+	// 	return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
+	// }
 	LockParams := map[string]interface{}{
 		"delegate": params.Delegate,
 		"proof":    decodedTransfer.Proof,
-		"data":     data,
+		// "data":     data,
 	}
 	paramsJSON, err := json.Marshal(LockParams)
 	if err != nil {
 		return nil, err
 	}
-	contractAbi, err := h.zeto.config.GetContractAbi(ctx, tx.DomainConfig.TokenName)
-	if err != nil {
-		return nil, err
-	}
-	functionJSON, err := json.Marshal(contractAbi.Functions()["lockProof"])
+	functionJSON, err := json.Marshal(lockProofABI)
 	if err != nil {
 		return nil, err
 	}

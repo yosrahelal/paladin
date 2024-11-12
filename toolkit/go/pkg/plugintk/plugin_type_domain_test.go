@@ -182,6 +182,23 @@ func TestDomainFunction_PrepareDeploy(t *testing.T) {
 	})
 }
 
+func TestDomainFunction_InitContract(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// InitContract - paladin to domain
+	funcs.InitContract = func(ctx context.Context, cdr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_InitContract{
+			InitContract: &prototk.InitContractRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_InitContractRes{}, res.ResponseFromDomain)
+	})
+}
+
 func TestDomainFunction_InitTransaction(t *testing.T) {
 	_, exerciser, funcs, _, _, done := setupDomainTests(t)
 	defer done()
@@ -349,6 +366,23 @@ func TestDomainFunction_ExecCall(t *testing.T) {
 		}
 	}, func(res *prototk.DomainMessage) {
 		assert.IsType(t, &prototk.DomainMessage_ExecCallRes{}, res.ResponseFromDomain)
+	})
+}
+
+func TestDomainFunction_BuildReceipt(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// BuildReceipt - paladin to domain
+	funcs.BuildReceipt = func(ctx context.Context, cdr *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+		return &prototk.BuildReceiptResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_BuildReceipt{
+			BuildReceipt: &prototk.BuildReceiptRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_BuildReceiptRes{}, res.ResponseFromDomain)
 	})
 }
 

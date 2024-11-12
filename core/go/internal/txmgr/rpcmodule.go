@@ -31,6 +31,8 @@ func (tm *txManager) buildRPCModule() {
 	tm.rpcModule = rpcserver.NewRPCModule("ptx").
 		Add("ptx_sendTransaction", tm.rpcSendTransaction()).
 		Add("ptx_sendTransactions", tm.rpcSendTransactions()).
+		Add("ptx_prepareTransaction", tm.rpcPrepareTransaction()).
+		Add("ptx_prepareTransactions", tm.rpcPrepareTransactions()).
 		Add("ptx_call", tm.rpcCall()).
 		Add("ptx_getTransaction", tm.rpcGetTransaction()).
 		Add("ptx_getTransactionFull", tm.rpcGetTransactionFull()).
@@ -39,16 +41,23 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_queryTransactionsFull", tm.rpcQueryTransactionsFull()).
 		Add("ptx_queryPendingTransactions", tm.rpcQueryPendingTransactions()).
 		Add("ptx_getTransactionReceipt", tm.rpcGetTransactionReceipt()).
+		Add("ptx_getTransactionReceiptFull", tm.rpcGetTransactionReceiptFull()).
+		Add("ptx_getDomainReceipt", tm.rpcGetDomainReceipt()).
+		Add("ptx_getStateReceipt", tm.rpcGetStateReceipt()).
 		Add("ptx_queryTransactionReceipts", tm.rpcQueryTransactionReceipts()).
 		Add("ptx_getTransactionDependencies", tm.rpcGetTransactionDependencies()).
 		Add("ptx_queryPublicTransactions", tm.rpcQueryPublicTransactions()).
 		Add("ptx_queryPendingPublicTransactions", tm.rpcQueryPendingPublicTransactions()).
 		Add("ptx_getPublicTransactionByNonce", tm.rpcGetPublicTransactionByNonce()).
 		Add("ptx_getPublicTransactionByHash", tm.rpcGetPublicTransactionByHash()).
+		Add("ptx_getPreparedTransaction", tm.rpcGetPreparedTransaction()).
+		Add("ptx_queryPreparedTransactions", tm.rpcQueryPreparedTransactions()).
 		Add("ptx_storeABI", tm.rpcStoreABI()).
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
-		Add("ptx_decodeError", tm.rpcDecodeRevertError()).
 		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs()).
+		Add("ptx_decodeCall", tm.rpcDecodeCall()).
+		Add("ptx_decodeEvent", tm.rpcDecodeEvent()).
+		Add("ptx_decodeError", tm.rpcDecodeError()).
 		Add("ptx_resolveVerifier", tm.rpcResolveVerifier())
 
 	tm.debugRpcModule = rpcserver.NewRPCModule("debug").
@@ -68,6 +77,22 @@ func (tm *txManager) rpcSendTransactions() rpcserver.RPCHandler {
 		txs []*pldapi.TransactionInput,
 	) ([]uuid.UUID, error) {
 		return tm.SendTransactions(ctx, txs)
+	})
+}
+
+func (tm *txManager) rpcPrepareTransaction() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		tx pldapi.TransactionInput,
+	) (*uuid.UUID, error) {
+		return tm.PrepareTransaction(ctx, &tx)
+	})
+}
+
+func (tm *txManager) rpcPrepareTransactions() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		txs []*pldapi.TransactionInput,
+	) ([]uuid.UUID, error) {
+		return tm.PrepareTransactions(ctx, txs)
 	})
 }
 
@@ -140,6 +165,39 @@ func (tm *txManager) rpcGetTransactionReceipt() rpcserver.RPCHandler {
 	})
 }
 
+func (tm *txManager) rpcGetTransactionReceiptFull() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		id uuid.UUID,
+	) (*pldapi.TransactionReceiptFull, error) {
+		return tm.GetTransactionReceiptByIDFull(ctx, id)
+	})
+}
+
+func (tm *txManager) rpcGetPreparedTransaction() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		id uuid.UUID,
+	) (*pldapi.PreparedTransaction, error) {
+		return tm.GetPreparedTransactionByID(ctx, tm.p.DB(), id)
+	})
+}
+
+func (tm *txManager) rpcGetDomainReceipt() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		domain string,
+		id uuid.UUID,
+	) (tktypes.RawJSON, error) {
+		return tm.GetDomainReceiptByID(ctx, domain, id)
+	})
+}
+
+func (tm *txManager) rpcGetStateReceipt() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		id uuid.UUID,
+	) (*pldapi.TransactionStates, error) {
+		return tm.GetStateReceiptByID(ctx, id)
+	})
+}
+
 func (tm *txManager) rpcGetTransactionDependencies() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
@@ -153,6 +211,14 @@ func (tm *txManager) rpcQueryTransactionReceipts() rpcserver.RPCHandler {
 		query query.QueryJSON,
 	) ([]*pldapi.TransactionReceipt, error) {
 		return tm.QueryTransactionReceipts(ctx, &query)
+	})
+}
+
+func (tm *txManager) rpcQueryPreparedTransactions() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		query query.QueryJSON,
+	) ([]*pldapi.PreparedTransaction, error) {
+		return tm.QueryPreparedTransactions(ctx, tm.p.DB(), &query)
 	})
 }
 
@@ -193,7 +259,7 @@ func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		a abi.ABI,
 	) (*tktypes.Bytes32, error) {
-		return tm.storeABI(ctx, a)
+		return tm.storeABI(ctx, tm.p.DB(), a)
 	})
 }
 
@@ -201,7 +267,7 @@ func (tm *txManager) rpcGetStoredABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		hash tktypes.Bytes32,
 	) (*pldapi.StoredABI, error) {
-		return tm.getABIByHash(ctx, hash)
+		return tm.getABIByHash(ctx, tm.p.DB(), hash)
 	})
 }
 
@@ -232,11 +298,30 @@ func (tm *txManager) rpcDebugTransactionStatus() rpcserver.RPCHandler {
 	})
 }
 
-func (tm *txManager) rpcDecodeRevertError() rpcserver.RPCHandler {
+func (tm *txManager) rpcDecodeError() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		revertError tktypes.HexBytes,
 		dataFormat tktypes.JSONFormatOptions,
-	) (*pldapi.DecodedError, error) {
+	) (*pldapi.ABIDecodedData, error) {
 		return tm.DecodeRevertError(ctx, tm.p.DB(), revertError, dataFormat)
+	})
+}
+
+func (tm *txManager) rpcDecodeCall() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		callData tktypes.HexBytes,
+		dataFormat tktypes.JSONFormatOptions,
+	) (*pldapi.ABIDecodedData, error) {
+		return tm.DecodeCall(ctx, tm.p.DB(), callData, dataFormat)
+	})
+}
+
+func (tm *txManager) rpcDecodeEvent() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod3(func(ctx context.Context,
+		topics []tktypes.Bytes32,
+		data tktypes.HexBytes,
+		dataFormat tktypes.JSONFormatOptions,
+	) (*pldapi.ABIDecodedData, error) {
+		return tm.DecodeEvent(ctx, tm.p.DB(), topics, data, dataFormat)
 	})
 }

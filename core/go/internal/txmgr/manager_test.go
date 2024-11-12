@@ -31,6 +31,7 @@ import (
 )
 
 type mockComponents struct {
+	c                *componentmocks.AllComponents
 	db               sqlmock.Sqlmock
 	ethClientFactory *ethclientmocks.EthClientFactory
 	domainManager    *componentmocks.DomainManager
@@ -38,7 +39,9 @@ type mockComponents struct {
 	keyManager       *componentmocks.KeyManager
 	publicTxMgr      *componentmocks.PublicTxManager
 	privateTxMgr     *componentmocks.PrivateTxManager
+	stateMgr         *componentmocks.StateManager
 	identityResolver *componentmocks.IdentityResolver
+	transportManager *componentmocks.TransportManager
 }
 
 func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pldconf.TxManagerConfig, mc *mockComponents)) (context.Context, *txManager, func()) {
@@ -48,29 +51,35 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 
 	conf := &pldconf.TxManagerConfig{}
 	mc := &mockComponents{
+		c:                componentmocks.NewAllComponents(t),
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
 		ethClientFactory: ethclientmocks.NewEthClientFactory(t),
 		keyManager:       componentmocks.NewKeyManager(t),
 		domainManager:    componentmocks.NewDomainManager(t),
 		publicTxMgr:      componentmocks.NewPublicTxManager(t),
 		privateTxMgr:     componentmocks.NewPrivateTxManager(t),
+		stateMgr:         componentmocks.NewStateManager(t),
 		identityResolver: componentmocks.NewIdentityResolver(t),
+		transportManager: componentmocks.NewTransportManager(t),
 	}
 
-	componentMocks := componentmocks.NewAllComponents(t)
+	componentMocks := mc.c
 	componentMocks.On("BlockIndexer").Return(mc.blockIndexer).Maybe()
 	componentMocks.On("DomainManager").Return(mc.domainManager).Maybe()
 	componentMocks.On("KeyManager").Return(mc.keyManager).Maybe()
 	componentMocks.On("PublicTxManager").Return(mc.publicTxMgr).Maybe()
 	componentMocks.On("PrivateTxManager").Return(mc.privateTxMgr).Maybe()
+	componentMocks.On("StateManager").Return(mc.stateMgr).Maybe()
 	componentMocks.On("IdentityResolver").Return(mc.identityResolver).Maybe()
 	componentMocks.On("EthClientFactory").Return(mc.ethClientFactory).Maybe()
+	componentMocks.On("TransportManager").Return(mc.transportManager).Maybe()
+	mc.transportManager.On("LocalNodeName").Return("node1").Maybe()
 
 	var p persistence.Persistence
 	var err error
 	var pDone func()
 	if realDB {
-		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
+		p, pDone, err = persistence.NewUnitTestPersistence(ctx, "txmgr")
 		require.NoError(t, err)
 	} else {
 		mp, err := mockpersistence.NewSQLMockProvider()

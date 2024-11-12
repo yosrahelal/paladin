@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"os"
 	"text/template"
+	"time"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
@@ -37,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -44,19 +46,26 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
 
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 	"github.com/kaleido-io/paladin/operator/pkg/config"
+
+	_ "embed"
 )
+
+//go:embed check-psql.sh
+var checkPsqlScript string
 
 // PaladinReconciler reconciles a Paladin object
 type PaladinReconciler struct {
 	client.Client
-	config *config.Config
-	Scheme *runtime.Scheme
+	config  *config.Config
+	Scheme  *runtime.Scheme
+	Changes *InFlight
 }
 
 // allows generic functions by giving a mapping between the types and interfaces for the CR
@@ -98,15 +107,6 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}()
 
-	// Create ConfigMap
-	configSum, tlsSecrets, _, err := r.createConfigMap(ctx, &node, name)
-	if err != nil {
-		log.Error(err, "Failed to create Paladin config map")
-		setCondition(&node.Status.Conditions, corev1alpha1.ConditionCM, metav1.ConditionFalse, corev1alpha1.ReasonCMCreationFailed, err.Error())
-		return ctrl.Result{}, err
-	}
-	log.Info("Created Paladin config map", "Name", name)
-
 	// Create Service
 	if _, err := r.createService(ctx, &node, name); err != nil {
 		log.Error(err, "Failed to create Paladin Service")
@@ -123,19 +123,84 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	log.Info("Created Paladin pod disruption budget", "Name", name)
 
-	// Create StatefulSet
-	ss, err := r.createStatefulSet(ctx, &node, name, tlsSecrets, configSum)
+	// Create ConfigMap
+	configSum, tlsSecrets, _, err := r.createConfigMap(ctx, &node, name)
 	if err != nil {
-		log.Error(err, "Failed to create Paladin StatefulSet")
-		setCondition(&node.Status.Conditions, corev1alpha1.ConditionSS, metav1.ConditionFalse, corev1alpha1.ReasonSSCreationFailed, err.Error())
+		log.Error(err, "Failed to create Paladin config map")
+		setCondition(&node.Status.Conditions, corev1alpha1.ConditionCM, metav1.ConditionFalse, corev1alpha1.ReasonCMCreationFailed, err.Error())
 		return ctrl.Result{}, err
 	}
-	log.Info("Created Paladin StatefulSet", "Name", ss.Name, "Namespace", ss.Namespace)
+	log.Info("Created Paladin config map", "Name", name)
+
+	// first we need to detect if the STS and the configsum differs
+	resourceID := fmt.Sprintf("paladin/%s", name)
+	existing := false
+	changeable := false
+	sts := &appsv1.StatefulSet{}
+	err = r.Client.Get(ctx, types.NamespacedName{
+		Name:      name,
+		Namespace: node.Namespace,
+	}, sts)
+	// it exists, so we need to check if it's config differs
+	if err == nil {
+		existing = true
+		// if it's already changing, we need to see if we should wait or finally reconcile
+		if r.Changes.IsQueued(resourceID) {
+			changeable = r.Changes.IsReady(resourceID)
+		} else { // if it's not changing, we need to check if the configsum differs
+			previousConfigSum := sts.Spec.Template.Annotations["core.paladin.io/config-sum"]
+			// if the configsum differs, we need to queue up the change for later
+			if previousConfigSum != configSum {
+				_ = r.Changes.Insert(resourceID)
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			} else {
+				// configsums are the same, so we can proceed in case different changes need to be made
+				changeable = true
+			}
+		}
+	} else if !errors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	if !existing || changeable {
+		// Create StatefulSet
+		ss, err := r.createStatefulSet(ctx, &node, name, tlsSecrets, configSum)
+		if err != nil {
+			log.Error(err, "Failed to create Paladin StatefulSet")
+			setCondition(&node.Status.Conditions, corev1alpha1.ConditionSS, metav1.ConditionFalse, corev1alpha1.ReasonSSCreationFailed, err.Error())
+			return ctrl.Result{}, err
+		}
+		log.Info("Created Paladin StatefulSet", "Name", ss.Name, "Namespace", ss.Namespace)
+		if changeable {
+			r.Changes.Delete(resourceID)
+		}
+	}
 
 	// Update condition to Succeeded
-	node.Status.Phase = corev1alpha1.StatusPhaseCompleted
+	node.Status.Phase = corev1alpha1.StatusPhasePending
+	setCondition(&node.Status.Conditions, corev1alpha1.ConditionHealthy, metav1.ConditionFalse, corev1alpha1.ReasonSSPending, fmt.Sprintf("Name: %s", name))
 
-	return ctrl.Result{}, nil
+	sts = &appsv1.StatefulSet{}
+	err = r.Client.Get(ctx, types.NamespacedName{
+		Name:      name,
+		Namespace: node.Namespace,
+	}, sts)
+	if err != nil {
+		log.Error(err, "Failed to get StatefulSet for status checking")
+		return ctrl.Result{}, err
+	}
+
+	if sts.Status.ReadyReplicas == sts.Status.Replicas {
+		node.Status.Phase = corev1alpha1.StatusPhaseReady
+		setCondition(&node.Status.Conditions, corev1alpha1.ConditionHealthy, metav1.ConditionTrue, corev1alpha1.ReasonSSReady, fmt.Sprintf("Name: %s", name))
+	}
+
+	if changeable {
+		// level-trigger, we want to check back in every so often in case we missed something
+		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+	}
+	// requeue after a bit to check if the change is released
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -149,10 +214,14 @@ func (r *PaladinReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.Paladin{}).
+		Owns(&appsv1.StatefulSet{}).
 		// reconcile all paladin nodes, for any change to any domain
 		Watches(&corev1alpha1.PaladinDomain{}, reconcileAll(PaladinCRMap, r.Client), reconcileEveryChange()).
 		// reconcile all paladin nodes, for any change to any registry
 		Watches(&corev1alpha1.PaladinRegistry{}, reconcileAll(PaladinCRMap, r.Client), reconcileEveryChange()).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 2,
+		}).
 		Complete(r)
 }
 
@@ -171,16 +240,17 @@ func (r *PaladinReconciler) createStatefulSet(ctx context.Context, node *corev1a
 		}
 	}
 
+	paladinContainer := r.getPaladinContainer(statefulSet)
 	// Used by Postgres sidecar, but also custom DB creation - a DB secret needs wiring up to env vars for DSNParams
 	if node.Spec.Database.PasswordSecret != nil {
-		if err := r.addPaladinDBSecret(ctx, statefulSet, *node.Spec.Database.PasswordSecret); err != nil {
+		if err := r.addPaladinDBSecret(ctx, statefulSet, paladinContainer, *node.Spec.Database.PasswordSecret); err != nil {
 			return nil, err
 		}
 	}
 
-	r.addKeystoreSecretMounts(statefulSet, node.Spec.SecretBackedSigners)
+	r.addKeystoreSecretMounts(statefulSet, paladinContainer, node.Spec.SecretBackedSigners)
 
-	r.addTLSSecretMounts(statefulSet, tlsSecrets)
+	r.addTLSSecretMounts(statefulSet, paladinContainer, tlsSecrets)
 
 	// Check if the StatefulSet already exists, create if not
 	var foundStatefulSet appsv1.StatefulSet
@@ -269,12 +339,10 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 	// Define the StatefulSet to run Paladin using the ConfigMap
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: node.Namespace,
-			Labels:    r.getLabels(node),
-			Annotations: r.withStandardAnnotations(map[string]string{
-				"kubectl.kubernetes.io/default-container": "paladin",
-			}),
+			Name:        name,
+			Namespace:   node.Namespace,
+			Labels:      r.getLabels(node),
+			Annotations: r.withStandardAnnotations(map[string]string{}),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
@@ -284,7 +352,8 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: r.getLabels(node),
 					Annotations: r.withStandardAnnotations(map[string]string{
-						"core.paladin.io/config-sum": fmt.Sprintf("md5-%s", configSum),
+						"kubectl.kubernetes.io/default-container": "paladin",
+						"core.paladin.io/config-sum":              fmt.Sprintf("md5-%s", configSum),
 					}),
 				},
 				Spec: corev1.PodSpec{
@@ -292,7 +361,7 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 						{
 							Name:            "paladin",
 							Image:           r.config.Paladin.Image, // Use the image from the config
-							ImagePullPolicy: corev1.PullIfNotPresent,
+							ImagePullPolicy: r.config.Paladin.ImagePullPolicy,
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "config",
@@ -319,6 +388,30 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 								},
 							},
 							Env: buildEnv(r.config.Paladin.Envs),
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{
+											"sh",
+											"-c",
+											"pidof java",
+										},
+									},
+								},
+								InitialDelaySeconds: 3,
+								TimeoutSeconds:      1,
+								PeriodSeconds:       2,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									TCPSocket: &corev1.TCPSocketAction{
+										Port: intstr.FromInt(8548),
+									},
+								},
+								InitialDelaySeconds: 5,
+								TimeoutSeconds:      2,
+								PeriodSeconds:       5,
+							},
 						},
 					},
 					Volumes: []corev1.Volume{
@@ -340,39 +433,67 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 }
 
 func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordSecret string) {
-	ss.Spec.Template.Spec.Containers = append(ss.Spec.Template.Spec.Containers, corev1.Container{
-		Name:            "postgres",
-		Image:           r.config.Postgres.Image, // Use the image from the config
-		ImagePullPolicy: corev1.PullIfNotPresent,
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "pgdata",
-				MountPath: "/pgdata",
+	// We prepend the sidecar so that we can have the prestart hook run before the main container starts, see below.
+	ss.Spec.Template.Spec.Containers = append([]corev1.Container{
+		{
+			Name:            "postgres",
+			Image:           r.config.Postgres.Image, // Use the image from the config
+			ImagePullPolicy: r.config.Postgres.ImagePullPolicy,
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "pgdata",
+					MountPath: "/pgdata",
+				},
 			},
-		},
-		Ports: []corev1.ContainerPort{
-			{
-				Name:          "postgres",
-				ContainerPort: 5432,
-				Protocol:      corev1.ProtocolTCP,
+			Ports: []corev1.ContainerPort{
+				{
+					Name:          "postgres",
+					ContainerPort: 5432,
+					Protocol:      corev1.ProtocolTCP,
+				},
 			},
-		},
-		Env: append([]corev1.EnvVar{
-			{
-				Name: "POSTGRES_PASSWORD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: passwordSecret,
+			// This is another ugly hack - we want to better ensure Postgres is ready before Paladin starts
+			// postStart may run immediately after the container starts, but before the container is live/ready,
+			// but it must complete before starting the subsequent container (according to https://medium.com/@marko.luksa/delaying-application-start-until-sidecar-is-ready-2ec2d21a7b74).
+			// So we run a script that checks if Postgres is ready, and if not, sleeps for a bit and retries.
+			Lifecycle: &corev1.Lifecycle{
+				PostStart: &corev1.LifecycleHandler{
+					Exec: &corev1.ExecAction{
+						Command: []string{
+							"/bin/sh",
+							"-c",
+							checkPsqlScript,
 						},
-						Key: "password",
 					},
 				},
 			},
-		}, buildEnv(r.config.Postgres.Envs, map[string]string{
-			"PGDATA": "/pgdata",
-		})...),
-	})
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(5432),
+					},
+				},
+				InitialDelaySeconds: 3,
+				TimeoutSeconds:      1,
+				PeriodSeconds:       5,
+			},
+			Env: append([]corev1.EnvVar{
+				{
+					Name: "POSTGRES_PASSWORD",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: passwordSecret,
+							},
+							Key: "password",
+						},
+					},
+				},
+			}, buildEnv(r.config.Postgres.Envs, map[string]string{
+				"PGDATA": "/pgdata",
+			})...),
+		},
+	}, ss.Spec.Template.Spec.Containers...)
 	ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
 		Name: "pgdata",
 		VolumeSource: corev1.VolumeSource{
@@ -418,10 +539,20 @@ func (r *PaladinReconciler) createPostgresPVC(ctx context.Context, node *corev1a
 	return nil
 }
 
-func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, signers []corev1alpha1.SecretBackedSigner) {
-	paladinContainer := &ss.Spec.Template.Spec.Containers[0]
+func (r *PaladinReconciler) getPaladinContainer(sts *appsv1.StatefulSet) *corev1.Container {
+	var paladinContainer *corev1.Container
+	for i, c := range sts.Spec.Template.Spec.Containers {
+		if c.Name == "paladin" {
+			paladinContainer = &sts.Spec.Template.Spec.Containers[i]
+			break
+		}
+	}
+	return paladinContainer
+}
+
+func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, ct *corev1.Container, signers []corev1alpha1.SecretBackedSigner) {
 	for _, s := range signers {
-		paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
+		ct.VolumeMounts = append(ct.VolumeMounts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("keystore-%s", s.Name),
 			MountPath: fmt.Sprintf("/keystores/%s", s.Name),
 		})
@@ -436,10 +567,9 @@ func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, sign
 	}
 }
 
-func (r *PaladinReconciler) addTLSSecretMounts(ss *appsv1.StatefulSet, tlsSecrets []string) {
-	paladinContainer := &ss.Spec.Template.Spec.Containers[0]
+func (r *PaladinReconciler) addTLSSecretMounts(ss *appsv1.StatefulSet, ct *corev1.Container, tlsSecrets []string) {
 	for tlsIdx, tlsSecretName := range tlsSecrets {
-		paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
+		ct.VolumeMounts = append(ct.VolumeMounts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("cert%.3d", tlsIdx),
 			MountPath: fmt.Sprintf("/cert%.3d", tlsIdx),
 		})
@@ -454,14 +584,13 @@ func (r *PaladinReconciler) addTLSSecretMounts(ss *appsv1.StatefulSet, tlsSecret
 	}
 }
 
-func (r *PaladinReconciler) addPaladinDBSecret(ctx context.Context, ss *appsv1.StatefulSet, secretName string) error {
+func (r *PaladinReconciler) addPaladinDBSecret(ctx context.Context, ss *appsv1.StatefulSet, ct *corev1.Container, secretName string) error {
 	_, _, err := r.retrieveUsernamePasswordSecret(ctx, ss.Namespace, secretName)
 	if err != nil {
 		return fmt.Errorf("failed to extract username/password from DB password secret '%s': %s", secretName, err)
 	}
 
-	paladinContainer := &ss.Spec.Template.Spec.Containers[0]
-	paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
+	ct.VolumeMounts = append(ct.VolumeMounts, corev1.VolumeMount{
 		Name:      "db-creds",
 		MountPath: "/db-creds",
 	})
@@ -550,6 +679,16 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 	pldConf.RPCServer.HTTP.Address = ptrTo("0.0.0.0") // use k8s for network control outside the pod
 	pldConf.RPCServer.WS.Port = ptrTo(8549)
 	pldConf.RPCServer.WS.Address = ptrTo("0.0.0.0") // use k8s for network control outside the pod
+
+	// Enable UI if not explicitly disabled
+	if len(pldConf.RPCServer.HTTP.StaticServers) == 0 {
+		pldConf.RPCServer.HTTP.StaticServers = append(pldConf.RPCServer.HTTP.StaticServers,
+			pldconf.StaticServerConfig{
+				Enabled:    true,
+				StaticPath: "/app/ui",
+				URLPath:    "/ui",
+			})
+	}
 
 	// DB needs merging from user config and our config
 	if err := r.generatePaladinDBConfig(ctx, node, &pldConf, name); err != nil {
@@ -994,6 +1133,7 @@ func (r *PaladinReconciler) createService(ctx context.Context, node *corev1alpha
 			return svc, fmt.Errorf("failed to create service: %s", err)
 		}
 		setCondition(&node.Status.Conditions, corev1alpha1.ConditionSVC, metav1.ConditionTrue, corev1alpha1.ReasonSVCCreated, fmt.Sprintf("Name: %s", name))
+		return svc, nil
 	} else if err != nil {
 		return svc, err
 	}
@@ -1077,7 +1217,7 @@ func generatePaladinServiceHostname(nodeName, namespace string) string {
 }
 
 func getPaladinURLEndpoint(ctx context.Context, c client.Client, name, namespace string) (string, error) {
-	if os.Getenv("USE_NODEPORTS_IN_DEBUGGER") == "true" {
+	if os.Getenv("KUBE_LOCAL") == "true" {
 		// Running outside of kubernetes, so we require a nodeport to be defined and exposed from Kind
 		var svc corev1.Service
 		err := c.Get(ctx, types.NamespacedName{Name: generatePaladinName(name), Namespace: namespace}, &svc)

@@ -38,6 +38,7 @@ const (
 )
 
 type ReceiptInput struct {
+	Domain          string                  // set when the receipt is from a domain
 	ReceiptType     ReceiptType             // required
 	TransactionID   uuid.UUID               // required
 	OnChain         tktypes.OnChainLocation // OnChain.Type must be set for an on-chain transaction/event
@@ -51,14 +52,38 @@ type TxCompletion struct {
 	PSC DomainSmartContract
 }
 
+// This is a transaction read for insertion into the Paladin database with all pre-verification completed.
+type ValidatedTransaction struct {
+	LocalFrom    string
+	Transaction  *pldapi.Transaction
+	DependsOn    []uuid.UUID
+	Function     *ResolvedFunction
+	PublicTxData []byte
+	Inputs       tktypes.RawJSON
+}
+
+// A resolved function on the ABI
+type ResolvedFunction struct {
+	ABI          abi.ABI
+	ABIReference *tktypes.Bytes32
+	Definition   *abi.Entry
+	Signature    string
+}
+
 type TXManager interface {
 	ManagerLifecycle
-	MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*TxCompletion) ([]uuid.UUID, error) // returns which transactions were known
-	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) error                        // requires all transactions to be known
+
+	// These are the general purpose functions exposed also as JSON/RPC APIs on the TX Manager
+
+	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) error // requires all transactions to be known
 	CalculateRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes) error
-	DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.DecodedError, error)
+	DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error)
+	DecodeCall(ctx context.Context, dbTX *gorm.DB, callData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error)
+	DecodeEvent(ctx context.Context, dbTX *gorm.DB, topics []tktypes.Bytes32, eventData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error)
 	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error)
 	SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
+	PrepareTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error)
+	PrepareTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
 	GetTransactionByID(ctx context.Context, id uuid.UUID) (*pldapi.Transaction, error)
 	GetTransactionByIDFull(ctx context.Context, id uuid.UUID) (result *pldapi.TransactionFull, err error)
 	GetTransactionDependencies(ctx context.Context, id uuid.UUID) (*pldapi.TransactionDependencies, error)
@@ -69,6 +94,14 @@ type TXManager interface {
 	QueryTransactionsFullTx(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) ([]*pldapi.TransactionFull, error)
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.TransactionReceipt, error)
 	GetTransactionReceiptByID(ctx context.Context, id uuid.UUID) (*pldapi.TransactionReceipt, error)
+	GetPreparedTransactionByID(ctx context.Context, dbTX *gorm.DB, id uuid.UUID) (*pldapi.PreparedTransaction, error)
+	QueryPreparedTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.PreparedTransaction, error)
 	CallTransaction(ctx context.Context, result any, tx *pldapi.TransactionCall) (err error)
-	UpsertABI(ctx context.Context, a abi.ABI) (*pldapi.StoredABI, error)
+	UpsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*pldapi.StoredABI, error)
+
+	// These functions for use of the private TX manager for chaining private transactions.
+
+	PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*ValidatedTransaction, error)
+	UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX *gorm.DB, txis []*ValidatedTransaction) error
+	WritePreparedTransactions(ctx context.Context, dbTX *gorm.DB, prepared []*PrepareTransactionWithRefs) (err error)
 }

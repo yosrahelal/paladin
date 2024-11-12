@@ -21,11 +21,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/preparedtxdistribution"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
@@ -69,7 +71,9 @@ var AllSequencerStates = []string{
 }
 
 type Sequencer struct {
-	ctx                     context.Context
+	ctx              context.Context
+	privateTxManager components.PrivateTxManager
+
 	persistenceRetryTimeout time.Duration
 
 	// each sequencer has its own go routine
@@ -96,22 +100,25 @@ type Sequencer struct {
 
 	pendingEvents chan ptmgrtypes.PrivateTransactionEvent
 
-	contractAddress     tktypes.EthAddress // the contract address managed by the current sequencer
-	nodeID              string
-	domainAPI           components.DomainSmartContract
-	components          components.AllComponents
-	endorsementGatherer ptmgrtypes.EndorsementGatherer
-	publisher           ptmgrtypes.Publisher
-	identityResolver    components.IdentityResolver
-	syncPoints          syncpoints.SyncPoints
-	stateDistributer    statedistribution.StateDistributer
-	transportWriter     ptmgrtypes.TransportWriter
-	graph               Graph
-	requestTimeout      time.Duration
+	contractAddress                tktypes.EthAddress // the contract address managed by the current sequencer
+	defaultSigner                  string
+	nodeID                         string
+	domainAPI                      components.DomainSmartContract
+	components                     components.AllComponents
+	endorsementGatherer            ptmgrtypes.EndorsementGatherer
+	publisher                      ptmgrtypes.Publisher
+	identityResolver               components.IdentityResolver
+	syncPoints                     syncpoints.SyncPoints
+	stateDistributer               statedistribution.StateDistributer
+	preparedTransactionDistributer preparedtxdistribution.PreparedTransactionDistributer
+	transportWriter                ptmgrtypes.TransportWriter
+	graph                          Graph
+	requestTimeout                 time.Duration
 }
 
 func NewSequencer(
 	ctx context.Context,
+	privateTxManager components.PrivateTxManager,
 	nodeID string,
 	contractAddress tktypes.EthAddress,
 	sequencerConfig *pldconf.PrivateTxManagerSequencerConfig,
@@ -122,12 +129,14 @@ func NewSequencer(
 	syncPoints syncpoints.SyncPoints,
 	identityResolver components.IdentityResolver,
 	stateDistributer statedistribution.StateDistributer,
+	preparedTransactionDistributer preparedtxdistribution.PreparedTransactionDistributer,
 	transportWriter ptmgrtypes.TransportWriter,
 	requestTimeout time.Duration,
 ) *Sequencer {
 
 	newSequencer := &Sequencer{
 		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("sequencer-%s", contractAddress)),
+		privateTxManager:     privateTxManager,
 		initiated:            time.Now(),
 		contractAddress:      contractAddress,
 		evalInterval:         confutil.DurationMin(sequencerConfig.EvaluationInterval, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.EvaluationInterval),
@@ -138,22 +147,27 @@ func NewSequencer(
 		incompleteTxSProcessMap: make(map[string]ptmgrtypes.TransactionFlow),
 		persistenceRetryTimeout: confutil.DurationMin(sequencerConfig.PersistenceRetryTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.PersistenceRetryTimeout),
 
-		staleTimeout:                 confutil.DurationMin(sequencerConfig.StaleTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.StaleTimeout),
-		processedTxIDs:               make(map[string]bool),
-		orchestrationEvalRequestChan: make(chan bool, 1),
-		stopProcess:                  make(chan bool, 1),
-		pendingEvents:                make(chan ptmgrtypes.PrivateTransactionEvent, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxPendingEvents),
-		nodeID:                       nodeID,
-		domainAPI:                    domainAPI,
-		components:                   allComponents,
-		endorsementGatherer:          endorsementGatherer,
-		publisher:                    publisher,
-		syncPoints:                   syncPoints,
-		identityResolver:             identityResolver,
-		stateDistributer:             stateDistributer,
-		transportWriter:              transportWriter,
-		graph:                        NewGraph(),
-		requestTimeout:               requestTimeout,
+		staleTimeout:                   confutil.DurationMin(sequencerConfig.StaleTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.StaleTimeout),
+		processedTxIDs:                 make(map[string]bool),
+		orchestrationEvalRequestChan:   make(chan bool, 1),
+		stopProcess:                    make(chan bool, 1),
+		pendingEvents:                  make(chan ptmgrtypes.PrivateTransactionEvent, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxPendingEvents),
+		nodeID:                         nodeID,
+		domainAPI:                      domainAPI,
+		components:                     allComponents,
+		endorsementGatherer:            endorsementGatherer,
+		publisher:                      publisher,
+		syncPoints:                     syncPoints,
+		identityResolver:               identityResolver,
+		stateDistributer:               stateDistributer,
+		preparedTransactionDistributer: preparedTransactionDistributer,
+		transportWriter:                transportWriter,
+		graph:                          NewGraph(),
+		requestTimeout:                 requestTimeout,
+
+		// Randomly allocate a signer.
+		// TODO: rotation
+		defaultSigner: fmt.Sprintf("domains.%s.submit.%s", contractAddress, uuid.New()),
 	}
 
 	log.L(ctx).Debugf("NewSequencer for contract address %s created: %+v", newSequencer.contractAddress, newSequencer)

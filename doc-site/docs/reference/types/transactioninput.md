@@ -13,8 +13,6 @@ title: TransactionInput
 
 | Field Name | Description | Type |
 |------------|-------------|------|
-| `id` | Server-generated UUID for this transaction (query only) | [`UUID`](simpletypes.md#uuid) |
-| `created` | Server-generated creation timestamp for this transaction (query only) | [`Timestamp`](simpletypes.md#timestamp) |
 | `idempotencyKey` | Externally supplied unique identifier for this transaction. 409 Conflict will be returned on attempt to re-submit | `string` |
 | `type` | Type of transaction (public or private) | `"private", "public"` |
 | `domain` | Name of a domain - only required on input for private deploy transactions | `string` |

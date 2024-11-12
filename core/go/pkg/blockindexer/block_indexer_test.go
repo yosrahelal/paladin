@@ -38,7 +38,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -117,11 +116,9 @@ func newTestBlockIndexer(t *testing.T) (context.Context, *blockIndexer, *rpcclie
 }
 
 func newTestBlockIndexerConf(t *testing.T, config *pldconf.BlockIndexerConfig) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, func()) {
-	logrus.SetLevel(logrus.DebugLevel)
-
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	p, pDone, err := persistence.NewUnitTestPersistence(ctx)
+	p, pDone, err := persistence.NewUnitTestPersistence(ctx, "blockindexer")
 	require.NoError(t, err)
 
 	blockListener, mRPC := newTestBlockListenerConf(t, ctx, config)
@@ -458,7 +455,7 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 	lastBlock := int64(-1)
 	lastIndex := -1
 	for i := 0; i < 15; i += 5 {
-		page, err := bi.ListTransactionEvents(ctx, lastBlock, lastIndex, 5, true, true)
+		page, err := bi.ListTransactionEvents(ctx, lastBlock, lastIndex, 5)
 		require.NoError(t, err)
 		assert.Len(t, page, 5)
 		for i2 := 0; i2 < 5; i2++ {
@@ -521,7 +518,7 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 
 	ch, err := bi.GetConfirmedBlockHeight(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(9), ch)
+	assert.Equal(t, tktypes.HexUint64(9), ch)
 }
 
 func TestBlockIndexerCancelledBeforeCurrentBlock(t *testing.T) {

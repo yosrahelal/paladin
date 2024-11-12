@@ -126,7 +126,7 @@ func (ils *staticStore) FindOrCreateLoadableKey(ctx context.Context, req *signer
 			return nil, "", i18n.NewError(ctx, tkmsgs.MsgSigningModuleBadKeyHandle)
 		}
 		keyHandle += url.PathEscape(segment.Name)
-		keyHandle += "/"
+		keyHandle += "."
 	}
 	if len(req.Name) == 0 {
 		return nil, "", i18n.NewError(ctx, tkmsgs.MsgSigningModuleBadKeyHandle)

@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -28,31 +28,54 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/router"
+	"github.com/kaleido-io/paladin/toolkit/pkg/staticserver"
 )
 
 type RPCServer interface {
-	Register(module *RPCModule)
 	Start() error
 	Stop()
-	EthPublish(eventType string, result interface{}) // Note this is an `eth_` specific extension, with no ack or reliability
 	HTTPAddr() net.Addr
 	WSAddr() net.Addr
-	WSHandler(w http.ResponseWriter, r *http.Request) // Provides access to the WebSocket handler directly to be able to install it into another server
+
+	Register(module *RPCModule)
+	EthPublish(eventType string, result interface{}) // Note this is an `eth_` specific extension, with no ack or reliability
+	WSSubscriptionCount(eventType string) int
+
+	WSHandler(w http.ResponseWriter, r *http.Request)   // Provides access to the WebSocket handler directly to be able to install it into another server
+	HTTPHandler(w http.ResponseWriter, r *http.Request) // Provides access to the http handler directly to be able to install it into another server
 }
 
-func NewRPCServer(ctx context.Context, conf *pldconf.RPCServerConfig) (_ RPCServer, err error) {
+func NewRPCServer(ctx context.Context, conf *pldconf.RPCServerConfig) (_ *rpcServer, err error) {
 	s := &rpcServer{
 		bgCtx:         ctx,
 		wsConnections: make(map[string]*webSocketConnection),
 		rpcModules:    make(map[string]*RPCModule),
 	}
 
+	// Add the HTTP server
 	if !conf.HTTP.Disabled {
-		if s.httpServer, err = httpserver.NewServer(ctx, "JSON/RPC (HTTP)", &conf.HTTP.HTTPServerConfig, http.HandlerFunc(s.httpHandler)); err != nil {
-			return nil, err
+		r, err := router.NewRouter(s.bgCtx, "JSON/RPC (HTTP)", &conf.HTTP.HTTPServerConfig)
+		if err != nil {
+			return s, err
 		}
+
+		// Add the static servers to the router
+		for _, s := range conf.HTTP.StaticServers {
+			if !s.Enabled {
+				continue
+			}
+			server := staticserver.NewStaticServer(s)
+			r.PathPrefixHandleFunc(s.URLPath, server.HTTPHandler)
+		}
+
+		// Add the JSON RPC main handler to the root path
+		r.HandleFunc("/", s.httpHandler)
+
+		s.httpServer = r
 	}
 
+	// Add the WebSocket server
 	if !conf.WS.Disabled {
 		s.wsUpgrader = &websocket.Upgrader{
 			ReadBufferSize:  int(confutil.ByteSize(conf.WS.ReadBufferSize, 0, *pldconf.WSDefaults.ReadBufferSize)),
@@ -66,6 +89,9 @@ func NewRPCServer(ctx context.Context, conf *pldconf.RPCServerConfig) (_ RPCServ
 
 	return s, err
 }
+
+// rpcServer implements the RPCServer interface
+var _ RPCServer = &rpcServer{}
 
 type rpcServer struct {
 	bgCtx         context.Context
@@ -97,6 +123,10 @@ func (s *rpcServer) WSAddr() (a net.Addr) {
 
 func (s *rpcServer) WSHandler(res http.ResponseWriter, req *http.Request) {
 	s.wsHandler(res, req)
+}
+
+func (s *rpcServer) HTTPHandler(w http.ResponseWriter, r *http.Request) {
+	s.httpHandler(w, r)
 }
 
 func (s *rpcServer) httpHandler(res http.ResponseWriter, req *http.Request) {

@@ -17,6 +17,7 @@ package io.kaleido.paladin.pente;
 
 import io.kaleido.paladin.pente.evmrunner.EVMRunner;
 import io.kaleido.paladin.pente.evmstate.PersistedAccount;
+import io.kaleido.paladin.toolkit.JsonHex;
 import org.apache.tuweni.bytes.Bytes;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.evm.account.Account;
@@ -46,7 +47,7 @@ public class PersistedAccountTest {
         account.applyChanges(updater);
 
         // Serialize it
-        String serialized = Bytes.wrap(account.serialize()).toHexString();
+        String serialized = Bytes.wrap(account.serialize(JsonHex.randomBytes32())).toHexString();
 
         // Deserialize it
         PersistedAccount deserialized = PersistedAccount.deserialize(Bytes.fromHexString(serialized).toArray());

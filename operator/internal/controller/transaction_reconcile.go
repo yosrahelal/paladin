@@ -130,7 +130,7 @@ func (r *transactionReconcile) submitTransactionAndRequeue(ctx context.Context, 
 func (r *transactionReconcile) queryTxByIdempotencyKeyAndRequeue(ctx context.Context, paladinRPC rpcclient.Client) error {
 	var txns []*pldapi.Transaction
 	err := paladinRPC.CallRPC(ctx, &txns, "ptx_queryTransactions",
-		query.NewQueryBuilder().Equal("idempotencyKey", r.pStatus.IdempotencyKey).Limit(1))
+		query.NewQueryBuilder().Equal("idempotencyKey", r.pStatus.IdempotencyKey).Limit(1).Query())
 	if err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func getPaladinRPC(ctx context.Context, c client.Client, nodeName, namespace str
 		log.Info(fmt.Sprintf("Waiting for paladin node '%s' to become available to deploy", nodeName))
 		return nil, nil
 	}
-	ready := node.Status.Phase == corev1alpha1.StatusPhaseCompleted
+	ready := node.Status.Phase == corev1alpha1.StatusPhaseReady
 	if !ready {
 		log.Info(fmt.Sprintf("Waiting for paladin node '%s' to reach completed phase (%s)", nodeName, node.Status.Phase))
 		return nil, nil

@@ -1,0 +1,85 @@
+name: Image Release
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+        description: 'The tag to release the images with'
+      latest:
+        required: false
+        type: boolean
+        default: false
+        description: 'Whether to also tag the images with "latest"'
+    secrets:
+      DOCKERHUB_USERNAME:
+        description: 'DockerHub username'
+        required: true
+      DOCKERHUB_TOKEN:
+        description: 'DockerHub token'
+        required: true
+  workflow_dispatch:
+    inputs:
+      latest:
+        required: false
+        type: boolean
+        description: 'Whether to also tag the images with "latest"'
+        default: false
+      tag:
+        required: true
+        type: string
+        description: 'The tag to release the images with'
+
+jobs:
+  image-tags:
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.determine-tags.outputs.tags }}
+    env:
+      TAG: ${{ inputs.tag }}
+      LATEST: ${{ inputs.latest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine tags
+        id: determine-tags
+        shell: bash
+        run: |
+          set -e
+          TAGS="${TAG}"
+
+          if [[ "${LATEST}" == 'true' ]]; then
+            echo "Appending 'latest' tag"
+            TAGS="${TAGS},latest"
+          fi
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+
+  push-to-dockerhub:
+    needs: image-tags
+    uses: ./.github/workflows/cross-build-images.yaml
+    with:
+      registry: docker.io
+      repository: ${{ github.repository_owner }}
+      image_tags: ${{ needs.image-tags.outputs.tags }}
+    secrets:
+      username: ${{ secrets.DOCKERHUB_USERNAME }}
+      password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  push-to-ghcr:
+    needs: image-tags
+    uses: ./.github/workflows/cross-build-images.yaml
+    with:
+      registry: ghcr.io
+      repository: ${{ github.repository_owner }}
+      image_tags: ${{ needs.image-tags.outputs.tags }}
+    secrets:
+      username: ${{ github.actor }}
+      password: ${{ secrets.GITHUB_TOKEN }}

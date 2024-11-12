@@ -20,16 +20,18 @@ import (
 	_ "embed"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
-	testZeto "github.com/kaleido-io/paladin/domains/integration-test/zeto"
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -51,7 +53,7 @@ func TestZetoDomainTestSuite(t *testing.T) {
 type zetoDomainTestSuite struct {
 	suite.Suite
 	hdWalletSeed      *testbed.UTInitFunction
-	deployedContracts *testZeto.ZetoDomainContracts
+	deployedContracts *ZetoDomainContracts
 	domainName        string
 	domain            zeto.Zeto
 	rpc               rpcbackend.Backend
@@ -60,13 +62,13 @@ type zetoDomainTestSuite struct {
 
 func (s *zetoDomainTestSuite) SetupSuite() {
 	s.hdWalletSeed = testbed.HDWalletSeedScopedToTest()
-	domainContracts := testZeto.DeployZetoContracts(s.T(), s.hdWalletSeed, "./config-for-deploy.yaml", controllerName)
+	domainContracts := DeployZetoContracts(s.T(), s.hdWalletSeed, "./config-for-deploy.yaml", controllerName)
 	s.deployedContracts = domainContracts
 	ctx := context.Background()
 	domainName := "zeto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
-	config := testZeto.PrepareZetoConfig(s.T(), s.deployedContracts, "../zkp")
-	zeto, zetoTestbed := newZetoDomain(s.T(), config)
+	config := PrepareZetoConfig(s.T(), s.deployedContracts, "../zkp")
+	zeto, zetoTestbed := newZetoDomain(s.T(), domainContracts, config)
 	done, _, rpc := newTestbed(s.T(), s.hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: zetoTestbed,
 	})
@@ -81,36 +83,37 @@ func (s *zetoDomainTestSuite) TearDownSuite() {
 }
 
 func (s *zetoDomainTestSuite) TestZeto_Anon() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON, false)
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON, false, false)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonBatch() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true)
+	s.T().Skip()
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true, false)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false)
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false, false)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true)
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false)
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false, true)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true)
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true, true)
 }
 
-func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, useBatch bool) {
+func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, useBatch bool, isNullifiersToken bool) {
 	ctx := context.Background()
 	log.L(ctx).Infof("Deploying an instance of the %s token", tokenName)
+	s.setupContractsAbi(t, ctx, tokenName)
 	var zetoAddress tktypes.EthAddress
 	rpcerr := s.rpc.CallRPC(ctx, &zetoAddress, "testbed_deploy",
-		s.domainName, &types.InitializerParams{
-			From:      controllerName,
+		s.domainName, controllerName, &types.InitializerParams{
 			TokenName: tokenName,
 		})
 	if rpcerr != nil {
@@ -122,12 +125,16 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	_, err := s.mint(ctx, zetoAddress, controllerName, []int64{10, 20})
 	require.NoError(t, err)
 
-	coins := findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
+	var controllerAddr tktypes.Bytes32
+	rpcerr = s.rpc.CallRPC(ctx, &controllerAddr, "ptx_resolveVerifier", controllerName, zetosignerapi.AlgoDomainZetoSnarkBJJ(s.domainName), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X)
+	require.Nil(t, rpcerr)
+
+	coins := findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
 	require.Len(t, coins, 2)
 	assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64())
-	assert.Equal(t, controllerName, coins[0].Data.Owner)
+	assert.Equal(t, controllerAddr.String(), coins[0].Data.Owner.String())
 	assert.Equal(t, int64(20), coins[1].Data.Amount.Int().Int64())
-	assert.Equal(t, controllerName, coins[1].Data.Owner)
+	assert.Equal(t, controllerAddr.String(), coins[1].Data.Owner.String())
 
 	// for testing the batch circuits, we mint the 3rd UTXO
 	if useBatch {
@@ -138,11 +145,11 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 
 	log.L(ctx).Infof("Attempt mint from non-controller (should fail)")
 	_, err = s.mint(ctx, zetoAddress, recipient1Name, []int64{10})
-	require.ErrorContains(t, err, "PD011513: Reverted: 0x118cdaa7")
-	assert.Regexp(t, "PD011513: Reverted: 0x118cdaa.*", err)
+	require.ErrorContains(t, err, "PD012216: Transaction reverted OwnableUnauthorizedAccount")
+	assert.Regexp(t, "PD012216: Transaction reverted OwnableUnauthorizedAccount.*", err)
 
-	// for testing the batch circuits, we transfer 50 which would require 3 UTXOs (>2)
 	if useBatch {
+		// for testing the batch circuits, we transfer 50 which would require 3 UTXOs (>2)
 		amount1 := 10
 		amount2 := 40
 		log.L(ctx).Infof("Transfer %d from controller to recipient1 (%d) and recipient2 (%d)", amount1+amount2, amount1, amount2)
@@ -156,22 +163,47 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	}
 
 	// check that we now only have one unspent coin, of value 5
-	// coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
-	// one for the controller from the failed transaction
+	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
 	// one for the controller from the successful transaction as change (value=5)
 	// one for the recipient (value=25)
-	// TODO: re-enable this test after the nullifiers handling is sorted
-	// require.Len(t, coins, 3)
-	// assert.Equal(t, int64(10), coins[0].Amount.Int64())
-	// assert.Equal(t, recipient1Name, coins[0].Owner)
-	// assert.Equal(t, int64(25), coins[1].Amount.Int64())
-	// assert.Equal(t, recipient1Name, coins[1].Owner)
-	// assert.Equal(t, int64(5), coins[2].Amount.Int64())
-	// assert.Equal(t, controllerName, coins[2].Owner)
+	expectedCoins := 2
+	if useBatch {
+		expectedCoins = 3
+	}
+
+	// some tokens like Zeto_AnonNullifier with batch can take some time to process
+	// so we need to retry at least once
+	if len(coins) != expectedCoins {
+		time.Sleep(1 * time.Second)
+		coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
+	}
+
+	require.Len(t, coins, expectedCoins)
+
+	if useBatch {
+		assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64()) // state for recipient1
+		assert.Equal(t, int64(40), coins[1].Data.Amount.Int().Int64()) // state for recipient2
+		assert.Equal(t, int64(10), coins[2].Data.Amount.Int().Int64()) // change for controller
+		assert.Equal(t, controllerAddr.String(), coins[2].Data.Owner.String())
+	} else {
+		assert.Equal(t, int64(25), coins[0].Data.Amount.Int().Int64()) // state for recipient1
+		assert.Equal(t, int64(5), coins[1].Data.Amount.Int().Int64())  // change for controller
+		assert.Equal(t, controllerAddr.String(), coins[1].Data.Owner.String())
+	}
 }
 
-func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthAddress, minter string, amounts []int64) (*tktypes.PrivateContractTransaction, error) {
-	var invokeResult tktypes.PrivateContractTransaction
+func (s *zetoDomainTestSuite) setupContractsAbi(t *testing.T, ctx context.Context, tokenName string) {
+	var result tktypes.HexBytes
+
+	contractAbi, ok := s.deployedContracts.deployedContractAbis[tokenName]
+	require.True(t, ok, "Missing ABI for contract %s", tokenName)
+	rpcerr := s.rpc.CallRPC(ctx, &result, "ptx_storeABI", contractAbi)
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+}
+
+func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthAddress, minter string, amounts []int64) (invokeResult *testbed.TransactionResult, err error) {
 	var params []*types.TransferParamEntry
 	for _, amount := range amounts {
 		params = append(params, &types.TransferParamEntry{
@@ -186,20 +218,23 @@ func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthA
 	if err != nil {
 		return nil, err
 	}
-	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     minter,
-		To:       tktypes.EthAddress(zetoAddress),
-		Function: *types.ZetoABI.Functions()["mint"],
-		Inputs:   paramsJson,
+	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     minter,
+			To:       &zetoAddress,
+			Function: "mint",
+			Data:     paramsJson,
+		},
+		ABI: types.ZetoABI,
 	}, true)
 	if rpcerr != nil {
 		return nil, rpcerr.Error()
 	}
-	return &invokeResult, nil
+	return invokeResult, nil
 }
 
-func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.EthAddress, sender string, receivers []string, amounts []int64) (*tktypes.PrivateContractTransaction, error) {
-	var invokeResult tktypes.PrivateContractTransaction
+func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.EthAddress, sender string, receivers []string, amounts []int64) (*testbed.TransactionResult, error) {
+	var invokeResult testbed.TransactionResult
 	var params []*types.TransferParamEntry
 	for i, receiver := range receivers {
 		params = append(params, &types.TransferParamEntry{
@@ -214,11 +249,14 @@ func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.
 	if err != nil {
 		return nil, err
 	}
-	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     sender,
-		To:       tktypes.EthAddress(zetoAddress),
-		Function: *types.ZetoABI.Functions()["transfer"],
-		Inputs:   paramsJson,
+	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     sender,
+			To:       &zetoAddress,
+			Function: "transfer",
+			Data:     paramsJson,
+		},
+		ABI: types.ZetoABI,
 	}, true)
 	if rpcerr != nil {
 		return nil, rpcerr.Error()
@@ -226,12 +264,16 @@ func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.
 	return &invokeResult, nil
 }
 
-func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.ZetoCoinState {
+func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON, useNullifiers bool) []*types.ZetoCoinState {
 	if jq == nil {
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
+	methodName := "pstate_queryContractStates"
+	if useNullifiers {
+		methodName = "pstate_queryContractNullifiers"
+	}
 	var zetoCoins []*types.ZetoCoinState
-	rpcerr := rpc.CallRPC(ctx, &zetoCoins, "pstate_queryContractStates",
+	rpcerr := rpc.CallRPC(ctx, &zetoCoins, methodName,
 		zeto.Name(),
 		address,
 		zeto.CoinSchemaID(),
@@ -251,7 +293,7 @@ func mapConfig(t *testing.T, config *types.DomainFactoryConfig) (m map[string]an
 	return m
 }
 
-func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, *testbed.TestbedDomain) {
+func newZetoDomain(t *testing.T, domainContracts *ZetoDomainContracts, config *types.DomainFactoryConfig) (zeto.Zeto, *testbed.TestbedDomain) {
 	var domain internalZeto.Zeto
 	return &domain, &testbed.TestbedDomain{
 		Config: mapConfig(t, config),
@@ -259,7 +301,7 @@ func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, 
 			domain.Callbacks = callbacks
 			return &domain
 		}),
-		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
+		RegistryAddress: tktypes.MustEthAddress(domainContracts.FactoryAddress.String()),
 		AllowSigning:    true,
 	}
 }

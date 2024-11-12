@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
@@ -27,6 +28,15 @@ import (
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
+
+var mintABI = &abi.Entry{
+	Type: abi.Function,
+	Name: "mint",
+	Inputs: abi.ParameterArray{
+		{Name: "utxos", Type: "uint256[]"},
+		{Name: "data", Type: "bytes"},
+	},
+}
 
 type mintHandler struct {
 	zeto *Zeto
@@ -66,7 +76,8 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
 	params := tx.Params.([]*types.TransferParamEntry)
 
-	_, outputStates, err := h.zeto.prepareOutputs(ctx, params, req.ResolvedVerifiers)
+	useNullifiers := isNullifiersToken(tx.DomainConfig.TokenName)
+	_, outputStates, err := h.zeto.prepareOutputs(ctx, useNullifiers, params, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -119,11 +130,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 	if err != nil {
 		return nil, err
 	}
-	contractAbi, err := h.zeto.config.GetContractAbi(ctx, tx.DomainConfig.TokenName)
-	if err != nil {
-		return nil, err
-	}
-	functionJSON, err := json.Marshal(contractAbi.Functions()["mint"])
+	functionJSON, err := json.Marshal(mintABI)
 	if err != nil {
 		return nil, err
 	}
@@ -132,6 +139,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		Transaction: &pb.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
+			RequiredSigner:  &req.Transaction.From, // must be signed by the authorized minter on-chain
 		},
 	}, nil
 }

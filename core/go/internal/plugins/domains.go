@@ -163,6 +163,21 @@ func (br *domainBridge) PrepareDeploy(ctx context.Context, req *prototk.PrepareD
 	return
 }
 
+func (br *domainBridge) InitContract(ctx context.Context, req *prototk.InitContractRequest) (res *prototk.InitContractResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_InitContract{InitContract: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_InitContractRes); ok {
+				res = r.InitContractRes
+			}
+			return res != nil
+		},
+	)
+	return
+}
+
 func (br *domainBridge) InitTransaction(ctx context.Context, req *prototk.InitTransactionRequest) (res *prototk.InitTransactionResponse, err error) {
 	err = br.toPlugin.RequestReply(ctx,
 		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
@@ -306,6 +321,21 @@ func (br *domainBridge) ExecCall(ctx context.Context, req *prototk.ExecCallReque
 		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
 			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_ExecCallRes); ok {
 				res = r.ExecCallRes
+			}
+			return res != nil
+		},
+	)
+	return
+}
+
+func (br *domainBridge) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptRequest) (res *prototk.BuildReceiptResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_BuildReceipt{BuildReceipt: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_BuildReceiptRes); ok {
+				res = r.BuildReceiptRes
 			}
 			return res != nil
 		},

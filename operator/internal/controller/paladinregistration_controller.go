@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -203,7 +204,7 @@ func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context,
 	}
 
 	tx := &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			To:       registryAddr,
 			Function: registryABI.Functions()["registerIdentity"].String(),
@@ -258,7 +259,7 @@ func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, re
 	}
 
 	tx := &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			To:       registryAddr,
 			Function: registryABI.Functions()["setIdentityProperty"].String(),
@@ -277,5 +278,8 @@ func (r *PaladinRegistrationReconciler) SetupWithManager(mgr ctrl.Manager) error
 		For(&corev1alpha1.PaladinRegistration{}).
 		// Reconcile when any node status changes
 		Watches(&corev1alpha1.Paladin{}, reconcileAll(PaladinRegistrationCRMap, r.Client), reconcileEveryChange()).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 2,
+		}).
 		Complete(r)
 }

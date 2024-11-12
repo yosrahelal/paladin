@@ -30,9 +30,6 @@ public class TestDomain extends DomainInstance {
     @Override
     protected CompletableFuture<ToDomain.ConfigureDomainResponse> configureDomain(ToDomain.ConfigureDomainRequest request) {
         ToDomain.DomainConfig domainConfig = ToDomain.DomainConfig.newBuilder()
-                .setBaseLedgerSubmitConfig(ToDomain.BaseLedgerSubmitConfig.newBuilder()
-                        .setSubmitMode(ToDomain.BaseLedgerSubmitConfig.Mode.ONE_TIME_USE_KEYS)
-                        .build())
                 .build();
         return CompletableFuture.completedFuture(ToDomain.ConfigureDomainResponse.newBuilder()
                 .setDomainConfig(domainConfig)
@@ -52,6 +49,11 @@ public class TestDomain extends DomainInstance {
 
     @Override
     protected CompletableFuture<ToDomain.PrepareDeployResponse> prepareDeploy(ToDomain.PrepareDeployRequest request) {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
+
+    @Override
+    protected CompletableFuture<ToDomain.InitContractResponse> initContract(ToDomain.InitContractRequest request) {
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
 
@@ -102,6 +104,11 @@ public class TestDomain extends DomainInstance {
 
     @Override
     protected CompletableFuture<ToDomain.ExecCallResponse> execCall(ToDomain.ExecCallRequest request) {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
+
+    @Override
+    protected CompletableFuture<ToDomain.BuildReceiptResponse> buildReceipt(ToDomain.BuildReceiptRequest request) {
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
 }

@@ -1,0 +1,130 @@
+name: Helm Chart release
+
+on:
+  workflow_call:
+    inputs:
+      latest:
+        required: false
+        type: boolean
+        default: false
+      images_tag:
+        required: true
+        type: string
+        description: 'The images tags to patch the chart with'
+      chart_tag:
+        required: true
+        type: string
+        description: 'Chart release tag'
+    secrets:
+      CR_TOKEN:
+        description: 'The GitHub token to use for the helm chart release'
+        required: true
+
+  workflow_dispatch:
+    inputs:
+      latest:
+        required: false
+        type: boolean
+        default: false
+      images_tag:
+        required: true
+        type: string
+        description: 'The images tags to patch the chart with'
+      chart_tag:
+        required: true
+        type: string
+        description: 'The helm chart tag to release the chart'
+  
+jobs:
+  helm-chart-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install pre-requisites
+        uses: ./.github/actions/setup
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+      
+      # The makefile uses kustomize
+      - uses: imranismail/setup-kustomize@v2
+
+      - name: Prepare CRD chart
+        run: ./gradlew prepareCRDsChart
+
+      - name: Prepare operator chart
+        run: ./gradlew prepareOperatorChart
+
+      - name: Set Lowercase Repository Owner
+        run: echo "LOWER_REPOSITORY_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+      
+      # Override the image tags in the values.yaml file 
+      - name: Override image tags
+        uses: ./.github/actions/update-yaml
+        with:
+          file: 'operator/charts/paladin-operator/values.yaml'
+          updates: |
+            operator:
+              image:
+                repository: docker.io/${{ env.LOWER_REPOSITORY_OWNER }}/paladin-operator
+                tag: ${{ inputs.images_tag }}
+            paladin:
+              image:
+                repository: docker.io/${{ env.LOWER_REPOSITORY_OWNER }}/paladin
+                tag: ${{ inputs.images_tag }}
+      
+      # Remove 'v' prefix from the tag
+      - name: Process Tag
+        shell: bash
+        run: |
+          TAG="${{ inputs.chart_tag }}"
+          PROCESSED_TAG="${TAG#v}"
+          echo "PROCESSED_TAG=${PROCESSED_TAG}" >> $GITHUB_ENV
+
+      # Override the chart version in the Chart.yaml file
+      - name: Override chart version
+        uses: ./.github/actions/update-yaml
+        with:
+          file: 'operator/charts/paladin-operator/Chart.yaml'
+          updates: |
+            version: ${{ env.PROCESSED_TAG }}
+            appVersion: ${{ inputs.chart_tag }}
+
+      - name: Confirm Helm temapltes
+        working-directory: operator/charts/paladin-operator
+        run: |
+          helm dependency build
+          helm template .
+          rm -rf charts
+          rm Chart.lock
+      
+      # TODO: Add e2e tests for the helm chart
+
+      # set CR_TOKEN env with the GitHub token secret when it is workflow_dispatch action
+      - name: Set CR_TOKEN
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == 'workflow_call' ]; then
+            echo "CR_TOKEN=${{ secrets.CR_TOKEN }}" >> $GITHUB_ENV
+          else
+            echo "CR_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+          fi
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        with:
+          mark_as_latest: ${{ inputs.latest }}
+          charts_dir: "operator/charts"
+          skip_existing: true
+        env: 
+          CR_TOKEN: "${{ env.CR_TOKEN }}"

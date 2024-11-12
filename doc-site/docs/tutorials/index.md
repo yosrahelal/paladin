@@ -1,30 +1,34 @@
-# Tutorials
+## Pre-requisites
 
-Explain the different tutorials that you have at a high level.
+* git
+* [NodeJS 20.x or newer](https://nodejs.org/en/download/package-manager) installed
 
-!!! tip
-    Change each card below to reflect the appropriate information for Tutorial 1, 2, 3. You can use [Material Design Icons](https://pictogrammers.com/library/mdi/) or [Font Awesome Icons](https://fontawesome.com/search?o=r&m=free) for representing the uniqueness of each card below.
+Clone the Paladin repository to access the examples:
+
+```shell
+git clone https://github.com/LF-Decentralized-Trust-labs/paladin.git
+```
+
+## Next Steps
+
+
+The tutorials on this page provide a starting point for running code on top of Paladin.
+
+If you haven't already, you should visit [Getting Started](../getting-started/installation/) to
+ensure you're familiar with running Paladin before walking through any of the tutorials.
 
 <div class="grid cards" markdown>
 
--   :fontawesome-solid-laptop-code:{ .lg .middle } __[Tutorial 1](tutorial-1.md)__ 
+-   :fontawesome-solid-stamp:{ .lg .middle } __[Bond Issuance](bond-issuance.md)__ 
 
     ---
 
-    Learn how to ... (Enter description for tutorial 1).
+    Learn how Noto and Pente work together to represent a bond issuance process.
 
--   :fontawesome-solid-hat-wizard:{ .lg .middle } __[Tutorial 2](tutorial-2.md)__ 
-
-    ---
-
-    Learn how to ... (Enter description for tutorial 2).
-
--   :material-school:{ .lg .middle } __[Tutorial 3](tutorial-3.md)__ 
+-   :fontawesome-solid-stamp:{ .lg .middle } __[Wholesale CBDC](zkp-cbdc.md)__ 
 
     ---
 
-    Learn how to ... (Enter description for tutorial 3).
-
+    Learn how to implement a wholesale CBDC with Zeto.
 
 </div>
-

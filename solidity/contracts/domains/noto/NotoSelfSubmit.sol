@@ -10,11 +10,9 @@ import {Noto} from "./Noto.sol";
  * signature is recovered and verified.
  */
 contract NotoSelfSubmit is Noto {
-    bytes32 public constant NotoVariantSelfSubmit =
-        0x0000000000000000000000000000000000000000000000000000000000000001;
+    uint64 public constant NotoVariantSelfSubmit = 0x0001;
 
     function initialize(
-        bytes32 notaryType,
         address notaryAddress,
         bytes calldata data
     ) public override initializer returns (bytes memory) {
@@ -22,7 +20,6 @@ contract NotoSelfSubmit is Noto {
         _notary = notaryAddress;
 
         return _encodeConfig(NotoConfig_V0({
-            notaryType: notaryType,
             notaryAddress: notaryAddress,
             data: data,
             variant: NotoVariantSelfSubmit

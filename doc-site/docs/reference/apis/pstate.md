@@ -11,6 +11,20 @@ title: pstate_*
 
 0. `schemas`: [`Schema[]`](../types/schema.md#schema)
 
+## `pstate_queryContractNullifiers`
+
+### Parameters
+
+0. `domain`: `string`
+1. `contractAddress`: [`EthAddress`](../types/simpletypes.md#ethaddress)
+2. `schemaRef`: [`Bytes32`](../types/simpletypes.md#bytes32)
+3. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+4. `qualifier`: [`StateStatusQualifier`](../types/statestatusqualifier.md#statestatusqualifier)
+
+### Returns
+
+0. `states`: [`State[]`](../types/state.md#state)
+
 ## `pstate_queryContractStates`
 
 ### Parameters
@@ -20,6 +34,19 @@ title: pstate_*
 2. `schemaRef`: [`Bytes32`](../types/simpletypes.md#bytes32)
 3. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
 4. `qualifier`: [`StateStatusQualifier`](../types/statestatusqualifier.md#statestatusqualifier)
+
+### Returns
+
+0. `states`: [`State[]`](../types/state.md#state)
+
+## `pstate_queryNullifiers`
+
+### Parameters
+
+0. `domain`: `string`
+1. `schemaRef`: [`Bytes32`](../types/simpletypes.md#bytes32)
+2. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+3. `qualifier`: [`StateStatusQualifier`](../types/statestatusqualifier.md#statestatusqualifier)
 
 ### Returns
 

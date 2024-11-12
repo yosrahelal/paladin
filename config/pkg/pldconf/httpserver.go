@@ -48,3 +48,8 @@ type CORSConfig struct {
 	AllowedOrigins   []string `json:"allowedOrigins"`
 	MaxAge           *string  `json:"maxAge"`
 }
+type StaticServerConfig struct {
+	Enabled    bool   `json:"enabled"`
+	StaticPath string `json:"staticPath"` // Path to the static files in the server FS e.g /app/ui
+	URLPath    string `json:"urlPath"`    // URL path to serve the static files e.g /ui -> http://host:port/ui
+}

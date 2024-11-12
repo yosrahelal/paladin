@@ -77,7 +77,7 @@ func MapError(err error) ErrorReason {
 		return ErrorKnownTransaction
 	case strings.Contains(errString, "already known"):
 		return ErrorKnownTransaction
-	case strings.Contains(errString, "execution reverted"):
+	case strings.Contains(errString, "reverted"):
 		return ErrorReasonTransactionReverted
 	// https://docs.avax.network/quickstart/integrate-exchange-with-avalanche#determining-finality
 	case strings.Contains(errString, "cannot query unfinalized data"):

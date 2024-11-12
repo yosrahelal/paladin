@@ -41,15 +41,17 @@ contract Swap {
         string tradeData2;
     }
 
-    struct FullState {
-        bytes id;
-        bytes32 schema;
-        bytes data;
+    struct StateData {
+        StateEncoded[] inputs;
+        StateEncoded[] outputs;
     }
 
-    struct StateData {
-        FullState[] inputs;
-        FullState[] outputs;
+    struct StateEncoded {
+        bytes id;
+        string domain;
+        bytes32 schema;
+        address contractAddress;
+        bytes data;
     }
 
     struct Trade {

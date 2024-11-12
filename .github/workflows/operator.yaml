@@ -1,16 +1,15 @@
 name: Paladin Operator Build
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
     paths:
       - 'operator/**'
-  # pull_request:
-  #   paths:
-  #     - 'operator/**'
   workflow_dispatch:
 
+# Ensure this workflow only runs for the most recent commit of a pull-request
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   operator-build:
@@ -20,17 +19,13 @@ jobs:
       NAMESPACE: paladin
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          check-latest: true
+      - name: Install pre-requisites
+        uses: ./.github/actions/setup
 
       # - name: Go Lint
       #   working-directory: operator
@@ -40,16 +35,17 @@ jobs:
       #   working-directory: operator
       #   run: make test
 
-      - name: Create Kubernetes Kind Cluster
+      - name: Install Kind
         uses: helm/kind-action@v1
         with:
           install_only: true # only install kind, the cluster creation is managed by the deploy step
           ignore_failed_clean: true
+      
+      # The makefile uses kustomize
+      - uses: imranismail/setup-kustomize@v2
 
-      - name: E2E Operator
-        working-directory: operator
-        run: gradle e2e -PclusterName=${{ env.CLUSTER_NAME }} -Pnamespace=${{ env.NAMESPACE }} 
+      - name: Deploy Operator
+        run: ./gradlew deploy -PclusterName=${{ env.CLUSTER_NAME }} -Pnamespace=${{ env.NAMESPACE }} 
 
       - name: Uninstall Operator
-        working-directory: operator
-        run: gradle clean -PclusterName=${{ env.CLUSTER_NAME }} -Pnamespace=${{ env.NAMESPACE }} -PdeleteCluster=true
+        run: ./gradlew clean -PclusterName=${{ env.CLUSTER_NAME }} -Pnamespace=${{ env.NAMESPACE }} -PdeleteCluster=true

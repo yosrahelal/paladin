@@ -18,6 +18,7 @@ package components
 import (
 	"context"
 
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"gorm.io/gorm"
 )
 
@@ -40,14 +41,37 @@ type PrivateTxStatus struct {
 	LatestError string `json:"latestError"`
 }
 
+type StateDistributionSet struct {
+	LocalNode  string
+	SenderNode string
+	Remote     []*StateDistribution
+	Local      []*StateDistribution
+}
+
+// A StateDistribution is an intent to send private data for a given state to a remote party
+type StateDistribution struct {
+	ID                    string
+	StateID               string
+	IdentityLocator       string
+	Domain                string
+	ContractAddress       string
+	SchemaID              string
+	StateDataJson         string
+	NullifierAlgorithm    *string
+	NullifierVerifierType *string
+	NullifierPayloadType  *string
+}
+
 type PrivateTxManager interface {
 	ManagerLifecycle
 	TransportClient
 
 	//Synchronous functions to submit a new private transaction
-	HandleNewTx(ctx context.Context, tx *PrivateTransaction) error
-	HandleDeployTx(ctx context.Context, tx *PrivateContractDeploy) error
+	HandleNewTx(ctx context.Context, tx *ValidatedTransaction) error
 	GetTxStatus(ctx context.Context, domainAddress string, txID string) (status PrivateTxStatus, err error)
+
+	// Synchronous function to call an existing deployed smart contract
+	CallPrivateSmartContract(ctx context.Context, call *TransactionInputs) (*abi.ComponentValue, error)
 
 	//TODO this is just a placeholder until we figure out the external interface for events
 	// in the meantime, this is handy for some blackish box testing
@@ -56,4 +80,6 @@ type PrivateTxManager interface {
 	NotifyFailedPublicTx(ctx context.Context, dbTX *gorm.DB, confirms []*PublicTxMatch) error
 
 	PrivateTransactionConfirmed(ctx context.Context, receipt *TxCompletion)
+
+	BuildStateDistributions(ctx context.Context, tx *PrivateTransaction) (*StateDistributionSet, error)
 }

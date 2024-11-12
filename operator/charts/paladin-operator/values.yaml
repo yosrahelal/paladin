@@ -1,15 +1,17 @@
 
 
-# Default values for paladin-operator
+# Install CRDs as part of the chart installation
+# When this is set to false, the CRDs are expected to be installed separately
+installCRDs: false
 
 # Default values for paladin-operator
 operator:
   name: paladin-operator
   namespace: paladin
   image:
-    repository: paladin-operator
-    tag: latest
-    pullPolicy: IfNotPresent
+    repository: kaleidoinc/paladin-operator
+    tag: release
+    pullPolicy: Always
 
   serviceAccount:
     create: true
@@ -74,17 +76,9 @@ operator:
   configMap:
     # Referring to the external config.yaml file
     dataFile: assets/config.json
-    
-# cert-manager dependencies
-cert-manager:
-  namespace: cert-manager
-  enabled: true
-  crds:
-    enabled: true
-
 # Prometheus dependencies
 prometheus:
-  enabled: true
+  enabled: false
   prometheus:
     namespace: prometheus 
   alertmanager:
@@ -93,3 +87,19 @@ prometheus:
     enabled: false
   pushgateway:
     enabled: false  # Enable if you need the push gateway
+
+paladin:
+  image:
+    repository: kaleidoinc/paladin
+    tag: release
+    pullPolicy: Always
+besu:
+  image:
+    repository: hyperledger/besu
+    tag: latest
+    pullPolicy: Always
+postgres:
+  image:
+    repository: postgres
+    tag: latest
+    pullPolicy: Always

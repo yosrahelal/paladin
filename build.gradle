@@ -19,6 +19,10 @@ def transports = [
     'transports/grpc/build/libs',
 ]
 
+def uiClient = [
+    'ui/client/dist',
+]
+ 
 def assembleSubprojects = [
     ':core:go',
     ':core:java',
@@ -29,6 +33,7 @@ def assembleSubprojects = [
     ':registries:static',
     ':registries:evm',
     ':transports:grpc',
+    ':ui:client',
 ]
 
 ext {
@@ -161,6 +166,57 @@ task copyTransports(type: Copy) {
     }
 }
 
+task copyUIFiles(type: Copy) {
+    def uiDir = file("${buildDir}/ui")
+
+    doFirst {
+        uiDir.mkdirs()
+    }
+
+    uiClient.each { dir ->
+        from dir
+    }
+    into uiDir
+
+    outputs.upToDateWhen { false }
+
+    doLast {
+        println "Copied UI files to ${uiDir}"
+    }
+}
+
+task copyZetoZKPFiles(type: Copy) {
+    def zetoZkpDir = file("${buildDir}/domains/zeto/zkp")
+
+    doFirst {
+        zetoZkpDir.mkdirs()
+    }
+
+    // These can be very large binaries, so adding to this list in the base image should be done with care.
+    // Likely if the range of circuits grows, a separate docker tag will be required for builds
+    // of Paladin that have a wider range of pre-built circuits included.
+    from fileTree('domains/zeto/zkp') {
+        include 'anon.zkey'
+        include 'anon-vkey.json'
+        include 'anon_js/anon.wasm'
+        // anon_enc
+        include 'anon_enc.zkey'
+        include 'anon_enc-vkey.json'
+        include 'anon_enc_js/anon_enc.wasm'
+        // anon_nullifier
+        include 'anon_nullifier.zkey'
+        include 'anon_nullifier-vkey.json'
+        include 'anon_nullifier_js/anon_nullifier.wasm'
+    }
+    into zetoZkpDir
+
+    outputs.upToDateWhen { false }
+
+    doLast {
+        println "Copied zetoZkp files to ${zetoZkpDir}"
+    }
+}
+
 // Root assemble task that depends on subproject's assemble tasks
 task assemble {
     assembleSubprojects.each { projectPath ->
@@ -168,7 +224,7 @@ task assemble {
     }
 }
 
-assemble.finalizedBy(copyLibraries, copyDomains, copyRegistries, copyTransports)
+assemble.finalizedBy(copyLibraries, copyDomains, copyRegistries, copyTransports, copyUIFiles, copyZetoZKPFiles)
 
 defaultTasks 'build'
 
@@ -180,6 +236,14 @@ task clean {
 task docker(type: Exec) {
     executable 'docker'
     args 'build'
+    args '-t', 'paladin:test'
+    args '.'
+}
+
+task dockerx(type: Exec) {
+    executable 'docker'
+    args 'buildx', 'build'
+    args '--platform', 'linux/amd64,linux/arm64'
     args '-t', 'paladin:test'
     args '.'
 }

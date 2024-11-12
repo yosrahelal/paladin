@@ -111,7 +111,7 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 	var p persistence.Persistence
 	if realDBAndSigner {
 		var err error
-		p, dbClose, err = persistence.NewUnitTestPersistence(ctx)
+		p, dbClose, err = persistence.NewUnitTestPersistence(ctx, "publictxmgr")
 		require.NoError(t, err)
 
 		mocks.keyManager = keymanager.NewKeyManager(ctx, &pldconf.KeyManagerConfig{
@@ -410,8 +410,8 @@ func fakeTxManagerInsert(t *testing.T, db *gorm.DB, txID uuid.UUID, fromStr stri
 		fakeABI, `[]`, tktypes.TimestampNow()).
 		Error
 	require.NoError(t, err)
-	err = db.Exec(`INSERT INTO "transactions" ("id", "created", "type", "abi_ref", "from") VALUES (?, ?, ?, ?, ?)`,
-		txID, tktypes.TimestampNow(), pldapi.TransactionTypePrivate.Enum(), fakeABI, fromStr).
+	err = db.Exec(`INSERT INTO "transactions" ("id", "submit_mode", "created", "type", "abi_ref", "from") VALUES (?, ?, ?, ?, ?, ?)`,
+		txID, pldapi.SubmitModeAuto, tktypes.TimestampNow(), pldapi.TransactionTypePrivate.Enum(), fakeABI, fromStr).
 		Error
 	require.NoError(t, err)
 }

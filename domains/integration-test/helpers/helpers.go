@@ -44,7 +44,7 @@ type DomainTransactionHelper struct {
 	ctx context.Context
 	t   *testing.T
 	rpc rpcbackend.Backend
-	tx  *tktypes.PrivateContractInvoke
+	tx  *pldapi.TransactionInput
 }
 
 type SentDomainTransaction struct {
@@ -99,10 +99,12 @@ func NewDomainTransactionHelper(ctx context.Context, t *testing.T, rpc rpcbacken
 		ctx: ctx,
 		t:   t,
 		rpc: rpc,
-		tx: &tktypes.PrivateContractInvoke{
-			To:       *to,
-			Function: *fn,
-			Inputs:   inputs,
+		tx: &pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				To:   to,
+				Data: inputs,
+			},
+			ABI: abi.ABI{fn},
 		},
 	}
 }
@@ -128,8 +130,8 @@ func (dth *DomainTransactionHelper) SignAndSend(signer string, confirm ...bool) 
 	return tx
 }
 
-func (dth *DomainTransactionHelper) Prepare(signer string) *tktypes.PrivateContractTransaction {
-	var result tktypes.PrivateContractTransaction
+func (dth *DomainTransactionHelper) Prepare(signer string) *testbed.TransactionResult {
+	var result testbed.TransactionResult
 	dth.tx.From = signer
 	rpcerr := dth.rpc.CallRPC(dth.ctx, &result, "testbed_prepare", dth.tx)
 	if rpcerr != nil {

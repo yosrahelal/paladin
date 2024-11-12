@@ -51,11 +51,19 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 
 	var contracts []*PrivateSmartContract
 	var txCompletions txCompletionsOrdered
-	unprocessedEvents := make([]*pldapi.EventWithData, 0, len(batch.Events))
+	nonRegisterEvents := make([]*pldapi.EventWithData, 0, len(batch.Events))
 
 	for _, ev := range batch.Events {
 		processedEvent := false
 		if ev.SoliditySignature == eventSolSig_PaladinRegisterSmartContract_V0 {
+
+			// We only register against registries that we have indexed, so we should be able to find the domain for this address
+			d, err := dm.getDomainByAddress(ctx, &ev.Address)
+			if err != nil {
+				log.L(ctx).Errorf("Registration event for unknown domain event: %s", tktypes.JSONString(ev))
+				continue
+			}
+
 			var parsedEvent event_PaladinRegisterSmartContract_V0
 			parseErr := json.Unmarshal(ev.Data, &parsedEvent)
 			if parseErr != nil {
@@ -75,6 +83,7 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 					ReceiptInput: components.ReceiptInput{
 						ReceiptType:   components.RT_Success,
 						TransactionID: txID,
+						Domain:        d.name,
 						OnChain: tktypes.OnChainLocation{
 							Type:             tktypes.OnChainEvent,
 							TransactionHash:  ev.TransactionHash,
@@ -90,7 +99,7 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 			}
 		}
 		if !processedEvent {
-			unprocessedEvents = append(unprocessedEvents, ev)
+			nonRegisterEvents = append(nonRegisterEvents, ev)
 		}
 	}
 
@@ -110,7 +119,7 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 		}
 	}
 
-	return unprocessedEvents, txCompletions, nil
+	return nonRegisterEvents, txCompletions, nil
 }
 
 func (dm *domainManager) notifyTransactions(txCompletions txCompletionsOrdered) {
@@ -138,7 +147,7 @@ func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID 
 			// Note: hits will be cached, but events from unrecognized contracts will always
 			// result in a cache miss and a database lookup
 			// TODO: revisit if we should optimize this
-			psc, err := d.dm.getSmartContractCached(ctx, tx, ev.Address)
+			_, psc, err := d.dm.getSmartContractCached(ctx, tx, ev.Address)
 			if err != nil {
 				return nil, err
 			}
@@ -151,8 +160,8 @@ func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID 
 				HandleEventBatchRequest: prototk.HandleEventBatchRequest{
 					BatchId: batchID,
 					ContractInfo: &prototk.ContractInfo{
-						ContractAddress: psc.Address().String(),
-						ContractConfig:  psc.ConfigBytes(),
+						ContractAddress:    psc.Address().String(),
+						ContractConfigJson: psc.config.ContractConfigJson,
 					},
 				},
 			}
@@ -202,10 +211,11 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 				return nil, err
 			}
 			log.L(ctx).Infof("Domain transaction completion: %s", txID)
-			txCompletions = append(txCompletions, &components.TxCompletion{
+			completion := &components.TxCompletion{
 				PSC: batch.psc,
 				ReceiptInput: components.ReceiptInput{
 					TransactionID: *txID,
+					Domain:        d.name,
 					ReceiptType:   components.RT_Success,
 					OnChain: tktypes.OnChainLocation{
 						Type:             tktypes.OnChainEvent, // the on-chain confirmation is an event (even though it's a private transaction we're confirming)
@@ -216,7 +226,8 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 						Source:           &addr,
 					},
 				},
-			})
+			}
+			txCompletions = append(txCompletions, completion)
 		}
 	}
 
@@ -224,6 +235,11 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 		// Ensure we are sorted in block order, as the above processing extracted the array in two
 		// phases (contract deployments, then transactions) so the list will be out of order.
 		sort.Sort(txCompletions)
+
+		receipts := make([]*components.ReceiptInput, len(txCompletions))
+		for i, txc := range txCompletions {
+			receipts[i] = &txc.ReceiptInput
+		}
 
 		// We have completions to hand to the TxManager to write as completions
 		// Note we go directly to the TxManager (bypassing the private TX manager) during the database
@@ -234,7 +250,7 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 		// for ALL private transactions (not just those where we're the sender) as there
 		// might be in-memory coordination activities that need to re-process now these
 		// transactions have been finalized.
-		if _, err := d.dm.txManager.MatchAndFinalizeTransactions(ctx, dbTX, txCompletions); err != nil {
+		if err := d.dm.txManager.FinalizeTransactions(ctx, dbTX, receipts); err != nil {
 			return nil, err
 		}
 	}
@@ -268,30 +284,40 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		return nil, err
 	}
 
-	stateSpends := make([]*pldapi.StateSpend, len(res.SpentStates))
+	stateSpends := make([]*pldapi.StateSpendRecord, len(res.SpentStates))
 	for i, state := range res.SpentStates {
-		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
 		if err != nil {
 			return nil, err
 		}
-		stateID, err := tktypes.ParseHexBytes(ctx, state.Id)
-		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
-		}
-		stateSpends[i] = &pldapi.StateSpend{DomainName: d.name, State: stateID, Transaction: *txUUID}
+		stateSpends[i] = &pldapi.StateSpendRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
 	}
 
-	stateConfirms := make([]*pldapi.StateConfirm, len(res.ConfirmedStates))
-	for i, state := range res.ConfirmedStates {
-		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+	stateReads := make([]*pldapi.StateReadRecord, len(res.ReadStates))
+	for i, state := range res.ReadStates {
+		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
 		if err != nil {
 			return nil, err
 		}
-		stateID, err := tktypes.ParseHexBytes(ctx, state.Id)
+		stateReads[i] = &pldapi.StateReadRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
+	}
+
+	stateConfirms := make([]*pldapi.StateConfirmRecord, len(res.ConfirmedStates))
+	for i, state := range res.ConfirmedStates {
+		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
 		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
+			return nil, err
 		}
-		stateConfirms[i] = &pldapi.StateConfirm{DomainName: d.name, State: stateID, Transaction: *txUUID}
+		stateConfirms[i] = &pldapi.StateConfirmRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
+	}
+
+	stateInfoRecords := make([]*pldapi.StateInfoRecord, len(res.InfoStates))
+	for i, state := range res.InfoStates {
+		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
+		if err != nil {
+			return nil, err
+		}
+		stateInfoRecords[i] = &pldapi.StateInfoRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
 	}
 
 	newStates := make([]*components.StateUpsertOutsideContext, 0)
@@ -319,7 +345,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		})
 
 		// These have implicit confirmations
-		stateConfirms = append(stateConfirms, &pldapi.StateConfirm{DomainName: d.name, State: id, Transaction: *txUUID})
+		stateConfirms = append(stateConfirms, &pldapi.StateConfirmRecord{DomainName: d.name, State: id, Transaction: *txUUID})
 	}
 
 	// Write any new states first
@@ -331,10 +357,22 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 	}
 
 	// Then any finalizations of those states
-	if len(stateSpends) > 0 || len(stateConfirms) > 0 {
-		if err := d.dm.stateStore.WriteStateFinalizations(ctx, dbTX, stateSpends, stateConfirms); err != nil {
+	if len(stateSpends) > 0 || len(stateReads) > 0 || len(stateConfirms) > 0 {
+		if err := d.dm.stateStore.WriteStateFinalizations(ctx, dbTX, stateSpends, stateReads, stateConfirms, stateInfoRecords); err != nil {
 			return nil, err
 		}
 	}
 	return res, err
+}
+
+func (d *domain) prepareIndexRecord(ctx context.Context, txIDStr, stateIDStr string) (uuid.UUID, tktypes.HexBytes, error) {
+	txUUID, err := d.recoverTransactionID(ctx, txIDStr)
+	if err != nil {
+		return uuid.UUID{}, nil, err
+	}
+	stateID, err := tktypes.ParseHexBytes(ctx, stateIDStr)
+	if err != nil {
+		return uuid.UUID{}, nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, stateIDStr)
+	}
+	return *txUUID, stateID, nil
 }

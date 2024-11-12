@@ -115,6 +115,9 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		{Type: abi.Error, Name: "BadValue", Inputs: abi.ParameterArray{
 			{Type: "uint256"},
 		}},
+		{Type: abi.Event, Name: "Updated", Inputs: abi.ParameterArray{
+			{Type: "uint256", Name: "value", Indexed: true},
+		}},
 	}
 
 	// Submit in a public deploy with array encoded params and bytecode
@@ -124,7 +127,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		ABI:       sampleABI,
 		Bytecode:  tktypes.MustParseHexBytes("0x11223344"),
 		DependsOn: []uuid.UUID{tx0ID},
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			IdempotencyKey: "tx1",
 			From:           "sender1",
 			Type:           pldapi.TransactionTypePublic.Enum(),
@@ -199,7 +202,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	// Submit in a public invoke using that same ABI referring to the function
 	tx2Input := &pldapi.TransactionInput{
 		DependsOn: []uuid.UUID{tx1ID},
-		Transaction: pldapi.Transaction{
+		TransactionBase: pldapi.TransactionBase{
 			ABIReference:   &abiHash,
 			IdempotencyKey: "tx2",
 			Type:           pldapi.TransactionTypePublic.Enum(),
@@ -288,7 +291,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var de *pldapi.DecodedError
+	var de *pldapi.ABIDecodedData
 	err = rpcClient.CallRPC(ctx, &de, "ptx_decodeError", tktypes.HexBytes(revertData), tktypes.DefaultJSONFormatOptions)
 	require.NoError(t, err)
 	require.Equal(t, `BadValue("12345")`, de.Summary)
@@ -321,7 +324,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	var resJSON tktypes.RawJSON
 	err = rpcClient.CallRPC(ctx, &resJSON, "ptx_call", &pldapi.TransactionCall{
 		TransactionInput: pldapi.TransactionInput{
-			Transaction: pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
 				IdempotencyKey: "tx2",
 				Type:           pldapi.TransactionTypePublic.Enum(),
 				Data:           tktypes.RawJSON(`{"0": 123456789012345678901234567890}`),
@@ -333,6 +336,25 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		},
 	})
 	assert.Regexp(t, "PD011517", err) // means we got all the way to the unconnected client
+
+	// Decode a sample call using the stored and shredded ABIs
+	data, err := sampleABI.Functions()["set"].EncodeCallDataJSON([]byte(`{"0": 123456789012345678901234567890}`))
+	require.NoError(t, err)
+	var decodedCall *pldapi.ABIDecodedData
+	err = rpcClient.CallRPC(ctx, &decodedCall, "ptx_decodeCall", tktypes.HexBytes(data), "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"0": "123456789012345678901234567890"}`, decodedCall.Data.String())
+
+	// Decode a sample event using the stored and shredded ABIs
+	valueEncoded, err := (&abi.ParameterArray{{Type: "uint256"}}).EncodeABIDataJSON([]byte(`["123456789012345678901234567890"]`))
+	require.NoError(t, err)
+	var decodedEvent *pldapi.ABIDecodedData
+	err = rpcClient.CallRPC(ctx, &decodedEvent, "ptx_decodeEvent", []string{
+		sampleABI.Events()["Updated"].SignatureHashBytes().String(), // topic 0
+		tktypes.Bytes32(valueEncoded).String(),                      // indexed integer, so can just directly pass data
+	}, "0x", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"value": "123456789012345678901234567890"}`, decodedEvent.Data.String())
 
 }
 
@@ -419,6 +441,38 @@ func TestPublicTransactionPassthroughQueries(t *testing.T) {
 	assert.Equal(t, sampleTxns[0], txn)
 }
 
+func TestDetailedReceiptRPCsNotFound(t *testing.T) {
+
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t, func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).
+			Return(&pldapi.TransactionStates{None: true}, nil)
+
+		md := componentmocks.NewDomain(t)
+		mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
+		md.On("GetDomainReceipt", mock.Anything, mock.Anything, mock.Anything).Return(tktypes.RawJSON(`{}`), nil)
+	})
+	defer done()
+
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
+	require.NoError(t, err)
+
+	var txReceipt *pldapi.TransactionReceiptFull
+	err = rpcClient.CallRPC(ctx, &txReceipt, "ptx_getTransactionReceiptFull", uuid.New())
+	require.NoError(t, err)
+	assert.Nil(t, txReceipt)
+
+	var txStates *pldapi.TransactionStates
+	err = rpcClient.CallRPC(ctx, &txStates, "ptx_getStateReceipt", uuid.New())
+	require.NoError(t, err)
+	assert.Equal(t, &pldapi.TransactionStates{None: true}, txStates)
+
+	var domainReceipt tktypes.RawJSON
+	err = rpcClient.CallRPC(ctx, &domainReceipt, "ptx_getDomainReceipt", "domain1", uuid.New())
+	require.NoError(t, err)
+	assert.JSONEq(t, `{}`, domainReceipt.Pretty())
+
+}
+
 func TestIdentityResolvePassthroughQueries(t *testing.T) {
 
 	ctx, url, _, done := newTestTransactionManagerWithRPC(t,
@@ -466,5 +520,78 @@ func TestDebugTransactionStatus(t *testing.T) {
 	assert.Equal(t, "pending", result.Status)
 	assert.Equal(t, "submitted", result.LatestEvent)
 	assert.Equal(t, "some error message", result.LatestError)
+
+}
+
+func TestQueryPreparedTransactionsNotFound(t *testing.T) {
+
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t)
+	defer done()
+
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
+	require.NoError(t, err)
+
+	var pt *pldapi.PreparedTransaction
+	err = rpcClient.CallRPC(ctx, &pt, "ptx_getPreparedTransaction", uuid.New())
+	require.NoError(t, err)
+	require.Nil(t, pt)
+
+	var pts []*pldapi.PreparedTransaction
+	err = rpcClient.CallRPC(ctx, &pts, "ptx_queryPreparedTransactions", query.NewQueryBuilder().Limit(10).Query())
+	require.NoError(t, err)
+	require.Empty(t, pts)
+
+}
+
+func TestPrepareTransactions(t *testing.T) {
+
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t, func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.MatchedBy(func(tx *components.ValidatedTransaction) bool {
+			return tx.Transaction.SubmitMode.V() == pldapi.SubmitModeExternal
+		})).Return(nil)
+	})
+	defer done()
+
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
+	require.NoError(t, err)
+
+	validPublicTx := &pldapi.TransactionInput{
+		ABI: abi.ABI{{Type: abi.Function, Name: "doStuff"}},
+		TransactionBase: pldapi.TransactionBase{
+			Type:           pldapi.TransactionTypePublic.Enum(),
+			IdempotencyKey: "tx1",
+			From:           "sender1",
+			To:             tktypes.RandAddress(),
+			Data:           tktypes.RawJSON(`[]`),
+		},
+	}
+
+	var txID *uuid.UUID
+	err = rpcClient.CallRPC(ctx, &txID, "ptx_prepareTransaction", validPublicTx)
+	assert.Regexp(t, "PD012225", err)
+
+	var txIDs []uuid.UUID
+	err = rpcClient.CallRPC(ctx, &txIDs, "ptx_prepareTransactions", []*pldapi.TransactionInput{validPublicTx})
+	assert.Regexp(t, "PD012225", err)
+
+	validPrivateTx := &pldapi.TransactionInput{
+		ABI: abi.ABI{{Type: abi.Function, Name: "doStuff"}},
+		TransactionBase: pldapi.TransactionBase{
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			Domain:         "domain1",
+			IdempotencyKey: "tx1",
+			From:           "sender1",
+			To:             tktypes.RandAddress(),
+			Data:           tktypes.RawJSON(`[]`),
+		},
+	}
+
+	err = rpcClient.CallRPC(ctx, &txID, "ptx_prepareTransaction", validPrivateTx)
+	require.NoError(t, err)
+
+	var returnedTX *pldapi.Transaction
+	err = rpcClient.CallRPC(ctx, &returnedTX, "ptx_getTransaction", txID)
+	require.NoError(t, err)
+	require.Equal(t, pldapi.SubmitModeExternal, returnedTX.SubmitMode.V())
 
 }
