@@ -35,7 +35,7 @@ jobs:
         run: |
           set -e
           ../../gradlew build
-          npm publish -provenance --access public
+          npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
