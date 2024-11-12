@@ -5,6 +5,7 @@ on:
       NPM_TOKEN:
         description: 'NPM token'
         required: true
+  workflow_dispatch:
 
 jobs:
   publish:
