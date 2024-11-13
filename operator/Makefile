@@ -1,13 +1,9 @@
-# VERSION defines the project version for the bundle.
-VERSION ?= 0.0.1
-
 CLUSTER_NAME ?= paladin
 NAMESPACE ?= default
 
-# IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
-IMAGE_TAG_BASE ?= paladin-operator
-OPERATOR_IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
-BUNDLE_OPERATOR_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
+OPERATOR_IMG_NAME ?= paladin-operator
+OPERATOR_IMG_TAG ?= test
+OPERATOR_IMG ?= ${OPERATOR_IMG_NAME}:${OPERATOR_IMG_TAG}
 PALADIN_IMG_NAME ?= paladin
 PALADIN_IMG_TAG ?= test 
 
@@ -209,9 +205,9 @@ helm-install: helm-install-dependencies ## Install operator using Helm.
 	$(HELM) upgrade --install ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} \
 		-n ${NAMESPACE} --create-namespace \
 		--set operator.namespace=${NAMESPACE} \
-		--set operator.image.repository=${IMAGE_TAG_BASE} \
+		--set operator.image.repository=${OPERATOR_IMG_NAME} \
 		--set operator.image.pullPolicy=IfNotPresent \
-		--set operator.image.tag=${VERSION} \
+		--set operator.image.tag=${OPERATOR_IMG_TAG} \
 		--set paladin.image.repository=${PALADIN_IMG_NAME} \
 		--set paladin.image.tag=${PALADIN_IMG_TAG} \
 		--set paladin.image.pullPolicy=IfNotPresent \
