@@ -36,7 +36,7 @@ export const Submissions: React.FC = () => {
     queryKey: ["submissions", tab, lastBlockWithTransactions],
     queryFn: ({ pageParam }) => fetchSubmissions(tab, pageParam),
     initialPageParam: undefined as IPaladinTransaction | undefined,
-    getNextPageParam: (lastPage) => { return lastPage[lastPage.length - 1] }
+    getNextPageParam: (lastPage) => { return lastPage[lastPage.length - 1] },
   });
 
   if (error) {

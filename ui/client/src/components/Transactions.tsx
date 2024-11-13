@@ -38,7 +38,7 @@ export const Transactions: React.FC = () => {
     queryKey: ["transactions", lastBlockWithTransactions],
     queryFn: ({ pageParam }) => fetchIndexedTransactions(pageParam),
     initialPageParam: undefined as ITransaction | undefined,
-    getNextPageParam: (lastPage) => { return lastPage[lastPage.length - 1] }
+    getNextPageParam: (lastPage) => { return lastPage[lastPage.length - 1] },
   });
 
   if (error) {

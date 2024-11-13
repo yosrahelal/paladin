@@ -119,8 +119,6 @@ export const fetchSubmissions = async (
     params: type === "all" ? allParams : pendingParams,
   };
 
-  console.log(JSON.stringify(payload))
-
   return <Promise<IPaladinTransaction[]>>(
     returnResponse(
       () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),

@@ -33,7 +33,7 @@ export const Events: React.FC = () => {
     queryKey: ["events", lastBlockWithTransactions],
     queryFn: ({ pageParam }) => fetchEvents(pageParam),
     initialPageParam: undefined as IEvent | undefined,
-    getNextPageParam: (lastPage) => {return lastPage[lastPage.length - 1]}
+    getNextPageParam: (lastPage) => {return lastPage[lastPage.length - 1]},
   });
 
   const theme = useTheme();

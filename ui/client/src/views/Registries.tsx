@@ -25,12 +25,12 @@ import { altDarkModeScrollbarStyle, altLightModeScrollbarStyle } from "../themes
 
 export const Registries: React.FC = () => {
 
-  const { lastBlockWithTransactions } = useContext(ApplicationContext);
+  const { lastBlockWithTransactions, autoRefreshEnabled } = useContext(ApplicationContext);
   const theme = useTheme();
   const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
   const { data: registries, error, isFetching } = useQuery({
-    queryKey: ["registries", lastBlockWithTransactions],
+    queryKey: ["registries", autoRefreshEnabled, lastBlockWithTransactions],
     queryFn: () => fetchRegistries()
   });
 
