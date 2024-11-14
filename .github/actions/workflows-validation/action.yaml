@@ -1,0 +1,10 @@
+name: "Validate Workflows Action"
+description: "A GitHub Action to validate workflows."
+
+runs:
+  using: docker
+  image: docker.io/rhysd/actionlint:latest
+
+branding:
+  color: "blue"
+  icon: "check-circle"
