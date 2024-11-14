@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: paladin
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: paladin
+  namespace: paladin
+spec:
+  url: https://LF-Decentralized-Trust-labs.github.io/paladin
+  interval: 5m
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: paladin-crds
+  namespace: paladin
+spec:
+  releaseName: paladin-crds
+  interval: 5m
+  chart:
+    spec:
+      chart: paladin-operator-crd
+      sourceRef:
+        kind: HelmRepository
+        name: paladin
+        namespace: paladin
+      version: "*"
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: paladin
+  namespace: paladin # This value must match spec.values.operator.namespace
+spec:
+  releaseName: paladin
+  interval: 5m
+  chart:
+    spec:
+      chart: paladin-operator
+      sourceRef:
+        kind: HelmRepository
+        name: paladin
+        namespace: paladin
+      version: "*"
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    mode: devnet # Installation mode. This setting determines which Custom Resources (CRs) will be installed by default when deploying this chart
+    operator:
+      namespace: paladin # This value must match metadata.namespace
+      image:
+        repository: ghcr.io/lf-decentralized-trust-labs/paladin-operator
+        tag: main
+        pullPolicy: Always
+    paladin:
+      image:
+        repository: ghcr.io/lf-decentralized-trust-labs/paladin
+        tag: main
+        pullPolicy: Always
+      # tollerations:
+      # nodeSelector:
+      # affinity:
+      # securityContext:
+    # besu:
+    #   image:
+    #     repository: hyperledger/besu
+    #     tag: latest
+    #     pullPolicy: IfNotPresent
+    #   nodeSelector:
+    #   affinity:
+    #   securityContext:
+    # postgres:
+    #   image:
+    #     repository: postgres
+    #     tag: latest
+    #     pullPolicy: IfNotPresent
+       
+      
+ 
