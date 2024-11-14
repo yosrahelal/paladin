@@ -18,6 +18,7 @@ package components
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"gorm.io/gorm"
 )
@@ -34,11 +35,20 @@ type TransactionDispatchedEvent struct {
 	SigningAddress  string `json:"signingAddress"`
 }
 
+type PrivateTxEndorsementStatus struct {
+	Party               string `json:"party"`
+	RequestTime         string `json:"requestTime,omitempty"`
+	EndorsementReceived bool   `json:"endorsementReceived"`
+}
+
 type PrivateTxStatus struct {
-	TxID        string `json:"transactionId"`
-	Status      string `json:"status"`
-	LatestEvent string `json:"latestEvent"`
-	LatestError string `json:"latestError"`
+	TxID           string                       `json:"transactionId"`
+	Status         string                       `json:"status"`
+	LatestEvent    string                       `json:"latestEvent"`
+	LatestError    string                       `json:"latestError"`
+	Endorsements   []PrivateTxEndorsementStatus `json:"endorsements"`
+	Transaction    *PrivateTransaction          `json:"transaction,omitempty"`
+	FailureMessage string                       `json:"failureMessage,omitempty"`
 }
 
 // If we had lots of these we would probably want to centralize the assignment of the constants to avoid duplication
@@ -72,7 +82,7 @@ type PrivateTxManager interface {
 
 	//Synchronous functions to submit a new private transaction
 	HandleNewTx(ctx context.Context, tx *ValidatedTransaction) error
-	GetTxStatus(ctx context.Context, domainAddress string, txID string) (status PrivateTxStatus, err error)
+	GetTxStatus(ctx context.Context, domainAddress string, txID uuid.UUID) (status PrivateTxStatus, err error)
 
 	// Synchronous function to call an existing deployed smart contract
 	CallPrivateSmartContract(ctx context.Context, call *TransactionInputs) (*abi.ComponentValue, error)

@@ -340,16 +340,36 @@ func (s *Sequencer) TriggerSequencerEvaluation() {
 	}
 }
 
-func (s *Sequencer) GetTxStatus(ctx context.Context, txID string) (status components.PrivateTxStatus, err error) {
-	//TODO This is primarily here to help with testing for now
-	// this needs to be revisited ASAP as part of a holisitic review of the persistence model
+func (s *Sequencer) GetTxStatus(ctx context.Context, txID uuid.UUID) (components.PrivateTxStatus, error) {
+
 	s.incompleteTxProcessMapMutex.Lock()
 	defer s.incompleteTxProcessMapMutex.Unlock()
-	if txProc, ok := s.incompleteTxSProcessMap[txID]; ok {
+	if txProc, ok := s.incompleteTxSProcessMap[txID.String()]; ok {
 		return txProc.GetTxStatus(ctx)
 	}
-	//TODO should be possible to query the status of a transaction that is not inflight
-	return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Transaction not found")
+	persistedTxn, err := s.components.TxManager().GetTransactionByIDFull(ctx, txID)
+	if err != nil {
+		log.L(ctx).Errorf("Error getting persisted transaction by ID: %s", err)
+		return components.PrivateTxStatus{}, err
+	}
+
+	status := "unknown"
+	failureMessage := ""
+	if persistedTxn.Receipt != nil {
+		if persistedTxn.Receipt.Success {
+			status = "confirmed"
+		} else {
+			failureMessage = persistedTxn.Receipt.FailureMessage
+			status = "failed"
+		}
+
+	}
+
+	return components.PrivateTxStatus{
+		TxID:           txID.String(),
+		Status:         status,
+		FailureMessage: failureMessage,
+	}, nil
 }
 
 func (s *Sequencer) HandleStateProducedEvent(ctx context.Context, stateProducedEvent *pbEngine.StateProducedEvent) {

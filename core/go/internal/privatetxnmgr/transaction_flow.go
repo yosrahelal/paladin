@@ -17,6 +17,7 @@ package privatetxnmgr
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,7 +66,7 @@ func NewTransactionFlow(
 		finalizePending:             false,
 		requestedVerifierResolution: false,
 		requestedSignatures:         false,
-		pendingEndorsementRequests:  make(map[string]map[string]*pendingEndorsementRequest),
+		pendingEndorsementRequests:  make(map[string]map[string]*endorsementRequest),
 		complete:                    false,
 		localCoordinator:            true,
 		dispatched:                  false,
@@ -78,7 +79,7 @@ func NewTransactionFlow(
 	}
 }
 
-type pendingEndorsementRequest struct {
+type endorsementRequest struct {
 	//time the request was made
 	requestTime time.Time
 	//unique string to identify the request (non unique across retries)
@@ -109,9 +110,9 @@ type transactionFlow struct {
 	delegateRequestTimer        *time.Timer
 	assemblePending             bool
 	complete                    bool
-	requestedVerifierResolution bool                                             //TODO add precision here so that we can track individual requests and implement retry as per endorsement
-	requestedSignatures         bool                                             //TODO add precision here so that we can track individual requests and implement retry as per endorsement
-	pendingEndorsementRequests  map[string]map[string]*pendingEndorsementRequest //map of attestationRequest names to a map of parties to a struct containing information about the active pending request
+	requestedVerifierResolution bool                                      //TODO add precision here so that we can track individual requests and implement retry as per endorsement
+	requestedSignatures         bool                                      //TODO add precision here so that we can track individual requests and implement retry as per endorsement
+	pendingEndorsementRequests  map[string]map[string]*endorsementRequest //map of attestationRequest names to a map of parties to a struct containing information about the active pending request
 	localCoordinator            bool
 	dispatched                  bool
 	prepared                    bool
@@ -120,15 +121,8 @@ type transactionFlow struct {
 	selectCoordinator           ptmgrtypes.CoordinatorSelector
 	assembleCoordinator         ptmgrtypes.AssembleCoordinator
 	environment                 ptmgrtypes.SequencerEnvironment
-}
-
-func (tf *transactionFlow) GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error) {
-	return components.PrivateTxStatus{
-		TxID:        tf.transaction.ID.String(),
-		Status:      tf.status,
-		LatestEvent: tf.latestEvent,
-		LatestError: tf.latestError,
-	}, nil
+	statusLock                  sync.RWMutex // under normal conditions, there should be only one contender for this lock ( the Write side of it) - i.e. the sequencer event loop so it should not normally slow things down
+	// however, it is not safe for the API thread to read the in memory status while the even loop is writing so things will slow down on the event loop thread while an API consumer is reading the status
 }
 
 func (tf *transactionFlow) IsComplete(_ context.Context) bool {

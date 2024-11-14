@@ -534,7 +534,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 
 }
 
-func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status components.PrivateTxStatus, err error) {
+func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string, txID uuid.UUID) (status components.PrivateTxStatus, err error) {
 	// this returns status that we happen to have in memory at the moment and might be useful for debugging
 
 	p.sequencersLock.RLock()
@@ -542,7 +542,7 @@ func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string
 	targetSequencer := p.sequencers[domainAddress]
 	if targetSequencer == nil {
 		return components.PrivateTxStatus{
-			TxID:   txID,
+			TxID:   txID.String(),
 			Status: "unknown",
 		}, nil
 

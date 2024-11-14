@@ -35,6 +35,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 type transactionFlowDepencyMocks struct {
@@ -1627,6 +1628,201 @@ func TestDuplicateEndorsementResponse(t *testing.T) {
 	// no further action because we are still waiting for a response from bob
 	//even though we have received 3 responses, we are not ready for dispatch because 2 of them are duplicates
 	tp.Action(ctx)
+}
+
+func TestGetTxStatusPendingEndorsements(t *testing.T) {
+	ctx := context.Background()
+	newTxID := uuid.New()
+
+	senderNodeName := "senderNode"
+	senderIdentityLocator := "sender@" + senderNodeName
+	aliceIdentityLocator := "alice@node1"
+	aliceVerifier := tktypes.RandAddress().String()
+	bobIdentityLocator := "bob@node2"
+	bobVerifier := tktypes.RandAddress().String()
+	carolIdentityLocator := "carol@node3"
+	carolVerifier := tktypes.RandAddress().String()
+	daveIdentityLocator := "dave@node4"
+	daveVerifier := tktypes.RandAddress().String()
+
+	testContractAddress := *tktypes.RandAddress()
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		Inputs: &components.TransactionInputs{
+			To:   testContractAddress,
+			From: senderIdentityLocator,
+		},
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From:          senderIdentityLocator,
+				TransactionId: newTxID.String(),
+			},
+			Verifiers: []*prototk.ResolvedVerifier{
+				{
+					Lookup:       senderIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       aliceIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       bobIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     bobVerifier,
+				},
+				{
+					Lookup:       carolIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     carolVerifier,
+				},
+				{
+					Lookup:       daveIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     daveVerifier,
+				},
+			},
+		},
+		PostAssembly: &components.TransactionPostAssembly{
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						aliceIdentityLocator,
+						bobIdentityLocator,
+					},
+				},
+				{
+					Name:            "bar",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						carolIdentityLocator,
+						daveIdentityLocator,
+					},
+				},
+			},
+		},
+	}
+
+	tp, mocks := newTransactionFlowForTesting(t, ctx, testTx, senderNodeName)
+	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(senderNodeName, nil)
+
+	expectEndorsementRequest := func(idempotencyKey *string, party, node string) {
+		mocks.transportWriter.On("SendEndorsementRequest",
+			mock.Anything,
+			mock.Anything, //idempotency key
+			party,
+			node,
+			testContractAddress.String(),
+			newTxID.String(),
+			mock.Anything, //attRequest
+			mock.Anything, //TransactionSpecification,
+			mock.Anything, //Verifiers,
+			mock.Anything, //Signatures,
+			mock.Anything, //InputStates,
+			mock.Anything, //OutputStates,
+			mock.Anything, //InfoStates,
+		).Return(nil).Once().Run(func(args mock.Arguments) {
+			if idempotencyKey != nil {
+				receivedIdempotencyKey := args.Get(1).(string)
+				*idempotencyKey = receivedIdempotencyKey
+			}
+		})
+	}
+	aliceIdempotencyKey := ""
+	bobIdempotencyKey := ""
+	carolIdempotencyKey := ""
+	daveIdempotencyKey := ""
+	expectEndorsementRequest(&aliceIdempotencyKey, "alice@node1", "node1")
+	expectEndorsementRequest(&bobIdempotencyKey, "bob@node2", "node2")
+	expectEndorsementRequest(&carolIdempotencyKey, "carol@node3", "node3")
+	expectEndorsementRequest(&daveIdempotencyKey, "dave@node4", "node4")
+
+	tp.Action(ctx)
+	tp.applyTransactionEndorsedEvent(ctx, &ptmgrtypes.TransactionEndorsedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			TransactionID:   newTxID.String(),
+			ContractAddress: testContractAddress.String(),
+		},
+		IdempotencyKey:         aliceIdempotencyKey,
+		Party:                  aliceIdentityLocator,
+		AttestationRequestName: "foo",
+		Endorsement: &prototk.AttestationResult{
+			Name: "foo",
+			Verifier: &prototk.ResolvedVerifier{
+				Lookup:       aliceIdentityLocator,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				Verifier:     tktypes.RandAddress().String(),
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
+		},
+	})
+	tp.applyTransactionEndorsedEvent(ctx, &ptmgrtypes.TransactionEndorsedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			TransactionID:   newTxID.String(),
+			ContractAddress: testContractAddress.String(),
+		},
+		IdempotencyKey:         daveIdempotencyKey,
+		Party:                  daveIdentityLocator,
+		AttestationRequestName: "bar",
+		Endorsement: &prototk.AttestationResult{
+			Name: "bar",
+			Verifier: &prototk.ResolvedVerifier{
+				Lookup:       daveIdentityLocator,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				Verifier:     tktypes.RandAddress().String(),
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
+		},
+	})
+	status, err := tp.GetTxStatus(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, newTxID.String(), status.TxID)
+	assert.Len(t, status.Endorsements, 4)
+	endorsementStatusForParty := func(party string) *components.PrivateTxEndorsementStatus {
+		for _, e := range status.Endorsements {
+			if e.Party == party {
+				return &e
+			}
+		}
+		return nil
+	}
+	require.NotNil(t, endorsementStatusForParty(aliceIdentityLocator))
+	require.NotNil(t, endorsementStatusForParty(bobIdentityLocator))
+	require.NotNil(t, endorsementStatusForParty(carolIdentityLocator))
+	require.NotNil(t, endorsementStatusForParty(daveIdentityLocator))
+
+	assert.Empty(t, endorsementStatusForParty(aliceIdentityLocator).RequestTime)
+	assert.True(t, endorsementStatusForParty(aliceIdentityLocator).EndorsementReceived)
+
+	assert.NotEmpty(t, endorsementStatusForParty(bobIdentityLocator).RequestTime)
+	assert.False(t, endorsementStatusForParty(bobIdentityLocator).EndorsementReceived)
+
+	assert.NotEmpty(t, endorsementStatusForParty(carolIdentityLocator).RequestTime)
+	assert.False(t, endorsementStatusForParty(carolIdentityLocator).EndorsementReceived)
+
+	assert.Empty(t, endorsementStatusForParty(daveIdentityLocator).RequestTime)
+	assert.True(t, endorsementStatusForParty(daveIdentityLocator).EndorsementReceived)
+
+	//	Status       string                       `json:"status"`
+	//
+	// LatestEvent  string                       `json:"latestEvent"`
+	// LatestError  string                       `json:"latestError"`
+	// Endorsements []PrivateTxEndorsementStatus `json:"endorsements"`
 }
 
 type fakeClock struct {

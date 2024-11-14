@@ -26,6 +26,8 @@ import (
 )
 
 func (tf *transactionFlow) ApplyEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+	tf.statusLock.Lock()
+	defer tf.statusLock.Unlock()
 
 	//First we update our in memory record of the transaction with the data from the event
 	switch event := event.(type) {
@@ -170,7 +172,7 @@ func (tf *transactionFlow) applyTransactionEndorsedEvent(ctx context.Context, ev
 		//only apply at this stage, action will be taken later
 		tf.transaction.PostAssembly = nil
 		// remove all pending endorsement request records because they are no longer valid
-		tf.pendingEndorsementRequests = make(map[string]map[string]*pendingEndorsementRequest)
+		tf.pendingEndorsementRequests = make(map[string]map[string]*endorsementRequest)
 
 	} else {
 		log.L(ctx).Infof("Adding endorsement from %s to transaction %s", event.Endorsement.Verifier.Lookup, tf.transaction.ID.String())

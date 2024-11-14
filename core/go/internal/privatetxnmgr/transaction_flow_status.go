@@ -17,10 +17,40 @@ package privatetxnmgr
 
 import (
 	"context"
+	"time"
 
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
+
+func (tf *transactionFlow) GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error) {
+	tf.statusLock.RLock()
+	defer tf.statusLock.RUnlock()
+	endorsementRequirements := tf.endorsementRequirements(ctx)
+	endorsementStatus := make([]components.PrivateTxEndorsementStatus, len(endorsementRequirements))
+	for i, requirement := range endorsementRequirements {
+		endorsementStatus[i] = components.PrivateTxEndorsementStatus{
+			Party:               requirement.party,
+			EndorsementReceived: true,
+		}
+		if parties, found := tf.pendingEndorsementRequests[requirement.attRequest.Name]; found {
+			if request, found := parties[requirement.party]; found {
+				endorsementStatus[i].EndorsementReceived = false
+				endorsementStatus[i].RequestTime = request.requestTime.Format(time.RFC3339Nano)
+			}
+		}
+	}
+
+	return components.PrivateTxStatus{
+		TxID:         tf.transaction.ID.String(),
+		Status:       tf.status,
+		LatestEvent:  tf.latestEvent,
+		LatestError:  tf.latestError,
+		Endorsements: endorsementStatus,
+		Transaction:  tf.transaction,
+	}, nil
+}
 
 func (tf *transactionFlow) hasOutstandingVerifierRequests(ctx context.Context) bool {
 	log.L(ctx).Debug("transactionFlow:hasOutstandingVerifierRequests")
@@ -74,13 +104,13 @@ func (tf *transactionFlow) hasOutstandingEndorsementRequests(ctx context.Context
 	return len(tf.outstandingEndorsementRequests(ctx)) > 0
 }
 
-type outstandingEndorsementRequest struct {
+type endorsementRequirement struct {
 	attRequest *prototk.AttestationRequest
 	party      string
 }
 
-func (tf *transactionFlow) outstandingEndorsementRequests(ctx context.Context) []*outstandingEndorsementRequest {
-	outstandingEndorsementRequests := make([]*outstandingEndorsementRequest, 0)
+func (tf *transactionFlow) outstandingEndorsementRequests(ctx context.Context) []*endorsementRequirement {
+	outstandingEndorsementRequests := make([]*endorsementRequirement, 0)
 	if tf.transaction.PostAssembly == nil {
 		log.L(ctx).Debugf("PostAssembly is nil so there are no outstanding endorsement requests")
 		return outstandingEndorsementRequests
@@ -105,10 +135,27 @@ func (tf *transactionFlow) outstandingEndorsementRequests(ctx context.Context) [
 				}
 				if !found {
 					log.L(ctx).Debugf("endorsement request for %s outstanding for transaction %s", party, tf.transaction.ID)
-					outstandingEndorsementRequests = append(outstandingEndorsementRequests, &outstandingEndorsementRequest{party: party, attRequest: attRequest})
+					outstandingEndorsementRequests = append(outstandingEndorsementRequests, &endorsementRequirement{party: party, attRequest: attRequest})
 				}
 			}
 		}
 	}
 	return outstandingEndorsementRequests
+}
+
+func (tf *transactionFlow) endorsementRequirements(ctx context.Context) []*endorsementRequirement {
+	//utility function to fold all the attestation plan into a single list, filtered by type - Endorse
+	endorsementRequests := make([]*endorsementRequirement, 0)
+	if tf.transaction.PostAssembly == nil {
+		log.L(ctx).Debugf("PostAssembly is nil so there are no endorsement requests")
+		return endorsementRequests
+	}
+	for _, attRequest := range tf.transaction.PostAssembly.AttestationPlan {
+		if attRequest.AttestationType == prototk.AttestationType_ENDORSE {
+			for _, party := range attRequest.Parties {
+				endorsementRequests = append(endorsementRequests, &endorsementRequirement{party: party, attRequest: attRequest})
+			}
+		}
+	}
+	return endorsementRequests
 }

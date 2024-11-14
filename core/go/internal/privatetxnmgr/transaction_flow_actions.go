@@ -55,7 +55,8 @@ func (tf *transactionFlow) logActionError(ctx context.Context, msg string, err e
 }
 
 func (tf *transactionFlow) Action(ctx context.Context) {
-	log.L(ctx).Debugf("transactionFlow:Action TransactionID='%s' Status='%s' LatestEvent='%s' LatestError='%s'", tf.transaction.ID, tf.status, tf.latestEvent, tf.latestError)
+	tf.statusLock.Lock()
+	defer tf.statusLock.Unlock()
 
 	tf.logActionDebug(ctx, ">>")
 	if tf.complete {
@@ -604,7 +605,7 @@ func (tf *transactionFlow) requestEndorsements(ctx context.Context) {
 				previousIdempotencyKey = r.idempotencyKey
 			}
 		} else {
-			tf.pendingEndorsementRequests[outstandingEndorsementRequest.attRequest.Name] = make(map[string]*pendingEndorsementRequest)
+			tf.pendingEndorsementRequests[outstandingEndorsementRequest.attRequest.Name] = make(map[string]*endorsementRequest)
 		}
 
 		if !previousRequestTime.IsZero() && tf.clock.Now().Before(previousRequestTime.Add(tf.requestTimeout)) {
@@ -624,7 +625,7 @@ func (tf *transactionFlow) requestEndorsements(ctx context.Context) {
 
 		tf.requestEndorsement(ctx, idempotencyKey, outstandingEndorsementRequest.party, outstandingEndorsementRequest.attRequest)
 		tf.pendingEndorsementRequests[outstandingEndorsementRequest.attRequest.Name][outstandingEndorsementRequest.party] =
-			&pendingEndorsementRequest{
+			&endorsementRequest{
 				requestTime:    tf.clock.Now(),
 				idempotencyKey: idempotencyKey,
 			}

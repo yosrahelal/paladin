@@ -496,12 +496,12 @@ func TestIdentityResolvePassthroughQueries(t *testing.T) {
 func TestDebugTransactionStatus(t *testing.T) {
 
 	contractAddress := tktypes.RandAddress()
-	txID := uuid.New().String()
+	txID := uuid.New()
 
 	ctx, url, _, done := newTestTransactionManagerWithRPC(t,
 		func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.privateTxMgr.On("GetTxStatus", mock.Anything, contractAddress.String(), txID).Return(components.PrivateTxStatus{
-				TxID:        txID,
+				TxID:        txID.String(),
 				Status:      "pending",
 				LatestEvent: "submitted",
 				LatestError: "some error message",
@@ -516,7 +516,7 @@ func TestDebugTransactionStatus(t *testing.T) {
 	var result components.PrivateTxStatus
 	err = rpcClient.CallRPC(ctx, &result, "debug_getTransactionStatus", contractAddress.String(), txID)
 	require.NoError(t, err)
-	assert.Equal(t, txID, result.TxID)
+	assert.Equal(t, txID.String(), result.TxID)
 	assert.Equal(t, "pending", result.Status)
 	assert.Equal(t, "submitted", result.LatestEvent)
 	assert.Equal(t, "some error message", result.LatestError)
