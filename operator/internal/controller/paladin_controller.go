@@ -824,7 +824,7 @@ func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *co
 		// Upsert a secret if we've been asked to. We use a mnemonic in this case (rather than directly generating a 32byte seed)
 		if s.Type == corev1alpha1.SignerType_AutoHDWallet {
 			wallet.Signer.KeyDerivation.Type = pldconf.KeyDerivationTypeBIP32
-			wallet.Signer.KeyDerivation.SeedKeyPath = pldconf.SigningKeyConfigEntry{Name: "seed"}
+			wallet.Signer.KeyDerivation.SeedKeyPath = pldconf.StaticKeyReference{Name: "seed"}
 			if err := r.generateBIP39SeedSecretIfNotExist(ctx, node, s.Secret); err != nil {
 				return err
 			}
