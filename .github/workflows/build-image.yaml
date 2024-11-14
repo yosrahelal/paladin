@@ -106,3 +106,11 @@ jobs:
             tag=${{ steps.build_tag_generator.outputs.BUILD_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/${{ inputs.image }}-${{ github.sha }}.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.image }}-${{ github.sha }}
+          path: /tmp/${{ inputs.image }}-${{ github.sha }}.tar
+          retention-days: 1

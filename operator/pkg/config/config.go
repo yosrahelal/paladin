@@ -9,30 +9,23 @@ import (
 	"github.com/spf13/viper"
 )
 
+type Template struct {
+	Image           string                  `json:"image"`
+	ImagePullPolicy corev1.PullPolicy       `json:"imagePullPolicy"`
+	Labels          map[string]string       `json:"labels"`
+	Annotations     map[string]string       `json:"annotations"`
+	Envs            map[string]string       `json:"envs"`
+	Tolerations     []corev1.Toleration     `json:"tolerations"`
+	Affinity        *corev1.Affinity        `json:"affinity"`
+	NodeSelector    map[string]string       `json:"nodeSelector"`
+	SecurityContext *corev1.SecurityContext `json:"securityContext"`
+}
+
 // Config represents the structure of the configuration
 type Config struct {
-	Paladin struct {
-		Image           string            `json:"image"`
-		ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy"`
-		Labels          map[string]string `json:"labels"`
-		Annotations     map[string]string `json:"annotations"`
-		Envs            map[string]string `json:"envs"`
-		// TODO: Add more fields
-	} `json:"paladin"`
-	Besu struct {
-		Image           string            `json:"image"`
-		ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy"`
-		Labels          map[string]string `json:"labels"`
-		Annotations     map[string]string `json:"annotations"`
-		Envs            map[string]string `json:"envs"`
-		// TODO: Add more fields
-	} `json:"besu"`
-	Postgres struct {
-		Image           string            `json:"image"`
-		ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy"`
-		Envs            map[string]string `json:"envs"`
-		// TODO: Add more fields
-	} `json:"postgres"`
+	Paladin  Template `json:"paladin"`
+	Besu     Template `json:"besu"`
+	Postgres Template `json:"postgres"`
 }
 
 // LoadConfig sets up Viper to load the config file
