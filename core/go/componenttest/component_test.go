@@ -1646,7 +1646,8 @@ func TestPrivacyGroupEndorsementConcurrent(t *testing.T) {
 	// This test is identical to TestPrivacyGroupEndorsement except that it sends the transactions concurrently
 	// For manual exploratory testing of longevity , it is possible to increase the number of iterations and the test should still be valid
 	// however, it is hard coded to a small number by default so that it can be run in CI
-	NUM_ITERATIONS := 4
+	NUM_ITERATIONS := 2
+	NUM_TRANSACTIONS_PER_NODE_PER_ITERATION := 2
 	ctx := context.Background()
 	domainRegistryAddress := deployDomainRegistry(t)
 
@@ -1701,87 +1702,93 @@ func TestPrivacyGroupEndorsementConcurrent(t *testing.T) {
 	// we wait for the confirmation of this transaction to ensure that there is no race condition of someone trying to call `set` before the map is initialized
 	// TODO - so long as we have the transaction id for the init transaction, we could declare a dependency on it for the set transactions
 	for i := 0; i < NUM_ITERATIONS; i++ {
-		// Start a private transaction on alice's node
+		// Start a number of private transaction on alice's node
 		// this should require endorsement from bob and carol
-		var aliceTxID uuid.UUID
-		err := alice.client.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
-			ABI: *domains.SimpleStorageSetABI(),
-			TransactionBase: pldapi.TransactionBase{
-				To:             contractAddress,
-				Domain:         "simpleStorageDomain",
-				IdempotencyKey: fmt.Sprintf("tx1-alice-%d", i),
-				Type:           pldapi.TransactionTypePrivate.Enum(),
-				From:           alice.identity,
-				Data: tktypes.RawJSON(fmt.Sprintf(`{
+		aliceTxID := make([]uuid.UUID, NUM_TRANSACTIONS_PER_NODE_PER_ITERATION)
+		bobTxID := make([]uuid.UUID, NUM_TRANSACTIONS_PER_NODE_PER_ITERATION)
+		carolTxID := make([]uuid.UUID, NUM_TRANSACTIONS_PER_NODE_PER_ITERATION)
+
+		for j := 0; j < NUM_TRANSACTIONS_PER_NODE_PER_ITERATION; j++ {
+			err := alice.client.CallRPC(ctx, &aliceTxID[j], "ptx_sendTransaction", &pldapi.TransactionInput{
+				ABI: *domains.SimpleStorageSetABI(),
+				TransactionBase: pldapi.TransactionBase{
+					To:             contractAddress,
+					Domain:         "simpleStorageDomain",
+					IdempotencyKey: fmt.Sprintf("tx1-alice-%d-%d", i, j),
+					Type:           pldapi.TransactionTypePrivate.Enum(),
+					From:           alice.identity,
+					Data: tktypes.RawJSON(fmt.Sprintf(`{
 				 	"map":"TestPrivacyGroupEndorsementConcurrent",
-                    "key": "alice_key_%d",
-					"value": "alice_value_%d"
-                }`, i, i)),
-			},
-		})
-		require.NoError(t, err)
-		assert.NotEqual(t, uuid.UUID{}, aliceTxID)
+                    "key": "alice_key_%d_%d",
+					"value": "alice_value_%d_%d"
+                }`, i, j, i, j)),
+				},
+			})
+			require.NoError(t, err)
+			assert.NotEqual(t, uuid.UUID{}, aliceTxID[j])
 
-		// Start a private transaction on bob's node
-		// this should require endorsement from alice and carol
-		var bobTxID uuid.UUID
-		err = bob.client.CallRPC(ctx, &bobTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
-			ABI: *domains.SimpleStorageSetABI(),
-			TransactionBase: pldapi.TransactionBase{
-				To:             contractAddress,
-				Domain:         "simpleStorageDomain",
-				IdempotencyKey: fmt.Sprintf("tx1-bob-%d", i),
-				Type:           pldapi.TransactionTypePrivate.Enum(),
-				From:           bob.identity,
-				Data: tktypes.RawJSON(fmt.Sprintf(`{
+			// Start a private transaction on bob's node
+			// this should require endorsement from alice and carol
+			err = bob.client.CallRPC(ctx, &bobTxID[j], "ptx_sendTransaction", &pldapi.TransactionInput{
+				ABI: *domains.SimpleStorageSetABI(),
+				TransactionBase: pldapi.TransactionBase{
+					To:             contractAddress,
+					Domain:         "simpleStorageDomain",
+					IdempotencyKey: fmt.Sprintf("tx1-bob-%d-%d", i, j),
+					Type:           pldapi.TransactionTypePrivate.Enum(),
+					From:           bob.identity,
+					Data: tktypes.RawJSON(fmt.Sprintf(`{
 				 	"map":"TestPrivacyGroupEndorsementConcurrent",
-                    "key": "bob_key_%d",
-					"value": "bob_value_%d"
-                }`, i, i)),
-			},
-		})
-		require.NoError(t, err)
-		assert.NotEqual(t, uuid.UUID{}, bobTxID)
+                    "key": "bob_key_%d_%d",
+					"value": "bob_value_%d_%d"
+                }`, i, j, i, j)),
+				},
+			})
+			require.NoError(t, err)
+			assert.NotEqual(t, uuid.UUID{}, bobTxID[j])
 
-		var carolTxID uuid.UUID
-		err = carol.client.CallRPC(ctx, &carolTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
-			ABI: *domains.SimpleStorageSetABI(),
-			TransactionBase: pldapi.TransactionBase{
-				To:             contractAddress,
-				Domain:         "simpleStorageDomain",
-				IdempotencyKey: fmt.Sprintf("tx1-carol-%d", i),
-				Type:           pldapi.TransactionTypePrivate.Enum(),
-				From:           bob.identity,
-				Data: tktypes.RawJSON(fmt.Sprintf(`{
+			err = carol.client.CallRPC(ctx, &carolTxID[j], "ptx_sendTransaction", &pldapi.TransactionInput{
+				ABI: *domains.SimpleStorageSetABI(),
+				TransactionBase: pldapi.TransactionBase{
+					To:             contractAddress,
+					Domain:         "simpleStorageDomain",
+					IdempotencyKey: fmt.Sprintf("tx1-carol-%d-%d", i, j),
+					Type:           pldapi.TransactionTypePrivate.Enum(),
+					From:           bob.identity,
+					Data: tktypes.RawJSON(fmt.Sprintf(`{
 				 	"map":"TestPrivacyGroupEndorsementConcurrent",
-                    "key": "carol_key_%d",
-					"value": "carol_value_%d"
-                }`, i, i)),
-			},
-		})
-		require.NoError(t, err)
-		assert.NotEqual(t, uuid.UUID{}, bobTxID)
+                    "key": "carol_key_%d_%d",
+					"value": "carol_value_%d_%d"
+                }`, i, j, i, j)),
+				},
+			})
+			require.NoError(t, err)
+			assert.NotEqual(t, uuid.UUID{}, carolTxID[j])
+		}
 
-		assert.Eventually(t,
-			transactionReceiptCondition(t, ctx, aliceTxID, alice.client, false),
-			transactionLatencyThreshold(t),
-			100*time.Millisecond,
-			"Transaction did not receive a receipt",
-		)
+		//once all transactions for this iteration are sent, wait for all of them to be confirmed before starting the next iteration
+		for j := 0; j < NUM_TRANSACTIONS_PER_NODE_PER_ITERATION; j++ {
+			assert.Eventually(t,
+				transactionReceiptCondition(t, ctx, aliceTxID[j], alice.client, false),
+				transactionLatencyThreshold(t),
+				100*time.Millisecond,
+				"Transaction did not receive a receipt",
+			)
 
-		assert.Eventually(t,
-			transactionReceiptCondition(t, ctx, bobTxID, bob.client, false),
-			transactionLatencyThreshold(t),
-			100*time.Millisecond,
-			"Transaction did not receive a receipt",
-		)
+			assert.Eventually(t,
+				transactionReceiptCondition(t, ctx, bobTxID[j], bob.client, false),
+				transactionLatencyThreshold(t),
+				100*time.Millisecond,
+				"Transaction did not receive a receipt",
+			)
 
-		assert.Eventually(t,
-			transactionReceiptCondition(t, ctx, carolTxID, carol.client, false),
-			transactionLatencyThreshold(t),
-			100*time.Millisecond,
-			fmt.Sprintf("Carol's transaction did not receive a receipt on iteration %d", i),
-		)
+			assert.Eventually(t,
+				transactionReceiptCondition(t, ctx, carolTxID[j], carol.client, false),
+				transactionLatencyThreshold(t),
+				100*time.Millisecond,
+				fmt.Sprintf("Carol's transaction did not receive a receipt on iteration %d", i),
+			)
+		}
 	}
 
 	var schemas []*pldapi.Schema
@@ -1824,9 +1831,11 @@ func TestPrivacyGroupEndorsementConcurrent(t *testing.T) {
 	require.NoError(t, jsonErr)
 
 	for i := 0; i < NUM_ITERATIONS; i++ {
-		assert.Equal(t, fmt.Sprintf("alice_value_%d", i), storage[fmt.Sprintf("alice_key_%d", i)])
-		assert.Equal(t, fmt.Sprintf("bob_value_%d", i), storage[fmt.Sprintf("bob_key_%d", i)])
-		assert.Equal(t, fmt.Sprintf("carol_value_%d", i), storage[fmt.Sprintf("carol_key_%d", i)])
+		for j := 0; j < NUM_TRANSACTIONS_PER_NODE_PER_ITERATION; j++ {
+			assert.Equal(t, fmt.Sprintf("alice_value_%d_%d", i, j), storage[fmt.Sprintf("alice_key_%d_%d", i, j)])
+			assert.Equal(t, fmt.Sprintf("bob_value_%d_%d", i, j), storage[fmt.Sprintf("bob_key_%d_%d", i, j)])
+			assert.Equal(t, fmt.Sprintf("carol_value_%d_%d", i, j), storage[fmt.Sprintf("carol_key_%d_%d", i, j)])
+		}
 	}
 
 }
