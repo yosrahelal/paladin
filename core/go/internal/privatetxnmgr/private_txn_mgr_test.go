@@ -1270,48 +1270,11 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 		},
 	}
 
-	setBlockHeight := func(blockHeight int64) {
-
-		postCommitHandler, err := aliceEngine.PreCommitHandler(
-			ctx,
-			nil,
-			[]*pldapi.IndexedBlock{
-				{
-					Number: blockHeight,
-				},
-			},
-			nil,
-		)
-		assert.NoError(t, err)
-		postCommitHandler()
-		postCommitHandler, err = bobEngine.PreCommitHandler(
-			ctx,
-			nil,
-			[]*pldapi.IndexedBlock{
-				{
-					Number: blockHeight,
-				},
-			},
-			nil,
-		)
-		assert.NoError(t, err)
-		postCommitHandler()
-		postCommitHandler, err = carolEngine.PreCommitHandler(
-			ctx,
-			nil,
-			[]*pldapi.IndexedBlock{
-				{
-					Number: blockHeight,
-				},
-			},
-			nil,
-		)
-		assert.NoError(t, err)
-		postCommitHandler()
-	}
-
 	//Start off on block 99 where alice should be coordinator
-	setBlockHeight(99)
+
+	aliceEngine.SetBlockHeight(ctx, 99)
+	bobEngine.SetBlockHeight(ctx, 99)
+	carolEngine.SetBlockHeight(ctx, 99)
 
 	err = aliceEngine.HandleNewTx(ctx, tx1)
 	assert.NoError(t, err)
@@ -1338,7 +1301,9 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 		dcFlushed,
 	)
 
-	setBlockHeight(100)
+	aliceEngine.SetBlockHeight(ctx, 100)
+	bobEngine.SetBlockHeight(ctx, 100)
+	carolEngine.SetBlockHeight(ctx, 100)
 	err = aliceEngine.HandleNewTx(ctx, tx2)
 	assert.NoError(t, err)
 
@@ -1346,6 +1311,235 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 	assert.Equal(t, "delegated", status)
 
 	status = pollForStatus(ctx, t, "dispatched", bobEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
+	assert.Equal(t, "dispatched", status)
+
+	require.NoError(t, <-dcFlushed)
+}
+
+func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover(t *testing.T) {
+
+	// Extension to TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundary where we simulate the case where
+	// there are still some transactions in flight when the coordinator role switches
+	// and assert that transactions that are not yet passed the point of no return (i.e. are sequenced but not dispatched ) are transferred to, and eventually submitted by, the new coordinator
+	ctx := context.Background()
+
+	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
+	domainAddressString := domainAddress.String()
+
+	testTransactionID1 := confutil.P(uuid.New())
+	testTransactionID2 := confutil.P(uuid.New())
+
+	aliceNodeName := "aliceNode"
+	bobNodeName := "bobNode"
+	carolNodeName := "carolNode"
+
+	aliceEngine, aliceEngineMocks := NewPrivateTransactionMgrForPackageTesting(t, aliceNodeName)
+	aliceEngineMocks.mockDomain(domainAddress)
+
+	bobEngine, bobEngineMocks := NewPrivateTransactionMgrForPackageTesting(t, bobNodeName)
+	bobEngineMocks.mockDomain(domainAddress)
+
+	carolEngine, carolEngineMocks := NewPrivateTransactionMgrForPackageTesting(t, carolNodeName)
+	carolEngineMocks.mockDomain(domainAddress)
+
+	alice := newPartyForTesting(ctx, "alice", aliceNodeName, aliceEngineMocks)
+	bob := newPartyForTesting(ctx, "bob", bobNodeName, bobEngineMocks)
+	carol := newPartyForTesting(ctx, "carol", carolNodeName, carolEngineMocks)
+
+	alice.mockResolve(ctx, bob)
+	alice.mockResolve(ctx, carol)
+
+	bob.mockResolve(ctx, alice)
+	bob.mockResolve(ctx, carol)
+
+	carol.mockResolve(ctx, bob)
+	carol.mockResolve(ctx, alice)
+
+	//Set up mocks on alice's transaction manager that are needed for it to be the sender (aka assembler) of transaction 1
+	aliceEngineMocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+	})
+
+	aliceEngineMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.MatchedBy(privateTransactionMatcher(*testTransactionID1, *testTransactionID2))).Run(func(args mock.Arguments) {
+		tx := args.Get(1).(*components.PrivateTransaction)
+		tx.PreAssembly = &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				TransactionId: tx.ID.String(),
+			},
+			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
+				{
+					Lookup:       alice.identityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+				},
+				{
+					Lookup:       bob.identityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+				},
+				{
+					Lookup:       carol.identityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+				},
+			},
+		}
+	}).Return(nil)
+
+	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
+
+		tx.PostAssembly = &components.TransactionPostAssembly{
+			AssemblyResult: prototk.AssembleTransactionResponse_OK,
+			InputStates: []*components.FullState{
+				{
+					ID:     tktypes.RandBytes(32),
+					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+					Data:   tktypes.JSONString("foo"),
+				},
+			},
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "endorsers",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						alice.identityLocator,
+						bob.identityLocator,
+						carol.identityLocator,
+					},
+				},
+			},
+		}
+
+	}).Return(nil)
+
+	//Set up mocks that allow nodes to exchange messages with each other
+	mockNetwork(t, []privateTransactionMgrForPackageTesting{
+		aliceEngine,
+		bobEngine,
+		carolEngine,
+	})
+
+	//Set up mocks on bob's engine that are needed for alice to be the coordinator of the first transaction
+	bobEngineMocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+	})
+
+	//set up the mocks on all 3 engines that are need on the endorse code path
+	bobEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(bobEngineMocks.domainSmartContract, nil)
+	carolEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(carolEngineMocks.domainSmartContract, nil)
+
+	aliceEngineMocks.mockForEndorsement(t, *testTransactionID1, &alice, []byte("alice-endorsement-bytes1"), []byte("alice-signature-bytes1"))
+	bobEngineMocks.mockForEndorsement(t, *testTransactionID1, &bob, []byte("bob-endorsement-bytes1"), []byte("bob-signature-bytes1"))
+	carolEngineMocks.mockForEndorsement(t, *testTransactionID1, &carol, []byte("carol-endorsement-bytes1"), []byte("carol-signature-bytes1"))
+
+	dcFlushed := make(chan error, 1)
+	//Set up mocks on bobs's engine that are needed to be the submitter of the first transaction
+	bobEngineMocks.mockForSubmitter(t, testTransactionID1, domainAddress,
+		map[string][]byte{ //expected endorsement signatures
+			alice.verifier: []byte("alice-signature-bytes1"),
+			bob.verifier:   []byte("bob-signature-bytes1"),
+			carol.verifier: []byte("carol-signature-bytes1"),
+		},
+		dcFlushed,
+	)
+
+	err := aliceEngine.Start()
+	assert.NoError(t, err)
+
+	tx1 := &components.ValidatedTransaction{
+		Function: &components.ResolvedFunction{
+			Definition: testABI[0],
+		},
+		Transaction: &pldapi.Transaction{
+			ID: testTransactionID1,
+			TransactionBase: pldapi.TransactionBase{
+				Domain: "domain1",
+				To:     domainAddress,
+				From:   alice.identityLocator,
+			},
+		},
+	}
+
+	tx2 := &components.ValidatedTransaction{
+		Function: &components.ResolvedFunction{
+			Definition: testABI[0],
+		},
+		Transaction: &pldapi.Transaction{
+			ID: testTransactionID2,
+			TransactionBase: pldapi.TransactionBase{
+				Domain: "domain1",
+				To:     domainAddress,
+				From:   alice.identityLocator,
+			},
+		},
+	}
+
+	aliceEngine.SetBlockHeight(ctx, 199)
+	bobEngine.SetBlockHeight(ctx, 199)
+	carolEngine.SetBlockHeight(ctx, 199)
+
+	err = aliceEngine.HandleNewTx(ctx, tx1)
+	assert.NoError(t, err)
+
+	//wait until alice had delegated to bob and bob has dispatched
+	status := pollForStatus(ctx, t, "delegated", aliceEngine, domainAddressString, testTransactionID1.String(), 200*time.Second)
+	assert.Equal(t, "delegated", status)
+
+	status = pollForStatus(ctx, t, "dispatched", bobEngine, domainAddressString, testTransactionID1.String(), 200*time.Second)
+	assert.Equal(t, "dispatched", status)
+
+	// tx1 is now past the point of no return
+
+	// set up mocks for second transaction to be partially endorsed
+	aliceEngineMocks.mockForEndorsement(t, *testTransactionID2, &alice, []byte("alice-endorsement-bytes2"), []byte("alice-signature-bytes2"))
+	bobEngineMocks.mockForEndorsement(t, *testTransactionID2, &bob, []byte("bob-endorsement-bytes2"), []byte("bob-signature-bytes2"))
+
+	//prepare carol to endorse transaction 2 but not until after the block height has been incremented
+	carolEndorsementTrigger := carolEngineMocks.mockForEndorsementOnTrigger(t, *testTransactionID2, &carol, []byte("carol-endorsement-bytes2"), []byte("carol-signature-bytes2"))
+
+	//send transaction 2 and it should get delegated to bob, because we have not moved the block height but it should not get dispatched yet because carol's endorsement is delayed
+	err = aliceEngine.HandleNewTx(ctx, tx2)
+	assert.NoError(t, err)
+
+	status = pollForStatus(ctx, t, "delegated", aliceEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
+	assert.Equal(t, "delegated", status)
+
+	//wait until bob has sequenced the transaction and is waiting for endorsement
+	status = pollForStatus(ctx, t, "signed", bobEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
+	assert.Equal(t, "signed", status)
+
+	// Setup mocks on carol to be coordinator
+	carolEngineMocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+	})
+
+	//Set up mocks on carol's engine that are needed to be the submitter of the second transaction
+	carolEngineMocks.mockForSubmitter(t, testTransactionID2, domainAddress,
+		map[string][]byte{ //expected endorsement signatures
+			alice.verifier: []byte("alice-signature-bytes2"),
+			bob.verifier:   []byte("bob-signature-bytes2"),
+			carol.verifier: []byte("carol-signature-bytes2"),
+		},
+		dcFlushed,
+	)
+
+	aliceEngine.SetBlockHeight(ctx, 200)
+	bobEngine.SetBlockHeight(ctx, 200)
+	carolEngine.SetBlockHeight(ctx, 200)
+
+	carolEndorsementTrigger()
+
+	status = pollForStatus(ctx, t, "delegated", aliceEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
+	assert.Equal(t, "delegated", status)
+
+	status = pollForStatus(ctx, t, "delegated", bobEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
+	assert.Equal(t, "delegated", status)
+
+	status = pollForStatus(ctx, t, "dispatched", carolEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 	require.NoError(t, <-dcFlushed)
@@ -1588,11 +1782,11 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	// Neither transaction should be dispatched yet
-	s, err := aliceEngine.GetTxStatus(ctx, domainAddressString, testTransactionID1.String())
+	s, err := aliceEngine.GetTxStatus(ctx, domainAddressString, *testTransactionID1)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
-	s, err = aliceEngine.GetTxStatus(ctx, domainAddressString, testTransactionID2.String())
+	s, err = aliceEngine.GetTxStatus(ctx, domainAddressString, *testTransactionID2)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
@@ -1637,11 +1831,11 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	if !testing.Short() {
 		time.Sleep(1 * time.Second)
 	}
-	s, err = aliceEngine.GetTxStatus(ctx, domainAddressString, testTransactionID1.String())
+	s, err = aliceEngine.GetTxStatus(ctx, domainAddressString, *testTransactionID1)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
-	s, err = aliceEngine.GetTxStatus(ctx, domainAddressString, testTransactionID2.String())
+	s, err = aliceEngine.GetTxStatus(ctx, domainAddressString, *testTransactionID2)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
@@ -2328,7 +2522,7 @@ func mockNetwork(t *testing.T, transactionManagers []privateTransactionMgrForPac
 
 }
 
-func (m *dependencyMocks) mockForEndorsement(t *testing.T, txID uuid.UUID, endorser *identityForTesting, endorsementPayload []byte, endorsementSignature []byte) {
+func (m *dependencyMocks) mockForEndorsement(_ *testing.T, txID uuid.UUID, endorser *identityForTesting, endorsementPayload []byte, endorsementSignature []byte) {
 	endorsementRequestMatcher := func(req *components.PrivateTransactionEndorseRequest) bool {
 		return req.TransactionSpecification.TransactionId == txID.String()
 	}
@@ -2346,17 +2540,50 @@ func (m *dependencyMocks) mockForEndorsement(t *testing.T, txID uuid.UUID, endor
 	endorser.mockSign(endorsementPayload, endorsementSignature)
 }
 
+func (m *dependencyMocks) mockForEndorsementOnTrigger(_ *testing.T, txID uuid.UUID, endorser *identityForTesting, endorsementPayload []byte, endorsementSignature []byte) func() {
+	triggered := false
+	endorsementRequestMatcher := func(req *components.PrivateTransactionEndorseRequest) bool {
+		return req.TransactionSpecification.TransactionId == txID.String()
+	}
+	trigger := make(chan struct{})
+	m.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.MatchedBy(endorsementRequestMatcher)).Run(func(_ mock.Arguments) {
+		if !triggered {
+			<-trigger
+		}
+	}).Return(&components.EndorsementResult{
+		Result:  prototk.EndorseTransactionResponse_SIGN,
+		Payload: endorsementPayload,
+		Endorser: &prototk.ResolvedVerifier{
+			Lookup:       endorser.identityLocator,
+			Verifier:     endorser.verifier,
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+		},
+	}, nil)
+
+	endorser.mockSign(endorsementPayload, endorsementSignature)
+
+	return func() {
+		//remember that the trigger has been called so that any future calls to the mock will not block
+		triggered = true
+		close(trigger)
+	}
+}
+
 type privateTransactionMgrForPackageTesting interface {
 	components.PrivateTxManager
 	PreCommitHandler(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error)
 	DependencyMocks() *dependencyMocks
 	NodeName() string
+	//Wrapper around a call to PreCommitHandler to notify of a new block with given height
+	SetBlockHeight(ctx context.Context, height int64)
 }
 type privateTransactionMgrForPackageTestingStruct struct {
 	*privateTxManager
 	preCommitHandler blockindexer.PreCommitHandler
 	dependencyMocks  *dependencyMocks
 	nodeName         string
+	t                *testing.T
 }
 
 func (p *privateTransactionMgrForPackageTestingStruct) PreCommitHandler(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
@@ -2369,6 +2596,22 @@ func (p *privateTransactionMgrForPackageTestingStruct) DependencyMocks() *depend
 
 func (p *privateTransactionMgrForPackageTestingStruct) NodeName() string {
 	return p.nodeName
+}
+
+func (p *privateTransactionMgrForPackageTestingStruct) SetBlockHeight(ctx context.Context, height int64) {
+	postCommitHandler, err := p.PreCommitHandler(
+		ctx,
+		nil,
+		[]*pldapi.IndexedBlock{
+			{
+				Number: height,
+			},
+		},
+		nil,
+	)
+	assert.NoError(p.t, err)
+	postCommitHandler()
+
 }
 
 func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (privateTransactionMgrForPackageTesting, *dependencyMocks) {
@@ -2449,6 +2692,7 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 		preCommitHandler: preInitResult.PreCommitHandler,
 		dependencyMocks:  mocks,
 		nodeName:         nodeName,
+		t:                t,
 	}, mocks
 
 }
@@ -2602,11 +2846,11 @@ func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, pri
 		case <-timeout:
 			// Timeout reached, exit the loop
 			assert.Failf(t, "Timed out waiting for status %s", expectedStatus)
-			s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, txID)
+			s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, uuid.MustParse(txID))
 			require.NoError(t, err)
 			return s.Status
 		case <-tick:
-			s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, txID)
+			s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, uuid.MustParse(txID))
 			if s.Status == expectedStatus {
 				return s.Status
 			}
