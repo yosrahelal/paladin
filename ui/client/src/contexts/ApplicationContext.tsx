@@ -26,8 +26,8 @@ interface Props {
 
 export const ApplicationContextProvider = ({ children, colorMode }: Props) => {
 
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
-  const [lastBlockWithTransactions, setLastBlockWithTransactions] = useState(0);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
+  const [lastBlockWithTransactions, setLastBlockWithTransactions] = useState(-1);
   const [refreshRequired, setRefreshRequired] = useState(false);
 
   const { data: actualLastBlockWithTransactions, error } = useQuery({
@@ -43,15 +43,18 @@ export const ApplicationContextProvider = ({ children, colorMode }: Props) => {
     retry: false
   });
 
-
   useEffect(() => {
+
+
     if(actualLastBlockWithTransactions !== undefined
       && actualLastBlockWithTransactions > lastBlockWithTransactions) {
-        if(autoRefreshEnabled) {
+        
+        if(autoRefreshEnabled || lastBlockWithTransactions === -1) {
           setLastBlockWithTransactions(actualLastBlockWithTransactions);
         } else {
           setRefreshRequired(true);
         }
+
     }
   }, [actualLastBlockWithTransactions, lastBlockWithTransactions, setLastBlockWithTransactions]);
 
