@@ -7,6 +7,9 @@ on:
         required: false
         type: boolean
         default: false
+      registry:
+        required: true
+        type: string 
       images_tag:
         required: true
         type: string
@@ -26,6 +29,13 @@ on:
         required: false
         type: boolean
         default: false
+      registry:
+        type: choice
+        options:
+          - 'docker.io'
+          - 'ghcr.io'
+        default: 'docker.io'
+        description: 'The docker registry to use for the images'
       images_tag:
         required: true
         type: string
@@ -56,7 +66,6 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
       
-      # The makefile uses kustomize
       - uses: imranismail/setup-kustomize@v2
 
       - name: Prepare CRD chart
@@ -65,10 +74,13 @@ jobs:
       - name: Prepare operator chart
         run: ./gradlew prepareOperatorChart
 
-      - name: Set Lowercase Repository Owner
-        run: echo "LOWER_REPOSITORY_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+      - name: Get Docker Repository Name
+        id: docker_repo
+        uses: ./.github/actions/repository
+        with:
+          repository: ${{ github.repository_owner }}
+          registry: ${{ inputs.registry }}
       
-      # Override the image tags in the values.yaml file 
       - name: Override image tags
         uses: ./.github/actions/update-yaml
         with:
@@ -76,11 +88,11 @@ jobs:
           updates: |
             operator:
               image:
-                repository: docker.io/${{ env.LOWER_REPOSITORY_OWNER }}/paladin-operator
+                repository: ${{ inputs.registry }}/${{ steps.docker_repo.outputs.repository }}/paladin-operator
                 tag: ${{ inputs.images_tag }}
             paladin:
               image:
-                repository: docker.io/${{ env.LOWER_REPOSITORY_OWNER }}/paladin
+                repository: ${{ inputs.registry }}/${{ steps.docker_repo.outputs.repository }}/paladin
                 tag: ${{ inputs.images_tag }}
       
       # Remove 'v' prefix from the tag
@@ -100,14 +112,14 @@ jobs:
             version: ${{ env.PROCESSED_TAG }}
             appVersion: ${{ inputs.chart_tag }}
 
-      - name: Confirm Helm temapltes
+      - name: Confirm Helm templates
         working-directory: operator/charts/paladin-operator
         run: |
           helm dependency build
           helm template .
           rm -rf charts
           rm Chart.lock
-      
+
       # TODO: Add e2e tests for the helm chart
 
       # set CR_TOKEN env with the GitHub token secret when it is workflow_dispatch action
