@@ -191,6 +191,11 @@ func (oc *orchestrator) orchestratorLoop() {
 
 	defer close(oc.orchestratorLoopDone)
 
+	if err := oc.initNextNonceFromDBRetry(ctx); err != nil {
+		log.L(ctx).Warnf("Context cancelled while obtaining highest nonce for %s: %s", oc.signingAddress, err)
+		return
+	}
+
 	ticker := time.NewTicker(oc.orchestratorPollingInterval)
 	defer ticker.Stop()
 	for {
@@ -224,16 +229,37 @@ func (oc *orchestrator) getFirstInFlight() (ift *inFlightTransactionStageControl
 	return
 }
 
-func (oc *orchestrator) allocateNonces(ctx context.Context, txns []*DBPublicTxn, highestInFlightNonce *uint64) error {
+func (oc *orchestrator) initNextNonceFromDBRetry(ctx context.Context) error {
+	return oc.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
+		return true, oc.initNextNonceFromDB(ctx)
+	})
+}
+
+func (oc *orchestrator) initNextNonceFromDB(ctx context.Context) error {
+	var txns []*DBPublicTxn
+	err := oc.p.DB().
+		WithContext(ctx).
+		Where("from = ?", oc.signingAddress).
+		Where("nonce IS NOT NULL").
+		Order("nonce DESC").
+		Limit(1).
+		Error
+	if err != nil || len(txns) == 0 {
+		return err
+	}
+	nextNonce := *txns[0].Nonce + 1
+	oc.nextNonce = &nextNonce
+	log.L(ctx).Infof("Next nonce initialized from DB fro %s: %d", oc.signingAddress, nextNonce)
+	return nil
+}
+
+func (oc *orchestrator) allocateNonces(ctx context.Context, txns []*DBPublicTxn) error {
 
 	// Of the the transactions might have nonces already
 	toAlloc := make([]*DBPublicTxn, 0, len(txns))
 	for _, tx := range txns {
 		if tx.Nonce == nil {
 			toAlloc = append(toAlloc, tx)
-		} else if highestInFlightNonce == nil || *tx.Nonce > *highestInFlightNonce {
-			newHighest := *tx.Nonce
-			highestInFlightNonce = &newHighest
 		}
 	}
 	if len(toAlloc) == 0 {
@@ -249,10 +275,8 @@ func (oc *orchestrator) allocateNonces(ctx context.Context, txns []*DBPublicTxn,
 			return err
 		}
 		// See if we have nonces in our DB that are ahead of the mempool.
-		if highestInFlightNonce != nil && txCount.Uint64() <= *highestInFlightNonce {
-			nextNonce := *highestInFlightNonce + 1
-			oc.nextNonce = &nextNonce
-			log.L(ctx).Infof("Next nonce for %s set to %d (after highest in-flight %d)", oc.signingAddress, nextNonce, *highestInFlightNonce)
+		if oc.nextNonce != nil && *oc.nextNonce >= txCount.Uint64() {
+			log.L(ctx).Infof("Next nonce for %s is %d (at or ahead of mempool %d)", oc.signingAddress, *oc.nextNonce, txCount.Uint64())
 		} else {
 			// Otherwise take the node's answer
 			oc.nextNonce = (*uint64)(txCount)
@@ -320,8 +344,8 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	var highestInFlightNonce *uint64
 	// Run through copying across from the old InFlight list to the new one, those that aren't ready to be deleted
 	for _, p := range oldInFlight {
-		if highestInFlightNonce == nil || *p.stateManager.GetNonce() > *highestInFlightNonce {
-			newHighest := *p.stateManager.GetNonce()
+		if highestInFlightNonce == nil || p.stateManager.GetNonce() > *highestInFlightNonce {
+			newHighest := p.stateManager.GetNonce()
 			highestInFlightNonce = &newHighest
 		}
 		if p.stateManager.CanBeRemoved(ctx) {
@@ -382,7 +406,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 		// of these transactions. Otherwise we might re-order transactions compared to their DB commit order
 		// (which is unacceptable for strict TX ordering).
 		if err := oc.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
-			return true, oc.allocateNonces(ctx, additional, highestInFlightNonce)
+			return true, oc.allocateNonces(ctx, additional)
 		}); err != nil {
 			log.L(ctx).Warnf("Orchestrator context cancelled while allocating nonce: %s", err)
 			return

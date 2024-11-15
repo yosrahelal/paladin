@@ -276,7 +276,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	// 2) Perform transaction to transfer value to the dest address
 
 	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource submitting a fueling tx for  destination address: %s ", destAddress)
-	fuelingTx, err = af.pubTxMgr.SubmitSingleTxn(ctx, &components.PublicTxSubmission{
+	fuelingTx, err = af.pubTxMgr.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
 		PublicTxInput: pldapi.PublicTxInput{
 			From: af.sourceAddress,
 			To:   &destAddress,

@@ -260,19 +260,26 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	require.NoError(t, err)
 
 	// The rest we submit as as batch
-	batch, err := ble.PrepareSubmissionBatch(ctx, txs[1:])
+	for _, tx := range txs[1:] {
+		err := ble.ValidateTransaction(ctx, tx)
+		require.NoError(t, err)
+	}
+	batch, err := ble.WriteNewTransactions(ctx, ble.p.DB(), txs[1:])
 	require.NoError(t, err)
-	assert.Empty(t, batch.Rejected())
-	assert.Len(t, batch.Accepted(), len(txs)-1)
-	err = ble.p.DB().Transaction(func(dbTX *gorm.DB) error {
-		return batch.Submit(ctx, dbTX)
-	})
+	require.Len(t, batch, len(txs[1:]))
+	for _, tx := range batch {
+		require.Greater(t, *tx.LocalID, 0)
+	}
+
+	// Get one back again by ID
+	txRead, err := ble.QueryPublicTxWithBindings(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("localId", batch[1]).Limit(1).Query())
 	require.NoError(t, err)
-	batch.Completed(ctx, true) // would normally be in a defer
+	require.Len(t, txRead, 1)
+	require.Equal(t, batch[1].Data, txRead[0].Data)
 
 	// Record activity on one TX
 	for i := range txs {
-		ble.addActivityRecord(fmt.Sprintf("%s:%d", resolvedKey, int(baseNonce)+i), fmt.Sprintf("activity %d", i))
+		ble.addActivityRecord(*txRead[0].LocalID, fmt.Sprintf("activity %d", i))
 	}
 
 	// Query to check we now have all of these
@@ -461,21 +468,20 @@ func TestAddActivityDisabled(t *testing.T) {
 	})
 	defer done()
 
-	ble.addActivityRecord("signer1:nonce", "message")
+	ble.addActivityRecord(12345, "message")
 
-	assert.Empty(t, ble.getActivityRecords("signer1:nonce"))
+	assert.Empty(t, ble.getActivityRecords(12345))
 }
 
 func TestAddActivityWrap(t *testing.T) {
 	_, ble, _, done := newTestPublicTxManager(t, false)
 	defer done()
 
-	signerNonce := "signer1:nonce"
 	for i := 0; i < 100; i++ {
-		ble.addActivityRecord(signerNonce, fmt.Sprintf("message %.2d", i))
+		ble.addActivityRecord(12345, fmt.Sprintf("message %.2d", i))
 	}
 
-	activityRecords := ble.getActivityRecords(signerNonce)
+	activityRecords := ble.getActivityRecords(12345)
 	assert.Equal(t, "message 99", activityRecords[0].Message)
 	assert.Equal(t, "message 98", activityRecords[1].Message)
 	assert.Len(t, activityRecords, ble.maxActivityRecordsPerTx)
@@ -507,8 +513,9 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
-	assert.NotNil(t, tx.PublicTx().From)
-	assert.Equal(t, uint64(1223451), tx.PublicTx().Gas.Uint64())
+	assert.NotNil(t, tx.From)
+	assert.NotZero(t, *tx.LocalID)
+	assert.Equal(t, uint64(1223451), tx.Gas.Uint64())
 
 }
 

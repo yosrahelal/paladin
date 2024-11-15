@@ -28,6 +28,7 @@ import (
 )
 
 var PublicTxFilterFields filters.FieldSet = filters.FieldMap{
+	"localId":         filters.HexBytesField(`"public_txn_id"`),
 	"from":            filters.HexBytesField(`"from"`),
 	"nonce":           filters.Int64Field("nonce"),
 	"created":         filters.Int64Field("created"),
@@ -65,7 +66,7 @@ type PublicTxManager interface {
 	// Write a set of validated transactions to the public TX mgr database, notifying the relevant orchestrator(s) to wake, assign nonces, and start the submission process
 	WriteNewTransactions(ctx context.Context, dbTX *gorm.DB, transactions []*PublicTxSubmission) ([]*pldapi.PublicTx, error)
 	// Convenience function that does ValidateTransaction+WriteNewTransactions for a single Tx
-	SubmitSingleTxn(ctx context.Context, transaction *PublicTxSubmission) (*pldapi.PublicTx, error)
+	SingleTransactionSubmit(ctx context.Context, transaction *PublicTxSubmission) (*pldapi.PublicTx, error)
 
 	MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransactionNotify) ([]*PublicTxMatch, error)
 	NotifyConfirmPersisted(ctx context.Context, confirms []*PublicTxMatch)

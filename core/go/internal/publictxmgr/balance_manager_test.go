@@ -266,10 +266,11 @@ func TestTopUpAddressNoOpScenarios(t *testing.T) {
 
 func generateExpectedFuelingTransaction(idx int, amountToTransfer uint64, from, to tktypes.EthAddress) *pldapi.PublicTx {
 	gas := tktypes.HexUint64(10)
+	nonce := tktypes.HexUint64(mockBaseNonce) + tktypes.HexUint64(idx) // fixed mock when disableManagerStart set
 	return &pldapi.PublicTx{
 		From:  from,
 		To:    &to,
-		Nonce: tktypes.HexUint64(mockBaseNonce) + tktypes.HexUint64(idx), // fixed mock when disableManagerStart set
+		Nonce: &nonce,
 		PublicTxOptions: pldapi.PublicTxOptions{
 			Gas:   &gas,
 			Value: tktypes.Uint64ToUint256(amountToTransfer),

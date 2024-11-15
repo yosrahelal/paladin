@@ -229,7 +229,7 @@ func buildEthTX(
 	return ethTx
 }
 
-func (ble *pubTxManager) SubmitSingleTxn(ctx context.Context, txi *components.PublicTxSubmission) (tx *pldapi.PublicTx, err error) {
+func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, txi *components.PublicTxSubmission) (tx *pldapi.PublicTx, err error) {
 	var txs []*pldapi.PublicTx
 	err = ble.ValidateTransaction(ctx, txi)
 	if err == nil {
@@ -311,6 +311,7 @@ func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX *gorm.DB
 		err = dbTX.
 			WithContext(ctx).
 			Table("public_txns").
+			Clauses(clause.Returning{Columns: []clause.Column{{Name: "public_txn_id"}}}).
 			Create(persistedTransactions).
 			Error
 	}
@@ -485,6 +486,7 @@ func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB,
 
 func mapPersistedTransaction(ptx *DBPublicTxn) *pldapi.PublicTx {
 	tx := &pldapi.PublicTx{
+		LocalID: &ptx.PublicTxnID,
 		From:    ptx.From,
 		Created: ptx.Created,
 		To:      ptx.To,

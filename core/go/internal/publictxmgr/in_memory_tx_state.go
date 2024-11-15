@@ -131,8 +131,8 @@ func (imtxs *inMemoryTxState) GetTransactionHash() *tktypes.Bytes32 {
 	return imtxs.mtx.TransactionHash
 }
 
-func (imtxs *inMemoryTxState) GetNonce() *uint64 {
-	return imtxs.mtx.ptx.Nonce
+func (imtxs *inMemoryTxState) GetNonce() uint64 {
+	return *imtxs.mtx.ptx.Nonce
 }
 
 func (imtxs *inMemoryTxState) GetFrom() tktypes.EthAddress {

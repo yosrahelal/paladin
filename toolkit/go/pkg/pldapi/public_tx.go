@@ -60,6 +60,7 @@ type PublicTxSubmissionData struct {
 }
 
 type PublicTx struct {
+	LocalID         *uint64                     `docstruct:"PublicTx" json:"localId,omitempty"` // only a local DB identifier for the public transaction. Not directly related to nonce order
 	To              *tktypes.EthAddress         `docstruct:"PublicTx" json:"to,omitempty"`
 	Data            tktypes.HexBytes            `docstruct:"PublicTx" json:"data,omitempty"`
 	From            tktypes.EthAddress          `docstruct:"PublicTx" json:"from"`

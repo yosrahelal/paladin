@@ -59,7 +59,7 @@ func NewTestInMemoryTxState(t *testing.T) InMemoryTxStateManager {
 		Created: oldTime,
 		From:    *oldFrom,
 		To:      oldTo,
-		Nonce:   oldNonce.Uint64(),
+		Nonce:   (*uint64)(&oldNonce),
 		Gas:     oldGasLimit.Uint64(),
 		Value:   oldValue,
 		Data:    oldTransactionData,
@@ -92,14 +92,13 @@ func TestSettersAndGetters(t *testing.T) {
 	oldTransactionData := tktypes.MustParseHexBytes(testTransactionData)
 
 	testManagedTx := &DBPublicTxn{
-		SignerNonce: fmt.Sprintf("%s:%d", oldFrom, oldNonce),
-		Created:     oldTime,
-		From:        *oldFrom,
-		To:          oldTo,
-		Nonce:       oldNonce.Uint64(),
-		Gas:         uint64(oldGasLimit),
-		Value:       oldValue,
-		Data:        tktypes.HexBytes(oldTransactionData),
+		Created: oldTime,
+		From:    *oldFrom,
+		To:      oldTo,
+		Nonce:   (*uint64)(&oldNonce),
+		Gas:     uint64(oldGasLimit),
+		Value:   oldValue,
+		Data:    tktypes.HexBytes(oldTransactionData),
 	}
 
 	imts := NewInMemoryTxStateManager(context.Background(), testManagedTx)
