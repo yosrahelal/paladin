@@ -1,0 +1,6 @@
+paths:
+  # This pattern matches any YAML file under the '.github/workflows/' directory.
+  .github/workflows/**/*.yaml:
+    ignore:
+      # Ignore the specific error from shellcheck
+      - 'shellcheck reported issue in this script: SC2086:.+'

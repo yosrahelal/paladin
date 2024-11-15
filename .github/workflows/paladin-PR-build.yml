@@ -6,7 +6,8 @@ permissions:
 
 on:
   push:
-    branches: [main]
+    branches: 
+      - main
     paths-ignore:
       - '**.md'
       - 'operator/charts/**'
@@ -56,6 +57,7 @@ jobs:
       image: paladin
       image_tag: test
       push: false
+      upload-artifact: true
       platforms: linux/amd64
       runs-on: ubuntu-latest
 
@@ -69,6 +71,7 @@ jobs:
         image: paladin-operator
         image_tag: test
         push: false
+        upload-artifact: true
         platforms: linux/amd64
         runs-on: ubuntu-latest
 
@@ -77,6 +80,11 @@ jobs:
     if: github.event_name == 'pull_request'
     needs: [core-image-build, operator-image-build]
     uses: ./.github/workflows/build-chart.yaml
+    with:
+      paladin-image: paladin.io/paladin
+      paladin-image-tag: test
+      operator-image: paladin.io/paladin-operator
+      operator-image-tag: test
 
   image-release:
     # run only on pushes to main or manual triggers
