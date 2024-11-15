@@ -70,17 +70,30 @@ def printClusterStatus(String namespace) {
     println getAllProcess.in.text.trim()
 } 
 
-def verifyResourceCreated(String namespace, String resourceType, String resourceName, int timeoutSeconds = 60) {
-    
-    // Wait for resource creation
-    def existsCommand = ["kubectl", "wait", "--for=create", "${resourceType}", "${resourceName}", "-n", namespace, "--timeout=${timeoutSeconds}s"]
-    def existsProcess = existsCommand.execute()
-    existsProcess.waitFor()
-    println "Creation Output: ${existsProcess.text}"
+def verifyResourceCreated(String namespace, String resourceType, String resourceName, String desiredReplicas = "1", int timeoutSeconds = 60) {
+    def startTime = System.currentTimeMillis()
+    def endTime = startTime + (timeoutSeconds * 1000)
+    def resourceReady = false
 
-    if (existsProcess.exitValue() != 0) {
+    while (System.currentTimeMillis() < endTime) {
+        def command = ["kubectl", "get", resourceType, resourceName, "-n", namespace, "-o", "jsonpath={.status.readyReplicas}"]
+        def process = command.execute()
+        process.waitFor()
+        def readyReplicas = process.text.trim()
+        println "Current Ready Replicas: ${readyReplicas}"
+
+        if (process.exitValue() == 0 && readyReplicas == desiredReplicas) {
+            resourceReady = true
+            break
+        }
+        Thread.sleep(2000) // Wait for 2 seconds before retrying
+    }
+
+    if (!resourceReady) {
         printClusterStatus(namespace)
-        throw new Exception("Resource ${resourceType}/${resourceName} (${namespace}) was not created within the expected time.")
+        throw new Exception("${resourceType} ${resourceName} in namespace ${namespace} did not become ready within ${timeoutSeconds} seconds.")
+    } else {
+        println "${resourceType} ${resourceName} in namespace ${namespace} is ready with ${desiredReplicas} replicas."
     }
 }
 
@@ -219,7 +232,7 @@ task installOperator(type: Exec, dependsOn: [installCrds, promoteKindImages, pre
 task verifyOperator(dependsOn: installOperator) {
     doLast {
         println 'Waiting for operator deployment to become ready...'
-        verifyResourceReady(namespace, 'deployment', 'paladin-operator', 'condition=available')
+        verifyResourceCreated(namespace, 'deployment', 'paladin-operator', "1")
     }
 }
 
@@ -228,12 +241,9 @@ task verifyBesu(dependsOn: verifyOperator) {
     doLast {
         println 'Waiting for besu statefulSet to become ready...'
 
-        verifyResourceCreated(namespace, 'statefulset', 'besu-node1', 120)
-        verifyResourceReady(namespace, 'statefulset', 'besu-node1', 'jsonpath=.status.readyReplicas=1', 60)
-        verifyResourceCreated(namespace, 'statefulset', 'besu-node2', 120)
-        verifyResourceReady(namespace, 'statefulset', 'besu-node2', 'jsonpath=.status.readyReplicas=1', 60)
-        verifyResourceCreated(namespace, 'statefulset', 'besu-node3', 120)
-        verifyResourceReady(namespace, 'statefulset', 'besu-node3', 'jsonpath=.status.readyReplicas=1', 60)
+        verifyResourceCreated(namespace,  'statefulset', 'besu-node1', "1", 120)
+        verifyResourceCreated(namespace, 'statefulset', 'besu-node2', "1", 120)
+        verifyResourceCreated(namespace, 'statefulset', 'besu-node3', "1", 120)
     }
 }
 
@@ -242,12 +252,9 @@ task verifyPaladin(dependsOn: verifyBesu) {
     doLast {
         println 'Waiting for paladin statefulSet to become ready...'
 
-        verifyResourceCreated(namespace, 'statefulset', 'paladin-node1', 120)
-        verifyResourceReady(namespace, 'statefulset', 'paladin-node1', 'jsonpath=.status.readyReplicas=1', 60)
-        verifyResourceCreated(namespace, 'statefulset', 'paladin-node2', 120)
-        verifyResourceReady(namespace, 'statefulset', 'paladin-node2', 'jsonpath=.status.readyReplicas=1', 60)
-        verifyResourceCreated(namespace, 'statefulset', 'paladin-node3', 120)
-        verifyResourceReady(namespace, 'statefulset', 'paladin-node3', 'jsonpath=.status.readyReplicas=1', 60)
+        verifyResourceCreated(namespace, 'statefulset', 'paladin-node1', "1", 120)
+        verifyResourceCreated(namespace, 'statefulset', 'paladin-node2', "1", 120)
+        verifyResourceCreated(namespace, 'statefulset', 'paladin-node3', "1", 120)
     }
 }
 
