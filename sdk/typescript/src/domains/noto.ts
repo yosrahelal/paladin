@@ -1,16 +1,14 @@
 import { ethers } from "ethers";
-import {
-  IGroupInfo,
-  IStateBase,
-  IStateEncoded,
-  TransactionType,
-} from "../interfaces";
+import { IGroupInfo, IStateEncoded, TransactionType } from "../interfaces";
 import PaladinClient from "../paladin";
-import { encodeHex } from "../utils";
 import * as notoPrivateJSON from "./abis/INotoPrivate.json";
 import { penteGroupABI } from "./pente";
 
-const POLL_TIMEOUT_MS = 5000;
+const DEFAULT_POLL_TIMEOUT = 10000;
+
+export interface NotoOptions {
+  pollTimeout?: number;
+}
 
 export const notoConstructorABI = (
   withHooks: boolean
@@ -69,10 +67,21 @@ export interface NotoApproveTransferParams {
 }
 
 export class NotoFactory {
-  constructor(private paladin: PaladinClient, public readonly domain: string) {}
+  private options: Required<NotoOptions>;
+
+  constructor(
+    private paladin: PaladinClient,
+    public readonly domain: string,
+    options?: NotoOptions
+  ) {
+    this.options = {
+      pollTimeout: DEFAULT_POLL_TIMEOUT,
+      ...options,
+    };
+  }
 
   using(paladin: PaladinClient) {
-    return new NotoFactory(paladin, this.domain);
+    return new NotoFactory(paladin, this.domain, this.options);
   }
 
   async newNoto(from: string, data: NotoConstructorParams) {
@@ -84,21 +93,32 @@ export class NotoFactory {
       from,
       data,
     });
-    const receipt = await this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    const receipt = await this.paladin.pollForReceipt(
+      txID,
+      this.options.pollTimeout
+    );
     return receipt?.contractAddress === undefined
       ? undefined
-      : new NotoInstance(this.paladin, receipt.contractAddress);
+      : new NotoInstance(this.paladin, receipt.contractAddress, this.options);
   }
 }
 
 export class NotoInstance {
+  private options: Required<NotoOptions>;
+
   constructor(
     private paladin: PaladinClient,
-    public readonly address: string
-  ) {}
+    public readonly address: string,
+    options?: NotoOptions
+  ) {
+    this.options = {
+      pollTimeout: DEFAULT_POLL_TIMEOUT,
+      ...options,
+    };
+  }
 
   using(paladin: PaladinClient) {
-    return new NotoInstance(paladin, this.address);
+    return new NotoInstance(paladin, this.address, this.options);
   }
 
   async mint(from: string, data: NotoMintParams) {
@@ -110,7 +130,7 @@ export class NotoInstance {
       from,
       data,
     });
-    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 
   async transfer(from: string, data: NotoTransferParams) {
@@ -122,7 +142,7 @@ export class NotoInstance {
       from,
       data,
     });
-    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 
   async prepareTransfer(from: string, data: NotoTransferParams) {
@@ -134,7 +154,10 @@ export class NotoInstance {
       from,
       data,
     });
-    return this.paladin.pollForPreparedTransaction(txID, POLL_TIMEOUT_MS);
+    return this.paladin.pollForPreparedTransaction(
+      txID,
+      this.options.pollTimeout
+    );
   }
 
   async approveTransfer(from: string, data: NotoApproveTransferParams) {
@@ -146,6 +169,6 @@ export class NotoInstance {
       from,
       data,
     });
-    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 }
