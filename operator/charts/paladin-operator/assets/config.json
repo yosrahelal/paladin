@@ -2,19 +2,30 @@
   "paladin": {
     "image": "{{ .Values.paladin.image.repository }}:{{ .Values.paladin.image.tag }}",
     "imagePullPolicy": "{{ .Values.paladin.image.pullPolicy }}",
-    "labels": {
-      "app": "paladin"
-    }
+    "labels": {{ toJson .Values.paladin.labels }},
+    "annotations": {{ toJson .Values.paladin.annotations }},
+    "envs": {{ toJson .Values.paladin.envs }},
+    "tolerations": {{ toJson .Values.paladin.tolerations }},
+    "affinity": {{ toJson .Values.paladin.affinity }},
+    "nodeSelector": {{ toJson .Values.paladin.nodeSelector }},
+    "securityContext": {{ toJson .Values.paladin.securityContext }}
   },
   "besu": {
     "image": "{{ .Values.besu.image.repository }}:{{ .Values.besu.image.tag }}",
     "imagePullPolicy": "{{ .Values.besu.image.pullPolicy }}",
-    "labels": {
-      "app": "besu"
-    }
+    "labels": {{ toJson .Values.besu.labels }},
+    "annotations": {{ toJson .Values.besu.annotations }},
+    "envs": {{ toJson .Values.besu.envs }},
+    "tolerations": {{ toJson .Values.besu.tolerations }},
+    "affinity": {{ toJson .Values.besu.affinity }},
+    "nodeSelector": {{ toJson .Values.besu.nodeSelector }},
+    "securityContext": {{ toJson .Values.besu.securityContext }}
   },
   "postgres": {
     "image": "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}",
-    "imagePullPolicy": "{{ .Values.postgres.image.pullPolicy }}"
+    "imagePullPolicy": "{{ .Values.postgres.image.pullPolicy }}",
+    "labels": {{ toJson .Values.postgres.labels }},
+    "annotations": {{ toJson .Values.postgres.annotations }},
+    "envs": {{ toJson .Values.postgres.envs }}
   }
 }
