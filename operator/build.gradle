@@ -223,35 +223,36 @@ task verifyOperator(dependsOn: installOperator) {
     }
 }
 
-// // Task to create the nodes
-// task createNode(type: Exec, dependsOn: verifyOperator) {
-//     executable 'make'
-//     args 'create-node'
-//     args "NAMESPACE=${namespace}"
-// }
+// Task to verify the besu statefulSet
+task verifyBesu(dependsOn: verifyOperator) {
+    doLast {
+        println 'Waiting for besu statefulSet to become ready...'
 
-// // Task to verify the besu statefulSet
-// task verifyBesu(dependsOn: createNode) {
-//     doLast {
-//         println 'Waiting for besu statefulSet to become ready...'
+        verifyResourceCreated(namespace, 'statefulset', 'besu-node1', 120)
+        verifyResourceReady(namespace, 'statefulset', 'besu-node1', 'jsonpath=.status.readyReplicas=1', 60)
+        verifyResourceCreated(namespace, 'statefulset', 'besu-node2', 120)
+        verifyResourceReady(namespace, 'statefulset', 'besu-node2', 'jsonpath=.status.readyReplicas=1', 60)
+        verifyResourceCreated(namespace, 'statefulset', 'besu-node3', 120)
+        verifyResourceReady(namespace, 'statefulset', 'besu-node3', 'jsonpath=.status.readyReplicas=1', 60)
+    }
+}
 
-//         verifyResourceCreated(namespace, 'statefulset', 'besu-node1', 120)
-//         verifyResourceReady(namespace, 'statefulset', 'besu-node1', 'jsonpath=.status.readyReplicas=1', 60)
-//     }
-// }
+// Task to verify the paladin statefulSet
+task verifyPaladin(dependsOn: verifyBesu) {
+    doLast {
+        println 'Waiting for paladin statefulSet to become ready...'
 
-// // Task to verify the paladin statefulSet
-// task verifyPaladin(dependsOn: createNode) {
-//     doLast {
-//         println 'Waiting for paladin statefulSet to become ready...'
-
-//         verifyResourceCreated(namespace, 'statefulset', 'paladin-node1', 120)
-//         verifyResourceReady(namespace, 'statefulset', 'paladin-node1', 'jsonpath=.status.readyReplicas=1', 60)
-//     }
-// }
+        verifyResourceCreated(namespace, 'statefulset', 'paladin-node1', 120)
+        verifyResourceReady(namespace, 'statefulset', 'paladin-node1', 'jsonpath=.status.readyReplicas=1', 60)
+        verifyResourceCreated(namespace, 'statefulset', 'paladin-node2', 120)
+        verifyResourceReady(namespace, 'statefulset', 'paladin-node2', 'jsonpath=.status.readyReplicas=1', 60)
+        verifyResourceCreated(namespace, 'statefulset', 'paladin-node3', 120)
+        verifyResourceReady(namespace, 'statefulset', 'paladin-node3', 'jsonpath=.status.readyReplicas=1', 60)
+    }
+}
 
 // The 'deplay' runs the whole flow
-task deploy(dependsOn: [copySolidity, copyZetoSolidity, verifyOperator]) {
+task deploy(dependsOn: [copySolidity, copyZetoSolidity, verifyPaladin]) {
     doLast {
         println 'Deplopy setup completed. Operator is running in the paladin namespace.'
     }
