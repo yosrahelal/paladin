@@ -130,8 +130,8 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 		err := ble.retry.Do(ctx, func(attempt int) (retry bool, err error) {
 			// (raw SQL as couldn't convince gORM to build this)
 			const dbQueryBase = `SELECT DISTINCT t."from" FROM "public_txns" AS t ` +
-				`LEFT JOIN "public_completions" AS c ON t."signer_nonce" = c."signer_nonce" ` +
-				`WHERE c."signer_nonce" IS NULL AND "suspended" IS FALSE`
+				`LEFT JOIN "public_completions" AS c ON t."pub_txn_id" = c."pub_txn_id" ` +
+				`WHERE c."pub_txn_id" IS NULL AND "suspended" IS FALSE`
 
 			const dbQueryNothingInFlight = dbQueryBase + ` LIMIT ?`
 			if len(inFlightSigningAddresses) == 0 {

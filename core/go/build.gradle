@@ -212,12 +212,6 @@ task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
         outputDir 'mocks/componentmocks'
     }
     mock {
-        inputDir 'internal/components'
-        name 'PublicTxBatch'
-        outputPackage 'componentmocks'
-        outputDir 'mocks/componentmocks'
-    }
-    mock {
         inputDir "go list -f {{.Dir}} github.com/kaleido-io/paladin/toolkit/pkg/rpcserver".execute().text.trim()
         includeAll true
         outputPackage 'componentmocks'

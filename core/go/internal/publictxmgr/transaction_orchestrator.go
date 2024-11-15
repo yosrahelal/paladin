@@ -239,10 +239,11 @@ func (oc *orchestrator) initNextNonceFromDB(ctx context.Context) error {
 	var txns []*DBPublicTxn
 	err := oc.p.DB().
 		WithContext(ctx).
-		Where("from = ?", oc.signingAddress).
+		Where(`"from" = ?`, oc.signingAddress).
 		Where("nonce IS NOT NULL").
 		Order("nonce DESC").
 		Limit(1).
+		Find(&txns).
 		Error
 	if err != nil || len(txns) == 0 {
 		return err
@@ -306,10 +307,10 @@ func (oc *orchestrator) allocateNonces(ctx context.Context, txns []*DBPublicTxn)
 			sqlQuery += `( ? = ? ) `
 			values = append(values, tx.PublicTxnID)
 			values = append(values, newNonces[i])
-			log.L(ctx).Debugf("assigning %s:%s (pubTxnId=%d)", oc.signingAddress, newNonces[i], tx.PublicTxnID)
+			log.L(ctx).Debugf("assigning %s:%d (pubTxnId=%d)", oc.signingAddress, newNonces[i], tx.PublicTxnID)
 		}
-		sqlQuery += `) as nv ("public_txn_id", "nonce") ` +
-			`WHERE "public_txns"."public_txn_id" = nv."public_txn_id";`
+		sqlQuery += `) as nv ("pub_txn_id", "nonce") ` +
+			`WHERE "public_txns"."pub_txn_id" = nv."pub_txn_id";`
 		return dbTX.WithContext(ctx).Raw(sqlQuery, values...).Error
 	})
 	if err != nil {
@@ -380,7 +381,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				Where(`"Completed"."tx_hash" IS NULL`).
 				Where("suspended IS FALSE").
 				Where(`"from" = ?`, oc.signingAddress).
-				Order("public_txn_id").
+				Order(`"public_txns"."pub_txn_id"`).
 				Limit(spaces)
 			if len(oc.inFlightTxs) > 0 {
 				// We don't want to see any of the ones we already have in flight.

@@ -21,25 +21,24 @@ package persistence
 
 import (
 	"context"
-	"testing"
 
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 )
 
-func TestMigrateUpDown(t *testing.T) {
-
-	ctx := context.Background()
-
-	// Up runs as part of the init
-	p, done, err := NewUnitTestPersistence(ctx, "persistence")
-	require.NoError(t, err)
-	assert.NotNil(t, p.DB())
-	defer done()
-
-	// Get the migration drive directly using the internal function, to run Down()
-	err = p.(*provider).runMigration(ctx, func(m *migrate.Migrate) error { return m.Down() })
-	require.NoError(t, err)
-
+// Used for unit tests throughout the project that want to test against a real DB
+// This version return an in-memory DB
+func NewUnitTestPersistence(ctx context.Context, suite string) (Persistence, func(), error) {
+	p, err := newSQLiteProvider(ctx, &pldconf.DBConfig{
+		Type: "sqlite",
+		SQLite: pldconf.SQLiteConfig{
+			SQLDBConfig: pldconf.SQLDBConfig{
+				DSN:           ":memory:",
+				AutoMigrate:   confutil.P(true),
+				MigrationsDir: "../../db/migrations/sqlite",
+				DebugQueries:  false,
+			},
+		},
+	})
+	return p, func() { p.Close() }, err
 }

@@ -256,7 +256,7 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 		Return(confutil.P(tktypes.HexUint64(baseNonce)), nil).Once()
 
 	// For the first one we do a one-off
-	_, err = ble.SingleTransactionSubmit(ctx, txs[0])
+	singleTx, err := ble.SingleTransactionSubmit(ctx, txs[0])
 	require.NoError(t, err)
 
 	// The rest we submit as as batch
@@ -268,29 +268,28 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, batch, len(txs[1:]))
 	for _, tx := range batch {
-		require.Greater(t, *tx.LocalID, 0)
+		require.Greater(t, *tx.LocalID, uint64(0))
 	}
 
 	// Get one back again by ID
-	txRead, err := ble.QueryPublicTxWithBindings(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("localId", batch[1]).Limit(1).Query())
+	txRead, err := ble.QueryPublicTxWithBindings(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("localId", *batch[1].LocalID).Limit(1).Query())
 	require.NoError(t, err)
 	require.Len(t, txRead, 1)
 	require.Equal(t, batch[1].Data, txRead[0].Data)
 
 	// Record activity on one TX
-	for i := range txs {
-		ble.addActivityRecord(*txRead[0].LocalID, fmt.Sprintf("activity %d", i))
+	for i, tx := range append([]*pldapi.PublicTx{singleTx}, batch...) {
+		ble.addActivityRecord(*tx.LocalID, fmt.Sprintf("activity %d", i))
 	}
 
 	// Query to check we now have all of these
 	queryTxs, err := ble.QueryPublicTxWithBindings(ctx, ble.p.DB(),
-		query.NewQueryBuilder().Sort("nonce").Query())
+		query.NewQueryBuilder().Sort("localId").Query())
 	require.NoError(t, err)
 	assert.Len(t, queryTxs, len(txs))
 	for i, qTX := range queryTxs {
 		// We don't include the bindings on these queries
 		assert.Equal(t, *resolvedKey, qTX.From)
-		assert.Equal(t, uint64(i)+baseNonce, qTX.Nonce.Uint64())
 		assert.Equal(t, txs[i].Data, qTX.Data)
 		require.Greater(t, len(qTX.Activity), 0)
 	}
@@ -298,10 +297,9 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	// Query scoped to one TX
 	byTxn, err := ble.QueryPublicTxForTransactions(ctx, ble.p.DB(), txIDs, nil)
 	require.NoError(t, err)
-	for i, tx := range txs {
+	for _, tx := range txs {
 		queryTxs := byTxn[tx.Bindings[0].TransactionID]
 		require.Len(t, queryTxs, 1)
-		assert.Equal(t, baseNonce+uint64(i), queryTxs[0].Nonce.Uint64())
 	}
 
 	// Check we can select to just see confirmed (which this isn't yet)

@@ -28,7 +28,7 @@ import (
 )
 
 var PublicTxFilterFields filters.FieldSet = filters.FieldMap{
-	"localId":         filters.HexBytesField(`"public_txn_id"`),
+	"localId":         filters.Int64Field(`"public_txns"."pub_txn_id"`),
 	"from":            filters.HexBytesField(`"from"`),
 	"nonce":           filters.Int64Field("nonce"),
 	"created":         filters.Int64Field("created"),

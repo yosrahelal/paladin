@@ -368,6 +368,7 @@ func TestStateManagerTxPersistenceManagementUpdateErrors(t *testing.T) {
 
 	rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{
 		NewSubmission: &DBPubTxnSubmission{
+			from:            "0x12345",
 			TransactionHash: tktypes.Bytes32(tktypes.RandBytes(32)),
 		},
 	}

@@ -311,7 +311,7 @@ func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX *gorm.DB
 		err = dbTX.
 			WithContext(ctx).
 			Table("public_txns").
-			Clauses(clause.Returning{Columns: []clause.Column{{Name: "public_txn_id"}}}).
+			Clauses(clause.Returning{Columns: []clause.Column{{Name: "pub_txn_id"}}}).
 			Create(persistedTransactions).
 			Error
 	}
@@ -436,8 +436,8 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 		Joins("Completed").
 		Where(`"Completed"."tx_hash" IS NULL`).
 		Joins("Binding").
-		Where(`"Binding"."signer_nonce" IS NULL`). // no binding for auto fueling txns
-		Where("data IS NULL").                     // they are simple transfers
+		Where(`"Binding"."pub_txn_id" IS NULL`). // no binding for auto fueling txns
+		Where("data IS NULL").                   // they are simple transfers
 		Limit(1).
 		Find(&ptxs).
 		Error
@@ -445,7 +445,7 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 		return nil, err
 	}
 	if len(ptxs) > 0 {
-		log.L(ctx).Debugf("GetPendingFuelingTransaction returned %s", ptxs[0].PublicTxnID)
+		log.L(ctx).Debugf("GetPendingFuelingTransaction returned %d", ptxs[0].PublicTxnID)
 		return mapPersistedTransaction(ptxs[0]), nil
 	}
 	return nil, nil
@@ -621,7 +621,7 @@ func (pte *pubTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *
 		Table("public_submissions").
 		Model(DBPubTxnSubmission{}).
 		Where(`tx_hash = ?`, hash).
-		Pluck("signer_nonce", &signerNonces).
+		Pluck("pub_txn_id", &signerNonces).
 		Error
 	if err == nil && len(signerNonces) > 0 {
 		signerNonceSplit := strings.Split(signerNonces[0], ":")
@@ -650,7 +650,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 	var lookups []*bindingsMatchingSubmission
 	err := dbTX.
 		Table("public_txn_bindings").
-		Select(`"transaction"`, `"tx_type"`, `"Submission"."signer_nonce"`, `"Submission"."tx_hash"`).
+		Select(`"transaction"`, `"tx_type"`, `"Submission"."pub_txn_id"`, `"Submission"."tx_hash"`).
 		Joins("Submission").
 		Where(`"Submission"."tx_hash" IN (?)`, txHashes).
 		Find(&lookups).
@@ -691,7 +691,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 		err := dbTX.
 			Table("public_completions").
 			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "signer_nonce"}},
+				Columns:   []clause.Column{{Name: "pub_txn_id"}},
 				DoNothing: true, // immutable
 			}).
 			Create(completions).
