@@ -446,18 +446,6 @@ func TestSubmitFailures(t *testing.T) {
 	})
 	assert.Regexp(t, "mapped revert error", err)
 
-	// insert transaction next nonce error
-	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
-		Return(ethclient.EstimateGasResult{GasLimit: tktypes.HexUint64(10)}, nil)
-	m.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
-		Return(nil, fmt.Errorf("pop")).Once()
-	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: pldapi.PublicTxInput{
-			From: tktypes.RandAddress(),
-		},
-	})
-	assert.NotNil(t, err)
-	assert.Regexp(t, "pop", err)
 }
 
 func TestAddActivityDisabled(t *testing.T) {
@@ -486,17 +474,11 @@ func TestAddActivityWrap(t *testing.T) {
 
 }
 
-func mockForSubmitSuccess(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
-	mocks.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
-		Return(confutil.P(tktypes.HexUint64(1122334455)), nil).Once()
-	mocks.db.ExpectBegin()
-	mocks.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
-	mocks.db.ExpectCommit()
-}
-
 func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	ctx := context.Background()
-	_, ble, _, done := newTestPublicTxManager(t, false, mockForSubmitSuccess)
+	_, ble, _, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
+		mocks.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
+	})
 	defer done()
 
 	// create transaction succeeded
@@ -512,7 +494,6 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, tx.From)
-	assert.NotZero(t, *tx.LocalID)
 	assert.Equal(t, uint64(1223451), tx.Gas.Uint64())
 
 }

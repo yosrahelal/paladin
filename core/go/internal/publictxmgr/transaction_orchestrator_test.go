@@ -77,10 +77,12 @@ func TestNewOrchestratorLoadsSecondTxAndQueuesBalanceCheck(t *testing.T) {
 	// Fill first slot with a stage controller
 	o.inFlightTxs = []*inFlightTransactionStageController{mockIT}
 
-	// Return the next nonce - will fill up the orchestrator
-	m.db.ExpectQuery("SELECT.*public_txn").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce"}).AddRow(
-		o.signingAddress, 2,
-	))
+	// Return a single transaction - note there's a highest nonce query on startup before the first poll, so we query twice
+	for i := 0; i < 2; i++ {
+		m.db.ExpectQuery("SELECT.*public_txn").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce"}).AddRow(
+			o.signingAddress, 2,
+		))
+	}
 	// Do not return any submissions for it
 	m.db.ExpectQuery("SELECT.*public_submissions").WillReturnRows(sqlmock.NewRows([]string{}))
 
