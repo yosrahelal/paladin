@@ -295,23 +295,20 @@ func (oc *orchestrator) allocateNonces(ctx context.Context, txns []*DBPublicTxn)
 
 	// Run the DB TXN
 	err := oc.p.DB().Transaction(func(dbTX *gorm.DB) error {
-		sqlQuery := `UPDATE "public_txns" ` +
-			`SET "nonce" = nv."nonce" ` +
-			`FROM ` +
-			`( VALUES `
+		sqlQuery := `WITH nonce_updates ("pub_txn_id", "nonce") AS ( VALUES `
 		values := make([]any, 0, len(toAlloc)*2)
 		for i, tx := range toAlloc {
 			if i > 0 {
 				sqlQuery += `, `
 			}
-			sqlQuery += `( ? = ? ) `
+			sqlQuery += `( ?, ? ) `
 			values = append(values, tx.PublicTxnID)
 			values = append(values, newNonces[i])
 			log.L(ctx).Debugf("assigning %s:%d (pubTxnId=%d)", oc.signingAddress, newNonces[i], tx.PublicTxnID)
 		}
-		sqlQuery += `) as nv ("pub_txn_id", "nonce") ` +
-			`WHERE "public_txns"."pub_txn_id" = nv."pub_txn_id";`
-		return dbTX.WithContext(ctx).Raw(sqlQuery, values...).Error
+		sqlQuery += ` ) UPDATE "public_txns" SET "nonce" = nu."nonce" FROM ( SELECT "pub_txn_id", "nonce" FROM nonce_updates ) AS nu ` +
+			`WHERE "public_txns"."pub_txn_id" = nu."pub_txn_id";`
+		return dbTX.WithContext(ctx).Exec(sqlQuery, values...).Error
 	})
 	if err != nil {
 		return err
@@ -322,6 +319,7 @@ func (oc *orchestrator) allocateNonces(ctx context.Context, txns []*DBPublicTxn)
 		nonce := newNonces[i]
 		tx.Nonce = &nonce
 	}
+	oc.lastNonceAlloc = time.Now()
 	oc.nextNonce = &newNextNonce
 
 	return nil

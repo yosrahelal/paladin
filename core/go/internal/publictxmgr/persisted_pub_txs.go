@@ -56,9 +56,9 @@ func (DBPublicTxnBinding) TableName() string {
 
 type DBPubTxnSubmission struct {
 	from            string            `gorm:"-"` // just used to ensure we dispatch to same writer as the associated pubic TX
-	PublicTxnID     uint64            `gorm:"column:pub_txn_id;primaryKey"`
+	PublicTxnID     uint64            `gorm:"column:pub_txn_id"`
 	Created         tktypes.Timestamp `gorm:"column:created;autoCreateTime:false"` // we set this as we track the record in memory too
-	TransactionHash tktypes.Bytes32   `gorm:"column:tx_hash"`
+	TransactionHash tktypes.Bytes32   `gorm:"column:tx_hash;primaryKey"`
 	GasPricing      tktypes.RawJSON   `gorm:"column:gas_pricing"` // no filtering allowed on this field as it's complex JSON gasPrice/maxFeePerGas/maxPriorityFeePerGas calculation
 }
 

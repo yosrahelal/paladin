@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"math/big"
-	"strings"
 	"sync"
 	"time"
 
@@ -615,19 +614,18 @@ func (pte *pubTxManager) getActivityRecords(pubTxID uint64) []pldapi.Transaction
 }
 
 func (pte *pubTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error) {
-	var signerNonces []string
+	var publicTxnIDs []uint64
 	var txns []*pldapi.PublicTxWithBinding
 	err := dbTX.
 		Table("public_submissions").
 		Model(DBPubTxnSubmission{}).
 		Where(`tx_hash = ?`, hash).
-		Pluck("pub_txn_id", &signerNonces).
+		Pluck("pub_txn_id", &publicTxnIDs).
+		Limit(1).
 		Error
-	if err == nil && len(signerNonces) > 0 {
-		signerNonceSplit := strings.Split(signerNonces[0], ":")
+	if err == nil && len(publicTxnIDs) > 0 {
 		txns, err = pte.QueryPublicTxWithBindings(ctx, dbTX, query.NewQueryBuilder().
-			Equal("from", signerNonceSplit[0]).
-			Equal("nonce", signerNonceSplit[1]).
+			Equal("localId", publicTxnIDs[0]).
 			Query())
 	}
 	if err != nil || len(txns) == 0 {
