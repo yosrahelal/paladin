@@ -61,8 +61,6 @@ type mocksAndTestControl struct {
 	txManager           *componentmocks.TXManager
 }
 
-const mockBaseNonce = 103342
-
 // const testDestAddress = "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
 
 // const testMainSigningAddress = testDestAddress

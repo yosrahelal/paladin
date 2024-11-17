@@ -4,6 +4,7 @@ go 1.22.5
 
 require (
 	github.com/go-resty/resty/v2 v2.14.0
+	github.com/google/uuid v1.6.0
 	github.com/hyperledger/firefly-common v1.4.11
 	github.com/hyperledger/firefly-signer v1.1.19-0.20241027192206-656dd986267e
 	github.com/kaleido-io/paladin/core v0.0.0-00010101000000-000000000000
@@ -30,7 +31,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.20.2 // indirect
 	github.com/go-openapi/swag v0.22.7 // indirect
 	github.com/golang-migrate/migrate/v4 v4.17.1 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect

@@ -1601,9 +1601,7 @@ func NewPrivateTransactionMgrForTesting(t *testing.T, nodeName string) (*private
 }
 
 type fakePublicTxManager struct {
-	t          *testing.T
-	rejectErr  error
-	prepareErr error
+	t *testing.T
 }
 
 // SingleTransactionSubmit implements components.PublicTxManager.

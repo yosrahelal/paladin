@@ -180,7 +180,7 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 }
 
 func (tb *testbed) newPrivateTransaction(ctx context.Context, invocation TransactionInput, intent prototk.TransactionSpecification_Intent) (components.DomainSmartContract, *components.PrivateTransaction, error) {
-	psc, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, invocation.To)
+	psc, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, tb.c.Persistence().DB(), invocation.To)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -314,7 +314,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 
 	if tx.PreparedPrivateTransaction != nil && tx.PreparedPrivateTransaction.To != nil {
 		// Private transaction
-		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, *tx.PreparedPrivateTransaction.To)
+		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, tb.c.Persistence().DB(), *tx.PreparedPrivateTransaction.To)
 		if err != nil {
 			return err
 		}
