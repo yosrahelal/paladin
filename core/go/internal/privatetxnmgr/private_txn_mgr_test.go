@@ -18,6 +18,7 @@ package privatetxnmgr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"regexp"
 	"sync"
@@ -1809,101 +1810,101 @@ func TestCallPrivateSmartContractOk(t *testing.T) {
 
 }
 
-// func TestCallPrivateSmartContractBadContract(t *testing.T) {
+func TestCallPrivateSmartContractBadContract(t *testing.T) {
 
-// 	ctx := context.Background()
-// 	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
 
-// 	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("not found"))
+	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("not found"))
 
-// 	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-// 		To:     *tktypes.RandAddress(),
-// 		Inputs: tktypes.RawJSON(`{}`),
-// 	})
-// 	assert.Regexp(t, "not found", err)
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     *tktypes.RandAddress(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	assert.Regexp(t, "not found", err)
 
-// }
-// func TestCallPrivateSmartContractBadDomainName(t *testing.T) {
+}
+func TestCallPrivateSmartContractBadDomainName(t *testing.T) {
 
-// 	ctx := context.Background()
-// 	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
 
-// 	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
 
-// 	fnDef := &abi.Entry{Name: "getIt", Type: abi.Function, Outputs: abi.ParameterArray{
-// 		{Name: "it", Type: "string"},
-// 	}}
+	fnDef := &abi.Entry{Name: "getIt", Type: abi.Function, Outputs: abi.ParameterArray{
+		{Name: "it", Type: "string"},
+	}}
 
-// 	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-// 		Domain:   "does-not-match",
-// 		To:       mPSC.Address(),
-// 		Inputs:   tktypes.RawJSON(`{}`),
-// 		Function: fnDef,
-// 	})
-// 	assert.Regexp(t, "PD011825", err)
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		Domain:   "does-not-match",
+		To:       mPSC.Address(),
+		Inputs:   tktypes.RawJSON(`{}`),
+		Function: fnDef,
+	})
+	assert.Regexp(t, "PD011825", err)
 
-// }
+}
 
-// func TestCallPrivateSmartContractInitCallFail(t *testing.T) {
+func TestCallPrivateSmartContractInitCallFail(t *testing.T) {
 
-// 	ctx := context.Background()
-// 	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
 
-// 	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
 
-// 	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
-// 		nil, fmt.Errorf("pop"),
-// 	)
+	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
+		nil, fmt.Errorf("pop"),
+	)
 
-// 	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-// 		To:     mPSC.Address(),
-// 		Inputs: tktypes.RawJSON(`{}`),
-// 	})
-// 	require.Regexp(t, "pop", err)
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     mPSC.Address(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	require.Regexp(t, "pop", err)
 
-// }
+}
 
-// func TestCallPrivateSmartContractResolveFail(t *testing.T) {
+func TestCallPrivateSmartContractResolveFail(t *testing.T) {
 
-// 	ctx := context.Background()
-// 	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
 
-// 	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
 
-// 	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
-// 		[]*prototk.ResolveVerifierRequest{
-// 			{Lookup: "bob@node1", Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS},
-// 		}, nil,
-// 	)
-// 	m.identityResolver.On("ResolveVerifier", mock.Anything, "bob@node1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
-// 		Return("", fmt.Errorf("pop"))
+	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
+		[]*prototk.ResolveVerifierRequest{
+			{Lookup: "bob@node1", Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS},
+		}, nil,
+	)
+	m.identityResolver.On("ResolveVerifier", mock.Anything, "bob@node1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return("", fmt.Errorf("pop"))
 
-// 	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-// 		To:     mPSC.Address(),
-// 		Inputs: tktypes.RawJSON(`{}`),
-// 	})
-// 	require.Regexp(t, "pop", err)
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     mPSC.Address(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	require.Regexp(t, "pop", err)
 
-// }
+}
 
-// func TestCallPrivateSmartContractExecCallFail(t *testing.T) {
+func TestCallPrivateSmartContractExecCallFail(t *testing.T) {
 
-// 	ctx := context.Background()
-// 	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
 
-// 	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
 
-// 	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
-// 		[]*prototk.ResolveVerifierRequest{}, nil,
-// 	)
-// 	mPSC.On("ExecCall", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(
-// 		nil, fmt.Errorf("pop"),
-// 	)
+	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
+		[]*prototk.ResolveVerifierRequest{}, nil,
+	)
+	mPSC.On("ExecCall", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(
+		nil, fmt.Errorf("pop"),
+	)
 
-// 	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-// 		To:     mPSC.Address(),
-// 		Inputs: tktypes.RawJSON(`{}`),
-// 	})
-// 	require.Regexp(t, "pop", err)
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     mPSC.Address(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	require.Regexp(t, "pop", err)
 
-// }
+}
