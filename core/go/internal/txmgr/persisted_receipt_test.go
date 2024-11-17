@@ -114,9 +114,40 @@ func TestFinalizeTransactionsInsertFail(t *testing.T) {
 
 }
 
+func mockKeyResolutionContextOk(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		_ = mockKeyResolver(t, mc)
+	}
+}
+
+func mockKeyResolver(t *testing.T, mc *mockComponents) *componentmocks.KeyResolver {
+	krc := componentmocks.NewKeyResolutionContext(t)
+	kr := componentmocks.NewKeyResolver(t)
+	krc.On("KeyResolver", mock.Anything).Return(kr)
+	krc.On("PreCommit").Return(nil)
+	krc.On("Close", mock.Anything).Return()
+	mc.keyManager.On("NewKeyResolutionContext", mock.Anything).Return(krc)
+	return kr
+}
+
+func mockKeyResolutionContextFail(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		_ = mockKeyResolverForFail(t, mc)
+	}
+}
+
+func mockKeyResolverForFail(t *testing.T, mc *mockComponents) *componentmocks.KeyResolver {
+	krc := componentmocks.NewKeyResolutionContext(t)
+	kr := componentmocks.NewKeyResolver(t)
+	krc.On("KeyResolver", mock.Anything).Return(kr)
+	krc.On("Close", false).Return()
+	mc.keyManager.On("NewKeyResolutionContext", mock.Anything).Return(krc)
+	return kr
+}
+
 func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, true, mockKeyResolutionContextOk(t), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
 	})
 	defer done()
@@ -160,7 +191,7 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 
 func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, true, mockKeyResolutionContextOk(t), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
 
 		mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).Return(

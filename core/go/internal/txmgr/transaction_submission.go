@@ -28,11 +28,13 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -355,15 +357,40 @@ func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, db
 	return nil
 }
 
+func (tm *txManager) runWithDBTxnKeyResolver(ctx context.Context, fn func(dbTX *gorm.DB, kr components.KeyResolver) error) (err error) {
+	krc := tm.keyManager.NewKeyResolutionContext(ctx)
+	committed := false
+	defer func() {
+		krc.Close(committed)
+	}()
+	err = tm.p.DB().Transaction(func(dbTX *gorm.DB) error {
+		err := fn(dbTX, krc.KeyResolver(dbTX))
+		if err == nil {
+			err = krc.PreCommit()
+		}
+		return err
+	})
+	committed = (err == nil)
+	return err
+}
+
 func (tm *txManager) SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
-	return tm.processNewTransactions(ctx, txs, pldapi.SubmitModeAuto)
+	err = tm.runWithDBTxnKeyResolver(ctx, func(dbTX *gorm.DB, kr components.KeyResolver) (err error) {
+		txIDs, err = tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeAuto)
+		return
+	})
+	return
 }
 
 func (tm *txManager) PrepareTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
-	return tm.processNewTransactions(ctx, txs, pldapi.SubmitModeExternal)
+	err = tm.runWithDBTxnKeyResolver(ctx, func(dbTX *gorm.DB, kr components.KeyResolver) (err error) {
+		txIDs, err = tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeExternal)
+		return
+	})
+	return
 }
 
-func (tm *txManager) processNewTransactions(ctx context.Context, txs []*pldapi.TransactionInput, submitMode pldapi.SubmitMode) (txIDs []uuid.UUID, err error) {
+func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, kr components.KeyResolver, txs []*pldapi.TransactionInput, submitMode pldapi.SubmitMode) (txIDs []uuid.UUID, err error) {
 
 	// Public transactions need a signing address resolution and nonce allocation trackers
 	// before we open the database transaction
@@ -372,7 +399,7 @@ func (tm *txManager) processNewTransactions(ctx context.Context, txs []*pldapi.T
 	txis := make([]*components.ValidatedTransaction, len(txs))
 	txIDs = make([]uuid.UUID, len(txs))
 	for i, tx := range txs {
-		txi, err := tm.resolveNewTransaction(ctx, tm.p.DB() /* no db tx for this part currently */, tx, submitMode)
+		txi, err := tm.resolveNewTransaction(ctx, dbTX, tx, submitMode)
 		if err != nil {
 			return nil, err
 		}
@@ -393,51 +420,34 @@ func (tm *txManager) processNewTransactions(ctx context.Context, txs []*pldapi.T
 		}
 	}
 
-	// Need to resolve the addresses for any public senders
+	// Public transactions need key resolution and validation
 	if len(publicTxs) > 0 {
-		ethAddresses, err := tm.keyManager.ResolveEthAddressBatchNewDatabaseTX(ctx, publicTxSenders)
-		if err != nil {
-			return nil, err
-		}
 		for i, ptx := range publicTxs {
-			ptx.From = ethAddresses[i]
+			resolvedKey, err := kr.ResolveKey(publicTxSenders[i], algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			if err == nil {
+				ptx.From, err = tktypes.ParseEthAddress(resolvedKey.Verifier.Verifier)
+			}
+			if err == nil {
+				err = tm.publicTxMgr.ValidateTransaction(ctx, ptx)
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	// Perform pre-transaction processing in the public TX manager as required
-	var committed = false
-	var publicBatch components.PublicTxBatch
+	// Now we're ready to insert into the database
+	_, err = tm.insertTransactions(ctx, dbTX, txis, false /* all must succeed on this path - we map idempotency errors below */)
+	if err != nil {
+		return nil, tm.checkIdempotencyKeys(ctx, dbTX, err, txs)
+	}
+
+	// Insert any public txns (validated above)
 	if len(publicTxs) > 0 {
-		publicBatch, err = tm.publicTxMgr.PrepareSubmissionBatch(ctx, publicTxs)
-		if err != nil {
+		if _, err = tm.publicTxMgr.WriteNewTransactions(ctx, dbTX, publicTxs); err != nil {
 			return nil, err
 		}
-		// Must ensure we close the batch, now it's open (for good or bad)
-		defer func() {
-			publicBatch.Completed(ctx, committed)
-		}()
-		// TODO: don't support partial rejection currently - will be important when we introduce the flush writer
-		if len(publicBatch.Rejected()) > 0 {
-			return nil, publicBatch.Rejected()[0].RejectedError()
-		}
 	}
-
-	// Do in-transaction processing for our tables, and the public tables
-	insertedOK := false
-	err = tm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
-		_, err = tm.insertTransactions(ctx, dbTX, txis, false /* all must succeed on this path - we map idempotency errors below */)
-		insertedOK = (err == nil)
-		if err == nil && publicBatch != nil {
-			err = publicBatch.Submit(ctx, dbTX)
-		}
-		// TODO: private insertion too
-		return err
-	})
-	if err != nil {
-		return nil, tm.checkIdempotencyKeys(ctx, err, insertedOK, txs)
-	}
-	// From this point on we're committed, and need to tell the public tx manager as such
-	committed = true
 
 	// TODO: Integrate with private TX manager persistence when available, as it will follow the
 	// same pattern as public transactions above
@@ -453,15 +463,15 @@ func (tm *txManager) processNewTransactions(ctx context.Context, txs []*pldapi.T
 
 // Will either return the original error, or will return a special idempotency key error that can be used by the caller
 // to determine that they need to ask for the existing transactions (rather than fail)
-func (tm *txManager) checkIdempotencyKeys(ctx context.Context, origErr error, insertedOK bool, txis []*pldapi.TransactionInput) error {
+func (tm *txManager) checkIdempotencyKeys(ctx context.Context, dbTX *gorm.DB, origErr error, txis []*pldapi.TransactionInput) error {
 	idempotencyKeys := make([]any, 0, len(txis))
 	for _, tx := range txis {
 		if tx.IdempotencyKey != "" {
 			idempotencyKeys = append(idempotencyKeys, tx.IdempotencyKey)
 		}
 	}
-	if !insertedOK && len(idempotencyKeys) > 0 {
-		existingTxs, lookupErr := tm.QueryTransactions(ctx, query.NewQueryBuilder().In("idempotencyKey", idempotencyKeys).Limit(len(idempotencyKeys)).Query(), false)
+	if len(idempotencyKeys) > 0 {
+		existingTxs, lookupErr := tm.QueryTransactions(ctx, query.NewQueryBuilder().In("idempotencyKey", idempotencyKeys).Limit(len(idempotencyKeys)).Query(), dbTX, false)
 		if lookupErr != nil {
 			log.L(ctx).Errorf("Failed to query for existing idempotencyKeys after insert error (returning original error): %s", lookupErr)
 		} else if (len(existingTxs)) > 0 {
