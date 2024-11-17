@@ -35,16 +35,6 @@ type publisher struct {
 	contractAddress  string
 }
 
-func (p *publisher) PublishTransactionBlockedEvent(ctx context.Context, transactionId string) {
-
-	p.privateTxManager.HandleNewEvent(ctx, &ptmgrtypes.TransactionBlockedEvent{
-		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
-			ContractAddress: p.contractAddress,
-			TransactionID:   transactionId,
-		},
-	})
-}
-
 func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string) {
 
 	p.privateTxManager.HandleNewEvent(ctx, &ptmgrtypes.TransactionDispatchedEvent{
