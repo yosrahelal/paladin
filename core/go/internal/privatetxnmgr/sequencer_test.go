@@ -52,6 +52,7 @@ type sequencerDepencyMocks struct {
 	stateDistributer               *statedistributionmocks.StateDistributer
 	preparedTransactionDistributer *preparedtxdistributionmocks.PreparedTransactionDistributer
 	txManager                      *componentmocks.TXManager
+	pubTxManager                   *componentmocks.PublicTxManager
 	transportWriter                *privatetxnmgrmocks.TransportWriter
 }
 
@@ -75,6 +76,7 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 		stateDistributer:               statedistributionmocks.NewStateDistributer(t),
 		preparedTransactionDistributer: preparedtxdistributionmocks.NewPreparedTransactionDistributer(t),
 		txManager:                      componentmocks.NewTXManager(t),
+		pubTxManager:                   componentmocks.NewPublicTxManager(t),
 		transportWriter:                privatetxnmgrmocks.NewTransportWriter(t),
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
@@ -82,6 +84,7 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("TxManager").Return(mocks.txManager).Maybe()
+	mocks.allComponents.On("PublicTxManager").Return(mocks.pubTxManager).Maybe()
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 	p, persistenceDone, err := persistence.NewUnitTestPersistence(ctx, "privatetxmgr")
 	require.NoError(t, err)
@@ -89,7 +92,7 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
 	mocks.domainSmartContract.On("Address").Return(*domainAddress).Maybe()
 
-	syncPoints := syncpoints.NewSyncPoints(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager)
+	syncPoints := syncpoints.NewSyncPoints(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager, mocks.pubTxManager)
 	o := NewSequencer(ctx, mocks.privateTxManager, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerSequencerConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.preparedTransactionDistributer, mocks.transportWriter, 30*time.Second)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)

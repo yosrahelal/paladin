@@ -18,12 +18,9 @@ package syncpoints
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/preparedtxdistribution"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -44,12 +41,12 @@ type DispatchPersisted struct {
 	ID                       string             `json:"id"`
 	PrivateTransactionID     string             `json:"privateTransactionID"`
 	PublicTransactionAddress tktypes.EthAddress `json:"publicTransactionAddress"`
-	PublicTransactionNonce   uint64             `json:"publicTransactionNonce"`
+	PublicTransactionID      uint64             `json:"publicTransactionID"`
 }
 
 // A dispatch sequence is a collection of private transactions that are submitted together for a given signing address in order
 type PublicDispatch struct {
-	PublicTxBatch                components.PublicTxBatch
+	PublicTxs                    []*components.PublicTxSubmission
 	PrivateTransactionDispatches []*DispatchPersisted
 }
 
@@ -134,21 +131,11 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 				continue
 			}
 
-			// Call the public transaction manager to allocate nonces for all transactions in the sequence
-			// and persist them to the database under the current transaction
-			pubBatch := dispatchSequenceOp.PublicTxBatch
-			err := pubBatch.Submit(ctx, dbTX)
+			// Call the public transaction manager persist to the database under the current transaction
+			publicTxns, err := s.pubTxMgr.WriteNewTransactions(ctx, dbTX, dispatchSequenceOp.PublicTxs)
 			if err != nil {
-				log.L(ctx).Errorf("Error submitting public transaction: %s", err)
-				// TODO  this is a really bad situation because it will cause all dispatches in the flush to rollback
-				// Should we skip this dispatch ( or this mini batch of dispatches?)
+				log.L(ctx).Errorf("Error submitting public transactions: %s", err)
 				return err
-			}
-			publicTxIDs := pubBatch.Accepted()
-			if len(publicTxIDs) != len(dispatchSequenceOp.PrivateTransactionDispatches) {
-				errorMessage := fmt.Sprintf("Expected %d public transaction IDs, got %d", len(dispatchSequenceOp.PrivateTransactionDispatches), len(publicTxIDs))
-				log.L(ctx).Error(errorMessage)
-				return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 			}
 
 			//TODO this results in an `INSERT` for each dispatchSequence
@@ -158,9 +145,8 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 			for dispatchIndex, dispatch := range dispatchSequenceOp.PrivateTransactionDispatches {
 
 				//fill in the foreign key before persisting in our dispatch table
-				dispatch.PublicTransactionAddress = publicTxIDs[dispatchIndex].PublicTx().From
-				dispatch.PublicTransactionNonce = publicTxIDs[dispatchIndex].PublicTx().Nonce.Uint64()
-
+				dispatch.PublicTransactionAddress = publicTxns[dispatchIndex].From
+				dispatch.PublicTransactionID = *publicTxns[dispatchIndex].LocalID
 				dispatch.ID = uuid.New().String()
 			}
 
@@ -172,7 +158,7 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 					Columns: []clause.Column{
 						{Name: "private_transaction_id"},
 						{Name: "public_transaction_address"},
-						{Name: "public_transaction_nonce"},
+						{Name: "public_transaction_id"},
 					},
 					DoNothing: true, // immutable
 				}).

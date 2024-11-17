@@ -69,7 +69,7 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
 	p.nodeName = p.components.TransportManager().LocalNodeName()
-	p.syncPoints = syncpoints.NewSyncPoints(p.ctx, &p.config.Writer, c.Persistence(), c.TxManager())
+	p.syncPoints = syncpoints.NewSyncPoints(p.ctx, &p.config.Writer, c.Persistence(), c.TxManager(), c.PublicTxManager())
 	p.stateDistributer = statedistribution.NewStateDistributer(
 		p.ctx,
 		p.components.TransportManager(),
@@ -442,19 +442,11 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 		return p.revertDeploy(ctx, tx, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Neither InvokeTransaction nor DeployTransaction set"))
 	}
 
-	pubBatch, err := publicTransactionEngine.PrepareSubmissionBatch(ctx, publicTXs)
-	if err != nil {
-		return p.revertDeploy(ctx, tx, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, "PrepareSubmissionBatch failed"))
-	}
-
-	// Must make sure from this point we return the nonces
-	completed := false // and include whether we committed the DB transaction or not
-	defer func() {
-		pubBatch.Completed(ctx, completed)
-	}()
-	if len(pubBatch.Rejected()) > 0 {
-		// We do not handle partial success - roll everything back
-		return p.revertDeploy(ctx, tx, i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivateTxManagerInternalError, "Submission batch rejected "))
+	for _, pubTx := range publicTXs {
+		err := publicTransactionEngine.ValidateTransaction(ctx, pubTx)
+		if err != nil {
+			return p.revertDeploy(ctx, tx, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, "PrepareSubmissionBatch failed"))
+		}
 	}
 
 	//transactions are always dispatched as a sequence, even if only a sequence of one
@@ -465,7 +457,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 			},
 		},
 	}
-	sequence.PublicTxBatch = pubBatch
+	sequence.PublicTxs = publicTXs
 	dispatchBatch := &syncpoints.DispatchBatch{
 		PublicDispatches: []*syncpoints.PublicDispatch{
 			sequence,
@@ -478,8 +470,6 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return p.revertDeploy(ctx, tx, err)
 	}
-
-	completed = true
 
 	p.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
 		TransactionID:  tx.ID.String(),

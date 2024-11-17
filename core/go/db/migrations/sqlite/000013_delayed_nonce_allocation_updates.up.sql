@@ -3,6 +3,7 @@ DROP TABLE IF EXISTS public_txn_bindings;
 DROP TABLE IF EXISTS public_submissions;
 DROP TABLE IF EXISTS public_completions;
 DROP TABLE IF EXISTS public_txns;
+DROP TABLE IF EXISTS dispatches;
 
 CREATE TABLE public_txns (
   "pub_txn_id"                INTEGER         PRIMARY KEY AUTOINCREMENT,
@@ -46,3 +47,12 @@ CREATE TABLE public_txn_bindings (
   FOREIGN KEY ("pub_txn_id") REFERENCES public_txns ("pub_txn_id") ON DELETE CASCADE
 );
 CREATE INDEX public_txn_bindings_transaction ON public_txn_bindings("transaction");
+
+CREATE TABLE dispatches (
+    "public_transaction_address"  TEXT    NOT NULL,
+    "public_transaction_id"       BIGINT  NOT NULL,
+    "private_transaction_id"      TEXT    NOT NULL,
+    "id"                          TEXT    NOT NULL,
+    PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX dispatches_public_private ON dispatches("public_transaction_address","public_transaction_id","private_transaction_id");

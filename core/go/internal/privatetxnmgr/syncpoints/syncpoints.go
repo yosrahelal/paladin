@@ -71,14 +71,16 @@ type SyncPoints interface {
 }
 
 type syncPoints struct {
-	started bool
-	writer  flushwriter.Writer[*syncPointOperation, *noResult]
-	txMgr   components.TXManager
+	started  bool
+	writer   flushwriter.Writer[*syncPointOperation, *noResult]
+	txMgr    components.TXManager
+	pubTxMgr components.PublicTxManager
 }
 
-func NewSyncPoints(ctx context.Context, conf *pldconf.FlushWriterConfig, p persistence.Persistence, txMgr components.TXManager) SyncPoints {
+func NewSyncPoints(ctx context.Context, conf *pldconf.FlushWriterConfig, p persistence.Persistence, txMgr components.TXManager, pubTxMgr components.PublicTxManager) SyncPoints {
 	s := &syncPoints{
-		txMgr: txMgr,
+		txMgr:    txMgr,
+		pubTxMgr: pubTxMgr,
 	}
 	s.writer = flushwriter.NewWriter(ctx, s.runBatch, p, conf, &WriterConfigDefaults)
 	return s

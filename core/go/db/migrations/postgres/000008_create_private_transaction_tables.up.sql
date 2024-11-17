@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE TABLE dispatches (
     "public_transaction_address"  TEXT    NOT NULL,
-    "public_transaction_nonce"    BIGINT  NOT NULL,
+    "public_transaction_nonce"    BIGINT  NOT NULL, -- moved to public_transaction_id in 13
     "private_transaction_id"      TEXT    NOT NULL,
     "id"                          TEXT    NOT NULL,
     PRIMARY KEY ("id")

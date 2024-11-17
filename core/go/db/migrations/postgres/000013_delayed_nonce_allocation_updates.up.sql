@@ -1,4 +1,3 @@
-ROLLBACK;
 BEGIN;
 
 -- Generate an identity column for the public_txns table
@@ -13,46 +12,22 @@ ALTER TABLE public_txn_bindings ADD "pub_txn_id" BIGINT;
 CREATE UNIQUE INDEX public_txn_bindings_pub_txn_id on public_txn_bindings("pub_txn_id");
 
 -- Add new new reference column to the public_submissions
-UPDATE
-    public_submissions
-SET
-    "pub_txn_id" = "ref_pub_txn_id"
-FROM (
-    SELECT public_txns."signer_nonce" as "ref_signer_nonce", public_txns."pub_txn_id" AS "ref_pub_txn_id"
-    FROM public_txns
-    INNER JOIN public_submissions AS psubs_join
-    ON psubs_join."signer_nonce" = public_txns."signer_nonce"
-) WHERE (
-    public_submissions."signer_nonce" = "ref_signer_nonce"
-);
+UPDATE public_submissions
+SET "pub_txn_id" = updates."pub_txn_id"
+FROM ( SELECT "signer_nonce", "pub_txn_id" FROM public_txns ) AS updates
+WHERE ( public_submissions."signer_nonce" = updates."signer_nonce" );
 
 -- Add new new reference column to the public_completions
-UPDATE
-    public_completions
-SET
-    "pub_txn_id" = "ref_pub_txn_id"
-FROM (
-    SELECT public_txns."signer_nonce" as "ref_signer_nonce", public_txns."pub_txn_id" AS "ref_pub_txn_id"
-    FROM public_txns
-    INNER JOIN public_completions AS pcomps_join
-    ON pcomps_join."signer_nonce" = public_txns."signer_nonce"
-) WHERE (
-    public_completions."signer_nonce" = "ref_signer_nonce"
-);
+UPDATE public_completions
+SET "pub_txn_id" = updates."pub_txn_id"
+FROM ( SELECT "signer_nonce", "pub_txn_id" FROM public_txns ) AS updates
+WHERE ( public_completions."signer_nonce" = updates."signer_nonce" );
 
 -- Add new new reference column to the public_txn_bindings
-UPDATE
-    public_txn_bindings
-SET
-    "pub_txn_id" = "ref_pub_txn_id"
-FROM (
-    SELECT public_txns."signer_nonce" as "ref_signer_nonce", public_txns."pub_txn_id" AS "ref_pub_txn_id"
-    FROM public_txns
-    INNER JOIN public_txn_bindings AS pbinds_join
-    ON pbinds_join."signer_nonce" = public_txns."signer_nonce"
-) WHERE (
-    public_txn_bindings."signer_nonce" = "ref_signer_nonce"
-);
+UPDATE public_txn_bindings
+SET "pub_txn_id" = updates."pub_txn_id"
+FROM ( SELECT "signer_nonce", "pub_txn_id" FROM public_txns ) AS updates
+WHERE ( public_txn_bindings."signer_nonce" = updates."signer_nonce" );
 
 -- Drop the old references
 ALTER TABLE public_submissions DROP CONSTRAINT public_submissions_signer_nonce_fkey;
@@ -76,5 +51,16 @@ ALTER TABLE public_txn_bindings ADD CONSTRAINT public_txn_bindings_pub_txn_id_fk
 
 -- Now we can make the nonce optional on the public_txns
 ALTER TABLE public_txns ALTER COLUMN "nonce" DROP NOT NULL;
+
+-- We also need to update the dispatches table
+ALTER TABLE dispatches ADD "public_transaction_id" BIGINT;
+UPDATE dispatches
+SET "public_transaction_id" = updates."pub_txn_id"
+FROM ( SELECT "nonce", "from", "pub_txn_id" FROM public_txns ) AS updates
+WHERE dispatches."public_transaction_address" = updates."from" AND dispatches."public_transaction_nonce" = updates."nonce";
+DROP INDEX dispatches_public_private;
+ALTER TABLE dispatches DROP COLUMN "public_transaction_nonce";
+ALTER TABLE dispatches ALTER COLUMN "public_transaction_id" SET NOT NULL;
+CREATE UNIQUE INDEX dispatches_public_private ON dispatches("public_transaction_address","public_transaction_id","private_transaction_id");
 
 COMMIT;
