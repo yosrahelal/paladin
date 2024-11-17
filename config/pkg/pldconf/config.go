@@ -31,6 +31,7 @@ type PaladinConfig struct {
 	TransportManagerConfig `json:",inline"`
 	RegistryManagerConfig  `json:",inline"`
 	KeyManagerConfig       `json:",inline"`
+	Startup                StartupConfig          `json:"startup"`
 	Log                    LogConfig              `json:"log"`
 	Blockchain             EthClientConfig        `json:"blockchain"`
 	DB                     DBConfig               `json:"db"`
