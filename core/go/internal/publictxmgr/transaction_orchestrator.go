@@ -293,7 +293,7 @@ func (oc *orchestrator) allocateNonces(ctx context.Context, txns []*DBPublicTxn)
 		newNextNonce++
 	}
 
-	// Run the DB TXN
+	// Run the DB TXN using a VALUES temp table to update multiple rows in a single operation
 	err := oc.p.DB().Transaction(func(dbTX *gorm.DB) error {
 		sqlQuery := `WITH nonce_updates ("pub_txn_id", "nonce") AS ( VALUES `
 		values := make([]any, 0, len(toAlloc)*2)
@@ -301,7 +301,7 @@ func (oc *orchestrator) allocateNonces(ctx context.Context, txns []*DBPublicTxn)
 			if i > 0 {
 				sqlQuery += `, `
 			}
-			sqlQuery += `( ?, ? ) `
+			sqlQuery += `( CAST (? AS BIGINT), CAST (? AS BIGINT) ) `
 			values = append(values, tx.PublicTxnID)
 			values = append(values, newNonces[i])
 			log.L(ctx).Debugf("assigning %s:%d (pubTxnId=%d)", oc.signingAddress, newNonces[i], tx.PublicTxnID)

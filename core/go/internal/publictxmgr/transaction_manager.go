@@ -287,21 +287,14 @@ func (ble *pubTxManager) ValidateTransaction(ctx context.Context, txi *component
 
 func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX *gorm.DB, transactions []*components.PublicTxSubmission) (pubTxns []*pldapi.PublicTx, err error) {
 	persistedTransactions := make([]*DBPublicTxn, len(transactions))
-	publicTxBindings := make([]*DBPublicTxnBinding, 0, len(transactions))
 	for i, txi := range transactions {
 		persistedTransactions[i] = &DBPublicTxn{
 			From:            *txi.From, // safe because validated in ValidateTransaction
 			To:              txi.To,
 			Gas:             txi.Gas.Uint64(),
+			Value:           txi.Value,
 			Data:            txi.Data,
 			FixedGasPricing: tktypes.JSONString(txi.PublicTxGasPricing),
-		}
-		for _, bnd := range txi.Bindings {
-			publicTxBindings = append(publicTxBindings, &DBPublicTxnBinding{
-				Transaction:     bnd.TransactionID,
-				TransactionType: bnd.TransactionType,
-				PublicTxnID:     persistedTransactions[i].PublicTxnID,
-			})
 		}
 	}
 	// All the nonce processing to this point should have ensured we do not have a conflict on nonces.
@@ -314,12 +307,25 @@ func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX *gorm.DB
 			Create(persistedTransactions).
 			Error
 	}
-	if err == nil && len(publicTxBindings) > 0 {
-		err = dbTX.
-			WithContext(ctx).
-			Table("public_txn_bindings").
-			Create(publicTxBindings).
-			Error
+	if err == nil {
+		publicTxBindings := make([]*DBPublicTxnBinding, 0, len(transactions))
+		for i, txi := range transactions {
+			pubTxnID := persistedTransactions[i].PublicTxnID
+			for _, bnd := range txi.Bindings {
+				publicTxBindings = append(publicTxBindings, &DBPublicTxnBinding{
+					Transaction:     bnd.TransactionID,
+					TransactionType: bnd.TransactionType,
+					PublicTxnID:     pubTxnID,
+				})
+			}
+		}
+		if len(publicTxBindings) > 0 {
+			err = dbTX.
+				WithContext(ctx).
+				Table("public_txn_bindings").
+				Create(publicTxBindings).
+				Error
+		}
 	}
 	if err == nil {
 		pubTxns = make([]*pldapi.PublicTx, len(persistedTransactions))
@@ -400,15 +406,14 @@ func (ble *pubTxManager) queryPublicTxWithBinding(ctx context.Context, dbTX *gor
 	return results, nil
 }
 
-func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tktypes.EthAddress, nonce uint64) (bool, error) {
+func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, pubTxnID uint64) (bool, error) {
 	// Runs a DB query to see if the transaction is marked completed (for good or bad)
 	// A non existent transaction results in false
 	var ptxs []*DBPublicTxn
 	err := ble.p.DB().
 		WithContext(ctx).
 		Table("public_txns").
-		Where("from = ?", from).
-		Where("nonce = ?", nonce).
+		Where(`"pub_txn_id" = ?`, pubTxnID).
 		Joins("Completed").
 		Select(`"Completed"."tx_hash"`).
 		Limit(1).
@@ -418,7 +423,7 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tkt
 		return false, err
 	}
 	if len(ptxs) > 0 && ptxs[0].Completed != nil {
-		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s:%d", from, nonce)
+		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s:%d (pubTxnID=%d)", ptxs[0].From, ptxs[0].Nonce, pubTxnID)
 		return true, nil
 	}
 	return false, nil

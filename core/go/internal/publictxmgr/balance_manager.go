@@ -234,7 +234,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 		}
 	}
 	if fuelingTx != nil {
-		completed, err := af.pubTxMgr.CheckTransactionCompleted(ctx, fuelingTx.From, fuelingTx.Nonce.Uint64())
+		completed, err := af.pubTxMgr.CheckTransactionCompleted(ctx, *fuelingTx.LocalID)
 		if err != nil {
 			return nil, err
 		}

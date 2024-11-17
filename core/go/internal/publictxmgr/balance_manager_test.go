@@ -264,25 +264,15 @@ func TestTopUpAddressNoOpScenarios(t *testing.T) {
 
 }
 
-func generateExpectedFuelingTransaction(idx int, amountToTransfer uint64, from, to tktypes.EthAddress) *pldapi.PublicTx {
-	gas := tktypes.HexUint64(10)
-	nonce := tktypes.HexUint64(mockBaseNonce) + tktypes.HexUint64(idx) // fixed mock when disableManagerStart set
-	return &pldapi.PublicTx{
-		From:  from,
-		To:    &to,
-		Nonce: &nonce,
-		PublicTxOptions: pldapi.PublicTxOptions{
-			Gas:   &gas,
-			Value: tktypes.Uint64ToUint256(amountToTransfer),
-		},
-	}
+func expectFuelingEqual(t *testing.T, fuelingTx *pldapi.PublicTx, amountToTransfer uint64, from, to tktypes.EthAddress) {
+	assert.Equal(t, from, fuelingTx.From)
+	assert.Equal(t, to, *fuelingTx.To)
+	assert.Equal(t, *tktypes.Uint64ToUint256(amountToTransfer), *fuelingTx.Value)
 }
 
 func mockAutoFuelTransactionSubmit(m *mocksAndTestControl, bm *BalanceManagerWithInMemoryTracking, uncachedBalance bool) {
 	// Then insert of the auto-fueling transaction
-	m.db.ExpectBegin()
 	m.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
-	m.db.ExpectCommit()
 
 	if uncachedBalance {
 		// Mock the sufficient balance on the auto-fueling source address, and the nonce assignment
@@ -317,10 +307,9 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	mockAutoFuelTransactionSubmit(m, bm, true)
 
 	expectedTopUpAmount := big.NewInt(100)
-	expectedFuelingTransaction1 := generateExpectedFuelingTransaction(0, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 	fuelingTx, err := bm.TopUpAccount(ctx, accountToTopUp)
 	require.NoError(t, err)
-	assert.Equal(t, expectedFuelingTransaction1, fuelingTx)
+	expectFuelingEqual(t, fuelingTx, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 
 	// Test no new fueling transaction when the current one is pending
 	accountToTopUp2 := &AddressAccount{
@@ -334,25 +323,24 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 
 	// return not yet completed, so should return the existing pending transaction
 	m.db.ExpectQuery("SELECT.*public_txns").
-		WillReturnRows(sqlmock.NewRows([]string{"from", "nonce"}).AddRow(
-			expectedFuelingTransaction1.From, expectedFuelingTransaction1.Nonce,
+		WillReturnRows(sqlmock.NewRows([]string{"from"}).AddRow(
+			*bm.sourceAddress,
 		))
 
 	newFuelingTx, err := bm.TopUpAccount(ctx, accountToTopUp2)
 	require.NoError(t, err)
-	assert.Equal(t, expectedFuelingTransaction1, newFuelingTx)
+	expectFuelingEqual(t, newFuelingTx, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 
 	// current transaction completed, replace with new transaction
 	expectedTopUpAmount2 := big.NewInt(50)
-	expectedFuelingTransaction2 := generateExpectedFuelingTransaction(1, expectedTopUpAmount2.Uint64(), *bm.sourceAddress, testDestAddress)
-	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce", `Completed__tx_hash`}).
-		AddRow(expectedFuelingTransaction1.From, expectedFuelingTransaction1.Nonce, tktypes.Bytes32(tktypes.RandBytes(32))))
+	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", `Completed__tx_hash`}).
+		AddRow(*bm.sourceAddress, tktypes.Bytes32(tktypes.RandBytes(32))))
 
 	mockAutoFuelTransactionSubmit(m, bm, false)
 
 	fuelingTx2, err := bm.TopUpAccount(ctx, accountToTopUp2)
 	require.NoError(t, err)
-	assert.Equal(t, expectedFuelingTransaction2, fuelingTx2)
+	expectFuelingEqual(t, fuelingTx2, expectedTopUpAmount2.Uint64(), *bm.sourceAddress, testDestAddress)
 
 	// test when couldn't record the result of the submitted transaction
 	// also do a balance look up
@@ -365,12 +353,11 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 		MaxCost:               big.NewInt(50),
 	}
 	expectedTopUpAmount3 := big.NewInt(50)
-	expectedFuelingTransaction3 := generateExpectedFuelingTransaction(2, expectedTopUpAmount3.Uint64(), *bm.sourceAddress, testDestAddress)
 	bm.NotifyAddressBalanceChanged(ctx, *bm.sourceAddress)
 	m.ethClient.On("GetBalance", mock.Anything, *bm.sourceAddress, "latest").Return(tktypes.Uint64ToUint256(50), nil).Once()
 
-	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce", `Completed__tx_hash`}).
-		AddRow(expectedFuelingTransaction2.From, expectedFuelingTransaction2.Nonce, tktypes.Bytes32(tktypes.RandBytes(32))))
+	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", `Completed__tx_hash`}).
+		AddRow(*bm.sourceAddress, tktypes.Bytes32(tktypes.RandBytes(32))))
 
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
 		Return(ethclient.EstimateGasResult{}, fmt.Errorf("pop")).Once()
@@ -383,14 +370,14 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	// test that we can recover if the transaction was actually registered in DB
 	// also do a address balance re-lookup
 	m.db.ExpectQuery("SELECT.*public_txns").
-		WillReturnRows(sqlmock.NewRows([]string{"from", "nonce"}).AddRow(
-			expectedFuelingTransaction3.From, expectedFuelingTransaction3.Nonce,
+		WillReturnRows(sqlmock.NewRows([]string{"from", "to", "value"}).AddRow(
+			*bm.sourceAddress, testDestAddress, (*tktypes.HexUint256)(expectedTopUpAmount3),
 		))
-	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce", `Completed__tx_hash`}).
-		AddRow(expectedFuelingTransaction3.From, expectedFuelingTransaction3.Nonce, nil /* incomplete */))
+	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", "to", "value", `Completed__tx_hash`}).
+		AddRow(*bm.sourceAddress, testDestAddress, (*tktypes.HexUint256)(expectedTopUpAmount3), nil /* incomplete */))
 	fuelingTx3, err := bm.TopUpAccount(ctx, accountToTopUp3)
 	require.NoError(t, err)
-	assert.Equal(t, expectedFuelingTransaction3.Nonce, fuelingTx3.Nonce)
+	expectFuelingEqual(t, fuelingTx3, expectedTopUpAmount3.Uint64(), *bm.sourceAddress, testDestAddress)
 }
 
 func TestTopUpSuccessTopUpMinAheadUseMin(t *testing.T) {
@@ -421,10 +408,9 @@ func TestTopUpSuccessTopUpMinAheadUseMin(t *testing.T) {
 	// the expectTopUpAmount should include min Value (50) multiply 2 extra space we set
 	expectedTopUpAmount := big.NewInt(200)
 
-	expectedFuelingTransaction1 := generateExpectedFuelingTransaction(0, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 	fuelingTx, err := bm.TopUpAccount(ctx, accountToTopUp)
 	require.NoError(t, err)
-	assert.Equal(t, expectedFuelingTransaction1, fuelingTx)
+	expectFuelingEqual(t, fuelingTx, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 
 }
 
@@ -456,10 +442,9 @@ func TestTopUpSuccessTopUpMinAheadUseMax(t *testing.T) {
 	// the expectTopUpAmount should include max Value (150) multiply 2 extra space we set
 	expectedTopUpAmount := big.NewInt(400)
 
-	expectedFuelingTransaction1 := generateExpectedFuelingTransaction(0, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 	fuelingTx, err := bm.TopUpAccount(ctx, accountToTopUp)
 	require.NoError(t, err)
-	assert.Equal(t, expectedFuelingTransaction1, fuelingTx)
+	expectFuelingEqual(t, fuelingTx, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 
 }
 
@@ -491,10 +476,9 @@ func TestTopUpSuccessTopUpMinAheadUseAvg(t *testing.T) {
 	// the expectTopUpAmount should include avg Value (100) multiply 2 extra space we set
 	expectedTopUpAmount := big.NewInt(300)
 
-	expectedFuelingTransaction1 := generateExpectedFuelingTransaction(0, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 	fuelingTx, err := bm.TopUpAccount(ctx, accountToTopUp)
 	require.NoError(t, err)
-	assert.Equal(t, expectedFuelingTransaction1, fuelingTx)
+	expectFuelingEqual(t, fuelingTx, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 
 }
 
@@ -523,10 +507,9 @@ func TestTopUpSuccessUseMinDestBalance(t *testing.T) {
 	bm.minDestBalance = big.NewInt(250)
 	expectedTopUpAmount := big.NewInt(150)
 
-	expectedFuelingTransaction1 := generateExpectedFuelingTransaction(0, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 	fuelingTx, err := bm.TopUpAccount(ctx, accountToTopUp)
 	require.NoError(t, err)
-	assert.Equal(t, expectedFuelingTransaction1, fuelingTx)
+	expectFuelingEqual(t, fuelingTx, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 }
 
 func TestTopUpSuccessUseMaxDestBalance(t *testing.T) {
@@ -554,10 +537,9 @@ func TestTopUpSuccessUseMaxDestBalance(t *testing.T) {
 	bm.maxDestBalance = big.NewInt(150)
 	expectedTopUpAmount := big.NewInt(50)
 
-	expectedFuelingTransaction1 := generateExpectedFuelingTransaction(0, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 	fuelingTx, err := bm.TopUpAccount(ctx, accountToTopUp)
 	require.NoError(t, err)
-	assert.Equal(t, expectedFuelingTransaction1, fuelingTx)
+	expectFuelingEqual(t, fuelingTx, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
 }
 
 func TestTopUpNoOpAlreadyAboveMaxDestBalance(t *testing.T) {

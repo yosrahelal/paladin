@@ -439,7 +439,8 @@ func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, 
 	// Now we're ready to insert into the database
 	_, err = tm.insertTransactions(ctx, dbTX, txis, false /* all must succeed on this path - we map idempotency errors below */)
 	if err != nil {
-		return nil, tm.checkIdempotencyKeys(ctx, dbTX, err, txs)
+		_ = dbTX.Rollback() // so we can start a new TX in SQLite
+		return nil, tm.checkIdempotencyKeys(ctx, err, txs)
 	}
 
 	// Insert any public txns (validated above)
@@ -463,7 +464,7 @@ func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, 
 
 // Will either return the original error, or will return a special idempotency key error that can be used by the caller
 // to determine that they need to ask for the existing transactions (rather than fail)
-func (tm *txManager) checkIdempotencyKeys(ctx context.Context, dbTX *gorm.DB, origErr error, txis []*pldapi.TransactionInput) error {
+func (tm *txManager) checkIdempotencyKeys(ctx context.Context, origErr error, txis []*pldapi.TransactionInput) error {
 	idempotencyKeys := make([]any, 0, len(txis))
 	for _, tx := range txis {
 		if tx.IdempotencyKey != "" {
@@ -471,7 +472,7 @@ func (tm *txManager) checkIdempotencyKeys(ctx context.Context, dbTX *gorm.DB, or
 		}
 	}
 	if len(idempotencyKeys) > 0 {
-		existingTxs, lookupErr := tm.QueryTransactions(ctx, query.NewQueryBuilder().In("idempotencyKey", idempotencyKeys).Limit(len(idempotencyKeys)).Query(), dbTX, false)
+		existingTxs, lookupErr := tm.QueryTransactions(ctx, query.NewQueryBuilder().In("idempotencyKey", idempotencyKeys).Limit(len(idempotencyKeys)).Query(), tm.p.DB(), false)
 		if lookupErr != nil {
 			log.L(ctx).Errorf("Failed to query for existing idempotencyKeys after insert error (returning original error): %s", lookupErr)
 		} else if (len(existingTxs)) > 0 {
