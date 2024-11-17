@@ -2,7 +2,49 @@ name: Operator Build
 
 on:
   workflow_call:
- 
+    inputs:
+      paladin-image:
+        required: true
+        type: string
+      paladin-image-tag:
+        required: true
+        type: string
+      operator-image:
+        required: true
+        type: string
+      operator-image-tag:
+        required: true
+        type: string
+      build-operator:
+        required: false
+        type: boolean
+        default: false
+      build-paladin:
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      paladin-image:
+        required: true
+        type: string
+      paladin-image-tag:
+        required: true
+        type: string
+      operator-image:
+        required: true
+        type: string
+      operator-image-tag:
+        required: true
+        type: string
+      build-operator:
+        required: false
+        type: boolean
+        default: false
+      build-paladin:
+        required: false
+        type: boolean
+        default: false
 jobs:
   operator-build:
     runs-on: ubuntu-latest
@@ -46,12 +88,12 @@ jobs:
           ./gradlew deploy \
             -PclusterName=${{ env.CLUSTER_NAME }} \
             -Pnamespace=${{ env.NAMESPACE }} \
-            -PbuildOperator=false \
-            -PbuildPaladin=false \
-            -PoperatorImageName=paladin.io/paladin-operator \
-            -PoperatorImageTag=test \
-            -PpaladinImageName=paladin.io/paladin \
-            -PpaladinImageTag=test 
+            -PbuildOperator=${{ inputs.build-operator }} \
+            -PbuildPaladin=${{ inputs.build-paladin }} \
+            -PoperatorImageName=${{ inputs.operator-image }} \
+            -PoperatorImageTag=${{ inputs.operator-image-tag }} \
+            -PpaladinImageName=${{ inputs.paladin-image }} \
+            -PpaladinImageTag=${{ inputs.paladin-image-tag }} 
 
       - name: Uninstall Operator
         run: |

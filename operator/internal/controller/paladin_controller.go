@@ -448,6 +448,8 @@ func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordS
 				{
 					Name:      "pgdata",
 					MountPath: "/pgdata",
+					SubPath:   "data",
+					ReadOnly:  false, // Postgres needs to write to this
 				},
 			},
 			Ports: []corev1.ContainerPort{
@@ -495,7 +497,7 @@ func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordS
 					},
 				},
 			}, buildEnv(r.config.Postgres.Envs, map[string]string{
-				"PGDATA": "/pgdata",
+				"PGDATA": "/pgdata/data",
 			})...),
 		},
 	}, ss.Spec.Template.Spec.Containers...)
