@@ -71,9 +71,13 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 			mockResolveKey(t, mc, "sender1", tktypes.RandAddress())
 
 			mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything).Return(nil)
-			mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return([]*pldapi.PublicTx{
-				{LocalID: confutil.P(uint64(42))},
-			}, nil)
+			mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(
+				func() {},
+				[]*pldapi.PublicTx{
+					{LocalID: confutil.P(uint64(42))},
+				},
+				nil,
+			)
 
 			mut := mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi})
 			mut.Run(func(args mock.Arguments) {

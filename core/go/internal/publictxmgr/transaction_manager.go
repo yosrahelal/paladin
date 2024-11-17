@@ -230,12 +230,14 @@ func buildEthTX(
 
 func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, txi *components.PublicTxSubmission) (tx *pldapi.PublicTx, err error) {
 	var txs []*pldapi.PublicTx
+	var cb func()
 	err = ble.ValidateTransaction(ctx, txi)
 	if err == nil {
-		txs, err = ble.WriteNewTransactions(ctx, ble.p.DB(), []*components.PublicTxSubmission{txi})
+		cb, txs, err = ble.WriteNewTransactions(ctx, ble.p.DB(), []*components.PublicTxSubmission{txi})
 	}
 	if err == nil {
 		tx = txs[0]
+		cb()
 	}
 	return
 }
@@ -285,7 +287,7 @@ func (ble *pubTxManager) ValidateTransaction(ctx context.Context, txi *component
 
 }
 
-func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX *gorm.DB, transactions []*components.PublicTxSubmission) (pubTxns []*pldapi.PublicTx, err error) {
+func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX *gorm.DB, transactions []*components.PublicTxSubmission) (postCommit func(), pubTxns []*pldapi.PublicTx, err error) {
 	persistedTransactions := make([]*DBPublicTxn, len(transactions))
 	for i, txi := range transactions {
 		persistedTransactions[i] = &DBPublicTxn{
@@ -329,12 +331,35 @@ func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX *gorm.DB
 	}
 	if err == nil {
 		pubTxns = make([]*pldapi.PublicTx, len(persistedTransactions))
+		toNotify := make(map[tktypes.EthAddress]bool)
 		for i, ptx := range persistedTransactions {
 			pubTxns[i] = mapPersistedTransaction(ptx)
+			toNotify[ptx.From] = true
 		}
+		postCommit = ble.postCommitNewTransactions(ctx, toNotify)
 	}
 
-	return pubTxns, err
+	return postCommit, pubTxns, err
+}
+
+func (ble *pubTxManager) postCommitNewTransactions(ctx context.Context, toNotify map[tktypes.EthAddress]bool) func() {
+	return func() {
+		// Mark any active orchestrators stale
+		inactive := false
+		for addr := range toNotify {
+			oc := ble.getOrchestratorForAddress(addr)
+			if oc != nil {
+				log.L(ctx).Debugf("Notified orchestrator %s to re-poll due to new transactions", &addr)
+				oc.MarkInFlightTxStale()
+			} else {
+				inactive = true
+			}
+		}
+		// And if there was an orchestrator un-loaded, then mark the main poll loop stale
+		if inactive {
+			ble.MarkInFlightOrchestratorsStale()
+		}
+	}
 }
 
 func recoverGasPriceOptions(gpoJSON tktypes.RawJSON) (ptgp pldapi.PublicTxGasPricing) {

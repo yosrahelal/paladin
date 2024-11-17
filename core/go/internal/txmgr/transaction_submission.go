@@ -375,22 +375,30 @@ func (tm *txManager) runWithDBTxnKeyResolver(ctx context.Context, fn func(dbTX *
 }
 
 func (tm *txManager) SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
+	var postCommit func()
 	err = tm.runWithDBTxnKeyResolver(ctx, func(dbTX *gorm.DB, kr components.KeyResolver) (err error) {
-		txIDs, err = tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeAuto)
+		postCommit, txIDs, err = tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeAuto)
 		return
 	})
+	if err == nil {
+		postCommit()
+	}
 	return
 }
 
 func (tm *txManager) PrepareTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
+	var postCommit func()
 	err = tm.runWithDBTxnKeyResolver(ctx, func(dbTX *gorm.DB, kr components.KeyResolver) (err error) {
-		txIDs, err = tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeExternal)
+		postCommit, txIDs, err = tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeExternal)
 		return
 	})
+	if err == nil {
+		postCommit()
+	}
 	return
 }
 
-func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, kr components.KeyResolver, txs []*pldapi.TransactionInput, submitMode pldapi.SubmitMode) (txIDs []uuid.UUID, err error) {
+func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, kr components.KeyResolver, txs []*pldapi.TransactionInput, submitMode pldapi.SubmitMode) (postCommit func(), txIDs []uuid.UUID, err error) {
 
 	// Public transactions need a signing address resolution and nonce allocation trackers
 	// before we open the database transaction
@@ -401,7 +409,7 @@ func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, 
 	for i, tx := range txs {
 		txi, err := tm.resolveNewTransaction(ctx, dbTX, tx, submitMode)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		txID := *txi.Transaction.ID
 		txis[i] = txi
@@ -431,7 +439,7 @@ func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, 
 				err = tm.publicTxMgr.ValidateTransaction(ctx, ptx)
 			}
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	}
@@ -440,13 +448,14 @@ func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, 
 	_, err = tm.insertTransactions(ctx, dbTX, txis, false /* all must succeed on this path - we map idempotency errors below */)
 	if err != nil {
 		_ = dbTX.Rollback() // so we can start a new TX in SQLite
-		return nil, tm.checkIdempotencyKeys(ctx, err, txs)
+		return nil, nil, tm.checkIdempotencyKeys(ctx, err, txs)
 	}
 
 	// Insert any public txns (validated above)
+	postCommit = func() {}
 	if len(publicTxs) > 0 {
-		if _, err = tm.publicTxMgr.WriteNewTransactions(ctx, dbTX, publicTxs); err != nil {
-			return nil, err
+		if postCommit, _, err = tm.publicTxMgr.WriteNewTransactions(ctx, dbTX, publicTxs); err != nil {
+			return nil, nil, err
 		}
 	}
 
@@ -455,11 +464,11 @@ func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, 
 	for _, txi := range txis {
 		if txi.Transaction.Type.V() == pldapi.TransactionTypePrivate {
 			if err := tm.privateTxMgr.HandleNewTx(ctx, txi); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	}
-	return txIDs, err
+	return postCommit, txIDs, err
 }
 
 // Will either return the original error, or will return a special idempotency key error that can be used by the caller

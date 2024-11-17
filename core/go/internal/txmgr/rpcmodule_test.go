@@ -89,7 +89,7 @@ func mockSubmitPublicTxOk(t *testing.T, senderAddr *tktypes.EthAddress) func(tmc
 	return func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 		mockResolveKey(t, mc, "sender1", senderAddr)
 		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything).Return(nil)
-		mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return([]*pldapi.PublicTx{
+		mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(func() {}, []*pldapi.PublicTx{
 			{LocalID: confutil.P(uint64(12345))},
 		}, nil)
 	}

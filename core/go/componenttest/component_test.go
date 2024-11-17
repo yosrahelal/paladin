@@ -26,7 +26,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
@@ -41,7 +40,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	"sigs.k8s.io/yaml"
 )
 
 func TestRunSimpleStorageEthTransaction(t *testing.T) {
@@ -49,48 +47,9 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	ctx := context.Background()
 	logrus.SetLevel(logrus.DebugLevel)
 
-	var testConfig pldconf.PaladinConfig
-
-	err := yaml.Unmarshal([]byte(`
-db:
-  type: sqlite
-  sqlite:
-    dsn:           ":memory:"
-    autoMigrate:   true
-    migrationsDir: ../db/migrations/sqlite
-    debugQueries:  false
-blockIndexer:
-  fromBlock: latest
-blockchain:
-  http:
-    url: http://localhost:8545
-  ws:
-    url: ws://localhost:8546
-    initialConnectAttempts: 25
-log:
-  level: debug
-  output: file
-  file:
-    filename: build/testbed.component-test.log
-wallets:
-- name: wallet1
-  keySelector: .*
-  signer:
-    keyDerivation:
-      type: "bip32"
-    keyStore:
-      type: "static"
-      static:
-        keys:
-          seed:
-            encoding: none
-            inline: polar mechanic crouch jungle field room dry sure machine brisk seed bulk student total ethics
-`), &testConfig)
-	require.NoError(t, err)
-
 	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil)
 	cm := instance.cm
-	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(100 * time.Millisecond)
+	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(250 * time.Millisecond)
 
 	build, err := solutils.LoadBuild(ctx, simpleStorageBuildJSON)
 	require.NoError(t, err)

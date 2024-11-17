@@ -116,7 +116,7 @@ func (s *syncPoints) PersistDeployDispatchBatch(ctx context.Context, dispatchBat
 	return err
 }
 
-func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB, dispatchOperations []*dispatchOperation) error {
+func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB, dispatchOperations []*dispatchOperation) (pubTXCbs []func(), err error) {
 
 	// For each operation in the batch, we need to call the baseledger transaction manager to allocate its nonce
 	// which it can only guaranteed to be gapless and unique if it is done during the database transaction that inserts the dispatch record.
@@ -132,11 +132,12 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 			}
 
 			// Call the public transaction manager persist to the database under the current transaction
-			publicTxns, err := s.pubTxMgr.WriteNewTransactions(ctx, dbTX, dispatchSequenceOp.PublicTxs)
+			pubTXCb, publicTxns, err := s.pubTxMgr.WriteNewTransactions(ctx, dbTX, dispatchSequenceOp.PublicTxs)
 			if err != nil {
 				log.L(ctx).Errorf("Error submitting public transactions: %s", err)
-				return err
+				return nil, err
 			}
+			pubTXCbs = append(pubTXCbs, pubTXCb)
 
 			//TODO this results in an `INSERT` for each dispatchSequence
 			//Would it be more efficient to pass an array for the whole flush?
@@ -167,7 +168,7 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 
 			if err != nil {
 				log.L(ctx).Errorf("Error persisting dispatches: %s", err)
-				return err
+				return nil, err
 			}
 
 		}
@@ -175,7 +176,7 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 		if len(op.privateDispatches) > 0 {
 			if err := s.txMgr.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, op.privateDispatches); err != nil {
 				log.L(ctx).Errorf("Error persisting private dispatches: %s", err)
-				return err
+				return nil, err
 			}
 		}
 
@@ -184,7 +185,7 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 
 			if err := s.txMgr.WritePreparedTransactions(ctx, dbTX, op.preparedTransactions); err != nil {
 				log.L(ctx).Errorf("Error persisting prepared transactions: %s", err)
-				return err
+				return nil, err
 			}
 		}
 
@@ -207,7 +208,7 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 
 			if err != nil {
 				log.L(ctx).Errorf("Error persisting prepared transaction distributions: %s", err)
-				return err
+				return nil, err
 			}
 		}
 
@@ -229,10 +230,10 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 
 			if err != nil {
 				log.L(ctx).Errorf("Error persisting state distributions: %s", err)
-				return err
+				return nil, err
 			}
 		}
 
 	}
-	return nil
+	return pubTXCbs, nil
 }

@@ -264,12 +264,13 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 		err := ble.ValidateTransaction(ctx, tx)
 		require.NoError(t, err)
 	}
-	batch, err := ble.WriteNewTransactions(ctx, ble.p.DB(), txs[1:])
+	postCommit, batch, err := ble.WriteNewTransactions(ctx, ble.p.DB(), txs[1:])
 	require.NoError(t, err)
 	require.Len(t, batch, len(txs[1:]))
 	for _, tx := range batch {
 		require.Greater(t, *tx.LocalID, uint64(0))
 	}
+	postCommit()
 
 	// Get one back again by ID
 	txRead, err := ble.QueryPublicTxWithBindings(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("localId", *batch[1].LocalID).Limit(1).Query())
@@ -477,6 +478,8 @@ func TestAddActivityWrap(t *testing.T) {
 func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	ctx := context.Background()
 	_, ble, _, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
+		mocks.db.MatchExpectationsInOrder(false)
+		mocks.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{}))
 		mocks.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
 	})
 	defer done()

@@ -97,10 +97,16 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 	// We flush all of the affected domain contexts first, as they might contain states we need to refer
 	// to in the DB transaction below using foreign key relationships
 	domainContextDBTXCallbacks := make([]func(err error), 0, len(domainContextsToFlush))
+	var pubTXCbs []func()
 	dbTXCallback := func(err error) {
 		for _, dcTXCallback := range domainContextDBTXCallbacks {
 			if dcTXCallback != nil {
 				dcTXCallback(err)
+			}
+		}
+		if err == nil {
+			for _, publicTXCallback := range pubTXCbs {
+				publicTXCallback()
 			}
 		}
 	}
@@ -132,7 +138,7 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 	}
 
 	if err == nil && len(dispatchOperations) > 0 {
-		err = s.writeDispatchOperations(ctx, dbTX, dispatchOperations) // err variable must not be re-allocated
+		pubTXCbs, err = s.writeDispatchOperations(ctx, dbTX, dispatchOperations) // err variable must not be re-allocated
 	}
 
 	if err == nil && len(delegateOperations) > 0 {

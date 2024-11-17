@@ -593,7 +593,7 @@ func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
 		mockResolveKeyOKThenFail(t, mc, "sender1", tktypes.RandAddress())
 		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything).Return(nil)
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
-		mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
 	})
 	defer done()
 

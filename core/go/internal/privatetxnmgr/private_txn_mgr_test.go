@@ -94,7 +94,7 @@ func mockWritePublicTxsOk(mocks *dependencyMocks) chan struct{} {
 				PublicTxOptions: tx.PublicTxOptions,
 			}
 		}
-		mwtx.Return(res, nil)
+		mwtx.Return(func() {}, res, nil)
 		if dispatched != nil {
 			close(dispatched)
 			dispatched = nil
@@ -1617,7 +1617,7 @@ func (f *fakePublicTxManager) ValidateTransaction(ctx context.Context, transacti
 }
 
 // WriteNewTransactions implements components.PublicTxManager.
-func (f *fakePublicTxManager) WriteNewTransactions(ctx context.Context, dbTX *gorm.DB, transactions []*components.PublicTxSubmission) ([]*pldapi.PublicTx, error) {
+func (f *fakePublicTxManager) WriteNewTransactions(ctx context.Context, dbTX *gorm.DB, transactions []*components.PublicTxSubmission) (func(), []*pldapi.PublicTx, error) {
 	panic("unimplemented")
 }
 
