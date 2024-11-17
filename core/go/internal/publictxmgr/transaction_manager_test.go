@@ -259,7 +259,7 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 
 	// The rest we submit as as batch
 	for _, tx := range txs[1:] {
-		err := ble.ValidateTransaction(ctx, tx)
+		err := ble.ValidateTransaction(ctx, ble.p.DB(), tx)
 		require.NoError(t, err)
 	}
 	postCommit, batch, err := ble.WriteNewTransactions(ctx, ble.p.DB(), txs[1:])

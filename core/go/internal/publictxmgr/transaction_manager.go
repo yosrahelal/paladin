@@ -231,7 +231,7 @@ func buildEthTX(
 func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, txi *components.PublicTxSubmission) (tx *pldapi.PublicTx, err error) {
 	var txs []*pldapi.PublicTx
 	var cb func()
-	err = ble.ValidateTransaction(ctx, txi)
+	err = ble.ValidateTransaction(ctx, ble.p.DB(), txi)
 	if err == nil {
 		cb, txs, err = ble.WriteNewTransactions(ctx, ble.p.DB(), []*components.PublicTxSubmission{txi})
 	}
@@ -242,7 +242,7 @@ func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, txi *compo
 	return
 }
 
-func (ble *pubTxManager) ValidateTransaction(ctx context.Context, txi *components.PublicTxSubmission) error {
+func (ble *pubTxManager) ValidateTransaction(ctx context.Context, dbTX *gorm.DB, txi *components.PublicTxSubmission) error {
 	log.L(ctx).Tracef("PrepareSubmission transaction: %+v", txi)
 
 	if txi.From == nil {
@@ -268,7 +268,7 @@ func (ble *pubTxManager) ValidateTransaction(ctx context.Context, txi *component
 				if len(gasEstimateResult.RevertData) > 0 {
 					// we can use the error dictionary callback to TXManager to look up the ABI
 					// Note: The ABI is already persisted before TXManager calls down into us.
-					err = ble.rootTxMgr.CalculateRevertError(ctx, ble.p.DB(), gasEstimateResult.RevertData)
+					err = ble.rootTxMgr.CalculateRevertError(ctx, dbTX, gasEstimateResult.RevertData)
 					log.L(ctx).Warnf("Estimate gas reverted (%s): %s", err, err)
 				}
 				return err

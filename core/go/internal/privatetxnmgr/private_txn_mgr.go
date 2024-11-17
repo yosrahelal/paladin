@@ -448,7 +448,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	}
 
 	for _, pubTx := range publicTXs {
-		err := publicTransactionEngine.ValidateTransaction(ctx, pubTx)
+		err := publicTransactionEngine.ValidateTransaction(ctx, p.components.Persistence().DB(), pubTx)
 		if err != nil {
 			return p.revertDeploy(ctx, tx, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, "PrepareSubmissionBatch failed"))
 		}

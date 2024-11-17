@@ -79,7 +79,7 @@ var testABI = abi.ABI{
 
 func mockWritePublicTxsOk(mocks *dependencyMocks) chan struct{} {
 	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
-	mockPublicTxManager.On("ValidateTransaction", mock.Anything, mock.Anything).Return(nil)
+	mockPublicTxManager.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	dispatched := make(chan struct{})
 	mwtx := mockPublicTxManager.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything)
 	mwtx.Run(func(args mock.Arguments) {
@@ -1610,7 +1610,7 @@ func (f *fakePublicTxManager) SingleTransactionSubmit(ctx context.Context, trans
 }
 
 // ValidateTransaction implements components.PublicTxManager.
-func (f *fakePublicTxManager) ValidateTransaction(ctx context.Context, transaction *components.PublicTxSubmission) error {
+func (f *fakePublicTxManager) ValidateTransaction(ctx context.Context, dbTX *gorm.DB, transaction *components.PublicTxSubmission) error {
 	panic("unimplemented")
 }
 

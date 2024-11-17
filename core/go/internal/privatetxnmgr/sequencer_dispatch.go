@@ -171,7 +171,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 			}
 			publicTXs[i].Data = tktypes.HexBytes(data)
 
-			err = publicTransactionEngine.ValidateTransaction(ctx, publicTXs[i])
+			err = publicTransactionEngine.ValidateTransaction(ctx, s.components.Persistence().DB(), publicTXs[i])
 			if err != nil {
 				return i18n.WrapError(ctx, err, msgs.MsgPrivTxMgrPublicTxFail)
 			}

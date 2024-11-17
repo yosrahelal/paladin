@@ -547,7 +547,7 @@ func TestInsertTransactionFail(t *testing.T) {
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnError(fmt.Errorf("pop"))
 		mc.db.ExpectRollback()
 		mockResolveKeyOKThenFail(t, mc, "sender1", tktypes.RandAddress())
-		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything).Return(nil)
+		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	})
 	defer done()
 
@@ -569,7 +569,7 @@ func TestInsertTransactionFail(t *testing.T) {
 func TestInsertTransactionPublicTxPrepareFail(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mockResolveKeyOKThenFail(t, mc, "sender1", tktypes.RandAddress())
-		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
 	})
 	defer done()
 
@@ -591,7 +591,7 @@ func TestInsertTransactionPublicTxPrepareFail(t *testing.T) {
 func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mockResolveKeyOKThenFail(t, mc, "sender1", tktypes.RandAddress())
-		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything).Return(nil)
+		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
 		mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
 	})

@@ -70,7 +70,7 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mockResolveKey(t, mc, "sender1", tktypes.RandAddress())
 
-			mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything).Return(nil)
+			mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(
 				func() {},
 				[]*pldapi.PublicTx{

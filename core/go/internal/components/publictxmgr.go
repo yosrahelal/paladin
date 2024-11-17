@@ -62,7 +62,7 @@ type PublicTxManager interface {
 	GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error)
 
 	// Perform (potentially expensive) transaction level validation, such as gas estimation. Call before starting a DB transaction
-	ValidateTransaction(ctx context.Context, transaction *PublicTxSubmission) error
+	ValidateTransaction(ctx context.Context, dbTX *gorm.DB, transaction *PublicTxSubmission) error
 	// Write a set of validated transactions to the public TX mgr database, notifying the relevant orchestrator(s) to wake, assign nonces, and start the submission process
 	WriteNewTransactions(ctx context.Context, dbTX *gorm.DB, transactions []*PublicTxSubmission) (func(), []*pldapi.PublicTx, error)
 	// Convenience function that does ValidateTransaction+WriteNewTransactions for a single Tx

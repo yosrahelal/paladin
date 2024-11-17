@@ -436,7 +436,7 @@ func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, 
 				ptx.From, err = tktypes.ParseEthAddress(resolvedKey.Verifier.Verifier)
 			}
 			if err == nil {
-				err = tm.publicTxMgr.ValidateTransaction(ctx, ptx)
+				err = tm.publicTxMgr.ValidateTransaction(ctx, dbTX, ptx)
 			}
 			if err != nil {
 				return nil, nil, err

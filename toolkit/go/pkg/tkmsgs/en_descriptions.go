@@ -68,6 +68,7 @@ var (
 	PublicTxSubmissionNonce                = ffm("PublicTxSubmission.nonce", "The transaction nonce")
 	PublicTxSubmissionDataTime             = ffm("PublicTxSubmissionData.time", "The submission time")
 	PublicTxSubmissionDataTransactionHash  = ffm("PublicTxSubmissionData.transactionHash", "The transaction hash")
+	PublicTxLocalID                        = ffm("PublicTx.localId", "A locally generated numeric ID for the public transaction. Unique within the node")
 	PublicTxTo                             = ffm("PublicTx.to", "The target contract address (optional)")
 	PublicTxData                           = ffm("PublicTx.data", "The pre-encoded calldata (optional)")
 	PublicTxFrom                           = ffm("PublicTx.from", "The sender's Ethereum address")
