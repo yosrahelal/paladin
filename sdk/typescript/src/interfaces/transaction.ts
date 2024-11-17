@@ -65,6 +65,7 @@ export interface ITransactionReceipt {
       contractAddress?: string;
     };
   };
+  failureMessage?: string;
 }
 
 export interface ITransactionStates {

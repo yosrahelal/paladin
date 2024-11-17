@@ -257,6 +257,27 @@ func template() error {
 		// Perform the regex replacement
 		newContent := pattern.ReplaceAllString(string(content), "{{ `{{${1}}}` }}")
 
+		// Add conditional wrapper around the content
+		conditions := []string{"(eq .Values.mode \"devnet\")"}
+
+		if strings.Contains(file, "smartcontractdeployment") {
+			// Include additional condition if file contains "smartcontractdeployment"
+			conditions = append(conditions, "(eq .Values.mode \"smartcontractdeployment\")")
+		}
+
+		// Build the condition string for the template
+		var condition string
+		if len(conditions) == 1 {
+			// Single condition doesn't need 'or'
+			condition = conditions[0]
+		} else {
+			// Multiple conditions use 'or' to combine them
+			condition = fmt.Sprintf("(or %s)", strings.Join(conditions, " "))
+		}
+
+		// Wrap newContent with the conditional template
+		newContent = fmt.Sprintf("{{- if %s }}\n\n%s\n{{- end }}", condition, newContent)
+
 		// Write the modified content back to the same file
 		err = os.WriteFile(file, []byte(newContent), fs.FileMode(0644))
 		if err != nil {

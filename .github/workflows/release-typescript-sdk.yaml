@@ -1,0 +1,41 @@
+name: TypeScript SDK Release
+on:
+  workflow_call:
+    secrets:
+      NPM_TOKEN:
+        description: 'NPM token'
+        required: true
+  workflow_dispatch:
+
+    
+jobs:
+  publish:
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install pre-requisites
+        uses: ./.github/actions/setup
+       
+      - name: Publish to npm
+        working-directory: sdk/typescript
+        shell: bash
+        run: |
+          set -e
+          ../../gradlew build
+          npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+

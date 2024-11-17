@@ -412,8 +412,12 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 								TimeoutSeconds:      2,
 								PeriodSeconds:       5,
 							},
+							SecurityContext: r.config.Paladin.SecurityContext,
 						},
 					},
+					Tolerations:  r.config.Paladin.Tolerations,
+					NodeSelector: r.config.Paladin.NodeSelector,
+					Affinity:     r.config.Paladin.Affinity,
 					Volumes: []corev1.Volume{
 						{
 							Name: "config",
@@ -439,10 +443,13 @@ func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordS
 			Name:            "postgres",
 			Image:           r.config.Postgres.Image, // Use the image from the config
 			ImagePullPolicy: r.config.Postgres.ImagePullPolicy,
+			SecurityContext: r.config.Postgres.SecurityContext,
 			VolumeMounts: []corev1.VolumeMount{
 				{
 					Name:      "pgdata",
 					MountPath: "/pgdata",
+					SubPath:   "data",
+					ReadOnly:  false, // Postgres needs to write to this
 				},
 			},
 			Ports: []corev1.ContainerPort{
@@ -490,7 +497,7 @@ func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordS
 					},
 				},
 			}, buildEnv(r.config.Postgres.Envs, map[string]string{
-				"PGDATA": "/pgdata",
+				"PGDATA": "/pgdata/data",
 			})...),
 		},
 	}, ss.Spec.Template.Spec.Containers...)
@@ -1203,6 +1210,8 @@ func (r *PaladinReconciler) getLabels(node *corev1alpha1.Paladin, extraLabels ..
 		}
 	}
 	l["app.kubernetes.io/name"] = generatePaladinName(node.Name)
+	l["app.kubernetes.io/instance"] = node.Name
+	l["app.kubernetes.io/part-of"] = "paladin"
 	return l
 }
 

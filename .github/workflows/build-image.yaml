@@ -1,18 +1,8 @@
 name: Build docker image
 permissions:
-  actions: read
-  checks: read
   contents: write
-  deployments: read
-  discussions: read
-  id-token: write
-  issues: read
   packages: write
-  pages: read
-  pull-requests: read
-  repository-projects: read
-  statuses: read
-  security-events: read
+  id-token: write
   
 on:
   workflow_call:
@@ -38,6 +28,11 @@ on:
         required: false
         type: boolean
         default: true
+      upload-artifact:
+        description: 'Upload the image as an artifact'
+        required: false
+        type: boolean
+        default: false
       platforms:
         description: 'Platforms to build for'
         required: false
@@ -59,9 +54,6 @@ on:
 jobs:
   docker:
     runs-on: ${{ inputs.runs-on }}
-    permissions:
-      contents: read
-      packages: write
     steps:
       - name: Print inputs
         run: |
@@ -91,18 +83,17 @@ jobs:
           registry: ${{ inputs.registry }}
           username: ${{ secrets.username }}
           password: ${{ secrets.password }}
-
-      - name: Set lower case image name
-        run: |
-          echo "IMAGE_LC=${IMAGE,,}" >>${GITHUB_ENV}
-        env:
-          IMAGE: ${{ inputs.registry }}/${{ inputs.image }}
       
       - name: Set build tag
         id: build_tag_generator
         run: |
           echo "BUILD_TAG=$(date +"%Y%m%d")-$GITHUB_RUN_NUMBER" >> $GITHUB_OUTPUT
           echo "BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_OUTPUT
+
+      - name: Set sanitized artifact name
+        run: echo "IMAGE_NAME_SANITIZED=${IMAGE//\//-}" >> $GITHUB_ENV
+        env:
+          IMAGE: ${{ inputs.image }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -112,10 +103,19 @@ jobs:
           builder: ${{ steps.buildx.outputs.name }}
           push: ${{ inputs.push }}
           platforms: ${{ inputs.platforms }}
-          tags: "${{ env.IMAGE_LC }}:${{ inputs.image_tag }}"
+          tags: "${{ inputs.registry }}/${{ inputs.image }}:${{ inputs.image_tag }}"
           labels: |
             commit=${{ github.sha }}
             build_date=${{ steps.build_tag_generator.outputs.BUILD_DATE }}
             tag=${{ steps.build_tag_generator.outputs.BUILD_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/${{ env.IMAGE_NAME_SANITIZED }}-${{ github.sha }}.tar
+
+      - name: Upload artifact
+        if: ${{ inputs.upload-artifact }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.image }}-${{ github.sha }}
+          path: /tmp/${{ env.IMAGE_NAME_SANITIZED }}-${{ github.sha }}.tar
+          retention-days: 1

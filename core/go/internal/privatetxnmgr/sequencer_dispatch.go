@@ -160,7 +160,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				PublicTxInput: pldapi.PublicTxInput{
 					From:            resolvedAddrs[i],
 					To:              &s.contractAddress,
-					PublicTxOptions: pldapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
+					PublicTxOptions: pt.PublicTxOptions,
 				},
 			}
 

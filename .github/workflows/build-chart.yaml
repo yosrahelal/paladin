@@ -1,0 +1,103 @@
+name: Operator Build
+
+on:
+  workflow_call:
+    inputs:
+      paladin-image:
+        required: true
+        type: string
+      paladin-image-tag:
+        required: true
+        type: string
+      operator-image:
+        required: true
+        type: string
+      operator-image-tag:
+        required: true
+        type: string
+      build-operator:
+        required: false
+        type: boolean
+        default: false
+      build-paladin:
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      paladin-image:
+        required: true
+        type: string
+      paladin-image-tag:
+        required: true
+        type: string
+      operator-image:
+        required: true
+        type: string
+      operator-image-tag:
+        required: true
+        type: string
+      build-operator:
+        required: false
+        type: boolean
+        default: false
+      build-paladin:
+        required: false
+        type: boolean
+        default: false
+jobs:
+  operator-build:
+    runs-on: ubuntu-latest
+    env:
+      CLUSTER_NAME: paladin
+      NAMESPACE: paladin
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install pre-requisites
+        uses: ./.github/actions/setup
+
+      - name: Install Kind
+        uses: helm/kind-action@v1
+        with:
+          install_only: true # only install kind, the cluster creation is managed by the deploy step
+          ignore_failed_clean: true
+
+      - name: Download docker artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp # download all docker images to /tmp
+          pattern: paladin-*
+          merge-multiple: true
+      
+      - name: Load image
+        run: |
+          docker load --input /tmp/paladin-operator-${{ github.sha }}.tar
+          docker load --input /tmp/paladin-${{ github.sha }}.tar
+          docker image ls -a  
+      
+      # The makefile uses kustomize
+      - uses: imranismail/setup-kustomize@v2
+
+      - name: Deploy Operator
+        run: |
+          ./gradlew deploy \
+            -PclusterName=${{ env.CLUSTER_NAME }} \
+            -Pnamespace=${{ env.NAMESPACE }} \
+            -PbuildOperator=${{ inputs.build-operator }} \
+            -PbuildPaladin=${{ inputs.build-paladin }} \
+            -PoperatorImageName=${{ inputs.operator-image }} \
+            -PoperatorImageTag=${{ inputs.operator-image-tag }} \
+            -PpaladinImageName=${{ inputs.paladin-image }} \
+            -PpaladinImageTag=${{ inputs.paladin-image-tag }} 
+
+      - name: Uninstall Operator
+        run: |
+          ./gradlew clean \
+            -PclusterName=${{ env.CLUSTER_NAME }} \
+            -Pnamespace=${{ env.NAMESPACE }} \
+            -PdeleteCluster=true
