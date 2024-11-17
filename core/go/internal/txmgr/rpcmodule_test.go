@@ -560,7 +560,7 @@ func TestQueryPreparedTransactionsNotFound(t *testing.T) {
 func TestPrepareTransactions(t *testing.T) {
 
 	ctx, url, _, done := newTestTransactionManagerWithRPC(t, mockKeyResolutionContextOk(t), func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.MatchedBy(func(tx *components.ValidatedTransaction) bool {
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.MatchedBy(func(tx *components.ValidatedTransaction) bool {
 			return tx.Transaction.SubmitMode.V() == pldapi.SubmitModeExternal
 		})).Return(nil)
 	})

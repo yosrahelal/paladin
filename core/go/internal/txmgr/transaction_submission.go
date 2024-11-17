@@ -463,7 +463,7 @@ func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, 
 	// same pattern as public transactions above
 	for _, txi := range txis {
 		if txi.Transaction.Type.V() == pldapi.TransactionTypePrivate {
-			if err := tm.privateTxMgr.HandleNewTx(ctx, txi); err != nil {
+			if err := tm.privateTxMgr.HandleNewTx(ctx, dbTX, txi); err != nil {
 				return nil, nil, err
 			}
 		}

@@ -210,7 +210,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 
 	// We also need to trigger ourselves for any private TX we chained
 	for _, tx := range dispatchBatch.PrivateDispatches {
-		if err := s.privateTxManager.HandleNewTx(ctx, tx); err != nil {
+		if err := s.privateTxManager.HandleNewTx(ctx, s.components.Persistence().DB(), tx); err != nil {
 			log.L(ctx).Errorf("Sequencer failed to notify private TX manager for chained transaction")
 		}
 	}

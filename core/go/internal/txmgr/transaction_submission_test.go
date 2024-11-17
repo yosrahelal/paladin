@@ -264,7 +264,7 @@ func TestResolveFunctionPlainNameOK(t *testing.T) {
 func TestSendTransactionPrivateDeploy(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK(true), mockKeyResolutionContextOk(t),
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
+			mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		})
 	defer done()
 
@@ -287,7 +287,7 @@ func TestSendTransactionPrivateDeploy(t *testing.T) {
 func TestSendTransactionPrivateInvoke(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK(true), mockKeyResolutionContextOk(t),
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
+			mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		})
 	defer done()
 
@@ -312,7 +312,7 @@ func TestSendTransactionPrivateInvoke(t *testing.T) {
 func TestSendTransactionPrivateInvokeFail(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK(false), mockKeyResolutionContextFail(t),
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+			mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
 		})
 	defer done()
 

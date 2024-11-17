@@ -148,7 +148,7 @@ func mockKeyResolverForFail(t *testing.T, mc *mockComponents) *componentmocks.Ke
 func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 
 	ctx, txm, done := newTestTransactionManager(t, true, mockKeyResolutionContextOk(t), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	})
 	defer done()
 
@@ -192,7 +192,7 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 
 	ctx, txm, done := newTestTransactionManager(t, true, mockKeyResolutionContextOk(t), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 		mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).Return(
 			&pldapi.TransactionStates{None: true}, nil,

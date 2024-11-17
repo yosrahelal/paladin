@@ -120,7 +120,7 @@ func TestPrivateTxManagerInvalidTransaction(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.handleNewTx(ctx, &components.PrivateTransaction{})
+	err = privateTxManager.handleNewTx(ctx, privateTxManager.components.Persistence().DB(), &components.PrivateTransaction{})
 	// no input domain should err
 	assert.Regexp(t, "PD011800", err)
 }
@@ -273,7 +273,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
-	err = privateTxManager.handleNewTx(ctx, tx)
+	err = privateTxManager.handleNewTx(ctx, privateTxManager.components.Persistence().DB(), tx)
 	require.NoError(t, err)
 
 	// testTimeout := 2 * time.Second
@@ -300,7 +300,7 @@ type identityForTesting struct {
 }
 
 func (i *identityForTesting) mockResolve(ctx context.Context, other identityForTesting) {
-	// in addition to the default mocks set up in newPartyForTesting, we can set up mocks to resolve remote identitys
+	// in addition to the default mocks set up in newPartyForTesting, we can set up mocks to resolve remote identities
 	// we could have used a real IdentityResolver here but we are testing the private transaction manager in isolation and so we mock the IdentityResolver as we do with all other tests in this file
 	i.mocks.identityResolver.On(
 		"ResolveVerifierAsync",
@@ -444,7 +444,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 		}()
 	}).Return(nil).Maybe()
 
-	remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
+	remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
 
 	//TODO match endorsement request and verifier args
 	remoteEngineMocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
@@ -508,7 +508,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
 
-	err = privateTxManager.handleNewTx(ctx, tx)
+	err = privateTxManager.handleNewTx(ctx, privateTxManager.components.Persistence().DB(), tx)
 	assert.NoError(t, err)
 
 	status := pollForStatus(ctx, t, "delegating", privateTxManager, domainAddressString, tx.ID.String(), 200*time.Second)
@@ -644,8 +644,8 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 
 	//set up the mocks on bob and carols engines that are need on the endorse code path (and of course also on alice's engine because she is an endorser too)
 
-	bobEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(bobEngineMocks.domainSmartContract, nil)
-	carolEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(carolEngineMocks.domainSmartContract, nil)
+	bobEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *domainAddress).Return(bobEngineMocks.domainSmartContract, nil)
+	carolEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *domainAddress).Return(carolEngineMocks.domainSmartContract, nil)
 
 	//TODO match endorsement request and verifier args
 	aliceEngineMocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
@@ -754,7 +754,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	err := aliceEngine.Start()
 	assert.NoError(t, err)
 
-	err = aliceEngine.handleNewTx(ctx, tx)
+	err = aliceEngine.handleNewTx(ctx, aliceEngine.components.Persistence().DB(), tx)
 	assert.NoError(t, err)
 
 	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx.ID.String(), 200*time.Second)
@@ -938,10 +938,10 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	err := aliceEngine.Start()
 	require.NoError(t, err)
 
-	err = aliceEngine.handleNewTx(ctx, tx1)
+	err = aliceEngine.handleNewTx(ctx, aliceEngine.components.Persistence().DB(), tx1)
 	require.NoError(t, err)
 
-	err = aliceEngine.handleNewTx(ctx, tx2)
+	err = aliceEngine.handleNewTx(ctx, aliceEngine.components.Persistence().DB(), tx2)
 	require.NoError(t, err)
 
 	// Neither transaction should be dispatched yet
@@ -1452,7 +1452,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 					privateTxManager.ReceiveTransportMessage(ctx, transportMessage)
 				}()
 			}).Return(nil).Maybe()
-			remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
+			remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
 
 			remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("domain1.contract1.notary", "notaryVerifier", nil)
 
@@ -1517,7 +1517,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 						From:   "Alice",
 					},
 				}
-				err = privateTxManager.handleNewTx(ctx, tx)
+				err = privateTxManager.handleNewTx(ctx, privateTxManager.components.Persistence().DB(), tx)
 				require.NoError(t, err)
 			}
 
@@ -1733,7 +1733,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 
 func (m *dependencyMocks) mockDomain(domainAddress *tktypes.EthAddress) {
 	m.stateStore.On("NewDomainContext", mock.Anything, m.domain, *domainAddress, mock.Anything).Return(m.domainContext).Maybe()
-	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(m.domainSmartContract, nil)
+	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *domainAddress).Maybe().Return(m.domainSmartContract, nil)
 	m.domain.On("Configuration").Return(&prototk.DomainConfig{}).Maybe()
 }
 
@@ -1762,7 +1762,7 @@ func mockDomainSmartContractAndCtx(t *testing.T, m *dependencyMocks) (*component
 	mPSC.On("Address").Return(contractAddr).Maybe()
 	mPSC.On("Domain").Return(mDomain).Maybe()
 
-	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, contractAddr).Return(mPSC, nil)
+	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, contractAddr).Return(mPSC, nil)
 
 	mDC := componentmocks.NewDomainContext(t)
 	m.stateStore.On("NewDomainContext", mock.Anything, mDomain, contractAddr).Return(mDC).Maybe()
