@@ -1,5 +1,5 @@
 BEGIN;
 
--- TODO (or at least decide if TODO): down migration is provided to reinstate the signer_nonce column.
+-- There is no ability to re-instate the signer_nonce column (and remove the pub_txn_id column) via a down migration
 
 COMMIT;
