@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
@@ -37,6 +38,7 @@ import (
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 )
@@ -55,6 +57,8 @@ type componentManager struct {
 	bgCtx        context.Context
 	// config
 	conf *pldconf.PaladinConfig
+	// debug server
+	debugServer httpserver.Server
 	// pre-init
 	keyManager       components.KeyManager
 	ethClientFactory ethclient.EthClientFactory
@@ -110,9 +114,29 @@ func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID 
 	}
 }
 
+func (cm *componentManager) startDebugServer() (httpserver.Server, error) {
+	if cm.conf.DebugServer.Port == nil {
+		cm.conf.DebugServer.Port = pldconf.DebugServerDefaults.Port
+	}
+	server, err := httpserver.NewDebugServer(cm.bgCtx, &cm.conf.DebugServer.HTTPServerConfig)
+	if err == nil {
+		err = server.Start()
+	}
+	return server, err
+}
+
 func (cm *componentManager) Init() (err error) {
-	cm.ethClientFactory, err = ethclient.NewEthClientFactory(cm.bgCtx, &cm.conf.Blockchain)
-	err = cm.wrapIfErr(err, msgs.MsgComponentEthClientInitError)
+	// start the debug server as early as possible
+	if confutil.Bool(cm.conf.DebugServer.Enabled, *pldconf.DebugServerDefaults.Enabled) {
+		cm.debugServer, err = cm.startDebugServer()
+		err = cm.addIfStarted("debugServer", cm.debugServer, err, msgs.MsgComponentDebugServerStartError)
+	}
+
+	if err == nil {
+		cm.ethClientFactory, err = ethclient.NewEthClientFactory(cm.bgCtx, &cm.conf.Blockchain)
+		err = cm.wrapIfErr(err, msgs.MsgComponentEthClientInitError)
+	}
+
 	if err == nil {
 		cm.persistence, err = persistence.NewPersistence(cm.bgCtx, &cm.conf.DB)
 		err = cm.addIfOpened("database", cm.persistence, err, msgs.MsgComponentDBInitError)

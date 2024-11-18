@@ -73,6 +73,7 @@ var (
 	MsgComponentIdentityResolverStartError = ffe("PD010030", "Error starting identity resolver")
 	MsgComponentAdditionalMgrInitError     = ffe("PD010031", "Error initializing %s manager")
 	MsgComponentAdditionalMgrStartError    = ffe("PD010032", "Error initializing %s manager")
+	MsgComponentDebugServerStartError      = ffe("PD010033", "Error starting debug server")
 
 	// States PD0101XX
 	MsgStateInvalidLength             = ffe("PD010101", "Invalid hash len expected=%d actual=%d")
