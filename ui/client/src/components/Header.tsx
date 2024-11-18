@@ -55,7 +55,7 @@ export const Header: React.FC = () => {
     }
   };
 
-  const handleAutoRefreshChange = (value: string) => {
+  const handleAutoRefreshChange = (value: 'play' | 'pause') => {
     switch (value) {
       case 'play': setAutoRefreshEnabled(true); break;
       case 'pause': setAutoRefreshEnabled(false); break;

@@ -21,7 +21,7 @@ import { fetchEvents } from "../queries/events";
 import { Event } from "./Event";
 import { useContext } from "react";
 import { ApplicationContext } from "../contexts/ApplicationContext";
-import { altDarkModeScrollbarStyle, altLightModeScrollbarStyle } from "../themes/default";
+import { getAltModeScrollBarStyle } from "../themes/default";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { IEvent } from "../interfaces";
 
@@ -33,12 +33,11 @@ export const Events: React.FC = () => {
     queryKey: ["events", lastBlockWithTransactions],
     queryFn: ({ pageParam }) => fetchEvents(pageParam),
     initialPageParam: undefined as IEvent | undefined,
-    getNextPageParam: (lastPage) => {return lastPage[lastPage.length - 1]},
+    getNextPageParam: (lastPage) => { return lastPage.length > 0? lastPage[lastPage.length - 1] : undefined },
   });
 
   const theme = useTheme();
-  const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
-
+  
   if (error) {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
   }
@@ -57,7 +56,7 @@ export const Events: React.FC = () => {
         sx={{
           height: "calc(100vh - 170px)",
           paddingRight: "15px",
-          ...addedStyle
+          ...getAltModeScrollBarStyle(theme.palette.mode)
         }}
       >
         <InfiniteScroll

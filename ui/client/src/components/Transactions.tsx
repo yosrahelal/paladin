@@ -23,7 +23,7 @@ import {
   fetchIndexedTransactions,
 } from "../queries/transactions";
 import { Transaction } from "./Transaction";
-import { altLightModeScrollbarStyle, altDarkModeScrollbarStyle } from "../themes/default";
+import { getAltModeScrollBarStyle } from "../themes/default";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { ITransaction } from "../interfaces";
 
@@ -32,7 +32,6 @@ export const Transactions: React.FC = () => {
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
 
   const theme = useTheme();
-  const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
   const { data: transactions, fetchNextPage, hasNextPage, error } = useInfiniteQuery({
     queryKey: ["transactions", lastBlockWithTransactions],
@@ -59,7 +58,7 @@ export const Transactions: React.FC = () => {
         sx={{
           height: "calc(100vh - 170px)",
           paddingRight: "15px",
-          ...addedStyle
+          ...getAltModeScrollBarStyle(theme.palette.mode)
         }}
       >
         <InfiniteScroll

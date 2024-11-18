@@ -21,7 +21,7 @@ import { useContext, useState } from "react";
 import { PaladinTransaction } from "../components/PaladinTransaction";
 import { ApplicationContext } from "../contexts/ApplicationContext";
 import { fetchSubmissions } from "../queries/transactions";
-import { altLightModeScrollbarStyle, altDarkModeScrollbarStyle } from "../themes/default";
+import { getAltModeScrollBarStyle } from "../themes/default";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { IPaladinTransaction } from "../interfaces";
 
@@ -30,13 +30,12 @@ export const Submissions: React.FC = () => {
   const [tab, setTab] = useState<'all' | 'pending'>('all');
 
   const theme = useTheme();
-  const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
   const { data: transactions, fetchNextPage, hasNextPage, error } = useInfiniteQuery({
     queryKey: ["submissions", tab, lastBlockWithTransactions],
     queryFn: ({ pageParam }) => fetchSubmissions(tab, pageParam),
     initialPageParam: undefined as IPaladinTransaction | undefined,
-    getNextPageParam: (lastPage) => { return lastPage[lastPage.length - 1] },
+    getNextPageParam: (lastPage) => { return lastPage.length > 0? lastPage[lastPage.length - 1] : undefined },
   });
 
   if (error) {
@@ -68,7 +67,7 @@ export const Submissions: React.FC = () => {
           sx={{
             paddingRight: "15px",
             height: "calc(100vh - 178px)",
-            ...addedStyle
+            ...getAltModeScrollBarStyle(theme.palette.mode)
           }}
         >
           <InfiniteScroll

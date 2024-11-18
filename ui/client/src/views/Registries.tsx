@@ -21,13 +21,12 @@ import { useContext } from "react";
 import { Registry } from "../components/Registry";
 import { ApplicationContext } from "../contexts/ApplicationContext";
 import { fetchRegistries } from "../queries/registry";
-import { altDarkModeScrollbarStyle, altLightModeScrollbarStyle } from "../themes/default";
+import { getAltModeScrollBarStyle } from "../themes/default";
 
 export const Registries: React.FC = () => {
 
   const { lastBlockWithTransactions, autoRefreshEnabled } = useContext(ApplicationContext);
   const theme = useTheme();
-  const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
   const { data: registries, error, isFetching } = useQuery({
     queryKey: ["registries", autoRefreshEnabled, lastBlockWithTransactions],
@@ -59,7 +58,7 @@ export const Registries: React.FC = () => {
           sx={{
             paddingRight: '15px',
             height: "calc(100vh - 170px)",
-            ...addedStyle
+            ...getAltModeScrollBarStyle(theme.palette.mode)
           }}
         >
           {registries?.map((registry) => (
