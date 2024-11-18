@@ -448,6 +448,8 @@ func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordS
 				{
 					Name:      "pgdata",
 					MountPath: "/pgdata",
+					SubPath:   "data",
+					ReadOnly:  false, // Postgres needs to write to this
 				},
 			},
 			Ports: []corev1.ContainerPort{
@@ -495,7 +497,7 @@ func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordS
 					},
 				},
 			}, buildEnv(r.config.Postgres.Envs, map[string]string{
-				"PGDATA": "/pgdata",
+				"PGDATA": "/pgdata/data",
 			})...),
 		},
 	}, ss.Spec.Template.Spec.Containers...)
@@ -695,6 +697,11 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 			})
 	}
 
+	// Override the default config with the user provided config
+	if err := r.generatePaladinAuthConfig(ctx, node, &pldConf); err != nil {
+		return "", nil, err
+	}
+
 	// DB needs merging from user config and our config
 	if err := r.generatePaladinDBConfig(ctx, node, &pldConf, name); err != nil {
 		return "", nil, err
@@ -727,6 +734,34 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 	}
 	b, err := yaml.Marshal(&pldConf)
 	return string(b), tlsSecrets, err
+}
+
+func (r *PaladinReconciler) generatePaladinAuthConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig) error {
+	// generate the Paladin auth config
+	if node.Spec.AuthConfig == nil {
+		return nil
+	}
+
+	switch node.Spec.AuthConfig.AuthMethod {
+	case corev1alpha1.AuthMethodSecret:
+		if node.Spec.AuthConfig.AuthSecret == nil {
+			return fmt.Errorf("AuthSecret must be provided when using AuthMethodSecret")
+		}
+		secretName := node.Spec.AuthConfig.AuthSecret.Name
+		if secretName == "" {
+			return fmt.Errorf("AuthSecret must be provided when using AuthMethodSecret")
+		}
+		sec := &corev1.Secret{}
+		if err := r.Client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: node.Namespace}, sec); err != nil {
+			return err
+		}
+		if sec.Data == nil {
+			return fmt.Errorf("Secret %s has no data", secretName)
+		}
+		mapToStruct(sec.Data, &pldConf.Blockchain.HTTP.Auth)
+		mapToStruct(sec.Data, &pldConf.Blockchain.WS.Auth)
+	}
+	return nil
 }
 
 func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig, name string) error {

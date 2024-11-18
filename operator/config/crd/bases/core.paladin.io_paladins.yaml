@@ -45,6 +45,29 @@ spec:
           spec:
             description: PaladinSpec defines the desired state of Paladin
             properties:
+              authConfig:
+                description: |-
+                  AuthConfig is used to provide authentication details for blockchain connections
+                  If this is set, it will override the auth details in the config
+                properties:
+                  authMethod:
+                    description: auth method to use for the connection
+                    enum:
+                    - secret
+                    type: string
+                  authSecret:
+                    description: SecretAuth is used to provide the name of the secret
+                      to use for authentication
+                    properties:
+                      name:
+                        description: The name of the secret to use for authentication
+                        type: string
+                    required:
+                    - name
+                    type: object
+                required:
+                - authMethod
+                type: object
               besuNode:
                 description: |-
                   Optionally bind to a local besu node deployed with this operator

@@ -1,0 +1,16 @@
+# run only when workflows are triggered by a push event
+on:
+  pull_request:
+    paths:
+    - '.github/workflows/**'
+    - '.github/actions/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Validate workflows
+        uses: ./.github/actions/workflows-validation
