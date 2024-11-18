@@ -29,21 +29,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestDebugServer(t *testing.T, conf *pldconf.HTTPServerConfig) (string, *httpServer, func()) {
+func newTestDebugServer(t *testing.T, conf *pldconf.HTTPServerConfig) (string, *debugServer, func()) {
 	conf.Address = confutil.P("127.0.0.1")
 	conf.Port = confutil.P(0)
 	s, err := NewDebugServer(context.Background(), conf)
 	require.NoError(t, err)
-	hs := s.(*httpServer)
+	ds := s.(*debugServer)
 	err = s.Start()
 	require.NoError(t, err)
 
-	return fmt.Sprintf("http://%s", s.Addr()), hs, s.Stop
+	return fmt.Sprintf("http://%s", s.Addr()), ds, s.Stop
 }
 
-func TestStackTrace(t *testing.T) {
+func TestDebugServerStackTrace(t *testing.T) {
 
-	url, _, done := newTestDebugServer(t, &pldconf.HTTPServerConfig{})
+	url, ds, done := newTestDebugServer(t, &pldconf.HTTPServerConfig{})
 	defer done()
 
 	resp, err := http.Get(fmt.Sprintf("%s/debug/pprof/goroutine?debug=2", url))
@@ -53,5 +53,14 @@ func TestStackTrace(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Regexp(t, "debugserver_test.go", string(b))
+
+	require.NotNil(t, ds.Router())
+
+}
+
+func TestDebugServerFail(t *testing.T) {
+
+	_, err := NewDebugServer(context.Background(), &pldconf.HTTPServerConfig{})
+	assert.Regexp(t, "PD020601", err)
 
 }

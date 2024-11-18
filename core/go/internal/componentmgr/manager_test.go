@@ -18,7 +18,9 @@ package componentmgr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"testing"
 
@@ -42,6 +44,11 @@ import (
 )
 
 func TestInitOK(t *testing.T) {
+
+	l, err := net.Listen("tcp4", ":0")
+	require.NoError(t, err)
+	debugPort := l.Addr().(*net.TCPAddr).Port
+	require.NoError(t, l.Close())
 
 	// We build a config that allows us to get through init successfully, as should be possible
 	// (anything that can't do this should have a separate Start() phase).
@@ -91,6 +98,12 @@ func TestInitOK(t *testing.T) {
 			HTTP: pldconf.RPCServerConfigHTTP{Disabled: true},
 			WS:   pldconf.RPCServerConfigWS{Disabled: true},
 		},
+		DebugServer: pldconf.DebugServerConfig{
+			Enabled: confutil.P(true),
+			HTTPServerConfig: pldconf.HTTPServerConfig{
+				Port: confutil.P(debugPort),
+			},
+		},
 	}
 
 	mockExtraManager := componentmocks.NewAdditionalManager(t)
@@ -98,7 +111,7 @@ func TestInitOK(t *testing.T) {
 	mockExtraManager.On("PreInit", mock.Anything).Return(&components.ManagerInitResult{}, nil)
 	mockExtraManager.On("PostInit", mock.Anything).Return(nil)
 	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), testConfig, mockExtraManager).(*componentManager)
-	err := cm.Init()
+	err = cm.Init()
 	require.NoError(t, err)
 
 	assert.NotNil(t, cm.KeyManager())
@@ -115,6 +128,11 @@ func TestInitOK(t *testing.T) {
 	assert.NotNil(t, cm.PublicTxManager())
 	assert.NotNil(t, cm.TxManager())
 	assert.NotNil(t, cm.IdentityResolver())
+
+	// Check we can send a request for a javadump - even just after init (not start)
+	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/debug/javadump", debugPort))
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
 
 	cm.Stop()
 
@@ -199,7 +217,11 @@ func TestStartOK(t *testing.T) {
 	mockExtraManager.On("Name").Return("unittest_manager")
 	mockExtraManager.On("Stop").Return()
 
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, mockExtraManager).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{
+		DebugServer: pldconf.DebugServerConfig{
+			Enabled: confutil.P(false),
+		},
+	}, mockExtraManager).(*componentManager)
 	cm.ethClientFactory = mockEthClientFactory
 	cm.initResults = map[string]*components.ManagerInitResult{
 		"utengine": {

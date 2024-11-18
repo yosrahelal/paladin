@@ -24,12 +24,30 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 )
 
-func NewDebugServer(ctx context.Context, debugServerConf *pldconf.HTTPServerConfig) (_ Server, err error) {
+type DebugServer interface {
+	Server
+	Router() *mux.Router
+}
+
+type debugServer struct {
+	Server
+	r *mux.Router
+}
+
+func (ds *debugServer) Router() *mux.Router {
+	return ds.r
+}
+
+func NewDebugServer(ctx context.Context, debugServerConf *pldconf.HTTPServerConfig) (_ DebugServer, err error) {
 	r := mux.NewRouter()
 	r.PathPrefix("/debug/pprof/cmdline").HandlerFunc(pprof.Cmdline)
 	r.PathPrefix("/debug/pprof/profile").HandlerFunc(pprof.Profile)
 	r.PathPrefix("/debug/pprof/symbol").HandlerFunc(pprof.Symbol)
 	r.PathPrefix("/debug/pprof/trace").HandlerFunc(pprof.Trace)
 	r.PathPrefix("/debug/pprof/").HandlerFunc(pprof.Index)
-	return NewServer(ctx, "debug", debugServerConf, r)
+	server, err := NewServer(ctx, "debug", debugServerConf, r)
+	if err != nil {
+		return nil, err
+	}
+	return &debugServer{Server: server, r: r}, nil
 }

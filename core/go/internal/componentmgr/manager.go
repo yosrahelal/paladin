@@ -17,6 +17,7 @@ package componentmgr
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -40,6 +41,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 )
 
@@ -114,12 +116,16 @@ func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID 
 	}
 }
 
+func (cm *componentManager) javaDump(res http.ResponseWriter, req *http.Request) {
+	cm.pluginManager.SendSystemCommandToLoader(prototk.PluginLoad_THREAD_DUMP)
+	res.WriteHeader(202)
+}
+
 func (cm *componentManager) startDebugServer() (httpserver.Server, error) {
-	if cm.conf.DebugServer.Port == nil {
-		cm.conf.DebugServer.Port = pldconf.DebugServerDefaults.Port
-	}
+	cm.conf.DebugServer.Port = confutil.P(confutil.Int(cm.conf.DebugServer.Port, *pldconf.DebugServerDefaults.Port))
 	server, err := httpserver.NewDebugServer(cm.bgCtx, &cm.conf.DebugServer.HTTPServerConfig)
 	if err == nil {
+		server.Router().PathPrefix("/debug/javadump").HandlerFunc(http.HandlerFunc(cm.javaDump))
 		err = server.Start()
 	}
 	return server, err
