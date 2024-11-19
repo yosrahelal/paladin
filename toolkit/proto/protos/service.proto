@@ -182,6 +182,10 @@ message PluginLoad {
   LibType lib_type = 2; // The binary type of the plugin
   string lib_location = 3; // The location of the plugin (such as a Java Jar file or C library load spec)
   optional string class = 4; // For JAR type we need to specify a class inside the Jar as well
+  enum SysCommand {
+    THREAD_DUMP = 0;
+  }
+  optional SysCommand sys_command = 5;
 }
 
 service PluginController {

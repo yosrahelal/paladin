@@ -139,6 +139,7 @@ func (dm *domainManager) Stop() {
 
 func (dm *domainManager) cleanupDomain(d *domain) {
 	// must not hold the domain lock when running this
+	log.L(dm.bgCtx).Infof("Cleaning up domain plugin after unload name=%s address=%s", d.name, d.RegistryAddress())
 	d.close()
 	delete(dm.domainsByName, d.name)
 	delete(dm.domainsByAddress, *d.RegistryAddress())
@@ -176,6 +177,9 @@ func (dm *domainManager) DomainRegistered(name string, toDomain components.Domai
 	// Initialize
 	d := dm.newDomain(name, conf, toDomain)
 	dm.domainsByName[name] = d
+
+	log.L(dm.bgCtx).Infof("Domain plugin registered name=%s address=%s", d.name, d.RegistryAddress())
+
 	go d.init()
 	return d, nil
 }

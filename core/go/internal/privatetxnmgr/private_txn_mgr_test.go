@@ -272,8 +272,9 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
 				TransactionBase: pldapi.TransactionBase{
-					To:   domainAddress,
-					Data: tktypes.RawJSON(jsonData),
+					To:              domainAddress,
+					Data:            tktypes.RawJSON(jsonData),
+					PublicTxOptions: pldapi.PublicTxOptions{Gas: confutil.P(tktypes.HexUint64(100000))},
 				},
 			}
 		},
@@ -474,8 +475,9 @@ func TestPrivateTxManagerSimplePreparedTransaction(t *testing.T) {
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
 				TransactionBase: pldapi.TransactionBase{
-					To:   domainAddress,
-					Data: tktypes.RawJSON(jsonData),
+					To:              domainAddress,
+					Data:            tktypes.RawJSON(jsonData),
+					PublicTxOptions: pldapi.PublicTxOptions{Gas: confutil.P(tktypes.HexUint64(100000))},
 				},
 			}
 		},
@@ -681,8 +683,9 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
 				TransactionBase: pldapi.TransactionBase{
-					To:   domainAddress,
-					Data: tktypes.RawJSON(jsonData),
+					To:              domainAddress,
+					Data:            tktypes.RawJSON(jsonData),
+					PublicTxOptions: pldapi.PublicTxOptions{Gas: confutil.P(tktypes.HexUint64(100000))},
 				},
 			}
 		},
@@ -891,8 +894,9 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
 				TransactionBase: pldapi.TransactionBase{
-					To:   domainAddress,
-					Data: tktypes.RawJSON(jsonData),
+					To:              domainAddress,
+					Data:            tktypes.RawJSON(jsonData),
+					PublicTxOptions: pldapi.PublicTxOptions{Gas: confutil.P(tktypes.HexUint64(100000))},
 				},
 			}
 		},
@@ -1695,8 +1699,9 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
 				TransactionBase: pldapi.TransactionBase{
-					To:   domainAddress,
-					Data: tktypes.RawJSON(jsonData),
+					To:              domainAddress,
+					Data:            tktypes.RawJSON(jsonData),
+					PublicTxOptions: pldapi.PublicTxOptions{Gas: confutil.P(tktypes.HexUint64(100000))},
 				},
 			}
 		},
@@ -2450,8 +2455,9 @@ func (m *dependencyMocks) mockForSubmitter(t *testing.T, transactionID *uuid.UUI
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
 				TransactionBase: pldapi.TransactionBase{
-					To:   domainAddress,
-					Data: tktypes.RawJSON(jsonData),
+					To:              domainAddress,
+					Data:            tktypes.RawJSON(jsonData),
+					PublicTxOptions: pldapi.PublicTxOptions{Gas: confutil.P(tktypes.HexUint64(100000))},
 				},
 			}
 			endorsed := make(map[string]bool)

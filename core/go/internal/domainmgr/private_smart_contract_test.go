@@ -866,6 +866,25 @@ func TestDomainAssembleTransactionLoadInputError(t *testing.T) {
 	assert.Nil(t, tx.PostAssembly)
 }
 
+func TestDomainAssembleTransactionRevert(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+
+	psc, tx := doDomainInitTransactionOK(t, td)
+	td.tp.Functions.AssembleTransaction = func(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
+		return &prototk.AssembleTransactionResponse{
+			AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+			RevertReason:   confutil.P("failed with error"),
+		}, nil
+	}
+	err := psc.AssembleTransaction(td.mdc, td.c.dbTX, tx)
+	require.NoError(t, err)
+
+	assert.NotNil(t, tx.PostAssembly)
+	assert.Equal(t, prototk.AssembleTransactionResponse_REVERT, tx.PostAssembly.AssemblyResult)
+	assert.Equal(t, "failed with error", *tx.PostAssembly.RevertReason)
+}
+
 func TestDomainAssembleTransactionLoadReadError(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
 	defer done()

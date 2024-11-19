@@ -266,7 +266,7 @@ func (tf *transactionFlow) applyTransactionFinalizeError(ctx context.Context, ev
 	tf.finalizePending = false
 }
 
-func (tf *transactionFlow) applyTransactionNudgeEvent(ctx context.Context, event *ptmgrtypes.TransactionNudgeEvent) {
+func (tf *transactionFlow) applyTransactionNudgeEvent(ctx context.Context, _ *ptmgrtypes.TransactionNudgeEvent) {
 	log.L(ctx).Warnf("applyTransactionNudgeEvent transaction %s", tf.transaction.ID)
 	tf.latestEvent = "TransactionNudgeEvent"
 

@@ -65,6 +65,7 @@ type pluginManager struct {
 	registryPlugins map[uuid.UUID]*plugin[prototk.RegistryMessage]
 
 	notifyPluginsUpdated chan bool
+	notifySystemCommand  chan prototk.PluginLoad_SysCommand
 	pluginLoaderDone     chan struct{}
 	loadingProgressed    chan *prototk.PluginLoadFailed
 	serverDone           chan error
@@ -88,6 +89,7 @@ func NewPluginManager(bgCtx context.Context,
 
 		serverDone:           make(chan error),
 		notifyPluginsUpdated: make(chan bool, 1),
+		notifySystemCommand:  make(chan prototk.PluginLoad_SysCommand, 1),
 		loadingProgressed:    make(chan *prototk.PluginLoadFailed, 1),
 	}
 	return pc
@@ -272,6 +274,14 @@ func (pm *pluginManager) InitLoader(req *prototk.PluginLoaderInit, stream protot
 	return pm.sendPluginsToLoader(stream)
 }
 
+func (pm *pluginManager) SendSystemCommandToLoader(cmd prototk.PluginLoad_SysCommand) {
+	select {
+	case pm.notifySystemCommand <- cmd:
+	default:
+		log.L(pm.bgCtx).Warnf("Unable to send system command to loader (command already queued)")
+	}
+}
+
 func (pm *pluginManager) LoadFailed(ctx context.Context, req *prototk.PluginLoadFailed) (*prototk.EmptyResponse, error) {
 	log.L(ctx).Errorf("Plugin load %s (type=%s) failed: %s", req.Plugin.Name, req.Plugin.PluginType, req.ErrorMessage)
 	select {
@@ -383,6 +393,8 @@ func (pm *pluginManager) sendPluginsToLoader(stream prototk.PluginController_Ini
 			case <-ctx.Done():
 				log.L(ctx).Debugf("loader stream closed")
 				err = i18n.NewError(ctx, msgs.MsgContextCanceled)
+			case systemCommand := <-pm.notifySystemCommand:
+				_ = stream.Send(&prototk.PluginLoad{SysCommand: &systemCommand})
 			case <-pm.notifyPluginsUpdated:
 				// loop and load any that need loading
 			}
