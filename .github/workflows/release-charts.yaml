@@ -1,5 +1,10 @@
 name: Helm Chart release
 
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
 on:
   workflow_call:
     inputs:
@@ -135,8 +140,23 @@ jobs:
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         with:
-          mark_as_latest: ${{ inputs.latest }}
+          mark_as_latest: false # the release is marked as latest in the next step
           charts_dir: "operator/charts"
           skip_existing: true
         env: 
           CR_TOKEN: "${{ env.CR_TOKEN }}"
+
+      - name: Prepare CRs artifacts
+        run: ./gradlew prepareArtifacts -PartifactDir=${{ github.workspace }}/artifacts
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.chart_tag }}
+          body: "Release ${{ inputs.chart_tag }}"
+          generate_release_notes: true
+          make_latest: ${{ inputs.latest }}
+          files: |
+            ${{ github.workspace }}/artifacts/basenet.yaml
+            ${{ github.workspace }}/artifacts/devnet.yaml
+            ${{ github.workspace }}/artifacts/artifacts.tar.gz
+ 

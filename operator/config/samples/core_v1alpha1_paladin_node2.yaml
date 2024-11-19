@@ -15,7 +15,10 @@ spec:
   database:
     mode: sidecarPostgres
     migrationMode: auto
-  besuNode: node2
+  baseLedgerEndpoint:
+    type: local
+    local:
+      nodeName: node2
   secretBackedSigners:
     - name: signer-1
       secret: node2.keys

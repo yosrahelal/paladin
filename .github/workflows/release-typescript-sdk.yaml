@@ -30,6 +30,7 @@ jobs:
         uses: ./.github/actions/setup
        
       - name: Publish to npm
+        continue-on-error: true # this can fail if the version is already published
         working-directory: sdk/typescript
         shell: bash
         run: |
