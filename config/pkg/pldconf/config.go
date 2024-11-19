@@ -36,6 +36,7 @@ type PaladinConfig struct {
 	Blockchain             EthClientConfig        `json:"blockchain"`
 	DB                     DBConfig               `json:"db"`
 	RPCServer              RPCServerConfig        `json:"rpcServer"`
+	DebugServer            DebugServerConfig      `json:"debugServer"`
 	StateStore             StateStoreConfig       `json:"statestore"`
 	BlockIndexer           BlockIndexerConfig     `json:"blockIndexer"`
 	TempDir                *string                `json:"tempDir"`

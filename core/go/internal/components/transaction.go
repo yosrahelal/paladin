@@ -24,12 +24,13 @@ import (
 )
 
 type TransactionInputs struct {
-	Domain   string                                  `json:"domain"`
-	From     string                                  `json:"from"`
-	To       tktypes.EthAddress                      `json:"to"`
-	Function *abi.Entry                              `json:"function"`
-	Inputs   tktypes.RawJSON                         `json:"inputs"`
-	Intent   prototk.TransactionSpecification_Intent `json:"intent"`
+	Domain          string                                  `json:"domain"`
+	From            string                                  `json:"from"`
+	To              tktypes.EthAddress                      `json:"to"`
+	Function        *abi.Entry                              `json:"function"`
+	Inputs          tktypes.RawJSON                         `json:"inputs"`
+	Intent          prototk.TransactionSpecification_Intent `json:"intent"`
+	PublicTxOptions pldapi.PublicTxOptions                  `json:"publicTxOptions"`
 }
 
 type TransactionStateRefs struct {
@@ -85,6 +86,7 @@ type TransactionPostAssembly struct {
 	Signatures            []*prototk.AttestationResult               `json:"signatures"`
 	Endorsements          []*prototk.AttestationResult               `json:"endorsements"`
 	DomainData            *string                                    `json:"domain_data"`
+	RevertReason          *string                                    `json:"revert_reason"`
 }
 
 // PrivateTransaction is the critical exchange object between the engine and the domain manager,
@@ -108,8 +110,6 @@ type PrivateTransaction struct {
 	PreparedPublicTransaction  *pldapi.TransactionInput `json:"-"`
 	PreparedPrivateTransaction *pldapi.TransactionInput `json:"-"`
 	PreparedMetadata           tktypes.RawJSON          `json:"-"`
-
-	PublicTxOptions pldapi.PublicTxOptions `json:"-"`
 }
 
 // PrivateContractDeploy is a simpler transaction type that constructs new private smart contract instances

@@ -45,6 +45,7 @@ const isNullifier = false
 
 var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 	BeforeAll(func() {
+		// Skip("for now")
 	})
 
 	AfterAll(func() {

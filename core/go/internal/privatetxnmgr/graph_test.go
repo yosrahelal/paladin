@@ -30,11 +30,11 @@ import (
 
 func NewMockTransactionProcessorForTesting(t *testing.T, transactionID uuid.UUID, inputStateIDs []string, outputStateIDs []string, endorsed bool, signer string) *privatetxnmgrmocks.TransactionFlow {
 	mockTransactionProcessor := privatetxnmgrmocks.NewTransactionFlow(t)
-	mockTransactionProcessor.On("ID").Return(transactionID).Maybe()
-	mockTransactionProcessor.On("InputStateIDs").Return(inputStateIDs).Maybe()
-	mockTransactionProcessor.On("OutputStateIDs").Return(outputStateIDs).Maybe()
-	mockTransactionProcessor.On("IsEndorsed", mock.Anything).Return(endorsed).Maybe()
-	mockTransactionProcessor.On("Signer").Return(signer).Maybe()
+	mockTransactionProcessor.On("ID", mock.Anything).Return(transactionID).Maybe()
+	mockTransactionProcessor.On("InputStateIDs", mock.Anything).Return(inputStateIDs).Maybe()
+	mockTransactionProcessor.On("OutputStateIDs", mock.Anything).Return(outputStateIDs).Maybe()
+	mockTransactionProcessor.On("IsEndorsed", mock.Anything, mock.Anything).Return(endorsed).Maybe()
+	mockTransactionProcessor.On("Signer", mock.Anything).Return(signer).Maybe()
 	return mockTransactionProcessor
 }
 
@@ -90,7 +90,7 @@ func TestRemoveTransactions(t *testing.T) {
 	testGraph.AddTransaction(ctx, mockTransactionProcessor2)
 	testGraph.AddTransaction(ctx, mockTransactionProcessor3)
 
-	testGraph.RemoveTransactions(ctx, map[string][]string{signer: {"tx1", "tx2"}})
+	testGraph.RemoveTransactions(ctx, []string{"tx1", "tx2"})
 
 	assert.True(t, testGraph.IncludesTransaction(TxID0.String()))
 	assert.True(t, testGraph.IncludesTransaction(TxID1.String()))
@@ -148,11 +148,11 @@ func TestScenario1(t *testing.T) {
 	//make sure they come out in the expected order
 	// the absolute order does not matter so long as dependencies come before dependants.
 	// so we expect either 0,1,3 or 1,0,3.
-	assert.True(t, ((dispatchableTransactions[0] == TxID0.String() && dispatchableTransactions[1] == TxID1.String()) ||
-		(dispatchableTransactions[0] == TxID1.String() && dispatchableTransactions[1] == TxID0.String())))
+	assert.True(t, ((dispatchableTransactions[0].ID(ctx) == TxID0 && dispatchableTransactions[1].ID(ctx) == TxID1) ||
+		(dispatchableTransactions[0].ID(ctx) == TxID1 && dispatchableTransactions[1].ID(ctx) == TxID0)))
 
 	//transaction 2 is not endorsed so should not be in the dispatchable list
-	assert.Equal(t, TxID3.String(), dispatchableTransactions[2])
+	assert.Equal(t, TxID3, dispatchableTransactions[2].ID(ctx))
 
 	// GetDispatchableTransactions is a read only operation so we can call it again and get the same result
 	dispatchable, err = testGraph.GetDispatchableTransactions(ctx)
@@ -165,11 +165,11 @@ func TestScenario1(t *testing.T) {
 	//make sure they come out in the expected order
 	// the absolute order does not matter so long as dependencies come before dependants.
 	// so we expect either 0,1,3 or 1,0,3.
-	assert.True(t, ((dispatchableTransactions[0] == TxID0.String() && dispatchableTransactions[1] == TxID1.String()) ||
-		(dispatchableTransactions[0] == TxID1.String() && dispatchableTransactions[1] == TxID0.String())))
-	assert.Equal(t, TxID3.String(), dispatchableTransactions[2])
+	assert.True(t, ((dispatchableTransactions[0].ID(ctx) == TxID0 && dispatchableTransactions[1].ID(ctx) == TxID1) ||
+		(dispatchableTransactions[0].ID(ctx) == TxID1 && dispatchableTransactions[1].ID(ctx) == TxID0)))
+	assert.Equal(t, TxID3, dispatchableTransactions[2].ID(ctx))
 
-	testGraph.RemoveTransactions(ctx, dispatchable)
+	testGraph.RemoveTransactions(ctx, dispatchable.IDs(ctx))
 
 	dispatchable, err = testGraph.GetDispatchableTransactions(ctx)
 	require.NoError(t, err)
@@ -230,7 +230,7 @@ func TestScenario2(t *testing.T) {
 	isBefore := func(tx1, tx2 string) bool {
 		foundTx1 := false
 		for _, tx := range dispatchableTransactions {
-			switch tx {
+			switch tx.ID(ctx).String() {
 			case tx1:
 				foundTx1 = true
 			case tx2:

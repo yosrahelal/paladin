@@ -25,7 +25,7 @@ import (
 )
 
 func (sd *preparedTransactionDistributer) sendPreparedTransactionAcknowledgement(ctx context.Context, domainName string, contractAddress string, preparedTxnId string, receivingParty string, distributingNode string, distributionID string) error {
-	log.L(ctx).Debugf("preparedTransactionDistributer:sendPreparedTransactionAcknowledgement %s %s %s %s %s %s", domainName, contractAddress, preparedTxnId, receivingParty, distributingNode, distributionID)
+	log.L(ctx).Debugf("preparedTransactionDistributer:sendPreparedTransactionAcknowledgement domainName=%s contractAddress=%s preparedTxnId=%s receivingParty=%s distributingNode=%s distributionID=%s", domainName, contractAddress, preparedTxnId, receivingParty, distributingNode, distributionID)
 	preparedTransactionAcknowledgedMessage := &pb.PreparedTransactionAcknowledgedMessage{
 		DomainName:      domainName,
 		ContractAddress: contractAddress,

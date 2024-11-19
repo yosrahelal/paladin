@@ -205,6 +205,10 @@ func TestNotifyPluginUpdateNotStarted(t *testing.T) {
 	require.NoError(t, err)
 	err = pc.ReloadPluginList()
 	require.NoError(t, err)
+
+	// System command sending should not block
+	pc.SendSystemCommandToLoader(prototk.PluginLoad_THREAD_DUMP)
+	pc.SendSystemCommandToLoader(prototk.PluginLoad_THREAD_DUMP)
 }
 
 func TestLoaderErrors(t *testing.T) {
@@ -268,6 +272,12 @@ func TestLoaderErrors(t *testing.T) {
 	// We should be notified of the error if we were waiting
 	err = pc.WaitForInit(ctx)
 	assert.Regexp(t, "pop", err)
+
+	// Get a system command
+	pc.SendSystemCommandToLoader(prototk.PluginLoad_THREAD_DUMP)
+	loadReq, err = loaderStream.Recv()
+	require.NoError(t, err)
+	require.Equal(t, prototk.PluginLoad_THREAD_DUMP, *loadReq.SysCommand)
 
 	// then attempt double start of the loader
 	dupLoader, err := client.InitLoader(ctx, &prototk.PluginLoaderInit{
