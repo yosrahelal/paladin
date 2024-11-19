@@ -24,9 +24,9 @@ type KeyStoreFactory[C ExtensibleConfig] interface {
 }
 
 // All cryptographic storage needs to support master key encryption, by which the bytes
-// can be decrypted an loaded into volatile memory for use, and then discarded.
+// can be decrypted and loaded into volatile memory for use, and then discarded.
 //
-// The implementation is not required to know how to generate or validate such data, just now
+// The implementation is not required to know how to generate or validate such data, just how
 // to securely store and retrieve it using only the information contained in the returned
 // keyHandle. If the implementation finds it does not exist, it can invoke the callback function to generate
 // a new suitable random string to encrypt and store.

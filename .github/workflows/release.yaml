@@ -65,6 +65,7 @@ jobs:
       chart_tag: ${{ needs.set-variables.outputs.tag }}
       images_tag: ${{ needs.set-variables.outputs.tag }}
       latest: '${{ fromJSON(needs.set-variables.outputs.latest) }}'
+      registry: docker.io
     secrets:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

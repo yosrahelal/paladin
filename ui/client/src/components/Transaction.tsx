@@ -45,7 +45,7 @@ export const Transaction: React.FC<Props> = ({
 
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
   const receiptCount = (transactionReceipts && transactionReceipts.length) ? transactionReceipts.length : 0;
-  const receiptIsPrivate = (transactionReceipts && transactionReceipts.length && transactionReceipts[0].domain !== '');
+  const receiptIsPrivate = (transactionReceipts && transactionReceipts.length && transactionReceipts[0].domain !== undefined);
   const typeKey =
     receiptCount > 1 ? 'atomicNumber' :
       receiptIsPrivate ? 'private' :
