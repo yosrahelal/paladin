@@ -241,12 +241,10 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 		postAssembly.InfoStatesPotential = res.AssembledTransaction.InfoStates
 		postAssembly.DomainData = res.AssembledTransaction.DomainData
 	}
-	if res.RevertReason != nil && *res.RevertReason != "" {
-		postAssembly.RevertReason = res.RevertReason
-	}
 
 	// We need to pass the assembly result back - it needs to be assigned to a sequence
 	// before anything interesting can happen with the result here
+	postAssembly.RevertReason = res.RevertReason
 	postAssembly.AssemblyResult = res.AssemblyResult
 	postAssembly.AttestationPlan = res.AttestationPlan
 	tx.PostAssembly = postAssembly
@@ -533,13 +531,20 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 	} else {
 		tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
-				Type:     pldapi.TransactionTypePublic.Enum(),
-				Function: functionABI.String(),
-				From:     tx.Signer,
-				To:       contractAddress,
-				Data:     tktypes.RawJSON(res.Transaction.ParamsJson),
+				Type:            pldapi.TransactionTypePublic.Enum(),
+				Function:        functionABI.String(),
+				From:            tx.Signer,
+				To:              contractAddress,
+				Data:            tktypes.RawJSON(res.Transaction.ParamsJson),
+				PublicTxOptions: tx.Inputs.PublicTxOptions,
 			},
 			ABI: abi.ABI{&functionABI},
+		}
+		// We cannot fall back to eth_estimateGas, as we queue up multiple transactions for dispatch that chain together.
+		// As such our transactions are not always executable in isolation, and would revert (due to consuming non-existent UTXO states)
+		// if we attempted to do gas estimation or call.
+		if tx.PreparedPublicTransaction.PublicTxOptions.Gas == nil {
+			tx.PreparedPublicTransaction.PublicTxOptions.Gas = &dc.d.defaultGasLimit
 		}
 	}
 	if res.Metadata != nil {

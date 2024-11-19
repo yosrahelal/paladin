@@ -192,6 +192,7 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 			"test1": {
 				Config:          map[string]any{"some": "conf"},
 				RegistryAddress: tktypes.RandHex(20),
+				DefaultGasLimit: confutil.P(uint64(100000)),
 			},
 		},
 	}, extraSetup...)

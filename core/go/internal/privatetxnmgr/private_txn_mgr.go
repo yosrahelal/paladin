@@ -255,12 +255,13 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.Vali
 	return p.handleNewTx(ctx, &components.PrivateTransaction{
 		ID: *tx.ID,
 		Inputs: &components.TransactionInputs{
-			Domain:   tx.Domain,
-			From:     tx.From,
-			To:       *tx.To,
-			Function: txi.Function.Definition,
-			Inputs:   txi.Inputs,
-			Intent:   intent,
+			Domain:          tx.Domain,
+			From:            tx.From,
+			To:              *tx.To,
+			Function:        txi.Function.Definition,
+			Inputs:          txi.Inputs,
+			Intent:          intent,
+			PublicTxOptions: txi.Transaction.PublicTxOptions,
 		},
 		PublicTxOptions: tx.PublicTxOptions,
 	})
