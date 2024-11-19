@@ -110,8 +110,6 @@ type PrivateTransaction struct {
 	PreparedPublicTransaction  *pldapi.TransactionInput `json:"-"`
 	PreparedPrivateTransaction *pldapi.TransactionInput `json:"-"`
 	PreparedMetadata           tktypes.RawJSON          `json:"-"`
-
-	PublicTxOptions pldapi.PublicTxOptions `json:"-"`
 }
 
 // PrivateContractDeploy is a simpler transaction type that constructs new private smart contract instances

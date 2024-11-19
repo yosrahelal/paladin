@@ -263,7 +263,6 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.Vali
 			Intent:          intent,
 			PublicTxOptions: txi.Transaction.PublicTxOptions,
 		},
-		PublicTxOptions: tx.PublicTxOptions,
 	})
 }
 
