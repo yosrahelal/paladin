@@ -56,7 +56,8 @@ type ConfigKeyPathEntry struct {
 	Index uint64 `json:"index"`
 }
 
-type SigningKeyConfigEntry struct {
+type StaticKeyReference struct {
+	KeyHandle  string               `json:"keyHandle,omitempty"` // causes resolution to be bypassed, similarly to if a key-mapping already exists in the DB for runtime resolution
 	Name       string               `json:"name"`
 	Index      uint64               `json:"index"`
 	Attributes map[string]string    `json:"attributes"`
@@ -64,17 +65,17 @@ type SigningKeyConfigEntry struct {
 }
 
 type KeyDerivationConfig struct {
-	Type                  KeyDerivationType     `json:"type"`
-	SeedKeyPath           SigningKeyConfigEntry `json:"seedKey"`
-	BIP44DirectResolution bool                  `json:"bip44DirectResolution"`
-	BIP44Prefix           *string               `json:"bip44Prefix"`
-	BIP44HardenedSegments *int                  `json:"bip44HardenedSegments"`
+	Type                  KeyDerivationType  `json:"type"`
+	SeedKeyPath           StaticKeyReference `json:"seedKey"`
+	BIP44DirectResolution bool               `json:"bip44DirectResolution"`
+	BIP44Prefix           *string            `json:"bip44Prefix"`
+	BIP44HardenedSegments *int               `json:"bip44HardenedSegments"`
 }
 
 var KeyDerivationDefaults = &KeyDerivationConfig{
 	BIP44Prefix:           confutil.P("m/44'/60'"),
 	BIP44HardenedSegments: confutil.P(1), // in addition to the prefix, so `m/44'/60'/0'/0/0` for example with 3 segments, on top of the prefix
-	SeedKeyPath:           SigningKeyConfigEntry{Name: "seed", Index: 0},
+	SeedKeyPath:           StaticKeyReference{Name: "seed", Index: 0},
 }
 
 type StaticKeyEntryEncoding string
