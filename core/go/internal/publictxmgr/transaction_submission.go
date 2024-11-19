@@ -114,6 +114,7 @@ func (it *inFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 				submissionErrorReason = ""
 				submissionOutcome = SubmissionOutcomeNonceTooLow
 			default:
+				log.L(ctx).Errorf("Submission error for transaction ID %s with hash %s (requires retry): %s", mtx.GetSignerNonce(), txHash, submissionError)
 				submissionOutcome = SubmissionOutcomeFailedRequiresRetry
 				return true, submissionError
 			}
