@@ -1,65 +1,64 @@
-import { ethers } from "ethers";
-import {
-  IGroupInfo,
-  IStateBase,
-  IStateEncoded,
-  TransactionType,
-} from "../interfaces";
+import { TransactionType } from "../interfaces";
 import PaladinClient from "../paladin";
 
-const POLL_TIMEOUT_MS = 5000;
+const DEFAULT_POLL_TIMEOUT = 10000;
 
-const zetoPrivateAbi = [{
-  "name": "mint",
-  "type": "function",
-  "inputs": [
-    {
-      "name": "mints",
-      "type": "tuple[]",
-      "components": [
-        {
-          "name": "to",
-          "type": "string",
-          "internalType": "string"
-        },
-        {
-          "name": "amount",
-          "type": "uint256",
-          "internalType": "uint256"
-        }
-      ]
-    }
-  ],
-  "outputs": [],
-}, {
-  "type": "function",
-  "name": "transfer",
-  "inputs": [
-    {
-      "name": "transfers",
-      "type": "tuple[]",
-      "components": [
-        {
-          "name": "to",
-          "type": "string",
-          "internalType": "string"
-        },
-        {
-          "name": "amount",
-          "type": "uint256",
-          "internalType": "uint256"
-        }
-      ]
-    }
-  ],
-  "outputs": []
-}]
+export interface ZetoOptions {
+  pollTimeout?: number;
+}
+
+const zetoPrivateAbi = [
+  {
+    name: "mint",
+    type: "function",
+    inputs: [
+      {
+        name: "mints",
+        type: "tuple[]",
+        components: [
+          {
+            name: "to",
+            type: "string",
+            internalType: "string",
+          },
+          {
+            name: "amount",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "transfer",
+    inputs: [
+      {
+        name: "transfers",
+        type: "tuple[]",
+        components: [
+          {
+            name: "to",
+            type: "string",
+            internalType: "string",
+          },
+          {
+            name: "amount",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+    ],
+    outputs: [],
+  },
+];
 
 export const zetoConstructorABI = {
   type: "constructor",
-  inputs: [
-    { name: "tokenName", type: "string" }
-  ],
+  inputs: [{ name: "tokenName", type: "string" }],
 };
 
 export interface ZetoConstructorParams {
@@ -80,10 +79,21 @@ export interface ZetoTransfer {
 }
 
 export class ZetoFactory {
-  constructor(private paladin: PaladinClient, public readonly domain: string) { }
+  private options: Required<ZetoOptions>;
+
+  constructor(
+    private paladin: PaladinClient,
+    public readonly domain: string,
+    options?: ZetoOptions
+  ) {
+    this.options = {
+      pollTimeout: DEFAULT_POLL_TIMEOUT,
+      ...options,
+    };
+  }
 
   using(paladin: PaladinClient) {
-    return new ZetoFactory(paladin, this.domain);
+    return new ZetoFactory(paladin, this.domain, this.options);
   }
 
   async newZeto(from: string, data: ZetoConstructorParams) {
@@ -95,21 +105,32 @@ export class ZetoFactory {
       from,
       data,
     });
-    const receipt = await this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    const receipt = await this.paladin.pollForReceipt(
+      txID,
+      this.options.pollTimeout
+    );
     return receipt?.contractAddress === undefined
       ? undefined
-      : new ZetoInstance(this.paladin, receipt.contractAddress);
+      : new ZetoInstance(this.paladin, receipt.contractAddress, this.options);
   }
 }
 
 export class ZetoInstance {
+  private options: Required<ZetoOptions>;
+
   constructor(
     private paladin: PaladinClient,
-    public readonly address: string
-  ) { }
+    public readonly address: string,
+    options?: ZetoOptions
+  ) {
+    this.options = {
+      pollTimeout: DEFAULT_POLL_TIMEOUT,
+      ...options,
+    };
+  }
 
   using(paladin: PaladinClient) {
-    return new ZetoInstance(paladin, this.address);
+    return new ZetoInstance(paladin, this.address, this.options);
   }
 
   async mint(from: string, data: ZetoMintParams) {
@@ -121,7 +142,7 @@ export class ZetoInstance {
       from,
       data,
     });
-    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 
   async transfer(from: string, data: ZetoTransferParams) {
@@ -133,6 +154,6 @@ export class ZetoInstance {
       from,
       data,
     });
-    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 }

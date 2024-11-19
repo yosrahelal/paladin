@@ -29,7 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { IPaladinTransaction, ITransactionReceipt } from '../interfaces';
 import { PaladinTransactionsDetails } from '../components/TransactionDetails';
 import { useEffect, useState } from 'react';
-import { altLightModeScrollbarStyle, altDarkModeScrollbarStyle } from '../themes/default';
+import { getAltModeScrollBarStyle } from '../themes/default';
 
 type Props = {
   paladinTransactions?: IPaladinTransaction[]
@@ -49,8 +49,7 @@ export const PaladinTransactionsReceiptDetailsDialog: React.FC<Props> = ({
   const { t } = useTranslation();
 
   const theme = useTheme();
-  const addedStyle = theme.palette.mode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
-
+  
   const selectedReceipt = paladinReceipts?.find(r => (r.id == selectedPaladinTransactionId));
   const selectedTransaction = paladinTransactions?.find(r => (r.id == selectedPaladinTransactionId));
 
@@ -70,7 +69,7 @@ export const PaladinTransactionsReceiptDetailsDialog: React.FC<Props> = ({
       <DialogTitle sx={{ textAlign: 'center' }}>
         {t('transaction')}
       </DialogTitle>
-      <DialogContent sx={{ height: '80vh', margin: '10px', padding: '10px', ...addedStyle }}>
+      <DialogContent sx={{ height: '80vh', margin: '10px', padding: '10px', ...getAltModeScrollBarStyle(theme.palette.mode) }}>
         <Box sx={{ padding: '20px', paddingTop: '5px' }}>
           <TextField select label={t('id')} fullWidth size="small" sx={{ marginTop: '5px' }} value={selectedPaladinTransactionId}
             onChange={event => setSelectedPaladinTransactionId(event.target.value)}>

@@ -4,7 +4,11 @@ import { IGroupInfo, TransactionType } from "../interfaces";
 import PaladinClient from "../paladin";
 import * as penteJSON from "./abis/PentePrivacyGroup.json";
 
-const POLL_TIMEOUT_MS = 5000;
+const DEFAULT_POLL_TIMEOUT = 10000;
+
+export interface PenteOptions {
+  pollTimeout?: number;
+}
 
 export const penteGroupABI = {
   name: "group",
@@ -83,10 +87,21 @@ export const newGroupSalt = () =>
   "0x" + Buffer.from(randomBytes(32)).toString("hex");
 
 export class PenteFactory {
-  constructor(private paladin: PaladinClient, public readonly domain: string) {}
+  private options: Required<PenteOptions>;
+
+  constructor(
+    private paladin: PaladinClient,
+    public readonly domain: string,
+    options?: PenteOptions
+  ) {
+    this.options = {
+      pollTimeout: DEFAULT_POLL_TIMEOUT,
+      ...options,
+    };
+  }
 
   using(paladin: PaladinClient) {
-    return new PenteFactory(paladin, this.domain);
+    return new PenteFactory(paladin, this.domain, this.options);
   }
 
   async newPrivacyGroup(from: string, data: PentePrivacyGroupParams) {
@@ -98,26 +113,43 @@ export class PenteFactory {
       from,
       data,
     });
-    const receipt = await this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    const receipt = await this.paladin.pollForReceipt(
+      txID,
+      this.options.pollTimeout
+    );
     return receipt?.contractAddress === undefined
       ? undefined
       : new PentePrivacyGroup(
           this.paladin,
           data.group,
-          receipt.contractAddress
+          receipt.contractAddress,
+          this.options
         );
   }
 }
 
 export class PentePrivacyGroup {
+  private options: Required<PenteOptions>;
+
   constructor(
     private paladin: PaladinClient,
     public readonly group: IGroupInfo,
-    public readonly address: string
-  ) {}
+    public readonly address: string,
+    options?: PenteOptions
+  ) {
+    this.options = {
+      pollTimeout: DEFAULT_POLL_TIMEOUT,
+      ...options,
+    };
+  }
 
   using(paladin: PaladinClient) {
-    return new PentePrivacyGroup(paladin, this.group, this.address);
+    return new PentePrivacyGroup(
+      paladin,
+      this.group,
+      this.address,
+      this.options
+    );
   }
 
   async deploy<ConstructorParams>(
@@ -140,7 +172,7 @@ export class PentePrivacyGroup {
     });
     const receipt = await this.paladin.pollForReceipt(
       txID,
-      POLL_TIMEOUT_MS,
+      this.options.pollTimeout,
       true
     );
     return receipt?.domainReceipt?.receipt.contractAddress;
@@ -160,7 +192,7 @@ export class PentePrivacyGroup {
       from,
       data: { group: this.group, to, inputs },
     });
-    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 
   async call<Params>(
@@ -194,7 +226,7 @@ export class PentePrivacyGroup {
       from,
       data,
     });
-    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
+    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 }
 

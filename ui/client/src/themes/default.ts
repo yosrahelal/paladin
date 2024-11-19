@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ThemeOptions } from '@mui/material';
+import { PaletteMode, ThemeOptions } from '@mui/material';
 
 export const darkThemeOptions: ThemeOptions = {
 
@@ -76,3 +76,7 @@ export const altLightModeScrollbarStyle = {
     border: '3px solid #FFFFFF',
   },
 };
+
+export const getAltModeScrollBarStyle = (paletteMode: PaletteMode) => (
+  paletteMode === 'light' ? altLightModeScrollbarStyle : altDarkModeScrollbarStyle
+);
