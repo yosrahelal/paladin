@@ -736,7 +736,7 @@ func txPoller[R any](ch *chainable, timeout time.Duration, txID uuid.UUID, doGet
 		// Check we didn't timeout
 		waitTime := time.Since(startTime)
 		if waitTime > timeout {
-			ch.deferError(i18n.WrapError(ch.ctx, lastErr, tkmsgs.MsgPaladinClientPollTimedOut, attempt, waitTime))
+			ch.deferError(i18n.WrapError(ch.ctx, lastErr, tkmsgs.MsgPaladinClientPollTxTimedOut, attempt, waitTime, txID))
 			return result
 		}
 		// Wait before polling
