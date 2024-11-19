@@ -70,7 +70,7 @@ func (sm *signingModule[C]) initHDWallet(ctx context.Context, conf *pldconf.KeyD
 		bip44HardenedSegments: confutil.IntMin(conf.BIP44HardenedSegments, 0, *pldconf.KeyDerivationDefaults.BIP44HardenedSegments),
 	}
 	seedKeyPath := pldconf.KeyDerivationDefaults.SeedKeyPath
-	if conf.SeedKeyPath.Name != "" || conf.SeedKeyPath.KeyHandle != "" {
+	if conf.SeedKeyPath.Name != "" || conf.SeedKeyPath.KeyHandle != "" || len(conf.SeedKeyPath.Attributes) > 0 {
 		seedKeyPath = conf.SeedKeyPath
 	}
 	// Note we don't have any way to store the resolved keyHandle, so we resolve it every time we start
