@@ -332,7 +332,7 @@ func (p *privateTxManager) validateDelegatedTransaction(ctx context.Context, tx 
 
 }
 
-func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, dbTX *gorm.DB, delegatingNodeName string, delegationId string, tx *components.PrivateTransaction) error {
+func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, dbTX *gorm.DB, delegationBlockHeight int64, delegatingNodeName string, delegationId string, tx *components.PrivateTransaction) error {
 	log.L(ctx).Debugf("Handling delegated transaction: %v", tx)
 
 	contractAddr := tx.Inputs.To
@@ -345,7 +345,7 @@ func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, dbTX 
 	if err != nil {
 		return err
 	}
-	queued := sequencer.ProcessInFlightTransaction(ctx, tx)
+	queued := sequencer.ProcessInFlightTransaction(ctx, tx, &delegationBlockHeight)
 	if queued {
 		log.L(ctx).Debugf("Delegated Transaction with ID %s queued in database", tx.ID)
 	}
@@ -729,13 +729,11 @@ func (p *privateTxManager) handleDelegationRequest(ctx context.Context, messageP
 		return
 	}
 
-	//TODO persist the delegated transaction and only continue with the acknowledgment once it has been persisted
-
 	//TODO not quite figured out how to receive an assembled transaction because it will have been assembled
 	// in the domain context of the sender.  In some cases, it will be using committed states so that will be ok.
 	// for now, in the interest of simplicity, we just trash the PostAssembly and start again
 	transaction.PostAssembly = nil
-	err = p.handleDelegatedTransaction(ctx, p.components.Persistence().DB(), replyTo, delegationRequest.DelegationId, transaction)
+	err = p.handleDelegatedTransaction(ctx, p.components.Persistence().DB(), delegationRequest.BlockHeight, replyTo, delegationRequest.DelegationId, transaction)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to handle delegated transaction: %s", err)
 		// do not send an ack and let the sender retry

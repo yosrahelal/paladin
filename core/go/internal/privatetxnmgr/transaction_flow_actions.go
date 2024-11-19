@@ -289,7 +289,7 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue bool) {
 
 	if tf.delegatePending {
-		tf.logActionInfof(ctx, "Transaction is delegating since %s", tf.delegateRequestTime)
+		tf.logActionInfof(ctx, "Transaction is delegating since %s (block=%d)", tf.delegateRequestTime, tf.delegateRequestBlockHeight)
 		if tf.clock.Now().Before(tf.delegateRequestTime.Add(tf.requestTimeout)) {
 			tf.logActionDebug(ctx, "Delegation request not timed out")
 			return false
@@ -306,7 +306,7 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue b
 
 	// There may be a potential optimization we can add where, in certain domain configurations, we can optimistically proceed without delegation and only delegate once we detect
 	// potential contention with other active nodes.  For now, we keep it simple and strictly abide by the configuration of the domain
-	coordinatorNode, err := tf.selectCoordinator.SelectCoordinatorNode(ctx, tf.transaction, tf.environment)
+	blockHeight, coordinatorNode, err := tf.selectCoordinator.SelectCoordinatorNode(ctx, tf.transaction, tf.environment)
 	if err != nil {
 		// errors from here are most likely a problem resolving the node name from the parties in the attestation plan
 		// so there is no point retrying although if we redo the assemble stage, we may get a different result
@@ -346,6 +346,7 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue b
 		delegationRequestID,
 		coordinatorNode,
 		tf.transaction,
+		blockHeight,
 	)
 	if err != nil {
 		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
@@ -353,6 +354,7 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue b
 	}
 	tf.pendingDelegationRequestID = delegationRequestID
 	tf.delegatePending = true
+	tf.delegateRequestBlockHeight = blockHeight
 	tf.delegateRequestTime = tf.clock.Now()
 	tf.delegateRequestTimer = time.AfterFunc(tf.requestTimeout, func() {
 		tf.publisher.PublishNudgeEvent(ctx, tf.transaction.ID.String())

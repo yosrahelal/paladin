@@ -278,7 +278,7 @@ func (s *Sequencer) ProcessNewTransaction(ctx context.Context, tx *components.Pr
 	return false
 }
 
-func (s *Sequencer) ProcessInFlightTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
+func (s *Sequencer) ProcessInFlightTransaction(ctx context.Context, tx *components.PrivateTransaction, delegationBlockHeight *int64) (queued bool) {
 	log.L(ctx).Infof("Processing in flight transaction %s", tx.ID)
 	//a transaction that already has had some processing done on it
 	// currently the only case this can happen is a transaction delegated from another node
@@ -287,10 +287,18 @@ func (s *Sequencer) ProcessInFlightTransaction(ctx context.Context, tx *componen
 	defer s.incompleteTxProcessMapMutex.Unlock()
 	_, alreadyInMemory := s.incompleteTxSProcessMap[tx.ID.String()]
 	if alreadyInMemory {
-		log.L(ctx).Warnf("Transaction %s already in memory. Ignoring", tx.ID)
+		if delegationBlockHeight != nil {
+			// We need to inform the in-flight processor that the delegation is received, because it might override a
+			// delegating status that we have locally (depending on the block height)
+			s.pendingTransactionEvents <- &ptmgrtypes.DelegationForInFlightEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
+				BlockHeight:                 *delegationBlockHeight,
+			}
+		} else {
+			log.L(ctx).Warnf("Transaction %s already in memory. Ignoring", tx.ID)
+		}
 		return false
-	}
-	if s.incompleteTxSProcessMap[tx.ID.String()] == nil {
+	} else {
 		if len(s.incompleteTxSProcessMap) >= s.maxConcurrentProcess {
 			// TODO: decide how this map is managed, it shouldn't track the entire lifecycle
 			// tx processing pool is full, queue the item

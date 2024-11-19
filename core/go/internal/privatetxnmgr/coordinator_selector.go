@@ -84,18 +84,20 @@ type roundRobinCoordinatorSelectorPolicy struct {
 	rangeSize      int
 }
 
-func (s *staticCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.Context, _ *components.PrivateTransaction, _ ptmgrtypes.SequencerEnvironment) (string, error) {
+func (s *staticCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.Context, _ *components.PrivateTransaction, environment ptmgrtypes.SequencerEnvironment) (int64, string, error) {
 	log.L(ctx).Debugf("SelectCoordinatorNode: Selecting coordinator node %s", s.nodeName)
-	return s.nodeName, nil
+	return environment.GetBlockHeight(), s.nodeName, nil
 }
 
-func (s *roundRobinCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.Context, transaction *components.PrivateTransaction, environment ptmgrtypes.SequencerEnvironment) (string, error) {
+func (s *roundRobinCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.Context, transaction *components.PrivateTransaction, environment ptmgrtypes.SequencerEnvironment) (int64, string, error) {
+	blockHeight := environment.GetBlockHeight()
+
 	if len(s.candidateNodes) == 0 {
 		if transaction.PostAssembly == nil {
 			//if we don't know the candidate nodes, and the transaction hasn't been assembled yet, then we can't select a coordinator so just assume we are the coordinator
 			// until we get the transaction assembled and then re-evaluate
 			log.L(ctx).Debug("SelectCoordinatorNode: No candidate nodes, assuming local node is the coordinator")
-			return s.localNode, nil
+			return blockHeight, s.localNode, nil
 		} else {
 			//use a map to dedupe as we go
 			candidateNodesMap := make(map[string]struct{})
@@ -105,7 +107,7 @@ func (s *roundRobinCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.
 						node, err := tktypes.PrivateIdentityLocator(party).Node(ctx, true)
 						if err != nil {
 							log.L(ctx).Errorf("SelectCoordinatorNode: Error resolving node for party %s: %s", party, err)
-							return "", i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, err)
+							return -1, "", i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, err)
 						}
 						if node == "" {
 							node = s.localNode
@@ -124,10 +126,8 @@ func (s *roundRobinCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.
 	if len(s.candidateNodes) == 0 {
 		//if we still don't have any candidate nodes, then we can't select a coordinator so just assume we are the coordinator
 		log.L(ctx).Debug("SelectCoordinatorNode: No candidate nodes, assuming local node is the coordinator")
-		return s.localNode, nil
+		return blockHeight, s.localNode, nil
 	}
-
-	blockHeight := environment.GetBlockHeight()
 
 	rangeIndex := blockHeight / int64(s.rangeSize)
 
@@ -135,6 +135,6 @@ func (s *roundRobinCoordinatorSelectorPolicy) SelectCoordinatorNode(ctx context.
 	coordinatorNode := s.candidateNodes[coordinatorIndex]
 	log.L(ctx).Debugf("SelectCoordinatorNode: selected coordinator node %s using round robin algorithm for blockHeight: %d and rangeSize %d ", coordinatorNode, blockHeight, s.rangeSize)
 
-	return coordinatorNode, nil
+	return blockHeight, coordinatorNode, nil
 
 }

@@ -63,6 +63,8 @@ func (tf *transactionFlow) ApplyEvent(ctx context.Context, event ptmgrtypes.Priv
 		tf.applyTransactionFinalizeError(ctx, event)
 	case *ptmgrtypes.TransactionNudgeEvent:
 		tf.applyTransactionNudgeEvent(ctx, event)
+	case *ptmgrtypes.DelegationForInFlightEvent:
+		tf.applyDelegationForInFlightEvent(ctx, event)
 
 	default:
 		log.L(ctx).Warnf("Unknown event type: %T", event)
@@ -267,9 +269,25 @@ func (tf *transactionFlow) applyTransactionFinalizeError(ctx context.Context, ev
 }
 
 func (tf *transactionFlow) applyTransactionNudgeEvent(ctx context.Context, _ *ptmgrtypes.TransactionNudgeEvent) {
-	log.L(ctx).Warnf("applyTransactionNudgeEvent transaction %s", tf.transaction.ID)
+	log.L(ctx).Infof("applyTransactionNudgeEvent transaction %s", tf.transaction.ID)
 	tf.latestEvent = "TransactionNudgeEvent"
 
 	//nothing really changes here, we just trigger a re-evaluation of the transaction state and next actions
+
+}
+
+func (tf *transactionFlow) applyDelegationForInFlightEvent(ctx context.Context, event *ptmgrtypes.DelegationForInFlightEvent) {
+	log.L(ctx).Infof("applyDelegationForInFlightEvent transaction %s blockHeight=%d", tf.transaction.ID, event.BlockHeight)
+	tf.latestEvent = "DelegationForInFlightEvent"
+	if tf.delegatePending && event.BlockHeight > tf.delegateRequestBlockHeight {
+		tf.status = "new"
+		tf.delegated = false
+		tf.delegatePending = false
+		if tf.delegateRequestTimer != nil {
+			tf.delegateRequestTimer.Stop()
+		}
+		tf.delegateRequestTimer = nil
+		log.L(ctx).Infof("delegation cancelled for transaction %s", tf.transaction.ID)
+	}
 
 }
