@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/tyler-smith/go-bip39"
 	appsv1 "k8s.io/api/apps/v1"
@@ -673,6 +674,14 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 		err := yaml.Unmarshal([]byte(*node.Spec.Config), &pldConf)
 		if err != nil {
 			return "", nil, fmt.Errorf("paladinConfigYAML is invalid: %s", err)
+		}
+	}
+
+	// Enable debug server by default on localhost:6060
+	if pldConf.DebugServer.Enabled == nil {
+		pldConf.DebugServer.Enabled = confutil.P(true)
+		if pldConf.DebugServer.Port == nil {
+			pldConf.DebugServer.Port = confutil.P(6060)
 		}
 	}
 

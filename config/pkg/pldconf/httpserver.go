@@ -60,8 +60,5 @@ type DebugServerConfig struct {
 }
 
 var DebugServerDefaults = &DebugServerConfig{
-	Enabled: confutil.P(true),
-	HTTPServerConfig: HTTPServerConfig{
-		Port: confutil.P(6060),
-	},
+	Enabled: confutil.P(false),
 }

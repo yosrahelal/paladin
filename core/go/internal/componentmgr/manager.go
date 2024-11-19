@@ -122,7 +122,7 @@ func (cm *componentManager) javaDump(res http.ResponseWriter, req *http.Request)
 }
 
 func (cm *componentManager) startDebugServer() (httpserver.Server, error) {
-	cm.conf.DebugServer.Port = confutil.P(confutil.Int(cm.conf.DebugServer.Port, *pldconf.DebugServerDefaults.Port))
+	cm.conf.DebugServer.Port = confutil.P(confutil.Int(cm.conf.DebugServer.Port, 0)) // if enabled with no port, we allocate one
 	server, err := httpserver.NewDebugServer(cm.bgCtx, &cm.conf.DebugServer.HTTPServerConfig)
 	if err == nil {
 		server.Router().PathPrefix("/debug/javadump").HandlerFunc(http.HandlerFunc(cm.javaDump))

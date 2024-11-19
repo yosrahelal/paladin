@@ -217,11 +217,7 @@ func TestStartOK(t *testing.T) {
 	mockExtraManager.On("Name").Return("unittest_manager")
 	mockExtraManager.On("Stop").Return()
 
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{
-		DebugServer: pldconf.DebugServerConfig{
-			Enabled: confutil.P(false),
-		},
-	}, mockExtraManager).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, mockExtraManager).(*componentManager)
 	cm.ethClientFactory = mockEthClientFactory
 	cm.initResults = map[string]*components.ManagerInitResult{
 		"utengine": {
