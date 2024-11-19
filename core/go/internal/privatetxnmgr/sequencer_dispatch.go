@@ -72,7 +72,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 			hasPrivateTransaction := preparedTransaction.PreparedPrivateTransaction != nil
 			switch {
 			case preparedTransaction.Inputs.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPublicTransaction && !hasPrivateTransaction:
-				log.L(ctx).Infof("Result of transaction %s is a public transaction", preparedTransaction.ID)
+				log.L(ctx).Infof("Result of transaction %s is a public transaction (gas=%d)", preparedTransaction.ID, *preparedTransaction.PreparedPublicTransaction.PublicTxOptions.Gas)
 				publicTransactionsToSend = append(publicTransactionsToSend, preparedTransaction)
 				sequence.PrivateTransactionDispatches = append(sequence.PrivateTransactionDispatches, &syncpoints.DispatchPersisted{
 					PrivateTransactionID: transactionFlow.ID(ctx).String(),
@@ -120,12 +120,6 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 			localStateDistributions = append(localStateDistributions, sds.Local...)
 		}
 
-		preparedTransactionPayloads := make([]*pldapi.TransactionInput, len(publicTransactionsToSend))
-
-		for j, preparedTransaction := range publicTransactionsToSend {
-			preparedTransactionPayloads[j] = preparedTransaction.PreparedPublicTransaction
-		}
-
 		//Now we have the payloads, we can prepare the submission
 		publicTransactionEngine := s.components.PublicTxManager()
 
@@ -159,7 +153,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 					PublicTxInput: pldapi.PublicTxInput{
 						From:            resolvedAddrs[i],
 						To:              &s.contractAddress,
-						PublicTxOptions: pt.PublicTxOptions,
+						PublicTxOptions: pt.PreparedPublicTransaction.PublicTxOptions,
 					},
 				}
 
