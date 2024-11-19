@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { createContext } from "react";
+import { createContext, Dispatch, SetStateAction, useEffect, useState } from "react";
 import { constants } from "../components/config";
 import { ErrorDialog } from "../dialogs/Error";
 import { fetchLatestBlockWithTxs } from "../queries/blocks";
@@ -9,6 +9,10 @@ interface IApplicationContext {
     toggleColorMode: () => void;
   };
   lastBlockWithTransactions: number;
+  autoRefreshEnabled: boolean;
+  setAutoRefreshEnabled: Dispatch<SetStateAction<boolean>>;
+  refreshRequired: boolean;
+  refresh: () => void;
 }
 
 export const ApplicationContext = createContext({} as IApplicationContext);
@@ -22,7 +26,11 @@ interface Props {
 
 export const ApplicationContextProvider = ({ children, colorMode }: Props) => {
 
-  const { data: lastBlockWithTransactions, error } = useQuery({
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
+  const [lastBlockWithTransactions, setLastBlockWithTransactions] = useState(-1);
+  const [refreshRequired, setRefreshRequired] = useState(false);
+
+  const { data: actualLastBlockWithTransactions, error } = useQuery({
     queryKey: ["lastBlockWithTransactions"],
     queryFn: () =>
       fetchLatestBlockWithTxs().then((res) => {
@@ -35,9 +43,34 @@ export const ApplicationContextProvider = ({ children, colorMode }: Props) => {
     retry: false
   });
 
+  useEffect(() => {
+
+
+    if(actualLastBlockWithTransactions !== undefined
+      && actualLastBlockWithTransactions > lastBlockWithTransactions) {
+        
+        if(autoRefreshEnabled || lastBlockWithTransactions === -1) {
+          setLastBlockWithTransactions(actualLastBlockWithTransactions);
+        } else {
+          setRefreshRequired(true);
+        }
+
+    }
+  }, [actualLastBlockWithTransactions, lastBlockWithTransactions, setLastBlockWithTransactions]);
+
+  const refresh = () => {
+    if(actualLastBlockWithTransactions !== undefined) {
+      setLastBlockWithTransactions(actualLastBlockWithTransactions);
+    }
+    setRefreshRequired(false);
+  };
+
   return (
     <ApplicationContext.Provider
-      value={{ lastBlockWithTransactions: lastBlockWithTransactions ?? 0, colorMode }}
+      value={{
+        lastBlockWithTransactions: lastBlockWithTransactions, colorMode,
+        autoRefreshEnabled, setAutoRefreshEnabled, refreshRequired, refresh
+      }}
     >
       {children}
       <ErrorDialog dialogOpen={!!error} message={error?.message ?? ""} />

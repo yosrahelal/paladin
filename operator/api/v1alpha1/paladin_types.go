@@ -37,6 +37,10 @@ type PaladinSpec struct {
 	// (vs. configuring a connection to a production blockchain network)
 	BesuNode string `json:"besuNode,omitempty"`
 
+	// AuthConfig is used to provide authentication details for blockchain connections
+	// If this is set, it will override the auth details in the config
+	AuthConfig *AuthConfig `json:"authConfig,omitempty"`
+
 	// Optionally tune the service definition.
 	// We merge any configuration you add (such as node ports) for the following services:
 	// "rpc-http" - 8545 (TCP),
@@ -137,6 +141,24 @@ type SecretBackedSigner struct {
 	// rules first on key matching and more generic rules (like the default of ".*") last.
 	// +kubebuilder:default=.*
 	KeySelector string `json:"keySelector"`
+}
+
+type AuthMethod string
+
+const AuthMethodSecret AuthMethod = "secret"
+
+type AuthConfig struct {
+	// auth method to use for the connection
+	// +kubebuilder:validation:Enum=secret
+	AuthMethod AuthMethod `json:"authMethod"`
+
+	// SecretAuth is used to provide the name of the secret to use for authentication
+	AuthSecret *AuthSecret `json:"authSecret,omitempty"`
+}
+
+type AuthSecret struct {
+	// The name of the secret to use for authentication
+	Name string `json:"name"`
 }
 
 // StatusReason is an enumeration of possible failure causes.  Each StatusReason
