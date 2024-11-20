@@ -29,7 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { IPaladinTransaction } from '../interfaces';
 import { PaladinTransactionsDetails } from '../components/TransactionDetails';
 import { useEffect, useState } from 'react';
-import { altLightModeScrollbarStyle, altDarkModeScrollbarStyle } from '../themes/default';
+import { getAltModeScrollBarStyle } from '../themes/default';
 
 type Props = {
   paladinTransactions?: IPaladinTransaction[]
@@ -47,7 +47,6 @@ export const PaladinTransactionsDetailsDialog: React.FC<Props> = ({
   const { t } = useTranslation();
 
   const theme = useTheme();
-  const addedStyle = theme.palette.mode === 'light'? altLightModeScrollbarStyle : altDarkModeScrollbarStyle;
 
   const selectedTransaction = paladinTransactions?.find(r => (r.id == selectedPaladinTransactionId));
 
@@ -67,7 +66,7 @@ export const PaladinTransactionsDetailsDialog: React.FC<Props> = ({
       <DialogTitle sx={{ textAlign: 'center' }}>
         {t('transaction')}
       </DialogTitle>
-      <DialogContent sx={{ height: '80vh',  padding: '20px', ...addedStyle}}>
+      <DialogContent sx={{ height: '80vh',  padding: '20px', ...getAltModeScrollBarStyle(theme.palette.mode)}}>
         <Box sx={{ padding: '20px', paddingTop: '5px' }}>
         <TextField select={paladinTransactions && paladinTransactions.length > 1} label={t('id')} fullWidth size="small" value={selectedPaladinTransactionId}
           onChange={event => setSelectedPaladinTransactionId(event.target.value)}>

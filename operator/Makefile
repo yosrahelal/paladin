@@ -218,7 +218,6 @@ helm-uninstall-dependencies:
 	@if $(KUBECTL) version --client=false > /dev/null 2>&1; then \
 		$(HELM) uninstall cert-manager --namespace cert-manager > /dev/null 2>&1 || true; \
 		$(KUBECTL) delete namespace cert-manager > /dev/null 2>&1 || true; \
-		$(KUBECTL) delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml > /dev/null 2>&1 || true; \
 	else \
 		echo "No Kubernetes cluster detected. Skipping dependencies uninstallation."; \
 	fi

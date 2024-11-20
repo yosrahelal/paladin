@@ -16,7 +16,9 @@ to run the code.
 
 Below is a walkthrough of each step in the example, with an explanation of what it does.
 
-### Create cash token
+### Cash setup
+
+#### Deploy cash token
 
 ```typescript
 const notoFactory = new NotoFactory(paladin1, "noto");
@@ -36,7 +38,7 @@ verify that each transaction is valid - no custom policies will be applied.
 
 Minting is restricted to be requested only by the notary.
 
-### Issue cash
+#### Issue cash
 
 ```typescript
 await notoCash.mint(cashIssuer, {
@@ -49,7 +51,9 @@ await notoCash.mint(cashIssuer, {
 The cash issuer mints cash to the investor party. As the notary of the cash token, they are
 allowed to do this.
 
-### Create issuer+custodian private group
+### Bond setup
+
+#### Create issuer+custodian private group
 
 ```typescript
 const penteFactory = new PenteFactory(paladin1, "pente");
@@ -71,7 +75,7 @@ recorded on the base ledger contract.
 
 As will be shown in future steps, any EVM logic can be deployed into this private EVM group.
 
-### Create public bond tracker
+#### Create public bond tracker
 
 ```typescript
 await paladin1.sendTransaction({
@@ -98,7 +102,7 @@ The public bond tracker is used to advertise public information about our bond, 
 face value, issue date, and maturity date. It will also be updated with publically-visible
 events throughout the bond's lifetime.
 
-### Create private bond tracker
+#### Create private bond tracker
 
 ```typescript
 await newBondTracker(issuerCustodianGroup, bondIssuer, {
@@ -118,7 +122,7 @@ the notary tracks the bond value as an ERC-20. Every mint and transfer of the No
 ERC-20, and anything that causes the ERC-20 to revert will cause the Noto operation to revert. This private tracker is only
 visible to the bond issuer and custodian, but will be atomically linked to the Noto token in the next step.
 
-### Create bond token
+#### Deploy bond token
 
 ```typescript
 const notoBond = await notoFactory.newNoto(bondIssuer, {
@@ -137,7 +141,9 @@ The "hooks" configuration points it to the private hooks contract that was deplo
 
 For this token, "restrictMinting" is disabled, because the hooks can enforce more flexible rules on both mint and transfer.
 
-### Issue bond to custodian
+### Bond issuance
+
+#### Issue bond to custodian
 
 ```typescript
 await notoBond.mint(bondIssuer, {
@@ -153,7 +159,7 @@ The Noto "mint" request will be prepared and encoded within a call to the "onMin
 contract. The logic in that contract will validate that the mint is allowed, and then will trigger two external calls
 on the base ledger: 1) to perform the Noto mint, and 2) to notify the public bond tracker that issuance has started.
 
-### Begin distribution of bond
+#### Begin distribution of bond
 
 ```typescript
 await bondTracker.using(paladin2).beginDistribution(bondCustodian, {
@@ -172,7 +178,9 @@ to the allow list before they will be allowed to subscribe to the bond.
 Both the bond tracker and the investor registry are private contracts, visible only within the privacy group
 between the issuer and custodian.
 
-### Create investor+custodian private group
+### Bond subscription
+
+#### Create investor+custodian private group
 
 ```typescript
 const investorCustodianGroup = await penteFactory
@@ -188,9 +196,9 @@ const investorCustodianGroup = await penteFactory
   });
 ```
 
-This create another instance of the Pente domain, scoped to only the investor and the custodian.
+This creates another instance of the Pente domain, scoped to only the investor and the custodian.
 
-### Create private bond subscription
+#### Create private bond subscription
 
 ```typescript
 const bondSubscription = await newBondSubscription(
@@ -207,7 +215,7 @@ const bondSubscription = await newBondSubscription(
 An investor may request to subscribe to the bond by creating a [private subscription contract](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/solidity/contracts/private/BondSubscription.sol)
 in their private EVM with the bond custodian.
 
-### Prepare tokens for exchange
+#### Prepare tokens for exchange
 
 ```typescript
 const paymentTransfer = await notoCash
@@ -238,7 +246,7 @@ uses Pente hooks, the result of the first "prepare" is a private Pente transacti
 be prepared again to receive a public transaction that wraps both the Pente hook transition and
 the Noto bond token transfer.
 
-### Share the prepared transactions with the private contract
+#### Share the prepared transactions with the private contract
 
 ```typescript
 await bondSubscription.using(paladin3).preparePayment(investor, {
@@ -256,7 +264,7 @@ The `preparePayment` and `prepareBond` methods on the bond subscription contract
 respective parties to encode their prepared transactions, in preparation for triggering an
 atomic DvP (delivery vs. payment).
 
-### Approve delegation via the private contract
+#### Approve delegation via the private contract
 
 ```typescript
 await notoCash.using(paladin3).approveTransfer(investor, {
@@ -285,7 +293,7 @@ In the case of the payment, we use the `approveTransfer` method of Noto. For the
 which uses Pente custom logic to wrap the Noto token, we use the `approveTransition` method
 of Pente.
 
-### Distribute the bond units by performing swap
+#### Distribute the bond units by performing swap
 
 ```typescript
 await bondSubscription.using(paladin2).distribute(bondCustodian, {
