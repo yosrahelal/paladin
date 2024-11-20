@@ -136,10 +136,7 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 
 	if len(preparedTxInserts) > 0 {
 		err = dbTX.WithContext(ctx).
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "id"}},
-				DoNothing: true, // immutable
-			}).
+			Clauses(clause.OnConflict{DoNothing: true /* immutable */}).
 			Create(preparedTxInserts).
 			Error
 	}
@@ -147,6 +144,7 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 	if err == nil && len(preparedTxStateInserts) > 0 {
 		err = dbTX.WithContext(ctx).
 			Omit("State").
+			Clauses(clause.OnConflict{DoNothing: true /* immutable */}).
 			Create(preparedTxStateInserts).
 			Error
 	}
