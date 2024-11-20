@@ -106,6 +106,7 @@ type transactionFlow struct {
 	delegatePending             bool
 	pendingDelegationRequestID  string
 	delegateRequestTime         time.Time
+	delegateRequestBlockHeight  int64
 	delegated                   bool
 	delegateRequestTimer        *time.Timer
 	assemblePending             bool

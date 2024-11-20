@@ -52,11 +52,10 @@ func newTestOrchestrator(t *testing.T, cbs ...func(mocks *mocksAndTestControl, c
 
 func newInflightTransaction(o *orchestrator, nonce uint64, txMods ...func(tx *DBPublicTxn)) (*inFlightTransactionStageController, *inFlightTransactionState) {
 	tx := &DBPublicTxn{
-		SignerNonce: fmt.Sprintf("%s:%d", o.signingAddress, 1),
-		From:        o.signingAddress,
-		Nonce:       nonce,
-		Gas:         2000,
-		Created:     tktypes.TimestampNow(),
+		From:    o.signingAddress,
+		Nonce:   &nonce,
+		Gas:     2000,
+		Created: tktypes.TimestampNow(),
 	}
 	for _, txMod := range txMods {
 		txMod(tx)
@@ -78,10 +77,12 @@ func TestNewOrchestratorLoadsSecondTxAndQueuesBalanceCheck(t *testing.T) {
 	// Fill first slot with a stage controller
 	o.inFlightTxs = []*inFlightTransactionStageController{mockIT}
 
-	// Return the next nonce - will fill up the orchestrator
-	m.db.ExpectQuery("SELECT.*public_txn").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce"}).AddRow(
-		o.signingAddress, 2,
-	))
+	// Return a single transaction - note there's a highest nonce query on startup before the first poll, so we query twice
+	for i := 0; i < 2; i++ {
+		m.db.ExpectQuery("SELECT.*public_txn").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce"}).AddRow(
+			o.signingAddress, 2,
+		))
+	}
 	// Do not return any submissions for it
 	m.db.ExpectQuery("SELECT.*public_submissions").WillReturnRows(sqlmock.NewRows([]string{}))
 
@@ -139,8 +140,10 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	o.inFlightTxs = []*inFlightTransactionStageController{mockIT}
 	o.state = OrchestratorStateRunning
 
-	// Just keep returning empty rows and we should go idle once we've flushed through the status update above
-	m.db.ExpectQuery("SELECT.*public_txn").WillReturnRows(sqlmock.NewRows([]string{}))
+	for i := 0; i < 2; i++ {
+		// return empty rows - once for max nonce calculation, and then again for the actual query
+		m.db.ExpectQuery("SELECT.*public_txn").WillReturnRows(sqlmock.NewRows([]string{}))
+	}
 
 	ocDone, _ := o.Start(ctx)
 
@@ -197,13 +200,13 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 	o.inFlightTxs = []*inFlightTransactionStageController{mockIT}
 	o.state = OrchestratorStateRunning
 
-	// Mock no auto-fueling TX in flight
-	m.db.ExpectQuery("SELECT.*public_txns.*data IS NULL").WillReturnRows(sqlmock.NewRows([]string{}))
+	for i := 0; i < 2; i++ {
+		// return empty rows - once for max nonce calculation, and then again for the actual query
+		m.db.ExpectQuery("SELECT.*public_txn").WillReturnRows(sqlmock.NewRows([]string{}))
+	}
 
 	// Then insert of the auto-fueling transaction
-	m.db.ExpectBegin()
 	m.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
-	m.db.ExpectCommit()
 
 	// Mock the insufficient balance on the account that's submitting
 	m.ethClient.On("GetBalance", mock.Anything, o.signingAddress, "latest").Return(tktypes.Uint64ToUint256(0), nil)

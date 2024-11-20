@@ -61,6 +61,7 @@ type zetoDomainTestSuite struct {
 }
 
 func (s *zetoDomainTestSuite) SetupSuite() {
+	log.SetLevel("debug")
 	s.hdWalletSeed = testbed.HDWalletSeedScopedToTest()
 	domainContracts := DeployZetoContracts(s.T(), s.hdWalletSeed, "./config-for-deploy.yaml", controllerName)
 	s.deployedContracts = domainContracts

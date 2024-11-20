@@ -49,7 +49,6 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 	localStateDistributions := make([]*components.StateDistribution, 0)
 	preparedTxnDistributions := make([]*preparedtxdistribution.PreparedTxnDistribution, 0)
 
-	completed := false // and include whether we committed the DB transaction or not
 	for signingAddress, transactionFlows := range dispatchableTransactions {
 		log.L(ctx).Debugf("DispatchTransactions: %d transactions for signingAddress %s", len(transactionFlows), signingAddress)
 
@@ -163,22 +162,15 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 					return err
 				}
 				publicTXs[i].Data = tktypes.HexBytes(data)
-			}
-			pubBatch, err := publicTransactionEngine.PrepareSubmissionBatch(ctx, publicTXs)
-			if err != nil {
-				return i18n.WrapError(ctx, err, msgs.MsgPrivTxMgrPublicTxFail)
-			}
-			// Must make sure from this point we return the nonces
-			sequence.PublicTxBatch = pubBatch
-			defer func() {
-				pubBatch.Completed(ctx, completed)
-			}()
-			if len(pubBatch.Rejected()) > 0 {
-				// We do not handle partial success - roll everything back
-				return i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivTxMgrPublicTxFail)
-			}
 
+				err = publicTransactionEngine.ValidateTransaction(ctx, s.components.Persistence().DB(), publicTXs[i])
+				if err != nil {
+					return i18n.WrapError(ctx, err, msgs.MsgPrivTxMgrPublicTxFail)
+				}
+			}
+			sequence.PublicTxs = publicTXs
 			dispatchBatch.PublicDispatches = append(dispatchBatch.PublicDispatches, sequence)
+
 		}
 	}
 
@@ -199,7 +191,6 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return err
 	}
-	completed = true
 	for signingAddress, sequence := range dispatchableTransactions {
 		for _, transactionFlow := range sequence {
 			s.publisher.PublishTransactionDispatchedEvent(ctx, transactionFlow.ID(ctx).String(), uint64(0) /*TODO*/, signingAddress)
@@ -215,7 +206,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 
 	// We also need to trigger ourselves for any private TX we chained
 	for _, tx := range dispatchBatch.PrivateDispatches {
-		if err := s.privateTxManager.HandleNewTx(ctx, tx); err != nil {
+		if err := s.privateTxManager.HandleNewTx(ctx, s.components.Persistence().DB(), tx); err != nil {
 			log.L(ctx).Errorf("Sequencer failed to notify private TX manager for chained transaction")
 		}
 	}

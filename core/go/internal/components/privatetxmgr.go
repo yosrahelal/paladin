@@ -81,7 +81,7 @@ type PrivateTxManager interface {
 	TransportClient
 
 	//Synchronous functions to submit a new private transaction
-	HandleNewTx(ctx context.Context, tx *ValidatedTransaction) error
+	HandleNewTx(ctx context.Context, dbTX *gorm.DB, tx *ValidatedTransaction) error
 	GetTxStatus(ctx context.Context, domainAddress string, txID uuid.UUID) (status PrivateTxStatus, err error)
 
 	// Synchronous function to call an existing deployed smart contract

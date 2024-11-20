@@ -18,9 +18,7 @@ package publictxmgr
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
-	"strings"
 	"sync"
 	"time"
 
@@ -86,9 +84,6 @@ type pubTxManager struct {
 	gasPriceClient   GasPriceClient
 	submissionWriter *submissionWriter
 
-	// nonce manager
-	nonceManager NonceCache
-
 	// a map of signing addresses and transaction engines
 	inFlightOrchestrators       map[tktypes.EthAddress]*orchestrator
 	signingAddressesPausedUntil map[tktypes.EthAddress]time.Time
@@ -107,7 +102,7 @@ type pubTxManager struct {
 	nonceCacheTimeout        time.Duration
 	engineLoopDone           chan struct{}
 
-	activityRecordCache     cache.Cache[string, *txActivityRecords]
+	activityRecordCache     cache.Cache[uint64, *txActivityRecords]
 	maxActivityRecordsPerTx int
 
 	// balance manager
@@ -149,7 +144,7 @@ func NewPublicTransactionManager(ctx context.Context, conf *pldconf.PublicTxMana
 		retry:                       retry.NewRetryIndefinite(&conf.Manager.Retry),
 		gasPriceIncreaseMax:         gasPriceIncreaseMax,
 		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *pldconf.PublicTxManagerDefaults.GasPrice.IncreasePercentage),
-		activityRecordCache:         cache.NewCache[string, *txActivityRecords](&conf.Manager.ActivityRecords.CacheConfig, &pldconf.PublicTxManagerDefaults.Manager.ActivityRecords.CacheConfig),
+		activityRecordCache:         cache.NewCache[uint64, *txActivityRecords](&conf.Manager.ActivityRecords.CacheConfig, &pldconf.PublicTxManagerDefaults.Manager.ActivityRecords.CacheConfig),
 		maxActivityRecordsPerTx:     confutil.Int(conf.Manager.ActivityRecords.RecordsPerTransaction, *pldconf.PublicTxManagerDefaults.Manager.ActivityRecords.RecordsPerTransaction),
 	}
 }
@@ -187,16 +182,6 @@ func (ble *pubTxManager) Start() error {
 	// The client is assured to be started by this point and available
 	ble.ethClient = ble.ethClientFactory.SharedWS()
 	ble.gasPriceClient.Init(ctx, ble.ethClient)
-	ble.nonceManager = newNonceCache(ble.nonceCacheTimeout, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
-		log.L(ctx).Tracef("NonceFromChain getting next nonce for signing address ID %s", signer)
-		nextNonce, err := ble.ethClient.GetTransactionCount(ctx, signer)
-		if err != nil {
-			log.L(ctx).Errorf("NonceFromChain getting next nonce for signer %s failed: %+v", signer, err)
-			return 0, err
-		}
-		log.L(ctx).Tracef("NonceFromChain getting next nonce for signer %s succeeded: %s, converting to uint: %d", signer, nextNonce.String(), nextNonce.Uint64())
-		return nextNonce.Uint64(), nil
-	})
 	if ble.engineLoopDone == nil { // only start once
 		ble.engineLoopDone = make(chan struct{})
 		log.L(ctx).Debugf("Kicking off  enterprise handler engine loop")
@@ -213,158 +198,9 @@ func (ble *pubTxManager) Stop() {
 	if ble.submissionWriter != nil {
 		ble.submissionWriter.Shutdown()
 	}
-	if ble.nonceManager != nil {
-		ble.nonceManager.Stop()
-	}
 	if ble.engineLoopDone != nil {
 		<-ble.engineLoopDone
 	}
-}
-
-type preparedTransaction struct {
-	bindings    []*components.PaladinTXReference
-	tx          *pldapi.PublicTx
-	rejectError error                 // only if rejected
-	revertData  tktypes.HexBytes      // only if rejected, and was available
-	nsi         NonceAssignmentIntent // only if accepted
-}
-
-type preparedTransactionBatch struct {
-	ble      *pubTxManager
-	accepted []components.PublicTxAccepted
-	rejected []components.PublicTxRejected
-}
-
-// Submit writes the prepared submission to the database using the provided context
-// This is expected to be a lightweight operation involving not much more than writing to the database, as the heavy lifting should have been done in PrepareSubmission
-// The database transaction will be coordinated by the caller
-func (pb *preparedTransactionBatch) Submit(ctx context.Context, dbTX *gorm.DB) (err error) {
-	persistedTransactions := make([]*DBPublicTxn, len(pb.accepted))
-	publicTxBindings := make([]*DBPublicTxnBinding, 0, len(pb.accepted))
-	for i, accepted := range pb.accepted {
-		ptx := accepted.(*preparedTransaction)
-		persistedTransactions[i], err = pb.ble.finalizeNonceForPersistedTX(ctx, ptx)
-		if err != nil {
-			return err
-		}
-		for _, bnd := range ptx.bindings {
-			publicTxBindings = append(publicTxBindings, &DBPublicTxnBinding{
-				Transaction:     bnd.TransactionID,
-				TransactionType: bnd.TransactionType,
-				SignerNonce:     persistedTransactions[i].SignerNonce,
-			})
-		}
-	}
-	// All the nonce processing to this point should have ensured we do not have a conflict on nonces.
-	// It is the caller's responsibility to ensure we do not have a conflict on transaction+resubmit_idx.
-	if len(persistedTransactions) > 0 {
-		err = dbTX.
-			WithContext(ctx).
-			Table("public_txns").
-			Create(persistedTransactions).
-			Error
-	}
-	if err == nil && len(publicTxBindings) > 0 {
-		err = dbTX.
-			WithContext(ctx).
-			Table("public_txn_bindings").
-			Create(publicTxBindings).
-			Error
-	}
-
-	return err
-}
-
-func (pb *preparedTransactionBatch) Accepted() []components.PublicTxAccepted { return pb.accepted }
-func (pb *preparedTransactionBatch) Rejected() []components.PublicTxRejected { return pb.rejected }
-
-func (pb *preparedTransactionBatch) Completed(ctx context.Context, committed bool) {
-	for _, pt := range pb.accepted {
-		if committed {
-			pt.(*preparedTransaction).nsi.Complete(ctx)
-		} else {
-			pt.(*preparedTransaction).nsi.Rollback(ctx)
-		}
-	}
-	if committed && len(pb.accepted) > 0 {
-		log.L(ctx).Debugf("%d transactions committed to DB", len(pb.accepted))
-		pb.ble.MarkInFlightOrchestratorsStale()
-	}
-}
-
-func (pt *preparedTransaction) Bindings() []*components.PaladinTXReference {
-	return pt.bindings
-}
-
-func (pt *preparedTransaction) PublicTx() *pldapi.PublicTx {
-	return pt.tx
-}
-
-func (pt *preparedTransaction) RejectedError() error {
-	return pt.rejectError
-}
-
-func (pt *preparedTransaction) RevertData() tktypes.HexBytes {
-	return pt.revertData
-}
-
-func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, transactions []*components.PublicTxSubmission) (components.PublicTxBatch, error) {
-	batch := &preparedTransactionBatch{
-		ble:      ble,
-		accepted: make([]components.PublicTxAccepted, 0, len(transactions)),
-		rejected: make([]components.PublicTxRejected, 0),
-	}
-	earlyReturn := true
-	defer func() {
-		if earlyReturn {
-			// Ensure we always cleanup if we fail (for error or panic) before we've
-			// delegated responsibility for calling this to our caller
-			batch.Completed(ctx, false)
-		}
-	}()
-	nonceAssigned := make([]*preparedTransaction, 0, len(transactions))
-	for _, tx := range transactions {
-		preparedSubmission, err := ble.prepareSubmission(ctx, nonceAssigned, tx)
-		if err != nil {
-			return nil, err
-		}
-		if preparedSubmission.rejectError != nil {
-			batch.rejected = append(batch.rejected, preparedSubmission)
-		} else {
-			nonceAssigned = append(nonceAssigned, preparedSubmission)
-			batch.accepted = append(batch.accepted, preparedSubmission)
-		}
-	}
-	earlyReturn = false
-	return batch, nil
-}
-
-// A one-and-done submission of a single transaction, used internally by auto-fueling, and demonstrating use of the
-// public transaction interface for the special case of a single transaction that will succeed or fail.
-// Other callers have to handle the Accepted()/Rejected() list to decide what they do for a split result.
-func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, transaction *components.PublicTxSubmission) (components.PublicTxAccepted, error) {
-	batch, err := ble.PrepareSubmissionBatch(ctx, []*components.PublicTxSubmission{transaction})
-	if err != nil {
-		return nil, err
-	}
-	// Must call completed and tell it whether the allocation of the nonces committed or rolled back
-	committed := false
-	defer func() {
-		batch.Completed(ctx, committed)
-	}()
-	// Try to submit
-	if len(batch.Rejected()) > 0 {
-		return nil, batch.Rejected()[0].RejectedError()
-	}
-	err = ble.p.DB().Transaction(func(dbTX *gorm.DB) error {
-		return batch.Submit(ctx, dbTX)
-	})
-	if err != nil {
-		return nil, err
-	}
-	// We committed - so the nonces are finalized as allocated
-	committed = true
-	return batch.Accepted()[0], nil
 }
 
 func buildEthTX(
@@ -392,100 +228,138 @@ func buildEthTX(
 	return ethTx
 }
 
-// PrepareSubmission prepares and validates the transaction input data so that a later call to
-// Submit can be made in the middle of a wider database transaction with minimal risk of error
-func (ble *pubTxManager) prepareSubmission(ctx context.Context, batchSoFar []*preparedTransaction, txi *components.PublicTxSubmission) (preparedSubmission *preparedTransaction, err error) {
+func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, txi *components.PublicTxSubmission) (tx *pldapi.PublicTx, err error) {
+	var txs []*pldapi.PublicTx
+	var cb func()
+	err = ble.ValidateTransaction(ctx, ble.p.DB(), txi)
+	if err == nil {
+		cb, txs, err = ble.WriteNewTransactions(ctx, ble.p.DB(), []*components.PublicTxSubmission{txi})
+	}
+	if err == nil {
+		tx = txs[0]
+		cb()
+	}
+	return
+}
+
+func (ble *pubTxManager) ValidateTransaction(ctx context.Context, dbTX *gorm.DB, txi *components.PublicTxSubmission) error {
 	log.L(ctx).Tracef("PrepareSubmission transaction: %+v", txi)
 
-	pt := &preparedTransaction{
-		bindings: txi.Bindings,
-		tx: &pldapi.PublicTx{
-			To:              txi.To,
-			Data:            txi.Data,
-			PublicTxOptions: txi.PublicTxOptions,
-		},
-	}
-
 	if txi.From == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgInvalidTXMissingFromAddr)
+		return i18n.NewError(ctx, msgs.MsgInvalidTXMissingFromAddr)
 	}
-	pt.tx.From = *txi.From
 
 	prepareStart := time.Now()
 	var txType InFlightTxOperation
 
-	rejected := false
-	if pt.tx.Gas == nil || *pt.tx.Gas == 0 {
+	if txi.Gas == nil || *txi.Gas == 0 {
 		gasEstimateResult, err := ble.ethClient.EstimateGasNoResolve(ctx, buildEthTX(
 			*txi.From,
 			nil, /* nonce not assigned at this point */
-			pt.tx.To,
-			pt.tx.Data,
-			&pt.tx.PublicTxOptions,
+			txi.To,
+			txi.Data,
+			&txi.PublicTxOptions,
 		))
 		if err != nil {
-			log.L(ctx).Errorf("HandleNewTx <%s> error estimating gas for transaction: %+v, request: (%+v)", txType, err, pt.tx)
+			log.L(ctx).Errorf("HandleNewTx <%s> error estimating gas for transaction: %+v, request: (%+v)", txType, err, txi)
 			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
 			if ethclient.MapSubmissionRejected(err) {
-				// transaction is rejected, so no nonce will be assigned - but we have not failed in our task
-				pt.rejectError = err
+				// transaction is rejected. We can build a useful error message hopefully by processing the rejection info
 				if len(gasEstimateResult.RevertData) > 0 {
 					// we can use the error dictionary callback to TXManager to look up the ABI
 					// Note: The ABI is already persisted before TXManager calls down into us.
-					pt.rejectError = ble.rootTxMgr.CalculateRevertError(ctx, ble.p.DB(), gasEstimateResult.RevertData)
-					log.L(ctx).Warnf("Estimate gas reverted (%s): %s", err, pt.rejectError)
+					err = ble.rootTxMgr.CalculateRevertError(ctx, dbTX, gasEstimateResult.RevertData)
+					log.L(ctx).Warnf("Estimate gas reverted (%s): %s", err, err)
 				}
-				return pt, nil
+				return err
 			}
-			return nil, err
+			return err
 		}
-		pt.tx.Gas = &gasEstimateResult.GasLimit
-		log.L(ctx).Tracef("HandleNewTx <%s> using the estimated gas limit %s for transaction: %+v", txType, pt.tx.Gas, pt.tx)
+		txi.Gas = &gasEstimateResult.GasLimit
+		log.L(ctx).Tracef("HandleNewTx <%s> using the estimated gas limit %s for transaction: %+v", txType, txi.Gas, txi)
 	} else {
-		log.L(ctx).Tracef("HandleNewTx <%s> using the provided gas limit %s for transaction: %+v", txType, pt.tx.Gas, pt.tx)
-	}
-
-	if !rejected {
-		// Need to check for an existing NSI for the address in the batch
-		for _, alreadyInBatch := range batchSoFar {
-			if alreadyInBatch.nsi != nil && alreadyInBatch.nsi.Address() == pt.tx.From {
-				pt.nsi = alreadyInBatch.nsi
-			}
-		}
-		if pt.nsi == nil {
-			pt.nsi, err = ble.nonceManager.IntentToAssignNonce(ctx, pt.tx.From)
-		}
-		if err != nil {
-			log.L(ctx).Errorf("HandleNewTx <%s> error assigning nonce for transaction: %+v, request: (%+v)", txType, err, pt.tx)
-			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
-			return nil, err
-		}
+		log.L(ctx).Tracef("HandleNewTx <%s> using the provided gas limit %s for transaction: %+v", txType, txi.Gas, txi)
 	}
 
 	ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusSuccess), time.Since(prepareStart).Seconds())
-	log.L(ctx).Debugf("HandleNewTx <%s> transaction validated and nonce assignment intent created for %s", txType, pt.tx.From)
-	return pt, nil
+	log.L(ctx).Debugf("HandleNewTx <%s> transaction validated and nonce assignment intent created for %s", txType, txi.From)
+	return nil
 
 }
 
-func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *preparedTransaction) (*DBPublicTxn, error) {
-	nonce, err := ptx.nsi.AssignNextNonce(ctx)
-	if err != nil {
-		log.L(ctx).Errorf("Failed to assign nonce to public transaction %+v: %s", ptx, err)
-		return nil, err
+func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX *gorm.DB, transactions []*components.PublicTxSubmission) (postCommit func(), pubTxns []*pldapi.PublicTx, err error) {
+	persistedTransactions := make([]*DBPublicTxn, len(transactions))
+	for i, txi := range transactions {
+		persistedTransactions[i] = &DBPublicTxn{
+			From:            *txi.From, // safe because validated in ValidateTransaction
+			To:              txi.To,
+			Gas:             txi.Gas.Uint64(),
+			Value:           txi.Value,
+			Data:            txi.Data,
+			FixedGasPricing: tktypes.JSONString(txi.PublicTxGasPricing),
+		}
 	}
-	tx := ptx.tx
-	tx.Nonce = tktypes.HexUint64(nonce)
-	log.L(ctx).Infof("Creating a new public transaction from=%s nonce=%d (%s)", tx.From, tx.Nonce /* number */, tx.Nonce /* hex */)
-	log.L(ctx).Tracef("payload: %+v", tx)
-	return &DBPublicTxn{
-		SignerNonce: fmt.Sprintf("%s:%d", tx.From, tx.Nonce), // having a single key rather than compound key helps us simplify cross-table correlation, particularly for batch lookup
-		From:        tx.From,
-		Nonce:       tx.Nonce.Uint64(),
-		To:          tx.To,
-		Gas:         tx.Gas.Uint64(),
-		Data:        tx.Data,
-	}, nil
+	// All the nonce processing to this point should have ensured we do not have a conflict on nonces.
+	// It is the caller's responsibility to ensure we do not have a conflict on transaction+resubmit_idx.
+	if len(persistedTransactions) > 0 {
+		err = dbTX.
+			WithContext(ctx).
+			Table("public_txns").
+			Clauses(clause.Returning{Columns: []clause.Column{{Name: "pub_txn_id"}}}).
+			Create(persistedTransactions).
+			Error
+	}
+	if err == nil {
+		publicTxBindings := make([]*DBPublicTxnBinding, 0, len(transactions))
+		for i, txi := range transactions {
+			pubTxnID := persistedTransactions[i].PublicTxnID
+			for _, bnd := range txi.Bindings {
+				publicTxBindings = append(publicTxBindings, &DBPublicTxnBinding{
+					Transaction:     bnd.TransactionID,
+					TransactionType: bnd.TransactionType,
+					PublicTxnID:     pubTxnID,
+				})
+			}
+		}
+		if len(publicTxBindings) > 0 {
+			err = dbTX.
+				WithContext(ctx).
+				Table("public_txn_bindings").
+				Create(publicTxBindings).
+				Error
+		}
+	}
+	if err == nil {
+		pubTxns = make([]*pldapi.PublicTx, len(persistedTransactions))
+		toNotify := make(map[tktypes.EthAddress]bool)
+		for i, ptx := range persistedTransactions {
+			pubTxns[i] = mapPersistedTransaction(ptx)
+			toNotify[ptx.From] = true
+		}
+		postCommit = ble.postCommitNewTransactions(ctx, toNotify)
+	}
+
+	return postCommit, pubTxns, err
+}
+
+func (ble *pubTxManager) postCommitNewTransactions(ctx context.Context, toNotify map[tktypes.EthAddress]bool) func() {
+	return func() {
+		// Mark any active orchestrators stale
+		inactive := false
+		for addr := range toNotify {
+			oc := ble.getOrchestratorForAddress(addr)
+			if oc != nil {
+				log.L(ctx).Debugf("Notified orchestrator %s to re-poll due to new transactions", &addr)
+				oc.MarkInFlightTxStale()
+			} else {
+				inactive = true
+			}
+		}
+		// And if there was an orchestrator un-loaded, then mark the main poll loop stale
+		if inactive {
+			ble.MarkInFlightOrchestratorsStale()
+		}
+	}
 }
 
 func recoverGasPriceOptions(gpoJSON tktypes.RawJSON) (ptgp pldapi.PublicTxGasPricing) {
@@ -542,7 +416,7 @@ func (ble *pubTxManager) queryPublicTxWithBinding(ctx context.Context, dbTX *gor
 		for iSub, pSub := range ptx.Submissions {
 			tx.Submissions[iSub] = mapPersistedSubmissionData(pSub)
 		}
-		tx.Activity = ble.getActivityRecords(ptx.SignerNonce)
+		tx.Activity = ble.getActivityRecords(ptx.PublicTxnID)
 		results[iTx] = &pldapi.PublicTxWithBinding{
 			PublicTx: tx,
 		}
@@ -557,15 +431,14 @@ func (ble *pubTxManager) queryPublicTxWithBinding(ctx context.Context, dbTX *gor
 	return results, nil
 }
 
-func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tktypes.EthAddress, nonce uint64) (bool, error) {
+func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, pubTxnID uint64) (bool, error) {
 	// Runs a DB query to see if the transaction is marked completed (for good or bad)
 	// A non existent transaction results in false
 	var ptxs []*DBPublicTxn
 	err := ble.p.DB().
 		WithContext(ctx).
 		Table("public_txns").
-		Where("from = ?", from).
-		Where("nonce = ?", nonce).
+		Where(`"pub_txn_id" = ?`, pubTxnID).
 		Joins("Completed").
 		Select(`"Completed"."tx_hash"`).
 		Limit(1).
@@ -575,7 +448,7 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tkt
 		return false, err
 	}
 	if len(ptxs) > 0 && ptxs[0].Completed != nil {
-		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s:%d", from, nonce)
+		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s:%d (pubTxnID=%d)", ptxs[0].From, ptxs[0].Nonce, pubTxnID)
 		return true, nil
 	}
 	return false, nil
@@ -592,8 +465,8 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 		Joins("Completed").
 		Where(`"Completed"."tx_hash" IS NULL`).
 		Joins("Binding").
-		Where(`"Binding"."signer_nonce" IS NULL`). // no binding for auto fueling txns
-		Where("data IS NULL").                     // they are simple transfers
+		Where(`"Binding"."pub_txn_id" IS NULL`). // no binding for auto fueling txns
+		Where("data IS NULL").                   // they are simple transfers
 		Limit(1).
 		Find(&ptxs).
 		Error
@@ -601,7 +474,7 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 		return nil, err
 	}
 	if len(ptxs) > 0 {
-		log.L(ctx).Debugf("GetPendingFuelingTransaction returned %s", ptxs[0].SignerNonce)
+		log.L(ctx).Debugf("GetPendingFuelingTransaction returned %d", ptxs[0].PublicTxnID)
 		return mapPersistedTransaction(ptxs[0]), nil
 	}
 	return nil, nil
@@ -620,18 +493,18 @@ func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB,
 	if err != nil {
 		return nil, err
 	}
-	signerNonceRefs := make([]string, len(ptxs))
+	publicTxRefs := make([]uint64, len(ptxs))
 	for i, ptx := range ptxs {
-		signerNonceRefs[i] = ptx.SignerNonce
+		publicTxRefs[i] = ptx.PublicTxnID
 	}
-	if len(signerNonceRefs) > 0 {
-		allSubs, err := ble.getTransactionSubmissions(ctx, dbTX, signerNonceRefs)
+	if len(publicTxRefs) > 0 {
+		allSubs, err := ble.getTransactionSubmissions(ctx, dbTX, publicTxRefs)
 		if err != nil {
 			return nil, err
 		}
 		for _, sub := range allSubs {
 			for _, ptx := range ptxs {
-				if sub.SignerNonce == ptx.SignerNonce {
+				if sub.PublicTxnID == ptx.PublicTxnID {
 					ptx.Submissions = append(ptx.Submissions, sub)
 				}
 			}
@@ -642,10 +515,11 @@ func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB,
 
 func mapPersistedTransaction(ptx *DBPublicTxn) *pldapi.PublicTx {
 	tx := &pldapi.PublicTx{
+		LocalID: &ptx.PublicTxnID,
 		From:    ptx.From,
-		Nonce:   tktypes.HexUint64(ptx.Nonce),
 		Created: ptx.Created,
 		To:      ptx.To,
+		Nonce:   (*tktypes.HexUint64)(ptx.Nonce),
 		Data:    ptx.Data,
 		PublicTxOptions: pldapi.PublicTxOptions{
 			Gas:                (*tktypes.HexUint64)(&ptx.Gas),
@@ -675,12 +549,12 @@ func mapPersistedSubmissionData(pSub *DBPubTxnSubmission) *pldapi.PublicTxSubmis
 	}
 }
 
-func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *gorm.DB, signerNonceRefs []string) ([]*DBPubTxnSubmission, error) {
+func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *gorm.DB, pubTxnIDs []uint64) ([]*DBPubTxnSubmission, error) {
 	var ptxs []*DBPubTxnSubmission
 	err := dbTX.
 		WithContext(ctx).
 		Table("public_submissions").
-		Where("signer_nonce IN (?)", signerNonceRefs).
+		Where("pub_txn_id IN (?)", pubTxnIDs).
 		Order("created DESC").
 		Find(&ptxs).
 		Error
@@ -704,7 +578,7 @@ func (ble *pubTxManager) ResumeTransaction(ctx context.Context, from tktypes.Eth
 func (pte *pubTxManager) UpdateSubStatus(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
 	// TODO: Choose after testing the right way to treat these records - if text is right or not
 	if err == nil {
-		pte.addActivityRecord(imtx.GetSignerNonce(),
+		pte.addActivityRecord(imtx.GetPubTxnID(),
 			i18n.ExpandWithCode(ctx,
 				i18n.MessageKey(msgs.MsgPublicTxHistoryInfo),
 				imtx.GetFrom(),
@@ -715,7 +589,7 @@ func (pte *pubTxManager) UpdateSubStatus(ctx context.Context, imtx InMemoryTxSta
 			),
 		)
 	} else {
-		pte.addActivityRecord(imtx.GetSignerNonce(),
+		pte.addActivityRecord(imtx.GetPubTxnID(),
 			i18n.ExpandWithCode(ctx,
 				i18n.MessageKey(msgs.MsgPublicTxHistoryError),
 				imtx.GetFrom(),
@@ -731,14 +605,14 @@ func (pte *pubTxManager) UpdateSubStatus(ctx context.Context, imtx InMemoryTxSta
 }
 
 // add an activity record - this function assumes caller will not add multiple
-func (pte *pubTxManager) addActivityRecord(signerNonce string, msg string) {
+func (pte *pubTxManager) addActivityRecord(pubTxnID uint64, msg string) {
 	if pte.maxActivityRecordsPerTx == 0 {
 		return
 	}
-	txr, _ := pte.activityRecordCache.Get(signerNonce)
+	txr, _ := pte.activityRecordCache.Get(pubTxnID)
 	if txr == nil {
 		txr = &txActivityRecords{}
-		pte.activityRecordCache.Set(signerNonce, txr)
+		pte.activityRecordCache.Set(pubTxnID, txr)
 	}
 	// We add to the front of the list (newest record first) and cap the size
 	txr.lock.Lock()
@@ -757,8 +631,8 @@ func (pte *pubTxManager) addActivityRecord(signerNonce string, msg string) {
 	txr.records = newActivity
 }
 
-func (pte *pubTxManager) getActivityRecords(signerNonce string) []pldapi.TransactionActivityRecord {
-	txr, _ := pte.activityRecordCache.Get(signerNonce)
+func (pte *pubTxManager) getActivityRecords(pubTxID uint64) []pldapi.TransactionActivityRecord {
+	txr, _ := pte.activityRecordCache.Get(pubTxID)
 	if txr != nil {
 		// Snap the current activity array pointer in the lock and return it directly
 		// (it does not get modified, only re-allocated on each update)
@@ -770,19 +644,18 @@ func (pte *pubTxManager) getActivityRecords(signerNonce string) []pldapi.Transac
 }
 
 func (pte *pubTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error) {
-	var signerNonces []string
+	var publicTxnIDs []uint64
 	var txns []*pldapi.PublicTxWithBinding
 	err := dbTX.
 		Table("public_submissions").
 		Model(DBPubTxnSubmission{}).
 		Where(`tx_hash = ?`, hash).
-		Pluck("signer_nonce", &signerNonces).
+		Pluck("pub_txn_id", &publicTxnIDs).
+		Limit(1).
 		Error
-	if err == nil && len(signerNonces) > 0 {
-		signerNonceSplit := strings.Split(signerNonces[0], ":")
+	if err == nil && len(publicTxnIDs) > 0 {
 		txns, err = pte.QueryPublicTxWithBindings(ctx, dbTX, query.NewQueryBuilder().
-			Equal("from", signerNonceSplit[0]).
-			Equal("nonce", signerNonceSplit[1]).
+			Equal("localId", publicTxnIDs[0]).
 			Query())
 	}
 	if err != nil || len(txns) == 0 {
@@ -805,7 +678,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 	var lookups []*bindingsMatchingSubmission
 	err := dbTX.
 		Table("public_txn_bindings").
-		Select(`"transaction"`, `"tx_type"`, `"Submission"."signer_nonce"`, `"Submission"."tx_hash"`).
+		Select(`"transaction"`, `"tx_type"`, `"Submission"."pub_txn_id"`, `"Submission"."tx_hash"`).
 		Joins("Submission").
 		Where(`"Submission"."tx_hash" IN (?)`, txHashes).
 		Find(&lookups).
@@ -831,7 +704,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 				})
 				// completions to insert, in the order of the inputs
 				completions = append(completions, &DBPublicTxnCompletion{
-					SignerNonce:     match.SignerNonce,
+					PublicTxnID:     match.PublicTxnID,
 					TransactionHash: txi.Hash,
 					Success:         txi.Result.V() == pldapi.TXResult_SUCCESS,
 					RevertData:      txi.RevertReason,
@@ -846,7 +719,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 		err := dbTX.
 			Table("public_completions").
 			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "signer_nonce"}},
+				Columns:   []clause.Column{{Name: "pub_txn_id"}},
 				DoNothing: true, // immutable
 			}).
 			Create(completions).

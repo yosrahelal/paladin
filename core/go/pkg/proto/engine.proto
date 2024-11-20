@@ -78,6 +78,7 @@ message DelegationRequest {
     string delegate_node_id = 2;
     string delegation_id = 3; //this is used to correlate the acknowledgement back to the delegation. unlike the transport message id / correlation id, this is not unique across retries
     bytes private_transaction = 4; //json serialized copy of the in-memory private transaction object
+    int64 block_height = 5; // the block height upon which this delegation was calculated (the highest delegation wins when crossing in the post)
     
     
     // TODO we are using google.protobuf.Any here for TransactionSpecification which is defined in toolkit protos

@@ -8,7 +8,7 @@ title: PublicTx
 ```json
 {
     "from": "0x0000000000000000000000000000000000000000",
-    "nonce": "0x0",
+    "nonce": null,
     "created": 0,
     "transactionHash": null
 }
@@ -18,6 +18,7 @@ title: PublicTx
 
 | Field Name | Description | Type |
 |------------|-------------|------|
+| `localId` | A locally generated numeric ID for the public transaction. Unique within the node | `uint64` |
 | `to` | The target contract address (optional) | [`EthAddress`](simpletypes.md#ethaddress) |
 | `data` | The pre-encoded calldata (optional) | [`HexBytes`](simpletypes.md#hexbytes) |
 | `from` | The sender's Ethereum address | [`EthAddress`](simpletypes.md#ethaddress) |

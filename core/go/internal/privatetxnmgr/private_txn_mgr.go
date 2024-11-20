@@ -80,7 +80,7 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
 	p.nodeName = p.components.TransportManager().LocalNodeName()
-	p.syncPoints = syncpoints.NewSyncPoints(p.ctx, &p.config.Writer, c.Persistence(), c.TxManager())
+	p.syncPoints = syncpoints.NewSyncPoints(p.ctx, &p.config.Writer, c.Persistence(), c.TxManager(), c.PublicTxManager())
 	p.stateDistributer = statedistribution.NewStateDistributer(
 		p.ctx,
 		p.components.TransportManager(),
@@ -138,10 +138,10 @@ func (p *privateTxManager) OnNewBlockHeight(ctx context.Context, blockHeight int
 	}
 }
 
-func (p *privateTxManager) getSequencerForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Sequencer, err error) {
+func (p *privateTxManager) getSequencerForContract(ctx context.Context, dbTX *gorm.DB, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Sequencer, err error) {
 
 	if domainAPI == nil {
-		domainAPI, err = p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
+		domainAPI, err = p.components.DomainManager().GetSmartContractByAddress(ctx, dbTX, contractAddr)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to get domain smart contract for contract address %s: %s", contractAddr, err)
 			return nil, err
@@ -166,7 +166,7 @@ func (p *privateTxManager) getSequencerForContract(ctx context.Context, contract
 			transportWriter := NewTransportWriter(domainAPI.Domain().Name(), &contractAddr, p.nodeName, p.components.TransportManager())
 			publisher := NewPublisher(p, contractAddr.String())
 
-			endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, contractAddr)
+			endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, dbTX, contractAddr)
 			if err != nil {
 				log.L(ctx).Errorf("Failed to get endorsement gatherer for contract %s: %s", contractAddr.String(), err)
 				return nil, err
@@ -215,11 +215,11 @@ func (p *privateTxManager) getSequencerForContract(ctx context.Context, contract
 	return p.sequencers[contractAddr.String()], nil
 }
 
-func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context, contractAddr tktypes.EthAddress) (ptmgrtypes.EndorsementGatherer, error) {
+func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context, dbTX *gorm.DB, contractAddr tktypes.EthAddress) (ptmgrtypes.EndorsementGatherer, error) {
 	// We need to have this as a function of the PrivateTransactionManager rather than a function of the sequencer because the endorsement gatherer is needed
 	// even if we don't have a sequencer.  e.g. maybe the transaction is being coordinated by another node and this node has just been asked to endorse it
 	// in that case, we need to make sure that we are using the domainContext provided by the endorsement request
-	domainSmartContract, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
+	domainSmartContract, err := p.components.DomainManager().GetSmartContractByAddress(ctx, dbTX, contractAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +232,7 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 	return p.endorsementGatherers[contractAddr.String()], nil
 }
 
-func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.ValidatedTransaction) error {
+func (p *privateTxManager) HandleNewTx(ctx context.Context, dbTX *gorm.DB, txi *components.ValidatedTransaction) error {
 	tx := txi.Transaction
 	if tx.To == nil {
 		if txi.Transaction.SubmitMode.V() != pldapi.SubmitModeAuto {
@@ -252,7 +252,7 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.Vali
 	if txi.Function == nil || txi.Function.Definition == nil {
 		return i18n.NewError(ctx, msgs.MsgPrivateTxMgrFunctionNotProvided)
 	}
-	return p.handleNewTx(ctx, &components.PrivateTransaction{
+	return p.handleNewTx(ctx, dbTX, &components.PrivateTransaction{
 		ID: *tx.ID,
 		Inputs: &components.TransactionInputs{
 			Domain:          tx.Domain,
@@ -274,7 +274,7 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, txi *components.Vali
 //
 // We are currently proving out this pattern on the boundary of the private transaction manager and the public transaction manager and once that has settled, we will implement the same pattern here.
 // In the meantime, we a single function to submit a transaction and there is currently no persistence of the submission record.  It is all held in memory only
-func (p *privateTxManager) handleNewTx(ctx context.Context, tx *components.PrivateTransaction) error {
+func (p *privateTxManager) handleNewTx(ctx context.Context, dbTX *gorm.DB, tx *components.PrivateTransaction) error {
 	log.L(ctx).Debugf("Handling new transaction: %v", tx)
 
 	emptyAddress := tktypes.EthAddress{}
@@ -283,7 +283,7 @@ func (p *privateTxManager) handleNewTx(ctx context.Context, tx *components.Priva
 	}
 
 	contractAddr := tx.Inputs.To
-	domainAPI, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
+	domainAPI, err := p.components.DomainManager().GetSmartContractByAddress(ctx, dbTX, contractAddr)
 	if err != nil {
 		return err
 	}
@@ -303,7 +303,7 @@ func (p *privateTxManager) handleNewTx(ctx context.Context, tx *components.Priva
 		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "PreAssembly is nil")
 	}
 
-	oc, err := p.getSequencerForContract(ctx, contractAddr, domainAPI)
+	oc, err := p.getSequencerForContract(ctx, dbTX, contractAddr, domainAPI)
 	if err != nil {
 		return err
 	}
@@ -332,20 +332,20 @@ func (p *privateTxManager) validateDelegatedTransaction(ctx context.Context, tx 
 
 }
 
-func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, delegatingNodeName string, delegationId string, tx *components.PrivateTransaction) error {
+func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, dbTX *gorm.DB, delegationBlockHeight int64, delegatingNodeName string, delegationId string, tx *components.PrivateTransaction) error {
 	log.L(ctx).Debugf("Handling delegated transaction: %v", tx)
 
 	contractAddr := tx.Inputs.To
-	domainAPI, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
+	domainAPI, err := p.components.DomainManager().GetSmartContractByAddress(ctx, dbTX, contractAddr)
 	if err != nil {
 		log.L(ctx).Errorf("handleDelegatedTransaction: Failed to get domain smart contract for contract address %s: %s", contractAddr, err)
 		return err
 	}
-	sequencer, err := p.getSequencerForContract(ctx, contractAddr, domainAPI)
+	sequencer, err := p.getSequencerForContract(ctx, dbTX, contractAddr, domainAPI)
 	if err != nil {
 		return err
 	}
-	queued := sequencer.ProcessInFlightTransaction(ctx, tx)
+	queued := sequencer.ProcessInFlightTransaction(ctx, tx, &delegationBlockHeight)
 	if queued {
 		log.L(ctx).Debugf("Delegated Transaction with ID %s queued in database", tx.ID)
 	}
@@ -376,16 +376,28 @@ func (p *privateTxManager) handleDeployTx(ctx context.Context, tx *components.Pr
 		return i18n.WrapError(ctx, err, msgs.MsgDeployInitFailed)
 	}
 
-	// NOTE unlike private transactions, we assume that all verifiers are resolved locally
+	// this is a transaction that will confirm just like invoke transactions
+	// unlike invoke transactions, we don't yet have the sequencer thread to dispatch to so we start a new go routine for each deployment
+	// TODO - should have a pool of deployment threads? Maybe size of pool should be one? Or at least one per domain?
+	go p.deploymentLoop(log.WithLogField(p.ctx, "role", "deploy-loop"), domain, tx)
 
-	//Resolve keys synchronously so that we can return an error if any key resolution fails
+	return nil
+}
+
+func (p *privateTxManager) deploymentLoop(ctx context.Context, domain components.Domain, tx *components.PrivateContractDeploy) {
+	log.L(ctx).Info("Starting deployment loop")
+
+	var err error
+
+	// Resolve keys synchronously on this go routine so that we can return an error if any key resolution fails
 	tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
 	for i, v := range tx.RequiredVerifiers {
 		// TODO: This is a synchronous cross-node exchange, done sequentially for each verifier.
 		// Potentially needs to move to an event-driven model like on invocation.
-		verifier, err := p.components.IdentityResolver().ResolveVerifier(ctx, v.Lookup, v.Algorithm, v.VerifierType)
-		if err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm, v.VerifierType)
+		verifier, resolveErr := p.components.IdentityResolver().ResolveVerifier(ctx, v.Lookup, v.Algorithm, v.VerifierType)
+		if resolveErr != nil {
+			err = i18n.WrapError(ctx, resolveErr, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm, v.VerifierType)
+			break
 		}
 		tx.Verifiers[i] = &prototk.ResolvedVerifier{
 			Lookup:       v.Lookup,
@@ -395,16 +407,9 @@ func (p *privateTxManager) handleDeployTx(ctx context.Context, tx *components.Pr
 		}
 	}
 
-	// this is a transaction that will confirm just like invoke transactions
-	// unlike invoke transactions, we don't yet have the sequencer thread to dispatch to so we start a new go routine for each deployment
-	// TODO - should have a pool of deployment threads? Maybe size of pool should be one? Or at least one per domain?
-	go p.deploymentLoop(log.WithLogField(p.ctx, "role", "deploy-loop"), domain, tx)
-
-	return nil
-}
-func (p *privateTxManager) deploymentLoop(ctx context.Context, domain components.Domain, tx *components.PrivateContractDeploy) {
-	log.L(ctx).Info("Starting deployment loop")
-	err := p.evaluateDeployment(ctx, domain, tx)
+	if err == nil {
+		err = p.evaluateDeployment(ctx, domain, tx)
+	}
 	if err != nil {
 		log.L(ctx).Errorf("Error evaluating deployment: %s", err)
 		return
@@ -485,19 +490,11 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 		return p.revertDeploy(ctx, tx, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Neither InvokeTransaction nor DeployTransaction set"))
 	}
 
-	pubBatch, err := publicTransactionEngine.PrepareSubmissionBatch(ctx, publicTXs)
-	if err != nil {
-		return p.revertDeploy(ctx, tx, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, "PrepareSubmissionBatch failed"))
-	}
-
-	// Must make sure from this point we return the nonces
-	completed := false // and include whether we committed the DB transaction or not
-	defer func() {
-		pubBatch.Completed(ctx, completed)
-	}()
-	if len(pubBatch.Rejected()) > 0 {
-		// We do not handle partial success - roll everything back
-		return p.revertDeploy(ctx, tx, i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivateTxManagerInternalError, "Submission batch rejected "))
+	for _, pubTx := range publicTXs {
+		err := publicTransactionEngine.ValidateTransaction(ctx, p.components.Persistence().DB(), pubTx)
+		if err != nil {
+			return p.revertDeploy(ctx, tx, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, "PrepareSubmissionBatch failed"))
+		}
 	}
 
 	//transactions are always dispatched as a sequence, even if only a sequence of one
@@ -508,7 +505,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 			},
 		},
 	}
-	sequence.PublicTxBatch = pubBatch
+	sequence.PublicTxs = publicTXs
 	dispatchBatch := &syncpoints.DispatchBatch{
 		PublicDispatches: []*syncpoints.PublicDispatch{
 			sequence,
@@ -521,8 +518,6 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return p.revertDeploy(ctx, tx, err)
 	}
-
-	completed = true
 
 	p.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
 		TransactionID:  tx.ID.String(),
@@ -577,7 +572,7 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 		return
 	}
 
-	endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, *contractAddress)
+	endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, p.components.Persistence().DB(), *contractAddress)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to get endorsement gatherer for contract address %s: %s", contractAddressString, err)
 		return
@@ -734,13 +729,11 @@ func (p *privateTxManager) handleDelegationRequest(ctx context.Context, messageP
 		return
 	}
 
-	//TODO persist the delegated transaction and only continue with the acknowledgment once it has been persisted
-
 	//TODO not quite figured out how to receive an assembled transaction because it will have been assembled
 	// in the domain context of the sender.  In some cases, it will be using committed states so that will be ok.
 	// for now, in the interest of simplicity, we just trash the PostAssembly and start again
 	transaction.PostAssembly = nil
-	err = p.handleDelegatedTransaction(ctx, replyTo, delegationRequest.DelegationId, transaction)
+	err = p.handleDelegatedTransaction(ctx, p.components.Persistence().DB(), delegationRequest.BlockHeight, replyTo, delegationRequest.DelegationId, transaction)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to handle delegated transaction: %s", err)
 		// do not send an ack and let the sender retry
@@ -874,7 +867,7 @@ func (p *privateTxManager) handleAssembleRequest(ctx context.Context, messagePay
 		return
 	}
 
-	sequencer, err := p.getSequencerForContract(ctx, *contractAddress, nil) // this is just to make sure the sequencer is running
+	sequencer, err := p.getSequencerForContract(ctx, p.components.Persistence().DB(), *contractAddress, nil) // this is just to make sure the sequencer is running
 	if err != nil {
 		log.L(ctx).Errorf("Failed to get sequencer for contract address %s: %s", contractAddressString, err)
 		p.sendAssembleError(ctx, replyTo, assembleRequest.AssembleRequestId, assembleRequest.ContractAddress, assembleRequest.TransactionId, err)
@@ -1037,7 +1030,7 @@ func (p *privateTxManager) PrivateTransactionConfirmed(ctx context.Context, rece
 	log.L(ctx).Infof("private TX manager notified of transaction confirmation %s deploy=%t",
 		receipt.TransactionID, receipt.PSC == nil)
 	if receipt.PSC != nil {
-		seq, err := p.getSequencerForContract(ctx, receipt.PSC.Address(), receipt.PSC)
+		seq, err := p.getSequencerForContract(ctx, p.components.Persistence().DB(), receipt.PSC.Address(), receipt.PSC)
 		if err != nil {
 			log.L(ctx).Errorf("failed to obtain sequence to process receipts on contract %s: %s", receipt.PSC.Address(), err)
 			return
@@ -1062,7 +1055,7 @@ func (p *privateTxManager) handleStateProducedEvent(ctx context.Context, message
 	contractAddressString := stateProducedEvent.ContractAddress
 	contractAddress := tktypes.MustEthAddress(contractAddressString)
 
-	sequencer, err := p.getSequencerForContract(ctx, *contractAddress, nil)
+	sequencer, err := p.getSequencerForContract(ctx, p.components.Persistence().DB(), *contractAddress, nil)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to get sequencer for contract address %s: %s", contractAddress, err)
 		return
@@ -1073,7 +1066,7 @@ func (p *privateTxManager) handleStateProducedEvent(ctx context.Context, message
 
 func (p *privateTxManager) CallPrivateSmartContract(ctx context.Context, call *components.TransactionInputs) (*abi.ComponentValue, error) {
 
-	psc, err := p.components.DomainManager().GetSmartContractByAddress(ctx, call.To)
+	psc, err := p.components.DomainManager().GetSmartContractByAddress(ctx, p.components.Persistence().DB(), call.To)
 	if err != nil {
 		return nil, err
 	}

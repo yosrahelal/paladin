@@ -53,10 +53,12 @@ func InitConfig(conf *pldconf.LogConfig) {
 	output := confutil.StringNotEmpty(conf.Output, *pldconf.LogDefaults.Output)
 	switch output {
 	case "file":
+		filename := confutil.StringNotEmpty(conf.File.Filename, *pldconf.LogDefaults.File.Filename)
+		rootLogger.Infof("Logs diverted to %s", filename)
 		maxSizeBytes := confutil.ByteSize(conf.File.MaxSize, 0, *pldconf.LogDefaults.File.MaxSize)
 		maxAgeDuration := confutil.DurationMin(conf.File.MaxAge, 0, *pldconf.LogDefaults.File.MaxAge)
 		lumberjack := &lumberjack.Logger{
-			Filename:   confutil.StringNotEmpty(conf.File.Filename, *pldconf.LogDefaults.File.Filename),
+			Filename:   filename,
 			MaxSize:    int(math.Ceil(float64(maxSizeBytes) / 1024 / 1024)), /* round up in megabytes */
 			MaxBackups: confutil.IntMin(conf.File.MaxBackups, 0, *pldconf.LogDefaults.File.MaxBackups),
 			MaxAge:     int(math.Ceil(float64(maxAgeDuration) / float64(time.Hour) / 24)), /* round up in days */

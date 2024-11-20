@@ -14,31 +14,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !testdbpostgres
-// +build !testdbpostgres
-
-package persistence
+package pldconf
 
 import (
-	"context"
-
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
-	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 )
 
-// Used for unit tests throughout the project that want to test against a real DB
-// This version return an in-memory DB
-func NewUnitTestPersistence(ctx context.Context, suite string) (Persistence, func(), error) {
-	p, err := newSQLiteProvider(ctx, &pldconf.DBConfig{
-		Type: "sqlite",
-		SQLite: pldconf.SQLiteConfig{
-			SQLDBConfig: pldconf.SQLDBConfig{
-				DSN:           ":memory:",
-				AutoMigrate:   confutil.P(true),
-				MigrationsDir: "../../db/migrations/sqlite",
-				DebugQueries:  false,
-			},
+type StartupConfig struct {
+	BlockchainConnectRetry RetryConfigWithMax `json:"blockchainConnectRetry"`
+}
+
+var StartupConfigDefaults = StartupConfig{
+	BlockchainConnectRetry: RetryConfigWithMax{
+		RetryConfig: RetryConfig{
+			InitialDelay: confutil.P("500ms"),
+			MaxDelay:     confutil.P("2s"),
+			Factor:       confutil.P(2.0),
 		},
-	})
-	return p, func() { p.Close() }, err
+		MaxAttempts: confutil.P(10),
+	},
 }

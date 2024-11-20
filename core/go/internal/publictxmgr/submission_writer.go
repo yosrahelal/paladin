@@ -48,6 +48,9 @@ func (sw *submissionWriter) runBatch(ctx context.Context, tx *gorm.DB, values []
 		}).
 		Create(values).
 		Error
+	if err != nil {
+		return nil, nil, err
+	}
 	// We don't actually provide any result, so just build an array of nil results
 	return nil, make([]flushwriter.Result[*noResult], len(values)), err
 }

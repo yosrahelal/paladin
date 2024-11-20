@@ -512,7 +512,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 	}
 
 	if res.Transaction.Type == prototk.PreparedTransaction_PRIVATE {
-		psc, err := dc.dm.GetSmartContractByAddress(dCtx.Ctx(), *contractAddress)
+		psc, err := dc.dm.GetSmartContractByAddress(dCtx.Ctx(), readTX, *contractAddress)
 		if err != nil {
 			return err
 		}

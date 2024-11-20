@@ -273,6 +273,7 @@ func (r *BesuReconciler) generateBesuConfigTOML(node *corev1alpha1.Besu) (string
 	setIfUnset("logging", "DEBUG")
 	setIfUnset("revert-reason-enabled", true)
 	setIfUnset("tx-pool", "SEQUENCED")
+	setIfUnset("tx-pool-limit-by-account-percentage", 1.0)
 
 	// To give a stable network through node restarts we use hostnames in static-nodes.json
 	// https://besu.hyperledger.org/24.1.0/public-networks/concepts/node-keys#enode-url

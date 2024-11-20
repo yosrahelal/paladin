@@ -72,7 +72,7 @@ func (tm *txManager) mapPersistedTXFull(pt *persistedTransaction) *pldapi.Transa
 	return res
 }
 
-func (tm *txManager) QueryTransactions(ctx context.Context, jq *query.QueryJSON, pending bool) ([]*pldapi.Transaction, error) {
+func (tm *txManager) QueryTransactions(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) ([]*pldapi.Transaction, error) {
 	qw := &queryWrapper[persistedTransaction, pldapi.Transaction]{
 		p:           tm.p,
 		table:       "transactions",
@@ -90,15 +90,11 @@ func (tm *txManager) QueryTransactions(ctx context.Context, jq *query.QueryJSON,
 			return mapPersistedTXBase(pt), nil
 		},
 	}
-	return qw.run(ctx, nil)
+	return qw.run(ctx, dbTX)
 }
 
-func (tm *txManager) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON, pending bool) (results []*pldapi.TransactionFull, err error) {
-	err = tm.p.DB().Transaction(func(dbTX *gorm.DB) error {
-		results, err = tm.QueryTransactionsFullTx(ctx, jq, dbTX, pending)
-		return err
-	})
-	return
+func (tm *txManager) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) (results []*pldapi.TransactionFull, err error) {
+	return tm.QueryTransactionsFullTx(ctx, jq, dbTX, pending)
 }
 
 func (tm *txManager) QueryTransactionsFullTx(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) ([]*pldapi.TransactionFull, error) {
@@ -146,7 +142,7 @@ func (tm *txManager) mergePublicTransactions(ctx context.Context, dbTX *gorm.DB,
 }
 
 func (tm *txManager) GetTransactionByIDFull(ctx context.Context, id uuid.UUID) (result *pldapi.TransactionFull, err error) {
-	ptxs, err := tm.QueryTransactionsFull(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), false)
+	ptxs, err := tm.QueryTransactionsFull(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), tm.p.DB(), false)
 	if len(ptxs) == 0 || err != nil {
 		return nil, err
 	}
@@ -154,7 +150,7 @@ func (tm *txManager) GetTransactionByIDFull(ctx context.Context, id uuid.UUID) (
 }
 
 func (tm *txManager) GetTransactionByID(ctx context.Context, id uuid.UUID) (*pldapi.Transaction, error) {
-	ptxs, err := tm.QueryTransactions(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), false)
+	ptxs, err := tm.QueryTransactions(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), tm.p.DB(), false)
 	if len(ptxs) == 0 || err != nil {
 		return nil, err
 	}
@@ -162,7 +158,7 @@ func (tm *txManager) GetTransactionByID(ctx context.Context, id uuid.UUID) (*pld
 }
 
 func (tm *txManager) GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey string) (*pldapi.Transaction, error) {
-	ptxs, err := tm.QueryTransactions(ctx, query.NewQueryBuilder().Limit(1).Equal("idempotencyKey", idempotencyKey).Query(), false)
+	ptxs, err := tm.QueryTransactions(ctx, query.NewQueryBuilder().Limit(1).Equal("idempotencyKey", idempotencyKey).Query(), tm.p.DB(), false)
 	if len(ptxs) == 0 || err != nil {
 		return nil, err
 	}

@@ -222,17 +222,18 @@ var _ = Describe("pente - parallelism on a single contract", Ordered, func() {
 
 		})
 
+		startingBalance := int64(1000)
 		It("check ERC-20 balance of each", func() {
 
 			for _, user := range users {
 				userBalance := getERC20Balance(user[0], user[1])
 				testLog("SimpleERC20 balance after mint to %s@%s: %s", user[0], user[1], userBalance.Int())
-				Expect(userBalance.String()).To(Equal(with18Decimals(1000).String()))
+				Expect(userBalance.String()).To(Equal(with18Decimals(startingBalance).String()))
 			}
 
 		})
 
-		It("does a bunch of parallel transfers", func() {
+		It("runs three parallel sets of transfers, with each parallel set being synchronous", func() {
 
 			results := make(chan error)
 			for _iUser, _user := range users {
@@ -264,16 +265,88 @@ var _ = Describe("pente - parallelism on a single contract", Ordered, func() {
 							}).
 							From(fmt.Sprintf("%s@%s", user[0], user[1])).
 							Send().
-							Wait(10 * time.Second)
+							// We submit the transactions one-at-a-time within each go-routine in this test
+							// (but have three concurrent go routines running)
+							Wait(5 * time.Second)
 						testLog("[%d]:%.3d/%.3d SimpleERC20 mint %d from %s@%s to %s@%s transaction %s",
 							iUser, i, count, amount, user[0], user[1], toUser[0], toUser[1], invoke.ID())
 						err = invoke.Error()
 					}
 				}()
 			}
+			// Wait for the three go routines to complete
 			for i := 0; i < len(users); i++ {
 				Expect(<-results).To(BeNil())
 			}
+		})
+
+		It("check ERC-20 balances add up to the correct total", func() {
+
+			totalBalance := new(big.Int)
+			for _, user := range users {
+				userBalance := getERC20Balance(user[0], user[1])
+				testLog("SimpleERC20 balance %s@%s after transfers: %s", user[0], user[1], userBalance.Int())
+				totalBalance = totalBalance.Add(totalBalance, userBalance.Int())
+			}
+			Expect(totalBalance.String()).To(Equal(with18Decimals(startingBalance * int64(len(users))).Int().String()))
+
+		})
+
+		It("runs three parallel sets of transfers, all submitted as a stream and checked at the end", func() {
+
+			results := make(chan []pldclient.SentTransaction)
+			for _iUser, _user := range users {
+				iUser := _iUser
+				user := _user
+				go func() {
+					const count = 10
+					transfers := make([]pldclient.SentTransaction, 0, count)
+					toUser := users[(iUser+1)%len(users)]
+					for i := 0; i < count; i++ {
+						bigAmount, _ := rand.Int(rand.Reader, big.NewInt(9))
+						amount := bigAmount.Int64() + 1
+						invoke := rpc[user[1]].ForABI(ctx, erc20PrivateABI).
+							Private().
+							Domain("pente").
+							To(penteContract).
+							Function("transfer").
+							Inputs(&penteInvokeParams{
+								Group: penteGroupStars,
+								To:    *erc20StarsAddr,
+								Inputs: map[string]any{
+									"to":    getEthAddress(toUser[0], toUser[1]),
+									"value": with18Decimals(amount),
+								},
+							}).
+							From(fmt.Sprintf("%s@%s", user[0], user[1])).
+							Send()
+						testLog("[%d]:%.3d/%.3d SimpleERC20 mint %d from %s@%s to %s@%s transaction %s",
+							iUser, i, count, amount, user[0], user[1], toUser[0], toUser[1], invoke.ID())
+						transfers = append(transfers, invoke)
+					}
+					results <- transfers
+				}()
+			}
+			// Wait for the three go routines to complete
+			for i := 0; i < len(users); i++ {
+				transfers := <-results
+				for _, transfer := range transfers {
+					testLog("SimpleERC20 wait for completion of transfer %s", transfer.ID())
+					Expect(transfer.Wait(10 * time.Second).Error()).To(BeNil())
+				}
+			}
+		})
+
+		It("check ERC-20 balances add up to the correct total", func() {
+
+			totalBalance := new(big.Int)
+			for _, user := range users {
+				userBalance := getERC20Balance(user[0], user[1])
+				testLog("SimpleERC20 balance %s@%s after transfers: %s", user[0], user[1], userBalance.Int())
+				totalBalance = totalBalance.Add(totalBalance, userBalance.Int())
+			}
+			Expect(totalBalance.String()).To(Equal(with18Decimals(startingBalance * int64(len(users))).Int().String()))
+
 		})
 
 	})

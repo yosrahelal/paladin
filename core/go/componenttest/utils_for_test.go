@@ -375,7 +375,9 @@ func testConfig(t *testing.T) pldconf.PaladinConfig {
 	assert.NoError(t, err)
 
 	// For running in this unit test the dirs are different to the sample config
+	// conf.DB.SQLite.DebugQueries = true
 	conf.DB.SQLite.MigrationsDir = "../db/migrations/sqlite"
+	// conf.DB.Postgres.DebugQueries = true
 	conf.DB.Postgres.MigrationsDir = "../db/migrations/postgres"
 
 	port, err := getFreePort()

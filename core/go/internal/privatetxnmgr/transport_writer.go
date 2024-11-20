@@ -51,7 +51,7 @@ func (tw *transportWriter) SendDelegationRequest(
 	delegationId string,
 	delegateNodeId string,
 	transaction *components.PrivateTransaction,
-
+	blockHeight int64,
 ) error {
 
 	transactionBytes, err := json.Marshal(transaction)
@@ -65,6 +65,7 @@ func (tw *transportWriter) SendDelegationRequest(
 		TransactionId:      transaction.ID.String(),
 		DelegateNodeId:     delegateNodeId,
 		PrivateTransaction: transactionBytes,
+		BlockHeight:        blockHeight,
 	}
 	delegationRequestBytes, err := proto.Marshal(delegationRequest)
 	if err != nil {

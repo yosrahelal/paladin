@@ -60,10 +60,11 @@ type PublicTxSubmissionData struct {
 }
 
 type PublicTx struct {
+	LocalID         *uint64                     `docstruct:"PublicTx" json:"localId,omitempty"` // only a local DB identifier for the public transaction. Not directly related to nonce order
 	To              *tktypes.EthAddress         `docstruct:"PublicTx" json:"to,omitempty"`
 	Data            tktypes.HexBytes            `docstruct:"PublicTx" json:"data,omitempty"`
 	From            tktypes.EthAddress          `docstruct:"PublicTx" json:"from"`
-	Nonce           tktypes.HexUint64           `docstruct:"PublicTx" json:"nonce"`
+	Nonce           *tktypes.HexUint64          `docstruct:"PublicTx" json:"nonce"`
 	Created         tktypes.Timestamp           `docstruct:"PublicTx" json:"created"`
 	CompletedAt     *tktypes.Timestamp          `docstruct:"PublicTx" json:"completedAt,omitempty"` // only once confirmed
 	TransactionHash *tktypes.Bytes32            `docstruct:"PublicTx" json:"transactionHash"`       // only once confirmed

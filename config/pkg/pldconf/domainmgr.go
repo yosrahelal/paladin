@@ -39,7 +39,7 @@ type DomainConfig struct {
 	DefaultGasLimit *uint64          `json:"defaultGasLimit"`
 }
 
-var DefaultDefaultGasLimit tktypes.HexUint64 = 3000000 // high gas limit by default (accommodating zkp transactions)
+var DefaultDefaultGasLimit tktypes.HexUint64 = 4000000 // high gas limit by default (accommodating zkp transactions)
 
 var ContractCacheDefaults = &CacheConfig{
 	Capacity: confutil.P(1000),

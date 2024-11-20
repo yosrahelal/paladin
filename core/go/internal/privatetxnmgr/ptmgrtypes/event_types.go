@@ -64,6 +64,11 @@ type TransactionSwappedInEvent struct {
 	PrivateTransactionEventBase
 }
 
+type DelegationForInFlightEvent struct {
+	PrivateTransactionEventBase
+	BlockHeight int64
+}
+
 type TransactionAssembledEvent struct {
 	PrivateTransactionEventBase
 	PostAssembly      *components.TransactionPostAssembly

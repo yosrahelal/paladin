@@ -52,7 +52,7 @@ func TestPrivateSmartContractQueryFail(t *testing.T) {
 	})
 	defer done()
 
-	_, err := td.dm.GetSmartContractByAddress(td.ctx, tktypes.EthAddress(tktypes.RandBytes(20)))
+	_, err := td.dm.GetSmartContractByAddress(td.ctx, td.c.dbTX, tktypes.EthAddress(tktypes.RandBytes(20)))
 	assert.Regexp(t, "pop", err)
 
 }
@@ -65,7 +65,7 @@ func TestPrivateSmartContractQueryNoResult(t *testing.T) {
 	})
 	defer done()
 
-	_, err := td.dm.GetSmartContractByAddress(td.ctx, tktypes.EthAddress(tktypes.RandBytes(20)))
+	_, err := td.dm.GetSmartContractByAddress(td.ctx, td.c.dbTX, tktypes.EthAddress(tktypes.RandBytes(20)))
 	assert.Regexp(t, "PD011609", err)
 
 }
@@ -180,7 +180,7 @@ func doDomainInitAssembleTransactionOK(t *testing.T, td *testDomainContext) (*do
 			},
 			AttestationPlan: []*prototk.AttestationRequest{
 				{
-					Name:            "ensorsement1",
+					Name:            "endorsement1",
 					AttestationType: prototk.AttestationType_ENDORSE,
 					Algorithm:       algorithms.ECDSA_SECP256K1,
 					PayloadType:     signpayloads.OPAQUE_TO_RSV,
@@ -1412,7 +1412,7 @@ func TestGetPSCInvalidConfig(t *testing.T) {
 		}, nil
 	}
 
-	psc, err := td.dm.GetSmartContractByAddress(td.ctx, *addr)
+	psc, err := td.dm.GetSmartContractByAddress(td.ctx, td.c.dbTX, *addr)
 	require.Regexp(t, "PD011610", err) // invalid config
 	assert.Nil(t, psc)
 }
@@ -1441,7 +1441,7 @@ func TestGetPSCUnknownDomain(t *testing.T) {
 		}, nil
 	}
 
-	psc, err := td.dm.GetSmartContractByAddress(td.ctx, *addr)
+	psc, err := td.dm.GetSmartContractByAddress(td.ctx, td.c.dbTX, *addr)
 	require.Regexp(t, "PD011654", err) // domain no longer configured
 	assert.Nil(t, psc)
 }
@@ -1463,7 +1463,7 @@ func TestGetPSCInitError(t *testing.T) {
 		return nil, fmt.Errorf("pop")
 	}
 
-	psc, err := td.dm.GetSmartContractByAddress(td.ctx, *addr)
+	psc, err := td.dm.GetSmartContractByAddress(td.ctx, td.c.dbTX, *addr)
 	require.Regexp(t, "pop", err) // domain no longer configured
 	assert.Nil(t, psc)
 }

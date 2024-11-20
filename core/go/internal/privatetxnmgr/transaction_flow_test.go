@@ -728,7 +728,7 @@ func TestRequestRemoteEndorsements(t *testing.T) {
 	sendingNodeName := "sendingNode"
 
 	tp, mocks := newTransactionFlowForTesting(t, ctx, testTx, sendingNodeName)
-	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(sendingNodeName, nil)
+	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(int64(0), sendingNodeName, nil)
 	mocks.transportWriter.On("SendEndorsementRequest",
 		mock.Anything,
 		mock.Anything,
@@ -853,7 +853,7 @@ func TestRequestLocalEndorsements(t *testing.T) {
 	}
 
 	tp, mocks := newTransactionFlowForTesting(t, ctx, testTx, sendingNodeName)
-	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(sendingNodeName, nil)
+	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(int64(0), sendingNodeName, nil)
 	mocks.endorsementGatherer.On("GatherEndorsement",
 		mock.Anything, // context
 		mock.Anything, //TransactionSpecification,
@@ -1011,7 +1011,7 @@ func TestTimedOutEndorsementRequest(t *testing.T) {
 	}
 
 	tp, mocks := newTransactionFlowForTesting(t, ctx, testTx, "node1")
-	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return("node1", nil)
+	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(int64(0), "node1", nil)
 
 	fakeClock := &fakeClock{timePassed: 0}
 	tp.clock = fakeClock
@@ -1176,7 +1176,7 @@ func TestEndorsementResponseAfterRevert(t *testing.T) {
 	}
 
 	tp, mocks := newTransactionFlowForTesting(t, ctx, testTx, "node1")
-	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return("node1", nil)
+	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(int64(0), "node1", nil)
 
 	fakeClock := &fakeClock{timePassed: 0}
 	tp.clock = fakeClock
@@ -1325,7 +1325,7 @@ func TestEndorsementResponseAfterReassemble(t *testing.T) {
 	}
 
 	tp, mocks := newTransactionFlowForTesting(t, ctx, testTx, "node1")
-	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return("node1", nil)
+	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(int64(0), "node1", nil)
 
 	fakeClock := &fakeClock{timePassed: 0}
 	tp.clock = fakeClock
@@ -1504,7 +1504,7 @@ func TestDuplicateEndorsementResponse(t *testing.T) {
 	}
 
 	tp, mocks := newTransactionFlowForTesting(t, ctx, testTx, senderNodeName)
-	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(senderNodeName, nil)
+	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(int64(0), senderNodeName, nil)
 
 	fakeClock := &fakeClock{timePassed: 0}
 	tp.clock = fakeClock
@@ -1719,7 +1719,7 @@ func TestGetTxStatusPendingEndorsements(t *testing.T) {
 	}
 
 	tp, mocks := newTransactionFlowForTesting(t, ctx, testTx, senderNodeName)
-	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(senderNodeName, nil)
+	mocks.coordinatorSelector.On("SelectCoordinatorNode", mock.Anything, mock.Anything, mock.Anything).Return(int64(0), senderNodeName, nil)
 
 	expectEndorsementRequest := func(idempotencyKey *string, party, node string) {
 		mocks.transportWriter.On("SendEndorsementRequest",
