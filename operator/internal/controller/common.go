@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"sort"
 
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
@@ -164,4 +166,46 @@ func setCondition(
 
 	// Update or append the condition
 	meta.SetStatusCondition(conditions, condition)
+}
+
+func mapToStruct(data map[string][]byte, result interface{}) error {
+	// Ensure that result is a pointer to a struct
+	v := reflect.ValueOf(result)
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		return fmt.Errorf("result argument must be a non-nil pointer to a struct")
+	}
+	v = v.Elem()
+	if v.Kind() != reflect.Struct {
+		return fmt.Errorf("result argument must be a pointer to a struct")
+	}
+
+	t := v.Type()
+
+	for i := 0; i < v.NumField(); i++ {
+		fieldValue := v.Field(i)
+		fieldType := t.Field(i)
+
+		// Skip unexported fields
+		if !fieldValue.CanSet() {
+			continue
+		}
+
+		// Get the JSON tag or use the field name
+		tag := fieldType.Tag.Get("json")
+		if tag == "" {
+			tag = fieldType.Name
+		}
+
+		// Check if the map contains the key
+		if val, exists := data[tag]; exists {
+			switch fieldValue.Kind() {
+			case reflect.String:
+				fieldValue.SetString(string(val))
+			default:
+				return fmt.Errorf("unsupported field type: %s", fieldValue.Kind())
+			}
+		}
+	}
+
+	return nil
 }

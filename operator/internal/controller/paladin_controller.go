@@ -706,6 +706,11 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 			})
 	}
 
+	// Override the default config with the user provided config
+	if err := r.generatePaladinAuthConfig(ctx, node, &pldConf); err != nil {
+		return "", nil, err
+	}
+
 	// DB needs merging from user config and our config
 	if err := r.generatePaladinDBConfig(ctx, node, &pldConf, name); err != nil {
 		return "", nil, err
@@ -738,6 +743,34 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 	}
 	b, err := yaml.Marshal(&pldConf)
 	return string(b), tlsSecrets, err
+}
+
+func (r *PaladinReconciler) generatePaladinAuthConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig) error {
+	// generate the Paladin auth config
+	if node.Spec.AuthConfig == nil {
+		return nil
+	}
+
+	switch node.Spec.AuthConfig.AuthMethod {
+	case corev1alpha1.AuthMethodSecret:
+		if node.Spec.AuthConfig.AuthSecret == nil {
+			return fmt.Errorf("AuthSecret must be provided when using AuthMethodSecret")
+		}
+		secretName := node.Spec.AuthConfig.AuthSecret.Name
+		if secretName == "" {
+			return fmt.Errorf("AuthSecret must be provided when using AuthMethodSecret")
+		}
+		sec := &corev1.Secret{}
+		if err := r.Client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: node.Namespace}, sec); err != nil {
+			return err
+		}
+		if sec.Data == nil {
+			return fmt.Errorf("Secret %s has no data", secretName)
+		}
+		mapToStruct(sec.Data, &pldConf.Blockchain.HTTP.Auth)
+		mapToStruct(sec.Data, &pldConf.Blockchain.WS.Auth)
+	}
+	return nil
 }
 
 func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig, name string) error {
@@ -835,7 +868,7 @@ func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *co
 		// Upsert a secret if we've been asked to. We use a mnemonic in this case (rather than directly generating a 32byte seed)
 		if s.Type == corev1alpha1.SignerType_AutoHDWallet {
 			wallet.Signer.KeyDerivation.Type = pldconf.KeyDerivationTypeBIP32
-			wallet.Signer.KeyDerivation.SeedKeyPath = pldconf.SigningKeyConfigEntry{Name: "seed"}
+			wallet.Signer.KeyDerivation.SeedKeyPath = pldconf.StaticKeyReference{Name: "seed"}
 			if err := r.generateBIP39SeedSecretIfNotExist(ctx, node, s.Secret); err != nil {
 				return err
 			}

@@ -78,6 +78,49 @@ func TestHDSigningStaticExample(t *testing.T) {
 
 }
 
+func TestHDSigningStaticExamplePreResolved(t *testing.T) {
+
+	ctx := context.Background()
+	sm, err := NewSigningModule(ctx, &signerapi.ConfigNoExt{
+		KeyDerivation: pldconf.KeyDerivationConfig{
+			Type: pldconf.KeyDerivationTypeBIP32,
+			SeedKeyPath: pldconf.StaticKeyReference{
+				KeyHandle: "directly.resolved",
+			},
+		},
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
+				Keys: map[string]pldconf.StaticKeyEntryConfig{
+					"directly.resolved": {
+						Encoding: "hex",
+						Inline:   tktypes.RandHex(32),
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	res, err := sm.Resolve(ctx, &signerapi.ResolveKeyRequest{
+		RequiredIdentifiers: []*signerapi.PublicKeyIdentifierType{{Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS}},
+		Name:                "key1",
+		Index:               0,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "m/44'/60'/0'", res.KeyHandle)
+
+	resSign, err := sm.Sign(ctx, &signerapi.SignRequest{
+		KeyHandle:   res.KeyHandle,
+		Algorithm:   algorithms.ECDSA_SECP256K1,
+		PayloadType: signpayloads.OPAQUE_TO_RSV,
+		Payload:     ([]byte)("some data"),
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, resSign.Payload)
+
+}
+
 func TestHDSigningDirectResNoPrefix(t *testing.T) {
 
 	ctx := context.Background()
@@ -157,7 +200,7 @@ func TestHDSigningDefaultBehaviorOK(t *testing.T) {
 	sm, err := NewSigningModule(ctx, &signerapi.ConfigNoExt{
 		KeyDerivation: pldconf.KeyDerivationConfig{
 			Type: pldconf.KeyDerivationTypeBIP32,
-			SeedKeyPath: pldconf.SigningKeyConfigEntry{
+			SeedKeyPath: pldconf.StaticKeyReference{
 				Name:  "seed",
 				Index: 0,
 				Path: []pldconf.ConfigKeyPathEntry{
@@ -292,7 +335,7 @@ func TestHDInitBadSeed(t *testing.T) {
 	_, err = NewSigningModule(ctx, &signerapi.ConfigNoExt{
 		KeyDerivation: pldconf.KeyDerivationConfig{
 			Type: pldconf.KeyDerivationTypeBIP32,
-			SeedKeyPath: pldconf.SigningKeyConfigEntry{
+			SeedKeyPath: pldconf.StaticKeyReference{
 				Name: "missing",
 			},
 		},
@@ -319,7 +362,7 @@ func TestHDInitGenSeed(t *testing.T) {
 	sm, err := NewSigningModule(ctx, &signerapi.ConfigNoExt{
 		KeyDerivation: pldconf.KeyDerivationConfig{
 			Type: pldconf.KeyDerivationTypeBIP32,
-			SeedKeyPath: pldconf.SigningKeyConfigEntry{
+			SeedKeyPath: pldconf.StaticKeyReference{
 				Name: "seed",
 				Path: []pldconf.ConfigKeyPathEntry{{Name: "generate"}},
 			},
