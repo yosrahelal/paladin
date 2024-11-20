@@ -2467,6 +2467,12 @@ func (p *privateTransactionMgrForPackageTestingStruct) DB() *gorm.DB {
 
 func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (privateTransactionMgrForPackageTesting, *dependencyMocks) {
 
+	defaultCoordinatorSelectionMode := EndorsementCoordinatorSelectionMode
+	EndorsementCoordinatorSelectionMode = BlockHeightRoundRobin // unit tests all coded to this mode (work to do as production mode for leader election becomes established)
+	t.Cleanup(func() {
+		EndorsementCoordinatorSelectionMode = defaultCoordinatorSelectionMode
+	})
+
 	ctx := context.Background()
 	mocks := &dependencyMocks{
 		preInitComponents:   componentmocks.NewPreInitComponents(t),

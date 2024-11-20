@@ -180,7 +180,7 @@ func doDomainInitAssembleTransactionOK(t *testing.T, td *testDomainContext) (*do
 			},
 			AttestationPlan: []*prototk.AttestationRequest{
 				{
-					Name:            "ensorsement1",
+					Name:            "endorsement1",
 					AttestationType: prototk.AttestationType_ENDORSE,
 					Algorithm:       algorithms.ECDSA_SECP256K1,
 					PayloadType:     signpayloads.OPAQUE_TO_RSV,
