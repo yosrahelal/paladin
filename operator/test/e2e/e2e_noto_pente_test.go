@@ -190,7 +190,7 @@ type penteReceipt struct {
 
 var _ = Describe("noto/pente - simple", Ordered, func() {
 	BeforeAll(func() {
-		Skip("for now")
+		// Skip("for now")
 	})
 
 	AfterAll(func() {
