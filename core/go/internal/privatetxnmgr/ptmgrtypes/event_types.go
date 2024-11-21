@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -63,13 +64,21 @@ type TransactionSwappedInEvent struct {
 	PrivateTransactionEventBase
 }
 
+type DelegationForInFlightEvent struct {
+	PrivateTransactionEventBase
+	BlockHeight int64
+}
+
 type TransactionAssembledEvent struct {
 	PrivateTransactionEventBase
+	PostAssembly      *components.TransactionPostAssembly
+	AssembleRequestID string
 }
 
 type TransactionAssembleFailedEvent struct {
 	PrivateTransactionEventBase
-	Error string
+	AssembleRequestID string
+	Error             string
 }
 
 type TransactionSignedEvent struct {
@@ -79,14 +88,21 @@ type TransactionSignedEvent struct {
 
 type TransactionEndorsedEvent struct {
 	PrivateTransactionEventBase
-	RevertReason *string
-	Endorsement  *prototk.AttestationResult
+	RevertReason           *string
+	Endorsement            *prototk.AttestationResult
+	Party                  string // In case Endorsement is nil, this is need to correlate with the attestation request
+	AttestationRequestName string // In case Endorsement is nil, this is need to correlate with the attestation request
+	IdempotencyKey         string
 }
 
 type TransactionDispatchedEvent struct {
 	PrivateTransactionEventBase
 	Nonce          uint64
 	SigningAddress string
+}
+
+type TransactionPreparedEvent struct {
+	PrivateTransactionEventBase
 }
 
 type TransactionConfirmedEvent struct {
@@ -97,8 +113,9 @@ type TransactionRevertedEvent struct {
 	PrivateTransactionEventBase
 }
 
-type TransactionDelegatedEvent struct {
+type TransactionDelegationAcknowledgedEvent struct {
 	PrivateTransactionEventBase
+	DelegationRequestID string
 }
 
 type TransactionBlockedEvent struct {
@@ -142,6 +159,12 @@ func (event *ResolveVerifierResponseEvent) Validate(ctx context.Context) error {
 }
 
 type TransactionFinalizedEvent struct {
+	PrivateTransactionEventBase
+}
+
+type TransactionNudgeEvent struct {
+	//used to trigger the sequence to re-evaluate a transaction's state and next action
+	//in lieu of a real event
 	PrivateTransactionEventBase
 }
 

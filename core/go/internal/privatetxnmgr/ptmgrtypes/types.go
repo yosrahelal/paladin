@@ -44,21 +44,33 @@ type Transaction struct {
 
 type Publisher interface {
 	//Service for sending messages and events within the local node
-	PublishTransactionBlockedEvent(ctx context.Context, transactionId string)
 	PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string)
-	PublishTransactionAssembledEvent(ctx context.Context, transactionId string)
-	PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string)
+	PublishTransactionPreparedEvent(ctx context.Context, transactionId string)
+	PublishTransactionAssembledEvent(ctx context.Context, transactionId string, postAssembly *components.TransactionPostAssembly, requestID string)
+	PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string, requestID string)
 	PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult)
-	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult, revertReason *string)
+	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, idempotencyKey string, party string, attestationRequestName string, attestationResult *prototk.AttestationResult, revertReason *string)
 	PublishResolveVerifierResponseEvent(ctx context.Context, transactionId string, lookup, algorithm, verifier, verifierType string)
 	PublishResolveVerifierErrorEvent(ctx context.Context, transactionId string, lookup, algorithm, errorMessage string)
 	PublishTransactionFinalizedEvent(ctx context.Context, transactionId string)
 	PublishTransactionFinalizeError(ctx context.Context, transactionId string, revertReason string, err error)
 	PublishTransactionConfirmedEvent(ctx context.Context, transactionId string)
+	PublishNudgeEvent(ctx context.Context, transactionId string)
 }
 
-// Map of signing address to an ordered list of transaction IDs that are ready to be dispatched by that signing address
-type DispatchableTransactions map[string][]string
+// Map of signing address to an ordered list of transaction flows that are ready to be dispatched by that signing address
+type DispatchableTransactions map[string][]TransactionFlow
+
+func (dtxs *DispatchableTransactions) IDs(ctx context.Context) []string {
+	var ids []string
+	for _, txs := range *dtxs {
+		for _, tx := range txs {
+			ids = append(ids, tx.ID(ctx).String())
+		}
+	}
+	return ids
+}
+
 type Dispatcher interface {
 	// Dispatcher is the component that takes responsibility for submitting the transactions in the sequence to the base ledger in the correct order
 	DispatchTransactions(context.Context, DispatchableTransactions) error
@@ -88,8 +100,10 @@ type ContentionResolver interface {
 }
 
 type TransportWriter interface {
-	SendDelegationRequest(ctx context.Context, delegationId string, delegateNodeId string, transaction *components.PrivateTransaction) error
-	SendEndorsementRequest(ctx context.Context, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState, infoStates []*components.FullState) error
+	SendDelegationRequest(ctx context.Context, delegationId string, delegateNodeName string, transaction *components.PrivateTransaction, blockHeight int64) error
+	SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, delegateNodeName string, transactionID string) error
+	SendEndorsementRequest(ctx context.Context, idempotencyKey string, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState, infoStates []*components.FullState) error
+	SendAssembleRequest(ctx context.Context, assemblingNode string, assembleRequestID string, txID uuid.UUID, contractAddress string, transactionInputs *components.TransactionInputs, preAssembly *components.TransactionPreAssembly, stateLocksJSON []byte, blockHeight int64) error
 }
 
 type TransactionFlowStatus int
@@ -109,15 +123,15 @@ type TransactionFlow interface {
 
 	PrepareTransaction(ctx context.Context, defaultSigner string) (*components.PrivateTransaction, error)
 	GetStateDistributions(ctx context.Context) (*components.StateDistributionSet, error)
-	CoordinatingLocally() bool
-	IsComplete() bool
-	ReadyForSequencing() bool
-	Dispatched() bool
-	ID() uuid.UUID
+	CoordinatingLocally(ctx context.Context) bool
+	IsComplete(ctx context.Context) bool
+	ReadyForSequencing(ctx context.Context) bool
+	Dispatched(ctx context.Context) bool
+	ID(ctx context.Context) uuid.UUID
 	IsEndorsed(ctx context.Context) bool
-	InputStateIDs() []string
-	OutputStateIDs() []string
-	Signer() string
+	InputStateIDs(ctx context.Context) []string
+	OutputStateIDs(ctx context.Context) []string
+	Signer(ctx context.Context) string
 }
 
 type Clock interface {
@@ -132,4 +146,31 @@ func (c *realClock) Now() time.Time {
 }
 func RealClock() Clock {
 	return &realClock{}
+}
+
+type CoordinatorSelector interface {
+	SelectCoordinatorNode(ctx context.Context, transaction *components.PrivateTransaction, environment SequencerEnvironment) (int64, string, error)
+}
+
+type SequencerEnvironment interface {
+	GetBlockHeight() int64
+}
+
+// AssembleCoordinator is a component that is responsible for coordinating the assembly of all transactions for a given domain contract instance
+// requests to assemble transactions are queued and the queue is processed on a single thread that blocks until one assemble completes before starting the next
+type AssembleCoordinator interface {
+	Start()
+	Stop()
+	QueueAssemble(ctx context.Context, assemblingNode string, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, transactionPreAssembly *components.TransactionPreAssembly)
+	Complete(requestID string, stateDistributions []*components.StateDistribution)
+}
+
+type LocalAssembler interface {
+	AssembleLocal(
+		ctx context.Context,
+		requestID string,
+		transactionID uuid.UUID,
+		transactionInputs *components.TransactionInputs,
+		preAssembly *components.TransactionPreAssembly,
+	)
 }

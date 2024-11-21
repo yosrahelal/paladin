@@ -53,6 +53,7 @@ var _ = Describe("controller", Ordered, func() {
 	defer GinkgoRecover()
 
 	BeforeAll(func() {
+		// Skip("for now")
 	})
 
 	AfterAll(func() {
@@ -215,7 +216,7 @@ var _ = Describe("controller", Ordered, func() {
 
 		var privacyGroups map[string]*privacyGroup
 
-		It("resovles participants", func() {
+		It("resolves participants", func() {
 			resolveParticipant := func(identity string, node string) *participant {
 				addr, err := rpc[node].PTX().ResolveVerifier(ctx, fmt.Sprintf("%s@%s", identity, node), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				if err != nil {

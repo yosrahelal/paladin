@@ -139,6 +139,7 @@ func (dm *domainManager) Stop() {
 
 func (dm *domainManager) cleanupDomain(d *domain) {
 	// must not hold the domain lock when running this
+	log.L(dm.bgCtx).Infof("Cleaning up domain plugin after unload name=%s address=%s", d.name, d.RegistryAddress())
 	d.close()
 	delete(dm.domainsByName, d.name)
 	delete(dm.domainsByAddress, *d.RegistryAddress())
@@ -176,6 +177,9 @@ func (dm *domainManager) DomainRegistered(name string, toDomain components.Domai
 	// Initialize
 	d := dm.newDomain(name, conf, toDomain)
 	dm.domainsByName[name] = d
+
+	log.L(dm.bgCtx).Infof("Domain plugin registered name=%s address=%s", d.name, d.RegistryAddress())
+
 	go d.init()
 	return d, nil
 }
@@ -232,7 +236,7 @@ func (dm *domainManager) waitForDeploy(ctx context.Context, req *inflight.Inflig
 		return nil, i18n.NewError(ctx, msgs.MsgDomainTransactionWasNotADeployment, receipt.TransactionID)
 	}
 
-	return dm.GetSmartContractByAddress(ctx, *receipt.ContractAddress)
+	return dm.GetSmartContractByAddress(ctx, dm.persistence.DB(), *receipt.ContractAddress)
 }
 
 func (dm *domainManager) ExecAndWaitTransaction(ctx context.Context, txID uuid.UUID, call func() error) error {
@@ -273,8 +277,8 @@ func (dm *domainManager) getDomainByAddressOrNil(addr *tktypes.EthAddress) *doma
 	return dm.domainsByAddress[*addr]
 }
 
-func (dm *domainManager) GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (components.DomainSmartContract, error) {
-	loadResult, dc, err := dm.getSmartContractCached(ctx, dm.persistence.DB(), addr)
+func (dm *domainManager) GetSmartContractByAddress(ctx context.Context, dbTX *gorm.DB, addr tktypes.EthAddress) (components.DomainSmartContract, error) {
+	loadResult, dc, err := dm.getSmartContractCached(ctx, dbTX, addr)
 	if dc != nil || err != nil {
 		return dc, err
 	}

@@ -103,7 +103,7 @@ func TestEventIndexingWithDB(t *testing.T) {
 	}
 
 	// Lookup the instance against the domain
-	psc, err := dm.GetSmartContractByAddress(ctx, contractAddr)
+	psc, err := dm.GetSmartContractByAddress(ctx, td.c.dbTX, contractAddr)
 	require.NoError(t, err)
 	dc := psc.(*domainContract)
 	assert.Equal(t, &PrivateSmartContract{
@@ -117,7 +117,7 @@ func TestEventIndexingWithDB(t *testing.T) {
 	assert.Equal(t, "0xfeedbeef", psc.(*domainContract).info.ConfigBytes.String())
 
 	// Get cached
-	psc2, err := dm.GetSmartContractByAddress(ctx, contractAddr)
+	psc2, err := dm.GetSmartContractByAddress(ctx, td.c.dbTX, contractAddr)
 	require.NoError(t, err)
 	assert.Equal(t, psc, psc2)
 }

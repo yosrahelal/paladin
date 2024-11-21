@@ -27,25 +27,8 @@ import (
 	"gorm.io/gorm"
 )
 
-type PublicTxAccepted interface {
-	Bindings() []*PaladinTXReference
-	PublicTx() *pldapi.PublicTx // the nonce can only be read after Submit() on the batch succeeds
-}
-
-type PublicTxRejected interface {
-	Bindings() []*PaladinTXReference
-	RejectedError() error         // non-nil if the transaction was rejected during prepare (estimate gas error), so cannot be submitted
-	RevertData() tktypes.HexBytes // if revert data is available for error decoding
-}
-
-type PublicTxBatch interface {
-	Submit(ctx context.Context, dbTX *gorm.DB) error
-	Accepted() []PublicTxAccepted
-	Rejected() []PublicTxRejected
-	Completed(ctx context.Context, committed bool) // caller must ensure this is called on all code paths, and only with true after DB TX has committed
-}
-
 var PublicTxFilterFields filters.FieldSet = filters.FieldMap{
+	"localId":         filters.Int64Field(`"public_txns"."pub_txn_id"`),
 	"from":            filters.HexBytesField(`"from"`),
 	"nonce":           filters.Int64Field("nonce"),
 	"created":         filters.Int64Field("created"),
@@ -77,7 +60,14 @@ type PublicTxManager interface {
 	QueryPublicTxForTransactions(ctx context.Context, dbTX *gorm.DB, boundToTxns []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*pldapi.PublicTx, error)
 	QueryPublicTxWithBindings(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error)
 	GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error)
-	PrepareSubmissionBatch(ctx context.Context, transactions []*PublicTxSubmission) (batch PublicTxBatch, err error)
+
+	// Perform (potentially expensive) transaction level validation, such as gas estimation. Call before starting a DB transaction
+	ValidateTransaction(ctx context.Context, dbTX *gorm.DB, transaction *PublicTxSubmission) error
+	// Write a set of validated transactions to the public TX mgr database, notifying the relevant orchestrator(s) to wake, assign nonces, and start the submission process
+	WriteNewTransactions(ctx context.Context, dbTX *gorm.DB, transactions []*PublicTxSubmission) (func(), []*pldapi.PublicTx, error)
+	// Convenience function that does ValidateTransaction+WriteNewTransactions for a single Tx
+	SingleTransactionSubmit(ctx context.Context, transaction *PublicTxSubmission) (*pldapi.PublicTx, error)
+
 	MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransactionNotify) ([]*PublicTxMatch, error)
 	NotifyConfirmPersisted(ctx context.Context, confirms []*PublicTxMatch)
 }

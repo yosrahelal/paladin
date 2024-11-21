@@ -17,9 +17,11 @@ package componentmgr
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
@@ -37,7 +39,10 @@ import (
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 )
 
@@ -55,6 +60,8 @@ type componentManager struct {
 	bgCtx        context.Context
 	// config
 	conf *pldconf.PaladinConfig
+	// debug server
+	debugServer httpserver.Server
 	// pre-init
 	keyManager       components.KeyManager
 	ethClientFactory ethclient.EthClientFactory
@@ -81,6 +88,8 @@ type componentManager struct {
 	// keep track of everything we started
 	started map[string]stoppable
 	opened  map[string]closeable
+	// limited startup retry for connecting to blockchain
+	ethClientStartupRetry *retry.Retry
 }
 
 // things that have a running component that is active in the background and hence "stops"
@@ -99,20 +108,45 @@ func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID 
 ) ComponentManager {
 	log.InitConfig(&conf.Log)
 	return &componentManager{
-		grpcTarget:         grpcTarget, // default is a UDS path, can use tcp:127.0.0.1:12345 strings too (or tcp4:/tcp6:)
-		instanceUUID:       instanceUUID,
-		bgCtx:              bgCtx,
-		conf:               conf,
-		additionalManagers: additionalManagers,
-		initResults:        make(map[string]*components.ManagerInitResult),
-		started:            make(map[string]stoppable),
-		opened:             make(map[string]closeable),
+		grpcTarget:            grpcTarget, // default is a UDS path, can use tcp:127.0.0.1:12345 strings too (or tcp4:/tcp6:)
+		instanceUUID:          instanceUUID,
+		bgCtx:                 bgCtx,
+		conf:                  conf,
+		additionalManagers:    additionalManagers,
+		initResults:           make(map[string]*components.ManagerInitResult),
+		started:               make(map[string]stoppable),
+		opened:                make(map[string]closeable),
+		ethClientStartupRetry: retry.NewRetryLimited(&conf.Startup.BlockchainConnectRetry, &pldconf.StartupConfigDefaults.BlockchainConnectRetry),
 	}
 }
 
+func (cm *componentManager) javaDump(res http.ResponseWriter, req *http.Request) {
+	cm.pluginManager.SendSystemCommandToLoader(prototk.PluginLoad_THREAD_DUMP)
+	res.WriteHeader(202)
+}
+
+func (cm *componentManager) startDebugServer() (httpserver.Server, error) {
+	cm.conf.DebugServer.Port = confutil.P(confutil.Int(cm.conf.DebugServer.Port, 0)) // if enabled with no port, we allocate one
+	server, err := httpserver.NewDebugServer(cm.bgCtx, &cm.conf.DebugServer.HTTPServerConfig)
+	if err == nil {
+		server.Router().PathPrefix("/debug/javadump").HandlerFunc(http.HandlerFunc(cm.javaDump))
+		err = server.Start()
+	}
+	return server, err
+}
+
 func (cm *componentManager) Init() (err error) {
-	cm.ethClientFactory, err = ethclient.NewEthClientFactory(cm.bgCtx, &cm.conf.Blockchain)
-	err = cm.wrapIfErr(err, msgs.MsgComponentEthClientInitError)
+	// start the debug server as early as possible
+	if confutil.Bool(cm.conf.DebugServer.Enabled, *pldconf.DebugServerDefaults.Enabled) {
+		cm.debugServer, err = cm.startDebugServer()
+		err = cm.addIfStarted("debugServer", cm.debugServer, err, msgs.MsgComponentDebugServerStartError)
+	}
+
+	if err == nil {
+		cm.ethClientFactory, err = ethclient.NewEthClientFactory(cm.bgCtx, &cm.conf.Blockchain)
+		err = cm.wrapIfErr(err, msgs.MsgComponentEthClientInitError)
+	}
+
 	if err == nil {
 		cm.persistence, err = persistence.NewPersistence(cm.bgCtx, &cm.conf.DB)
 		err = cm.addIfOpened("database", cm.persistence, err, msgs.MsgComponentDBInitError)
@@ -271,10 +305,17 @@ func (cm *componentManager) startBlockIndexer() (err error) {
 	return err
 }
 
+func (cm *componentManager) startEthClient() error {
+	return cm.ethClientStartupRetry.Do(cm.bgCtx, func(attempt int) (retryable bool, err error) {
+		return true, cm.ethClientFactory.Start()
+	})
+}
+
 func (cm *componentManager) StartManagers() (err error) {
 
 	// start the eth client before any managers - this connects the WebSocket, and gathers the ChainID
-	err = cm.ethClientFactory.Start()
+	// We have special handling here to allow for concurrent startup of the blockchain node and Paladin
+	err = cm.startEthClient()
 	err = cm.addIfStarted("eth_client", cm.ethClientFactory, err, msgs.MsgComponentEthClientStartError)
 
 	// start the managers

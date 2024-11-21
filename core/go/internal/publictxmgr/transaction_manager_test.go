@@ -61,8 +61,6 @@ type mocksAndTestControl struct {
 	txManager           *componentmocks.TXManager
 }
 
-const mockBaseNonce = 103342
-
 // const testDestAddress = "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
 
 // const testMainSigningAddress = testDestAddress
@@ -169,9 +167,6 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 	require.NoError(t, err)
 
 	if mocks.disableManagerStart {
-		pmgr.nonceManager = newNonceCache(1*time.Hour, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
-			return mockBaseNonce, nil
-		})
 		pmgr.ethClient = pmgr.ethClientFactory.SharedWS()
 		pmgr.gasPriceClient.Init(ctx, pmgr.ethClient)
 	} else {
@@ -259,34 +254,41 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 		Return(confutil.P(tktypes.HexUint64(baseNonce)), nil).Once()
 
 	// For the first one we do a one-off
-	_, err = ble.SingleTransactionSubmit(ctx, txs[0])
+	singleTx, err := ble.SingleTransactionSubmit(ctx, txs[0])
 	require.NoError(t, err)
 
 	// The rest we submit as as batch
-	batch, err := ble.PrepareSubmissionBatch(ctx, txs[1:])
+	for _, tx := range txs[1:] {
+		err := ble.ValidateTransaction(ctx, ble.p.DB(), tx)
+		require.NoError(t, err)
+	}
+	postCommit, batch, err := ble.WriteNewTransactions(ctx, ble.p.DB(), txs[1:])
 	require.NoError(t, err)
-	assert.Empty(t, batch.Rejected())
-	assert.Len(t, batch.Accepted(), len(txs)-1)
-	err = ble.p.DB().Transaction(func(dbTX *gorm.DB) error {
-		return batch.Submit(ctx, dbTX)
-	})
+	require.Len(t, batch, len(txs[1:]))
+	for _, tx := range batch {
+		require.Greater(t, *tx.LocalID, uint64(0))
+	}
+	postCommit()
+
+	// Get one back again by ID
+	txRead, err := ble.QueryPublicTxWithBindings(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("localId", *batch[1].LocalID).Limit(1).Query())
 	require.NoError(t, err)
-	batch.Completed(ctx, true) // would normally be in a defer
+	require.Len(t, txRead, 1)
+	require.Equal(t, batch[1].Data, txRead[0].Data)
 
 	// Record activity on one TX
-	for i := range txs {
-		ble.addActivityRecord(fmt.Sprintf("%s:%d", resolvedKey, int(baseNonce)+i), fmt.Sprintf("activity %d", i))
+	for i, tx := range append([]*pldapi.PublicTx{singleTx}, batch...) {
+		ble.addActivityRecord(*tx.LocalID, fmt.Sprintf("activity %d", i))
 	}
 
 	// Query to check we now have all of these
 	queryTxs, err := ble.QueryPublicTxWithBindings(ctx, ble.p.DB(),
-		query.NewQueryBuilder().Sort("nonce").Query())
+		query.NewQueryBuilder().Sort("localId").Query())
 	require.NoError(t, err)
 	assert.Len(t, queryTxs, len(txs))
 	for i, qTX := range queryTxs {
 		// We don't include the bindings on these queries
 		assert.Equal(t, *resolvedKey, qTX.From)
-		assert.Equal(t, uint64(i)+baseNonce, qTX.Nonce.Uint64())
 		assert.Equal(t, txs[i].Data, qTX.Data)
 		require.Greater(t, len(qTX.Activity), 0)
 	}
@@ -294,10 +296,9 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	// Query scoped to one TX
 	byTxn, err := ble.QueryPublicTxForTransactions(ctx, ble.p.DB(), txIDs, nil)
 	require.NoError(t, err)
-	for i, tx := range txs {
+	for _, tx := range txs {
 		queryTxs := byTxn[tx.Bindings[0].TransactionID]
 		require.Len(t, queryTxs, 1)
-		assert.Equal(t, baseNonce+uint64(i), queryTxs[0].Nonce.Uint64())
 	}
 
 	// Check we can select to just see confirmed (which this isn't yet)
@@ -444,18 +445,6 @@ func TestSubmitFailures(t *testing.T) {
 	})
 	assert.Regexp(t, "mapped revert error", err)
 
-	// insert transaction next nonce error
-	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
-		Return(ethclient.EstimateGasResult{GasLimit: tktypes.HexUint64(10)}, nil)
-	m.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
-		Return(nil, fmt.Errorf("pop")).Once()
-	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: pldapi.PublicTxInput{
-			From: tktypes.RandAddress(),
-		},
-	})
-	assert.NotNil(t, err)
-	assert.Regexp(t, "pop", err)
 }
 
 func TestAddActivityDisabled(t *testing.T) {
@@ -464,38 +453,33 @@ func TestAddActivityDisabled(t *testing.T) {
 	})
 	defer done()
 
-	ble.addActivityRecord("signer1:nonce", "message")
+	ble.addActivityRecord(12345, "message")
 
-	assert.Empty(t, ble.getActivityRecords("signer1:nonce"))
+	assert.Empty(t, ble.getActivityRecords(12345))
 }
 
 func TestAddActivityWrap(t *testing.T) {
 	_, ble, _, done := newTestPublicTxManager(t, false)
 	defer done()
 
-	signerNonce := "signer1:nonce"
 	for i := 0; i < 100; i++ {
-		ble.addActivityRecord(signerNonce, fmt.Sprintf("message %.2d", i))
+		ble.addActivityRecord(12345, fmt.Sprintf("message %.2d", i))
 	}
 
-	activityRecords := ble.getActivityRecords(signerNonce)
+	activityRecords := ble.getActivityRecords(12345)
 	assert.Equal(t, "message 99", activityRecords[0].Message)
 	assert.Equal(t, "message 98", activityRecords[1].Message)
 	assert.Len(t, activityRecords, ble.maxActivityRecordsPerTx)
 
 }
 
-func mockForSubmitSuccess(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
-	mocks.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
-		Return(confutil.P(tktypes.HexUint64(1122334455)), nil).Once()
-	mocks.db.ExpectBegin()
-	mocks.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
-	mocks.db.ExpectCommit()
-}
-
 func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	ctx := context.Background()
-	_, ble, _, done := newTestPublicTxManager(t, false, mockForSubmitSuccess)
+	_, ble, _, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
+		mocks.db.MatchExpectationsInOrder(false)
+		mocks.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{}))
+		mocks.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
+	})
 	defer done()
 
 	// create transaction succeeded
@@ -510,8 +494,8 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
-	assert.NotNil(t, tx.PublicTx().From)
-	assert.Equal(t, uint64(1223451), tx.PublicTx().Gas.Uint64())
+	assert.NotNil(t, tx.From)
+	assert.Equal(t, uint64(1223451), tx.Gas.Uint64())
 
 }
 

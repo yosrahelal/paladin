@@ -32,6 +32,6 @@ func TestE2E(t *testing.T) {
 	logrus.SetLevel(logrus.WarnLevel)
 
 	RegisterFailHandler(Fail)
-	fmt.Fprintf(GinkgoWriter, "Starting operator-go suite\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Starting operator-go suite\n")
 	RunSpecs(t, "e2e suite")
 }

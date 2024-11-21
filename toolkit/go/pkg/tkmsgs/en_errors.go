@@ -72,7 +72,7 @@ var (
 	MsgPaladinClientNoABISupplied     = ffe("PD020213", "No ABI supplied")
 	MsgPaladinClientNoDomain          = ffe("PD020214", "No domain specified for private transaction")
 	MsgPaladinClientNoFunction        = ffe("PD020215", "No function specified")
-	MsgPaladinClientPollTimedOut      = ffe("PD020216", "Polling timed out after %d attempts in %s")
+	MsgPaladinClientPollTxTimedOut    = ffe("PD020216", "Polling timed out after %d attempts in %s for transaction %s")
 
 	// Plugin PD0203XX
 	MsgPluginUnsupportedRequest   = ffe("PD020300", "Unsupported request %T")

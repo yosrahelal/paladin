@@ -21,13 +21,9 @@ package persistence
 
 import (
 	"context"
-	"testing"
 
-	"github.com/golang-migrate/migrate/v4"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // Used for unit tests throughout the project that want to test against a real DB
@@ -45,20 +41,4 @@ func NewUnitTestPersistence(ctx context.Context, suite string) (Persistence, fun
 		},
 	})
 	return p, func() { p.Close() }, err
-}
-
-func TestMigrateUpDown(t *testing.T) {
-
-	ctx := context.Background()
-
-	// Up runs as part of the init
-	p, done, err := NewUnitTestPersistence(ctx, "persistence")
-	require.NoError(t, err)
-	assert.NotNil(t, p.DB())
-	defer done()
-
-	// Get the migration drive directly using the internal function, to run Down()
-	err = p.(*provider).runMigration(ctx, func(m *migrate.Migrate) error { return m.Down() })
-	require.NoError(t, err)
-
 }

@@ -62,7 +62,7 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 	}
 
 	// we should stop the first, and swap in the second
-	m.db.ExpectQuery("SELECT.*public_txn").WillReturnRows(sqlmock.NewRows([]string{"from"}).AddRow(testSigningAddr2))
+	m.db.ExpectQuery("SELECT.*public_txn").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce"}).AddRow(testSigningAddr2, 12345))
 
 	ble.poll(ctx)
 	existingOrchestrator.orchestratorLoopDone = make(chan struct{})

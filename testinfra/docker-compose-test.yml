@@ -14,7 +14,7 @@ services:
     command:
       - /var/besu
   besu:
-    image: hyperledger/besu:latest
+    image: hyperledger/besu:24.10.0
     user: 0:0
     volumes:
       - besu_data:/var/besu:rw

@@ -35,17 +35,6 @@ type publisher struct {
 	contractAddress  string
 }
 
-func (p *publisher) PublishTransactionBlockedEvent(ctx context.Context, transactionId string) {
-
-	p.privateTxManager.HandleNewEvent(ctx, &ptmgrtypes.TransactionBlockedEvent{
-		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
-			ContractAddress: p.contractAddress,
-			TransactionID:   transactionId,
-		},
-	})
-
-}
-
 func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string) {
 
 	p.privateTxManager.HandleNewEvent(ctx, &ptmgrtypes.TransactionDispatchedEvent{
@@ -61,26 +50,37 @@ func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, trans
 		Nonce:          nonce,
 		SigningAddress: signingAddress,
 	})
-
 }
 
-func (p *publisher) PublishTransactionAssembledEvent(ctx context.Context, transactionId string) {
+func (p *publisher) PublishTransactionPreparedEvent(ctx context.Context, transactionId string) {
+	p.privateTxManager.HandleNewEvent(ctx, &ptmgrtypes.TransactionPreparedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
+	})
+}
+
+func (p *publisher) PublishTransactionAssembledEvent(ctx context.Context, transactionId string, postAssembly *components.TransactionPostAssembly, requestID string) {
 	event := &ptmgrtypes.TransactionAssembledEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			ContractAddress: p.contractAddress,
 			TransactionID:   transactionId,
 		},
+		PostAssembly:      postAssembly,
+		AssembleRequestID: requestID,
 	}
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }
 
-func (p *publisher) PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string) {
+func (p *publisher) PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string, requestID string) {
 	event := &ptmgrtypes.TransactionAssembleFailedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			ContractAddress: p.contractAddress,
 			TransactionID:   transactionId,
 		},
-		Error: errorMessage,
+		Error:             errorMessage,
+		AssembleRequestID: requestID,
 	}
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }
@@ -96,14 +96,17 @@ func (p *publisher) PublishTransactionSignedEvent(ctx context.Context, transacti
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }
 
-func (p *publisher) PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, endorsement *prototk.AttestationResult, revertReason *string) {
+func (p *publisher) PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, idempotencyKey string, party string, attestationRequestName string, endorsement *prototk.AttestationResult, revertReason *string) {
 	event := &ptmgrtypes.TransactionEndorsedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			ContractAddress: p.contractAddress,
 			TransactionID:   transactionId,
 		},
-		Endorsement:  endorsement,
-		RevertReason: revertReason,
+		Endorsement:            endorsement,
+		RevertReason:           revertReason,
+		Party:                  party,
+		AttestationRequestName: attestationRequestName,
+		IdempotencyKey:         idempotencyKey,
 	}
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }
@@ -161,6 +164,16 @@ func (p *publisher) PublishTransactionFinalizeError(ctx context.Context, transac
 
 func (p *publisher) PublishTransactionConfirmedEvent(ctx context.Context, transactionId string) {
 	event := &ptmgrtypes.TransactionConfirmedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
+	}
+	p.privateTxManager.HandleNewEvent(ctx, event)
+}
+
+func (p *publisher) PublishNudgeEvent(ctx context.Context, transactionId string) {
+	event := &ptmgrtypes.TransactionNudgeEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			ContractAddress: p.contractAddress,
 			TransactionID:   transactionId,

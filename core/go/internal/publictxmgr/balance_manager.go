@@ -234,7 +234,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 		}
 	}
 	if fuelingTx != nil {
-		completed, err := af.pubTxMgr.CheckTransactionCompleted(ctx, fuelingTx.From, fuelingTx.Nonce.Uint64())
+		completed, err := af.pubTxMgr.CheckTransactionCompleted(ctx, *fuelingTx.LocalID)
 		if err != nil {
 			return nil, err
 		}
@@ -276,7 +276,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	// 2) Perform transaction to transfer value to the dest address
 
 	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource submitting a fueling tx for  destination address: %s ", destAddress)
-	submission, err := af.pubTxMgr.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+	fuelingTx, err = af.pubTxMgr.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
 		PublicTxInput: pldapi.PublicTxInput{
 			From: af.sourceAddress,
 			To:   &destAddress,
@@ -290,7 +290,6 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 		log.L(ctx).Errorf("TransferGasFromAutoFuelingSource fueling tx submission for destination address: %s failed due to: %+v", destAddress, err)
 		return nil, err
 	}
-	fuelingTx = submission.PublicTx()
 	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource tracking fueling tx with from=%s nonce=%d, for destination address: %s ", fuelingTx.From, fuelingTx.Nonce, destAddress)
 	// start tracking the new transactions
 	af.trackedFuelingTransactions[destAddress] = fuelingTx

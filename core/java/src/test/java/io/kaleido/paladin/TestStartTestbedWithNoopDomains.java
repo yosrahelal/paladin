@@ -15,6 +15,7 @@
 
 package io.kaleido.paladin;
 
+import io.kaleido.paladin.diagnostics.VirtualMachineDiagnostics;
 import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.JsonHex;
 import org.junit.jupiter.api.Test;
