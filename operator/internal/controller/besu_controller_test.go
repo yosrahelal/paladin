@@ -99,7 +99,7 @@ var _ = Describe("Besu Controller", func() {
 func TestBesu_GetLabels(t *testing.T) {
 	// Mock configuration
 	config := config.Config{
-		Paladin: config.Template{
+		Besu: config.Template{
 			Labels: map[string]string{
 				"env":  "production",
 				"tier": "backend",
@@ -128,11 +128,14 @@ func TestBesu_GetLabels(t *testing.T) {
 
 	// Assertions
 	expectedLabels := map[string]string{
-		"app":     "besu-test-node",
-		"env":     "production",
-		"tier":    "backend",
-		"version": "v1",
+		"env":                        "production",
+		"tier":                       "backend",
+		"version":                    "v1",
+		"app.kubernetes.io/instance": "test-node",
+		"app.kubernetes.io/name":     "besu-test-node",
+		"app.kubernetes.io/part-of":  "paladin",
 	}
 
+	assert.Equal(t, len(expectedLabels), len(labels), "labels should have the same length")
 	assert.Equal(t, expectedLabels, labels, "labels should match expected labels")
 }

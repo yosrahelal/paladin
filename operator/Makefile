@@ -125,7 +125,7 @@ kind-delete: ## Delete the Kind cluster.
 
 ##@ Build
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
+build: manifests generate fmt vet test ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
 .PHONY: run 

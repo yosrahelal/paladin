@@ -230,14 +230,16 @@ func (r *TransactionInvokeReconciler) reconcilePaladin(ctx context.Context, obj 
 	}
 
 	tis := &corev1alpha1.TransactionInvokeList{}
-	r.Client.List(ctx, tis, client.InNamespace(paladin.Namespace))
-	reqs := make([]ctrl.Request, 0, len(tis.Items))
+	reqs := []ctrl.Request{}
 
-	for _, ti := range tis.Items {
-		if ti.Spec.Node == paladin.Name {
-			reqs = append(reqs, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&ti)})
+	if err := r.Client.List(ctx, tis, client.InNamespace(paladin.Namespace)); err == nil {
+		for _, ti := range tis.Items {
+			if ti.Spec.Node == paladin.Name {
+				reqs = append(reqs, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&ti)})
+			}
 		}
 	}
+
 	return reqs
 }
 

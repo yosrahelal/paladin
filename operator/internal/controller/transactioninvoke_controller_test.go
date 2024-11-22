@@ -47,11 +47,17 @@ var _ = Describe("TransactionInvoke Controller", func() {
 			err := k8sClient.Get(ctx, typeNamespacedName, transactioninvoke)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &corev1alpha1.TransactionInvoke{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "core.paladin.io/v1alpha1",
+						Kind:       "TransactionInvoke",
+					},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: corev1alpha1.TransactionInvokeSpec{
+						TxType: "public",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

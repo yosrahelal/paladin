@@ -61,6 +61,8 @@ ext {
     operatorImageTag = project.hasProperty('operatorImageTag') ? project.operatorImageTag : 'test'
     paladinImageName = project.hasProperty('paladinImageName') ? project.paladinImageName : 'paladin'
     paladinImageTag = project.hasProperty('paladinImageTag') ? project.paladinImageTag : 'test'
+
+    artifactDir = project.hasProperty('artifactDir') ? project.artifactDir : 'artifacts'
 }
 
 def printClusterStatus(String namespace) {
@@ -158,7 +160,7 @@ task copyZetoSolidity(type: Copy) {
 task buildContractSamples(type: Exec, dependsOn: [copySolidity, copyZetoSolidity]) {
     commandLine "go", "run", "./contractpkg", "generate", "./contractpkg/contract_map.json"
 }
-
+ 
 // Task to build the Paladin image from the parent project
 task buildPaladinImage {
     dependsOn ':docker' // Builds the Paladin image in the parent project
@@ -214,6 +216,10 @@ task installCrds(type: Exec, dependsOn: [startKindCluster, prepareCRDsChart]){
 
 task prepareOperatorChart(type: Exec, dependsOn: [buildContractSamples]) {
     commandLine "go", "run", "./contractpkg", "template", "config/samples", "charts/paladin-operator/templates/samples"
+}
+
+task prepareArtifacts(type: Exec, dependsOn: [buildContractSamples]) {
+    commandLine "go", "run", "./contractpkg", "artifacts", "config/samples", "${artifactDir}"
 }
 
 // Task to install the operator using Helm

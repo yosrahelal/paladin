@@ -707,7 +707,7 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 	}
 
 	// Override the default config with the user provided config
-	if err := r.generatePaladinAuthConfig(ctx, node, &pldConf); err != nil {
+	if err := r.generatePaladinBlockchainConfig(ctx, node, &pldConf); err != nil {
 		return "", nil, err
 	}
 
@@ -736,29 +736,64 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 		return "", nil, err
 	}
 
-	// Bind to the a local besu node if we've been configured with one
-	if node.Spec.BesuNode != "" {
-		pldConf.Blockchain.HTTP.URL = fmt.Sprintf("http://%s:8545", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
-		pldConf.Blockchain.WS.URL = fmt.Sprintf("ws://%s:8546", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
-	}
 	b, err := yaml.Marshal(&pldConf)
 	return string(b), tlsSecrets, err
 }
+func (r *PaladinReconciler) generatePaladinBlockchainConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig) error {
+	if node.Spec.BaseLedgerEndpoint == nil {
+		// Alternatively, the config can be provided in the spec.config
 
-func (r *PaladinReconciler) generatePaladinAuthConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig) error {
-	// generate the Paladin auth config
-	if node.Spec.AuthConfig == nil {
+		// fallback: check the deprecated fields
+		if node.Spec.BesuNode != "" {
+			pldConf.Blockchain.HTTP.URL = fmt.Sprintf("http://%s:8545", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
+			pldConf.Blockchain.WS.URL = fmt.Sprintf("ws://%s:8546", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
+		} else {
+			if err := r.generatePaladinAuthConfig(ctx, node, node.Spec.AuthConfig, pldConf); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+	endpoint := node.Spec.BaseLedgerEndpoint
+	switch endpoint.Type {
+	case corev1alpha1.EndpointTypeLocal:
+		lEndpoint := endpoint.Local
+		if lEndpoint == nil {
+			return fmt.Errorf("local endpoint is nil")
+		}
+		pldConf.Blockchain.HTTP.URL = fmt.Sprintf("http://%s:8545", generateBesuServiceHostname(lEndpoint.NodeName, node.Namespace))
+		pldConf.Blockchain.WS.URL = fmt.Sprintf("ws://%s:8546", generateBesuServiceHostname(lEndpoint.NodeName, node.Namespace))
+	case corev1alpha1.EndpointTypeNetwork:
+		nEndpoint := endpoint.Endpoint
+		if nEndpoint == nil {
+			return fmt.Errorf("network endpoint is nil")
+		}
+		pldConf.Blockchain.HTTP.URL = nEndpoint.JSONRPC
+		pldConf.Blockchain.WS.URL = nEndpoint.WS
+		if err := r.generatePaladinAuthConfig(ctx, node, nEndpoint.Auth, pldConf); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unsupported endpoint type '%s'", endpoint.Type)
+	}
+
+	return nil
+}
+func (r *PaladinReconciler) generatePaladinAuthConfig(ctx context.Context, node *corev1alpha1.Paladin, authConfig *corev1alpha1.Auth, pldConf *pldconf.PaladinConfig) error {
+
+	if authConfig == nil {
 		return nil
 	}
 
-	switch node.Spec.AuthConfig.AuthMethod {
-	case corev1alpha1.AuthMethodSecret:
-		if node.Spec.AuthConfig.AuthSecret == nil {
-			return fmt.Errorf("AuthSecret must be provided when using AuthMethodSecret")
+	switch authConfig.Type {
+	case corev1alpha1.AuthTypeSecret:
+		if authConfig.Secret == nil {
+			return fmt.Errorf("AuthSecret must be provided when using AuthTypeSecret")
 		}
-		secretName := node.Spec.AuthConfig.AuthSecret.Name
+		secretName := authConfig.Secret.Name
 		if secretName == "" {
-			return fmt.Errorf("AuthSecret must be provided when using AuthMethodSecret")
+			return fmt.Errorf("AuthSecret must be provided when using AuthTypeSecret")
 		}
 		sec := &corev1.Secret{}
 		if err := r.Client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: node.Namespace}, sec); err != nil {
@@ -767,8 +802,12 @@ func (r *PaladinReconciler) generatePaladinAuthConfig(ctx context.Context, node 
 		if sec.Data == nil {
 			return fmt.Errorf("Secret %s has no data", secretName)
 		}
-		mapToStruct(sec.Data, &pldConf.Blockchain.HTTP.Auth)
-		mapToStruct(sec.Data, &pldConf.Blockchain.WS.Auth)
+		if err := mapToStruct(sec.Data, &pldConf.Blockchain.HTTP.Auth); err != nil {
+			return err
+		}
+		if err := mapToStruct(sec.Data, &pldConf.Blockchain.WS.Auth); err != nil {
+			return err
+		}
 	}
 	return nil
 }

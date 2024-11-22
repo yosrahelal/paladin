@@ -189,30 +189,16 @@ func TestPaladin_GetLabels(t *testing.T) {
 
 	// Assertions
 	expectedLabels := map[string]string{
-		"app":     "paladin-test-node",
-		"env":     "production",
-		"tier":    "backend",
-		"version": "v1",
+		"env":                        "production",
+		"tier":                       "backend",
+		"version":                    "v1",
+		"app.kubernetes.io/instance": "test-node",
+		"app.kubernetes.io/name":     "paladin-test-node",
+		"app.kubernetes.io/part-of":  "paladin",
 	}
 
 	assert.Equal(t, expectedLabels, labels, "labels should match expected labels")
 }
-
-// package controllers
-
-// import (
-// 	"context"
-// 	"fmt"
-// 	"testing"
-
-// 	"github.com/stretchr/testify/assert"
-// 	corev1 "k8s.io/api/core/v1"
-// 	"k8s.io/apimachinery/pkg/types"
-// 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-// 	corev1alpha1 "path/to/your/api/v1alpha1"
-// 	"path/to/your/pldconf"
-// )
 
 func TestGeneratePaladinAuthConfig(t *testing.T) {
 	tests := []struct {
@@ -230,9 +216,14 @@ func TestGeneratePaladinAuthConfig(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: corev1alpha1.PaladinSpec{
-					AuthConfig: &corev1alpha1.AuthConfig{
-						AuthMethod: corev1alpha1.AuthMethodSecret,
-						AuthSecret: &corev1alpha1.AuthSecret{Name: "test-secret"},
+					BaseLedgerEndpoint: &corev1alpha1.BaseLedgerEndpoint{
+						Type: corev1alpha1.EndpointTypeNetwork,
+						Endpoint: &corev1alpha1.NetworkLedgerEndpoint{
+							Auth: &corev1alpha1.Auth{
+								Type:   corev1alpha1.AuthTypeSecret,
+								Secret: &corev1alpha1.AuthSecret{Name: "test-secret"},
+							},
+						},
 					},
 				},
 			},
@@ -274,9 +265,16 @@ func TestGeneratePaladinAuthConfig(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: corev1alpha1.PaladinSpec{
-					AuthConfig: &corev1alpha1.AuthConfig{
-						AuthMethod: corev1alpha1.AuthMethodSecret,
-						AuthSecret: &corev1alpha1.AuthSecret{Name: "test-secret"},
+					BaseLedgerEndpoint: &corev1alpha1.BaseLedgerEndpoint{
+						Type: corev1alpha1.EndpointTypeNetwork,
+						Endpoint: &corev1alpha1.NetworkLedgerEndpoint{
+							JSONRPC: "https://besu.node",
+							WS:      "wss://besu.mode",
+							Auth: &corev1alpha1.Auth{
+								Type:   corev1alpha1.AuthTypeSecret,
+								Secret: &corev1alpha1.AuthSecret{Name: "test-secret"},
+							},
+						},
 					},
 				},
 			},
@@ -291,8 +289,13 @@ func TestGeneratePaladinAuthConfig(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: corev1alpha1.PaladinSpec{
-					AuthConfig: &corev1alpha1.AuthConfig{
-						AuthMethod: corev1alpha1.AuthMethodSecret,
+					BaseLedgerEndpoint: &corev1alpha1.BaseLedgerEndpoint{
+						Type: corev1alpha1.EndpointTypeNetwork,
+						Endpoint: &corev1alpha1.NetworkLedgerEndpoint{
+							Auth: &corev1alpha1.Auth{
+								Type: corev1alpha1.AuthTypeSecret,
+							},
+						},
 					},
 				},
 			},
@@ -303,9 +306,14 @@ func TestGeneratePaladinAuthConfig(t *testing.T) {
 			name: "Secret with no data",
 			node: &corev1alpha1.Paladin{
 				Spec: corev1alpha1.PaladinSpec{
-					AuthConfig: &corev1alpha1.AuthConfig{
-						AuthMethod: corev1alpha1.AuthMethodSecret,
-						AuthSecret: &corev1alpha1.AuthSecret{Name: "empty-secret"},
+					BaseLedgerEndpoint: &corev1alpha1.BaseLedgerEndpoint{
+						Type: corev1alpha1.EndpointTypeNetwork,
+						Endpoint: &corev1alpha1.NetworkLedgerEndpoint{
+							Auth: &corev1alpha1.Auth{
+								Type:   corev1alpha1.AuthTypeSecret,
+								Secret: &corev1alpha1.AuthSecret{Name: "empty-secret"},
+							},
+						},
 					},
 				},
 			},
@@ -339,7 +347,8 @@ func TestGeneratePaladinAuthConfig(t *testing.T) {
 
 			// Call the method under test
 			pldConf := &pldconf.PaladinConfig{}
-			err := reconciler.generatePaladinAuthConfig(ctx, tt.node, pldConf)
+
+			err := reconciler.generatePaladinAuthConfig(ctx, tt.node, tt.node.Spec.BaseLedgerEndpoint.Endpoint.Auth, pldConf)
 
 			// Verify the results
 			if tt.wantErr {
