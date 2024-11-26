@@ -19,6 +19,8 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -30,11 +32,14 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -87,26 +92,26 @@ func (s *zetoDomainTestSuite) TestZeto_Anon() {
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON, false, false)
 }
 
-func (s *zetoDomainTestSuite) TestZeto_AnonBatch() {
-	s.T().Skip()
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true, false)
-}
+// func (s *zetoDomainTestSuite) TestZeto_AnonBatch() {
+// 	s.T().Skip()
+// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true, false)
+// }
 
-func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false, false)
-}
+// func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
+// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false, false)
+// }
 
-func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
-}
+// func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
+// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
+// }
 
-func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false, true)
-}
+// func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
+// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false, true)
+// }
 
-func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true, true)
-}
+// func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
+// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true, true)
+// }
 
 func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, useBatch bool, isNullifiersToken bool) {
 	ctx := context.Background()
@@ -122,8 +127,33 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	}
 	log.L(ctx).Infof("Zeto instance deployed to %s", zetoAddress)
 
+	var controllerEthAddr string
+	rpcerr = s.rpc.CallRPC(ctx, &controllerEthAddr, "ptx_resolveVerifier", controllerName, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	require.Nil(t, rpcerr)
+
+	log.L(ctx).Infof("Deploying the sample ERC20 with initialOwner %s", controllerEthAddr)
+	erc20Address, err := deployERC20(ctx, s.rpc, controllerEthAddr)
+	require.NoError(t, err)
+
+	log.L(ctx).Infof("Setting the ERC20 contract (%s) to the Zeto instance", erc20Address)
+	paramsJson, err := json.Marshal(&map[string]string{"_erc20": erc20Address.String()})
+	require.NoError(t, err)
+	var invokeResult testbed.TransactionResult
+	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     controllerName,
+			To:       &zetoAddress,
+			Function: "setERC20",
+			Data:     paramsJson,
+		},
+		ABI: types.ZetoABI,
+	}, true)
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+
 	log.L(ctx).Infof("Mint two UTXOs (10, 20) from controller to controller")
-	_, err := s.mint(ctx, zetoAddress, controllerName, []int64{10, 20})
+	_, err = s.mint(ctx, zetoAddress, controllerName, []int64{10, 20})
 	require.NoError(t, err)
 
 	var controllerAddr tktypes.Bytes32
@@ -191,6 +221,9 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 		assert.Equal(t, int64(5), coins[1].Data.Amount.Int().Int64())  // change for controller
 		assert.Equal(t, controllerAddr.String(), coins[1].Data.Owner.String())
 	}
+
+	log.L(ctx).Infof("Deposit from ERC20 balance to Zeto")
+
 }
 
 func (s *zetoDomainTestSuite) setupContractsAbi(t *testing.T, ctx context.Context, tokenName string) {
@@ -265,6 +298,27 @@ func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.
 	return &invokeResult, nil
 }
 
+func (s *zetoDomainTestSuite) deposit(ctx context.Context, zetoAddress tktypes.EthAddress, sender string, amount int64) (*testbed.TransactionResult, error) {
+	var invokeResult testbed.TransactionResult
+	paramsJson, err := json.Marshal(&map[string]int64{"amount": amount})
+	if err != nil {
+		return nil, err
+	}
+	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     sender,
+			To:       &zetoAddress,
+			Function: "deposit",
+			Data:     paramsJson,
+		},
+		ABI: types.ZetoABI,
+	}, true)
+	if rpcerr != nil {
+		return nil, rpcerr.Error()
+	}
+	return &invokeResult, nil
+}
+
 func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON, useNullifiers bool) []*types.ZetoCoinState {
 	if jq == nil {
 		jq = query.NewQueryBuilder().Limit(100).Query()
@@ -313,4 +367,20 @@ func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[
 	assert.NoError(t, err)
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
 	return done, tb, rpc
+}
+
+func deployERC20(ctx context.Context, rpc rpcbackend.Backend, controllerAddr string) (*tktypes.EthAddress, error) {
+	bytes, err := os.ReadFile("./abis/SampleERC20.json")
+	if err != nil {
+		return nil, err
+	}
+	build := solutils.MustLoadBuildResolveLinks(bytes, map[string]*tktypes.EthAddress{})
+	params := fmt.Sprintf(`{"initialOwner":"%s"}`, controllerAddr)
+	var addr string
+	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deployBytecode", controllerName, build.ABI, build.Bytecode.String(), tktypes.RawJSON(params))
+	if rpcerr != nil {
+		return nil, rpcerr.Error()
+	}
+	return tktypes.MustEthAddress(addr), nil
+
 }

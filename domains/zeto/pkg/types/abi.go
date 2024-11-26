@@ -66,6 +66,13 @@ var ZetoABI = abi.ABI{
 			{Name: "call", Type: "bytes"}, // assumed to be an encoded "transfer"
 		},
 	},
+	{
+		Name: "setERC20",
+		Type: abi.Function,
+		Inputs: abi.ParameterArray{
+			{Name: "_erc20", Type: "address"},
+		},
+	},
 }
 
 type InitializerParams struct {
