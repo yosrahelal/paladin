@@ -72,14 +72,14 @@ const (
 
 type BaseLedgerEndpoint struct {
 	// Type specifies the type of the endpoint.
-	// +kubebuilder:validation:Enum=local;network
+	// +kubebuilder:validation:Enum=local;endpoint
 	Type BaseLedgerEndpointType `json:"type"`
 
 	// Local specifies the configuration when the type is 'local'.
 	// +optional
 	Local *LocalLedgerEndpoint `json:"local,omitempty"`
 
-	// Network specifies the configuration when the type is 'network'.
+	// Network specifies the configuration when the type is 'endpoint'.
 	// +optional
 	Endpoint *NetworkLedgerEndpoint `json:"endpoint,omitempty"`
 }

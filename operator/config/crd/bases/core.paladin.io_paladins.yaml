@@ -74,7 +74,7 @@ spec:
                 properties:
                   endpoint:
                     description: Network specifies the configuration when the type
-                      is 'network'.
+                      is 'endpoint'.
                     properties:
                       auth:
                         properties:
@@ -118,7 +118,7 @@ spec:
                     description: Type specifies the type of the endpoint.
                     enum:
                     - local
-                    - network
+                    - endpoint
                     type: string
                 required:
                 - type
