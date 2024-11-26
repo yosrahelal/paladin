@@ -275,6 +275,31 @@ func TestNoto(t *testing.T) {
 	assert.Equal(t, notaryKey.Verifier.Verifier, coins[0].Data.Owner.String())
 	assert.Equal(t, int64(50), coins[1].Data.Amount.Int().Int64())
 	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[1].Data.Owner.String())
+
+	log.L(ctx).Infof("Burn 25 from recipient2")
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     recipient2Name,
+			To:       &notoAddress,
+			Function: "burn",
+			Data: toJSON(t, &types.BurnParams{
+				Amount: tktypes.Int64ToInt256(25),
+			}),
+		},
+		ABI: types.NotoABI,
+	}, true)
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+
+	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
+	require.NoError(t, err)
+	require.Len(t, coins, 2)
+
+	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, notaryKey.Verifier.Verifier, coins[0].Data.Owner.String())
+	assert.Equal(t, int64(25), coins[1].Data.Amount.Int().Int64())
+	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[1].Data.Owner.String())
 }
 
 func TestNotoApprove(t *testing.T) {

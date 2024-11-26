@@ -17,6 +17,7 @@ package noto
 
 import (
 	"context"
+	"math/big"
 
 	"encoding/json"
 
@@ -37,6 +38,8 @@ func (n *Noto) GetHandler(method string) types.DomainHandler {
 		return &mintHandler{noto: n}
 	case "transfer":
 		return &transferHandler{noto: n}
+	case "burn":
+		return &burnHandler{noto: n}
 	case "approveTransfer":
 		return &approveHandler{noto: n}
 	default:
@@ -55,10 +58,25 @@ func (n *Noto) validateMintAmounts(ctx context.Context, params *types.MintParams
 	return nil
 }
 
-// Check that the inputs and outputs of a transfer net out to zero
+// Check that a transfer has at least one input and output, and they net out to zero
 func (n *Noto) validateTransferAmounts(ctx context.Context, coins *gatheredCoins) error {
+	if len(coins.inCoins) == 0 {
+		return i18n.NewError(ctx, msgs.MsgInvalidInputs, "transfer", coins.inCoins)
+	}
 	if coins.inTotal.Cmp(coins.outTotal) != 0 {
 		return i18n.NewError(ctx, msgs.MsgInvalidAmount, "transfer", coins.inTotal, coins.outTotal)
+	}
+	return nil
+}
+
+// Check that a burn has at least one input, and a net output matching the requested amount
+func (n *Noto) validateBurnAmounts(ctx context.Context, params *types.BurnParams, coins *gatheredCoins) error {
+	if len(coins.inCoins) == 0 {
+		return i18n.NewError(ctx, msgs.MsgInvalidInputs, "burn", coins.inCoins)
+	}
+	amount := big.NewInt(0).Sub(coins.inTotal, coins.outTotal)
+	if amount.Cmp(params.Amount.Int()) != 0 {
+		return i18n.NewError(ctx, msgs.MsgInvalidAmount, "burn", params.Amount.Int().Text(10), amount.Text(10))
 	}
 	return nil
 }
