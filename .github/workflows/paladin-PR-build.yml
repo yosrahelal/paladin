@@ -12,8 +12,6 @@ on:
       - '**.md'
       - 'operator/charts/**'
   pull_request:
-    paths-ignore:
-      - '**.md'
   workflow_dispatch:
 
 # Ensure this workflow only runs for the most recent commit of a pull-request
