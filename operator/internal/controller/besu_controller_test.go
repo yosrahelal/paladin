@@ -20,9 +20,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
-	// . "github.com/onsi/ginkgo/v2"
-	// . "github.com/onsi/gomega"
+	"github.com/google/uuid"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,458 +38,504 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-// var _ = Describe("Besu Controller", func() {
-// 	var (
-// 		ctx                context.Context
-// 		resourceName       string
-// 		namespace          string
-// 		typeNamespacedName types.NamespacedName
-// 		besu               *corev1alpha1.Besu
-// 		besuGenesis        *corev1alpha1.BesuGenesis
-// 		genesisConfigMap   *corev1.ConfigMap
-// 		besuReconciler     *BesuReconciler
-// 	)
+// initializeTestReconciler sets up a new BesuReconciler with a fresh fake client for each test.
+func initializeTestReconciler(objs ...client.Object) (*BesuReconciler, client.Client) {
+	scheme := runtime.NewScheme()
+	corev1.AddToScheme(scheme)
+	appsv1.AddToScheme(scheme)
+	policyv1.AddToScheme(scheme)
+	corev1alpha1.AddToScheme(scheme)
 
-// 	BeforeEach(func() {
-// 		ctx = context.Background()
-// 		resourceName = "test-besu"
-// 		namespace = "default"
-// 		typeNamespacedName = types.NamespacedName{
-// 			Name:      resourceName,
-// 			Namespace: namespace,
-// 		}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objs...).
+		WithStatusSubresource(objs...).
+		Build()
 
-// 		// Initialize BesuGenesis
-// 		besuGenesis = &corev1alpha1.BesuGenesis{
-// 			ObjectMeta: metav1.ObjectMeta{
-// 				Name:      "test-genesis",
-// 				Namespace: namespace,
-// 			},
-// 			Spec: corev1alpha1.BesuGenesisSpec{
-// 				Consensus:         "qbft",
-// 				InitialValidators: []string{"validator1", "validator2"},
-// 			},
-// 		}
-// 		err := k8sClient.Create(ctx, besuGenesis)
-// 		Expect(err).NotTo(HaveOccurred())
+	cfg := &config.Config{
+		Besu: config.Template{
+			Image:           "hyperledger/besu:latest",
+			ImagePullPolicy: corev1.PullAlways,
+			Labels: map[string]string{
+				"env":  "test",
+				"tier": "backend",
+			},
+			Annotations: map[string]string{
+				"test-annotation": "test",
+			},
+			Envs: map[string]string{
+				"ENV_VAR": "value",
+			},
+		},
+	}
 
-// 		genesisConfigMap = &corev1.ConfigMap{
-// 			ObjectMeta: metav1.ObjectMeta{
-// 				Name:      generateBesuGenesisName(besuGenesis.ObjectMeta.Name),
-// 				Namespace: namespace,
-// 			},
-// 			Data: map[string]string{
-// 				"genesis.json": `{"consensus": "qbft"}`,
-// 			},
-// 		}
-// 		err = k8sClient.Create(ctx, genesisConfigMap)
-// 		Expect(err).NotTo(HaveOccurred())
+	reconciler := &BesuReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		config: cfg,
+	}
 
-// 		// Initialize Besu resource
-// 		besu = &corev1alpha1.Besu{
-// 			ObjectMeta: metav1.ObjectMeta{
-// 				Name:      resourceName,
-// 				Namespace: namespace,
-// 			},
-// 			Spec: corev1alpha1.BesuSpec{
-// 				Genesis: besuGenesis.ObjectMeta.Name,
-// 			},
-// 		}
+	return reconciler, fakeClient
+}
 
-// 		// Initialize BesuReconciler
-// 		cfg := &config.Config{
-// 			Besu: config.Template{
-// 				Image:           "hyperledger/besu:latest",
-// 				ImagePullPolicy: corev1.PullAlways,
-// 				Labels: map[string]string{
-// 					"env":  "test",
-// 					"tier": "backend",
-// 				},
-// 				Annotations: map[string]string{
-// 					"test-annotation": "test",
-// 				},
-// 				Envs: map[string]string{
-// 					"ENV_VAR": "value",
-// 				},
-// 			},
-// 		}
-// 		besuReconciler = &BesuReconciler{
-// 			Client: k8sClient,
-// 			Scheme: clientgoscheme.Scheme,
-// 			config: cfg,
-// 		}
+// generateUniqueNameUUID generates a unique name using UUID.
+func generateUniqueNameUUID(base string) string {
+	return fmt.Sprintf("%s-%s", base, uuid.New().String())
+}
 
-// 		// Create the Besu custom resource
-// 		By("Creating the Besu custom resource")
-// 		err = k8sClient.Create(ctx, besu)
-// 		Expect(err).NotTo(HaveOccurred())
-// 	})
+// Helper function to verify resource existence.
+func verifyResourceExists(ctx context.Context, k8sClient client.Client, namespacedName types.NamespacedName, obj client.Object) {
+	err := k8sClient.Get(ctx, namespacedName, obj)
+	Expect(err).NotTo(HaveOccurred())
+}
 
-// 	AfterEach(func() {
-// 		// Delete the Besu custom resource
-// 		By("Deleting the Besu custom resource")
-// 		err := k8sClient.Delete(ctx, besu)
-// 		Expect(err).NotTo(HaveOccurred())
+// Helper function to verify resource non-existence.
+func verifyResourceDoesNotExist(ctx context.Context, k8sClient client.Client, namespacedName types.NamespacedName, obj client.Object) {
+	err := k8sClient.Get(ctx, namespacedName, obj)
+	Expect(err).To(HaveOccurred())
+	Expect(client.IgnoreNotFound(err)).To(BeNil())
+}
 
-// 		err = k8sClient.Delete(ctx, besuGenesis)
-// 		Expect(err).NotTo(HaveOccurred())
+// besu_controller_test.go
 
-// 		err = k8sClient.Delete(ctx, genesisConfigMap)
-// 		Expect(err).NotTo(HaveOccurred())
+var _ = Describe("Besu Controller", func() {
+	var (
+		ctx                context.Context
+		resourceName       string
+		namespace          string
+		typeNamespacedName types.NamespacedName
+		besu               *corev1alpha1.Besu
+		besuGenesis        *corev1alpha1.BesuGenesis
+		genesisConfigMap   *corev1.ConfigMap
+		besuReconciler     *BesuReconciler
+		k8sClient          client.Client
+	)
 
-// 	})
+	BeforeEach(func() {
+		ctx = context.Background()
+		resourceName = generateUniqueNameUUID("test-besu") // Use UUID for uniqueness
+		namespace = "default"
+		typeNamespacedName = types.NamespacedName{
+			Name:      resourceName,
+			Namespace: namespace,
+		}
 
-// 	Context("When reconciling a new Besu resource", func() {
-// 		It("Should create all necessary Kubernetes resources", func() {
-// 			By("Reconciling the Besu resource")
-// 			_, err := besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
+		// Initialize BesuGenesis with a unique name
+		besuGenesisName := generateUniqueNameUUID("test-genesis")
+		besuGenesis = &corev1alpha1.BesuGenesis{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      besuGenesisName,
+				Namespace: namespace,
+			},
+			Spec: corev1alpha1.BesuGenesisSpec{
+				Consensus:         "qbft",
+				InitialValidators: []string{"validator1", "validator2"},
+			},
+		}
 
-// 			By("Checking if the StatefulSet was created")
-// 			statefulSet := &appsv1.StatefulSet{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuName(resourceName),
-// 				Namespace: namespace,
-// 			}, statefulSet)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(statefulSet.Name).To(Equal(generateBesuName(resourceName)))
+		// Initialize Besu resource with a unique name
+		besu = &corev1alpha1.Besu{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      resourceName,
+				Namespace: namespace,
+			},
+			Spec: corev1alpha1.BesuSpec{
+				Genesis: besuGenesisName,
+			},
+		}
+		// Initialize ConfigMap
+		genesisConfigMap = &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      generateBesuGenesisName(besuGenesisName),
+				Namespace: namespace,
+			},
+			Data: map[string]string{
+				"genesis.json": `{"consensus": "qbft"}`,
+			},
+		}
+		// Initialize the test reconciler and fake client
+		besuReconciler, k8sClient = initializeTestReconciler(besuGenesis, besu, genesisConfigMap)
+	})
 
-// 			By("Checking if the Service was created")
-// 			service := &corev1.Service{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuName(resourceName),
-// 				Namespace: namespace,
-// 			}, service)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(service.Name).To(Equal(generateBesuName(resourceName)))
+	AfterEach(func() {
+		// Cleanup resources
+		By("Deleting the Besu custom resource")
+		err := k8sClient.Delete(ctx, besu)
+		if err != nil && client.IgnoreNotFound(err) == nil {
+			Fail(fmt.Sprintf("Failed to delete Besu: %v", err))
+		}
 
-// 			By("Checking if the ConfigMap was created")
-// 			configMap := &corev1.ConfigMap{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuName(resourceName),
-// 				Namespace: namespace,
-// 			}, configMap)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(configMap.Name).To(Equal(generateBesuName(resourceName)))
+		By("Deleting the BesuGenesis custom resource")
+		err = k8sClient.Delete(ctx, besuGenesis)
+		if err != nil && client.IgnoreNotFound(err) == nil {
+			Fail(fmt.Sprintf("Failed to delete BesuGenesis: %v", err))
+		}
 
-// 			By("Checking if the Secret was created")
-// 			secret := &corev1.Secret{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuIDSecretName(resourceName),
-// 				Namespace: namespace,
-// 			}, secret)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(secret.Name).To(Equal(generateBesuIDSecretName(resourceName)))
+		By("Deleting the Genesis ConfigMap")
+		err = k8sClient.Delete(ctx, genesisConfigMap)
+		if err != nil && client.IgnoreNotFound(err) == nil {
+			Fail(fmt.Sprintf("Failed to delete Genesis ConfigMap: %v", err))
+		}
+	})
 
-// 			By("Checking if the PodDisruptionBudget was created")
-// 			pdb := &policyv1.PodDisruptionBudget{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuName(resourceName),
-// 				Namespace: namespace,
-// 			}, pdb)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(pdb.Name).To(Equal(generateBesuName(resourceName)))
-// 		})
-// 	})
+	Context("Resource Creation", func() {
+		It("Should create all necessary Kubernetes resources", func() {
+			By("Reconciling the Besu resource")
+			_, err := besuReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
 
-// 	Context("When updating the Besu resource", func() {
-// 		It("Should update the Kubernetes resources accordingly", func() {
-// 			By("Reconciling the Besu resource initially")
-// 			_, err := besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
+			// Define expected resource names based on unique resourceName
+			statefulSetName := generateBesuName(resourceName)
+			serviceName := generateBesuName(resourceName)
+			configMapName := generateBesuName(resourceName)
+			secretName := generateBesuIDSecretName(resourceName)
+			pdbName := generateBesuName(resourceName) // Assuming PDB name matches Besu name
 
-// 			By("Updating the Besu resource with new configuration")
-// 			updatedBesu := &corev1alpha1.Besu{}
-// 			err = k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			updatedBesu.Spec.Config = ptrToString("[Node]\nDataDir = \"/new-data-dir\"\n")
-// 			err = k8sClient.Update(ctx, updatedBesu)
-// 			Expect(err).NotTo(HaveOccurred())
+			By("Checking if the StatefulSet was created")
+			statefulSet := &appsv1.StatefulSet{}
+			verifyResourceExists(ctx, k8sClient, types.NamespacedName{Name: statefulSetName, Namespace: namespace}, statefulSet)
+			Expect(statefulSet.Name).To(Equal(statefulSetName))
 
-// 			By("Reconciling the Besu resource after update")
-// 			_, err = besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
+			By("Checking if the Service was created")
+			service := &corev1.Service{}
+			verifyResourceExists(ctx, k8sClient, types.NamespacedName{Name: serviceName, Namespace: namespace}, service)
+			Expect(service.Name).To(Equal(serviceName))
 
-// 			By("Verifying that the StatefulSet has been updated")
-// 			statefulSet := &appsv1.StatefulSet{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuName(resourceName),
-// 				Namespace: namespace,
-// 			}, statefulSet)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(statefulSet.Spec.Template.Annotations).To(HaveKey("core.paladin.io/config-sum"))
+			By("Checking if the ConfigMap was created")
+			configMap := &corev1.ConfigMap{}
+			verifyResourceExists(ctx, k8sClient, types.NamespacedName{Name: configMapName, Namespace: namespace}, configMap)
+			Expect(configMap.Name).To(Equal(configMapName))
 
-// 			By("Verifying that the ConfigMap has been updated")
-// 			configMap := &corev1.ConfigMap{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuName(resourceName),
-// 				Namespace: namespace,
-// 			}, configMap)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(configMap.Data["pldconf.besu.toml"]).To(ContainSubstring("/new-data-dir"))
-// 		})
-// 	})
+			By("Checking if the Secret was created")
+			secret := &corev1.Secret{}
+			verifyResourceExists(ctx, k8sClient, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
+			Expect(secret.Name).To(Equal(secretName))
 
-// 	Context("When deleting a Besu resource", func() {
-// 		It("Should clean up all associated resources", func() {
-// 			By("Reconciling the Besu resource")
-// 			_, err := besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
+			By("Checking if the PodDisruptionBudget was created")
+			pdb := &policyv1.PodDisruptionBudget{}
+			verifyResourceExists(ctx, k8sClient, types.NamespacedName{Name: pdbName, Namespace: namespace}, pdb)
+			Expect(pdb.Name).To(Equal(pdbName))
+		})
+	})
 
-// 			By("Deleting the Besu resource")
-// 			err = k8sClient.Delete(ctx, besu)
-// 			Expect(err).NotTo(HaveOccurred())
+	Context("Resource Update", func() {
+		It("Should update the Kubernetes resources accordingly", func() {
+			By("Reconciling the Besu resource initially")
+			_, err := besuReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
 
-// 			By("Ensuring associated resources are deleted")
-// 			Eventually(func() bool {
-// 				statefulSet := &appsv1.StatefulSet{}
-// 				err = k8sClient.Get(ctx, types.NamespacedName{
-// 					Name:      generateBesuName(resourceName),
-// 					Namespace: namespace,
-// 				}, statefulSet)
-// 				return errors.IsNotFound(err)
-// 			}, time.Second*5, time.Millisecond*500).Should(BeTrue())
+			By("Updating the Besu resource with new configuration")
+			updatedBesu := &corev1alpha1.Besu{}
+			err = k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
+			Expect(err).NotTo(HaveOccurred())
+			updatedBesu.Spec.Config = ptrToString("[Node]\nDataDir = \"/new-data-dir\"\n")
+			err = k8sClient.Update(ctx, updatedBesu)
+			Expect(err).NotTo(HaveOccurred())
 
-// 			Eventually(func() bool {
-// 				service := &corev1.Service{}
-// 				err = k8sClient.Get(ctx, types.NamespacedName{
-// 					Name:      generateBesuName(resourceName),
-// 					Namespace: namespace,
-// 				}, service)
-// 				return errors.IsNotFound(err)
-// 			}, time.Second*5, time.Millisecond*500).Should(BeTrue())
+			By("Reconciling the Besu resource after update")
+			_, err = besuReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
 
-// 			Eventually(func() bool {
-// 				configMap := &corev1.ConfigMap{}
-// 				err = k8sClient.Get(ctx, types.NamespacedName{
-// 					Name:      generateBesuName(resourceName),
-// 					Namespace: namespace,
-// 				}, configMap)
-// 				return errors.IsNotFound(err)
-// 			}, time.Second*5, time.Millisecond*500).Should(BeTrue())
+			By("Verifying that the StatefulSet has been updated")
+			statefulSet := &appsv1.StatefulSet{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      generateBesuName(resourceName),
+				Namespace: namespace,
+			}, statefulSet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(statefulSet.Spec.Template.Annotations).To(HaveKey("core.paladin.io/config-sum"))
 
-// 			Eventually(func() bool {
-// 				secret := &corev1.Secret{}
-// 				err = k8sClient.Get(ctx, types.NamespacedName{
-// 					Name:      generateBesuIDSecretName(resourceName),
-// 					Namespace: namespace,
-// 				}, secret)
-// 				return errors.IsNotFound(err)
-// 			}, time.Second*5, time.Millisecond*500).Should(BeTrue())
+			By("Verifying that the ConfigMap has been updated")
+			configMap := &corev1.ConfigMap{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      generateBesuName(resourceName),
+				Namespace: namespace,
+			}, configMap)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(configMap.Data["pldconf.besu.toml"]).To(ContainSubstring("/new-data-dir"))
+		})
+	})
 
-// 			Eventually(func() bool {
-// 				pdb := &policyv1.PodDisruptionBudget{}
-// 				err = k8sClient.Get(ctx, types.NamespacedName{
-// 					Name:      generateBesuName(resourceName),
-// 					Namespace: namespace,
-// 				}, pdb)
-// 				return errors.IsNotFound(err)
-// 			}, time.Second*5, time.Millisecond*500).Should(BeTrue())
-// 		})
-// 	})
+	// Context("Resource Deletion", func() {
+	// 	It("Should clean up all associated resources", func() {
+	// 		By("Reconciling the Besu resource")
+	// 		_, err := besuReconciler.Reconcile(ctx, ctrl.Request{
+	// 			NamespacedName: typeNamespacedName,
+	// 		})
+	// 		Expect(err).NotTo(HaveOccurred())
 
-// 	Context("When the Genesis resource is missing", func() {
-// 		It("Should set the status to Pending and requeue", func() {
-// 			By("Setting a non-existent Genesis in the Besu resource")
-// 			besu.Spec.Genesis = "non-existent-genesis"
-// 			err := k8sClient.Update(ctx, besu)
-// 			Expect(err).NotTo(HaveOccurred())
+	// 		By("Deleting the Besu resource")
+	// 		err = k8sClient.Delete(ctx, besu)
+	// 		Expect(err).NotTo(HaveOccurred())
 
-// 			By("Reconciling the Besu resource")
-// 			result, err := besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+	// 		By("Ensuring associated resources are deleted")
+	// 		// Define expected resource names based on unique resourceName
+	// 		statefulSetName := generateBesuName(resourceName)
+	// 		serviceName := generateBesuName(resourceName)
+	// 		configMapName := generateBesuName(resourceName)
+	// 		secretName := generateBesuIDSecretName(resourceName)
+	// 		pdbName := generateBesuName(resourceName)
 
-// 			By("Verifying the status is set to Pending")
-// 			updatedBesu := &corev1alpha1.Besu{}
-// 			err = k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(updatedBesu.Status.Phase).To(Equal(corev1alpha1.StatusPhasePending))
-// 		})
-// 	})
+	// 		Eventually(func() bool {
+	// 			statefulSet := &appsv1.StatefulSet{}
+	// 			err = k8sClient.Get(ctx, types.NamespacedName{
+	// 				Name:      statefulSetName,
+	// 				Namespace: namespace,
+	// 			}, statefulSet)
+	// 			return client.IgnoreNotFound(err) == nil
+	// 		}, time.Second*5, time.Millisecond*500).Should(BeFalse())
 
-// 	Context("When failing to create a resource", func() {
-// 		It("Should set the status to Failed", func() {
-// 			By("Providing invalid Service configuration")
-// 			besu.Spec.Service = corev1.ServiceSpec{
-// 				Type: corev1.ServiceType("InvalidType"),
-// 			}
-// 			err := k8sClient.Update(ctx, besu)
-// 			Expect(err).NotTo(HaveOccurred())
+	// 		Eventually(func() bool {
+	// 			service := &corev1.Service{}
+	// 			err = k8sClient.Get(ctx, types.NamespacedName{
+	// 				Name:      serviceName,
+	// 				Namespace: namespace,
+	// 			}, service)
+	// 			return client.IgnoreNotFound(err) == nil
+	// 		}, time.Second*5, time.Millisecond*500).Should(BeFalse())
 
-// 			By("Reconciling the Besu resource")
-// 			_, err = besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).To(HaveOccurred())
+	// 		Eventually(func() bool {
+	// 			configMap := &corev1.ConfigMap{}
+	// 			err = k8sClient.Get(ctx, types.NamespacedName{
+	// 				Name:      configMapName,
+	// 				Namespace: namespace,
+	// 			}, configMap)
+	// 			return client.IgnoreNotFound(err) == nil
+	// 		}, time.Second*5, time.Millisecond*500).Should(BeFalse())
 
-// 			By("Verifying the status is set to Failed")
-// 			updatedBesu := &corev1alpha1.Besu{}
-// 			err = k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(updatedBesu.Status.Phase).To(Equal(corev1alpha1.StatusPhaseFailed))
-// 		})
-// 	})
+	// 		Eventually(func() bool {
+	// 			secret := &corev1.Secret{}
+	// 			err = k8sClient.Get(ctx, types.NamespacedName{
+	// 				Name:      secretName,
+	// 				Namespace: namespace,
+	// 			}, secret)
+	// 			return client.IgnoreNotFound(err) == nil
+	// 		}, time.Second*5, time.Millisecond*500).Should(BeFalse())
 
-// 	Context("When updating labels and annotations", func() {
-// 		It("Should propagate them to associated resources", func() {
-// 			By("Reconciling the Besu resource")
-// 			_, err := besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
+	// 		Eventually(func() bool {
+	// 			pdb := &policyv1.PodDisruptionBudget{}
+	// 			err = k8sClient.Get(ctx, types.NamespacedName{
+	// 				Name:      pdbName,
+	// 				Namespace: namespace,
+	// 			}, pdb)
+	// 			return client.IgnoreNotFound(err) == nil
+	// 		}, time.Second*5, time.Millisecond*500).Should(BeFalse())
+	// 	})
+	// })
 
-// 			By("Updating labels and annotations in the Besu resource")
-// 			updatedBesu := &corev1alpha1.Besu{}
-// 			err = k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			updatedBesu.Labels = map[string]string{
-// 				"new-label": "new-value",
-// 			}
-// 			updatedBesu.Annotations = map[string]string{
-// 				"new-annotation": "new-value",
-// 			}
-// 			err = k8sClient.Update(ctx, updatedBesu)
-// 			Expect(err).NotTo(HaveOccurred())
+	// Context("Error Scenarios", func() {
+	// 	It("Should set the status to Pending and requeue when Genesis is missing", func() {
+	// 		By("Setting a non-existent Genesis in the Besu resource")
+	// 		updatedBesu := &corev1alpha1.Besu{}
+	// 		err := k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		updatedBesu.Spec.Genesis = "non-existent-genesis"
+	// 		err = k8sClient.Update(ctx, updatedBesu)
+	// 		Expect(err).NotTo(HaveOccurred())
 
-// 			By("Reconciling the Besu resource after label update")
-// 			_, err = besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
+	// 		By("Reconciling the Besu resource")
+	// 		result, err := besuReconciler.Reconcile(ctx, ctrl.Request{
+	// 			NamespacedName: typeNamespacedName,
+	// 		})
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
-// 			By("Verifying labels are updated on the StatefulSet")
-// 			statefulSet := &appsv1.StatefulSet{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuName(resourceName),
-// 				Namespace: namespace,
-// 			}, statefulSet)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(statefulSet.Labels).To(HaveKeyWithValue("new-label", "new-value"))
-// 			Expect(statefulSet.Annotations).To(HaveKeyWithValue("new-annotation", "new-value"))
-// 		})
-// 	})
+	// 		By("Verifying the status is set to Pending")
+	// 		updatedBesu = &corev1alpha1.Besu{}
+	// 		err = k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		Expect(updatedBesu.Status.Phase).To(Equal(corev1alpha1.StatusPhasePending))
+	// 	})
 
-// 	Context("When ConfigMap data changes", func() {
-// 		It("Should trigger a rolling update of the StatefulSet", func() {
-// 			By("Reconciling the Besu resource")
-// 			_, err := besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
+	// 	It("Should set the status to Failed when resource creation fails", func() {
+	// 		By("Providing invalid Service configuration")
+	// 		updatedBesu := &corev1alpha1.Besu{}
+	// 		err := k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		updatedBesu.Spec.Service = corev1.ServiceSpec{
+	// 			Type: corev1.ServiceType("InvalidType"),
+	// 		}
+	// 		err = k8sClient.Update(ctx, updatedBesu)
+	// 		Expect(err).NotTo(HaveOccurred())
 
-// 			By("Simulating a change in ConfigMap data")
-// 			configMap := &corev1.ConfigMap{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuName(resourceName),
-// 				Namespace: namespace,
-// 			}, configMap)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			configMap.Data["pldconf.besu.toml"] = "modified data"
-// 			err = k8sClient.Update(ctx, configMap)
-// 			Expect(err).NotTo(HaveOccurred())
+	// 		By("Reconciling the Besu resource")
+	// 		_, err = besuReconciler.Reconcile(ctx, ctrl.Request{
+	// 			NamespacedName: typeNamespacedName,
+	// 		})
+	// 		Expect(err).To(HaveOccurred())
 
-// 			By("Reconciling the Besu resource after ConfigMap change")
-// 			_, err = besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
+	// 		By("Verifying the status is set to Failed")
+	// 		updatedBesu = &corev1alpha1.Besu{}
+	// 		err = k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		Expect(updatedBesu.Status.Phase).To(Equal(corev1alpha1.StatusPhaseFailed))
+	// 	})
+	// })
 
-// 			By("Verifying the StatefulSet's annotation has been updated")
-// 			statefulSet := &appsv1.StatefulSet{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuName(resourceName),
-// 				Namespace: namespace,
-// 			}, statefulSet)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			Expect(statefulSet.Spec.Template.Annotations).To(HaveKey("core.paladin.io/config-sum"))
-// 		})
-// 	})
+	// Context("Label and Annotation Updates", func() {
+	// 	It("Should propagate labels and annotations to associated resources", func() {
+	// 		By("Reconciling the Besu resource")
+	// 		_, err := besuReconciler.Reconcile(ctx, ctrl.Request{
+	// 			NamespacedName: typeNamespacedName,
+	// 		})
+	// 		Expect(err).NotTo(HaveOccurred())
 
-// 	Context("When the Besu resource specifies custom environment variables", func() {
-// 		It("Should set them in the Besu container", func() {
-// 			By("Updating the Besu resource with custom environment variables")
-// 			updatedBesu := &corev1alpha1.Besu{}
-// 			err := k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			updatedBesu.Spec.Config = ptrToString("[Node]\nCustomEnvVar = \"custom-value\"\n")
-// 			err = k8sClient.Update(ctx, updatedBesu)
-// 			Expect(err).NotTo(HaveOccurred())
+	// 		By("Updating labels and annotations in the Besu resource")
+	// 		updatedBesu := &corev1alpha1.Besu{}
+	// 		err = k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		updatedBesu.Labels = map[string]string{
+	// 			"new-label": "new-value",
+	// 		}
+	// 		updatedBesu.Annotations = map[string]string{
+	// 			"new-annotation": "new-value",
+	// 		}
+	// 		err = k8sClient.Update(ctx, updatedBesu)
+	// 		Expect(err).NotTo(HaveOccurred())
 
-// 			By("Reconciling the Besu resource")
-// 			_, err = besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
+	// 		By("Reconciling the Besu resource after label update")
+	// 		_, err = besuReconciler.Reconcile(ctx, ctrl.Request{
+	// 			NamespacedName: typeNamespacedName,
+	// 		})
+	// 		Expect(err).NotTo(HaveOccurred())
 
-// 			By("Verifying the environment variables in the StatefulSet")
-// 			statefulSet := &appsv1.StatefulSet{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuName(resourceName),
-// 				Namespace: namespace,
-// 			}, statefulSet)
-// 			Expect(err).NotTo(HaveOccurred())
+	// 		By("Verifying labels are updated on the StatefulSet")
+	// 		statefulSet := &appsv1.StatefulSet{}
+	// 		err = k8sClient.Get(ctx, types.NamespacedName{
+	// 			Name:      generateBesuName(resourceName),
+	// 			Namespace: namespace,
+	// 		}, statefulSet)
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		Expect(statefulSet.Labels).To(HaveKeyWithValue("new-label", "new-value"))
+	// 		Expect(statefulSet.Spec.Template.Annotations).To(HaveKeyWithValue("new-annotation", "new-value"))
+	// 	})
+	// })
 
-// 			var besuContainer corev1.Container
-// 			for _, container := range statefulSet.Spec.Template.Spec.Containers {
-// 				if container.Name == "besu" {
-// 					besuContainer = container
-// 					break
-// 				}
-// 			}
-// 			Expect(besuContainer.Env).To(ContainElement(corev1.EnvVar{
-// 				Name:  "ENV_VAR",
-// 				Value: "value",
-// 			}))
-// 		})
-// 	})
+	Context("ConfigMap Changes", func() {
+		It("Should trigger a rolling update of the StatefulSet when ConfigMap data changes", func() {
+			By("Reconciling the Besu resource")
+			_, err := besuReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
 
-// 	Context("When the PersistentVolumeClaim is missing", func() {
-// 		It("Should create the PVC and proceed", func() {
-// 			By("Reconciling the Besu resource")
-// 			_, err := besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
+			By("Simulating a change in ConfigMap data")
+			configMap := &corev1.ConfigMap{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      generateBesuName(resourceName),
+				Namespace: namespace,
+			}, configMap)
+			Expect(err).NotTo(HaveOccurred())
+			configMap.Data["pldconf.besu.toml"] = "modified data"
+			err = k8sClient.Update(ctx, configMap)
+			Expect(err).NotTo(HaveOccurred())
 
-// 			By("Deleting the PVC to simulate missing PVC")
-// 			pvc := &corev1.PersistentVolumeClaim{}
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuPVCName(resourceName),
-// 				Namespace: namespace,
-// 			}, pvc)
-// 			Expect(err).NotTo(HaveOccurred())
-// 			err = k8sClient.Delete(ctx, pvc)
-// 			Expect(err).NotTo(HaveOccurred())
+			By("Reconciling the Besu resource after ConfigMap change")
+			_, err = besuReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
 
-// 			By("Reconciling the Besu resource after PVC deletion")
-// 			_, err = besuReconciler.Reconcile(ctx, reconcile.Request{
-// 				NamespacedName: typeNamespacedName,
-// 			})
-// 			Expect(err).NotTo(HaveOccurred())
+			By("Verifying the StatefulSet's annotation has been updated")
+			statefulSet := &appsv1.StatefulSet{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      generateBesuName(resourceName),
+				Namespace: namespace,
+			}, statefulSet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(statefulSet.Spec.Template.Annotations).To(HaveKey("core.paladin.io/config-sum"))
+		})
+	})
 
-// 			By("Verifying the PVC has been recreated")
-// 			err = k8sClient.Get(ctx, types.NamespacedName{
-// 				Name:      generateBesuPVCName(resourceName),
-// 				Namespace: namespace,
-// 			}, pvc)
-// 			Expect(err).NotTo(HaveOccurred())
-// 		})
-// 	})
-// })
+	Context("Environment Variable Updates", func() {
+		It("Should set custom environment variables in the Besu container", func() {
+			By("Updating the Besu resource with custom environment variables")
+			updatedBesu := &corev1alpha1.Besu{}
+			err := k8sClient.Get(ctx, typeNamespacedName, updatedBesu)
+			Expect(err).NotTo(HaveOccurred())
+			updatedBesu.Spec.Config = ptrToString("[Node]\nCustomEnvVar = \"custom-value\"\n")
+			err = k8sClient.Update(ctx, updatedBesu)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Reconciling the Besu resource")
+			_, err = besuReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the environment variables in the StatefulSet")
+			statefulSet := &appsv1.StatefulSet{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      generateBesuName(resourceName),
+				Namespace: namespace,
+			}, statefulSet)
+			Expect(err).NotTo(HaveOccurred())
+
+			var besuContainer corev1.Container
+			found := false
+			for _, container := range statefulSet.Spec.Template.Spec.Containers {
+				if container.Name == "besu" {
+					besuContainer = container
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue())
+
+			Expect(besuContainer.Env).To(ContainElement(corev1.EnvVar{
+				Name:  "ENV_VAR",
+				Value: "value",
+			}))
+		})
+	})
+
+	Context("PersistentVolumeClaim Handling", func() {
+		It("Should create the PVC if it's missing and proceed", func() {
+			By("Reconciling the Besu resource")
+			_, err := besuReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Deleting the PVC to simulate missing PVC")
+			pvc := &corev1.PersistentVolumeClaim{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      generateBesuPVCName(resourceName),
+				Namespace: namespace,
+			}, pvc)
+			Expect(err).NotTo(HaveOccurred())
+			err = k8sClient.Delete(ctx, pvc)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Reconciling the Besu resource after PVC deletion")
+			_, err = besuReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the PVC has been recreated")
+			Eventually(func() bool {
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      generateBesuPVCName(resourceName),
+					Namespace: namespace,
+				}, pvc)
+				return err == nil
+			}, time.Second*5, time.Millisecond*500).Should(BeTrue())
+		})
+	})
+
+})
 
 // setupBesuTestReconciler sets up a BesuReconciler for testing
 func setupBesuTestReconciler(objs ...runtime.Object) (*BesuReconciler, error) {
