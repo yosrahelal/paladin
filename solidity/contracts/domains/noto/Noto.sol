@@ -5,23 +5,24 @@ import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/crypt
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {INoto} from "../interfaces/INoto.sol";
 
-/// @title A sample on-chain implementation of a Confidential UTXO (C-UTXO) pattern,
-///        with participant confidentiality and anonymity based on notary submission and
-///        validation of transactions.
-/// @author Kaleido, Inc.
-/// @dev Transaction pre-verification is performed by a notary.
-///      The EVM ledger provides double-spend protection on the transaction outputs,
-///      and provides a deterministic linkage (a DAG) of inputs and outputs.
-///
-///      The notary must authorize every transaction by either:
-///
-///      1. Submitting the transaction directly
-///
-///      2. Pre-authorizing another EVM address to perform a transaction, by storing
-///         the EIP-712 typed-data hash of the transaction in an approval record.
-///         This allows coordination of DVP with other smart contracts, which could
-///         be using any model programmable via EVM (not just C-UTXO)
-///
+/**
+ * @title A sample on-chain implementation of a Confidential UTXO (C-UTXO) pattern,
+ *        with participant confidentiality and anonymity based on notary submission and
+ *        validation of transactions.
+ * @author Kaleido, Inc.
+ * @dev Transaction pre-verification is performed by a notary.
+ *      The EVM ledger provides double-spend protection on the transaction outputs,
+ *      and provides a deterministic linkage (a DAG) of inputs and outputs.
+ *
+ *      The notary must authorize every transaction by either:
+ *
+ *      1. Submitting the transaction directly
+ *
+ *      2. Pre-authorizing another EVM address to perform a transaction, by storing
+ *         the EIP-712 typed-data hash of the transaction in an approval record.
+ *         This allows coordination of DVP with other smart contracts, which could
+ *         be using any model programmable via EVM (not just C-UTXO)
+ */
 contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     address _notary;
     mapping(bytes32 => bool) private _unspent;
@@ -90,16 +91,20 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
 
     function _authorizeUpgrade(address) internal override onlyNotary {}
 
-    /// @dev query whether a TXO is currently in the unspent list
-    /// @param id the UTXO identifier
-    /// @return unspent true or false depending on whether the identifier is in the unspent map
+    /**
+     * @dev query whether a TXO is currently in the unspent list
+     * @param id the UTXO identifier
+     * @return unspent true or false depending on whether the identifier is in the unspent map
+     */
     function isUnspent(bytes32 id) public view returns (bool unspent) {
         return _unspent[id];
     }
 
-    /// @dev query whether an approval exists for the given transaction
-    /// @param txhash the transaction hash
-    /// @return delegate the non-zero owner address, or zero if the TXO ID is not in the approval map
+    /**
+     * @dev query whether an approval exists for the given transaction
+     * @param txhash the transaction hash
+     * @return delegate the non-zero owner address, or zero if the TXO ID is not in the approval map
+     */
     function getTransferApproval(
         bytes32 txhash
     ) public view returns (address delegate) {
