@@ -18,11 +18,13 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -146,11 +148,6 @@ func TestPaladinRegistryReconcile_WithContractAddress(t *testing.T) {
 			EVM: corev1alpha1.EVMRegistryConfig{
 				ContractAddress: "0x1234567890abcdef",
 			},
-			Plugin: corev1alpha1.PluginConfig{
-				Type:    "c-shared",
-				Library: "libexample",
-			},
-			ConfigJSON: "{}",
 		},
 	}
 
@@ -190,15 +187,10 @@ func TestPaladinRegistryReconcile_WithSmartContractDeployment(t *testing.T) {
 			EVM: corev1alpha1.EVMRegistryConfig{
 				SmartContractDeployment: "test-scd",
 			},
-			Plugin: corev1alpha1.PluginConfig{
-				Type:    "c-shared",
-				Library: "libexample",
-			},
-			ConfigJSON: "{}",
 		},
 	}
 
-	// Create a SmartContractDeployment resource
+	// Create a SmartContractDeployment resource with a ContractAddress
 	scd := &corev1alpha1.SmartContractDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-scd",
@@ -252,11 +244,6 @@ func TestPaladinRegistryReconcile_MissingContractInfo(t *testing.T) {
 		},
 		Spec: corev1alpha1.PaladinRegistrySpec{
 			Type: corev1alpha1.RegistryTypeEVM,
-			Plugin: corev1alpha1.PluginConfig{
-				Type:    "c-shared",
-				Library: "libexample",
-			},
-			ConfigJSON: "{}",
 		},
 	}
 
@@ -273,9 +260,172 @@ func TestPaladinRegistryReconcile_MissingContractInfo(t *testing.T) {
 
 	// Run the reconcile function
 	result, err := reconciler.Reconcile(ctx, req)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "missing contractAddress or smartContractDeployment")
 	assert.Equal(t, ctrl.Result{}, result)
+}
+func TestPaladinRegistryReconcile_ResourceNotFound(t *testing.T) {
+	reconciler, err := setupPaladinRegistryTestReconciler()
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "non-existent-registry",
+			Namespace: "default",
+		},
+	}
+
+	// Reconcile should return without error
+	result, err := reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+}
+
+func TestTrackContractDeploymentAndRequeue_DeploymentNotFound(t *testing.T) {
+	reg := &corev1alpha1.PaladinRegistry{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-registry",
+			Namespace: "default",
+		},
+		Spec: corev1alpha1.PaladinRegistrySpec{
+			Type: corev1alpha1.RegistryTypeEVM,
+			EVM: corev1alpha1.EVMRegistryConfig{
+				SmartContractDeployment: "test-scd",
+			},
+		},
+		Status: corev1alpha1.PaladinRegistryStatus{
+			Status: corev1alpha1.RegistryStatusPending,
+		},
+	}
+
+	reconciler, err := setupPaladinRegistryTestReconciler(reg)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	result, err := reconciler.trackContractDeploymentAndRequeue(ctx, reg)
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{RequeueAfter: 1 * time.Second}, result)
+}
+
+func TestPaladinRegistryTrackContractDeploymentAndRequeue_PendingDeployment(t *testing.T) {
+	reg := &corev1alpha1.PaladinRegistry{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-registry",
+			Namespace: "default",
+		},
+		Spec: corev1alpha1.PaladinRegistrySpec{
+			Type: corev1alpha1.RegistryTypeEVM,
+			EVM: corev1alpha1.EVMRegistryConfig{
+				SmartContractDeployment: "test-scd",
+			},
+		},
+		Status: corev1alpha1.PaladinRegistryStatus{
+			Status: corev1alpha1.RegistryStatusPending,
+		},
+	}
+
+	// Create a SmartContractDeployment resource without a ContractAddress
+	scd := &corev1alpha1.SmartContractDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scd",
+			Namespace: "default",
+		},
+	}
+
+	reconciler, err := setupPaladinRegistryTestReconciler(reg, scd)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	result, err := reconciler.trackContractDeploymentAndRequeue(ctx, reg)
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{RequeueAfter: 1 * time.Second}, result)
+}
+
+func TestPaladinRegistryTrackContractDeploymentAndRequeue_SuccessfulDeployment(t *testing.T) {
+	reg := &corev1alpha1.PaladinRegistry{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-registry",
+			Namespace: "default",
+		},
+		Spec: corev1alpha1.PaladinRegistrySpec{
+			Type: corev1alpha1.RegistryTypeEVM,
+			EVM: corev1alpha1.EVMRegistryConfig{
+				SmartContractDeployment: "test-scd",
+			},
+		},
+		Status: corev1alpha1.PaladinRegistryStatus{
+			Status: corev1alpha1.RegistryStatusPending,
+		},
+	}
+
+	// Create a SmartContractDeployment resource with a ContractAddress
+	scd := &corev1alpha1.SmartContractDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scd",
+			Namespace: "default",
+		},
+		Status: corev1alpha1.SmartContractDeploymentStatus{
+			ContractAddress: "0xabcdef1234567890",
+		},
+	}
+
+	reconciler, err := setupPaladinRegistryTestReconciler(reg, scd)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	result, err := reconciler.trackContractDeploymentAndRequeue(ctx, reg)
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+
+	// Fetch the updated registry
+	updatedReg := &corev1alpha1.PaladinRegistry{}
+	err = reconciler.Get(ctx, types.NamespacedName{
+		Name:      reg.Name,
+		Namespace: reg.Namespace,
+	}, updatedReg)
+	require.NoError(t, err)
+	assert.Equal(t, corev1alpha1.RegistryStatusAvailable, updatedReg.Status.Status)
+	assert.Equal(t, "0xabcdef1234567890", updatedReg.Status.ContractAddress)
+}
+
+func TestPaladinRegistryReconcile_GetError(t *testing.T) {
+	reconciler, err := setupPaladinRegistryTestReconciler()
+	require.NoError(t, err)
+
+	// Mock client to return an error on Get
+	reconciler.Client = &errorClient{
+		Client: reconciler.Client,
+		getErr: fmt.Errorf("failed to get resource"),
+	}
+
+	ctx := context.Background()
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-registry",
+			Namespace: "default",
+		},
+	}
+
+	result, err := reconciler.Reconcile(ctx, req)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get resource")
+	assert.Equal(t, ctrl.Result{}, result)
+}
+
+type errorClient struct {
+	client.Client
+	getErr error
+}
+
+func (e *errorClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if e.getErr != nil {
+		return e.getErr
+	}
+	return e.Client.Get(ctx, key, obj, opts...)
 }
 
 func TestPaladinRegistryReconcile_DeletedResource(t *testing.T) {

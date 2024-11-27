@@ -835,7 +835,7 @@ func TestGenerateStatefulSetTemplate(t *testing.T) {
 	assert.Equal(t, r.getLabels(node), statefulSet.Labels)
 	require.NotNil(t, statefulSet.Spec.Template.Spec.Containers)
 }
-func TestCreateService(t *testing.T) {
+func TestBesuCreateService(t *testing.T) {
 	node := &corev1alpha1.Besu{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-besu",
