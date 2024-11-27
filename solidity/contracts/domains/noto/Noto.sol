@@ -28,7 +28,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     mapping(bytes32 => bool) private _unspent;
     mapping(bytes32 => address) private _approvals;
 
-    error NotoInvalidNotary(address signer, address notary);
     error NotoInvalidInput(bytes32 id);
     error NotoInvalidOutput(bytes32 id);
     error NotoNotNotary(address sender);
@@ -151,27 +150,37 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
         bytes memory signature,
         bytes memory data
     ) internal {
-        // Check the inputs are all existing unspent ids
+        _checkInputs(inputs);
+        _checkOutputs(outputs);
+        emit NotoTransfer(inputs, outputs, signature, data);
+    }
+
+    /**
+     * @dev Check the inputs are all existing unspent ids
+     */
+    function _checkInputs(bytes32[] memory inputs) internal {
         for (uint256 i = 0; i < inputs.length; ++i) {
             if (_unspent[inputs[i]] == false) {
                 revert NotoInvalidInput(inputs[i]);
             }
             delete (_unspent[inputs[i]]);
         }
+    }
 
-        // Check the outputs are all new unspent ids
+    /**
+     * @dev Check the outputs are all new unspent ids
+     */
+    function _checkOutputs(bytes32[] memory outputs) internal {
         for (uint256 i = 0; i < outputs.length; ++i) {
             if (_unspent[outputs[i]] == true) {
                 revert NotoInvalidOutput(outputs[i]);
             }
             _unspent[outputs[i]] = true;
         }
-
-        emit NotoTransfer(inputs, outputs, signature, data);
     }
 
     /**
-     * @dev authorizes a operation to be performed by another address in a future transaction.
+     * @dev authorizes an operation to be performed by another address in a future transaction.
      *      For example, a smart contract coordinating a DVP.
      *
      *      Note the txhash will only be spendable if it is exactly correct for
