@@ -63,4 +63,5 @@ var (
 	MsgNotImplemented              = ffe("PD200022", "Not implemented")
 	MsgInvalidDelegate             = ffe("PD200023", "Invalid delegate: %s")
 	MsgNoDomainReceipt             = ffe("PD200024", "Not implemented. See state receipt for coin transfers")
+	MsgNoBurning                   = ffe("PD200025", "Burn is not enabled")
 )
