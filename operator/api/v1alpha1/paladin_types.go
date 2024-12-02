@@ -189,20 +189,29 @@ const (
 	// AuthTypeSecret is used to authenticate with a secret
 	// The secret must contain keys "username" and "password"
 	AuthTypeSecret AuthType = "secret"
+	AuthTypeInline AuthType = "inline"
 )
 
 type Auth struct {
 	// auth method to use for the connection
 	// +kubebuilder:validation:Enum=secret
+	// +kubebuilder:validation:Enum=inline
 	Type AuthType `json:"type"`
 
 	// Secret is used to provide the name of the secret to use for authentication
 	Secret *AuthSecret `json:"secretRef,omitempty"`
+
+	// Auth details are provided inline (not recommended)
+	Inline *AuthInline `json:"inline,omitempty"`
 }
 
 type AuthSecret struct {
 	// The name of the secret to use for authentication
 	Name string `json:"name"`
+}
+type AuthInline struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 // StatusReason is an enumeration of possible failure causes.  Each StatusReason
