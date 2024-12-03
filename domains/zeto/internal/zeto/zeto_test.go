@@ -642,3 +642,13 @@ func findCoins(ctx context.Context, z *Zeto, useNullifiers bool, contractAddress
 	}
 	return coins, err
 }
+
+func TestGetHandler(t *testing.T) {
+	z := &Zeto{
+		name: "test1",
+	}
+	assert.NotNil(t, z.GetHandler("mint"))
+	assert.NotNil(t, z.GetHandler("transfer"))
+	assert.NotNil(t, z.GetHandler("lockProof"))
+	assert.Nil(t, z.GetHandler("bad"))
+}

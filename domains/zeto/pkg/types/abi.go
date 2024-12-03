@@ -73,6 +73,20 @@ var ZetoABI = abi.ABI{
 			{Name: "_erc20", Type: "address"},
 		},
 	},
+	{
+		Name: "deposit",
+		Type: abi.Function,
+		Inputs: abi.ParameterArray{
+			{Name: "amount", Type: "uint256"},
+		},
+	},
+	{
+		Name: "withdraw",
+		Type: abi.Function,
+		Inputs: abi.ParameterArray{
+			{Name: "amount", Type: "uint256"},
+		},
+	},
 }
 
 type InitializerParams struct {
@@ -103,4 +117,12 @@ type TransferParamEntry struct {
 type LockParams struct {
 	Delegate *tktypes.EthAddress `json:"delegate"`
 	Call     tktypes.HexBytes    `json:"call"`
+}
+
+type DepositParams struct {
+	Amount *tktypes.HexUint256 `json:"amount"`
+}
+
+type WithdrawParams struct {
+	Amount *tktypes.HexUint256 `json:"amount"`
 }
