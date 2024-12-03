@@ -64,12 +64,17 @@ func (rsw *receivedPreparedTransactionWriter) runBatch(ctx context.Context, dbTX
 
 		preparedTransactions[i] = receivedPreparedTransactionWriteOperation.PreparedTransaction
 	}
-	if err := rsw.txMgr.WritePreparedTransactions(ctx, dbTX, preparedTransactions); err != nil {
+	postCommit, err := rsw.txMgr.WritePreparedTransactions(ctx, dbTX, preparedTransactions)
+	if err != nil {
 		log.L(ctx).Errorf("Error persisting prepared transactions: %s", err)
 		return nil, nil, err
 	}
 	// We don't actually provide any result, so just build an array of nil results
-	return nil, make([]flushwriter.Result[*receivedPreparedTransactionWriterNoResult], len(values)), nil
+	return func(err error) {
+		if err == nil {
+			postCommit()
+		}
+	}, make([]flushwriter.Result[*receivedPreparedTransactionWriterNoResult], len(values)), nil
 
 }
 
