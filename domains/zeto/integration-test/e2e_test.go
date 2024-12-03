@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
@@ -62,6 +61,7 @@ type zetoDomainTestSuite struct {
 	domainName        string
 	domain            zeto.Zeto
 	rpc               rpcbackend.Backend
+	tb                testbed.Testbed
 	done              func()
 }
 
@@ -75,12 +75,13 @@ func (s *zetoDomainTestSuite) SetupSuite() {
 	log.L(ctx).Infof("Domain name = %s", domainName)
 	config := PrepareZetoConfig(s.T(), s.deployedContracts, "../zkp")
 	zeto, zetoTestbed := newZetoDomain(s.T(), domainContracts, config)
-	done, _, rpc := newTestbed(s.T(), s.hdWalletSeed, map[string]*testbed.TestbedDomain{
+	done, tb, rpc := newTestbed(s.T(), s.hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: zetoTestbed,
 	})
 	s.domainName = domainName
 	s.domain = zeto
 	s.rpc = rpc
+	s.tb = tb
 	s.done = done
 }
 
@@ -92,30 +93,31 @@ func (s *zetoDomainTestSuite) TestZeto_Anon() {
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON, false, false)
 }
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonBatch() {
-// 	s.T().Skip()
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true, false)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonBatch() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true, false)
+}
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false, false)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false, false)
+}
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
+}
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false, true)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false, true)
+}
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true, true)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true, true)
+}
 
 func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, useBatch bool, isNullifiersToken bool) {
 	ctx := context.Background()
+	log.L(ctx).Info("*************************************")
 	log.L(ctx).Infof("Deploying an instance of the %s token", tokenName)
+	log.L(ctx).Info("*************************************")
 	s.setupContractsAbi(t, ctx, tokenName)
 	var zetoAddress tktypes.EthAddress
 	rpcerr := s.rpc.CallRPC(ctx, &zetoAddress, "testbed_deploy",
@@ -138,21 +140,21 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	log.L(ctx).Infof("Setting the ERC20 contract (%s) to the Zeto instance", erc20Address)
 	paramsJson, err := json.Marshal(&map[string]string{"_erc20": erc20Address.String()})
 	require.NoError(t, err)
-	var invokeResult testbed.TransactionResult
-	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+	_, err = s.tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			From:     controllerName,
 			To:       &zetoAddress,
 			Function: "setERC20",
 			Data:     paramsJson,
 		},
 		ABI: types.ZetoABI,
-	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
+	})
+	require.NoError(t, err)
 
+	log.L(ctx).Info("*************************************")
 	log.L(ctx).Infof("Mint two UTXOs (10, 20) from controller to controller")
+	log.L(ctx).Info("*************************************")
 	_, err = s.mint(ctx, zetoAddress, controllerName, []int64{10, 20})
 	require.NoError(t, err)
 
@@ -169,7 +171,9 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 
 	// for testing the batch circuits, we mint the 3rd UTXO
 	if useBatch {
+		log.L(ctx).Info("*************************************")
 		log.L(ctx).Infof("Mint 30 from controller to controller")
+		log.L(ctx).Info("*************************************")
 		_, err = s.mint(ctx, zetoAddress, controllerName, []int64{30})
 		require.NoError(t, err)
 	}
@@ -183,12 +187,16 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 		// for testing the batch circuits, we transfer 50 which would require 3 UTXOs (>2)
 		amount1 := 10
 		amount2 := 40
+		log.L(ctx).Info("*************************************")
 		log.L(ctx).Infof("Transfer %d from controller to recipient1 (%d) and recipient2 (%d)", amount1+amount2, amount1, amount2)
+		log.L(ctx).Info("*************************************")
 		_, err = s.transfer(ctx, zetoAddress, controllerName, []string{recipient1Name, recipient2Name}, []int64{int64(amount1), int64(amount2)})
 		require.NoError(t, err)
 	} else {
 		amount := 25
+		log.L(ctx).Info("*************************************")
 		log.L(ctx).Infof("Transfer %d from controller to recipient1", amount)
+		log.L(ctx).Info("*************************************")
 		_, err = s.transfer(ctx, zetoAddress, controllerName, []string{recipient1Name}, []int64{int64(amount)})
 		require.NoError(t, err)
 	}
@@ -201,14 +209,6 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	if useBatch {
 		expectedCoins = 3
 	}
-
-	// some tokens like Zeto_AnonNullifier with batch can take some time to process
-	// so we need to retry at least once
-	if len(coins) != expectedCoins {
-		time.Sleep(1 * time.Second)
-		coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
-	}
-
 	require.Len(t, coins, expectedCoins)
 
 	if useBatch {
@@ -222,8 +222,29 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 		assert.Equal(t, controllerAddr.String(), coins[1].Data.Owner.String())
 	}
 
-	log.L(ctx).Infof("Deposit from ERC20 balance to Zeto")
+	log.L(ctx).Infof("Mint 100 in ERC20 to controller")
+	err = s.mintERC20(ctx, *erc20Address, 100, controllerName, controllerEthAddr)
+	require.NoError(t, err)
 
+	log.L(ctx).Infof("Approve Zeto (%s) to spend from the controller account (%s)", zetoAddress.String(), controllerEthAddr)
+	err = s.approveERC20(ctx, *erc20Address, zetoAddress, 100, controllerName)
+	require.NoError(t, err)
+
+	log.L(ctx).Info("*************************************")
+	log.L(ctx).Infof("Deposit from ERC20 balance to Zeto")
+	log.L(ctx).Info("*************************************")
+	_, err = s.deposit(ctx, zetoAddress, controllerName, 100)
+	require.NoError(t, err)
+
+	expectedCoins += 2 // the deposit call produces 2 output UTXOs for the receiver
+	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
+	require.Len(t, coins, expectedCoins)
+
+	log.L(ctx).Info("*************************************")
+	log.L(ctx).Infof("Withdraw back to ERC20 balance from Zeto")
+	log.L(ctx).Info("*************************************")
+	_, err = s.withdraw(ctx, zetoAddress, controllerName, 100)
+	require.NoError(t, err)
 }
 
 func (s *zetoDomainTestSuite) setupContractsAbi(t *testing.T, ctx context.Context, tokenName string) {
@@ -299,11 +320,14 @@ func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.
 }
 
 func (s *zetoDomainTestSuite) deposit(ctx context.Context, zetoAddress tktypes.EthAddress, sender string, amount int64) (*testbed.TransactionResult, error) {
-	var invokeResult testbed.TransactionResult
-	paramsJson, err := json.Marshal(&map[string]int64{"amount": amount})
+	params := &types.DepositParams{
+		Amount: tktypes.Int64ToInt256(amount),
+	}
+	paramsJson, err := json.Marshal(params)
 	if err != nil {
 		return nil, err
 	}
+	var invokeResult testbed.TransactionResult
 	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			From:     sender,
@@ -317,6 +341,74 @@ func (s *zetoDomainTestSuite) deposit(ctx context.Context, zetoAddress tktypes.E
 		return nil, rpcerr.Error()
 	}
 	return &invokeResult, nil
+}
+
+func (s *zetoDomainTestSuite) withdraw(ctx context.Context, zetoAddress tktypes.EthAddress, sender string, amount int64) (*testbed.TransactionResult, error) {
+	params := &types.WithdrawParams{
+		Amount: tktypes.Int64ToInt256(amount),
+	}
+	paramsJson, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+	var invokeResult testbed.TransactionResult
+	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     sender,
+			To:       &zetoAddress,
+			Function: "withdraw",
+			Data:     paramsJson,
+		},
+		ABI: types.ZetoABI,
+	}, true)
+	if rpcerr != nil {
+		return nil, rpcerr.Error()
+	}
+	return &invokeResult, nil
+}
+
+func (s *zetoDomainTestSuite) mintERC20(ctx context.Context, erc20Address tktypes.EthAddress, amount int64, from, to string) error {
+	paramsJson, err := json.Marshal(&map[string]any{"amount": amount, "to": to})
+	if err != nil {
+		return err
+	}
+	build, err := getERC20Spec()
+	if err != nil {
+		return err
+	}
+	_, err = s.tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type:     pldapi.TransactionTypePublic.Enum(),
+			From:     from,
+			To:       &erc20Address,
+			Function: "mint",
+			Data:     paramsJson,
+		},
+		ABI: build.ABI,
+	})
+	return err
+}
+
+func (s *zetoDomainTestSuite) approveERC20(ctx context.Context, erc20Address, zetoAddress tktypes.EthAddress, amount int64, from string) error {
+	paramsJson, err := json.Marshal(&map[string]any{"spender": zetoAddress.String(), "value": amount})
+	if err != nil {
+		return err
+	}
+	build, err := getERC20Spec()
+	if err != nil {
+		return err
+	}
+	_, err = s.tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type:     pldapi.TransactionTypePublic.Enum(),
+			From:     from,
+			To:       &erc20Address,
+			Function: "approve",
+			Data:     paramsJson,
+		},
+		ABI: build.ABI,
+	})
+	return err
 }
 
 func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON, useNullifiers bool) []*types.ZetoCoinState {
@@ -369,12 +461,20 @@ func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[
 	return done, tb, rpc
 }
 
-func deployERC20(ctx context.Context, rpc rpcbackend.Backend, controllerAddr string) (*tktypes.EthAddress, error) {
+func getERC20Spec() (*solutils.SolidityBuild, error) {
 	bytes, err := os.ReadFile("./abis/SampleERC20.json")
 	if err != nil {
 		return nil, err
 	}
 	build := solutils.MustLoadBuildResolveLinks(bytes, map[string]*tktypes.EthAddress{})
+	return build, nil
+}
+
+func deployERC20(ctx context.Context, rpc rpcbackend.Backend, controllerAddr string) (*tktypes.EthAddress, error) {
+	build, err := getERC20Spec()
+	if err != nil {
+		return nil, err
+	}
 	params := fmt.Sprintf(`{"initialOwner":"%s"}`, controllerAddr)
 	var addr string
 	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deployBytecode", controllerName, build.ABI, build.Bytecode.String(), tktypes.RawJSON(params))
