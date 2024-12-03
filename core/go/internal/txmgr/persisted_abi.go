@@ -73,25 +73,25 @@ func (tm *txManager) getABIByHash(ctx context.Context, dbTX *gorm.DB, hash tktyp
 	return pa, nil
 }
 
-func (tm *txManager) storeABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*tktypes.Bytes32, error) {
-	pa, err := tm.UpsertABI(ctx, dbTX, a)
+func (tm *txManager) storeABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (func(), *tktypes.Bytes32, error) {
+	postCommit, pa, err := tm.UpsertABI(ctx, dbTX, a)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &pa.Hash, err
+	return postCommit, &pa.Hash, err
 }
 
-func (tm *txManager) UpsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*pldapi.StoredABI, error) {
+func (tm *txManager) UpsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (func(), *pldapi.StoredABI, error) {
 	hash, err := tktypes.ABISolDefinitionHash(ctx, a)
 	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidABI)
+		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidABI)
 	}
 
 	// If cached, nothing to do (note must not cache until written for this to be true)
 	pa, existing := tm.abiCache.Get(*hash)
 	if existing {
 		log.L(ctx).Debugf("ABI %s already cached", hash)
-		return pa, nil
+		return func() {}, pa, nil
 	}
 
 	// Grab all the error definitions for reverse lookup
@@ -135,12 +135,13 @@ func (tm *txManager) UpsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*
 			Error
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	// Now we can cache it
 	pa = &pldapi.StoredABI{Hash: *hash, ABI: a}
-	tm.abiCache.Set(*hash, pa)
-	return pa, err
+	return func() {
+		// Caching must only be done post-commit of the DB transaction
+		tm.abiCache.Set(*hash, pa)
+	}, pa, err
 }
 
 func (tm *txManager) queryABIs(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.StoredABI, error) {

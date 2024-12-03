@@ -116,7 +116,7 @@ func (s *syncPoints) PersistDeployDispatchBatch(ctx context.Context, dispatchBat
 	return err
 }
 
-func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB, dispatchOperations []*dispatchOperation) (pubTXCbs []func(), err error) {
+func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB, dispatchOperations []*dispatchOperation) (postCommits []func(), err error) {
 
 	// For each operation in the batch, we need to call the baseledger transaction manager to allocate its nonce
 	// which it can only guaranteed to be gapless and unique if it is done during the database transaction that inserts the dispatch record.
@@ -137,7 +137,7 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 				log.L(ctx).Errorf("Error submitting public transactions: %s", err)
 				return nil, err
 			}
-			pubTXCbs = append(pubTXCbs, pubTXCb)
+			postCommits = append(postCommits, pubTXCb)
 
 			//TODO this results in an `INSERT` for each dispatchSequence
 			//Would it be more efficient to pass an array for the whole flush?
@@ -183,10 +183,12 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 		if len(op.preparedTransactions) > 0 {
 			log.L(ctx).Debugf("Writing prepared transactions locally  %d", len(op.preparedTransactions))
 
-			if err := s.txMgr.WritePreparedTransactions(ctx, dbTX, op.preparedTransactions); err != nil {
+			txPostCommit, err := s.txMgr.WritePreparedTransactions(ctx, dbTX, op.preparedTransactions)
+			if err != nil {
 				log.L(ctx).Errorf("Error persisting prepared transactions: %s", err)
 				return nil, err
 			}
+			postCommits = append(postCommits, txPostCommit)
 		}
 
 		if len(op.preparedTxnDistributions) == 0 {
@@ -235,5 +237,5 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB,
 		}
 
 	}
-	return pubTXCbs, nil
+	return postCommits, nil
 }

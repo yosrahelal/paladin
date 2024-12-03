@@ -97,11 +97,11 @@ type TXManager interface {
 	GetPreparedTransactionByID(ctx context.Context, dbTX *gorm.DB, id uuid.UUID) (*pldapi.PreparedTransaction, error)
 	QueryPreparedTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.PreparedTransaction, error)
 	CallTransaction(ctx context.Context, result any, tx *pldapi.TransactionCall) (err error)
-	UpsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*pldapi.StoredABI, error)
+	UpsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (func(), *pldapi.StoredABI, error)
 
 	// These functions for use of the private TX manager for chaining private transactions.
 
-	PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*ValidatedTransaction, error)
+	PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (func(), *ValidatedTransaction, error)
 	UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX *gorm.DB, txis []*ValidatedTransaction) error
-	WritePreparedTransactions(ctx context.Context, dbTX *gorm.DB, prepared []*PrepareTransactionWithRefs) (err error)
+	WritePreparedTransactions(ctx context.Context, dbTX *gorm.DB, prepared []*PrepareTransactionWithRefs) (postCommit func(), err error)
 }
