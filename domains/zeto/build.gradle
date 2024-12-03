@@ -32,7 +32,7 @@ ext {
         "github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner",
     ]
 
-    zetoVersion = "v0.0.7"
+    zetoVersion = "v0.0.9"
     zetoHost = "hyperledger-labs"
     zkpOut = "${projectDir}/zkp"
     toolsOut = "${projectDir}/tools"
@@ -78,6 +78,7 @@ task downloadZetoProver {
     def outname = "zeto-wasm-${zetoVersion}.tar.gz"
     def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
+    inputs.file(f)
     doFirst {
         mkdir(f.parent)
         new URL(url).withInputStream{ i -> f.withOutputStream{ it << i }}
@@ -89,6 +90,7 @@ task downloadZetoTestProvingKeys {
     def outname = "zeto-test-proving-keys-${zetoVersion}.tar.gz"
     def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
+    inputs.file(f)
     doFirst {
         mkdir(f.parent)
         new URL(url).withInputStream{ i -> f.withOutputStream{ it << i }}
@@ -100,6 +102,7 @@ task downloadZetoCompiledContracts {
     def outname = "zeto-contracts-${zetoVersion}.tar.gz"
     def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
+    inputs.file(f)
     doFirst {
         mkdir(f.parent)
         new URL(url).withInputStream{ i -> f.withOutputStream{ it << i }}
