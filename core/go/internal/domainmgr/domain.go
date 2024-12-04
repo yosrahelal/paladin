@@ -154,9 +154,11 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 		}
 		stream.Sources = append(stream.Sources, blockindexer.EventStreamSource{ABI: eventsABI})
 
-		if _, err := d.dm.txManager.UpsertABI(d.ctx, d.dm.persistence.DB(), eventsABI); err != nil {
+		postCommit, _, err := d.dm.txManager.UpsertABI(d.ctx, d.dm.persistence.DB(), eventsABI)
+		if err != nil {
 			return nil, err
 		}
+		postCommit() // we didn't actually use a coordinated TX to call immediately
 	}
 
 	// We build a stream name in a way assured to result in a new stream if the ABI changes

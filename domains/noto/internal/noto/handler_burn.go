@@ -18,6 +18,7 @@ package noto
 import (
 	"context"
 	"encoding/json"
+	"math/big"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
@@ -31,30 +32,26 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
-type mintHandler struct {
+type burnHandler struct {
 	noto *Noto
 }
 
-func (h *mintHandler) ValidateParams(ctx context.Context, config *types.NotoParsedConfig, params string) (interface{}, error) {
-	var mintParams types.MintParams
-	if err := json.Unmarshal([]byte(params), &mintParams); err != nil {
+func (h *burnHandler) ValidateParams(ctx context.Context, config *types.NotoParsedConfig, params string) (interface{}, error) {
+	var BurnParams types.BurnParams
+	if err := json.Unmarshal([]byte(params), &BurnParams); err != nil {
 		return nil, err
 	}
-	if mintParams.To == "" {
-		return nil, i18n.NewError(ctx, msgs.MsgParameterRequired, "to")
-	}
-	if mintParams.Amount == nil || mintParams.Amount.Int().Sign() != 1 {
+	if BurnParams.Amount == nil || BurnParams.Amount.Int().Sign() != 1 {
 		return nil, i18n.NewError(ctx, msgs.MsgParameterGreaterThanZero, "amount")
 	}
-	return &mintParams, nil
+	return &BurnParams, nil
 }
 
-func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
-	params := tx.Params.(*types.MintParams)
+func (h *burnHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	notary := tx.DomainConfig.NotaryLookup
 
-	if tx.DomainConfig.RestrictMinting && req.Transaction.From != notary {
-		return nil, i18n.NewError(ctx, msgs.MsgMintOnlyNotary, notary, req.Transaction.From)
+	if !tx.DomainConfig.AllowBurning {
+		return nil, i18n.NewError(ctx, msgs.MsgNoBurning)
 	}
 	return &prototk.InitTransactionResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
@@ -68,38 +65,45 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
-			{
-				Lookup:       params.To,
-				Algorithm:    algorithms.ECDSA_SECP256K1,
-				VerifierType: verifiers.ETH_ADDRESS,
-			},
 		},
 	}, nil
 }
 
-func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
-	params := tx.Params.(*types.MintParams)
+func (h *burnHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
+	params := tx.Params.(*types.BurnParams)
 	notary := tx.DomainConfig.NotaryLookup
 
 	_, err := h.noto.findEthAddressVerifier(ctx, "notary", notary, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
-	toAddress, err := h.noto.findEthAddressVerifier(ctx, "to", params.To, req.ResolvedVerifiers)
+	fromAddress, err := h.noto.findEthAddressVerifier(ctx, "from", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
-	outputCoins, outputStates, err := h.noto.prepareOutputs(toAddress, params.Amount, []string{notary, params.To})
+	inputCoins, inputStates, total, err := h.noto.prepareInputs(ctx, req.StateQueryContext, fromAddress, params.Amount)
 	if err != nil {
 		return nil, err
 	}
-	encodedTransfer, err := h.noto.encodeTransferUnmasked(ctx, tx.ContractAddress, nil, outputCoins)
+	infoStates, err := h.noto.prepareInfo(params.Data, []string{notary, tx.Transaction.From})
 	if err != nil {
 		return nil, err
 	}
 
-	infoStates, err := h.noto.prepareInfo(params.Data, []string{notary, params.To})
+	var outputCoins []*types.NotoCoin
+	var outputStates []*prototk.NewState
+	if total.Cmp(params.Amount.Int()) == 1 {
+		remainder := big.NewInt(0).Sub(total, params.Amount.Int())
+		returnedCoins, returnedStates, err := h.noto.prepareOutputs(fromAddress, (*tktypes.HexUint256)(remainder), []string{notary, tx.Transaction.From})
+		if err != nil {
+			return nil, err
+		}
+		outputCoins = append(outputCoins, returnedCoins...)
+		outputStates = append(outputStates, returnedStates...)
+	}
+
+	encodedTransfer, err := h.noto.encodeTransferUnmasked(ctx, tx.ContractAddress, inputCoins, outputCoins)
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +111,7 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 	return &prototk.AssembleTransactionResponse{
 		AssemblyResult: prototk.AssembleTransactionResponse_OK,
 		AssembledTransaction: &prototk.AssembledTransaction{
+			InputStates:  inputStates,
 			OutputStates: outputStates,
 			InfoStates:   infoStates,
 		},
@@ -133,13 +138,16 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 	}, nil
 }
 
-func (h *mintHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
-	params := tx.Params.(*types.MintParams)
+func (h *burnHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
+	params := tx.Params.(*types.BurnParams)
 	coins, err := h.noto.gatherCoins(ctx, req.Inputs, req.Outputs)
 	if err != nil {
 		return nil, err
 	}
-	if err := h.noto.validateMintAmounts(ctx, params, coins); err != nil {
+	if err := h.noto.validateBurnAmounts(ctx, params, coins); err != nil {
+		return nil, err
+	}
+	if err := h.noto.validateOwners(ctx, tx, req, coins); err != nil {
 		return nil, err
 	}
 
@@ -152,7 +160,11 @@ func (h *mintHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, 
 	}, nil
 }
 
-func (h *mintHandler) baseLedgerMint(ctx context.Context, req *prototk.PrepareTransactionRequest) (*TransactionWrapper, error) {
+func (h *burnHandler) baseLedgerBurn(ctx context.Context, req *prototk.PrepareTransactionRequest) (*TransactionWrapper, error) {
+	inputs := make([]string, len(req.InputStates))
+	for i, state := range req.InputStates {
+		inputs[i] = state.Id
+	}
 	outputs := make([]string, len(req.OutputStates))
 	for i, state := range req.OutputStates {
 		outputs[i] = state.Id
@@ -169,7 +181,8 @@ func (h *mintHandler) baseLedgerMint(ctx context.Context, req *prototk.PrepareTr
 	if err != nil {
 		return nil, err
 	}
-	params := &NotoMintParams{
+	params := &NotoTransferParams{
+		Inputs:    inputs,
 		Outputs:   outputs,
 		Signature: sender.Payload,
 		Data:      data,
@@ -180,19 +193,15 @@ func (h *mintHandler) baseLedgerMint(ctx context.Context, req *prototk.PrepareTr
 	}
 	return &TransactionWrapper{
 		transactionType: prototk.PreparedTransaction_PUBLIC,
-		functionABI:     h.noto.contractABI.Functions()["mint"],
+		functionABI:     h.noto.contractABI.Functions()["transfer"],
 		paramsJSON:      paramsJSON,
 	}, nil
 }
 
-func (h *mintHandler) hookMint(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
-	inParams := tx.Params.(*types.MintParams)
+func (h *burnHandler) hookBurn(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
+	inParams := tx.Params.(*types.BurnParams)
 
 	fromAddress, err := h.noto.findEthAddressVerifier(ctx, "from", tx.Transaction.From, req.ResolvedVerifiers)
-	if err != nil {
-		return nil, err
-	}
-	toAddress, err := h.noto.findEthAddressVerifier(ctx, "to", inParams.To, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -201,9 +210,9 @@ func (h *mintHandler) hookMint(ctx context.Context, tx *types.ParsedTransaction,
 	if err != nil {
 		return nil, err
 	}
-	params := &MintHookParams{
+	params := &BurnHookParams{
 		Sender: fromAddress,
-		To:     toAddress,
+		From:   fromAddress,
 		Amount: inParams.Amount,
 		Prepared: PreparedTransaction{
 			ContractAddress: (*tktypes.EthAddress)(tx.ContractAddress),
@@ -212,12 +221,12 @@ func (h *mintHandler) hookMint(ctx context.Context, tx *types.ParsedTransaction,
 	}
 
 	transactionType := prototk.PreparedTransaction_PUBLIC
-	functionABI := solutils.MustLoadBuild(notoHooksJSON).ABI.Functions()["onMint"]
+	functionABI := solutils.MustLoadBuild(notoHooksJSON).ABI.Functions()["onBurn"]
 	var paramsJSON []byte
 
 	if tx.DomainConfig.PrivateAddress != nil {
 		transactionType = prototk.PreparedTransaction_PRIVATE
-		functionABI = penteInvokeABI("onMint", functionABI.Inputs)
+		functionABI = penteInvokeABI("onBurn", functionABI.Inputs)
 		penteParams := &PenteInvokeParams{
 			Group:  tx.DomainConfig.PrivateGroup,
 			To:     tx.DomainConfig.PrivateAddress,
@@ -241,13 +250,13 @@ func (h *mintHandler) hookMint(ctx context.Context, tx *types.ParsedTransaction,
 	}, nil
 }
 
-func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
-	baseTransaction, err := h.baseLedgerMint(ctx, req)
+func (h *burnHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
+	baseTransaction, err := h.baseLedgerBurn(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	if tx.DomainConfig.NotaryType == types.NotaryTypePente {
-		hookTransaction, err := h.hookMint(ctx, tx, req, baseTransaction)
+		hookTransaction, err := h.hookBurn(ctx, tx, req, baseTransaction)
 		if err != nil {
 			return nil, err
 		}

@@ -116,6 +116,7 @@ func TestInitContractOk(t *testing.T) {
 		"notaryLookup": "notary",
 		"notaryType": "0x0",
 		"restrictMinting": false,
+		"allowBurning": false,
 		"variant": "0x0"
 	}`, res.ContractConfig.ContractConfigJson)
 }

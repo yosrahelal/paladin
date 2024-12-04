@@ -98,8 +98,9 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 		})
 	defer done()
 
-	abiRef, err := txm.storeABI(ctx, txm.p.DB(), testABI)
+	postCommit, abiRef, err := txm.storeABI(ctx, txm.p.DB(), testABI)
 	require.NoError(t, err)
+	postCommit()
 
 	txID, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
@@ -111,7 +112,7 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	postCommit, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
+	postCommit, err = txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
 		[]*blockindexer.IndexedTransactionNotify{txi})
 	require.NoError(t, err)
 	postCommit()

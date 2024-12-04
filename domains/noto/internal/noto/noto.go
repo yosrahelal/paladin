@@ -217,9 +217,13 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 		NotaryLookup:    params.Notary,
 		NotaryType:      types.NotaryTypeSigner,
 		RestrictMinting: true,
+		AllowBurning:    true,
 	}
 	if params.RestrictMinting != nil {
 		deployData.RestrictMinting = *params.RestrictMinting
+	}
+	if params.AllowBurning != nil {
+		deployData.AllowBurning = *params.AllowBurning
 	}
 
 	if params.Hooks != nil && !params.Hooks.PublicAddress.IsZero() {
@@ -276,6 +280,7 @@ func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractReques
 			PrivateAddress:  domainConfig.DecodedData.PrivateAddress,
 			PrivateGroup:    domainConfig.DecodedData.PrivateGroup,
 			RestrictMinting: domainConfig.DecodedData.RestrictMinting,
+			AllowBurning:    domainConfig.DecodedData.AllowBurning,
 		}
 		notoContractConfigJSON, err = json.Marshal(parsedConfig)
 	}

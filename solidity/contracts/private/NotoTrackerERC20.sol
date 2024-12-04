@@ -39,4 +39,14 @@ contract NotoTrackerERC20 is INotoHooks, ERC20 {
     ) external {
         emit PenteExternalCall(prepared.contractAddress, prepared.encodedCall);
     }
+
+    function onBurn(
+        address sender,
+        address from,
+        uint256 amount,
+        PreparedTransaction calldata prepared
+    ) external override {
+        _burn(from, amount);
+        emit PenteExternalCall(prepared.contractAddress, prepared.encodedCall);
+    }
 }
