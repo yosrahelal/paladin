@@ -129,10 +129,10 @@ func TestPrepareOutputs(t *testing.T) {
 	assert.NoError(t, err)
 
 	sender.Verifier = "bad key"
-	_, _, err = zeto.prepareOutputForWithdraw(ctx, tktypes.Uint64ToUint256(100), []*prototk.ResolvedVerifier{sender})
+	_, _, err = zeto.prepareOutputForWithdraw(ctx, tktypes.Uint64ToUint256(100), sender)
 	assert.ErrorContains(t, err, "PD210037: Failed load owner public key.")
 
 	sender.Verifier = "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"
-	_, _, err = zeto.prepareOutputForWithdraw(ctx, tktypes.Uint64ToUint256(100), []*prototk.ResolvedVerifier{sender})
+	_, _, err = zeto.prepareOutputForWithdraw(ctx, tktypes.Uint64ToUint256(100), sender)
 	assert.NoError(t, err)
 }

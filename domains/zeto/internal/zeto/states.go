@@ -220,8 +220,7 @@ func (z *Zeto) prepareOutputsForDeposit(ctx context.Context, useNullifiers bool,
 	return coins, newStates, nil
 }
 
-func (z *Zeto) prepareOutputForWithdraw(ctx context.Context, amount *tktypes.HexUint256, resolvedVerifiers []*pb.ResolvedVerifier) (*types.ZetoCoin, *pb.NewState, error) {
-	resolvedRecipient := resolvedVerifiers[0]
+func (z *Zeto) prepareOutputForWithdraw(ctx context.Context, amount *tktypes.HexUint256, resolvedRecipient *pb.ResolvedVerifier) (*types.ZetoCoin, *pb.NewState, error) {
 	recipientKey, err := loadBabyJubKey([]byte(resolvedRecipient.Verifier))
 	if err != nil {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)

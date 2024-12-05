@@ -69,7 +69,7 @@ var withdrawABI_nullifiers = &abi.Entry{
 func (h *withdrawHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
 	var withdrawParams types.WithdrawParams
 	if err := json.Unmarshal([]byte(params), &withdrawParams); err != nil {
-		return nil, err
+		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeWithdrawCall, err)
 	}
 
 	if err := validateAmountParam(ctx, withdrawParams.Amount, 0); err != nil {
@@ -106,7 +106,7 @@ func (h *withdrawHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxInputs, err)
 	}
 
-	outputCoin, outputState, err := h.zeto.prepareOutputForWithdraw(ctx, tktypes.MustParseHexUint256(remainder.Text(10)), req.ResolvedVerifiers)
+	outputCoin, outputState, err := h.zeto.prepareOutputForWithdraw(ctx, tktypes.MustParseHexUint256(remainder.Text(10)), resolvedSender)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
@@ -253,7 +253,7 @@ func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins [
 
 	hash, err := outputCoin.Hash(ctx)
 	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorHashOutputState, err)
 	}
 	outputCommitment := hash.Int().Text(16)
 	outputValueInt := outputCoin.Amount.Int().Uint64()

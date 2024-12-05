@@ -247,6 +247,7 @@ func TestTransferAssemble(t *testing.T) {
 		}, nil
 
 	}
+	h.zeto.Callbacks = testCallbacks
 	res, err = h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Len(t, res.AssembledTransaction.OutputStates, 2)
