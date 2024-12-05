@@ -184,7 +184,7 @@ func (z *Zeto) prepareOutputsForTransfer(ctx context.Context, useNullifiers bool
 	return coins, newStates, nil
 }
 
-func (z *Zeto) prepareOutputsForDeposit(ctx context.Context, useNullifiers bool, amount *tktypes.HexUint256, resolvedVerifiers []*pb.ResolvedVerifier) ([]*types.ZetoCoin, []*pb.NewState, error) {
+func (z *Zeto) prepareOutputsForDeposit(ctx context.Context, useNullifiers bool, amount *tktypes.HexUint256, resolvedSender *pb.ResolvedVerifier) ([]*types.ZetoCoin, []*pb.NewState, error) {
 	var coins []*types.ZetoCoin
 	// the token implementation allows up to 2 output states, we will use one of them
 	// to bear the deposit amount, and set the other to value of 0. we randomize
@@ -196,7 +196,7 @@ func (z *Zeto) prepareOutputsForDeposit(ctx context.Context, useNullifiers bool,
 	amounts[randomIdx] = amount
 	amounts[size-randomIdx-1] = tktypes.MustParseHexUint256("0x0")
 	for _, amt := range amounts {
-		resolvedRecipient := resolvedVerifiers[0]
+		resolvedRecipient := resolvedSender
 		recipientKey, err := loadBabyJubKey([]byte(resolvedRecipient.Verifier))
 		if err != nil {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)

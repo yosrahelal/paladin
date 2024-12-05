@@ -53,7 +53,7 @@ var depositABI = &abi.Entry{
 func (h *depositHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
 	var depositParams types.DepositParams
 	if err := json.Unmarshal([]byte(params), &depositParams); err != nil {
-		return nil, err
+		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeDepositCall, err)
 	}
 
 	if err := validateAmountParam(ctx, depositParams.Amount, 0); err != nil {
@@ -85,7 +85,7 @@ func (h *depositHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 	}
 
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	outputCoins, outputStates, err := h.zeto.prepareOutputsForDeposit(ctx, useNullifiers, amount, req.ResolvedVerifiers)
+	outputCoins, outputStates, err := h.zeto.prepareOutputsForDeposit(ctx, useNullifiers, amount, resolvedSender)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
@@ -194,19 +194,15 @@ func (h *depositHandler) formatProvingRequest(ctx context.Context, outputCoins [
 	outputSalts := make([]string, outputSize)
 	outputOwners := make([]string, outputSize)
 	for i := 0; i < outputSize; i++ {
-		if i < len(outputCoins) {
-			coin := outputCoins[i]
-			hash, err := coin.Hash(ctx)
-			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
-			}
-			outputCommitments[i] = hash.Int().Text(16)
-			outputValueInts[i] = coin.Amount.Int().Uint64()
-			outputSalts[i] = coin.Salt.Int().Text(16)
-			outputOwners[i] = coin.Owner.String()
-		} else {
-			outputSalts[i] = "0"
+		coin := outputCoins[i]
+		hash, err := coin.Hash(ctx)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
 		}
+		outputCommitments[i] = hash.Int().Text(16)
+		outputValueInts[i] = coin.Amount.Int().Uint64()
+		outputSalts[i] = coin.Salt.Int().Text(16)
+		outputOwners[i] = coin.Owner.String()
 	}
 
 	payload := &corepb.ProvingRequest{
