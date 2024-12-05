@@ -32,7 +32,7 @@ ext {
         "github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner",
     ]
 
-    zetoVersion = "v0.0.9"
+    zetoVersion = "v0.0.10"
     zetoHost = "hyperledger-labs"
     zkpOut = "${projectDir}/zkp"
     toolsOut = "${projectDir}/tools"
@@ -74,11 +74,10 @@ dependencies {
     coreGo project(path: ":core:go", configuration: "goSource")
 }
 
-task downloadZetoProver {
+task downloadZetoProver(dependsOn: "protoc") {
     def outname = "zeto-wasm-${zetoVersion}.tar.gz"
     def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
-    inputs.file(f)
     doFirst {
         mkdir(f.parent)
         new URL(url).withInputStream{ i -> f.withOutputStream{ it << i }}
@@ -86,11 +85,10 @@ task downloadZetoProver {
     outputs.file(f)
 }
 
-task downloadZetoTestProvingKeys {
+task downloadZetoTestProvingKeys(dependsOn: "protoc") {
     def outname = "zeto-test-proving-keys-${zetoVersion}.tar.gz"
     def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
-    inputs.file(f)
     doFirst {
         mkdir(f.parent)
         new URL(url).withInputStream{ i -> f.withOutputStream{ it << i }}
@@ -98,11 +96,10 @@ task downloadZetoTestProvingKeys {
     outputs.file(f)
 }
 
-task downloadZetoCompiledContracts {
+task downloadZetoCompiledContracts(dependsOn: "protoc") {
     def outname = "zeto-contracts-${zetoVersion}.tar.gz"
     def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
-    inputs.file(f)
     doFirst {
         mkdir(f.parent)
         new URL(url).withInputStream{ i -> f.withOutputStream{ it << i }}
@@ -220,7 +217,7 @@ task testE2E(type: Exec, dependsOn: [protoc, copySolidity, copySolidityForTest, 
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task unitTests(type: Exec, dependsOn: [protoc, ":core:go:makeMocks"]) {
+task unitTests(type: Exec, dependsOn: [protoc, ":core:go:makeMocks", downloadZetoCompiledContracts]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
