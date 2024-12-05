@@ -259,7 +259,11 @@ func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		a abi.ABI,
 	) (*tktypes.Bytes32, error) {
-		return tm.storeABI(ctx, tm.p.DB(), a)
+		postCommit, abiHashRef, err := tm.storeABI(ctx, tm.p.DB(), a)
+		if err == nil {
+			postCommit()
+		}
+		return abiHashRef, err
 	})
 }
 

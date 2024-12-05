@@ -73,7 +73,7 @@ var defaultConstructorSignature = func() string {
 	return sig
 }()
 
-func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputABI abi.ABI, inputABIRef *tktypes.Bytes32, requiredFunction string, to *tktypes.EthAddress) (_ *components.ResolvedFunction, err error) {
+func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputABI abi.ABI, inputABIRef *tktypes.Bytes32, requiredFunction string, to *tktypes.EthAddress) (postCommit func(), _ *components.ResolvedFunction, err error) {
 
 	// Lookup the ABI we're working with.
 	// Only needs to contain the function definition we're calling, but can be the whole ABI of the contract.
@@ -81,28 +81,29 @@ func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputAB
 	var pa *pldapi.StoredABI
 	if inputABIRef != nil {
 		if inputABI != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgTxMgrABIAndDefinition)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrABIAndDefinition)
 		}
 		pa, err = tm.getABIByHash(ctx, dbTX, *inputABIRef)
+		postCommit = func() {}
 	} else {
 		if len(inputABI) == 0 {
 			if to != nil {
-				return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrNoABIOrReference)
+				return nil, nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrNoABIOrReference)
 			}
 			// it's convenient to do a deploy without a constructor, of bytecode with no
 			// parameters - treat this as an ABI with just the default constructor
 			// (we need something to hash to an abiReference in all cases)
 			inputABI = abi.ABI{defaultConstructor}
 		}
-		pa, err = tm.UpsertABI(ctx, dbTX, inputABI)
+		postCommit, pa, err = tm.UpsertABI(ctx, dbTX, inputABI)
 	}
 	if err != nil || pa == nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrABIReferenceLookupFailed, inputABIRef)
+		return postCommit, nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrABIReferenceLookupFailed, inputABIRef)
 	}
 
 	// If a function is specified, we cannot be invoking the constructor
 	if requiredFunction != "" && to == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgTxMgrFunctionWithoutTo)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrFunctionWithoutTo)
 	}
 
 	// Find the function in the ABI that we're invoking
@@ -130,7 +131,7 @@ func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputAB
 			oldSelector := functionSignature
 			functionSignature, _ = e.Signature()
 			if oldSelector != "" {
-				return nil, i18n.NewError(ctx, msgs.MsgTxMgrFunctionMultiMatch, oldSelector, functionSignature)
+				return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrFunctionMultiMatch, oldSelector, functionSignature)
 			}
 			selectedFunction = e
 		}
@@ -141,11 +142,11 @@ func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputAB
 			selectedFunction = defaultConstructor
 			functionSignature = defaultConstructorSignature
 		} else {
-			return nil, i18n.NewError(ctx, msgs.MsgTxMgrFunctionNoMatch)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrFunctionNoMatch)
 		}
 	}
 	log.L(ctx).Debugf("Function selected: %s", selectedFunction.SolString())
-	return &components.ResolvedFunction{
+	return postCommit, &components.ResolvedFunction{
 		ABI:          pa.ABI,
 		ABIReference: &pa.Hash,
 		Definition:   selectedFunction,
@@ -233,10 +234,11 @@ func (tm *txManager) PrepareTransaction(ctx context.Context, tx *pldapi.Transact
 
 func (tm *txManager) CallTransaction(ctx context.Context, result any, call *pldapi.TransactionCall) (err error) {
 
-	txi, err := tm.resolveNewTransaction(ctx, tm.p.DB(), &call.TransactionInput, pldapi.SubmitModeCall)
+	abiPostCommit, txi, err := tm.resolveNewTransaction(ctx, tm.p.DB(), &call.TransactionInput, pldapi.SubmitModeCall)
 	if err != nil {
 		return err
 	}
+	abiPostCommit() // we did not use a coordinated transaction, so call straight away
 
 	serializer, err := call.DataFormat.GetABISerializer(ctx)
 	if err != nil {
@@ -303,10 +305,10 @@ func (tm *txManager) callTransactionPublic(ctx context.Context, result any, call
 	return err
 }
 
-func (tm *txManager) PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*components.ValidatedTransaction, error) {
+func (tm *txManager) PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (func(), *components.ValidatedTransaction, error) {
 	tx.Type = pldapi.TransactionTypePrivate.Enum()
 	if tx.IdempotencyKey == "" {
-		return nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateChainedTXIdemKey)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateChainedTXIdemKey)
 	}
 	return tm.resolveNewTransaction(ctx, dbTX, tx, submitMode)
 }
@@ -406,11 +408,23 @@ func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, 
 	var publicTxSenders []string
 	txis := make([]*components.ValidatedTransaction, len(txs))
 	txIDs = make([]uuid.UUID, len(txs))
+
+	var abiPostCommits []func()
+	var writeTxPostCommit func()
+	postCommit = func() {
+		for _, fn := range abiPostCommits {
+			fn()
+		}
+		if writeTxPostCommit != nil {
+			writeTxPostCommit()
+		}
+	}
 	for i, tx := range txs {
-		txi, err := tm.resolveNewTransaction(ctx, dbTX, tx, submitMode)
+		abiPostCommit, txi, err := tm.resolveNewTransaction(ctx, dbTX, tx, submitMode)
 		if err != nil {
 			return nil, nil, err
 		}
+		abiPostCommits = append(abiPostCommits, abiPostCommit)
 		txID := *txi.Transaction.ID
 		txis[i] = txi
 		txIDs[i] = txID
@@ -452,9 +466,8 @@ func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, 
 	}
 
 	// Insert any public txns (validated above)
-	postCommit = func() {}
 	if len(publicTxs) > 0 {
-		if postCommit, _, err = tm.publicTxMgr.WriteNewTransactions(ctx, dbTX, publicTxs); err != nil {
+		if writeTxPostCommit, _, err = tm.publicTxMgr.WriteNewTransactions(ctx, dbTX, publicTxs); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -496,7 +509,7 @@ func (tm *txManager) checkIdempotencyKeys(ctx context.Context, origErr error, tx
 	return origErr
 }
 
-func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*components.ValidatedTransaction, error) {
+func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (func(), *components.ValidatedTransaction, error) {
 	txID := uuid.New()
 	// Useful to have a correlation from transactionID to idempotencyKey in the logs
 	log.L(ctx).Debugf("Resolving new transaction TransactionID: %s, idempotencyKey: %s ", txID, tx.IdempotencyKey)
@@ -505,20 +518,20 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, t
 	case pldapi.TransactionTypePrivate:
 	case pldapi.TransactionTypePublic:
 		if submitMode == pldapi.SubmitModeExternal {
-			return nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateOnlyForPrepare)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateOnlyForPrepare)
 		}
 	default:
 		// Note autofuel transactions can only be created internally within the public TX manager
-		return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidTXType)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidTXType)
 	}
 
 	// We resolve the function outside of a DB transaction, because it's idempotent processing
 	// and needs to happen before we open the DB transaction that is used by the public TX manager.
 	// Note there is only a DB cost for read if we haven't cached the function, and there
 	// is only a DB cost for write, if it's the first time we've invoked the function.
-	fn, err := tm.resolveFunction(ctx, dbTX, tx.ABI, tx.ABIReference, tx.Function, tx.To)
+	postCommit, fn, err := tm.resolveFunction(ctx, dbTX, tx.ABI, tx.ABIReference, tx.Function, tx.To)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var publicTxData []byte
@@ -527,7 +540,7 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, t
 		publicTxData, err = tm.getPublicTxData(ctx, fn.Definition, tx.Bytecode, cv)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var localFrom string
@@ -537,13 +550,13 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, t
 
 		identifier, node, err := tktypes.PrivateIdentityLocator(tx.From).Validate(ctx, tm.localNodeName, false)
 		if err != nil || node != tm.localNodeName {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrPublicSenderNotValidLocal, tx.From)
+			return nil, nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrPublicSenderNotValidLocal, tx.From)
 		}
 		localFrom = identifier
 		tx.From = fmt.Sprintf("%s@%s", identifier, node)
 	}
 
-	return &components.ValidatedTransaction{
+	return postCommit, &components.ValidatedTransaction{
 		LocalFrom: localFrom,
 		Transaction: &pldapi.Transaction{
 			TransactionBase: tx.TransactionBase,

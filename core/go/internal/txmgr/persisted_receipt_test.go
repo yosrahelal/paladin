@@ -167,7 +167,7 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 		},
 		ABI: exampleABI,
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = txm.p.DB().Transaction(func(tx *gorm.DB) error {
 		return txm.FinalizeTransactions(ctx, tx, []*components.ReceiptInput{
@@ -355,8 +355,9 @@ func TestDecodeCall(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, true)
 	defer done()
 
-	_, err := txm.storeABI(ctx, txm.p.DB(), sampleABI)
+	postCommit, _, err := txm.storeABI(ctx, txm.p.DB(), sampleABI)
 	require.NoError(t, err)
+	postCommit()
 
 	validCall, err := sampleABI.Functions()["set"].EncodeCallDataJSON([]byte(`[12345]`))
 	require.NoError(t, err)
@@ -390,8 +391,9 @@ func TestDecodeEvent(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, true)
 	defer done()
 
-	_, err := txm.storeABI(ctx, txm.p.DB(), sampleABI)
+	postCommit, _, err := txm.storeABI(ctx, txm.p.DB(), sampleABI)
 	require.NoError(t, err)
+	postCommit()
 
 	validTopic0 := tktypes.Bytes32(sampleABI.Events()["Updated"].SignatureHashBytes())
 	validTopic1, err := (&abi.ParameterArray{{Type: "uint256"}}).EncodeABIDataJSON([]byte(`["12345"]`))

@@ -36,6 +36,13 @@ type TransferHookParams struct {
 	Prepared PreparedTransaction `json:"prepared"`
 }
 
+type BurnHookParams struct {
+	Sender   *tktypes.EthAddress `json:"sender"`
+	From     *tktypes.EthAddress `json:"from"`
+	Amount   *tktypes.HexUint256 `json:"amount"`
+	Prepared PreparedTransaction `json:"prepared"`
+}
+
 type ApproveTransferHookParams struct {
 	Sender   *tktypes.EthAddress `json:"sender"`
 	From     *tktypes.EthAddress `json:"from"`
