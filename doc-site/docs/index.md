@@ -6,7 +6,7 @@ Paladin provides programmable privacy for EVM.
 
 Paladin gives enterprises control of sensitive information without compromising transparency or scalability.
 
-The Paladin code base is open source, Apache 2.0 licensing and is maintained in an open source community that provides open governance and open development, as part of [Linux Foundation Decentralized Trust](https://www.lfdecentralizedtrust.org).
+The Paladin is Apache 2.0 open source, with open governance through [Linux Foundation Decentralized Trust](https://www.lfdecentralizedtrust.org).
 
 ## Programmable privacy for EVM
 

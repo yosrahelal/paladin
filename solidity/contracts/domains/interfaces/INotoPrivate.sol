@@ -19,6 +19,11 @@ interface INotoPrivate {
         bytes calldata data
     ) external;
 
+    function burn(
+        uint256 amount,
+        bytes calldata data
+    ) external;
+
     function approveTransfer(
         StateEncoded[] calldata inputs,
         StateEncoded[] calldata outputs,

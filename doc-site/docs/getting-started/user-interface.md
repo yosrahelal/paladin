@@ -18,21 +18,22 @@ Each Paladin node runs an instance of the Paladin UI at the path `/ui`. If you u
 
 ### Indexer
 
+The indexer panel displays recent transactions and events. 
+
 <img src="../../images/ui-indexer.png" alt="Indexer" style=" box-shadow: 0px 0px 15px 0px rgba(0,0,0,0.57">
 
-The indexer panel displays recent transactions and events. Clicking on `View Details` brings up detailed information on a transaction or event:
+Clicking on `View Details` brings up detailed information on a transaction or event:
 
 <img src="../../images/ui-transaction.png" alt="Transaction" style=" box-shadow: 0px 0px 15px 0px rgba(0,0,0,0.57">
 
 ### Submissions
 
-<img src="../../images/ui-submissions.png" alt="Submissions" style=" box-shadow: 0px 0px 15px 0px rgba(0,0,0,0.57">
-
-
 The submissions panel displays recent transactions that have been submitted with an option to display only those in pending state.
+
+<img src="../../images/ui-submissions.png" alt="Submissions" style=" box-shadow: 0px 0px 15px 0px rgba(0,0,0,0.57">
 
 ### Registry
 
-<img src="../../images/ui-registry.png" alt="Registry" style=" box-shadow: 0px 0px 15px 0px rgba(0,0,0,0.57">
-
 The registry panel displays the list of Paladin nodes.
+
+<img src="../../images/ui-registry.png" alt="Registry" style=" box-shadow: 0px 0px 15px 0px rgba(0,0,0,0.57">
