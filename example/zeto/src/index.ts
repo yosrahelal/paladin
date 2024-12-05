@@ -5,6 +5,7 @@ import PaladinClient, {
   TransactionType,
   Verifiers,
 } from "paladin-sdk";
+import erc20Abi from "./abis/SampleERC20.json";
 
 const logger = console;
 
@@ -33,7 +34,46 @@ async function main() {
     logger.error("Failed!");
     return;
   }
-  logger.log(`Success! address: ${zetoCBDC.address}`);
+  logger.log(`Success! Zeto deployed at: ${zetoCBDC.address}`);
+
+  logger.log("Deploying ERC20 token...");
+  const cbdcIssuerAddress = await paladin1.resolveVerifier(
+    cbdcIssuer,
+    Algorithms.ECDSA_SECP256K1,
+    Verifiers.ETH_ADDRESS
+  );
+
+  const txId = await paladin3.sendTransaction({
+    type: TransactionType.PUBLIC,
+    from: cbdcIssuer,
+    data: {
+      "initialOwner": cbdcIssuerAddress,
+    },
+    function: "",
+    abi: erc20Abi.abi,
+    bytecode: erc20Abi.bytecode,
+  });
+  if (txId === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  const result1 = await paladin3.pollForReceipt(txId, 5000);
+  if (result1 === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  const erc20Address = result1.contractAddress;
+  logger.log(`Success! ERC20 deployed at: ${erc20Address}`);
+
+  logger.log("Setting ERC20 to the Zeto token contract ...");
+  const result2 = await zetoCBDC.setERC20(cbdcIssuer, {
+    _erc20: erc20Address as string
+  });
+  if (result1 === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  logger.log(`Success! ERC20 configured on the Zeto contract`);
 
   // Issue some cash
   logger.log("Issuing CBDC to bank1 and bank2 ...");
