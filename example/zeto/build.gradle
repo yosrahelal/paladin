@@ -50,7 +50,7 @@ task install(type: Exec) {
     outputs.dir("node_modules")
 }
 
-task build(type: Exec, dependsOn: [install]) {
+task build(type: Exec, dependsOn: [install, copyContracts]) {
     executable 'npm'
     args 'run'
     args 'build'
