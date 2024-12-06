@@ -22,8 +22,6 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
-	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
@@ -53,7 +51,7 @@ var depositABI = &abi.Entry{
 func (h *depositHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
 	var depositParams types.DepositParams
 	if err := json.Unmarshal([]byte(params), &depositParams); err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeDepositCall, err)
+		return nil, err
 	}
 
 	if err := validateAmountParam(ctx, depositParams.Amount, 0); err != nil {
@@ -84,23 +82,26 @@ func (h *depositHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 		return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, tx.Transaction.From)
 	}
 
-	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	outputCoins, outputStates, err := h.zeto.prepareOutputsForDeposit(ctx, useNullifiers, amount, resolvedSender)
+	outputCoins, outputStates, err := h.zeto.prepareOutputsForDeposit(ctx, amount, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
 
-	payloadBytes, err := h.formatProvingRequest(ctx, outputCoins)
+	contractAddress, err := tktypes.ParseEthAddress(req.Transaction.ContractInfo.ContractAddress)
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
+	}
+	payloadBytes, err := h.formatProvingRequest(ctx, outputCoins, tx.DomainConfig.CircuitId, tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
 
-	amountStr := amount.Int().Text(10)
+	amountStr := amount.String()
 	return &pb.AssembleTransactionResponse{
 		AssemblyResult: pb.AssembleTransactionResponse_OK,
 		AssembledTransaction: &pb.AssembledTransaction{
 			OutputStates: outputStates,
-			DomainData:   &amountStr,
+			ExtraData:    &amountStr,
 		},
 		AttestationPlan: []*pb.AttestationRequest{
 			{
@@ -139,7 +140,7 @@ func (h *depositHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 		return nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalProvingRes, err)
 	}
 
-	outputSize := common.GetInputSize(len(req.OutputStates))
+	outputSize := getInputSize(len(req.OutputStates))
 	outputs := make([]string, outputSize)
 	for i := 0; i < outputSize; i++ {
 		if i < len(req.OutputStates) {
@@ -162,7 +163,7 @@ func (h *depositHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}
-	amount := tktypes.MustParseHexUint256(*req.DomainData)
+	amount := tktypes.MustParseHexUint256(*req.ExtraData)
 	params := map[string]any{
 		"amount":  amount.Int().Text(10),
 		"outputs": outputs,
@@ -187,26 +188,30 @@ func (h *depositHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 	}, nil
 }
 
-func (h *depositHandler) formatProvingRequest(ctx context.Context, outputCoins []*types.ZetoCoin) ([]byte, error) {
-	outputSize := common.GetInputSize(len(outputCoins))
+func (h *depositHandler) formatProvingRequest(ctx context.Context, outputCoins []*types.ZetoCoin, circuitId, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
+	outputSize := getInputSize(len(outputCoins))
 	outputCommitments := make([]string, outputSize)
 	outputValueInts := make([]uint64, outputSize)
 	outputSalts := make([]string, outputSize)
 	outputOwners := make([]string, outputSize)
 	for i := 0; i < outputSize; i++ {
-		coin := outputCoins[i]
-		hash, err := coin.Hash(ctx)
-		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
+		if i < len(outputCoins) {
+			coin := outputCoins[i]
+			hash, err := coin.Hash(ctx)
+			if err != nil {
+				return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
+			}
+			outputCommitments[i] = hash.Int().Text(16)
+			outputValueInts[i] = coin.Amount.Int().Uint64()
+			outputSalts[i] = coin.Salt.Int().Text(16)
+			outputOwners[i] = coin.Owner.String()
+		} else {
+			outputSalts[i] = "0"
 		}
-		outputCommitments[i] = hash.Int().Text(16)
-		outputValueInts[i] = coin.Amount.Int().Uint64()
-		outputSalts[i] = coin.Salt.Int().Text(16)
-		outputOwners[i] = coin.Owner.String()
 	}
 
 	payload := &corepb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_DEPOSIT,
+		CircuitId: circuitId,
 		Common: &corepb.ProvingRequestCommon{
 			OutputCommitments: outputCommitments,
 			OutputValues:      outputValueInts,
