@@ -121,7 +121,7 @@ public class NotoHelper {
         return address;
     }
 
-    private static Testbed.TransactionResult getTransactionInfo(LinkedHashMap<String, Object> res) {
+    private static Testbed.TransactionResult getTransactionResult(LinkedHashMap<String, Object> res) {
         return new ObjectMapper().convertValue(res, Testbed.TransactionResult.class);
     }
 
@@ -165,7 +165,7 @@ public class NotoHelper {
     }
 
     public Testbed.TransactionResult prepareTransfer(String sender, String to, int amount) throws IOException {
-        return getTransactionInfo(
+        return getTransactionResult(
                 testbed.getRpcClient().request("testbed_prepare", new Testbed.TransactionInput(
                         "private",
                         "",

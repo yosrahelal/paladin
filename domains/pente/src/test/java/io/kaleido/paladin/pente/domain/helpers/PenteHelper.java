@@ -96,7 +96,7 @@ public class PenteHelper {
         return address;
     }
 
-    private static Testbed.TransactionResult getTransactionInfo(LinkedHashMap<String, Object> res) {
+    private static Testbed.TransactionResult getTransactionResult(LinkedHashMap<String, Object> res) {
         return new ObjectMapper().convertValue(res, Testbed.TransactionResult.class);
     }
 
@@ -114,7 +114,7 @@ public class PenteHelper {
                 JsonABI.newParameters()
         );
 
-        var tx = getTransactionInfo(
+        var tx = getTransactionResult(
                 testbed.getRpcClient().request("testbed_invoke", new Testbed.TransactionInput(
                         "private",
                         "",
@@ -132,7 +132,7 @@ public class PenteHelper {
         return domainData.contractAddress();
     }
 
-    public void invoke(String methodName, JsonABI.Parameters inputParams, String sender, JsonHex.Address privateAddress, Object inputValues) throws IOException {
+    public Testbed.TransactionResult invoke(String methodName, JsonABI.Parameters inputParams, String sender, JsonHex.Address privateAddress, Object inputValues) throws IOException {
         JsonABI.Entry invokeABI = JsonABI.newFunction(
                 methodName,
                 JsonABI.newParameters(
@@ -146,20 +146,21 @@ public class PenteHelper {
                 JsonABI.newParameters()
         );
 
-        testbed.getRpcClient().request("testbed_invoke",
-                new Testbed.TransactionInput(
-                        "private",
-                        "",
-                        sender,
-                        JsonHex.addressFrom(address),
-                        new HashMap<>() {{
-                            put("group", groupInfo);
-                            put("to", privateAddress);
-                            put("inputs", inputValues);
-                        }},
-                        new JsonABI(List.of(invokeABI)),
-                        ""
-                ), true);
+        return getTransactionResult(
+                testbed.getRpcClient().request("testbed_invoke",
+                        new Testbed.TransactionInput(
+                                "private",
+                                "",
+                                sender,
+                                JsonHex.addressFrom(address),
+                                new HashMap<>() {{
+                                    put("group", groupInfo);
+                                    put("to", privateAddress);
+                                    put("inputs", inputValues);
+                                }},
+                                new JsonABI(List.of(invokeABI)),
+                                ""
+                        ), true));
     }
 
     public PenteCallOutputJSON call(String methodName, JsonABI.Parameters inputParams, JsonABI.Parameters outputParams, String sender, JsonHex.Address privateAddress, Object inputValues) throws IOException {
@@ -194,7 +195,7 @@ public class PenteHelper {
     }
 
     public Testbed.TransactionResult prepare(String sender, JsonABI.Entry fn, Map<String, Object> inputs) throws IOException {
-        return getTransactionInfo(
+        return getTransactionResult(
                 testbed.getRpcClient().request("testbed_prepare", new Testbed.TransactionInput(
                         "private",
                         "",

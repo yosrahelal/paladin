@@ -279,20 +279,19 @@ public class BondTest {
             bondSubscription.preparePayment(alice, paymentTransfer.preparedTransaction().to(), paymentMetadata.transferWithApproval().encodedCall());
 
             // Alice receives full bond distribution
-            bondSubscription.distribute(bondCustodian);
+            var distributeTX = bondSubscription.distribute(bondCustodian);
 
-            // Look up the deployed Atom
-            // TODO: use the AtomDeployed event instead of this method
-            HashMap<String, Object> queryResult = testbed.getRpcClient().request("ptx_call",
-                    new Testbed.TransactionInput(
-                            "public",
-                            "",
-                            bondCustodian,
-                            JsonHex.addressFrom(atomFactoryAddress),
-                            new HashMap<>(),
-                            atomFactoryABI,
-                            "lastDeploy"));
-            var atomAddress = JsonHex.addressFrom(queryResult.get("0").toString());
+            // Look up the deployed Atom address
+            HashMap<String, Object> distributeReceipt = testbed.getRpcClient().request("ptx_getTransactionReceipt", distributeTX.id());
+            String distributeTXHash = distributeReceipt.get("transactionHash").toString();
+            List<HashMap<String, Object>> events = testbed.getRpcClient().request("bidx_decodeTransactionEvents",
+                    distributeTXHash,
+                    atomFactoryABI,
+                    "");
+            var deployEvent = events.stream().filter(ev -> ev.get("soliditySignature").toString().startsWith("event AtomDeployed")).findFirst();
+            assertFalse(deployEvent.isEmpty());
+            var deployEventData = (HashMap<String, Object>) deployEvent.get().get("data");
+            var atomAddress = JsonHex.addressFrom(deployEventData.get("addr").toString());
 
             // Alice approves payment transfer
             notoCash.approveTransfer(
