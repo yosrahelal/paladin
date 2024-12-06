@@ -95,17 +95,25 @@ func (z *Zeto) makeNewState(ctx context.Context, useNullifiers bool, coin *types
 	return newState, nil
 }
 
-func (z *Zeto) prepareInputs(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, params []*types.TransferParamEntry) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
-	var lastStateTimestamp int64
-	total := big.NewInt(0)
-	stateRefs := []*pb.StateRef{}
-	coins := []*types.ZetoCoin{}
-
+func (z *Zeto) prepareInputsForTransfer(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, params []*types.TransferParamEntry) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
 	expectedTotal := big.NewInt(0)
 	for _, param := range params {
 		expectedTotal = expectedTotal.Add(expectedTotal, param.Amount.Int())
 	}
 
+	return z.buildInputsForExpectedTotal(ctx, useNullifiers, stateQueryContext, senderKey, expectedTotal)
+}
+
+func (z *Zeto) prepareInputsForWithdraw(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, amount *tktypes.HexUint256) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
+	expectedTotal := amount.Int()
+	return z.buildInputsForExpectedTotal(ctx, useNullifiers, stateQueryContext, senderKey, expectedTotal)
+}
+
+func (z *Zeto) buildInputsForExpectedTotal(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, expectedTotal *big.Int) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
+	var lastStateTimestamp int64
+	total := big.NewInt(0)
+	stateRefs := []*pb.StateRef{}
+	coins := []*types.ZetoCoin{}
 	for {
 		queryBuilder := query.NewQueryBuilder().
 			Limit(10).
@@ -176,7 +184,7 @@ func (z *Zeto) prepareOutputsForTransfer(ctx context.Context, useNullifiers bool
 	return coins, newStates, nil
 }
 
-func (z *Zeto) prepareOutputsForDeposit(ctx context.Context, amount *tktypes.HexUint256, resolvedVerifiers []*pb.ResolvedVerifier) ([]*types.ZetoCoin, []*pb.NewState, error) {
+func (z *Zeto) prepareOutputsForDeposit(ctx context.Context, useNullifiers bool, amount *tktypes.HexUint256, resolvedSender *pb.ResolvedVerifier) ([]*types.ZetoCoin, []*pb.NewState, error) {
 	var coins []*types.ZetoCoin
 	// the token implementation allows up to 2 output states, we will use one of them
 	// to bear the deposit amount, and set the other to value of 0. we randomize
@@ -188,7 +196,7 @@ func (z *Zeto) prepareOutputsForDeposit(ctx context.Context, amount *tktypes.Hex
 	amounts[randomIdx] = amount
 	amounts[size-randomIdx-1] = tktypes.MustParseHexUint256("0x0")
 	for _, amt := range amounts {
-		resolvedRecipient := resolvedVerifiers[0]
+		resolvedRecipient := resolvedSender
 		recipientKey, err := loadBabyJubKey([]byte(resolvedRecipient.Verifier))
 		if err != nil {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
@@ -202,7 +210,7 @@ func (z *Zeto) prepareOutputsForDeposit(ctx context.Context, amount *tktypes.Hex
 			Amount: amt,
 		}
 
-		newState, err := z.makeNewState(ctx, false, newCoin, resolvedRecipient.Lookup)
+		newState, err := z.makeNewState(ctx, useNullifiers, newCoin, resolvedRecipient.Lookup)
 		if err != nil {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorCreateNewState, err)
 		}
@@ -210,6 +218,27 @@ func (z *Zeto) prepareOutputsForDeposit(ctx context.Context, amount *tktypes.Hex
 		newStates = append(newStates, newState)
 	}
 	return coins, newStates, nil
+}
+
+func (z *Zeto) prepareOutputForWithdraw(ctx context.Context, amount *tktypes.HexUint256, resolvedRecipient *pb.ResolvedVerifier) (*types.ZetoCoin, *pb.NewState, error) {
+	recipientKey, err := loadBabyJubKey([]byte(resolvedRecipient.Verifier))
+	if err != nil {
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
+	}
+
+	salt := crypto.NewSalt()
+	compressedKeyStr := zetosigner.EncodeBabyJubJubPublicKey(recipientKey)
+	newCoin := &types.ZetoCoin{
+		Salt:   (*tktypes.HexUint256)(salt),
+		Owner:  tktypes.MustParseHexBytes(compressedKeyStr),
+		Amount: amount,
+	}
+
+	newState, err := z.makeNewState(ctx, false, newCoin, resolvedRecipient.Lookup)
+	if err != nil {
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorCreateNewState, err)
+	}
+	return newCoin, newState, nil
 }
 
 func (z *Zeto) findAvailableStates(ctx context.Context, useNullifiers bool, stateQueryContext, query string) ([]*pb.StoredState, error) {
