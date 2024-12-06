@@ -101,4 +101,14 @@ contract BondTracker is INotoHooks, ERC20, Ownable {
         approvals++; // must store something on each call (see https://github.com/kaleido-io/paladin/issues/252)
         emit PenteExternalCall(prepared.contractAddress, prepared.encodedCall);
     }
+
+    function onBurn(
+        address sender,
+        address from,
+        uint256 amount,
+        PreparedTransaction calldata prepared
+    ) external override {
+        _burn(from, amount);
+        emit PenteExternalCall(prepared.contractAddress, prepared.encodedCall);
+    }
 }

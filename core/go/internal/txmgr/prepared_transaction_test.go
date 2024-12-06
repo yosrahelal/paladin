@@ -102,7 +102,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 	testSchemaID := schemas[0].ID()
 
 	// Create the parent TX
-	parentTx, err := txm.resolveNewTransaction(ctx, txm.p.DB(), &pldapi.TransactionInput{
+	postCommit, parentTx, err := txm.resolveNewTransaction(ctx, txm.p.DB(), &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			From:           "me",
 			IdempotencyKey: "parent_txn",
@@ -114,6 +114,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 		ABI: abi.ABI{{Type: abi.Function, Name: "doThing1"}},
 	}, pldapi.SubmitModeAuto)
 	require.NoError(t, err)
+	postCommit()
 	_, err = txm.insertTransactions(ctx, txm.p.DB(), []*components.ValidatedTransaction{parentTx}, false)
 	require.NoError(t, err)
 
@@ -149,12 +150,14 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 		Metadata: tktypes.RawJSON(`{"some":"data"}`),
 	}
 
-	storedABI, err := txm.UpsertABI(ctx, txm.p.DB(), childFnABI)
+	postCommit, storedABI, err := txm.UpsertABI(ctx, txm.p.DB(), childFnABI)
 	require.NoError(t, err)
+	postCommit()
 
 	// Write the prepared TX it results in
-	err = txm.WritePreparedTransactions(ctx, txm.p.DB(), []*components.PrepareTransactionWithRefs{ptInsert})
+	postCommit, err = txm.WritePreparedTransactions(ctx, txm.p.DB(), []*components.PrepareTransactionWithRefs{ptInsert})
 	require.NoError(t, err)
+	postCommit()
 
 	// Query it back
 	pt, err := txm.GetPreparedTransactionByID(ctx, txm.p.DB(), *parentTx.Transaction.ID)
@@ -190,7 +193,7 @@ func TestWritePreparedTransactionsBadTX(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	err := txm.WritePreparedTransactions(ctx, txm.p.DB(), []*components.PrepareTransactionWithRefs{{
+	_, err := txm.WritePreparedTransactions(ctx, txm.p.DB(), []*components.PrepareTransactionWithRefs{{
 		Transaction: &pldapi.TransactionInput{},
 	}})
 	assert.Regexp(t, "PD012211", err)

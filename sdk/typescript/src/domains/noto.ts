@@ -59,6 +59,11 @@ export interface NotoTransferParams {
   data: string;
 }
 
+export interface NotoBurnParams {
+  amount: string | number;
+  data: string;
+}
+
 export interface NotoApproveTransferParams {
   inputs: IStateEncoded[];
   outputs: IStateEncoded[];
@@ -165,6 +170,18 @@ export class NotoInstance {
       type: TransactionType.PRIVATE,
       abi: notoPrivateJSON.abi,
       function: "approveTransfer",
+      to: this.address,
+      from,
+      data,
+    });
+    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
+  }
+
+  async burn(from: string, data: NotoBurnParams) {
+    const txID = await this.paladin.sendTransaction({
+      type: TransactionType.PRIVATE,
+      abi: notoPrivateJSON.abi,
+      function: "burn",
       to: this.address,
       from,
       data,
