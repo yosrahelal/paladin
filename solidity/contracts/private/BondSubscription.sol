@@ -13,7 +13,6 @@ contract BondSubscription is Ownable, IPenteExternalCall {
     address public bondAddress;
     address public custodian;
     uint256 public requestedUnits;
-    uint256 public receivedUnits;
     address public atomFactory;
 
     address internal distributeBondAddress;
@@ -54,12 +53,7 @@ contract BondSubscription is Ownable, IPenteExternalCall {
         distributeBondCall = encodedCall;
     }
 
-    function distribute(uint256 units_) external onlyCustodian {
-        require(
-            units_ <= requestedUnits &&
-                receivedUnits <= requestedUnits - units_,
-            "Cannot receive more units than were requested"
-        );
+    function distribute() external onlyCustodian {
         require(
             distributeBondCall.length > 0,
             "Bond transfer has not been prepared"
@@ -68,7 +62,6 @@ contract BondSubscription is Ownable, IPenteExternalCall {
             distributePaymentCall.length > 0,
             "Payment transfer has not been prepared"
         );
-        receivedUnits += units_;
 
         Atom.Operation[] memory operations = new Atom.Operation[](2);
         operations[0] = Atom.Operation(

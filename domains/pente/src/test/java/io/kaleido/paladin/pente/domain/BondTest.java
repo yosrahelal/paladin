@@ -279,7 +279,7 @@ public class BondTest {
             bondSubscription.preparePayment(alice, paymentTransfer.preparedTransaction().to(), paymentMetadata.transferWithApproval().encodedCall());
 
             // Alice receives full bond distribution
-            bondSubscription.distribute(bondCustodian, 1000);
+            bondSubscription.distribute(bondCustodian);
 
             // Look up the deployed Atom
             // TODO: use the AtomDeployed event instead of this method
