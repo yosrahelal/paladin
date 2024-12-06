@@ -155,6 +155,7 @@ func (n *Noto) prepareOutputs(ownerAddress *tktypes.EthAddress, amount *tktypes.
 
 func (n *Noto) prepareInfo(data tktypes.HexBytes, distributionList []string) ([]*prototk.NewState, error) {
 	newData := &types.TransactionData{
+		Salt: tktypes.RandHex(32),
 		Data: data,
 	}
 	newState, err := n.makeNewInfoState(newData, distributionList)
