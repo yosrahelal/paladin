@@ -28,6 +28,13 @@ interface INotoHooks is IPenteExternalCall {
         PreparedTransaction calldata prepared
     ) external;
 
+    function onBurn(
+        address sender,
+        address from,
+        uint256 amount,
+        PreparedTransaction calldata prepared
+    ) external;
+
     function onApproveTransfer(
         address sender,
         address from,

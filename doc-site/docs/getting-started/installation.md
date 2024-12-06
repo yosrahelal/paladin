@@ -3,7 +3,7 @@
 ## Pre-requisites
 
 * Access to a running Kubernetes cluster
-* [helm](https://helm.sh/) installed
+* [helm](https://helm.sh/) `v3` installed
 * [kubectl](https://kubernetes.io/docs/reference/kubectl/) installed
 
 ## Quick Start with kind
@@ -172,6 +172,12 @@ Each Paladin node runs an instance of the Paladin UI at the path `/ui`. If you u
 * http://localhost:31748/ui
 
 Learn about interacting with the [UI](./user-interface.md), and try out the [Tutorials](./../tutorials/index.md).
+
+## Troubleshooting
+
+If you encounter any issues during installation, please refer to the [Troubleshooting Guide](./troubleshooting.md).  
+
+If your issue is not listed or remains unresolved, please report it by [opening an issue on the Paladin GitHub page](https://github.com/LF-Decentralized-Trust-labs/paladin/issues).
 
 ## Uninstall
 

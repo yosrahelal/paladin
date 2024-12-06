@@ -15,3 +15,5 @@
 */
 
 package utils
+
+const ApplicationName = "paladin"

@@ -1,0 +1,55 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Run Controller",
+        "type": "go",
+        "preLaunchTask": "check-running-on-kind",
+        "request": "launch",
+        "mode": "debug",
+        "program": "${workspaceFolder}/cmd/main.go",
+        "env": { 
+            "KUBE_LOCAL": "true",
+            "WATCH_NAMESPACE": "default"
+        },
+        "presentation": {
+            "hidden": false
+        }
+      },
+      {
+        "name": "Run Contract Generator",
+        "type": "go",
+        "request": "launch",
+        "mode": "auto",
+        "program": "${workspaceFolder}/contractpkg",
+        "args": [
+          "generate",
+          "contract_map.json"
+        ]
+      },
+      {
+        "name": "Run Temaplte Generator",
+        "type": "go",
+        "request": "launch",
+        "mode": "auto",
+        "program": "${workspaceFolder}/contractpkg",
+        "args": [
+          "template",
+          "../config/samples",
+          "../charts/paladin-operator/templates/samples"
+        ]
+      },
+      {
+        "name": "Run Artifacts Generator",
+        "type": "go",
+        "request": "launch",
+        "mode": "auto",
+        "program": "${workspaceFolder}/contractpkg",
+        "args": [
+          "combine",
+          "../config/samples",
+          "../artifacts"
+        ]
+      }
+    ]
+  }

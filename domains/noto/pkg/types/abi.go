@@ -47,6 +47,7 @@ type ConstructorParams struct {
 	Implementation  string      `json:"implementation,omitempty"`  // Use a specific implementation of Noto that was registered to the factory (blank to use default)
 	Hooks           *HookParams `json:"hooks,omitempty"`           // Configure hooks for programmable logic around Noto operations
 	RestrictMinting *bool       `json:"restrictMinting,omitempty"` // Only allow notary to mint (default: true)
+	AllowBurning    *bool       `json:"allowBurning,omitempty"`    // Allow token holders to burn their tokens (default: true)
 }
 
 // Currently the only supported hooks are provided via a Pente private smart contract
@@ -64,6 +65,11 @@ type MintParams struct {
 
 type TransferParams struct {
 	To     string              `json:"to"`
+	Amount *tktypes.HexUint256 `json:"amount"`
+	Data   tktypes.HexBytes    `json:"data"`
+}
+
+type BurnParams struct {
 	Amount *tktypes.HexUint256 `json:"amount"`
 	Data   tktypes.HexBytes    `json:"data"`
 }
