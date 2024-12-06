@@ -212,9 +212,15 @@ public class DomainIntegrationTests {
             List<JsonNode> notoSchemas = testbed.getRpcClient().request("pstate_listSchemas",
                     "noto");
             assertEquals(2, notoSchemas.size());
-            var notoSchema = mapper.convertValue(notoSchemas.getLast(), StateSchema.class);
-            assertEquals("type=NotoCoin(bytes32 salt,string owner,uint256 amount),labels=[owner,amount]",
-                    notoSchema.signature());
+            StateSchema notoSchema = null;
+            for (var i = 0; i < 2; i++) {
+                var schema = mapper.convertValue(notoSchemas.get(i), StateSchema.class);
+                if (schema.signature().equals("type=NotoCoin(bytes32 salt,string owner,uint256 amount),labels=[owner,amount]")) {
+                    notoSchema = schema;
+                } else {
+                    assertEquals("type=TransactionData(bytes32 salt,bytes data),labels=[]", schema.signature());
+                }
+            }
 
             // Create the privacy group
             String penteInstanceAddress = testbed.getRpcClient().request("testbed_deploy",
