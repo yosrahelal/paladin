@@ -98,31 +98,7 @@ async function main() {
   logger.log(`  ERC20 configured on the Zeto contract`);
 
   logger.log("- Issuing CBDC to bank1 with public minting in ERC20...");
-  const bank1Address = await paladin1.resolveVerifier(
-    bank1,
-    Algorithms.ECDSA_SECP256K1,
-    Verifiers.ETH_ADDRESS
-  );
-  const txId2 = await paladin3.sendTransaction({
-    type: TransactionType.PUBLIC,
-    from: cbdcIssuer,
-    to: erc20Address,
-    data: {
-      "amount": 100000,
-      "to": bank1Address,
-    },
-    function: "mint",
-    abi: erc20Abi.abi,
-  });
-  if (txId2 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
-  const result3 = await paladin3.pollForReceipt(txId2, 5000);
-  if (result3 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
+  await mintERC20(paladin3, cbdcIssuer, bank1, erc20Address!, 100000);
   logger.log("  Success!");
 
   logger.log("- Bank1 deposit ERC20 balance to Zeto ...");
@@ -192,6 +168,34 @@ async function deployERC20(paladin: PaladinClient, cbdcIssuer: string): Promise<
   }
   const erc20Address = result1.contractAddress;
   return erc20Address;
+}
+
+async function mintERC20(paladin: PaladinClient, cbdcIssuer: string, bank1: string, erc20Address: string, amount: number): Promise<void> {
+  const bank1Address = await paladin.resolveVerifier(
+    bank1,
+    Algorithms.ECDSA_SECP256K1,
+    Verifiers.ETH_ADDRESS
+  );
+  const txId2 = await paladin.sendTransaction({
+    type: TransactionType.PUBLIC,
+    from: cbdcIssuer,
+    to: erc20Address,
+    data: {
+      "amount": amount,
+      "to": bank1Address,
+    },
+    function: "mint",
+    abi: erc20Abi.abi,
+  });
+  if (txId2 === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  const result3 = await paladin.pollForReceipt(txId2, 5000);
+  if (result3 === undefined) {
+    logger.error("Failed!");
+    return;
+  }
 }
 
 if (require.main === module) {
