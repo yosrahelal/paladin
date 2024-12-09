@@ -26,7 +26,6 @@ import io.kaleido.paladin.toolkit.*;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 
 public class NotoHelper {
@@ -121,10 +120,6 @@ public class NotoHelper {
         return address;
     }
 
-    private static Testbed.TransactionResult getTransactionResult(LinkedHashMap<String, Object> res) {
-        return new ObjectMapper().convertValue(res, Testbed.TransactionResult.class);
-    }
-
     public List<NotoCoin> queryStates(JsonHex.Bytes32 schemaID, JsonQuery.Query query) throws IOException {
         List<HashMap<String, Object>> states = testbed.getRpcClient().request("pstate_queryContractStates",
                 domainName, address, schemaID, query, "available");
@@ -165,7 +160,7 @@ public class NotoHelper {
     }
 
     public Testbed.TransactionResult prepareTransfer(String sender, String to, int amount) throws IOException {
-        return getTransactionResult(
+        return TestbedHelper.getTransactionResult(
                 testbed.getRpcClient().request("testbed_prepare", new Testbed.TransactionInput(
                         "private",
                         "",

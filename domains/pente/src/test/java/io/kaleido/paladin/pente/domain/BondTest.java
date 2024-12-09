@@ -20,10 +20,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kaleido.paladin.pente.domain.PenteConfiguration.GroupTupleJSON;
-import io.kaleido.paladin.pente.domain.helpers.BondSubscriptionHelper;
-import io.kaleido.paladin.pente.domain.helpers.BondTrackerHelper;
-import io.kaleido.paladin.pente.domain.helpers.NotoHelper;
-import io.kaleido.paladin.pente.domain.helpers.PenteHelper;
+import io.kaleido.paladin.pente.domain.helpers.*;
 import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.*;
 import org.junit.jupiter.api.Test;
@@ -302,16 +299,16 @@ public class BondTest {
                     atomAddress.toString());
 
             // Custodian approves bond transfer
-            issuerCustodianInstance.approveTransition(
+            var txID = issuerCustodianInstance.approveTransition(
                     bondCustodian,
                     JsonHex.randomBytes32(),
                     atomAddress,
                     bondTransferMetadata.approvalParams().transitionHash(),
                     bondTransferMetadata.approvalParams().signatures());
-            Thread.sleep(3000); // TODO: wait for transaction receipt
+            TestbedHelper.pollForReceipt(testbed, txID, 3000);
 
             // Execute the Atom
-            testbed.getRpcClient().request("ptx_sendTransaction",
+            txID = TestbedHelper.sendTransaction(testbed,
                     new Testbed.TransactionInput(
                             "public",
                             "",
@@ -321,7 +318,7 @@ public class BondTest {
                             atomABI,
                             "execute"
                     ));
-            Thread.sleep(3000); // TODO: wait for transaction receipt
+            TestbedHelper.pollForReceipt(testbed, txID, 3000);
 
             // TODO: figure out how to test negative cases (such as when Pente reverts due to a non-allowed investor)
 

@@ -26,7 +26,6 @@ import io.kaleido.paladin.toolkit.JsonHex;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -96,10 +95,6 @@ public class PenteHelper {
         return address;
     }
 
-    private static Testbed.TransactionResult getTransactionResult(LinkedHashMap<String, Object> res) {
-        return new ObjectMapper().convertValue(res, Testbed.TransactionResult.class);
-    }
-
     public JsonHex.Address deploy(String sender, String bytecode, JsonABI.Parameters inputABI, Object inputValues) throws IOException {
         JsonABI.Entry deployABI = JsonABI.newFunction(
                 "deploy",
@@ -114,7 +109,7 @@ public class PenteHelper {
                 JsonABI.newParameters()
         );
 
-        var tx = getTransactionResult(
+        var tx = TestbedHelper.getTransactionResult(
                 testbed.getRpcClient().request("testbed_invoke", new Testbed.TransactionInput(
                         "private",
                         "",
@@ -146,7 +141,7 @@ public class PenteHelper {
                 JsonABI.newParameters()
         );
 
-        return getTransactionResult(
+        return TestbedHelper.getTransactionResult(
                 testbed.getRpcClient().request("testbed_invoke",
                         new Testbed.TransactionInput(
                                 "private",
@@ -195,7 +190,7 @@ public class PenteHelper {
     }
 
     public Testbed.TransactionResult prepare(String sender, JsonABI.Entry fn, Map<String, Object> inputs) throws IOException {
-        return getTransactionResult(
+        return TestbedHelper.getTransactionResult(
                 testbed.getRpcClient().request("testbed_prepare", new Testbed.TransactionInput(
                         "private",
                         "",
@@ -206,7 +201,7 @@ public class PenteHelper {
                         "")));
     }
 
-    public void approveTransition(String sender, JsonHex.Bytes32 txID, JsonHex.Address delegate, JsonHex.Bytes32 transitionHash, List<JsonHex.Bytes> signatures) throws IOException {
+    public String approveTransition(String sender, JsonHex.Bytes32 txID, JsonHex.Address delegate, JsonHex.Bytes32 transitionHash, List<JsonHex.Bytes> signatures) throws IOException {
         JsonABI.Entry fn = JsonABI.newFunction(
                 "approveTransition",
                 JsonABI.newParameters(
@@ -218,7 +213,7 @@ public class PenteHelper {
                 JsonABI.newParameters()
         );
 
-        testbed.getRpcClient().request("ptx_sendTransaction",
+        return TestbedHelper.sendTransaction(testbed,
                 new Testbed.TransactionInput(
                         "public",
                         "",
