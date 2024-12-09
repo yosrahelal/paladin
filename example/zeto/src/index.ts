@@ -1,6 +1,5 @@
 import PaladinClient, {
   Algorithms,
-  newTransactionId,
   ZetoFactory,
   TransactionType,
   Verifiers,
@@ -85,32 +84,7 @@ async function main() {
   logger.log(`  Zeto deployed at: ${zetoCBDC2.address}`);
 
   logger.log("- Deploying ERC20 token to manage the CBDC supply publicly...");
-  const cbdcIssuerAddress = await paladin1.resolveVerifier(
-    cbdcIssuer,
-    Algorithms.ECDSA_SECP256K1,
-    Verifiers.ETH_ADDRESS
-  );
-
-  const txId1 = await paladin3.sendTransaction({
-    type: TransactionType.PUBLIC,
-    from: cbdcIssuer,
-    data: {
-      "initialOwner": cbdcIssuerAddress,
-    },
-    function: "",
-    abi: erc20Abi.abi,
-    bytecode: erc20Abi.bytecode,
-  });
-  if (txId1 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
-  const result1 = await paladin3.pollForReceipt(txId1, 5000);
-  if (result1 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
-  const erc20Address = result1.contractAddress;
+  const erc20Address = await deployERC20(paladin3, cbdcIssuer);
   logger.log(`  ERC20 deployed at: ${erc20Address}`);
 
   logger.log("- Setting ERC20 to the Zeto token contract ...");
@@ -190,8 +164,34 @@ async function main() {
   logger.log("\nSuccess!");
 }
 
-function getFunctionAbi(abi: any, functionName: string): any {
-  return abi.find((element: any) => element.name === functionName);
+async function deployERC20(paladin: PaladinClient, cbdcIssuer: string): Promise<string | undefined> {
+  const cbdcIssuerAddress = await paladin.resolveVerifier(
+    cbdcIssuer,
+    Algorithms.ECDSA_SECP256K1,
+    Verifiers.ETH_ADDRESS
+  );
+
+  const txId1 = await paladin3.sendTransaction({
+    type: TransactionType.PUBLIC,
+    from: cbdcIssuer,
+    data: {
+      "initialOwner": cbdcIssuerAddress,
+    },
+    function: "",
+    abi: erc20Abi.abi,
+    bytecode: erc20Abi.bytecode,
+  });
+  if (txId1 === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  const result1 = await paladin.pollForReceipt(txId1, 5000);
+  if (result1 === undefined) {
+    logger.error("Failed!");
+    return;
+  }
+  const erc20Address = result1.contractAddress;
+  return erc20Address;
 }
 
 if (require.main === module) {
