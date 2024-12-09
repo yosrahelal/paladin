@@ -130,6 +130,7 @@ public class BondTest {
                     assertEquals("type=TransactionData(bytes32 salt,bytes data),labels=[]", schema.signature());
                 }
             }
+            assertNotNull(notoSchema);
 
             String bondTrackerPublicBytecode = ResourceLoader.jsonResourceEntryText(
                     this.getClass().getClassLoader(),
@@ -287,7 +288,7 @@ public class BondTest {
                     "");
             var deployEvent = events.stream().filter(ev -> ev.get("soliditySignature").toString().startsWith("event AtomDeployed")).findFirst();
             assertFalse(deployEvent.isEmpty());
-            var deployEventData = (HashMap<String, Object>) deployEvent.get().get("data");
+            var deployEventData = mapper.convertValue(deployEvent.get().get("data"), HashMap.class);
             var atomAddress = JsonHex.addressFrom(deployEventData.get("addr").toString());
 
             // Alice approves payment transfer
