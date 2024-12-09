@@ -305,7 +305,8 @@ public class BondTest {
                     atomAddress,
                     bondTransferMetadata.approvalParams().transitionHash(),
                     bondTransferMetadata.approvalParams().signatures());
-            TestbedHelper.pollForReceipt(testbed, txID, 3000);
+            var receipt = TestbedHelper.pollForReceipt(testbed, txID, 3000);
+            assertNotNull(receipt);
 
             // Execute the Atom
             txID = TestbedHelper.sendTransaction(testbed,
@@ -318,7 +319,16 @@ public class BondTest {
                             atomABI,
                             "execute"
                     ));
-            TestbedHelper.pollForReceipt(testbed, txID, 3000);
+            receipt = TestbedHelper.pollForReceipt(testbed, txID, 3000);
+            assertNotNull(receipt);
+
+            // All prepared transactions should now be resolved
+            receipt = TestbedHelper.pollForReceipt(testbed, paymentTransfer.id(), 3000);
+            assertNotNull(receipt);
+            receipt = TestbedHelper.pollForReceipt(testbed, bondTransfer2.id(), 3000);
+            assertNotNull(receipt);
+            receipt = TestbedHelper.pollForReceipt(testbed, bondTransfer.id(), 3000);
+            assertNotNull(receipt);
 
             // TODO: figure out how to test negative cases (such as when Pente reverts due to a non-allowed investor)
 
