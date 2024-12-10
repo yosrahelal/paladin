@@ -107,14 +107,16 @@ func TestPrivateTxManagerInvalidTransactionMissingDomain(t *testing.T) {
 	require.NoError(t, err)
 
 	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: confutil.P(uuid.New()),
-			TransactionBase: pldapi.TransactionBase{
-				To:   domainAddress,
-				From: "alice@node1",
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: confutil.P(uuid.New()),
+				TransactionBase: pldapi.TransactionBase{
+					To:   domainAddress,
+					From: "alice@node1",
+				},
 			},
 		},
 	})
@@ -137,15 +139,17 @@ func TestPrivateTxManagerInvalidTransactionMismatchedDomain(t *testing.T) {
 	require.NoError(t, err)
 
 	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: confutil.P(uuid.New()),
-			TransactionBase: pldapi.TransactionBase{
-				To:     domainAddress,
-				Domain: "domain2",
-				From:   "alice@node1",
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: confutil.P(uuid.New()),
+				TransactionBase: pldapi.TransactionBase{
+					To:     domainAddress,
+					Domain: "domain2",
+					From:   "alice@node1",
+				},
 			},
 		},
 	})
@@ -166,15 +170,17 @@ func TestPrivateTxManagerInvalidTransactionEmptyAddress(t *testing.T) {
 	require.NoError(t, err)
 
 	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: confutil.P(uuid.New()),
-			TransactionBase: pldapi.TransactionBase{
-				To:     domainAddress,
-				Domain: "domain1",
-				From:   "alice@node1",
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: confutil.P(uuid.New()),
+				TransactionBase: pldapi.TransactionBase{
+					To:     domainAddress,
+					Domain: "domain1",
+					From:   "alice@node1",
+				},
 			},
 		},
 	})
@@ -322,15 +328,17 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	require.NoError(t, err)
 
 	tx := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: testTransactionID,
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				To:     domainAddress,
-				From:   alice.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: testTransactionID,
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					To:     domainAddress,
+					From:   alice.identityLocator,
+				},
 			},
 		},
 	}
@@ -499,16 +507,18 @@ func TestPrivateTxManagerSimplePreparedTransaction(t *testing.T) {
 	require.NoError(t, err)
 
 	tx := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID:         testTransactionID,
-			SubmitMode: pldapi.SubmitModeExternal.Enum(),
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				To:     domainAddress,
-				From:   alice.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID:         testTransactionID,
+				SubmitMode: pldapi.SubmitModeExternal.Enum(),
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					To:     domainAddress,
+					From:   alice.identityLocator,
+				},
 			},
 		},
 	}
@@ -681,15 +691,17 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	assert.NoError(t, err)
 
 	tx := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: testTransactionID,
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				To:     domainAddress,
-				From:   alice.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: testTransactionID,
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					To:     domainAddress,
+					From:   alice.identityLocator,
+				},
 			},
 		},
 	}
@@ -868,15 +880,17 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 	assert.NoError(t, err)
 
 	tx := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: testTransactionID,
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				To:     domainAddress,
-				From:   alice.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: testTransactionID,
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					To:     domainAddress,
+					From:   alice.identityLocator,
+				},
 			},
 		},
 	}
@@ -1019,15 +1033,17 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	assert.NoError(t, err)
 
 	tx := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: testTransactionID,
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				To:     domainAddress,
-				From:   alice.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: testTransactionID,
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					To:     domainAddress,
+					From:   alice.identityLocator,
+				},
 			},
 		},
 	}
@@ -1172,29 +1188,33 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 	assert.NoError(t, err)
 
 	tx1 := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: testTransactionID1,
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				To:     domainAddress,
-				From:   alice.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: testTransactionID1,
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					To:     domainAddress,
+					From:   alice.identityLocator,
+				},
 			},
 		},
 	}
 
 	tx2 := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: testTransactionID2,
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				To:     domainAddress,
-				From:   alice.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: testTransactionID2,
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					To:     domainAddress,
+					From:   alice.identityLocator,
+				},
 			},
 		},
 	}
@@ -1380,29 +1400,33 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 	assert.NoError(t, err)
 
 	tx1 := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: testTransactionID1,
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				To:     domainAddress,
-				From:   alice.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: testTransactionID1,
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					To:     domainAddress,
+					From:   alice.identityLocator,
+				},
 			},
 		},
 	}
 
 	tx2 := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: testTransactionID2,
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				To:     domainAddress,
-				From:   alice.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: testTransactionID2,
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					To:     domainAddress,
+					From:   alice.identityLocator,
+				},
 			},
 		},
 	}
@@ -1642,15 +1666,17 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	tx1 := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: testTransactionID1,
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				To:     domainAddress,
-				From:   alice.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: testTransactionID1,
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					To:     domainAddress,
+					From:   alice.identityLocator,
+				},
 			},
 		},
 	}
@@ -1659,15 +1685,17 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	tx2 := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID: testTransactionID2,
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				To:     domainAddress,
-				From:   alice.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID: testTransactionID2,
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					To:     domainAddress,
+					From:   alice.identityLocator,
+				},
 			},
 		},
 	}
@@ -1825,15 +1853,17 @@ func TestPrivateTxManagerDeploy(t *testing.T) {
 	require.NoError(t, err)
 
 	deployTx := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID:         testTransactionID,
-			SubmitMode: pldapi.SubmitModeAuto.Enum(),
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				From:   "alice",
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID:         testTransactionID,
+				SubmitMode: pldapi.SubmitModeAuto.Enum(),
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					From:   "alice",
+				},
 			},
 		},
 	}
@@ -1861,18 +1891,20 @@ func TestPrivateTxManagerDeployErrorInvalidSubmitMode(t *testing.T) {
 	require.NoError(t, err)
 
 	deployTx := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID:         testTransactionID,
-			SubmitMode: pldapi.SubmitModeExternal.Enum(),
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				From:   notary.identityLocator,
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID:         testTransactionID,
+				SubmitMode: pldapi.SubmitModeExternal.Enum(),
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					From:   notary.identityLocator,
+					Data:   tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
+				},
 			},
 		},
-		Inputs: tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
 	}
 	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), deployTx)
 	assert.Error(t, err)
@@ -1894,18 +1926,20 @@ func TestPrivateTxManagerDeployFailInit(t *testing.T) {
 	require.NoError(t, err)
 
 	tx := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID:         &testTransactionID,
-			SubmitMode: pldapi.SubmitModeAuto.Enum(),
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				From:   "alice@node1",
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID:         &testTransactionID,
+				SubmitMode: pldapi.SubmitModeAuto.Enum(),
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					From:   "alice@node1",
+					Data:   tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
+				},
 			},
 		},
-		Inputs: tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
 	}
 
 	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), tx)
@@ -1921,18 +1955,20 @@ func TestPrivateTxManagerDeployFailPrepare(t *testing.T) {
 
 	testTransactionID := uuid.New()
 	vtx := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID:         &testTransactionID,
-			SubmitMode: pldapi.SubmitModeAuto.Enum(),
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				From:   "alice@node1",
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID:         &testTransactionID,
+				SubmitMode: pldapi.SubmitModeAuto.Enum(),
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					From:   "alice@node1",
+					Data:   tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
+				},
 			},
 		},
-		Inputs: tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
 	}
 	mocks.domain.On("InitDeploy", mock.Anything, mock.MatchedBy(privateDeployTransactionMatcher(testTransactionID))).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateContractDeploy)
@@ -1984,18 +2020,20 @@ func TestPrivateTxManagerFailSignerResolve(t *testing.T) {
 
 	testTransactionID := uuid.New()
 	vtx := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID:         &testTransactionID,
-			SubmitMode: pldapi.SubmitModeAuto.Enum(),
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				From:   "alice@node1",
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID:         &testTransactionID,
+				SubmitMode: pldapi.SubmitModeAuto.Enum(),
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					From:   "alice@node1",
+					Data:   tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
+				},
 			},
 		},
-		Inputs: tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
 	}
 
 	mocks.domain.On("InitDeploy", mock.Anything, mock.MatchedBy(privateDeployTransactionMatcher(testTransactionID))).Run(func(args mock.Arguments) {
@@ -2068,18 +2106,20 @@ func TestPrivateTxManagerDeployFailNoInvokeOrDeploy(t *testing.T) {
 	testTransactionID := uuid.New()
 
 	vtx := &components.ValidatedTransaction{
-		Function: &components.ResolvedFunction{
-			Definition: testABI[0],
-		},
-		Transaction: &pldapi.Transaction{
-			ID:         &testTransactionID,
-			SubmitMode: pldapi.SubmitModeAuto.Enum(),
-			TransactionBase: pldapi.TransactionBase{
-				Domain: "domain1",
-				From:   "alice@node1",
+		ResolvedTransaction: components.ResolvedTransaction{
+			Function: &components.ResolvedFunction{
+				Definition: testABI[0],
+			},
+			Transaction: &pldapi.Transaction{
+				ID:         &testTransactionID,
+				SubmitMode: pldapi.SubmitModeAuto.Enum(),
+				TransactionBase: pldapi.TransactionBase{
+					Domain: "domain1",
+					From:   "alice@node1",
+					Data:   tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
+				},
 			},
 		},
-		Inputs: tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
 	}
 
 	mocks.domain.On("InitDeploy", mock.Anything, mock.MatchedBy(privateDeployTransactionMatcher(testTransactionID))).Run(func(args mock.Arguments) {

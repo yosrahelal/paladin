@@ -242,7 +242,7 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, dbTX *gorm.DB, txi *
 			ID:     *tx.ID,
 			Domain: tx.Domain,
 			From:   tx.From,
-			Inputs: txi.Inputs,
+			Inputs: tx.Data,
 		})
 	}
 	intent := prototk.TransactionSpecification_SEND_TRANSACTION
@@ -259,7 +259,7 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, dbTX *gorm.DB, txi *
 			From:            tx.From,
 			To:              *tx.To,
 			Function:        txi.Function.Definition,
-			Inputs:          txi.Inputs,
+			Inputs:          tx.Data,
 			Intent:          intent,
 			PublicTxOptions: txi.Transaction.PublicTxOptions,
 		},
