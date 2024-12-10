@@ -60,12 +60,24 @@ export interface ITransactionReceipt {
   transactionHash: string;
   source: string;
   contractAddress?: string;
-  domainReceipt?: {
-    receipt: {
-      contractAddress?: string;
-    };
-  };
+  states?: ITransactionStates;
+  domainReceipt?: IPenteDomainReceipt;
   failureMessage?: string;
+}
+
+export interface IPenteDomainReceipt {
+  receipt: {
+    from?: string;
+    to?: string;
+    contractAddress?: string;
+    logs?: IPenteLog[];
+  };
+}
+
+export interface IPenteLog {
+  address: string;
+  topics: string[];
+  data: string;
 }
 
 export interface ITransactionStates {
@@ -124,4 +136,11 @@ export interface ITransactionActivityRecord {
 export enum TransactionType {
   Private = "private",
   Public = "public",
+}
+
+export interface IDecodedEvent {
+  signature: string;
+  definition: ethers.JsonFragment;
+  data: any;
+  summary: string; // errors only
 }

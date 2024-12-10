@@ -13,8 +13,10 @@ import {
   IPreparedTransaction,
   ITransactionReceipt,
   ITransactionStates,
+  IDecodedEvent,
 } from "./interfaces/transaction";
 import { Algorithms, Verifiers } from "./interfaces";
+import { ethers } from "ethers";
 
 const POLL_INTERVAL_MS = 100;
 
@@ -188,5 +190,25 @@ export default class PaladinClient {
       verifierType,
     ]);
     return res.data.result;
+  }
+
+  async storeABI(abi: ethers.InterfaceAbi) {
+    await this.post("ptx_storeABI", [abi]);
+  }
+
+  async decodeEvent(topics: string[], data: string) {
+    try {
+      const res = await this.post<JsonRpcResult<IDecodedEvent>>(
+        "ptx_decodeEvent",
+        [topics, data, ""]
+      );
+      return res.data.result;
+    } catch (err) {
+      const parsed = this.parseAxiosErrorMessage(err);
+      if (typeof parsed === "string" && parsed.indexOf("PD012229") >= 0) {
+        return undefined;
+      }
+      throw err;
+    }
   }
 }
