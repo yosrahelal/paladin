@@ -100,8 +100,9 @@ func goodPrivateTXWithInputs(psc *domainContract) *components.ResolvedTransactio
 		Transaction: &pldapi.Transaction{
 			ID: confutil.P(uuid.New()),
 			TransactionBase: pldapi.TransactionBase{
-				From: "txSigner",
-				To:   &psc.info.Address,
+				Domain: psc.d.name,
+				From:   "txSigner",
+				To:     &psc.info.Address,
 				Data: tktypes.RawJSON(`{
 				   "from": "sender",
 				   "to": "receiver",
@@ -145,7 +146,9 @@ func doDomainInitTransactionOK(t *testing.T, td *testDomainContext, resFn ...fun
 	}
 
 	ptx := &components.PrivateTransaction{
-		ID: *localTx.Transaction.ID,
+		ID:      *localTx.Transaction.ID,
+		Domain:  localTx.Transaction.Domain,
+		Address: *localTx.Transaction.To,
 	}
 	err := psc.InitTransaction(td.ctx, ptx, localTx)
 	require.NoError(t, err)
@@ -1211,8 +1214,9 @@ func goodPrivateCallWithInputsAndOutputs(psc *domainContract) *components.Resolv
 	return &components.ResolvedTransaction{
 		Transaction: &pldapi.Transaction{
 			TransactionBase: pldapi.TransactionBase{
-				From: "me",
-				To:   &psc.info.Address,
+				Domain: psc.d.name,
+				From:   "me",
+				To:     &psc.info.Address,
 				Data: tktypes.RawJSON(`{
 					"address": "0xf2C41ae275A9acE65e1Fb78B97270a61D86Aa0Ed"
 				}`),
@@ -1274,7 +1278,8 @@ func TestInitCallBadInput(t *testing.T) {
 	_, err := psc.InitCall(td.ctx, &components.ResolvedTransaction{
 		Transaction: &pldapi.Transaction{
 			TransactionBase: pldapi.TransactionBase{
-				To: &psc.info.Address,
+				Domain: psc.d.name,
+				To:     &psc.info.Address,
 				Data: tktypes.RawJSON(`{
 					"wrong": "0xf2C41ae275A9acE65e1Fb78B97270a61D86Aa0Ed"
 				}`),
@@ -1356,7 +1361,8 @@ func TestExecCallBadInput(t *testing.T) {
 	_, err := psc.ExecCall(td.c.dCtx, td.c.dbTX, &components.ResolvedTransaction{
 		Transaction: &pldapi.Transaction{
 			TransactionBase: pldapi.TransactionBase{
-				To: &psc.info.Address,
+				Domain: psc.d.name,
+				To:     &psc.info.Address,
 				Data: tktypes.RawJSON(`{
 					"wrong": "0xf2C41ae275A9acE65e1Fb78B97270a61D86Aa0Ed"
 				}`)},

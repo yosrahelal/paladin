@@ -2201,10 +2201,16 @@ func TestCallPrivateSmartContractOk(t *testing.T) {
 		resultCV, nil,
 	)
 
-	res, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-		To:       mPSC.Address(),
-		Inputs:   tktypes.RawJSON(`{}`),
-		Function: fnDef,
+	res, err := ptx.CallPrivateSmartContract(ctx, &components.ResolvedTransaction{
+		Transaction: &pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
+				To:   confutil.P(mPSC.Address()),
+				Data: tktypes.RawJSON(`{}`),
+			},
+		},
+		Function: &components.ResolvedFunction{
+			Definition: fnDef,
+		},
 	})
 	require.NoError(t, err)
 	jsonData, err := res.JSON()
@@ -2220,9 +2226,13 @@ func TestCallPrivateSmartContractBadContract(t *testing.T) {
 
 	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("not found"))
 
-	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-		To:     *tktypes.RandAddress(),
-		Inputs: tktypes.RawJSON(`{}`),
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.ResolvedTransaction{
+		Transaction: &pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
+				To:   tktypes.RandAddress(),
+				Data: tktypes.RawJSON(`{}`),
+			},
+		},
 	})
 	assert.Regexp(t, "not found", err)
 
@@ -2238,11 +2248,17 @@ func TestCallPrivateSmartContractBadDomainName(t *testing.T) {
 		{Name: "it", Type: "string"},
 	}}
 
-	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-		Domain:   "does-not-match",
-		To:       mPSC.Address(),
-		Inputs:   tktypes.RawJSON(`{}`),
-		Function: fnDef,
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.ResolvedTransaction{
+		Transaction: &pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
+				Domain: "does-not-match",
+				To:     confutil.P(mPSC.Address()),
+				Data:   tktypes.RawJSON(`{}`),
+			},
+		},
+		Function: &components.ResolvedFunction{
+			Definition: fnDef,
+		},
 	})
 	assert.Regexp(t, "PD011825", err)
 
@@ -2259,9 +2275,13 @@ func TestCallPrivateSmartContractInitCallFail(t *testing.T) {
 		nil, fmt.Errorf("pop"),
 	)
 
-	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-		To:     mPSC.Address(),
-		Inputs: tktypes.RawJSON(`{}`),
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.ResolvedTransaction{
+		Transaction: &pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
+				To:   confutil.P(mPSC.Address()),
+				Data: tktypes.RawJSON(`{}`),
+			},
+		},
 	})
 	require.Regexp(t, "pop", err)
 
@@ -2282,9 +2302,13 @@ func TestCallPrivateSmartContractResolveFail(t *testing.T) {
 	m.identityResolver.On("ResolveVerifier", mock.Anything, "bob@node1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 		Return("", fmt.Errorf("pop"))
 
-	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-		To:     mPSC.Address(),
-		Inputs: tktypes.RawJSON(`{}`),
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.ResolvedTransaction{
+		Transaction: &pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
+				To:   confutil.P(mPSC.Address()),
+				Data: tktypes.RawJSON(`{}`),
+			},
+		},
 	})
 	require.Regexp(t, "pop", err)
 
@@ -2304,9 +2328,13 @@ func TestCallPrivateSmartContractExecCallFail(t *testing.T) {
 		nil, fmt.Errorf("pop"),
 	)
 
-	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-		To:     mPSC.Address(),
-		Inputs: tktypes.RawJSON(`{}`),
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.ResolvedTransaction{
+		Transaction: &pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
+				To:   confutil.P(mPSC.Address()),
+				Data: tktypes.RawJSON(`{}`),
+			},
+		},
 	})
 	require.Regexp(t, "pop", err)
 

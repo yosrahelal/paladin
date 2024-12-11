@@ -90,7 +90,8 @@ func (d *domain) initSmartContract(ctx context.Context, def *PrivateSmartContrac
 
 func (dc *domainContract) buildTransactionSpecification(ctx context.Context, localTx *components.ResolvedTransaction, intent prototk.TransactionSpecification_Intent) (*prototk.TransactionSpecification, error) {
 
-	if localTx.Transaction == nil || localTx.Transaction.Data == nil || localTx.Function == nil {
+	if localTx.Transaction == nil || localTx.Transaction.Data == nil || localTx.Function == nil ||
+		localTx.Transaction.Domain != dc.Domain().Name() || *localTx.Transaction.To != dc.info.Address {
 		return nil, i18n.NewError(ctx, msgs.MsgDomainTxnInputDefinitionInvalid)
 	}
 
@@ -140,6 +141,9 @@ func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.Pr
 		return err
 	}
 	txSpec.TransactionId = tktypes.Bytes32UUIDFirst16(tx.ID).String()
+	tx.ID = *localTx.Transaction.ID
+	tx.Domain = localTx.Transaction.Domain
+	tx.Address = *localTx.Transaction.To
 
 	// Do the request with the domain
 	log.L(ctx).Infof("Initializing transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, txSpec.ContractInfo.ContractAddress)

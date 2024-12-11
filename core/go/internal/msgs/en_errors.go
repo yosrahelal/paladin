@@ -320,6 +320,8 @@ var (
 	MsgPrivateTxManagerNewSequencerError         = ffe("PD011834", "Failed to create new sequencer")
 	MsgPrivateTxManagerInvalidStaticCoordinator  = ffe("PD011835", "Contract was configured with invalid static coordinator '%s'.  Must be of the form 'identity@node'")
 	MsgPrivateTxMgrFunctionNotProvided           = ffe("PD011836", "Function abi not provided in transaction input")
+	MsgPrivateTxMgrAssembleRequestInvalid        = ffe("PD011837", "Assemble request is invalid for transaction %s")
+	MsgPrivateTxMgrAssembleTxnNotFound           = ffe("PD011838", "Transaction %s not found in local node")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")

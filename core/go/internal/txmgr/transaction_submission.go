@@ -31,7 +31,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -157,7 +156,6 @@ func (tm *txManager) pickFunction(ctx context.Context, pa *pldapi.StoredABI, req
 		}
 	}
 	return &components.ResolvedFunction{
-		ABI:          pa.ABI,
 		ABIReference: &pa.Hash,
 		Definition:   selectedFunction,
 		Signature:    functionSignature,
@@ -265,14 +263,7 @@ func (tm *txManager) CallTransaction(ctx context.Context, result any, call *plda
 	}
 
 	// Do the call
-	cv, err := tm.privateTxMgr.CallPrivateSmartContract(ctx, &components.TransactionInputs{
-		Domain:   call.Domain,
-		From:     call.From,
-		To:       *call.To,
-		Function: txi.Function.Definition,
-		Inputs:   txi.Transaction.Data,
-		Intent:   prototk.TransactionSpecification_CALL,
-	})
+	cv, err := tm.privateTxMgr.CallPrivateSmartContract(ctx, &txi.ResolvedTransaction)
 	if err != nil {
 		return err
 	}
