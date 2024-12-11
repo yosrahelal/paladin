@@ -194,8 +194,7 @@ const (
 
 type Auth struct {
 	// auth method to use for the connection
-	// +kubebuilder:validation:Enum=secret
-	// +kubebuilder:validation:Enum=inline
+	// +kubebuilder:validation:Enum=secret;inline
 	Type AuthType `json:"type"`
 
 	// Secret is used to provide the name of the secret to use for authentication

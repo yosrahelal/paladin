@@ -74,6 +74,7 @@ spec:
                   type:
                     description: auth method to use for the connection
                     enum:
+                    - secret
                     - inline
                     type: string
                 required:
@@ -113,6 +114,7 @@ spec:
                           type:
                             description: auth method to use for the connection
                             enum:
+                            - secret
                             - inline
                             type: string
                         required:
