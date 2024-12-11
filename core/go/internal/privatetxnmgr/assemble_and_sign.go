@@ -79,16 +79,26 @@ func (s *Sequencer) AssembleLocal(ctx context.Context, requestID string, transac
 	)
 }
 
-func (s *Sequencer) assembleAndSign(ctx context.Context, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, preAssembly *components.TransactionPreAssembly, domainContext components.DomainContext) (*components.TransactionPostAssembly, error) {
+func (s *Sequencer) assembleAndSign(ctx context.Context, transactionID uuid.UUID, preAssembly *components.TransactionPreAssembly, domainContext components.DomainContext) (*components.TransactionPostAssembly, error) {
 	//Assembles the transaction and synchronously fulfills any local signature attestation requests
 	// Given that the coordinator is single threading calls to assemble, there may be benefits to performance if we were to fulfill the signature request async
 	// but that would introduce levels of complexity that may not be justified so this is open as a potential for future optimization where we would need to think about
 	// whether a lost/late signature would trigger a re-assembly of the transaction ( and any transaction that come after it in the sequencer) or whether we could safely ask the assembly
 	// to post hoc sign an assembly
 
+	// The transaction input data that is the senders intent to perform the transaction for this ID,
+	// MUST be retrieved from the local database. We cannot process it from the data that is received
+	// over the wire from another node (otherwise that node could "tell us" to do something that no
+	// application locally instructed us to do).
+	locallyResolvedTx, err := s.components.TxManager().GetResolvedTransactionByID(ctx, transactionID)
+	if err != nil {
+		log.L(ctx).Errorf("assembleAndSign: Error resolving local transaction: %s", err)
+		return nil, err
+	}
+	preAssembly.TransactionSpecification
 	transaction := &components.PrivateTransaction{
 		ID:          transactionID,
-		Inputs:      transactionInputs,
+		Inputs:      mapInputs(locallyResolvedTx, preAssembly.TransactionSpecification.Intent /* we propagate the intent */),
 		PreAssembly: preAssembly,
 	}
 
@@ -96,7 +106,7 @@ func (s *Sequencer) assembleAndSign(ctx context.Context, transactionID uuid.UUID
 	 * Assemble
 	 */
 	readTX := s.components.Persistence().DB()
-	err := s.domainAPI.AssembleTransaction(domainContext, readTX, transaction)
+	err = s.domainAPI.AssembleTransaction(domainContext, readTX, transaction)
 	if err != nil {
 		log.L(ctx).Errorf("assembleAndSign: Error assembling transaction: %s", err)
 		return nil, err

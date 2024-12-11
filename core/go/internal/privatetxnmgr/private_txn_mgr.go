@@ -253,17 +253,22 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, dbTX *gorm.DB, txi *
 		return i18n.NewError(ctx, msgs.MsgPrivateTxMgrFunctionNotProvided)
 	}
 	return p.handleNewTx(ctx, dbTX, &components.PrivateTransaction{
-		ID: *tx.ID,
-		Inputs: &components.TransactionInputs{
-			Domain:          tx.Domain,
-			From:            tx.From,
-			To:              *tx.To,
-			Function:        txi.Function.Definition,
-			Inputs:          tx.Data,
-			Intent:          intent,
-			PublicTxOptions: txi.Transaction.PublicTxOptions,
-		},
+		ID:     *tx.ID,
+		Inputs: mapInputs(&txi.ResolvedTransaction, intent),
 	})
+}
+
+func mapInputs(rtx *components.ResolvedTransaction, intent prototk.TransactionSpecification_Intent) *components.TransactionInputs {
+	tx := rtx.Transaction
+	return &components.TransactionInputs{
+		Domain:          tx.Domain,
+		From:            tx.From,
+		To:              *tx.To,
+		Function:        rtx.Function.Definition,
+		Inputs:          tx.Data,
+		Intent:          intent,
+		PublicTxOptions: rtx.Transaction.PublicTxOptions,
+	}
 }
 
 // HandleNewTx synchronously receives a new transaction submission

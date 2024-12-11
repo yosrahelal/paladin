@@ -88,7 +88,11 @@ func (d *domain) initSmartContract(ctx context.Context, def *PrivateSmartContrac
 	return pscValid, dc, nil
 }
 
-func (dc *domainContract) processTxInputs(ctx context.Context, txi *components.TransactionInputs) (*prototk.TransactionSpecification, error) {
+func (dc *domainContract) buildTransactionSpecification(ctx context.Context, localTx *components.ResolvedTransaction, intent prototk.TransactionSpecification_Intent) (*prototk.TransactionSpecification, error) {
+
+	if localTx.Transaction == nil || localTx.Transaction.Data == nil || localTx.Function == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgDomainTxnInputDefinitionInvalid)
+	}
 
 	// Query the base block height to inform the assembly step that comes later
 	confirmedBlockHeight, err := dc.dm.blockIndexer.GetConfirmedBlockHeight(ctx)
@@ -97,9 +101,10 @@ func (dc *domainContract) processTxInputs(ctx context.Context, txi *components.T
 	}
 
 	var abiJSON []byte
-	inputValues, err := txi.Function.Inputs.ParseJSONCtx(ctx, txi.Inputs)
+	fnDef := localTx.Function.Definition
+	inputValues, err := fnDef.Inputs.ParseJSONCtx(ctx, localTx.Transaction.Data)
 	if err == nil {
-		abiJSON, err = json.Marshal(txi.Function)
+		abiJSON, err = json.Marshal(fnDef)
 	}
 	var paramsJSON []byte
 	if err == nil {
@@ -107,7 +112,7 @@ func (dc *domainContract) processTxInputs(ctx context.Context, txi *components.T
 		paramsJSON, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, inputValues)
 	}
 	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFunctionParams, txi.Function.SolString())
+		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFunctionParams, fnDef.SolString())
 	}
 
 	return &prototk.TransactionSpecification{
@@ -115,12 +120,12 @@ func (dc *domainContract) processTxInputs(ctx context.Context, txi *components.T
 			ContractAddress:    dc.info.Address.String(),
 			ContractConfigJson: dc.config.ContractConfigJson,
 		},
-		From:               txi.From,
+		From:               localTx.Transaction.From,
 		FunctionAbiJson:    string(abiJSON),
 		FunctionParamsJson: string(paramsJSON),
-		FunctionSignature:  txi.Function.SolString(), // we use the proprietary "Solidity inspired" form that is very specific, including param names and nested struct defs
+		FunctionSignature:  fnDef.SolString(), // we use the proprietary "Solidity inspired" form that is very specific, including param names and nested struct defs
 		BaseBlock:          int64(confirmedBlockHeight),
-		Intent:             txi.Intent,
+		Intent:             intent,
 	}, nil
 }
 
@@ -128,19 +133,16 @@ func (dc *domainContract) ContractConfig() *prototk.ContractConfig {
 	return dc.config
 }
 
-func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.PrivateTransaction) error {
-	if tx.Inputs == nil {
-		return i18n.NewError(ctx, msgs.MsgDomainTXIncompleteInitTransaction)
-	}
+func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.PrivateTransaction, localTx *components.ResolvedTransaction) error {
 
-	txSpec, err := dc.processTxInputs(ctx, tx.Inputs)
+	txSpec, err := dc.buildTransactionSpecification(ctx, localTx, tx.Intent)
 	if err != nil {
 		return err
 	}
 	txSpec.TransactionId = tktypes.Bytes32UUIDFirst16(tx.ID).String()
 
 	// Do the request with the domain
-	log.L(ctx).Infof("Initializing transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, tx.Inputs.To)
+	log.L(ctx).Infof("Initializing transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, txSpec.ContractInfo.ContractAddress)
 	res, err := dc.api.InitTransaction(ctx, &prototk.InitTransactionRequest{
 		Transaction: txSpec,
 	})
@@ -152,6 +154,7 @@ func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.Pr
 	preAssembly := &components.TransactionPreAssembly{
 		TransactionSpecification: txSpec,
 		RequiredVerifiers:        res.RequiredVerifiers,
+		PublicTxOptions:          localTx.Transaction.PublicTxOptions,
 	}
 	tx.PreAssembly = preAssembly
 	return nil
@@ -189,10 +192,19 @@ func (dc *domainContract) fullyQualifyAssemblyIdentities(res *prototk.AssembleTr
 	}
 }
 
-func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) error {
-	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil {
+func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction, localTx *components.ResolvedTransaction) error {
+	if tx.PreAssembly == nil || localTx.Transaction == nil || localTx.Transaction.ID == nil || *localTx.Transaction.ID != tx.ID {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompleteAssembleTransaction)
 	}
+
+	// Assemble is a sender-role operation, that must be performed only using the local details of the transaction as submitted
+	// to this node by the application connected to that node. We cannot use any data that was received over the wire
+	// from the coordinator as part of the assembly.
+	txSpec, err := dc.buildTransactionSpecification(dCtx.Ctx(), localTx, tx.Intent)
+	if err != nil {
+		return err
+	}
+	tx.PreAssembly.TransactionSpecification = txSpec
 
 	// Clear any previous assembly state out, as it's considered completely invalid
 	// at this point if we're re-assembling.
@@ -203,7 +215,7 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 
 	// Now we have the required verifiers, we can ask the domain to do the heavy lifting
 	// and assemble the transaction (using the state store interface we provide)
-	log.L(dCtx.Ctx()).Infof("Assembling transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, tx.Inputs.To)
+	log.L(dCtx.Ctx()).Infof("Assembling transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, preAssembly.TransactionSpecification.ContractInfo.ContractAddress)
 	res, err := dc.api.AssembleTransaction(dCtx.Ctx(), &prototk.AssembleTransactionRequest{
 		StateQueryContext: c.id,
 		Transaction:       preAssembly.TransactionSpecification,
@@ -253,7 +265,7 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 
 // Happens only on the sequencing node
 func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) (err error) {
-	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil || tx.PostAssembly == nil {
+	if tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil || tx.PostAssembly == nil {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompleteWritePotentialStates)
 	}
 
@@ -303,9 +315,10 @@ func (dc *domainContract) upsertPotentialStates(dCtx components.DomainContext, r
 		newStatesToWrite[i] = stateUpsert
 	}
 
+	contractAddr := tx.PreAssembly.TransactionSpecification.ContractInfo.ContractAddress
 	writtenStates = make([]*components.FullState, len(newStatesToWrite))
 	if len(newStatesToWrite) > 0 {
-		log.L(dCtx.Ctx()).Infof("Writing states to domain context for transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, tx.Inputs.To)
+		log.L(dCtx.Ctx()).Infof("Writing states to domain context for transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, contractAddr)
 		newStates, err := dCtx.UpsertStates(readTX, newStatesToWrite...)
 		if err != nil {
 			return nil, err
@@ -326,7 +339,7 @@ func (dc *domainContract) upsertPotentialStates(dCtx components.DomainContext, r
 // Happens on all nodes that are aware of the transaction and want to mask input states from other
 // transactions being assembled on the same node.
 func (dc *domainContract) LockStates(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) error {
-	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
+	if tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
 		tx.PostAssembly == nil || tx.PostAssembly.InputStates == nil || tx.PostAssembly.OutputStates == nil {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompleteLockStates)
 	}
@@ -401,7 +414,8 @@ func (dc *domainContract) LockStates(dCtx components.DomainContext, readTX *gorm
 	}
 
 	// Heavy lifting is all done for us by the state store
-	log.L(dCtx.Ctx()).Infof("Loading TX into context transaction=%s domain=%s contract-address=%s inputs=%v read=%s outputs=%v info=%v", tx.ID, dc.d.name, tx.Inputs.To, inputIDs, readIDs, outputIDs, infoIDs)
+	contractAddr := tx.PreAssembly.TransactionSpecification.ContractInfo.ContractAddress
+	log.L(dCtx.Ctx()).Infof("Loading TX into context transaction=%s domain=%s contract-address=%s inputs=%v read=%s outputs=%v info=%v", tx.ID, dc.d.name, contractAddr, inputIDs, readIDs, outputIDs, infoIDs)
 	_, err := dCtx.UpsertStates(readTX, states...)
 	if err == nil {
 		err = dCtx.AddStateLocks(stateLocks...)
@@ -466,7 +480,7 @@ func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, read
 }
 
 func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) error {
-	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
+	if tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
 		tx.PostAssembly == nil || tx.Signer == "" {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompletePrepareTransaction)
 	}
@@ -478,7 +492,8 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 	defer c.close()
 
 	// Run the prepare
-	log.L(dCtx.Ctx()).Infof("Preparing transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, tx.Inputs.To)
+	contractAddr := preAssembly.TransactionSpecification.ContractInfo.ContractAddress
+	log.L(dCtx.Ctx()).Infof("Preparing transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, contractAddr)
 	res, err := dc.api.PrepareTransaction(dCtx.Ctx(), &prototk.PrepareTransactionRequest{
 		StateQueryContext: c.id,
 		Transaction:       preAssembly.TransactionSpecification,
@@ -536,7 +551,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 				From:            tx.Signer,
 				To:              contractAddress,
 				Data:            tktypes.RawJSON(res.Transaction.ParamsJson),
-				PublicTxOptions: tx.Inputs.PublicTxOptions,
+				PublicTxOptions: tx.PreAssembly.PublicTxOptions,
 			},
 			ABI: abi.ABI{&functionABI},
 		}
@@ -553,9 +568,9 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 	return nil
 }
 
-func (dc *domainContract) InitCall(ctx context.Context, txi *components.TransactionInputs) ([]*prototk.ResolveVerifierRequest, error) {
+func (dc *domainContract) InitCall(ctx context.Context, callTx *components.ResolvedTransaction) ([]*prototk.ResolveVerifierRequest, error) {
 
-	txSpec, err := dc.processTxInputs(ctx, txi)
+	txSpec, err := dc.buildTransactionSpecification(ctx, callTx, prototk.TransactionSpecification_CALL)
 	if err != nil {
 		return nil, err
 	}
@@ -572,9 +587,9 @@ func (dc *domainContract) InitCall(ctx context.Context, txi *components.Transact
 
 }
 
-func (dc *domainContract) ExecCall(dCtx components.DomainContext, readTX *gorm.DB, txi *components.TransactionInputs, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error) {
+func (dc *domainContract) ExecCall(dCtx components.DomainContext, readTX *gorm.DB, callTx *components.ResolvedTransaction, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error) {
 
-	txSpec, err := dc.processTxInputs(dCtx.Ctx(), txi)
+	txSpec, err := dc.buildTransactionSpecification(dCtx.Ctx(), callTx, prototk.TransactionSpecification_CALL)
 	if err != nil {
 		return nil, err
 	}
@@ -594,7 +609,7 @@ func (dc *domainContract) ExecCall(dCtx components.DomainContext, readTX *gorm.D
 	}
 
 	// The outputs must conform to the spec
-	outputDef := txi.Function.Outputs
+	outputDef := callTx.Function.Definition.Outputs
 	if outputDef == nil {
 		outputDef = abi.ParameterArray{}
 	}
@@ -603,7 +618,7 @@ func (dc *domainContract) ExecCall(dCtx components.DomainContext, readTX *gorm.D
 	}
 	cv, err := outputDef.ParseJSONCtx(dCtx.Ctx(), []byte(res.ResultJson))
 	if err != nil {
-		log.L(dCtx.Ctx()).Errorf("Invalid data from domain for %s: %s", txi.Function.SolString(), res.ResultJson)
+		log.L(dCtx.Ctx()).Errorf("Invalid data from domain for %s: %s", callTx.Function.Definition.SolString(), res.ResultJson)
 		return nil, i18n.WrapError(dCtx.Ctx(), err, msgs.MsgDomainInvalidDataFromDomain)
 	}
 

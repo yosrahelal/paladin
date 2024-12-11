@@ -53,9 +53,9 @@ type TxCompletion struct {
 }
 
 type ResolvedTransaction struct {
-	Transaction *pldapi.Transaction
-	DependsOn   []uuid.UUID
-	Function    *ResolvedFunction
+	Transaction *pldapi.Transaction `json:"transaction"`
+	DependsOn   []uuid.UUID         `json:"dependsOn"`
+	Function    *ResolvedFunction   `json:"function"`
 }
 
 // This is a transaction read for insertion into the Paladin database with all pre-verification completed.
@@ -67,10 +67,10 @@ type ValidatedTransaction struct {
 
 // A resolved function on the ABI
 type ResolvedFunction struct {
-	ABI          abi.ABI
-	ABIReference *tktypes.Bytes32
-	Definition   *abi.Entry
-	Signature    string
+	// ABI          abi.ABI          `json:"abi"`
+	ABIReference *tktypes.Bytes32 `json:"abiReference"`
+	Definition   *abi.Entry       `json:"definition"`
+	Signature    string           `json:"signature"`
 }
 
 type TXManager interface {

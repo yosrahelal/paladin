@@ -241,7 +241,7 @@ var (
 	MsgDomainMultipleEndorsersSubmit          = ffe("PD011623", "Multiple endorsers of the transaction specified a submission constraint")
 	MsgDomainNoEndorserSubmit                 = ffe("PD011624", "Domain is configured for endorser submission, and no endorser specified a submission constraint")
 	MsgDomainInvalidSubmissionConfig          = ffe("PD011625", "Domain specified an unexpected base ledger submission config: %s")
-	MsgDomainTXIncompleteInitTransaction      = ffe("PD011626", "Transaction is incomplete for phase InitTransaction")
+	MsgDomainTxnInputDefinitionInvalid        = ffe("PD011626", "Transaction input definition is invalid")
 	MsgDomainTXIncompleteAssembleTransaction  = ffe("PD011627", "Transaction is incomplete for phase AssembleTransaction")
 	MsgDomainTXIncompleteWritePotentialStates = ffe("PD011628", "Transaction is incomplete for phase WritePotentialStates")
 	MsgDomainTXIncompleteLockStates           = ffe("PD011629", "Transaction is incomplete for phase LockStates")
