@@ -193,6 +193,9 @@ public class JsonABI extends ArrayList<JsonABI.Entry> {
                 }
             }
         }
+        if (entryType.equals("constructor")) {
+            return JsonABI.newConstructor(null);
+        }
         throw new IllegalArgumentException("%s %s not found in ABI".formatted(entryType, entryName));
     }
 
