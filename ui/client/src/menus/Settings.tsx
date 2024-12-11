@@ -62,27 +62,6 @@ export const SettingsMenu: React.FC<Props> = ({
         open={anchorEl !== null}
         keepMounted
         onClose={() => setAnchorEl(null)}
-        slotProps={{
-          paper: {
-            elevation: 0,
-            sx: {
-              overflow: 'visible',
-              filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
-              '&::before': {
-                content: '""',
-                display: 'block',
-                position: 'absolute',
-                top: 0,
-                right: 22,
-                width: 10,
-                height: 10,
-                bgcolor: 'background.paper',
-                transform: 'translateY(-50%) rotate(45deg)',
-                zIndex: 0
-              }
-            }
-          }
-        }}
       >
         <Grid2 container>
           <Grid2>
