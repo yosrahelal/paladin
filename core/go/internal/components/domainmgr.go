@@ -73,7 +73,7 @@ type DomainSmartContract interface {
 	ContractConfig() *prototk.ContractConfig
 
 	InitTransaction(ctx context.Context, ptx *PrivateTransaction, localTx *ResolvedTransaction) error
-	AssembleTransaction(dCtx DomainContext, readTX *gorm.DB, ptx *PrivateTransaction) error
+	AssembleTransaction(dCtx DomainContext, readTX *gorm.DB, ptx *PrivateTransaction, localTx *ResolvedTransaction) error
 	WritePotentialStates(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
 	LockStates(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
 	EndorseTransaction(dCtx DomainContext, readTX *gorm.DB, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)

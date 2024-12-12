@@ -99,8 +99,11 @@ func (s *Sequencer) assembleAndSign(ctx context.Context, transactionID uuid.UUID
 	// over the wire from another node (otherwise that node could "tell us" to do something that no
 	// application locally instructed us to do).
 	localTx, err := s.resolveLocalTransaction(ctx, transactionID)
-	if err != nil || localTx.Transaction.Domain == s.domainAPI.Domain().Name() || localTx.Transaction.To == nil || *localTx.Transaction.To != s.domainAPI.Address() {
-		log.L(ctx).Errorf("assembleAndSign: transaction %s for invalid domain/address", transactionID)
+	if err != nil || localTx.Transaction.Domain != s.domainAPI.Domain().Name() || localTx.Transaction.To == nil || *localTx.Transaction.To != s.domainAPI.Address() {
+		if err == nil {
+			log.L(ctx).Errorf("assembleAndSign: transaction %s for invalid domain/address domain=%s (expected=%s) to=%s (expected=%s)",
+				transactionID, localTx.Transaction.Domain, s.domainAPI.Domain().Name(), localTx.Transaction.To, s.domainAPI.Address())
+		}
 		err := i18n.WrapError(ctx, err, msgs.MsgPrivateTxMgrAssembleRequestInvalid, transactionID)
 		return nil, err
 	}
@@ -115,7 +118,7 @@ func (s *Sequencer) assembleAndSign(ctx context.Context, transactionID uuid.UUID
 	 * Assemble
 	 */
 	readTX := s.components.Persistence().DB()
-	err = s.domainAPI.AssembleTransaction(domainContext, readTX, transaction)
+	err = s.domainAPI.AssembleTransaction(domainContext, readTX, transaction, localTx)
 	if err != nil {
 		log.L(ctx).Errorf("assembleAndSign: Error assembling transaction: %s", err)
 		return nil, err

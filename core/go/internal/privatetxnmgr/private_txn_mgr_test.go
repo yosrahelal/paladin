@@ -203,9 +203,12 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	notary := newPartyForTesting(ctx, "notary", "node1", mocks)
 
 	initialised := make(chan struct{}, 1)
-	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From: alice.identityLocator,
+			},
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
 					Lookup:       alice.identityLocator,
@@ -236,8 +239,9 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	})
+	mocks.domainSmartContract.On("Address").Return(*domainAddress)
 	endorsePayload := []byte("some-endorsement-bytes")
-	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
@@ -342,6 +346,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 			},
 		},
 	}
+	mocks.txManager.On("GetResolvedTransactionByID", mock.Anything, mock.Anything).Return(&tx.ResolvedTransaction, nil)
 	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), tx)
 	require.NoError(t, err)
 
@@ -384,7 +389,7 @@ func TestPrivateTxManagerSimplePreparedTransaction(t *testing.T) {
 	notary := newPartyForTesting(ctx, "notary", "node1", mocks)
 
 	initialised := make(chan struct{}, 1)
-	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
@@ -568,9 +573,13 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
 		StaticCoordinator:    &notary.identityLocator,
 	})
-	localNodeMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	localNodeMocks.domainSmartContract.On("Address").Return(*domainAddress)
+	localNodeMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From: alice.identityLocator,
+			},
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
 					Lookup:       alice.identityLocator,
@@ -589,7 +598,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 
 	assembled := make(chan struct{}, 1)
 
-	localNodeMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	localNodeMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
@@ -705,6 +714,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 			},
 		},
 	}
+	localNodeMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, mock.Anything).Return(&tx.ResolvedTransaction, nil)
 
 	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), tx)
 	assert.NoError(t, err)
@@ -750,9 +760,12 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
 		StaticCoordinator:    &notary.identityLocator,
 	})
-	localNodeMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	localNodeMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From: alice.identityLocator,
+			},
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
 					Lookup:       alice.identityLocator,
@@ -771,7 +784,7 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 
 	assembled := make(chan struct{}, 1)
 
-	localNodeMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	localNodeMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
@@ -828,6 +841,7 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 	remoteEngineMocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	})
+	localNodeMocks.domainSmartContract.On("Address").Return(*domainAddress)
 	remoteEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("some-endorsement-bytes"),
@@ -894,6 +908,7 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 			},
 		},
 	}
+	localNodeMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, mock.Anything).Return(&tx.ResolvedTransaction, nil)
 
 	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), tx)
 	assert.NoError(t, err)
@@ -940,11 +955,12 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 
 	testTransactionID := confutil.P(uuid.New())
 
-	aliceEngineMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	aliceEngineMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			TransactionSpecification: &prototk.TransactionSpecification{
 				TransactionId: testTransactionID.String(),
+				From:          alice.identityLocator,
 			},
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
@@ -966,7 +982,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 		}
 	}).Return(nil)
 
-	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
@@ -1012,6 +1028,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	aliceEngineMocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	})
+	aliceEngineMocks.domainSmartContract.On("Address").Return(*domainAddress)
 
 	aliceEngineMocks.mockForEndorsement(t, *testTransactionID, &alice, []byte("alice-endorsement-bytes"), []byte("alice-signature-bytes"))
 	bobEngineMocks.mockForEndorsement(t, *testTransactionID, &bob, []byte("bob-endorsement-bytes"), []byte("bob-signature-bytes"))
@@ -1047,6 +1064,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 			},
 		},
 	}
+	aliceEngineMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, mock.Anything).Return(&tx.ResolvedTransaction, nil)
 
 	err = aliceEngine.HandleNewTx(ctx, aliceEngine.DB(), tx)
 	assert.NoError(t, err)
@@ -1097,11 +1115,12 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 
 	//Set up mocks on alice's transaction manager that are needed for it to be the sender (aka assembler) of transaction 1
 
-	aliceEngineMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.MatchedBy(privateTransactionMatcher(*testTransactionID1, *testTransactionID2))).Run(func(args mock.Arguments) {
+	aliceEngineMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.MatchedBy(privateTransactionMatcher(*testTransactionID1, *testTransactionID2)), mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			TransactionSpecification: &prototk.TransactionSpecification{
 				TransactionId: tx.ID.String(),
+				From:          alice.identityLocator,
 			},
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
@@ -1123,7 +1142,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 		}
 	}).Return(nil)
 
-	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
@@ -1164,6 +1183,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 	aliceEngineMocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	})
+	aliceEngineMocks.domainSmartContract.On("Address").Return(*domainAddress)
 
 	//set up the mocks on all 3 engines that are need on the endorse code path
 	bobEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *domainAddress).Return(bobEngineMocks.domainSmartContract, nil)
@@ -1202,6 +1222,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 			},
 		},
 	}
+	aliceEngineMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, *testTransactionID1).Return(&tx1.ResolvedTransaction, nil)
 
 	tx2 := &components.ValidatedTransaction{
 		ResolvedTransaction: components.ResolvedTransaction{
@@ -1218,6 +1239,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 			},
 		},
 	}
+	aliceEngineMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, *testTransactionID2).Return(&tx2.ResolvedTransaction, nil)
 
 	//Start off on block 99 where alice should be coordinator
 
@@ -1309,11 +1331,12 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	})
 
-	aliceEngineMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.MatchedBy(privateTransactionMatcher(*testTransactionID1, *testTransactionID2))).Run(func(args mock.Arguments) {
+	aliceEngineMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.MatchedBy(privateTransactionMatcher(*testTransactionID1, *testTransactionID2)), mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			TransactionSpecification: &prototk.TransactionSpecification{
 				TransactionId: tx.ID.String(),
+				From:          alice.identityLocator,
 			},
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
@@ -1335,7 +1358,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 		}
 	}).Return(nil)
 
-	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
@@ -1376,6 +1399,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 	bobEngineMocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	})
+	aliceEngineMocks.domainSmartContract.On("Address").Return(*domainAddress)
 
 	//set up the mocks on all 3 engines that are need on the endorse code path
 	bobEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *domainAddress).Return(bobEngineMocks.domainSmartContract, nil)
@@ -1414,6 +1438,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 			},
 		},
 	}
+	aliceEngineMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, *testTransactionID1).Return(&tx1.ResolvedTransaction, nil)
 
 	tx2 := &components.ValidatedTransaction{
 		ResolvedTransaction: components.ResolvedTransaction{
@@ -1430,6 +1455,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 			},
 		},
 	}
+	aliceEngineMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, *testTransactionID2).Return(&tx2.ResolvedTransaction, nil)
 
 	aliceEngine.SetBlockHeight(ctx, 199)
 	bobEngine.SetBlockHeight(ctx, 199)
@@ -1514,6 +1540,8 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	aliceEngine, aliceEngineMocks := NewPrivateTransactionMgrForPackageTesting(t, aliceNodeName)
 	aliceEngineMocks.mockDomain(domainAddress)
 
+	log.SetLevel("debug")
+
 	_, bobEngineMocks := NewPrivateTransactionMgrForPackageTesting(t, bobNodeName)
 	bobEngineMocks.mockDomain(domainAddress)
 
@@ -1526,9 +1554,13 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	})
 
-	aliceEngineMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	aliceEngineMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				TransactionId: tx.ID.String(),
+				From:          alice.identityLocator,
+			},
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
 					Lookup:       alice.identityLocator,
@@ -1543,6 +1575,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			},
 		}
 	}).Return(nil)
+	aliceEngineMocks.domainSmartContract.On("Address").Return(*domainAddress)
 
 	// TODO check that the transaction is signed with this key
 
@@ -1563,7 +1596,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	testTransactionID1 := confutil.P(uuid.New())
 	testTransactionID2 := confutil.P(uuid.New())
 
-	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(2).(*components.PrivateTransaction)
 		switch tx.ID.String() {
 		case testTransactionID1.String():
@@ -1680,6 +1713,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			},
 		},
 	}
+	aliceEngineMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, *testTransactionID1).Return(&tx1.ResolvedTransaction, nil)
 
 	err = aliceEngine.HandleNewTx(ctx, aliceEngine.DB(), tx1)
 	require.NoError(t, err)
@@ -1699,6 +1733,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			},
 		},
 	}
+	aliceEngineMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, *testTransactionID2).Return(&tx2.ResolvedTransaction, nil)
 
 	err = aliceEngine.HandleNewTx(ctx, aliceEngine.DB(), tx2)
 	require.NoError(t, err)

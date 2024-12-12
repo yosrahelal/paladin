@@ -81,7 +81,7 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		return
 	}
 
-	if tf.transaction.PreAssembly == nil {
+	if tf.transaction.PreAssembly == nil || tf.transaction.PreAssembly.TransactionSpecification == nil {
 		tf.logActionDebug(ctx, "PreAssembly is nil")
 		panic("PreAssembly is nil.")
 		//This should never happen unless there is a serious programming error or the memory has been corrupted
@@ -403,6 +403,7 @@ func (tf *transactionFlow) writeAndLockStates(ctx context.Context) {
 		}
 	}
 }
+
 func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 	//Assemble may require a call to another node ( in the case we have been delegated to coordinate transaction for other nodes)
 	//Usually, they will get sent to us already assembled but there may be cases where we need to re-assemble
@@ -423,10 +424,16 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 		return
 	}
 
-	assemblingNode, err := tktypes.PrivateIdentityLocator(tf.transaction.PreAssembly.TransactionSpecification.From).Node(ctx, true)
+	var err error
+	var assemblingNode string
+	preAssemblyCopy := *tf.transaction.PreAssembly
+	if preAssemblyCopy.TransactionSpecification == nil {
+		err = i18n.NewError(ctx, msgs.MsgPrivateTxMgrAssembleRequestInvalid, tf.transaction.ID)
+	}
+	if err == nil {
+		assemblingNode, err = tktypes.PrivateIdentityLocator(preAssemblyCopy.TransactionSpecification.From).Node(ctx, true)
+	}
 	if err != nil {
-
-		log.L(ctx).Errorf("Failed to get node name from locator %s: %s", tf.transaction.PreAssembly.TransactionSpecification.From, err)
 		tf.publisher.PublishTransactionAssembleFailedEvent(
 			ctx,
 			tf.transaction.ID.String(),
@@ -436,7 +443,6 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 		return
 	}
 
-	preAssemblyCopy := *tf.transaction.PreAssembly
 	tf.assembleCoordinator.QueueAssemble(
 		ctx,
 		assemblingNode,
