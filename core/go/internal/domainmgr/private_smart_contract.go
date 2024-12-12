@@ -208,6 +208,7 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 	if err != nil {
 		return err
 	}
+	txSpec.TransactionId = tktypes.Bytes32UUIDFirst16(tx.ID).String()
 	tx.PreAssembly.TransactionSpecification = txSpec
 
 	// Clear any previous assembly state out, as it's considered completely invalid
