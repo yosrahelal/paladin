@@ -50,6 +50,17 @@ spec:
                   Deprecated: Use 'baseLedgerEndpoint' instead. Example:
                   { "baseLedgerEndpoint": {"type": "network", "network": {"auth": {}}} }
                 properties:
+                  inline:
+                    description: Auth details are provided inline (not recommended)
+                    properties:
+                      password:
+                        type: string
+                      username:
+                        type: string
+                    required:
+                    - password
+                    - username
+                    type: object
                   secretRef:
                     description: Secret is used to provide the name of the secret
                       to use for authentication
@@ -64,6 +75,7 @@ spec:
                     description: auth method to use for the connection
                     enum:
                     - secret
+                    - inline
                     type: string
                 required:
                 - type
@@ -78,6 +90,17 @@ spec:
                     properties:
                       auth:
                         properties:
+                          inline:
+                            description: Auth details are provided inline (not recommended)
+                            properties:
+                              password:
+                                type: string
+                              username:
+                                type: string
+                            required:
+                            - password
+                            - username
+                            type: object
                           secretRef:
                             description: Secret is used to provide the name of the
                               secret to use for authentication
@@ -92,6 +115,7 @@ spec:
                             description: auth method to use for the connection
                             enum:
                             - secret
+                            - inline
                             type: string
                         required:
                         - type
