@@ -808,6 +808,15 @@ func (r *PaladinReconciler) generatePaladinAuthConfig(ctx context.Context, node 
 		if err := mapToStruct(sec.Data, &pldConf.Blockchain.WS.Auth); err != nil {
 			return err
 		}
+
+	case corev1alpha1.AuthTypeInline:
+		if authConfig.Inline == nil {
+			return fmt.Errorf("AuthInline must be provided when using AuthTypeInline")
+		}
+		pldConf.Blockchain.HTTP.Auth.Username = authConfig.Inline.Username
+		pldConf.Blockchain.HTTP.Auth.Password = authConfig.Inline.Password
+		pldConf.Blockchain.WS.Auth.Username = authConfig.Inline.Username
+		pldConf.Blockchain.WS.Auth.Password = authConfig.Inline.Password
 	}
 	return nil
 }
