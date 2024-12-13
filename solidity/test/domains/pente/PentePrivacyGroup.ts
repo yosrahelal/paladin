@@ -129,21 +129,32 @@ describe("PentePrivacyGroup", function () {
     );
     const tx1ID = randBytes32();
 
+    const tx1 = {
+      inputs: [],
+      reads: [],
+      outputs: stateSet1,
+      info: info1,
+    };
     await expect(
       privacyGroup.transition(
         tx1ID,
-        {
-          inputs: [],
-          reads: [],
-          outputs: stateSet1,
-          info: info1,
-        },
+        tx1,
         [],
         endorsements1
       )
     )
       .to.emit(privacyGroup, "PenteTransition")
       .withArgs(tx1ID, [], [], stateSet1, info1);
+
+    // Rejects duplicate
+    await expect(
+      privacyGroup.transition(
+        tx1ID,
+        tx1,
+        [],
+        endorsements1
+      )
+    ).to.be.rejectedWith("PenteDuplicateTransaction");
 
     const stateSet2 = [randBytes32(), randBytes32(), randBytes32()];
     const inputs2 = [stateSet1[1]];
