@@ -191,30 +191,34 @@ func (tb *testbed) newTestbedTransaction(ctx context.Context, invocation *pldapi
 		return nil, err
 	}
 
+	return mapDirectlyToInternalPrivateTX(psc, &invocation.TransactionBase, fn, intent), nil
+}
+
+func mapDirectlyToInternalPrivateTX(psc components.DomainSmartContract, inTx *pldapi.TransactionBase, fn *abi.Entry, intent prototk.TransactionSpecification_Intent) *testbedTransaction {
 	txnID := uuid.New()
 	return &testbedTransaction{
 		psc: psc,
 		ptx: &components.PrivateTransaction{
 			ID:      txnID,
-			Intent:  intent,
 			Domain:  psc.Domain().Name(),
 			Address: psc.Address(),
+			Intent:  intent,
 		},
 		localTx: &components.ResolvedTransaction{
 			Transaction: &pldapi.Transaction{
 				ID: &txnID,
 				TransactionBase: pldapi.TransactionBase{
 					Domain: psc.Domain().Name(),
-					From:   invocation.From,
+					From:   inTx.From,
 					To:     confutil.P(psc.Address()),
-					Data:   invocation.Data,
+					Data:   inTx.Data,
 				},
 			},
 			Function: &components.ResolvedFunction{
 				Definition: fn,
 			},
 		},
-	}, nil
+	}
 }
 
 // Very simplified version of the real logic in TX manager
@@ -356,7 +360,8 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, tx *testbedTransa
 		if err != nil {
 			return err
 		}
-		nextTX := mapDirectlyToInternalPrivateTX(nextContract, tx.ptx.PreparedPrivateTransaction, tx.ptx.Intent)
+		nextTX := mapDirectlyToInternalPrivateTX(nextContract, &tx.ptx.PreparedPrivateTransaction.TransactionBase, tx.ptx.PreparedPrivateTransaction.ABI[0], tx.ptx.Intent)
+		log.L(ctx).Infof("Testbed chaining prepared private transaction to=%s domain=%s/%s", nextTX.localTx.Transaction.To, nextContract.Domain().Name(), nextContract.Address())
 		return tb.execPrivateTransaction(ctx, nextTX)
 	} else {
 		// Public transaction
@@ -371,30 +376,6 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, tx *testbedTransa
 		}
 		_, err := tb.ExecTransactionSync(ctx, tx.ptx.PreparedPublicTransaction)
 		return err
-	}
-}
-
-func mapDirectlyToInternalPrivateTX(psc components.DomainSmartContract, etx *pldapi.TransactionInput, intent prototk.TransactionSpecification_Intent) *testbedTransaction {
-	txnID := uuid.New()
-	return &testbedTransaction{
-		psc: psc,
-		ptx: &components.PrivateTransaction{
-			ID:      txnID,
-			Domain:  etx.Domain,
-			Address: *etx.To,
-			Intent:  intent,
-		},
-		localTx: &components.ResolvedTransaction{
-			Transaction: &pldapi.Transaction{
-				ID: &txnID,
-				TransactionBase: pldapi.TransactionBase{
-					Domain: etx.Domain,
-					From:   etx.From,
-					To:     etx.To,
-					Data:   etx.Data,
-				},
-			},
-		},
 	}
 }
 

@@ -92,6 +92,7 @@ func (dc *domainContract) buildTransactionSpecification(ctx context.Context, loc
 
 	if localTx.Transaction == nil || localTx.Transaction.Data == nil || localTx.Function == nil ||
 		localTx.Transaction.Domain != dc.Domain().Name() || *localTx.Transaction.To != dc.info.Address {
+		log.L(ctx).Errorf("Invalid tx for domain %s/%s: %+v", dc.Domain().Name(), dc.info.Address, localTx.Transaction)
 		return nil, i18n.NewError(ctx, msgs.MsgDomainTxnInputDefinitionInvalid)
 	}
 
