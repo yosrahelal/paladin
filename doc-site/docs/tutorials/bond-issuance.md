@@ -83,7 +83,7 @@ await paladin1.sendTransaction({
   abi: bondTrackerPublicJson.abi,
   bytecode: bondTrackerPublicJson.bytecode,
   function: "",
-  from: bondIssuerUnqualified,
+  from: bondIssuer.lookup,
   data: {
     owner: issuerCustodianGroup.address,
     issueDate_: issueDate,
@@ -108,7 +108,7 @@ events throughout the bond's lifetime.
 await newBondTracker(issuerCustodianGroup, bondIssuer, {
   name: "BOND",
   symbol: "BOND",
-  custodian: bondCustodianAddress,
+  custodian: await bondCustodian.address(),
   publicTracker: bondTrackerPublicAddress,
 });
 ```
@@ -149,7 +149,7 @@ await paladin1.sendTransaction({
   abi: atomFactoryJson.abi,
   bytecode: atomFactoryJson.bytecode,
   function: "",
-  from: bondIssuerUnqualified,
+  from: bondIssuer.lookup,
   data: {},
 });
 ```
@@ -189,7 +189,7 @@ await bondTracker.using(paladin2).beginDistribution(bondCustodian, {
 const investorList = await bondTracker.investorList(bondIssuer);
 await investorList
   .using(paladin2)
-  .addInvestor(bondCustodian, { addr: investorAddress });
+  .addInvestor(bondCustodian, { addr: await investor.address() });
 ```
 
 This allows the bond custodian to begin distributing the bond to potential investors. Each investor must be added
@@ -227,7 +227,7 @@ const bondSubscription = await newBondSubscription(
   {
     bondAddress_: notoBond.address,
     units_: 100,
-    custodian_: bondCustodianAddress,
+    custodian_: await bondCustodian.address(),
     atomFactory_: atomFactoryAddress,
   }
 );
@@ -336,7 +336,7 @@ await paladin2.sendTransaction({
   type: TransactionType.PUBLIC,
   abi: atomJson.abi,
   function: "execute",
-  from: bondCustodianUnqualified,
+  from: bondCustodian.lookup,
   to: atomAddress,
   data: {},
 });

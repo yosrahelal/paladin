@@ -1,7 +1,8 @@
 import PaladinClient, {
+  PaladinVerifier,
   PentePrivacyGroup,
   PentePrivateContract,
-} from "paladin-sdk";
+} from "@lfdecentralizedtrust-labs/paladin-sdk";
 import investorList from "../abis/InvestorList.json";
 
 export interface AddInvestorParams {
@@ -20,7 +21,7 @@ export class InvestorList extends PentePrivateContract<{}> {
     return new InvestorList(this.evm.using(paladin), this.address);
   }
 
-  addInvestor(from: string, params: AddInvestorParams) {
+  addInvestor(from: PaladinVerifier, params: AddInvestorParams) {
     return this.invoke(from, "addInvestor", params);
   }
 }
