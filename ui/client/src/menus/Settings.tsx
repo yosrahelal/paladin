@@ -47,7 +47,6 @@ export const SettingsMenu: React.FC<Props> = ({
   };
 
   const handleColorChange = (mode: 'light' | 'dark' | null) => {
-    console.log(mode !== theme.palette.mode)
     if (mode !== null && mode !== theme.palette.mode) {
       colorMode.toggleColorMode();
     }
