@@ -22,6 +22,7 @@ import { ApplicationContext } from "../contexts/ApplicationContext";
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { SettingsMenu } from "../menus/Settings";
 import MenuIcon from '@mui/icons-material/Menu';
+import { AppRoutes } from "../routes";
 
 export const Header: React.FC = () => {
 
@@ -34,11 +35,11 @@ export const Header: React.FC = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const getTabFromPath = (path: string) => {
-    if (path.startsWith('/ui/indexer')) {
+    if (path.startsWith(AppRoutes.Indexer)) {
       return 0;
-    } else if (path.startsWith('/ui/submissions')) {
+    } else if (path.startsWith(AppRoutes.Submissions)) {
       return 1;
-    } else if (path.startsWith('/ui/registry')) {
+    } else if (path.startsWith(AppRoutes.Registry)) {
       return 2;
     }
     return 0;
@@ -49,9 +50,9 @@ export const Header: React.FC = () => {
   const handleNavigation = (tab: number) => {
     setTab(tab);
     switch (tab) {
-      case 0: navigate('/ui/indexer'); break;
-      case 1: navigate('/ui/submissions'); break;
-      case 2: navigate('/ui/registry'); break;
+      case 0: navigate(AppRoutes.Indexer); break;
+      case 1: navigate(AppRoutes.Submissions); break;
+      case 2: navigate(AppRoutes.Registry); break;
     }
   };
 
