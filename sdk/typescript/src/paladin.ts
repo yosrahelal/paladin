@@ -17,6 +17,7 @@ import {
 } from "./interfaces/transaction";
 import { Algorithms, Verifiers } from "./interfaces";
 import { ethers } from "ethers";
+import { PaladinVerifier } from "./verifier";
 
 const POLL_INTERVAL_MS = 100;
 
@@ -53,6 +54,10 @@ export default class PaladinClient {
       jsonrpc: "2.0",
       id: Date.now(),
     };
+  }
+
+  getVerifiers(...lookups: string[]) {
+    return lookups.map((lookup) => new PaladinVerifier(this, lookup));
   }
 
   parseAxiosErrorMessage(err: any) {

@@ -1,7 +1,8 @@
 import PaladinClient, {
+  PaladinVerifier,
   PentePrivacyGroup,
   PentePrivateContract,
-} from "paladin-sdk";
+} from "@lfdecentralizedtrust-labs/paladin-sdk";
 import bondTracker from "../abis/BondTracker.json";
 import { InvestorList } from "./investorlist";
 
@@ -19,7 +20,7 @@ export interface BeginDistributionParams {
 
 export const newBondTracker = async (
   pente: PentePrivacyGroup,
-  from: string,
+  from: PaladinVerifier,
   params: BondTrackerConstructorParams
 ) => {
   const address = await pente.deploy(
@@ -43,11 +44,11 @@ export class BondTracker extends PentePrivateContract<BondTrackerConstructorPara
     return new BondTracker(this.evm.using(paladin), this.address);
   }
 
-  beginDistribution(from: string, params: BeginDistributionParams) {
+  beginDistribution(from: PaladinVerifier, params: BeginDistributionParams) {
     return this.invoke(from, "beginDistribution", params);
   }
 
-  async investorList(from: string) {
+  async investorList(from: PaladinVerifier) {
     const result = await this.call(from, "investorList", []);
     return new InvestorList(this.evm, result[0]);
   }

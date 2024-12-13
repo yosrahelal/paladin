@@ -26,8 +26,8 @@ configurations {
 }
 
 dependencies {
-    contractCompile project(path: ":solidity", configuration: "compiledContracts")
-    buildSDK project(path: ":sdk:typescript", configuration: "buildSDK")
+    contractCompile project(path: ':solidity', configuration: 'compiledContracts')
+    buildSDK project(path: ':sdk:typescript', configuration: 'buildSDK')
 }
 
 task install(type: Exec) {
@@ -35,9 +35,9 @@ task install(type: Exec) {
     args 'install'
 
     inputs.files(configurations.buildSDK)
-    inputs.files("package.json")
-    outputs.files("package-lock.json")
-    outputs.dir("node_modules")
+    inputs.files('package.json')
+    outputs.files('package-lock.json')
+    outputs.dir('node_modules')
 }
 
 task copyABI(type: Exec, dependsOn: install) {
@@ -46,6 +46,7 @@ task copyABI(type: Exec, dependsOn: install) {
     args 'abi'
 
     inputs.files(configurations.contractCompile)
+    inputs.dir('scripts')
     outputs.dir('src/abis')
 }
 
@@ -54,11 +55,19 @@ task build(type: Exec, dependsOn: [install, copyABI]) {
     args 'run'
     args 'build'
 
-    inputs.dir("src")
-    outputs.dir("build")
+    inputs.dir('src')
+    outputs.dir('build')
+}
+
+task e2e(type: Exec, dependsOn: [build]) {
+    dependsOn ':operator:deploy'
+
+    executable 'npm'
+    args 'run'
+    args 'start'
 }
 
 task clean(type: Delete) {
-    delete "node_modules"
-    delete "build"
+    delete 'node_modules'
+    delete 'build'
 }
