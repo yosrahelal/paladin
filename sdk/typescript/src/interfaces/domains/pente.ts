@@ -7,5 +7,5 @@ export interface IGroupInfo {
 
 export interface IGroupInfoUnresolved {
   salt: string;
-  members: PaladinVerifier[];
+  members: (string | PaladinVerifier)[];
 }
