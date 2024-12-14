@@ -515,6 +515,26 @@ func (tm *txManager) checkIdempotencyKeys(ctx context.Context, origErr error, tx
 	return origErr
 }
 
+func (tm *txManager) resolvePrivateDomain(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput) error {
+	if tx.To != nil {
+		// We've been given the contract to invoke, we need to check it's valid
+		psc, err := tm.domainMgr.GetSmartContractByAddress(ctx, dbTX, *tx.To)
+		if err != nil {
+			return err
+		}
+		domain := psc.Domain().Name()
+		if tx.Domain == "" {
+			tx.Domain = domain
+		} else if tx.Domain != domain {
+			return i18n.NewError(ctx, msgs.MsgTxMgrDomainMismatch, tx.Domain, domain, psc.Address())
+		}
+	} else if tx.Domain == "" {
+		// We deploying a private smart contract, so we must have a domain
+		return i18n.NewError(ctx, msgs.MsgTxMgrDomainMissingForDeploy)
+	}
+	return nil
+}
+
 func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (func(), *components.ValidatedTransaction, error) {
 	txID := uuid.New()
 	// Useful to have a correlation from transactionID to idempotencyKey in the logs
@@ -522,6 +542,9 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, t
 
 	switch tx.Type.V() {
 	case pldapi.TransactionTypePrivate:
+		if err := tm.resolvePrivateDomain(ctx, dbTX, tx); err != nil {
+			return nil, nil, err
+		}
 	case pldapi.TransactionTypePublic:
 		if submitMode == pldapi.SubmitModeExternal {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateOnlyForPrepare)
@@ -531,10 +554,6 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, t
 		return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidTXType)
 	}
 
-	// We resolve the function outside of a DB transaction, because it's idempotent processing
-	// and needs to happen before we open the DB transaction that is used by the public TX manager.
-	// Note there is only a DB cost for read if we haven't cached the function, and there
-	// is only a DB cost for write, if it's the first time we've invoked the function.
 	postCommit, fn, err := tm.resolveFunction(ctx, dbTX, tx.ABI, tx.ABIReference, tx.Function, tx.To)
 	if err != nil {
 		return nil, nil, err

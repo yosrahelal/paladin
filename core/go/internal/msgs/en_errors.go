@@ -409,6 +409,8 @@ var (
 	MsgTxMgrDecodeEventAnonymous         = ffe("PD012228", "Unable to decode event with no topics (anonymous events cannot be decoded)")
 	MsgTxMgrDecodeEventNoABI             = ffe("PD012229", "Unable to decode event data using stored ABIs (%d matched signature)")
 	MsgTxMgrPublicSenderNotValidLocal    = ffe("PD012230", "The from identity '%s' must be a valid identity local to the node")
+	MsgTxMgrDomainMismatch               = ffe("PD012231", "The domain '%s' specified on the transaction does not match the domain '%s' for contract %s")
+	MsgTxMgrDomainMissingForDeploy       = ffe("PD012232", "A domain must be specified for a private smart contract deployment transaction")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")
