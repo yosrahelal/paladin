@@ -274,16 +274,20 @@ async function main(): Promise<boolean> {
   receipt = await bondSubscription.using(paladin2).distribute(bondCustodian);
   if (!checkReceipt(receipt)) return false;
 
-  // TODO: use the AtomDeployed event instead of this lookup method
-  const atomAddressResult = await paladin2.call({
-    type: TransactionType.PUBLIC,
-    abi: atomFactoryJson.abi,
-    function: "lastDeploy",
-    from: bondCustodian.lookup,
-    to: atomFactoryAddress,
-    data: {},
-  });
-  const atomAddress = atomAddressResult["0"];
+  // Extract the address of the created Atom
+  const events = await paladin2.decodeTransactionEvents(
+    receipt.transactionHash,
+    atomFactoryJson.abi,
+    ""
+  );
+  const atomDeployedEvent = events.find(
+    (e) => e.soliditySignature === "event AtomDeployed(address addr)"
+  );
+  if (atomDeployedEvent === undefined) {
+    logger.error("Did not find AtomDeployed event");
+    return false;
+  }
+  const atomAddress = atomDeployedEvent.data.addr;
   logger.log("Success!");
 
   // Approve the payment transfer
