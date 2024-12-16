@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -179,29 +180,45 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 	})
 }
 
-func (tb *testbed) newPrivateTransaction(ctx context.Context, invocation *pldapi.TransactionInput, intent prototk.TransactionSpecification_Intent) (components.DomainSmartContract, *components.PrivateTransaction, error) {
+func (tb *testbed) newTestbedTransaction(ctx context.Context, invocation *pldapi.TransactionInput, intent prototk.TransactionSpecification_Intent) (*testbedTransaction, error) {
 	psc, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, tb.c.Persistence().DB(), *invocation.To)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	fn, err := tb.resolveFunction(invocation)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	tx := &components.PrivateTransaction{
-		ID: uuid.New(),
-		Inputs: &components.TransactionInputs{
-			Function: fn,
-			Domain:   psc.Domain().Name(),
-			From:     invocation.From,
-			To:       psc.Address(),
-			Inputs:   invocation.Data,
-			Intent:   intent,
+	return mapDirectlyToInternalPrivateTX(psc, &invocation.TransactionBase, fn, intent), nil
+}
+
+func mapDirectlyToInternalPrivateTX(psc components.DomainSmartContract, inTx *pldapi.TransactionBase, fn *abi.Entry, intent prototk.TransactionSpecification_Intent) *testbedTransaction {
+	txnID := uuid.New()
+	return &testbedTransaction{
+		psc: psc,
+		ptx: &components.PrivateTransaction{
+			ID:      txnID,
+			Domain:  psc.Domain().Name(),
+			Address: psc.Address(),
+			Intent:  intent,
+		},
+		localTx: &components.ResolvedTransaction{
+			Transaction: &pldapi.Transaction{
+				ID: &txnID,
+				TransactionBase: pldapi.TransactionBase{
+					Domain: psc.Domain().Name(),
+					From:   inTx.From,
+					To:     confutil.P(psc.Address()),
+					Data:   inTx.Data,
+				},
+			},
+			Function: &components.ResolvedFunction{
+				Definition: fn,
+			},
 		},
 	}
-	return psc, tx, err
 }
 
 // Very simplified version of the real logic in TX manager
@@ -223,53 +240,54 @@ func (tb *testbed) resolveFunction(invocation *pldapi.TransactionInput) (*abi.En
 	return nil, fmt.Errorf("Could not find function '%s' in provided ABI", invocation.Function)
 }
 
-func (tb *testbed) resolveTXSigner(tx *components.PrivateTransaction) error {
+func (tb *testbed) resolveTXSigner(tx *testbedTransaction) error {
 	// The testbed implements much simpler checking here than the full private TX manager
 	// on whether the ENDORSER_MUST_SUBMIT constraint clashes with the config on the contract.
-	for _, ar := range tx.PostAssembly.Endorsements {
+	for _, ar := range tx.ptx.PostAssembly.Endorsements {
 		for _, c := range ar.Constraints {
 			if c == prototk.AttestationResult_ENDORSER_MUST_SUBMIT {
-				if tx.Signer != "" {
+				if tx.ptx.Signer != "" {
 					// Multiple endorsers claiming it is an error
 					return fmt.Errorf("multiple endorsers claimed submit")
 				}
-				tx.Signer = ar.Verifier.Lookup
+				tx.ptx.Signer = ar.Verifier.Lookup
 			}
 		}
 	}
 	// If there isn't an ENDORSER_MUST_SUBMIT constraint, we just use a one-time key
-	if tx.Signer == "" {
-		tx.Signer = fmt.Sprintf("testbed.onetime.%s", uuid.New())
+	if tx.ptx.Signer == "" {
+		tx.ptx.Signer = fmt.Sprintf("testbed.onetime.%s", uuid.New())
 	}
 	return nil
 }
 
-func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.DomainSmartContract, tx *components.PrivateTransaction) error {
+func (tb *testbed) execPrivateTransaction(ctx context.Context, tx *testbedTransaction) error {
 
-	if !strings.Contains(tx.Inputs.From, "@") {
+	sender := tx.localTx.Transaction.From
+	if !strings.Contains(sender, "@") {
 		// Transaction manager normally does the full version of this
-		tx.Inputs.From = fmt.Sprintf("%s@%s", tx.Inputs.From, tb.c.TransportManager().LocalNodeName())
+		tx.localTx.Transaction.From = fmt.Sprintf("%s@%s", sender, tb.c.TransportManager().LocalNodeName())
 	}
 
 	// Testbed just uses a domain context for the duration of the TX, and flushes before returning
-	dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
+	dCtx := tb.c.StateManager().NewDomainContext(ctx, tx.psc.Domain(), tx.psc.Address())
 	defer dCtx.Close()
 
 	// First we call init on the smart contract to:
 	// - validate the transaction ABI is understood by the contract
 	// - get an initial list of verifiers that need to be resolved
-	if err := psc.InitTransaction(ctx, tx); err != nil {
+	if err := tx.psc.InitTransaction(ctx, tx.ptx, tx.localTx); err != nil {
 		return err
 	}
 
 	// Gather the addresses - in the testbed we assume these all to be local
-	tx.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.PreAssembly.RequiredVerifiers))
-	for i, v := range tx.PreAssembly.RequiredVerifiers {
+	tx.ptx.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.ptx.PreAssembly.RequiredVerifiers))
+	for i, v := range tx.ptx.PreAssembly.RequiredVerifiers {
 		resolvedKey, err := tb.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 		if err != nil {
 			return fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
 		}
-		tx.PreAssembly.Verifiers[i] = &prototk.ResolvedVerifier{
+		tx.ptx.PreAssembly.Verifiers[i] = &prototk.ResolvedVerifier{
 			Lookup:       v.Lookup,
 			Algorithm:    v.Algorithm,
 			Verifier:     resolvedKey.Verifier.Verifier,
@@ -278,21 +296,21 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 
 	// Now call assemble
-	if err := psc.AssembleTransaction(dCtx, tb.c.Persistence().DB(), tx); err != nil {
+	if err := tx.psc.AssembleTransaction(dCtx, tb.c.Persistence().DB(), tx.ptx, tx.localTx); err != nil {
 		return err
 	}
 
 	// The testbed only handles the OK result
-	switch tx.PostAssembly.AssemblyResult {
+	switch tx.ptx.PostAssembly.AssemblyResult {
 	case prototk.AssembleTransactionResponse_OK:
 	default:
-		return fmt.Errorf("assemble result was %s", tx.PostAssembly.AssemblyResult)
+		return fmt.Errorf("assemble result was %s", tx.ptx.PostAssembly.AssemblyResult)
 	}
 
 	// The testbed always chooses to take the assemble output and progress to endorse
 	// (no complex sequence selection routine that might result in abandonment).
 	// So just write the states
-	if err := psc.WritePotentialStates(dCtx, tb.c.Persistence().DB(), tx); err != nil {
+	if err := tx.psc.WritePotentialStates(dCtx, tb.c.Persistence().DB(), tx.ptx); err != nil {
 		return err
 	}
 
@@ -302,12 +320,12 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 
 	// Gather endorsements (this would be a distributed activity across nodes in the real engine)
-	if err := tb.gatherEndorsements(dCtx, psc, tx); err != nil {
+	if err := tb.gatherEndorsements(dCtx, tx); err != nil {
 		return err
 	}
 
 	log.L(ctx).Infof("Assembled and endorsed inputs=%d outputs=%d signatures=%d endorsements=%d",
-		len(tx.PostAssembly.InputStates), len(tx.PostAssembly.OutputStates), len(tx.PostAssembly.Signatures), len(tx.PostAssembly.Endorsements))
+		len(tx.ptx.PostAssembly.InputStates), len(tx.ptx.PostAssembly.OutputStates), len(tx.ptx.PostAssembly.Signatures), len(tx.ptx.PostAssembly.Endorsements))
 
 	// Pick the signer for the base ledger transaction (we are always the coordinator in the testbed so this logic is much simplified from the private TX manager)
 	if err := tb.resolveTXSigner(tx); err != nil {
@@ -315,12 +333,12 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 
 	// Prepare the transaction
-	if err := psc.PrepareTransaction(dCtx, tb.c.Persistence().DB(), tx); err != nil {
+	if err := tx.psc.PrepareTransaction(dCtx, tb.c.Persistence().DB(), tx.ptx); err != nil {
 		return err
 	}
 
 	// Build any nullifiers
-	if err := tb.writeNullifiersToContext(dCtx, tx); err != nil {
+	if err := tb.writeNullifiersToContext(dCtx, tx.ptx); err != nil {
 		return err
 	}
 
@@ -332,79 +350,66 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	dbTXResultCB(nil)
 
 	// If preparing only, stop here
-	if tx.Inputs.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION {
+	if tx.ptx.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION {
 		return nil
 	}
 
-	if tx.PreparedPrivateTransaction != nil && tx.PreparedPrivateTransaction.To != nil {
+	if tx.ptx.PreparedPrivateTransaction != nil && tx.ptx.PreparedPrivateTransaction.To != nil {
 		// Private transaction
-		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, tb.c.Persistence().DB(), *tx.PreparedPrivateTransaction.To)
+		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, tb.c.Persistence().DB(), *tx.ptx.PreparedPrivateTransaction.To)
 		if err != nil {
 			return err
 		}
-		nextTX := mapDirectlyToInternalPrivateTX(tx.PreparedPrivateTransaction, tx.Inputs.Intent)
-		return tb.execPrivateTransaction(ctx, nextContract, nextTX)
+		nextTX := mapDirectlyToInternalPrivateTX(nextContract, &tx.ptx.PreparedPrivateTransaction.TransactionBase, tx.ptx.PreparedPrivateTransaction.ABI[0], tx.ptx.Intent)
+		log.L(ctx).Infof("Testbed chaining prepared private transaction to=%s domain=%s/%s", nextTX.localTx.Transaction.To, nextContract.Domain().Name(), nextContract.Address())
+		return tb.execPrivateTransaction(ctx, nextTX)
 	} else {
 		// Public transaction
-		if tx.Inputs.Intent == prototk.TransactionSpecification_CALL {
+		if tx.ptx.Intent == prototk.TransactionSpecification_CALL {
 			var ignored any // TODO: return the output in some way
 			return tb.ExecBaseLedgerCall(ctx, &ignored, &pldapi.TransactionCall{
-				TransactionInput: *tx.PreparedPublicTransaction,
+				TransactionInput: *tx.ptx.PreparedPublicTransaction,
 				PublicCallOptions: pldapi.PublicCallOptions{
 					Block: "latest",
 				},
 			})
 		}
-		_, err := tb.ExecTransactionSync(ctx, tx.PreparedPublicTransaction)
+		_, err := tb.ExecTransactionSync(ctx, tx.ptx.PreparedPublicTransaction)
 		return err
 	}
 }
 
-func mapDirectlyToInternalPrivateTX(etx *pldapi.TransactionInput, intent prototk.TransactionSpecification_Intent) *components.PrivateTransaction {
-	return &components.PrivateTransaction{
-		ID: uuid.New(),
-		Inputs: &components.TransactionInputs{
-			Domain:   etx.Domain,
-			From:     etx.From,
-			To:       *etx.To,
-			Function: etx.ABI[0],
-			Inputs:   etx.Data,
-			Intent:   intent,
-		},
-	}
-}
-
-func mapTransactionState(state *components.FullState, tx *components.TransactionInputs) *pldapi.StateEncoded {
+func mapTransactionState(state *components.FullState, tx *testbedTransaction) *pldapi.StateEncoded {
 	return &pldapi.StateEncoded{
-		DomainName:      tx.Domain,
-		ContractAddress: tx.To,
+		DomainName:      tx.ptx.Domain,
+		ContractAddress: tx.ptx.Address,
 		ID:              state.ID,
 		Schema:          state.Schema,
 		Data:            state.Data.Bytes(),
 	}
 }
 
-func (tb *testbed) mapTransaction(ctx context.Context, tx *components.PrivateTransaction) (*TransactionResult, error) {
-	inputStates := make([]*pldapi.StateEncoded, len(tx.PostAssembly.InputStates))
-	for i, state := range tx.PostAssembly.InputStates {
-		inputStates[i] = mapTransactionState(state, tx.Inputs)
+func (tb *testbed) mapTransaction(ctx context.Context, tx *testbedTransaction) (*TransactionResult, error) {
+	inputStates := make([]*pldapi.StateEncoded, len(tx.ptx.PostAssembly.InputStates))
+	for i, state := range tx.ptx.PostAssembly.InputStates {
+		inputStates[i] = mapTransactionState(state, tx)
 	}
-	outputStates := make([]*pldapi.StateEncoded, len(tx.PostAssembly.OutputStates))
-	for i, state := range tx.PostAssembly.OutputStates {
-		outputStates[i] = mapTransactionState(state, tx.Inputs)
+	outputStates := make([]*pldapi.StateEncoded, len(tx.ptx.PostAssembly.OutputStates))
+	for i, state := range tx.ptx.PostAssembly.OutputStates {
+		outputStates[i] = mapTransactionState(state, tx)
 	}
-	readStates := make([]*pldapi.StateEncoded, len(tx.PostAssembly.ReadStates))
-	for i, state := range tx.PostAssembly.ReadStates {
-		readStates[i] = mapTransactionState(state, tx.Inputs)
+	readStates := make([]*pldapi.StateEncoded, len(tx.ptx.PostAssembly.ReadStates))
+	for i, state := range tx.ptx.PostAssembly.ReadStates {
+		readStates[i] = mapTransactionState(state, tx)
 	}
-	infoStates := make([]*pldapi.StateEncoded, len(tx.PostAssembly.InfoStates))
-	for i, state := range tx.PostAssembly.InfoStates {
-		infoStates[i] = mapTransactionState(state, tx.Inputs)
+	infoStates := make([]*pldapi.StateEncoded, len(tx.ptx.PostAssembly.InfoStates))
+	for i, state := range tx.ptx.PostAssembly.InfoStates {
+		infoStates[i] = mapTransactionState(state, tx)
 	}
 
-	preparedTransaction := tx.PreparedPublicTransaction
-	if tx.PreparedPublicTransaction == nil {
-		preparedTransaction = tx.PreparedPrivateTransaction
+	preparedTransaction := tx.ptx.PreparedPublicTransaction
+	if tx.ptx.PreparedPublicTransaction == nil {
+		preparedTransaction = tx.ptx.PreparedPrivateTransaction
 	}
 
 	encodedCall, err := preparedTransaction.ABI[0].EncodeCallDataJSONCtx(ctx, preparedTransaction.Data)
@@ -413,15 +418,15 @@ func (tb *testbed) mapTransaction(ctx context.Context, tx *components.PrivateTra
 	}
 
 	var domainData []byte
-	if tx.PostAssembly.DomainData != nil {
-		domainData = []byte(*tx.PostAssembly.DomainData)
+	if tx.ptx.PostAssembly.DomainData != nil {
+		domainData = []byte(*tx.ptx.PostAssembly.DomainData)
 	}
 
 	return &TransactionResult{
-		ID:                  tx.ID,
+		ID:                  tx.ptx.ID,
 		EncodedCall:         encodedCall,
 		PreparedTransaction: preparedTransaction,
-		PreparedMetadata:    tx.PreparedMetadata,
+		PreparedMetadata:    tx.ptx.PreparedMetadata,
 		InputStates:         inputStates,
 		OutputStates:        outputStates,
 		ReadStates:          readStates,
@@ -435,15 +440,15 @@ func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 		invocation pldapi.TransactionInput,
 		waitForCompletion bool,
 	) (*TransactionResult, error) {
-		psc, tx, err := tb.newPrivateTransaction(ctx, &invocation, prototk.TransactionSpecification_SEND_TRANSACTION)
+		tx, err := tb.newTestbedTransaction(ctx, &invocation, prototk.TransactionSpecification_SEND_TRANSACTION)
 		if err != nil {
 			return nil, err
 		}
 		doExec := func() error {
-			return tb.execPrivateTransaction(ctx, psc, tx)
+			return tb.execPrivateTransaction(ctx, tx)
 		}
 		if waitForCompletion {
-			err = tb.c.DomainManager().ExecAndWaitTransaction(ctx, tx.ID, doExec)
+			err = tb.c.DomainManager().ExecAndWaitTransaction(ctx, tx.ptx.ID, doExec)
 		} else {
 			err = doExec()
 		}
@@ -460,11 +465,11 @@ func (tb *testbed) rpcTestbedPrepare() rpcserver.RPCHandler {
 		invocation pldapi.TransactionInput,
 	) (*TransactionResult, error) {
 
-		psc, tx, err := tb.newPrivateTransaction(ctx, &invocation, prototk.TransactionSpecification_PREPARE_TRANSACTION)
+		tx, err := tb.newTestbedTransaction(ctx, &invocation, prototk.TransactionSpecification_PREPARE_TRANSACTION)
 		if err != nil {
 			return nil, err
 		}
-		err = tb.execPrivateTransaction(ctx, psc, tx)
+		err = tb.execPrivateTransaction(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
@@ -491,12 +496,12 @@ func (tb *testbed) rpcTestbedCall() rpcserver.RPCHandler {
 		invocation *pldapi.TransactionInput,
 		dataFormat tktypes.JSONFormatOptions,
 	) (tktypes.RawJSON, error) {
-		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_CALL)
+		tx, err := tb.newTestbedTransaction(ctx, invocation, prototk.TransactionSpecification_CALL)
 		if err != nil {
 			return nil, err
 		}
 
-		requiredVerifiers, err := psc.InitCall(ctx, tx.Inputs)
+		requiredVerifiers, err := tx.psc.InitCall(ctx, tx.localTx)
 		if err != nil {
 			return nil, err
 		}
@@ -506,10 +511,10 @@ func (tb *testbed) rpcTestbedCall() rpcserver.RPCHandler {
 			return nil, err
 		}
 
-		dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
+		dCtx := tb.c.StateManager().NewDomainContext(ctx, tx.psc.Domain(), tx.psc.Address())
 		defer dCtx.Close()
 
-		cv, err := psc.ExecCall(dCtx, tb.c.Persistence().DB(), tx.Inputs, resolvedVerifiers)
+		cv, err := tx.psc.ExecCall(dCtx, tb.c.Persistence().DB(), tx.localTx, resolvedVerifiers)
 		if err != nil {
 			return nil, err
 		}

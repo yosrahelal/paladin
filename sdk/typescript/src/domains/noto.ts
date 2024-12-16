@@ -3,6 +3,7 @@ import { IGroupInfo, IStateEncoded, TransactionType } from "../interfaces";
 import PaladinClient from "../paladin";
 import * as notoPrivateJSON from "./abis/INotoPrivate.json";
 import { penteGroupABI } from "./pente";
+import { PaladinVerifier } from "../verifier";
 
 const DEFAULT_POLL_TIMEOUT = 10000;
 
@@ -38,7 +39,7 @@ export const notoConstructorABI = (
 });
 
 export interface NotoConstructorParams {
-  notary: string;
+  notary: PaladinVerifier;
   hooks?: {
     privateGroup?: IGroupInfo;
     publicAddress?: string;
@@ -48,13 +49,13 @@ export interface NotoConstructorParams {
 }
 
 export interface NotoMintParams {
-  to: string;
+  to: PaladinVerifier;
   amount: string | number;
   data: string;
 }
 
 export interface NotoTransferParams {
-  to: string;
+  to: PaladinVerifier;
   amount: string | number;
   data: string;
 }
@@ -89,14 +90,17 @@ export class NotoFactory {
     return new NotoFactory(paladin, this.domain, this.options);
   }
 
-  async newNoto(from: string, data: NotoConstructorParams) {
+  async newNoto(from: PaladinVerifier, data: NotoConstructorParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
       domain: this.domain,
       abi: [notoConstructorABI(!!data.hooks)],
       function: "",
-      from,
-      data,
+      from: from.lookup,
+      data: {
+        ...data,
+        notary: data.notary.lookup,
+      },
     });
     const receipt = await this.paladin.pollForReceipt(
       txID,
@@ -126,38 +130,47 @@ export class NotoInstance {
     return new NotoInstance(paladin, this.address, this.options);
   }
 
-  async mint(from: string, data: NotoMintParams) {
+  async mint(from: PaladinVerifier, data: NotoMintParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
       abi: notoPrivateJSON.abi,
       function: "mint",
       to: this.address,
-      from,
-      data,
+      from: from.lookup,
+      data: {
+        ...data,
+        to: data.to.lookup,
+      },
     });
     return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 
-  async transfer(from: string, data: NotoTransferParams) {
+  async transfer(from: PaladinVerifier, data: NotoTransferParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
       abi: notoPrivateJSON.abi,
       function: "transfer",
       to: this.address,
-      from,
-      data,
+      from: from.lookup,
+      data: {
+        ...data,
+        to: data.to.lookup,
+      },
     });
     return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 
-  async prepareTransfer(from: string, data: NotoTransferParams) {
+  async prepareTransfer(from: PaladinVerifier, data: NotoTransferParams) {
     const txID = await this.paladin.prepareTransaction({
       type: TransactionType.PRIVATE,
       abi: notoPrivateJSON.abi,
       function: "transfer",
       to: this.address,
-      from,
-      data,
+      from: from.lookup,
+      data: {
+        ...data,
+        to: data.to.lookup,
+      },
     });
     return this.paladin.pollForPreparedTransaction(
       txID,
@@ -165,25 +178,28 @@ export class NotoInstance {
     );
   }
 
-  async approveTransfer(from: string, data: NotoApproveTransferParams) {
+  async approveTransfer(
+    from: PaladinVerifier,
+    data: NotoApproveTransferParams
+  ) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
       abi: notoPrivateJSON.abi,
       function: "approveTransfer",
       to: this.address,
-      from,
+      from: from.lookup,
       data,
     });
     return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 
-  async burn(from: string, data: NotoBurnParams) {
+  async burn(from: PaladinVerifier, data: NotoBurnParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
       abi: notoPrivateJSON.abi,
       function: "burn",
       to: this.address,
-      from,
+      from: from.lookup,
       data,
     });
     return this.paladin.pollForReceipt(txID, this.options.pollTimeout);

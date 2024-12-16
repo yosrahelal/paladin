@@ -1,7 +1,8 @@
 import PaladinClient, {
+  PaladinVerifier,
   PentePrivacyGroup,
   PentePrivateContract,
-} from "paladin-sdk";
+} from "@lfdecentralizedtrust-labs/paladin-sdk";
 import bondSubscription from "../abis/BondSubscription.json";
 
 const bondSubscriptionConstructor = bondSubscription.abi.find(
@@ -27,7 +28,7 @@ export interface PrepareBondParams {
 
 export const newBondSubscription = async (
   pente: PentePrivacyGroup,
-  from: string,
+  from: PaladinVerifier,
   params: BondSubscriptionConstructorParams
 ) => {
   if (bondSubscriptionConstructor === undefined) {
@@ -54,15 +55,15 @@ export class BondSubscription extends PentePrivateContract<BondSubscriptionConst
     return new BondSubscription(this.evm.using(paladin), this.address);
   }
 
-  preparePayment(from: string, params: PreparePaymentParams) {
+  preparePayment(from: PaladinVerifier, params: PreparePaymentParams) {
     return this.invoke(from, "preparePayment", params);
   }
 
-  prepareBond(from: string, params: PrepareBondParams) {
+  prepareBond(from: PaladinVerifier, params: PrepareBondParams) {
     return this.invoke(from, "prepareBond", params);
   }
 
-  async distribute(from: string) {
+  async distribute(from: PaladinVerifier) {
     return this.invoke(from, "distribute", {});
   }
 }
