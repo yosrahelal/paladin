@@ -266,10 +266,10 @@ task verifyPaladin(dependsOn: verifyBesu) {
     }
 }
 
-// The 'deplay' runs the whole flow
+// The 'deploy' runs the whole flow
 task deploy(dependsOn: [copySolidity, copyZetoSolidity, verifyPaladin]) {
     doLast {
-        println 'Deplopy setup completed. Operator is running in the paladin namespace.'
+        println 'Deploy setup completed. Operator is running in the paladin namespace.'
     }
 }
 

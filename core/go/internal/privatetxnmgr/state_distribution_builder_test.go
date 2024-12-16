@@ -44,10 +44,12 @@ func TestStateDistributionBuilderAllSenderNoNullifiers(t *testing.T) {
 	state2ID := tktypes.HexBytes(tktypes.RandBytes(32))
 	contractAddr := *tktypes.RandAddress()
 	ctx, sd := newTestStateDistributionBuilder(t, &components.PrivateTransaction{
-		Inputs: &components.TransactionInputs{
-			From:   "sender@node1",
-			Domain: "domain1",
-			To:     contractAddr,
+		Domain:  "domain1",
+		Address: contractAddr,
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From: "sender@node1",
+			},
 		},
 		PostAssembly: &components.TransactionPostAssembly{
 			OutputStates: []*components.FullState{
@@ -101,10 +103,12 @@ func TestStateDistributionWithNullifiersAllRemote(t *testing.T) {
 	state2ID := tktypes.HexBytes(tktypes.RandBytes(32))
 	contractAddr := *tktypes.RandAddress()
 	ctx, sd := newTestStateDistributionBuilder(t, &components.PrivateTransaction{
-		Inputs: &components.TransactionInputs{
-			From:   "bob@node2",
-			Domain: "domain1",
-			To:     contractAddr,
+		Domain:  "domain1",
+		Address: contractAddr,
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From: "bob@node2",
+			},
 		},
 		PostAssembly: &components.TransactionPostAssembly{
 			OutputStates: []*components.FullState{
@@ -192,9 +196,11 @@ func TestStateDistributionWithNullifiersAllRemote(t *testing.T) {
 func TestStateDistributionNonFullyQualifiedSender(t *testing.T) {
 
 	ctx, sd := newTestStateDistributionBuilder(t, &components.PrivateTransaction{
-		Inputs: &components.TransactionInputs{
-			From:   "bob",
-			Domain: "domain1",
+		Domain: "domain1",
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From: "bob",
+			},
 		},
 	})
 
@@ -206,9 +212,11 @@ func TestStateDistributionNonFullyQualifiedSender(t *testing.T) {
 func TestStateDistributionInvalidAssembly(t *testing.T) {
 
 	ctx, sd := newTestStateDistributionBuilder(t, &components.PrivateTransaction{
-		Inputs: &components.TransactionInputs{
-			From:   "bob@node1",
-			Domain: "domain1",
+		Domain: "domain1",
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From: "bob@node1",
+			},
 		},
 		PostAssembly: &components.TransactionPostAssembly{
 			OutputStatesPotential: []*prototk.NewState{
@@ -229,10 +237,12 @@ func TestStateDistributionInvalidNullifiers(t *testing.T) {
 	state1ID := tktypes.HexBytes(tktypes.RandBytes(32))
 	contractAddr := *tktypes.RandAddress()
 	ctx, sd := newTestStateDistributionBuilder(t, &components.PrivateTransaction{
-		Inputs: &components.TransactionInputs{
-			From:   "bob@node2",
-			Domain: "domain1",
-			To:     contractAddr,
+		Domain:  "domain1",
+		Address: contractAddr,
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From: "bob@node2",
+			},
 		},
 		PostAssembly: &components.TransactionPostAssembly{
 			OutputStates: []*components.FullState{
@@ -269,10 +279,12 @@ func TestStateDistributionInfoStateNoNodeName(t *testing.T) {
 	state1ID := tktypes.HexBytes(tktypes.RandBytes(32))
 	contractAddr := *tktypes.RandAddress()
 	ctx, sd := newTestStateDistributionBuilder(t, &components.PrivateTransaction{
-		Inputs: &components.TransactionInputs{
-			From:   "bob@node2",
-			Domain: "domain1",
-			To:     contractAddr,
+		Domain:  "domain1",
+		Address: contractAddr,
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From: "bob@node2",
+			},
 		},
 		PostAssembly: &components.TransactionPostAssembly{
 			InfoStates: []*components.FullState{
