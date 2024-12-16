@@ -99,6 +99,7 @@ func (tf *transactionFlow) applyTransactionAssembledEvent(ctx context.Context, e
 			revertReason = *event.PostAssembly.RevertReason
 		}
 		tf.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleRevert), revertReason))
+		tf.assembleCoordinator.Complete(event.AssembleRequestID, nil)
 		return
 	}
 	if tf.transaction.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_PARK {
@@ -106,6 +107,7 @@ func (tf *transactionFlow) applyTransactionAssembledEvent(ctx context.Context, e
 		log.L(ctx).Infof("AssemblyResult is AssembleTransactionResponse_PARK")
 		tf.status = "parked"
 		tf.assemblePending = false
+		tf.assembleCoordinator.Complete(event.AssembleRequestID, nil)
 		return
 	}
 	tf.status = "assembled"
