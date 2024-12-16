@@ -114,5 +114,5 @@ export interface IEventWithData {
   signature: string;
   soliditySignature: string;
   address: string;
-  data: string;
+  data: any;
 }

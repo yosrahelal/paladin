@@ -227,6 +227,6 @@ export default class PaladinClient {
       "bidx_decodeTransactionEvents",
       [transactionHash, abi, resultFormat]
     );
-    return res.data;
+    return res.data.result;
   }
 }
