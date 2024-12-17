@@ -74,7 +74,7 @@ dependencies {
     coreGo project(path: ":core:go", configuration: "goSource")
 }
 
-task downloadZetoProver(dependsOn: "protoc") {
+task downloadZetoProver() {
     def outname = "zeto-wasm-${zetoVersion}.tar.gz"
     def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
@@ -85,7 +85,7 @@ task downloadZetoProver(dependsOn: "protoc") {
     outputs.file(f)
 }
 
-task downloadZetoTestProvingKeys(dependsOn: "protoc") {
+task downloadZetoTestProvingKeys() {
     def outname = "zeto-test-proving-keys-${zetoVersion}.tar.gz"
     def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
@@ -96,7 +96,7 @@ task downloadZetoTestProvingKeys(dependsOn: "protoc") {
     outputs.file(f)
 }
 
-task downloadZetoCompiledContracts(dependsOn: "protoc") {
+task downloadZetoCompiledContracts() {
     def outname = "zeto-contracts-${zetoVersion}.tar.gz"
     def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
