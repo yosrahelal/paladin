@@ -183,6 +183,7 @@ func (h *depositHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 		Transaction: &pb.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
+			RequiredSigner:  &req.Transaction.From, // must be signed by the original sender
 		},
 	}, nil
 }
