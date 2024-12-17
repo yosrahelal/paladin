@@ -22,7 +22,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-//go:embed abis/IZeto.json
+//go:embed abis/IZetoPrivate.json
 var zetoPrivateJSON []byte
 
 var ZetoABI = solutils.MustParseBuildABI(zetoPrivateJSON)

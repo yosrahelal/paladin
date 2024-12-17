@@ -1,7 +1,7 @@
 import { TransactionType } from "../interfaces";
 import PaladinClient from "../paladin";
 import { PaladinVerifier } from "../verifier";
-import * as zetoPrivateJSON from "./abis/IZeto.json";
+import * as zetoPrivateJSON from "./abis/IZetoPrivate.json";
 
 const POLL_TIMEOUT_MS = 10000;
 

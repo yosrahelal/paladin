@@ -178,7 +178,7 @@ task copyPkgSolidity(type: Copy) {
 
     into 'pkg/types/abis'
     from fileTree(configurations.contractCompile.asPath) {
-        include 'contracts/domains/interfaces/IZeto.sol/IZeto.json'
+        include 'contracts/domains/interfaces/IZetoPrivate.sol/IZetoPrivate.json'
     }
 
     // Flatten all paths into the destination folder
