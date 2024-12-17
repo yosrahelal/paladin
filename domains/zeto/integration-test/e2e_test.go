@@ -466,7 +466,7 @@ func getERC20Spec() (*solutils.SolidityBuild, error) {
 	if err != nil {
 		return nil, err
 	}
-	build := solutils.MustLoadBuildResolveLinks(bytes, map[string]*tktypes.EthAddress{})
+	build := solutils.MustLoadBuild(bytes)
 	return build, nil
 }
 
