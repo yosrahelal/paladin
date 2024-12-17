@@ -230,7 +230,7 @@ task testE2E(type: Exec, dependsOn: [protoc, copySolidity, copySolidityForTest, 
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task unitTests(type: Exec, dependsOn: [protoc, ":core:go:makeMocks", downloadZetoCompiledContracts]) {
+task unitTests(type: Exec, dependsOn: [protoc, ":core:go:makeMocks", downloadZetoCompiledContracts, copyPkgSolidity]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
@@ -283,6 +283,7 @@ task build {
 task clean(type: Delete) {
     delete 'coverage'
     delete 'internal/zeto/abis'
+    delete 'pkg/types/abis'
     delete 'integration-test/abis'
     delete zkpOut
     delete toolsOut
