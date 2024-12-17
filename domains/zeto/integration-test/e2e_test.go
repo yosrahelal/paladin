@@ -138,7 +138,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Setting the ERC20 contract (%s) to the Zeto instance", erc20Address)
-	paramsJson, err := json.Marshal(&map[string]string{"_erc20": erc20Address.String()})
+	paramsJson, err := json.Marshal(&map[string]string{"erc20": erc20Address.String()})
 	require.NoError(t, err)
 	_, err = s.tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
