@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
@@ -72,9 +74,7 @@ func deployContracts(ctx context.Context, t *testing.T, hdWalletSeed *testbed.UT
 		var addr string
 		rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deployBytecode",
 			notaryName, build.ABI, build.Bytecode.String(), tktypes.RawJSON(`{}`))
-		if rpcerr != nil {
-			assert.NoError(t, rpcerr)
-		}
+		assert.NoError(t, rpcerr)
 		deployed[name] = addr
 	}
 	return deployed
@@ -92,12 +92,14 @@ func newNotoDomain(t *testing.T, config *types.DomainConfig) (*Noto, *testbed.Te
 	}
 }
 
-func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcclient.Client) {
+func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcclient.Client, pldclient.PaladinClient) {
 	tb := testbed.NewTestBed()
 	url, _, done, err := tb.StartForTest("../../testbed.config.yaml", domains, hdWalletSeed)
 	assert.NoError(t, err)
-	rpc := rpcclient.WrapRestyClient(resty.New().SetBaseURL(url))
-	return done, tb, rpc
+	rc := resty.New().SetBaseURL(url)
+	rpc := rpcclient.WrapRestyClient(rc)
+	client := pldclient.Wrap(rpcclient.WrapRestyClient(rc))
+	return done, tb, rpc, client
 }
 
 func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcclient.Client, noto *Noto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.NotoCoinState {
@@ -111,9 +113,22 @@ func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcclient.Client,
 		noto.coinSchema.Id,
 		jq,
 		"available")
-	if rpcerr != nil {
-		require.NoError(t, rpcerr)
+	require.NoError(t, rpcerr)
+	return notoCoins
+}
+
+func findLockedCoins(t *testing.T, ctx context.Context, rpc rpcclient.Client, noto *Noto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.NotoCoinState {
+	if jq == nil {
+		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
+	var notoCoins []*types.NotoCoinState
+	rpcerr := rpc.CallRPC(ctx, &notoCoins, "pstate_queryContractStates",
+		noto.name,
+		address,
+		noto.lockedCoinSchema.Id,
+		jq,
+		"available")
+	require.NoError(t, rpcerr)
 	return notoCoins
 }
 
@@ -137,7 +152,7 @@ func TestNoto(t *testing.T) {
 	noto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: contracts["factory"],
 	})
-	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
+	done, tb, rpc, _ := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()
@@ -155,9 +170,7 @@ func TestNoto(t *testing.T) {
 		domainName, "me", &types.ConstructorParams{
 			Notary: notaryName,
 		})
-	if rpcerr != nil {
-		require.NoError(t, rpcerr)
-	}
+	require.NoError(t, rpcerr)
 	log.L(ctx).Infof("Noto instance deployed to %s", notoAddress)
 
 	log.L(ctx).Infof("Mint 100 from notary to notary")
@@ -174,9 +187,7 @@ func TestNoto(t *testing.T) {
 		},
 		ABI: types.NotoABI,
 	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr)
-	}
+	require.NoError(t, rpcerr)
 
 	coins := findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.Len(t, coins, 1)
@@ -234,9 +245,7 @@ func TestNoto(t *testing.T) {
 		},
 		ABI: types.NotoABI,
 	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr)
-	}
+	require.NoError(t, rpcerr)
 
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.NoError(t, err)
@@ -260,9 +269,7 @@ func TestNoto(t *testing.T) {
 		},
 		ABI: types.NotoABI,
 	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr)
-	}
+	require.NoError(t, rpcerr)
 
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.NoError(t, err)
@@ -285,9 +292,7 @@ func TestNoto(t *testing.T) {
 		},
 		ABI: types.NotoABI,
 	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr)
-	}
+	require.NoError(t, rpcerr)
 
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.NoError(t, err)
@@ -319,7 +324,7 @@ func TestNotoApprove(t *testing.T) {
 	noto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: contracts["factory"],
 	})
-	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
+	done, tb, rpc, _ := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()
@@ -333,9 +338,7 @@ func TestNotoApprove(t *testing.T) {
 		domainName, "me", &types.ConstructorParams{
 			Notary: notaryName,
 		})
-	if rpcerr != nil {
-		require.NoError(t, rpcerr)
-	}
+	require.NoError(t, rpcerr)
 	log.L(ctx).Infof("Noto instance deployed to %s", notoAddress)
 
 	log.L(ctx).Infof("Mint 100 from notary to notary")
@@ -352,9 +355,7 @@ func TestNotoApprove(t *testing.T) {
 		},
 		ABI: types.NotoABI,
 	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr)
-	}
+	require.NoError(t, rpcerr)
 
 	log.L(ctx).Infof("Approve recipient1 to claim 50")
 	var prepared testbed.TransactionResult
@@ -370,9 +371,7 @@ func TestNotoApprove(t *testing.T) {
 		},
 		ABI: types.NotoABI,
 	})
-	if rpcerr != nil {
-		require.NoError(t, rpcerr)
-	}
+	require.NoError(t, rpcerr)
 
 	var transferParams NotoTransferParams
 	err = json.Unmarshal(prepared.PreparedTransaction.Data, &transferParams)
@@ -392,9 +391,7 @@ func TestNotoApprove(t *testing.T) {
 		},
 		ABI: types.NotoABI,
 	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr)
-	}
+	require.NoError(t, rpcerr)
 
 	log.L(ctx).Infof("Claim 50 using approval")
 	receipt, err := tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
@@ -413,7 +410,7 @@ func TestNotoApprove(t *testing.T) {
 
 func TestNotoLock(t *testing.T) {
 	ctx := context.Background()
-	log.L(ctx).Infof("TestNoto")
+	log.L(ctx).Infof("TestNotoLock")
 	domainName := "noto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 
@@ -431,15 +428,13 @@ func TestNotoLock(t *testing.T) {
 	noto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: contracts["factory"],
 	})
-	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
+	done, tb, rpc, client := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()
 
-	notaryKey, err := tb.ResolveKey(ctx, notaryName, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	recipient1Key, err := tb.ResolveKey(ctx, recipient1Name, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
-	// recipient1Key, err := tb.ResolveKey(ctx, recipient1Name, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-	// require.NoError(t, err)
 	recipient2Key, err := tb.ResolveKey(ctx, recipient2Name, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
@@ -449,12 +444,10 @@ func TestNotoLock(t *testing.T) {
 		domainName, "me", &types.ConstructorParams{
 			Notary: notaryName,
 		})
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
+	require.NoError(t, rpcerr)
 	log.L(ctx).Infof("Noto instance deployed to %s", notoAddress)
 
-	log.L(ctx).Infof("Mint 100 from notary to notary")
+	log.L(ctx).Infof("Mint 100 from notary to recipient1")
 	var invokeResult testbed.TransactionResult
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
@@ -462,51 +455,55 @@ func TestNotoLock(t *testing.T) {
 			To:       &notoAddress,
 			Function: "mint",
 			Data: toJSON(t, &types.MintParams{
-				To:     notaryName,
+				To:     recipient1Name,
 				Amount: tktypes.Int64ToInt256(100),
 			}),
 		},
 		ABI: types.NotoABI,
 	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
+	require.NoError(t, rpcerr)
 
 	coins := findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.Len(t, coins, 1)
 	assert.Equal(t, int64(100), coins[0].Data.Amount.Int().Int64())
-	assert.Equal(t, notaryKey.Verifier.Verifier, coins[0].Data.Owner.String())
+	assert.Equal(t, recipient1Key.Verifier.Verifier, coins[0].Data.Owner.String())
 
-	log.L(ctx).Infof("Lock a transfer of 50 from notary to recipient1")
+	unlockerDelegate1 := "recipient1-unlocker1"
+	unlockerDelegate2 := "recipient1-unlocker2"
+	unlockerDelegate1Key, err := tb.ResolveKey(ctx, unlockerDelegate1, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	require.NoError(t, err)
+	unlockerDelegate2Key, err := tb.ResolveKey(ctx, unlockerDelegate2, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	require.NoError(t, err)
+
+	log.L(ctx).Infof("Lock 50 from recipient1")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
-			From:     notaryName,
+			From:     recipient1Name,
 			To:       &notoAddress,
-			Function: "lockTransfer",
-			Data: toJSON(t, &types.LockTransferParams{
-				To:     recipient1Name,
-				Amount: tktypes.Int64ToInt256(50),
+			Function: "lock",
+			Data: toJSON(t, &types.LockParams{
+				Amount:   tktypes.Int64ToInt256(50),
+				Delegate: tktypes.MustEthAddress(unlockerDelegate1Key.Verifier.Verifier),
 			}),
 		},
 		ABI: types.NotoABI,
 	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
+	require.NoError(t, rpcerr)
 
-	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
-	require.Len(t, coins, 2)
+	coins = findLockedCoins(t, ctx, rpc, noto, notoAddress, nil)
+	require.Len(t, coins, 1)
 	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
-	assert.Equal(t, notaryKey.Verifier.Verifier, coins[0].Data.Owner.String())
-	assert.True(t, coins[0].Data.Locked)
-	assert.Equal(t, int64(50), coins[1].Data.Amount.Int().Int64())
-	assert.Equal(t, notaryKey.Verifier.Verifier, coins[1].Data.Owner.String())
-	assert.False(t, coins[1].Data.Locked)
+	assert.Equal(t, recipient1Key.Verifier.Verifier, coins[0].Data.Owner.String())
+	lockedCoin := coins[0]
+	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
+	require.Len(t, coins, 1)
+	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, recipient1Key.Verifier.Verifier, coins[0].Data.Owner.String())
 
-	log.L(ctx).Infof("Transfer 50 from notary to recipient2 (succeeds but does not use locked state)")
+	log.L(ctx).Infof("Transfer 50 from recipient1 to recipient2 (succeeds but does not use locked state)")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
-			From:     notaryName,
+			From:     recipient1Name,
 			To:       &notoAddress,
 			Function: "transfer",
 			Data: toJSON(t, &types.TransferParams{
@@ -516,16 +513,51 @@ func TestNotoLock(t *testing.T) {
 		},
 		ABI: types.NotoABI,
 	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
+	require.NoError(t, rpcerr)
 
+	coins = findLockedCoins(t, ctx, rpc, noto, notoAddress, nil)
+	require.Len(t, coins, 1)
+	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, recipient1Key.Verifier.Verifier, coins[0].Data.Owner.String())
+	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
+	require.Len(t, coins, 1)
+	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[0].Data.Owner.String())
+
+	log.L(ctx).Infof("Delegate lock ownership to another address")
+	tx := client.ForABI(ctx, noto.contractABI).
+		Public().
+		From(unlockerDelegate1).
+		To(&notoAddress).
+		Function("delegateLock").
+		Inputs(&NotoDelegateLockParams{
+			Locked:   lockedCoin.ID,
+			Delegate: tktypes.MustEthAddress(unlockerDelegate2Key.Verifier.Verifier),
+		}).
+		Send().
+		Wait(3 * time.Second)
+	require.NoError(t, tx.Error())
+
+	log.L(ctx).Infof("Unlock from recipient1 (return 50 to recipient1)")
+	tx = client.ForABI(ctx, noto.contractABI).
+		Public().
+		From(unlockerDelegate2).
+		To(&notoAddress).
+		Function("unlock").
+		Inputs(&NotoUnlockParams{
+			Locked:  lockedCoin.ID,
+			Outcome: 0,
+		}).
+		Send().
+		Wait(3 * time.Second)
+	require.NoError(t, tx.Error())
+
+	coins = findLockedCoins(t, ctx, rpc, noto, notoAddress, nil)
+	require.Len(t, coins, 0)
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.Len(t, coins, 2)
 	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
-	assert.Equal(t, notaryKey.Verifier.Verifier, coins[0].Data.Owner.String())
-	assert.True(t, coins[0].Data.Locked)
+	assert.Equal(t, recipient1Key.Verifier.Verifier, coins[0].Data.Owner.String())
 	assert.Equal(t, int64(50), coins[1].Data.Amount.Int().Int64())
 	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[1].Data.Owner.String())
-	assert.False(t, coins[1].Data.Locked)
 }
