@@ -16,78 +16,16 @@
 package types
 
 import (
-	"github.com/hyperledger/firefly-signer/pkg/abi"
+	_ "embed"
+
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-var ZetoABI = abi.ABI{
-	{
-		Type: abi.Constructor,
-		Inputs: abi.ParameterArray{
-			{
-				Name: "tokenName",
-				Type: "string",
-			},
-		},
-	},
-	{
-		Name: "mint",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{
-				Name: "mints",
-				Type: "tuple[]",
-				Components: abi.ParameterArray{
-					{Name: "to", Type: "string"},
-					{Name: "amount", Type: "uint256"},
-				},
-			},
-		},
-	},
-	{
-		Name: "transfer",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{
-				Name: "transfers",
-				Type: "tuple[]",
-				Components: abi.ParameterArray{
-					{Name: "to", Type: "string"},
-					{Name: "amount", Type: "uint256"},
-				},
-			},
-		},
-	},
-	{
-		Name: "lockProof",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{Name: "delegate", Type: "address"},
-			{Name: "call", Type: "bytes"}, // assumed to be an encoded "transfer"
-		},
-	},
-	{
-		Name: "setERC20",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{Name: "_erc20", Type: "address"},
-		},
-	},
-	{
-		Name: "deposit",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{Name: "amount", Type: "uint256"},
-		},
-	},
-	{
-		Name: "withdraw",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{Name: "amount", Type: "uint256"},
-		},
-	},
-}
+//go:embed abis/IZeto.json
+var zetoPrivateJSON []byte
+
+var ZetoABI = solutils.MustParseBuildABI(zetoPrivateJSON)
 
 type InitializerParams struct {
 	TokenName string `json:"tokenName"`
