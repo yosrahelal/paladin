@@ -246,9 +246,9 @@ func TestInitTransaction(t *testing.T) {
 
 	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"10\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210016: Unexpected signature for function 'mint': expected='function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }', actual=''")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210016: Unexpected signature for function 'mint': expected='function mint(TransferParam[] memory mints) external { }; struct TransferParam { string to; uint256 amount; }', actual=''")
 
-	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
+	req.Transaction.FunctionSignature = "function mint(TransferParam[] memory mints) external { }; struct TransferParam { string to; uint256 amount; }"
 	_, err = z.InitTransaction(context.Background(), req)
 	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210017: Failed to decode contract address. bad address - must be 20 bytes (len=0)")
 
@@ -290,7 +290,7 @@ func TestAssembleTransaction(t *testing.T) {
 	_, err := z.AssembleTransaction(context.Background(), req)
 	assert.ErrorContains(t, err, "PD210009")
 
-	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
+	req.Transaction.FunctionSignature = "function mint(TransferParam[] memory mints) external { }; struct TransferParam { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
 		CircuitId: "circuit1",
 		TokenName: "testToken1",
@@ -316,7 +316,7 @@ func TestEndorseTransaction(t *testing.T) {
 	assert.EqualError(t, err, "PD210010: Failed to validate endorse transaction spec. PD210012: Failed to unmarshal function abi json. unexpected end of JSON input")
 
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
-	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
+	req.Transaction.FunctionSignature = "function mint(TransferParam[] memory mints) external { }; struct TransferParam { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
 		CircuitId: "circuit1",
 		TokenName: "testToken1",
@@ -357,7 +357,7 @@ func TestPrepareTransaction(t *testing.T) {
 	assert.EqualError(t, err, "PD210011: Failed to validate prepare transaction spec. PD210012: Failed to unmarshal function abi json. unexpected end of JSON input")
 
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
-	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
+	req.Transaction.FunctionSignature = "function mint(TransferParam[] memory mints) external { }; struct TransferParam { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
 		CircuitId: "circuit1",
 		TokenName: "testToken1",
