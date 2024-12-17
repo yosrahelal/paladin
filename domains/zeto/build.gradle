@@ -210,7 +210,7 @@ task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, generateP
     includeEmptyDirs = false
 }
 
-task testE2E(type: Exec, dependsOn: [protoc, copySolidity, copySolidityForTest, ':testinfra:startTestInfra', ":core:go:makeMocks"]) {
+task testE2E(type: Exec, dependsOn: [protoc, copySolidity, copyPkgSolidity, copySolidityForTest, ':testinfra:startTestInfra', ":core:go:makeMocks"]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
@@ -230,7 +230,7 @@ task testE2E(type: Exec, dependsOn: [protoc, copySolidity, copySolidityForTest, 
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task unitTests(type: Exec, dependsOn: [protoc, ":core:go:makeMocks", downloadZetoCompiledContracts, copyPkgSolidity]) {
+task unitTests(type: Exec, dependsOn: [protoc, ":core:go:makeMocks", ":testinfra:startTestInfra", downloadZetoCompiledContracts, copySolidity, copyPkgSolidity]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
@@ -251,9 +251,6 @@ task unitTests(type: Exec, dependsOn: [protoc, ":core:go:makeMocks", downloadZet
     if (project.findProperty('verboseTests') == 'true') {
         args '-v'
     }
-
-    dependsOn copySolidity
-    dependsOn ':testinfra:startTestInfra'
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
