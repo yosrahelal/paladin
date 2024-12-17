@@ -1,5 +1,6 @@
 import { TransactionType } from "../interfaces";
 import PaladinClient from "../paladin";
+import { PaladinVerifier } from "../verifier";
 
 const POLL_TIMEOUT_MS = 10000;
 
@@ -243,7 +244,7 @@ export interface ZetoSetERC20Params {
 }
 
 export interface ZetoTransfer {
-  to: string;
+  to: PaladinVerifier;
   amount: string | number;
 }
 
@@ -273,13 +274,13 @@ export class ZetoFactory {
     return new ZetoFactory(paladin, this.domain, this.options);
   }
 
-  async newZeto(from: string, data: ZetoConstructorParams) {
+  async newZeto(from: PaladinVerifier, data: ZetoConstructorParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
       domain: this.domain,
       abi: [zetoConstructorABI],
       function: "",
-      from,
+      from: from.lookup,
       data,
     });
     const receipt = await this.paladin.pollForReceipt(
@@ -313,26 +314,30 @@ export class ZetoInstance {
     return zeto;
   }
 
-  async mint(from: string, data: ZetoMintParams) {
+  async mint(from: PaladinVerifier, data: ZetoMintParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
       abi: zetoPrivateAbi,
       function: "mint",
       to: this.address,
-      from,
-      data,
+      from: from.lookup,
+      data: {
+        mints: data.mints.map((t) => ({ ...t, to: t.to.lookup })),
+      },
     });
     return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 
-  async transfer(from: string, data: ZetoTransferParams) {
+  async transfer(from: PaladinVerifier, data: ZetoTransferParams) {
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
       abi: zetoPrivateAbi,
       function: "transfer",
       to: this.address,
-      from,
-      data,
+      from: from.lookup,
+      data: {
+        transfers: data.transfers.map((t) => ({ ...t, to: t.to.lookup })),
+      },
     });
     return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }

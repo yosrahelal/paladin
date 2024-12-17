@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/statedistributionmocks"
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -143,14 +144,25 @@ func TestNewSequencerProcessNewTransactionAssemblyFailed(t *testing.T) {
 	newTxID := uuid.New()
 	testTx := &components.PrivateTransaction{
 		ID: newTxID,
-		Inputs: &components.TransactionInputs{
-			From: "alice",
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From: "alice",
+			},
 		},
-		PreAssembly: &components.TransactionPreAssembly{},
 	}
+	dependencyMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, mock.Anything).Return(&components.ResolvedTransaction{
+		Transaction: &pldapi.Transaction{
+			ID: &newTxID,
+			TransactionBase: pldapi.TransactionBase{
+				Domain: "domain1",
+				To:     &testOc.contractAddress,
+			},
+		},
+	}, nil)
 
 	waitForFinalize := make(chan bool, 1)
-	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("fail assembly. Just happy that we got this far"))
+	dependencyMocks.domain.On("Name").Return("domain1")
+	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("fail assembly"))
 	dependencyMocks.publisher.On("PublishTransactionAssembleFailedEvent", mock.Anything, newTxID.String(), mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		waitForFinalize <- true
 	})

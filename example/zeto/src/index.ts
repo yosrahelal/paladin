@@ -3,8 +3,9 @@ import PaladinClient, {
   ZetoFactory,
   TransactionType,
   Verifiers,
-} from "paladin-sdk";
+} from "@lfdecentralizedtrust-labs/paladin-sdk";
 import erc20Abi from "./abis/SampleERC20.json";
+import { checkDeploy, checkReceipt } from "./util";
 
 const logger = console;
 
@@ -18,10 +19,10 @@ const paladin3 = new PaladinClient({
   url: "http://127.0.0.1:31748",
 });
 
-async function main() {
-  const cbdcIssuer = "centralbank@node3";
-  const bank1 = `bank1@node1`;
-  const bank2 = `bank2@node2`;
+async function main(): Promise<boolean> {
+  const [cbdcIssuer] = paladin1.getVerifiers("centralbank@node3");
+  const [bank1] = paladin2.getVerifiers("bank1@node1");
+  const [bank2] = paladin3.getVerifiers("bank2@node2");
 
   // Deploy a Zeto token to represent cash (CBDC)
   logger.log("Use case #1: Privacy-preserving CBDC token, using private minting...");
@@ -30,11 +31,7 @@ async function main() {
   const zetoCBDC1 = await zetoFactory.newZeto(cbdcIssuer, {
     tokenName: "Zeto_AnonNullifier",
   });
-  if (zetoCBDC1 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
-  logger.log(`  Zeto deployed at: ${zetoCBDC1.address}`);
+  if (!checkDeploy(zetoCBDC1)) return false;
 
   // Issue some cash
   logger.log("- Issuing CBDC to bank1 and bank2 with private minting...");
@@ -48,28 +45,23 @@ async function main() {
         to: bank2,
         amount: 100000,
       },
-    ]
+    ],
   });
-  if (receipt === undefined) {
-    logger.error("Failed!");
-    return;
-  }
-  logger.log("  Success!");
+  if (!checkReceipt(receipt)) return false;
 
   // Transfer some cash from bank1 to bank2
-  logger.log("- Bank1 transferring CBDC to bank2 to pay for some asset trades ...");
+  logger.log(
+    "Bank1 transferring CBDC to bank2 to pay for some asset trades ..."
+  );
   receipt = await zetoCBDC1.using(paladin1).transfer(bank1, {
     transfers: [
       {
         to: bank2,
         amount: 1000,
       },
-    ]
+    ],
   });
-  if (receipt === undefined) {
-    logger.error("Failed!");
-    return;
-  }
+  if (!checkReceipt(receipt)) return false;
   logger.log("  Success!\n");
 
   logger.log("Use case #2: Privacy-preserving CBDC token, using public minting of an ERC20 token...");
@@ -77,38 +69,29 @@ async function main() {
   const zetoCBDC2 = await zetoFactory.newZeto(cbdcIssuer, {
     tokenName: "Zeto_AnonNullifier",
   });
-  if (zetoCBDC2 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
+  if (!checkDeploy(zetoCBDC2)) return false;
   logger.log(`  Zeto deployed at: ${zetoCBDC2.address}`);
 
   logger.log("- Deploying ERC20 token to manage the CBDC supply publicly...");
-  const erc20Address = await deployERC20(paladin3, cbdcIssuer);
+  const erc20Address = await deployERC20(paladin3, cbdcIssuer.lookup);
   logger.log(`  ERC20 deployed at: ${erc20Address}`);
 
   logger.log("- Setting ERC20 to the Zeto token contract ...");
-  const result2 = await zetoCBDC2.setERC20(cbdcIssuer, {
+  const result2 = await zetoCBDC2.setERC20(cbdcIssuer.lookup, {
     _erc20: erc20Address as string
   });
-  if (result2 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
+  if (!checkReceipt(result2)) return false;
   logger.log(`  ERC20 configured on the Zeto contract`);
 
   logger.log("- Issuing CBDC to bank1 with public minting in ERC20...");
-  await mintERC20(paladin3, cbdcIssuer, bank1, erc20Address!, 100000);
+  await mintERC20(paladin3, cbdcIssuer.lookup, bank1.lookup, erc20Address!, 100000);
   logger.log("  Success!");
 
   logger.log("- Bank1 deposit ERC20 balance to Zeto ...");
-  const result4 = await zetoCBDC2.using(paladin1).deposit(bank1, {
+  const result4 = await zetoCBDC2.using(paladin1).deposit(bank1.lookup, {
     amount: 10000
   });
-  if (result4 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
+  if (!checkReceipt(result4)) return false;
   logger.log(`  Bank1 deposit successful`);
 
   // Transfer some cash from bank1 to bank2
@@ -121,23 +104,19 @@ async function main() {
       },
     ]
   });
-  if (receipt === undefined) {
-    logger.error("Failed!");
-    return;
-  }
+  if (!checkReceipt(receipt)) return false;
   logger.log("  Success!");
 
   logger.log("- Bank1 withdraws Zeto back to ERC20 balance ...");
-  const result5 = await zetoCBDC2.using(paladin1).withdraw(bank1, {
+  const result5 = await zetoCBDC2.using(paladin1).withdraw(bank1.lookup, {
     amount: 1000
   });
-  if (result5 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
+  if (!checkReceipt(result5)) return false;
   logger.log(`  Bank1 withdraw successful`);
 
   logger.log("\nSuccess!");
+
+  return true;
 }
 
 async function deployERC20(paladin: PaladinClient, cbdcIssuer: string): Promise<string | undefined> {
@@ -157,15 +136,8 @@ async function deployERC20(paladin: PaladinClient, cbdcIssuer: string): Promise<
     abi: erc20Abi.abi,
     bytecode: erc20Abi.bytecode,
   });
-  if (txId1 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
   const result1 = await paladin.pollForReceipt(txId1, 5000);
-  if (result1 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
+  if (!checkReceipt(result1)) return;
   const erc20Address = result1.contractAddress;
   return erc20Address;
 }
@@ -187,21 +159,18 @@ async function mintERC20(paladin: PaladinClient, cbdcIssuer: string, bank1: stri
     function: "mint",
     abi: erc20Abi.abi,
   });
-  if (txId2 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
   const result3 = await paladin.pollForReceipt(txId2, 5000);
-  if (result3 === undefined) {
-    logger.error("Failed!");
-    return;
-  }
+  if (!checkReceipt(result3)) return;
 }
 
 if (require.main === module) {
-  main().catch((err) => {
-    console.error("Exiting with uncaught error");
-    console.error(err);
-    process.exit(1);
-  });
+  main()
+    .then((success: boolean) => {
+      process.exit(success ? 0 : 1);
+    })
+    .catch((err) => {
+      console.error("Exiting with uncaught error");
+      console.error(err);
+      process.exit(1);
+    });
 }

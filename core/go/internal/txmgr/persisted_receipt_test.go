@@ -145,9 +145,33 @@ func mockKeyResolverForFail(t *testing.T, mc *mockComponents) *componentmocks.Ke
 	return kr
 }
 
+func mockDomainContractResolve(t *testing.T, domainName string, contractAddrs ...tktypes.EthAddress) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mgsc := mc.domainManager.On("GetSmartContractByAddress", mock.Anything, mock.Anything, mock.MatchedBy(func(a tktypes.EthAddress) bool {
+			if len(contractAddrs) == 0 {
+				return true
+			}
+			for _, contractAddr := range contractAddrs {
+				if contractAddr == a {
+					return true
+				}
+			}
+			return false
+		}))
+		mgsc.Run(func(args mock.Arguments) {
+			mpsc := componentmocks.NewDomainSmartContract(t)
+			mdmn := componentmocks.NewDomain(t)
+			mdmn.On("Name").Return(domainName)
+			mpsc.On("Domain").Return(mdmn)
+			mpsc.On("Address").Return(args[2].(tktypes.EthAddress)).Maybe()
+			mgsc.Return(mpsc, nil)
+		})
+	}
+}
+
 func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, true, mockKeyResolutionContextOk(t), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, true, mockKeyResolutionContextOk(t), mockDomainContractResolve(t, "domain1"), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	})
 	defer done()
@@ -160,7 +184,6 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 		TransactionBase: pldapi.TransactionBase{
 			From:     "me",
 			Type:     pldapi.TransactionTypePrivate.Enum(),
-			Domain:   "domain1",
 			Function: "doIt",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data:     tktypes.JSONString(tktypes.HexBytes(callData)),
@@ -191,7 +214,7 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 
 func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, true, mockKeyResolutionContextOk(t), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, true, mockKeyResolutionContextOk(t), mockDomainContractResolve(t, "domain1"), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 		mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).Return(

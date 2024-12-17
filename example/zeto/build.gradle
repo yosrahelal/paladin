@@ -15,10 +15,6 @@
 
 configurations {
     // Resolvable configurations
-    contractCompile {
-        canBeConsumed = false
-        canBeResolved = true
-    }
     buildSDK {
         canBeConsumed = false
         canBeResolved = true
@@ -26,7 +22,7 @@ configurations {
 }
 
 dependencies {
-    buildSDK project(path: ":sdk:typescript", configuration: "buildSDK")
+    buildSDK project(path: ':sdk:typescript', configuration: 'buildSDK')
 }
 
 task copyContracts(type: Copy, dependsOn: [":domains:zeto:extractZetoArtifacts"]) {
@@ -45,9 +41,9 @@ task install(type: Exec) {
     args 'install'
 
     inputs.files(configurations.buildSDK)
-    inputs.files("package.json")
-    outputs.files("package-lock.json")
-    outputs.dir("node_modules")
+    inputs.files('package.json')
+    outputs.files('package-lock.json')
+    outputs.dir('node_modules')
 }
 
 task build(type: Exec, dependsOn: [install, copyContracts]) {
@@ -55,11 +51,19 @@ task build(type: Exec, dependsOn: [install, copyContracts]) {
     args 'run'
     args 'build'
 
-    inputs.dir("src")
-    outputs.dir("build")
+    inputs.dir('src')
+    outputs.dir('build')
+}
+
+task e2e(type: Exec, dependsOn: [build]) {
+    dependsOn ':operator:deploy'
+
+    executable 'npm'
+    args 'run'
+    args 'start'
 }
 
 task clean(type: Delete) {
-    delete "node_modules"
-    delete "build"
+    delete 'node_modules'
+    delete 'build'
 }
