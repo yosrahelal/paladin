@@ -267,7 +267,7 @@ task test {
     finalizedBy checkCoverage
 }
 
-task buildGo(type: GoLib, dependsOn: [":toolkit:go:protoc", copySolidity]) {
+task buildGo(type: GoLib, dependsOn: [":toolkit:go:protoc", copySolidity, copyPkgSolidity]) {
     inputs.files(configurations.coreGo)
     inputs.files(configurations.toolkitGo)
     baseName "zeto"
