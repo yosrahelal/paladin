@@ -23,11 +23,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
@@ -130,13 +134,7 @@ var _ = Describe("Paladin Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			cfg := &config.Config{
-				Paladin: struct {
-					Image           string            `json:"image"`
-					ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy"`
-					Labels          map[string]string `json:"labels"`
-					Annotations     map[string]string `json:"annotations"`
-					Envs            map[string]string `json:"envs"`
-				}{
+				Paladin: config.Template{
 					Labels: map[string]string{
 						"env":  "production",
 						"tier": "backend",
@@ -162,13 +160,7 @@ var _ = Describe("Paladin Controller", func() {
 func TestPaladin_GetLabels(t *testing.T) {
 	// Mock configuration
 	config := config.Config{
-		Paladin: struct {
-			Image           string            `json:"image"`
-			ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy"`
-			Labels          map[string]string `json:"labels"`
-			Annotations     map[string]string `json:"annotations"`
-			Envs            map[string]string `json:"envs"`
-		}{
+		Paladin: config.Template{
 			Labels: map[string]string{
 				"env":  "production",
 				"tier": "backend",
@@ -197,11 +189,175 @@ func TestPaladin_GetLabels(t *testing.T) {
 
 	// Assertions
 	expectedLabels := map[string]string{
-		"app":     "paladin-test-node",
-		"env":     "production",
-		"tier":    "backend",
-		"version": "v1",
+		"env":                        "production",
+		"tier":                       "backend",
+		"version":                    "v1",
+		"app.kubernetes.io/instance": "test-node",
+		"app.kubernetes.io/name":     "paladin-test-node",
+		"app.kubernetes.io/part-of":  "paladin",
 	}
 
 	assert.Equal(t, expectedLabels, labels, "labels should match expected labels")
+}
+
+func TestGeneratePaladinAuthConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		node     *corev1alpha1.Paladin
+		secret   *corev1.Secret
+		wantErr  bool
+		expected *pldconf.PaladinConfig
+	}{
+		{
+			name: "Valid AuthConfig with secret",
+			node: &corev1alpha1.Paladin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-node",
+					Namespace: "default",
+				},
+				Spec: corev1alpha1.PaladinSpec{
+					BaseLedgerEndpoint: &corev1alpha1.BaseLedgerEndpoint{
+						Type: corev1alpha1.EndpointTypeNetwork,
+						Endpoint: &corev1alpha1.NetworkLedgerEndpoint{
+							Auth: &corev1alpha1.Auth{
+								Type:   corev1alpha1.AuthTypeSecret,
+								Secret: &corev1alpha1.AuthSecret{Name: "test-secret"},
+							},
+						},
+					},
+				},
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"username": []byte("testuser"),
+					"password": []byte("testpass"),
+				},
+			},
+			wantErr: false,
+			expected: &pldconf.PaladinConfig{
+				Blockchain: pldconf.EthClientConfig{
+					HTTP: pldconf.HTTPClientConfig{
+						Auth: pldconf.HTTPBasicAuthConfig{
+							Username: "testuser",
+							Password: "testpass",
+						},
+					},
+					WS: pldconf.WSClientConfig{
+						HTTPClientConfig: pldconf.HTTPClientConfig{
+							Auth: pldconf.HTTPBasicAuthConfig{
+								Username: "testuser",
+								Password: "testpass",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Secret not found",
+			node: &corev1alpha1.Paladin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-node",
+					Namespace: "default",
+				},
+				Spec: corev1alpha1.PaladinSpec{
+					BaseLedgerEndpoint: &corev1alpha1.BaseLedgerEndpoint{
+						Type: corev1alpha1.EndpointTypeNetwork,
+						Endpoint: &corev1alpha1.NetworkLedgerEndpoint{
+							JSONRPC: "https://besu.node",
+							WS:      "wss://besu.mode",
+							Auth: &corev1alpha1.Auth{
+								Type:   corev1alpha1.AuthTypeSecret,
+								Secret: &corev1alpha1.AuthSecret{Name: "test-secret"},
+							},
+						},
+					},
+				},
+			},
+			secret:  nil,
+			wantErr: true,
+		},
+		{
+			name: "Missing AuthSecret",
+			node: &corev1alpha1.Paladin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-node",
+					Namespace: "default",
+				},
+				Spec: corev1alpha1.PaladinSpec{
+					BaseLedgerEndpoint: &corev1alpha1.BaseLedgerEndpoint{
+						Type: corev1alpha1.EndpointTypeNetwork,
+						Endpoint: &corev1alpha1.NetworkLedgerEndpoint{
+							Auth: &corev1alpha1.Auth{
+								Type: corev1alpha1.AuthTypeSecret,
+							},
+						},
+					},
+				},
+			},
+			secret:  nil,
+			wantErr: true,
+		},
+		{
+			name: "Secret with no data",
+			node: &corev1alpha1.Paladin{
+				Spec: corev1alpha1.PaladinSpec{
+					BaseLedgerEndpoint: &corev1alpha1.BaseLedgerEndpoint{
+						Type: corev1alpha1.EndpointTypeNetwork,
+						Endpoint: &corev1alpha1.NetworkLedgerEndpoint{
+							Auth: &corev1alpha1.Auth{
+								Type:   corev1alpha1.AuthTypeSecret,
+								Secret: &corev1alpha1.AuthSecret{Name: "empty-secret"},
+							},
+						},
+					},
+				},
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "empty-secret",
+					Namespace: "default",
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a fake client and populate it with the secret if provided
+			scheme := runtime.NewScheme()
+			_ = corev1.AddToScheme(scheme)
+			_ = corev1alpha1.AddToScheme(scheme)
+			ctx := context.TODO()
+
+			client := fake.NewClientBuilder().WithScheme(scheme).Build()
+			if tt.secret != nil {
+				err := client.Create(ctx, tt.secret)
+				require.NoError(t, err)
+			}
+
+			reconciler := &PaladinReconciler{
+				Client: client,
+			}
+
+			// Call the method under test
+			pldConf := &pldconf.PaladinConfig{}
+
+			err := reconciler.generatePaladinAuthConfig(ctx, tt.node, tt.node.Spec.BaseLedgerEndpoint.Endpoint.Auth, pldConf)
+
+			// Verify the results
+			if tt.wantErr {
+				assert.Error(t, err, "Expected an error but got none")
+			} else {
+				require.NoError(t, err, "Did not expect an error but got one")
+				assert.Equal(t, tt.expected.Blockchain.HTTP.Auth, pldConf.Blockchain.HTTP.Auth, "HTTP Auth mismatch")
+				assert.Equal(t, tt.expected.Blockchain.WS.Auth, pldConf.Blockchain.WS.Auth, "WS Auth mismatch")
+			}
+		})
+	}
 }

@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
 type PluginManager interface {
@@ -27,4 +28,5 @@ type PluginManager interface {
 	LoaderID() uuid.UUID
 	WaitForInit(ctx context.Context) error
 	ReloadPluginList() error
+	SendSystemCommandToLoader(cmd prototk.PluginLoad_SysCommand)
 }

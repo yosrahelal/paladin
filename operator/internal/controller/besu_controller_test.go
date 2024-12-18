@@ -29,7 +29,6 @@ import (
 
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 	"github.com/kaleido-io/paladin/operator/pkg/config"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -74,13 +73,7 @@ var _ = Describe("Besu Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			cfg := &config.Config{
-				Paladin: struct {
-					Image           string            `json:"image"`
-					ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy"`
-					Labels          map[string]string `json:"labels"`
-					Annotations     map[string]string `json:"annotations"`
-					Envs            map[string]string `json:"envs"`
-				}{
+				Paladin: config.Template{
 					Labels: map[string]string{
 						"env":  "production",
 						"tier": "backend",
@@ -106,13 +99,7 @@ var _ = Describe("Besu Controller", func() {
 func TestBesu_GetLabels(t *testing.T) {
 	// Mock configuration
 	config := config.Config{
-		Besu: struct {
-			Image           string            `json:"image"`
-			ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy"`
-			Labels          map[string]string `json:"labels"`
-			Annotations     map[string]string `json:"annotations"`
-			Envs            map[string]string `json:"envs"`
-		}{
+		Besu: config.Template{
 			Labels: map[string]string{
 				"env":  "production",
 				"tier": "backend",
@@ -141,11 +128,14 @@ func TestBesu_GetLabels(t *testing.T) {
 
 	// Assertions
 	expectedLabels := map[string]string{
-		"app":     "besu-test-node",
-		"env":     "production",
-		"tier":    "backend",
-		"version": "v1",
+		"env":                        "production",
+		"tier":                       "backend",
+		"version":                    "v1",
+		"app.kubernetes.io/instance": "test-node",
+		"app.kubernetes.io/name":     "besu-test-node",
+		"app.kubernetes.io/part-of":  "paladin",
 	}
 
+	assert.Equal(t, len(expectedLabels), len(labels), "labels should have the same length")
 	assert.Equal(t, expectedLabels, labels, "labels should match expected labels")
 }

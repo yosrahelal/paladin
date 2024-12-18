@@ -15,6 +15,7 @@
 
 package io.kaleido.paladin.loader;
 
+import io.kaleido.paladin.diagnostics.VirtualMachineDiagnostics;
 import io.kaleido.paladin.toolkit.PluginControllerGrpc;
 import io.kaleido.paladin.toolkit.Service;
 import io.kaleido.paladin.toolkit.Service.PluginLoad;
@@ -133,8 +134,25 @@ public class PluginLoader implements StreamObserver<PluginLoad> {
                 CompletableFuture.delayedExecutor(delay, TimeUnit.MILLISECONDS));
     }
 
+    private void threadDump() {
+        try {
+            System.err.println(VirtualMachineDiagnostics.newInstance().getThreadDump());
+        } catch(Throwable e) {
+            LOGGER.error("failed to initiate thread dump", e);
+        }
+    }
+
     @Override
     public void onNext(PluginLoad loadInstruction) {
+        if (loadInstruction.hasSysCommand()) {
+            // we are processing a system command rather than an actual load
+            switch (loadInstruction.getSysCommand()) {
+                case THREAD_DUMP -> threadDump();
+                default -> LOGGER.warn("unrecognized system command {}", loadInstruction.getSysCommand());
+            }
+            return;
+        }
+
         PluginInfo info = new PluginInfo(grpcTarget, loadInstruction.getPlugin().getPluginType().toString(),
                 loadInstruction.getPlugin().getName(), loadInstruction.getPlugin().getId());
         LOGGER.info("load instruction for {} {} [{}] libType={} location={} class={}",

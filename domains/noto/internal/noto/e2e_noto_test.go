@@ -165,14 +165,17 @@ func TestNoto(t *testing.T) {
 
 	log.L(ctx).Infof("Mint 100 from notary to notary")
 	var invokeResult testbed.TransactionResult
-	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
-		From:     notaryName,
-		To:       notoAddress,
-		Function: *types.NotoABI.Functions()["mint"],
-		Inputs: toJSON(t, &types.MintParams{
-			To:     notaryName,
-			Amount: tktypes.Int64ToInt256(100),
-		}),
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     notaryName,
+			To:       &notoAddress,
+			Function: "mint",
+			Data: toJSON(t, &types.MintParams{
+				To:     notaryName,
+				Amount: tktypes.Int64ToInt256(100),
+			}),
+		},
+		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
@@ -184,14 +187,17 @@ func TestNoto(t *testing.T) {
 	assert.Equal(t, notaryKey.Verifier.Verifier, coins[0].Data.Owner.String())
 
 	log.L(ctx).Infof("Attempt mint from non-notary (should fail)")
-	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
-		From:     recipient1Name,
-		To:       notoAddress,
-		Function: *types.NotoABI.Functions()["mint"],
-		Inputs: toJSON(t, &types.MintParams{
-			To:     recipient1Name,
-			Amount: tktypes.Int64ToInt256(100),
-		}),
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     recipient1Name,
+			To:       &notoAddress,
+			Function: "mint",
+			Data: toJSON(t, &types.MintParams{
+				To:     recipient1Name,
+				Amount: tktypes.Int64ToInt256(100),
+			}),
+		},
+		ABI: types.NotoABI,
 	}, true)
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200009")
@@ -200,14 +206,17 @@ func TestNoto(t *testing.T) {
 	require.Len(t, coins, 1)
 
 	log.L(ctx).Infof("Transfer 150 from notary (should fail)")
-	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
-		From:     notaryName,
-		To:       notoAddress,
-		Function: *types.NotoABI.Functions()["transfer"],
-		Inputs: toJSON(t, &types.TransferParams{
-			To:     recipient1Name,
-			Amount: tktypes.Int64ToInt256(150),
-		}),
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     notaryName,
+			To:       &notoAddress,
+			Function: "transfer",
+			Data: toJSON(t, &types.TransferParams{
+				To:     recipient1Name,
+				Amount: tktypes.Int64ToInt256(150),
+			}),
+		},
+		ABI: types.NotoABI,
 	}, true)
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200005")
@@ -216,14 +225,17 @@ func TestNoto(t *testing.T) {
 	require.Len(t, coins, 1)
 
 	log.L(ctx).Infof("Transfer 50 from notary to recipient1")
-	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
-		From:     notaryName,
-		To:       notoAddress,
-		Function: *types.NotoABI.Functions()["transfer"],
-		Inputs: toJSON(t, &types.TransferParams{
-			To:     recipient1Name,
-			Amount: tktypes.Int64ToInt256(50),
-		}),
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     notaryName,
+			To:       &notoAddress,
+			Function: "transfer",
+			Data: toJSON(t, &types.TransferParams{
+				To:     recipient1Name,
+				Amount: tktypes.Int64ToInt256(50),
+			}),
+		},
+		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
@@ -239,14 +251,17 @@ func TestNoto(t *testing.T) {
 	assert.Equal(t, notaryKey.Verifier.Verifier, coins[1].Data.Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from recipient1 to recipient2")
-	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
-		From:     recipient1Name,
-		To:       notoAddress,
-		Function: *types.NotoABI.Functions()["transfer"],
-		Inputs: toJSON(t, &types.TransferParams{
-			To:     recipient2Name,
-			Amount: tktypes.Int64ToInt256(50),
-		}),
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     recipient1Name,
+			To:       &notoAddress,
+			Function: "transfer",
+			Data: toJSON(t, &types.TransferParams{
+				To:     recipient2Name,
+				Amount: tktypes.Int64ToInt256(50),
+			}),
+		},
+		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
@@ -259,6 +274,31 @@ func TestNoto(t *testing.T) {
 	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
 	assert.Equal(t, notaryKey.Verifier.Verifier, coins[0].Data.Owner.String())
 	assert.Equal(t, int64(50), coins[1].Data.Amount.Int().Int64())
+	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[1].Data.Owner.String())
+
+	log.L(ctx).Infof("Burn 25 from recipient2")
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     recipient2Name,
+			To:       &notoAddress,
+			Function: "burn",
+			Data: toJSON(t, &types.BurnParams{
+				Amount: tktypes.Int64ToInt256(25),
+			}),
+		},
+		ABI: types.NotoABI,
+	}, true)
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+
+	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
+	require.NoError(t, err)
+	require.Len(t, coins, 2)
+
+	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, notaryKey.Verifier.Verifier, coins[0].Data.Owner.String())
+	assert.Equal(t, int64(25), coins[1].Data.Amount.Int().Int64())
 	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[1].Data.Owner.String())
 }
 
@@ -303,14 +343,17 @@ func TestNotoApprove(t *testing.T) {
 
 	log.L(ctx).Infof("Mint 100 from notary to notary")
 	var invokeResult testbed.TransactionResult
-	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
-		From:     notaryName,
-		To:       notoAddress,
-		Function: *types.NotoABI.Functions()["mint"],
-		Inputs: toJSON(t, &types.MintParams{
-			To:     notaryName,
-			Amount: tktypes.Int64ToInt256(100),
-		}),
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     notaryName,
+			To:       &notoAddress,
+			Function: "mint",
+			Data: toJSON(t, &types.MintParams{
+				To:     notaryName,
+				Amount: tktypes.Int64ToInt256(100),
+			}),
+		},
+		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
@@ -318,14 +361,17 @@ func TestNotoApprove(t *testing.T) {
 
 	log.L(ctx).Infof("Approve recipient1 to claim 50")
 	var prepared testbed.TransactionResult
-	rpcerr = rpc.CallRPC(ctx, &prepared, "testbed_prepare", &testbed.TransactionInput{
-		From:     notaryName,
-		To:       notoAddress,
-		Function: *types.NotoABI.Functions()["transfer"],
-		Inputs: toJSON(t, &types.TransferParams{
-			To:     recipient1Name,
-			Amount: tktypes.Int64ToInt256(50),
-		}),
+	rpcerr = rpc.CallRPC(ctx, &prepared, "testbed_prepare", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     notaryName,
+			To:       &notoAddress,
+			Function: "transfer",
+			Data: toJSON(t, &types.TransferParams{
+				To:     recipient1Name,
+				Amount: tktypes.Int64ToInt256(50),
+			}),
+		},
+		ABI: types.NotoABI,
 	})
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
@@ -335,16 +381,19 @@ func TestNotoApprove(t *testing.T) {
 	err = json.Unmarshal(prepared.PreparedTransaction.Data, &transferParams)
 	require.NoError(t, err)
 
-	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
-		From:     notaryName,
-		To:       notoAddress,
-		Function: *types.NotoABI.Functions()["approveTransfer"],
-		Inputs: toJSON(t, &types.ApproveParams{
-			Inputs:   prepared.InputStates,
-			Outputs:  prepared.OutputStates,
-			Data:     transferParams.Data,
-			Delegate: tktypes.MustEthAddress(recipient1Key.Verifier.Verifier),
-		}),
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     notaryName,
+			To:       &notoAddress,
+			Function: "approveTransfer",
+			Data: toJSON(t, &types.ApproveParams{
+				Inputs:   prepared.InputStates,
+				Outputs:  prepared.OutputStates,
+				Data:     transferParams.Data,
+				Delegate: tktypes.MustEthAddress(recipient1Key.Verifier.Verifier),
+			}),
+		},
+		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
@@ -455,14 +504,17 @@ func TestNotoSelfSubmit(t *testing.T) {
 
 	log.L(ctx).Infof("Mint 100 from notary to notary")
 	var invokeResult testbed.TransactionResult
-	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
-		From:     notaryName,
-		To:       notoAddress,
-		Function: *types.NotoABI.Functions()["mint"],
-		Inputs: toJSON(t, &types.MintParams{
-			To:     notaryName,
-			Amount: tktypes.Int64ToInt256(100),
-		}),
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     notaryName,
+			To:       &notoAddress,
+			Function: "mint",
+			Data: toJSON(t, &types.MintParams{
+				To:     notaryName,
+				Amount: tktypes.Int64ToInt256(100),
+			}),
+		},
+		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
@@ -475,14 +527,17 @@ func TestNotoSelfSubmit(t *testing.T) {
 	assert.Equal(t, notaryKey.Verifier.Verifier, coins[0].Data.Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from notary to recipient1")
-	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
-		From:     notaryName,
-		To:       notoAddress,
-		Function: *types.NotoABI.Functions()["transfer"],
-		Inputs: toJSON(t, &types.TransferParams{
-			To:     recipient1Name,
-			Amount: tktypes.Int64ToInt256(50),
-		}),
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     notaryName,
+			To:       &notoAddress,
+			Function: "transfer",
+			Data: toJSON(t, &types.TransferParams{
+				To:     recipient1Name,
+				Amount: tktypes.Int64ToInt256(50),
+			}),
+		},
+		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
@@ -498,14 +553,17 @@ func TestNotoSelfSubmit(t *testing.T) {
 	assert.Equal(t, notaryKey.Verifier.Verifier, coins[1].Data.Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from recipient1 to recipient2")
-	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &testbed.TransactionInput{
-		From:     recipient1Name,
-		To:       notoAddress,
-		Function: *types.NotoABI.Functions()["transfer"],
-		Inputs: toJSON(t, &types.TransferParams{
-			To:     recipient2Name,
-			Amount: tktypes.Int64ToInt256(50),
-		}),
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     recipient1Name,
+			To:       &notoAddress,
+			Function: "transfer",
+			Data: toJSON(t, &types.TransferParams{
+				To:     recipient2Name,
+				Amount: tktypes.Int64ToInt256(50),
+			}),
+		},
+		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())

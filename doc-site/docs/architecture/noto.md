@@ -26,6 +26,7 @@ Creates a new Noto token, with a new address on the base ledger.
         {"name": "notary", "type": "string"},
         {"name": "implementation", "type": "string"},
         {"name": "restrictMinting", "type": "boolean"},
+        {"name": "allowBurning", "type": "boolean"},
         {"name": "hooks", "type": "tuple", "components": [
             {"name": "privateGroup", "type": "tuple", "components": [
                 {"name": "salt", "type": "bytes32"},
@@ -43,6 +44,7 @@ Inputs:
 * **notary** - lookup string for the identity that will serve as the notary for this token instance. May be located at this node or another node
 * **implementation** - (optional) the name of a non-default Noto implementation that has previously been registered
 * **restrictMinting** - (optional - default true) only allow the notary to request mint
+* **allowBurning** - (optional - default true) allow token owners to request burn
 * **hooks** - (optional) specify a [Pente](../pente) private smart contract that will be called for each Noto transaction, to provide custom logic and policies
 
 ### mint
@@ -118,6 +120,27 @@ delegating it to another party for execution.
     ]
 }
 ```
+
+### burn
+
+Burn value from the sender. Available UTXO states will be selected for burning, and new UTXO
+states will be created for the remaining amount (if any).
+
+```json
+{
+    "name": "burn",
+    "type": "function",
+    "inputs": [
+        {"name": "amount", "type": "uint256"},
+        {"name": "data", "type": "bytes"}
+    ]
+}
+```
+
+Inputs:
+
+* **amount** - amount of value to burn
+* **data** - user/application data to include with the transaction (will be accessible from an "info" state in the state receipt)
 
 Inputs:
 

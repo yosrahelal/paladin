@@ -54,12 +54,10 @@ to atomically allocate and record the nonce under that same transaction.
 // but never more than one of these.  We probably could make the mutually exclusive nature more explicit by using interfaces but its not worth the added complexity
 
 type syncPointOperation struct {
-	contractAddress        tktypes.EthAddress
-	domainContext          components.DomainContext
-	finalizeOperation      *finalizeOperation
-	dispatchOperation      *dispatchOperation
-	delegateOperation      *delegateOperation
-	delegationAckOperation *delegationAckOperation
+	contractAddress   tktypes.EthAddress
+	domainContext     components.DomainContext
+	finalizeOperation *finalizeOperation
+	dispatchOperation *dispatchOperation
 }
 
 func (dso *syncPointOperation) WriteKey() string {
@@ -72,8 +70,6 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 
 	finalizeOperations := make([]*finalizeOperation, 0, len(values))
 	dispatchOperations := make([]*dispatchOperation, 0, len(values))
-	delegateOperations := make([]*delegateOperation, 0, len(values))
-	delegationAckOperations := make([]*delegationAckOperation, 0, len(values))
 	domainContextsToFlush := make(map[uuid.UUID]components.DomainContext)
 
 	for _, op := range values {
@@ -86,21 +82,21 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 		if op.dispatchOperation != nil {
 			dispatchOperations = append(dispatchOperations, op.dispatchOperation)
 		}
-		if op.delegateOperation != nil {
-			delegateOperations = append(delegateOperations, op.delegateOperation)
-		}
-		if op.delegationAckOperation != nil {
-			delegationAckOperations = append(delegationAckOperations, op.delegationAckOperation)
-		}
 	}
 
 	// We flush all of the affected domain contexts first, as they might contain states we need to refer
 	// to in the DB transaction below using foreign key relationships
 	domainContextDBTXCallbacks := make([]func(err error), 0, len(domainContextsToFlush))
+	var pubTXCbs []func()
 	dbTXCallback := func(err error) {
 		for _, dcTXCallback := range domainContextDBTXCallbacks {
 			if dcTXCallback != nil {
 				dcTXCallback(err)
+			}
+		}
+		if err == nil {
+			for _, publicTXCallback := range pubTXCbs {
+				publicTXCallback()
 			}
 		}
 	}
@@ -112,8 +108,8 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 			dbTXCallback(err)
 		}
 	}()
-	log.L(ctx).Infof("SyncPoints flush-writer: domain=contexts=%d finalizeOperations=%d dispatchOperations=%d delegateOperations=%d delegationAckOperations=%d",
-		len(domainContextsToFlush), len(finalizeOperations), len(dispatchOperations), len(delegateOperations), len(delegationAckOperations))
+	log.L(ctx).Infof("SyncPoints flush-writer: domain=contexts=%d finalizeOperations=%d dispatchOperations=%d",
+		len(domainContextsToFlush), len(finalizeOperations), len(dispatchOperations))
 	for _, dc := range domainContextsToFlush {
 		var domainCB func(error)
 		domainCB, err = dc.Flush(dbTX) // err variable must not be re-allocated
@@ -132,15 +128,7 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 	}
 
 	if err == nil && len(dispatchOperations) > 0 {
-		err = s.writeDispatchOperations(ctx, dbTX, dispatchOperations) // err variable must not be re-allocated
-	}
-
-	if err == nil && len(delegateOperations) > 0 {
-		err = s.writeDelegateOperations(ctx, dbTX, delegateOperations) // err variable must not be re-allocated
-	}
-
-	if err == nil && len(delegationAckOperations) > 0 {
-		err = s.writeDelegationAckOperations(ctx, dbTX, delegationAckOperations) // err variable must not be re-allocated
+		pubTXCbs, err = s.writeDispatchOperations(ctx, dbTX, dispatchOperations) // err variable must not be re-allocated
 	}
 
 	if err != nil {

@@ -128,7 +128,7 @@ abstract class PluginInstance<MSG> {
                 build();
     }
 
-    final CompletableFuture<MSG> requestReply(MSG requestMessage) {
+    final synchronized CompletableFuture<MSG> requestReply(MSG requestMessage) {
         CompletableFuture<MSG> inflight =
                 inflightRequests.addRequest(UUID.fromString(getHeader(requestMessage).getMessageId()));
         sendStream.onNext(requestMessage);
@@ -163,12 +163,12 @@ abstract class PluginInstance<MSG> {
         }
     }
 
-    private Void send(MSG msg) {
+    private synchronized Void send(MSG msg) {
         sendStream.onNext(msg);
         return null;
     }
 
-    private Void sendErrorReply(Service.Header reqHeader, Throwable t) {
+    private synchronized Void sendErrorReply(Service.Header reqHeader, Throwable t) {
         Service.Header resHeader = Service.Header.newBuilder().
                 setPluginId(pluginId).
                 setMessageId(UUID.randomUUID().toString()).

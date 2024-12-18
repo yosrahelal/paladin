@@ -133,7 +133,7 @@ func (tm *txManager) rpcQueryTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
 	) ([]*pldapi.Transaction, error) {
-		return tm.QueryTransactions(ctx, &query, false)
+		return tm.QueryTransactions(ctx, &query, tm.p.DB(), false)
 	})
 }
 
@@ -141,7 +141,7 @@ func (tm *txManager) rpcQueryTransactionsFull() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
 	) ([]*pldapi.TransactionFull, error) {
-		return tm.QueryTransactionsFull(ctx, &query, false)
+		return tm.QueryTransactionsFull(ctx, &query, tm.p.DB(), false)
 	})
 }
 
@@ -151,9 +151,9 @@ func (tm *txManager) rpcQueryPendingTransactions() rpcserver.RPCHandler {
 		full bool,
 	) (any, error) {
 		if full {
-			return tm.QueryTransactionsFull(ctx, &query, true)
+			return tm.QueryTransactionsFull(ctx, &query, tm.p.DB(), true)
 		}
-		return tm.QueryTransactions(ctx, &query, true)
+		return tm.QueryTransactions(ctx, &query, tm.p.DB(), true)
 	})
 }
 
@@ -259,7 +259,11 @@ func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		a abi.ABI,
 	) (*tktypes.Bytes32, error) {
-		return tm.storeABI(ctx, tm.p.DB(), a)
+		postCommit, abiHashRef, err := tm.storeABI(ctx, tm.p.DB(), a)
+		if err == nil {
+			postCommit()
+		}
+		return abiHashRef, err
 	})
 }
 
@@ -294,7 +298,7 @@ func (tm *txManager) rpcDebugTransactionStatus() rpcserver.RPCHandler {
 		contractAddress string,
 		id uuid.UUID,
 	) (components.PrivateTxStatus, error) {
-		return tm.privateTxMgr.GetTxStatus(ctx, contractAddress, id.String())
+		return tm.privateTxMgr.GetTxStatus(ctx, contractAddress, id)
 	})
 }
 

@@ -1,13 +1,55 @@
 name: Helm Chart release
 
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
 on:
+  workflow_call:
+    inputs:
+      latest:
+        required: false
+        type: boolean
+        default: false
+      registry:
+        required: true
+        type: string 
+      images_tag:
+        required: true
+        type: string
+        description: 'The images tags to patch the chart with'
+      chart_tag:
+        required: true
+        type: string
+        description: 'Chart release tag'
+    secrets:
+      CR_TOKEN:
+        description: 'The GitHub token to use for the helm chart release'
+        required: true
+
   workflow_dispatch:
     inputs:
       latest:
         required: false
         type: boolean
         default: false
-
+      registry:
+        type: choice
+        options:
+          - 'docker.io'
+          - 'ghcr.io'
+        default: 'docker.io'
+        description: 'The docker registry to use for the images'
+      images_tag:
+        required: true
+        type: string
+        description: 'The images tags to patch the chart with'
+      chart_tag:
+        required: true
+        type: string
+        description: 'The helm chart tag to release the chart'
+  
 jobs:
   helm-chart-release:
     runs-on: ubuntu-latest
@@ -18,33 +60,8 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      # Install protoc only on non-Windows systems
-      - name: Install protoc
-        run: |
-          PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-          curl -LO $PB_REL/download/v25.1/protoc-25.1-linux-x86_64.zip
-          unzip protoc-25.1-linux-x86_64.zip -d protoc
-          echo "${PWD}/protoc/bin" >> $GITHUB_PATH
-
-      # Set up Java
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: 21
-
-      # Set up Go
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          check-latest: true
-          cache-dependency-path: |
-            **/*.sum
-
-      # Set up Gradle
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Install pre-requisites
+        uses: ./.github/actions/setup
 
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -54,18 +71,92 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
       
+      - uses: imranismail/setup-kustomize@v2
+
       - name: Prepare CRD chart
-        working-directory: operator
-        run: gradle prepareCRDsChart
+        run: ./gradlew prepareCRDsChart
 
       - name: Prepare operator chart
         run: ./gradlew prepareOperatorChart
 
+      - name: Get Docker Repository Name
+        id: docker_repo
+        uses: ./.github/actions/repository
+        with:
+          repository: ${{ github.repository_owner }}
+          registry: ${{ inputs.registry }}
+      
+      - name: Override image tags
+        uses: ./.github/actions/update-yaml
+        with:
+          file: 'operator/charts/paladin-operator/values.yaml'
+          updates: |
+            operator:
+              image:
+                repository: ${{ inputs.registry }}/${{ steps.docker_repo.outputs.repository }}/paladin-operator
+                tag: ${{ inputs.images_tag }}
+            paladin:
+              image:
+                repository: ${{ inputs.registry }}/${{ steps.docker_repo.outputs.repository }}/paladin
+                tag: ${{ inputs.images_tag }}
+      
+      # Remove 'v' prefix from the tag
+      - name: Process Tag
+        shell: bash
+        run: |
+          TAG="${{ inputs.chart_tag }}"
+          PROCESSED_TAG="${TAG#v}"
+          echo "PROCESSED_TAG=${PROCESSED_TAG}" >> $GITHUB_ENV
+
+      # Override the chart version in the Chart.yaml file
+      - name: Override chart version
+        uses: ./.github/actions/update-yaml
+        with:
+          file: 'operator/charts/paladin-operator/Chart.yaml'
+          updates: |
+            version: ${{ env.PROCESSED_TAG }}
+            appVersion: ${{ inputs.chart_tag }}
+
+      - name: Confirm Helm templates
+        working-directory: operator/charts/paladin-operator
+        run: |
+          helm dependency build
+          helm template .
+          rm -rf charts
+          rm Chart.lock
+
+      # TODO: Add e2e tests for the helm chart
+
+      # set CR_TOKEN env with the GitHub token secret when it is workflow_dispatch action
+      - name: Set CR_TOKEN
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == 'workflow_call' ]; then
+            echo "CR_TOKEN=${{ secrets.CR_TOKEN }}" >> $GITHUB_ENV
+          else
+            echo "CR_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+          fi
+
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         with:
-          mark_as_latest: ${{ inputs.latest }}
+          mark_as_latest: false # the release is marked as latest in the next step
           charts_dir: "operator/charts"
           skip_existing: true
         env: 
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_TOKEN: "${{ env.CR_TOKEN }}"
+
+      - name: Prepare CRs artifacts
+        run: ./gradlew prepareArtifacts -PartifactDir=${{ github.workspace }}/artifacts
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.chart_tag }}
+          body: "Release ${{ inputs.chart_tag }}"
+          generate_release_notes: true
+          make_latest: ${{ inputs.latest }}
+          files: |
+            ${{ github.workspace }}/artifacts/basenet.yaml
+            ${{ github.workspace }}/artifacts/devnet.yaml
+            ${{ github.workspace }}/artifacts/artifacts.tar.gz
+ 

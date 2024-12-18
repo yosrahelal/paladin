@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
@@ -108,8 +109,21 @@ func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 	}, nil
 }
 
+func (h *approveHandler) decodeStates(states []*pldapi.StateEncoded) []*prototk.EndorsableState {
+	result := make([]*prototk.EndorsableState, len(states))
+	for i, state := range states {
+		result[i] = &prototk.EndorsableState{
+			Id:            state.ID.String(),
+			SchemaId:      state.Schema.String(),
+			StateDataJson: tktypes.RawJSON(state.Data).String(),
+		}
+	}
+	return result
+}
+
 func (h *approveHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
-	coins, err := h.noto.gatherCoins(ctx, req.Inputs, req.Outputs)
+	params := tx.Params.(*types.ApproveParams)
+	coins, err := h.noto.gatherCoins(ctx, h.decodeStates(params.Inputs), h.decodeStates(params.Outputs))
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +134,6 @@ func (h *approveHandler) Endorse(ctx context.Context, tx *types.ParsedTransactio
 		return nil, err
 	}
 
-	params := tx.Params.(*types.ApproveParams)
 	transferHash, err := h.transferHash(ctx, tx, params)
 	if err != nil {
 		return nil, err

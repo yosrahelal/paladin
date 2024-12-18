@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "../domains/interfaces/INoto.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 contract Atom is Initializable {
     uint256 private _operationCount;
@@ -69,21 +66,13 @@ contract AtomFactory {
 
     event AtomDeployed(address addr);
 
-    // Must match the signature initialize(Atom.Operation[])
-    string private constant INIT_SIGNATURE = "initialize((address,bytes)[])";
-
     constructor() {
         logic = address(new Atom());
     }
 
     function create(Atom.Operation[] calldata operations) public {
-        bytes memory _initializationCalldata = abi.encodeWithSignature(
-            INIT_SIGNATURE,
-            operations
-        );
-        address addr = address(
-            new ERC1967Proxy(logic, _initializationCalldata)
-        );
-        emit AtomDeployed(addr);
+        address instance = Clones.clone(logic);
+        Atom(instance).initialize(operations);
+        emit AtomDeployed(instance);
     }
 }

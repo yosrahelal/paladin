@@ -51,7 +51,7 @@ func TestMintValidateParams(t *testing.T) {
 
 	max := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(100), nil).Text(10)
 	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":"+max+"}]}")
-	assert.EqualError(t, err, "PD210105: Total amount must be in the range (0, 2^100)")
+	assert.EqualError(t, err, "PD210107: Total amount must be in the range (0, 2^100)")
 
 	params, err := h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}]}")
 	assert.NoError(t, err)

@@ -41,7 +41,10 @@ type hdWalletPathEntry struct {
 	Index uint64
 }
 
-func configToKeyResolutionRequest(k *pldconf.SigningKeyConfigEntry) *signerapi.ResolveKeyRequest {
+func configToKeyResolutionRequest(k *pldconf.StaticKeyReference) (string, *signerapi.ResolveKeyRequest) {
+	if k.KeyHandle != "" {
+		return k.KeyHandle, nil
+	}
 	keyReq := &signerapi.ResolveKeyRequest{
 		Name:       k.Name,
 		Index:      k.Index,
@@ -54,7 +57,7 @@ func configToKeyResolutionRequest(k *pldconf.SigningKeyConfigEntry) *signerapi.R
 			Index: p.Index,
 		})
 	}
-	return keyReq
+	return "", keyReq
 }
 
 func (sm *signingModule[C]) initHDWallet(ctx context.Context, conf *pldconf.KeyDerivationConfig) (err error) {
@@ -67,11 +70,19 @@ func (sm *signingModule[C]) initHDWallet(ctx context.Context, conf *pldconf.KeyD
 		bip44HardenedSegments: confutil.IntMin(conf.BIP44HardenedSegments, 0, *pldconf.KeyDerivationDefaults.BIP44HardenedSegments),
 	}
 	seedKeyPath := pldconf.KeyDerivationDefaults.SeedKeyPath
-	if conf.SeedKeyPath.Name != "" {
+	if conf.SeedKeyPath.Name != "" || conf.SeedKeyPath.KeyHandle != "" || len(conf.SeedKeyPath.Attributes) > 0 {
 		seedKeyPath = conf.SeedKeyPath
 	}
 	// Note we don't have any way to store the resolved keyHandle, so we resolve it every time we start
-	seed, _, err := sm.keyStore.FindOrCreateLoadableKey(ctx, configToKeyResolutionRequest(&seedKeyPath), sm.new32ByteRandomSeed)
+	var seed []byte
+	keyHandle, seedResolve := configToKeyResolutionRequest(&seedKeyPath)
+	if keyHandle != "" {
+		// We have been provided a pre-resolved key handle
+		seed, err = sm.keyStore.LoadKeyMaterial(ctx, keyHandle)
+	} else {
+		// We need to call resolve to resolve the key material
+		seed, _, err = sm.keyStore.FindOrCreateLoadableKey(ctx, seedResolve, sm.new32ByteRandomSeed)
+	}
 	if err != nil {
 		return err
 	}

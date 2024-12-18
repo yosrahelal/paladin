@@ -17,6 +17,8 @@ limitations under the License.
 package main
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,29 +36,15 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func main() {
+// file names that are basenet specific
+var basenet = []string{"issuer", "paladindomain", "paladinregistry", "smartcontractdeployment", "transactioninvoke"}
 
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, fmt.Errorf("usage: go run ./contractpkg generate|template [ARGS]"))
-		os.Exit(1)
-		return
-	}
-	switch os.Args[1] {
-	case "generate":
-		if err := generateSmartContracts(); err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
-		}
-	case "template":
-		if err := template(); err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
-		}
-	default:
-		fmt.Fprintln(os.Stderr, fmt.Errorf("usage: go run ./contractpkg generate|template [ARGS]"))
-		os.Exit(1)
-	}
-	os.Exit(0)
+// file names that are devnet specific
+var devnet = []string{"besu_node", "paladin_node", "genesis", "paladinregistration"}
+
+var scope = map[string][]string{
+	"basenet": basenet,
+	"devnet":  append(devnet, basenet...),
 }
 
 type ContractMap map[string]*ContractMapBuild
@@ -67,9 +55,15 @@ type ContractMapBuild struct {
 	Params     any               `json:"params"`
 }
 
+var cmd = map[string]func() error{
+	"generate":  generateSmartContracts,
+	"template":  template,
+	"artifacts": generateArtifacts,
+}
+
 func generateSmartContracts() error {
 	if len(os.Args) < 3 {
-		return fmt.Errorf("usage: go run ./contractpkg generate [path/to/contractMap.json]")
+		return fmt.Errorf("usage: go run ./%s %s [path/to/contractMap.json]", filepath.Base(os.Args[0]), os.Args[1])
 	}
 
 	var buildMap ContractMap
@@ -197,7 +191,7 @@ func (m *ContractMap) process(name string, b *ContractMapBuild) error {
 // adjust all .yaml files in the directory to use the new template syntax
 func template() error {
 	if len(os.Args) < 4 {
-		return fmt.Errorf("usage: go run ./contractpkg template [src] [dist]")
+		return fmt.Errorf("usage: go run ./%s %s [src] [dist]", filepath.Base(os.Args[0]), os.Args[1])
 	}
 	srcDir := os.Args[2]
 	destDir := os.Args[3]
@@ -257,6 +251,28 @@ func template() error {
 		// Perform the regex replacement
 		newContent := pattern.ReplaceAllString(string(content), "{{ `{{${1}}}` }}")
 
+		// Add conditional wrapper around the content
+		vScopes := scopes(file)
+		conditions := []string{}
+		var condition string
+		for _, s := range vScopes {
+			conditions = append(conditions, fmt.Sprintf("(eq .Values.mode \"%s\")", s))
+
+			// Build the condition string for the template
+			if len(conditions) == 1 {
+				// Single condition doesn't need 'or'
+				condition = conditions[0]
+			} else {
+				// Multiple conditions use 'or' to combine them
+				condition = fmt.Sprintf("(or %s)", strings.Join(conditions, " "))
+			}
+		}
+
+		// Wrap newContent with the conditional template
+		if len(condition) != 0 {
+			newContent = fmt.Sprintf("{{- if %s }}\n\n%s\n{{- end }}", condition, newContent)
+		}
+
 		// Write the modified content back to the same file
 		err = os.WriteFile(file, []byte(newContent), fs.FileMode(0644))
 		if err != nil {
@@ -267,6 +283,150 @@ func template() error {
 		fmt.Printf("Processed %s\n", file)
 	}
 	return nil
+}
+
+func generateArtifacts() error {
+	if len(os.Args) < 4 {
+		return fmt.Errorf("usage: go run ./%s %s [srcDir] [outDir]", filepath.Base(os.Args[0]), os.Args[1])
+	}
+	srcDir := os.Args[2]
+	outDir := os.Args[3]
+
+	// Create the output directory if it doesn't exist
+	err := os.MkdirAll(outDir, 0755)
+	if err != nil {
+		return fmt.Errorf("Error creating directory %s: %v", outDir, err)
+	}
+
+	// For each scope, combine the YAML files
+	for scopeName := range scope {
+		combinedContent := ""
+		// Collect all files that match the scope
+		files, err := filepath.Glob(filepath.Join(srcDir, "*.yaml"))
+		if err != nil {
+			return fmt.Errorf("Error finding YAML files in %s: %v", srcDir, err)
+		}
+
+		for _, file := range files {
+			filename := filepath.Base(file)
+			// Check if the file belongs to the current scope
+			if fileBelongsToScope(filename, scopeName) {
+				content, err := os.ReadFile(file)
+				if err != nil {
+					return fmt.Errorf("Error reading file %s: %v", file, err)
+				}
+				// Add a YAML document separator if needed
+				if len(combinedContent) > 0 {
+					combinedContent += "\n---\n"
+				}
+				combinedContent += string(content)
+			}
+		}
+
+		// Write the combined content to a file
+		if combinedContent != "" {
+			outFile := filepath.Join(outDir, fmt.Sprintf("%s.yaml", scopeName))
+			err = os.WriteFile(outFile, []byte(combinedContent), 0644)
+			if err != nil {
+				return fmt.Errorf("Error writing combined YAML file %s: %v", outFile, err)
+			}
+			fmt.Printf("Combined YAML for scope '%s' written to %s\n", scopeName, outFile)
+		} else {
+			fmt.Printf("No YAML files found for scope '%s'\n", scopeName)
+		}
+	}
+
+	// Create a .tar.gz archive for all YAML files in the source directory
+	err = createTarGz(srcDir, filepath.Join(outDir, "artifacts.tar.gz"))
+	if err != nil {
+		return fmt.Errorf("Error creating tar.gz archive: %v", err)
+	}
+
+	fmt.Printf("Tar.gz archive created at %s\n", filepath.Join(outDir, "artifacts.tar.gz"))
+	return nil
+}
+
+// createTarGz compresses all YAML files in the source directory into a .tar.gz archive
+func createTarGz(srcDir, destFile string) error {
+	// Create the output file
+	outFile, err := os.Create(destFile)
+	if err != nil {
+		return fmt.Errorf("Error creating tar.gz file %s: %v", destFile, err)
+	}
+	defer outFile.Close()
+
+	// Create a gzip writer
+	gw := gzip.NewWriter(outFile)
+	defer gw.Close()
+
+	// Create a tar writer
+	tw := tar.NewWriter(gw)
+	defer tw.Close()
+
+	// Walk through the source directory and add .yaml files to the archive
+	err = filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories
+		if info.IsDir() {
+			return nil
+		}
+
+		// Only add YAML files
+		if filepath.Ext(path) == ".yaml" {
+			file, err := os.Open(path)
+			if err != nil {
+				return fmt.Errorf("Error opening file %s: %v", path, err)
+			}
+			defer file.Close()
+
+			// Create a tar header for the file
+			header := &tar.Header{
+				Name:    filepath.Base(path),
+				Size:    info.Size(),
+				Mode:    int64(info.Mode()),
+				ModTime: info.ModTime(),
+			}
+			if err := tw.WriteHeader(header); err != nil {
+				return fmt.Errorf("Error writing tar header for file %s: %v", path, err)
+			}
+
+			// Copy the file content to the tar writer
+			_, err = io.Copy(tw, file)
+			if err != nil {
+				return fmt.Errorf("Error writing file %s to tar: %v", path, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("Error walking the directory %s: %v", srcDir, err)
+	}
+
+	return nil
+}
+func fileBelongsToScope(filename, scopeName string) bool {
+	for _, s := range scopes(filename) {
+		if s == scopeName {
+			return true
+		}
+	}
+	return false
+}
+
+func scopes(filename string) []string {
+	var s []string
+	for k, v := range scope {
+		for _, f := range v {
+			if strings.Contains(filename, f) {
+				s = append(s, k)
+				break
+			}
+		}
+	}
+	return s
 }
 
 // Helper function to copy a file from src to dst
@@ -298,4 +458,29 @@ func copyFile(src, dst string) error {
 	}
 
 	return nil
+}
+
+func usageMessage() string {
+	commands := []string{}
+	for k := range cmd {
+		commands = append(commands, k)
+	}
+	return fmt.Sprintf("usage: go run ./%s %s [ARGS]", filepath.Base(os.Args[0]), strings.Join(commands, "|"))
+}
+
+func main() {
+
+	if len(os.Args) < 2 {
+		fmt.Fprintln(os.Stderr, fmt.Errorf(usageMessage()))
+		os.Exit(1)
+	}
+	if f, ok := cmd[os.Args[1]]; ok {
+		if err := f(); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+	fmt.Fprintln(os.Stderr, fmt.Errorf(usageMessage()))
+	os.Exit(1)
 }

@@ -1,15 +1,11 @@
-# VERSION defines the project version for the bundle.
-VERSION ?= 0.0.1
-
 CLUSTER_NAME ?= paladin
 NAMESPACE ?= default
 
-# IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
-IMAGE_TAG_BASE ?= paladin-operator
-OPERATOR_IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
-BUNDLE_OPERATOR_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
-PALADIN_IMG_NAME ?= paladin
-PALADIN_IMG_TAG ?= test 
+OPERATOR_IMAGE_NAME ?= paladin-operator
+OPERATOR_IMAGE_TAG ?= test
+OPERATOR_IMG ?= ${OPERATOR_IMAGE_NAME}:${OPERATOR_IMAGE_TAG}
+PALADIN_IMAGE_NAME ?= paladin
+PALADIN_IMAGE_TAG ?= test 
 
 # USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
 USE_IMAGE_DIGESTS ?= false
@@ -116,7 +112,7 @@ kind-start:	## Create a Kind cluster.
 kind-promote: kind-start ## Load Docker images into Kind cluster.
 	echo "Loading images into Kind cluster..."
 	$(KIND_CLUSTER) load docker-image ${OPERATOR_IMG} --name "${CLUSTER_NAME}"
-	$(KIND_CLUSTER) load docker-image ${PALADIN_IMG_NAME}:${PALADIN_IMG_TAG}  --name "${CLUSTER_NAME}"
+	$(KIND_CLUSTER) load docker-image ${PALADIN_IMAGE_NAME}:${PALADIN_IMAGE_TAG}  --name "${CLUSTER_NAME}"
 
 .PHONY: kind-delete
 kind-delete: ## Delete the Kind cluster.
@@ -129,7 +125,7 @@ kind-delete: ## Delete the Kind cluster.
 
 ##@ Build
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
+build: manifests generate fmt vet test ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
 .PHONY: run 
@@ -209,11 +205,11 @@ helm-install: helm-install-dependencies ## Install operator using Helm.
 	$(HELM) upgrade --install ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} \
 		-n ${NAMESPACE} --create-namespace \
 		--set operator.namespace=${NAMESPACE} \
-		--set operator.image.repository=${IMAGE_TAG_BASE} \
+		--set operator.image.repository=${OPERATOR_IMAGE_NAME} \
 		--set operator.image.pullPolicy=IfNotPresent \
-		--set operator.image.tag=${VERSION} \
-		--set paladin.image.repository=${PALADIN_IMG_NAME} \
-		--set paladin.image.tag=${PALADIN_IMG_TAG} \
+		--set operator.image.tag=${OPERATOR_IMAGE_TAG} \
+		--set paladin.image.repository=${PALADIN_IMAGE_NAME} \
+		--set paladin.image.tag=${PALADIN_IMAGE_TAG} \
 		--set paladin.image.pullPolicy=IfNotPresent \
 		--set prometheus.enabled=false
 
@@ -222,7 +218,6 @@ helm-uninstall-dependencies:
 	@if $(KUBECTL) version --client=false > /dev/null 2>&1; then \
 		$(HELM) uninstall cert-manager --namespace cert-manager > /dev/null 2>&1 || true; \
 		$(KUBECTL) delete namespace cert-manager > /dev/null 2>&1 || true; \
-		$(KUBECTL) delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml > /dev/null 2>&1 || true; \
 	else \
 		echo "No Kubernetes cluster detected. Skipping dependencies uninstallation."; \
 	fi
@@ -275,7 +270,9 @@ $(CRD_REF_DOCS): $(LOCALBIN)
 
 .PHONY: generate-reference-docs
 generate-reference-docs: crd-ref-docs ## Generate API reference documentation.
-	${CRD_REF_DOCS} --source-path "${PWD}/api/" --config "${PWD}/docs/config.yaml" --renderer=markdown --output-path="${PWD}/docs/api.md"
+	mkdir -p ${PWD}/../doc-site/docs/reference/crds/
+	${CRD_REF_DOCS} --source-path "${PWD}/api/" --config "${PWD}/docs/config.yaml" --renderer=markdown --output-path="${PWD}/../doc-site/docs/reference/crds/core.paladin.io.md"
+	./hack/prepare-crds-doc.sh
 
 ##@ Paladin Operator
 

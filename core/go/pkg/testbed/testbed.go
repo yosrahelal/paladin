@@ -71,6 +71,12 @@ type testbed struct {
 	c         components.AllComponents
 }
 
+type testbedTransaction struct {
+	psc     components.DomainSmartContract
+	ptx     *components.PrivateTransaction
+	localTx *components.ResolvedTransaction
+}
+
 func NewTestBed() Testbed {
 	tb := &testbed{}
 	tb.ctx, tb.cancelCtx = context.WithCancel(context.Background())

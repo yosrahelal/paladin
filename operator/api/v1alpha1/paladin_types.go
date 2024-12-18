@@ -33,9 +33,20 @@ type PaladinSpec struct {
 	// Adds signing modules that load their key materials from a k8s secret
 	SecretBackedSigners []SecretBackedSigner `json:"secretBackedSigners,omitempty"`
 
-	// Optionally bind to a local besu node deployed with this operator
-	// (vs. configuring a connection to a production blockchain network)
+	// Deprecated: Use 'baseLedgerEndpoint' instead. Example:
+	// { "baseLedgerEndpoint": {"type": "local", "local": {"nodeName": "node-name"}} }
+	//
+	// Optionally bind to a local Besu node deployed with this operator
+	// (vs. configuring a connection to a production blockchain network).
+	// +optional
 	BesuNode string `json:"besuNode,omitempty"`
+
+	// Deprecated: Use 'baseLedgerEndpoint' instead. Example:
+	// { "baseLedgerEndpoint": {"type": "network", "network": {"auth": {}}} }
+	AuthConfig *Auth `json:"authConfig,omitempty"`
+
+	// BaseLedgerEndpoint specifies the base endpoint for the ledger
+	BaseLedgerEndpoint *BaseLedgerEndpoint `json:"baseLedgerEndpoint,omitempty"`
 
 	// Optionally tune the service definition.
 	// We merge any configuration you add (such as node ports) for the following services:
@@ -51,6 +62,39 @@ type PaladinSpec struct {
 
 	// Transports are configured individually on each node, as they reference security details specific to that node
 	Transports []TransportConfig `json:"transports"`
+}
+type BaseLedgerEndpointType string
+
+const (
+	EndpointTypeLocal   BaseLedgerEndpointType = "local"
+	EndpointTypeNetwork BaseLedgerEndpointType = "endpoint"
+)
+
+type BaseLedgerEndpoint struct {
+	// Type specifies the type of the endpoint.
+	// +kubebuilder:validation:Enum=local;endpoint
+	Type BaseLedgerEndpointType `json:"type"`
+
+	// Local specifies the configuration when the type is 'local'.
+	// +optional
+	Local *LocalLedgerEndpoint `json:"local,omitempty"`
+
+	// Network specifies the configuration when the type is 'endpoint'.
+	// +optional
+	Endpoint *NetworkLedgerEndpoint `json:"endpoint,omitempty"`
+}
+
+// LocalLedgerEndpoint defines the configuration for local endpoints.
+type LocalLedgerEndpoint struct {
+	// NodeName specifies the name of the local node.
+	NodeName string `json:"nodeName"`
+}
+
+// NetworkLedgerEndpoint defines the configuration for network endpoints.
+type NetworkLedgerEndpoint struct {
+	JSONRPC string `json:"jsonrpc"`
+	WS      string `json:"ws"`
+	Auth    *Auth  `json:"auth,omitempty"`
 }
 
 type LabelReference struct {
@@ -137,6 +181,36 @@ type SecretBackedSigner struct {
 	// rules first on key matching and more generic rules (like the default of ".*") last.
 	// +kubebuilder:default=.*
 	KeySelector string `json:"keySelector"`
+}
+
+type AuthType string
+
+const (
+	// AuthTypeSecret is used to authenticate with a secret
+	// The secret must contain keys "username" and "password"
+	AuthTypeSecret AuthType = "secret"
+	AuthTypeInline AuthType = "inline"
+)
+
+type Auth struct {
+	// auth method to use for the connection
+	// +kubebuilder:validation:Enum=secret;inline
+	Type AuthType `json:"type"`
+
+	// Secret is used to provide the name of the secret to use for authentication
+	Secret *AuthSecret `json:"secretRef,omitempty"`
+
+	// Auth details are provided inline (not recommended)
+	Inline *AuthInline `json:"inline,omitempty"`
+}
+
+type AuthSecret struct {
+	// The name of the secret to use for authentication
+	Name string `json:"name"`
+}
+type AuthInline struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 // StatusReason is an enumeration of possible failure causes.  Each StatusReason

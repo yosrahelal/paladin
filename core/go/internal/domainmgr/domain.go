@@ -52,6 +52,7 @@ type domain struct {
 	cancelCtx context.CancelFunc
 
 	conf            *pldconf.DomainConfig
+	defaultGasLimit tktypes.HexUint64
 	dm              *domainManager
 	name            string
 	api             components.DomainManagerToDomain
@@ -83,6 +84,7 @@ func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDo
 	d := &domain{
 		dm:              dm,
 		conf:            conf,
+		defaultGasLimit: pldconf.DefaultDefaultGasLimit, // can be set by config below
 		initRetry:       retry.NewRetryIndefinite(&conf.Init.Retry),
 		name:            name,
 		api:             toDomain,
@@ -93,6 +95,9 @@ func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDo
 		schemasBySignature: make(map[string]components.Schema),
 
 		inFlight: make(map[string]*inFlightDomainRequest),
+	}
+	if conf.DefaultGasLimit != nil {
+		d.defaultGasLimit = tktypes.HexUint64(*conf.DefaultGasLimit)
 	}
 	log.L(dm.bgCtx).Debugf("Domain %s configured. Config: %s", name, tktypes.JSONString(conf.Config))
 	d.ctx, d.cancelCtx = context.WithCancel(log.WithLogField(dm.bgCtx, "domain", d.name))
@@ -149,9 +154,11 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 		}
 		stream.Sources = append(stream.Sources, blockindexer.EventStreamSource{ABI: eventsABI})
 
-		if _, err := d.dm.txManager.UpsertABI(d.ctx, d.dm.persistence.DB(), eventsABI); err != nil {
+		postCommit, _, err := d.dm.txManager.UpsertABI(d.ctx, d.dm.persistence.DB(), eventsABI)
+		if err != nil {
 			return nil, err
 		}
+		postCommit() // we didn't actually use a coordinated TX to call immediately
 	}
 
 	// We build a stream name in a way assured to result in a new stream if the ABI changes

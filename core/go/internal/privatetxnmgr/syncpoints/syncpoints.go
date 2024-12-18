@@ -61,24 +61,20 @@ type SyncPoints interface {
 	// the onCommit and onRollback callbacks are called, on a separate goroutine when the transaction is committed or rolled back
 	QueueTransactionFinalize(ctx context.Context, domain string, contractAddress tktypes.EthAddress, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error))
 
-	// DelegateTransaction writes a record to the local database recording that the given transaction has been delegated to the given delegate
-	// then triggers a reliable cross node handshake to transmit that delegation to the delegate node and record their acknowledgement
-	QueueDelegation(dCtx components.DomainContext, contractAddress tktypes.EthAddress, transactionID uuid.UUID, delegateNodeID string, onCommit func(context.Context), onRollback func(context.Context, error))
-
-	// DelegateTransaction writes a record to the local database recording that we have received acknowledgement from the delegate node
-	QueueDelegationAck(dCtx components.DomainContext, contractAddress tktypes.EthAddress, delegationID uuid.UUID, onCommit func(context.Context), onRollback func(context.Context, error))
 	Close()
 }
 
 type syncPoints struct {
-	started bool
-	writer  flushwriter.Writer[*syncPointOperation, *noResult]
-	txMgr   components.TXManager
+	started  bool
+	writer   flushwriter.Writer[*syncPointOperation, *noResult]
+	txMgr    components.TXManager
+	pubTxMgr components.PublicTxManager
 }
 
-func NewSyncPoints(ctx context.Context, conf *pldconf.FlushWriterConfig, p persistence.Persistence, txMgr components.TXManager) SyncPoints {
+func NewSyncPoints(ctx context.Context, conf *pldconf.FlushWriterConfig, p persistence.Persistence, txMgr components.TXManager, pubTxMgr components.PublicTxManager) SyncPoints {
 	s := &syncPoints{
-		txMgr: txMgr,
+		txMgr:    txMgr,
+		pubTxMgr: pubTxMgr,
 	}
 	s.writer = flushwriter.NewWriter(ctx, s.runBatch, p, conf, &WriterConfigDefaults)
 	return s

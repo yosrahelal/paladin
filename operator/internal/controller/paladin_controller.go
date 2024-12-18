@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/tyler-smith/go-bip39"
 	appsv1 "k8s.io/api/apps/v1"
@@ -412,8 +413,12 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 								TimeoutSeconds:      2,
 								PeriodSeconds:       5,
 							},
+							SecurityContext: r.config.Paladin.SecurityContext,
 						},
 					},
+					Tolerations:  r.config.Paladin.Tolerations,
+					NodeSelector: r.config.Paladin.NodeSelector,
+					Affinity:     r.config.Paladin.Affinity,
 					Volumes: []corev1.Volume{
 						{
 							Name: "config",
@@ -439,10 +444,13 @@ func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordS
 			Name:            "postgres",
 			Image:           r.config.Postgres.Image, // Use the image from the config
 			ImagePullPolicy: r.config.Postgres.ImagePullPolicy,
+			SecurityContext: r.config.Postgres.SecurityContext,
 			VolumeMounts: []corev1.VolumeMount{
 				{
 					Name:      "pgdata",
 					MountPath: "/pgdata",
+					SubPath:   "data",
+					ReadOnly:  false, // Postgres needs to write to this
 				},
 			},
 			Ports: []corev1.ContainerPort{
@@ -490,7 +498,7 @@ func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordS
 					},
 				},
 			}, buildEnv(r.config.Postgres.Envs, map[string]string{
-				"PGDATA": "/pgdata",
+				"PGDATA": "/pgdata/data",
 			})...),
 		},
 	}, ss.Spec.Template.Spec.Containers...)
@@ -669,6 +677,14 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 		}
 	}
 
+	// Enable debug server by default on localhost:6060
+	if pldConf.DebugServer.Enabled == nil {
+		pldConf.DebugServer.Enabled = confutil.P(true)
+		if pldConf.DebugServer.Port == nil {
+			pldConf.DebugServer.Port = confutil.P(6060)
+		}
+	}
+
 	// Node name can be overridden, but defaults to the CR name
 	if pldConf.NodeName == "" {
 		pldConf.NodeName = node.Name
@@ -688,6 +704,11 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 				StaticPath: "/app/ui",
 				URLPath:    "/ui",
 			})
+	}
+
+	// Override the default config with the user provided config
+	if err := r.generatePaladinBlockchainConfig(ctx, node, &pldConf); err != nil {
+		return "", nil, err
 	}
 
 	// DB needs merging from user config and our config
@@ -715,13 +736,89 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 		return "", nil, err
 	}
 
-	// Bind to the a local besu node if we've been configured with one
-	if node.Spec.BesuNode != "" {
-		pldConf.Blockchain.HTTP.URL = fmt.Sprintf("http://%s:8545", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
-		pldConf.Blockchain.WS.URL = fmt.Sprintf("ws://%s:8546", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
-	}
 	b, err := yaml.Marshal(&pldConf)
 	return string(b), tlsSecrets, err
+}
+func (r *PaladinReconciler) generatePaladinBlockchainConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig) error {
+	if node.Spec.BaseLedgerEndpoint == nil {
+		// Alternatively, the config can be provided in the spec.config
+
+		// fallback: check the deprecated fields
+		if node.Spec.BesuNode != "" {
+			pldConf.Blockchain.HTTP.URL = fmt.Sprintf("http://%s:8545", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
+			pldConf.Blockchain.WS.URL = fmt.Sprintf("ws://%s:8546", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
+		} else {
+			if err := r.generatePaladinAuthConfig(ctx, node, node.Spec.AuthConfig, pldConf); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+	endpoint := node.Spec.BaseLedgerEndpoint
+	switch endpoint.Type {
+	case corev1alpha1.EndpointTypeLocal:
+		lEndpoint := endpoint.Local
+		if lEndpoint == nil {
+			return fmt.Errorf("local endpoint is nil")
+		}
+		pldConf.Blockchain.HTTP.URL = fmt.Sprintf("http://%s:8545", generateBesuServiceHostname(lEndpoint.NodeName, node.Namespace))
+		pldConf.Blockchain.WS.URL = fmt.Sprintf("ws://%s:8546", generateBesuServiceHostname(lEndpoint.NodeName, node.Namespace))
+	case corev1alpha1.EndpointTypeNetwork:
+		nEndpoint := endpoint.Endpoint
+		if nEndpoint == nil {
+			return fmt.Errorf("network endpoint is nil")
+		}
+		pldConf.Blockchain.HTTP.URL = nEndpoint.JSONRPC
+		pldConf.Blockchain.WS.URL = nEndpoint.WS
+		if err := r.generatePaladinAuthConfig(ctx, node, nEndpoint.Auth, pldConf); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unsupported endpoint type '%s'", endpoint.Type)
+	}
+
+	return nil
+}
+func (r *PaladinReconciler) generatePaladinAuthConfig(ctx context.Context, node *corev1alpha1.Paladin, authConfig *corev1alpha1.Auth, pldConf *pldconf.PaladinConfig) error {
+
+	if authConfig == nil {
+		return nil
+	}
+
+	switch authConfig.Type {
+	case corev1alpha1.AuthTypeSecret:
+		if authConfig.Secret == nil {
+			return fmt.Errorf("AuthSecret must be provided when using AuthTypeSecret")
+		}
+		secretName := authConfig.Secret.Name
+		if secretName == "" {
+			return fmt.Errorf("AuthSecret must be provided when using AuthTypeSecret")
+		}
+		sec := &corev1.Secret{}
+		if err := r.Client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: node.Namespace}, sec); err != nil {
+			return err
+		}
+		if sec.Data == nil {
+			return fmt.Errorf("Secret %s has no data", secretName)
+		}
+		if err := mapToStruct(sec.Data, &pldConf.Blockchain.HTTP.Auth); err != nil {
+			return err
+		}
+		if err := mapToStruct(sec.Data, &pldConf.Blockchain.WS.Auth); err != nil {
+			return err
+		}
+
+	case corev1alpha1.AuthTypeInline:
+		if authConfig.Inline == nil {
+			return fmt.Errorf("AuthInline must be provided when using AuthTypeInline")
+		}
+		pldConf.Blockchain.HTTP.Auth.Username = authConfig.Inline.Username
+		pldConf.Blockchain.HTTP.Auth.Password = authConfig.Inline.Password
+		pldConf.Blockchain.WS.Auth.Username = authConfig.Inline.Username
+		pldConf.Blockchain.WS.Auth.Password = authConfig.Inline.Password
+	}
+	return nil
 }
 
 func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig, name string) error {
@@ -819,7 +916,7 @@ func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *co
 		// Upsert a secret if we've been asked to. We use a mnemonic in this case (rather than directly generating a 32byte seed)
 		if s.Type == corev1alpha1.SignerType_AutoHDWallet {
 			wallet.Signer.KeyDerivation.Type = pldconf.KeyDerivationTypeBIP32
-			wallet.Signer.KeyDerivation.SeedKeyPath = pldconf.SigningKeyConfigEntry{Name: "seed"}
+			wallet.Signer.KeyDerivation.SeedKeyPath = pldconf.StaticKeyReference{Name: "seed"}
 			if err := r.generateBIP39SeedSecretIfNotExist(ctx, node, s.Secret); err != nil {
 				return err
 			}
@@ -1203,6 +1300,8 @@ func (r *PaladinReconciler) getLabels(node *corev1alpha1.Paladin, extraLabels ..
 		}
 	}
 	l["app.kubernetes.io/name"] = generatePaladinName(node.Name)
+	l["app.kubernetes.io/instance"] = node.Name
+	l["app.kubernetes.io/part-of"] = "paladin"
 	return l
 }
 

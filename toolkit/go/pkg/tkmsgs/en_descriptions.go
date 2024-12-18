@@ -1,3 +1,19 @@
+// Copyright © 2024 Kaleido, Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package tkmsgs
 
 import (
@@ -68,6 +84,7 @@ var (
 	PublicTxSubmissionNonce                = ffm("PublicTxSubmission.nonce", "The transaction nonce")
 	PublicTxSubmissionDataTime             = ffm("PublicTxSubmissionData.time", "The submission time")
 	PublicTxSubmissionDataTransactionHash  = ffm("PublicTxSubmissionData.transactionHash", "The transaction hash")
+	PublicTxLocalID                        = ffm("PublicTx.localId", "A locally generated numeric ID for the public transaction. Unique within the node")
 	PublicTxTo                             = ffm("PublicTx.to", "The target contract address (optional)")
 	PublicTxData                           = ffm("PublicTx.data", "The pre-encoded calldata (optional)")
 	PublicTxFrom                           = ffm("PublicTx.from", "The sender's Ethereum address")
@@ -132,7 +149,7 @@ var (
 	PreparedTransactionDomain                     = ffm("PreparedTransaction.domain", "The domain of the original transaction that prepared this transaction submission")
 	PreparedTransactionTo                         = ffm("PreparedTransaction.to", "The to address or the original transaction that prepared this transaction submission")
 	PreparedTransactionTransaction                = ffm("PreparedTransaction.transaction", "The Paladin transaction definition that has been prepared for submission, with the ABI and function details resolved")
-	PreparedTransactionExtraData                  = ffm("PreparedTransaction.metadata", "Domain specific additional information generated during prepare in addition to the states. Used particularly in atomic multi-party transactions to separate data that can be disclosed, away from the full transaction submission payload")
+	PreparedTransactionMetadata                   = ffm("PreparedTransaction.metadata", "Domain specific additional information generated during prepare in addition to the states. Used particularly in atomic multi-party transactions to separate data that can be disclosed, away from the full transaction submission payload")
 	PreparedTransactionStates                     = ffm("PreparedTransaction.states", "Details of all states of the original transaction that prepared this transaction submission")
 	DecodedErrorData                              = ffm("ABIDecodedData.data", "The decoded JSON data using the matched ABI definition")
 	DecodedSummary                                = ffm("ABIDecodedData.summary", "A string formatted summary - errors only")

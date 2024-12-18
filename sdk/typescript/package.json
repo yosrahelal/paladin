@@ -1,6 +1,6 @@
 {
-  "name": "paladin-sdk",
-  "version": "0.0.1",
+  "name": "@lfdecentralizedtrust-labs/paladin-sdk",
+  "version": "0.0.6-alpha.2",
   "description": "",
   "main": "build/index.js",
   "scripts": {
@@ -18,5 +18,8 @@
     "axios": "^1.7.7",
     "ethers": "^6.13.4",
     "uuid": "^11.0.2"
+  },
+  "repository": {
+    "url": "https://github.com/LF-Decentralized-Trust-labs/paladin"
   }
 }

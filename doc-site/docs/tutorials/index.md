@@ -1,4 +1,16 @@
-# Tutorials
+## Pre-requisites
+
+* git
+* [NodeJS 20.x or newer](https://nodejs.org/en/download/package-manager) installed
+
+Clone the Paladin repository to access the examples:
+
+```shell
+git clone https://github.com/LF-Decentralized-Trust-labs/paladin.git
+```
+
+## Next Steps
+
 
 The tutorials on this page provide a starting point for running code on top of Paladin.
 

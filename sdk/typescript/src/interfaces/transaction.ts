@@ -60,11 +60,24 @@ export interface ITransactionReceipt {
   transactionHash: string;
   source: string;
   contractAddress?: string;
-  domainReceipt?: {
-    receipt: {
-      contractAddress?: string;
-    };
+  states?: ITransactionStates;
+  domainReceipt?: IPenteDomainReceipt;
+  failureMessage?: string;
+}
+
+export interface IPenteDomainReceipt {
+  receipt: {
+    from?: string;
+    to?: string;
+    contractAddress?: string;
+    logs?: IPenteLog[];
   };
+}
+
+export interface IPenteLog {
+  address: string;
+  topics: string[];
+  data: string;
 }
 
 export interface ITransactionStates {
@@ -81,46 +94,25 @@ export interface ITransactionStates {
   };
 }
 
-export interface ITransactionDependencies {
-  dependsOn: string[];
-  prereqOf: string[];
-}
-
-export interface IPublicTxWithBinding {
-  to?: string;
-  data?: string;
-  from: string;
-  nonce: string;
-  created: string;
-  completedAt?: string;
-  transactionHash?: string;
-  success?: boolean;
-  revertData?: string;
-  submissions?: IPublicTxSubmissionData[];
-  activity?: ITransactionActivityRecord[];
-  gas?: string;
-  value?: string;
-  maxPriorityFeePerGas?: string;
-  maxFeePerGas?: string;
-  gasPrice?: string;
-  transaction: string;
-  transactionType: TransactionType;
-}
-
-export interface IPublicTxSubmissionData {
-  time: string;
-  transactionHash: string;
-  maxPriorityFeePerGas?: string;
-  maxFeePerGas?: string;
-  gasPrice?: string;
-}
-
-export interface ITransactionActivityRecord {
-  time: string;
-  message: string;
-}
-
 export enum TransactionType {
   Private = "private",
   Public = "public",
+}
+
+export interface IDecodedEvent {
+  signature: string;
+  definition: ethers.JsonFragment;
+  data: any;
+  summary: string; // errors only
+}
+
+export interface IEventWithData {
+  blockNumber: number;
+  transactionIndex: number;
+  logIndex: number;
+  transactionHash: string;
+  signature: string;
+  soliditySignature: string;
+  address: string;
+  data: any;
 }

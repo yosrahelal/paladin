@@ -69,13 +69,29 @@ func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*pldconf.TxMana
 
 }
 
-func mockPublicSubmitTxOkOrReject(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
-		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
-		mockSubmissionBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
-		mockSubmissionBatch.On("Completed", mock.Anything, mock.Anything).Return(nil)
-		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil)
+func mockResolveKeyOKThenFail(t *testing.T, mc *mockComponents, identifier string, senderAddr *tktypes.EthAddress) {
+	kr := mockKeyResolverForFail(t, mc)
+	kr.On("ResolveKey", identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return(&pldapi.KeyMappingAndVerifier{Verifier: &pldapi.KeyVerifier{
+			Verifier: senderAddr.String(),
+		}}, nil)
+}
+
+func mockResolveKey(t *testing.T, mc *mockComponents, identifier string, senderAddr *tktypes.EthAddress) {
+	kr := mockKeyResolver(t, mc)
+	kr.On("ResolveKey", identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return(&pldapi.KeyMappingAndVerifier{Verifier: &pldapi.KeyVerifier{
+			Verifier: senderAddr.String(),
+		}}, nil)
+}
+
+func mockSubmitPublicTxOk(t *testing.T, senderAddr *tktypes.EthAddress) func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+	return func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+		mockResolveKey(t, mc, "sender1", senderAddr)
+		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(func() {}, []*pldapi.PublicTx{
+			{LocalID: confutil.P(uint64(12345))},
+		}, nil)
 	}
 }
 
@@ -84,15 +100,13 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	senderAddr := tktypes.RandAddress()
 	var publicTxns map[uuid.UUID][]*pldapi.PublicTx
 	ctx, url, tmr, done := newTestTransactionManagerWithRPC(t,
-		mockPublicSubmitTxOkOrReject(t),
+		mockSubmitPublicTxOk(t, senderAddr),
 		mockQueryPublicTxForTransactions(func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*pldapi.PublicTx, error) {
 			return publicTxns, nil
 		}),
 		func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
-			mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
-				Return([]*tktypes.EthAddress{senderAddr}, nil)
-			mc.keyManager.On("ResolveEthAddressNewDatabaseTX", mock.Anything, "sender1").
-				Return(senderAddr, nil)
+			mc.keyManager.On("ResolveEthAddressNewDatabaseTX", mock.Anything, "sender1").Return(senderAddr, nil) // used in call
+
 			unconnected := ethclient.NewUnconnectedRPCClient(context.Background(), &pldconf.EthClientConfig{}, 0)
 			mc.ethClientFactory.On("HTTPClient").Return(unconnected)
 		},
@@ -142,7 +156,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		tx1ID: {
 			{
 				From:  *senderAddr,
-				Nonce: 111222333,
+				Nonce: confutil.P(tktypes.HexUint64(111222333)),
 			},
 		},
 	}
@@ -364,7 +378,7 @@ func TestPublicTransactionPassthroughQueries(t *testing.T) {
 	tx := &pldapi.PublicTxWithBinding{
 		PublicTx: &pldapi.PublicTx{
 			From:  tktypes.EthAddress(tktypes.RandBytes(20)),
-			Nonce: tktypes.HexUint64(nonce.Uint64()),
+			Nonce: confutil.P(tktypes.HexUint64(nonce.Uint64())),
 		},
 		PublicTxBinding: pldapi.PublicTxBinding{Transaction: uuid.New(), TransactionType: pldapi.TransactionTypePublic.Enum()},
 	}
@@ -496,12 +510,12 @@ func TestIdentityResolvePassthroughQueries(t *testing.T) {
 func TestDebugTransactionStatus(t *testing.T) {
 
 	contractAddress := tktypes.RandAddress()
-	txID := uuid.New().String()
+	txID := uuid.New()
 
 	ctx, url, _, done := newTestTransactionManagerWithRPC(t,
 		func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.privateTxMgr.On("GetTxStatus", mock.Anything, contractAddress.String(), txID).Return(components.PrivateTxStatus{
-				TxID:        txID,
+				TxID:        txID.String(),
 				Status:      "pending",
 				LatestEvent: "submitted",
 				LatestError: "some error message",
@@ -516,7 +530,7 @@ func TestDebugTransactionStatus(t *testing.T) {
 	var result components.PrivateTxStatus
 	err = rpcClient.CallRPC(ctx, &result, "debug_getTransactionStatus", contractAddress.String(), txID)
 	require.NoError(t, err)
-	assert.Equal(t, txID, result.TxID)
+	assert.Equal(t, txID.String(), result.TxID)
 	assert.Equal(t, "pending", result.Status)
 	assert.Equal(t, "submitted", result.LatestEvent)
 	assert.Equal(t, "some error message", result.LatestError)
@@ -545,8 +559,8 @@ func TestQueryPreparedTransactionsNotFound(t *testing.T) {
 
 func TestPrepareTransactions(t *testing.T) {
 
-	ctx, url, _, done := newTestTransactionManagerWithRPC(t, func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.MatchedBy(func(tx *components.ValidatedTransaction) bool {
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t, mockDomainContractResolve(t, "domain1"), mockKeyResolutionContextOk(t), func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.MatchedBy(func(tx *components.ValidatedTransaction) bool {
 			return tx.Transaction.SubmitMode.V() == pldapi.SubmitModeExternal
 		})).Return(nil)
 	})

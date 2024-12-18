@@ -40,6 +40,7 @@ type NotoConfigData_V0 struct {
 	PrivateAddress  *tktypes.EthAddress `json:"privateAddress"`
 	PrivateGroup    *PentePrivateGroup  `json:"privateGroup"`
 	RestrictMinting bool                `json:"restrictMinting"`
+	AllowBurning    bool                `json:"allowBurning"`
 }
 
 // This is the structure we parse the config into in InitConfig and gets passed back to us on every call
@@ -51,6 +52,7 @@ type NotoParsedConfig struct {
 	PrivateAddress  *tktypes.EthAddress `json:"privateAddress,omitempty"`
 	PrivateGroup    *PentePrivateGroup  `json:"privateGroup,omitempty"`
 	RestrictMinting bool                `json:"restrictMinting"`
+	AllowBurning    bool                `json:"allowBurning"`
 }
 
 type PentePrivateGroup struct {

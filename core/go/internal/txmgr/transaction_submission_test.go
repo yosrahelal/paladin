@@ -26,21 +26,27 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"gorm.io/gorm"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
+func mockBeginRollback(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	mc.db.ExpectBegin()
+	mc.db.ExpectRollback()
+}
+
 func TestResolveFunctionABIAndDef(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false)
+	ctx, txm, done := newTestTransactionManager(t, false, mockKeyResolutionContextFail(t), mockBeginRollback)
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
@@ -54,7 +60,7 @@ func TestResolveFunctionABIAndDef(t *testing.T) {
 }
 
 func TestResolveFunctionNoABI(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false)
+	ctx, txm, done := newTestTransactionManager(t, false, mockKeyResolutionContextFail(t), mockBeginRollback)
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
@@ -68,7 +74,7 @@ func TestResolveFunctionNoABI(t *testing.T) {
 }
 
 func TestResolveFunctionBadABI(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false)
+	ctx, txm, done := newTestTransactionManager(t, false, mockKeyResolutionContextFail(t), mockBeginRollback)
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
@@ -82,12 +88,17 @@ func TestResolveFunctionBadABI(t *testing.T) {
 }
 
 func mockInsertABI(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	mc.db.ExpectBegin()
+	mockInsertABINoBegin(conf, mc)
+}
+
+func mockInsertABINoBegin(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 }
 
 func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, mockKeyResolutionContextFail(t))
 	defer done()
 
 	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
@@ -100,27 +111,15 @@ func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
 	assert.Regexp(t, "PD012204", err)
 }
 
-func mockInsertABIAndTransactionOK(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectBegin()
-	mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectCommit()
-}
-
-func mockPublicSubmitWithDataTxOk(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+func mockInsertABIAndTransactionOK(commit bool) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
-		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
-		mockSubmissionBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
-		mockSubmissionBatch.On("Completed", mock.Anything, true).Return(nil)
-		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil).
-			Run(func(args mock.Arguments) {
-				publicTxs := args[1].([]*components.PublicTxSubmission)
-				for _, tx := range publicTxs {
-					require.NotEmpty(t, tx.Data)
-				}
-			})
+		mc.db.ExpectBegin()
+		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
+		if commit {
+			mc.db.ExpectCommit()
+		}
 	}
 }
 
@@ -156,10 +155,11 @@ func mockGetPublicTransactionForHash(cb func(hash tktypes.Bytes32) (*pldapi.Publ
 
 func TestSubmitBadFromAddr(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		kr := mockKeyResolverForFail(t, mc)
+		kr.On("ResolveKey", "sender1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return(nil, fmt.Errorf("bad address"))
+		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
-		mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
-			Return(nil, fmt.Errorf("bad address"))
 	})
 	defer done()
 
@@ -181,10 +181,10 @@ func TestSubmitBadFromAddr(t *testing.T) {
 }
 
 func TestResolveFunctionHexInputOK(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitWithDataTxOk(t), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
-			Return([]*tktypes.EthAddress{tktypes.RandAddress()}, nil)
-	})
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockInsertABIAndTransactionOK(true),
+		mockSubmitPublicTxOk(t, tktypes.RandAddress()),
+	)
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -205,7 +205,7 @@ func TestResolveFunctionHexInputOK(t *testing.T) {
 }
 
 func TestResolveFunctionHexInputFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, mockKeyResolutionContextFail(t))
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
@@ -223,7 +223,7 @@ func TestResolveFunctionHexInputFail(t *testing.T) {
 }
 
 func TestResolveFunctionUnsupportedInput(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, mockKeyResolutionContextFail(t))
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
@@ -241,11 +241,7 @@ func TestResolveFunctionUnsupportedInput(t *testing.T) {
 }
 
 func TestResolveFunctionPlainNameOK(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitWithDataTxOk(t),
-		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
-				Return([]*tktypes.EthAddress{tktypes.RandAddress()}, nil)
-		})
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK(true), mockSubmitPublicTxOk(t, tktypes.RandAddress()))
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -266,9 +262,10 @@ func TestResolveFunctionPlainNameOK(t *testing.T) {
 }
 
 func TestSendTransactionPrivateDeploy(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
-	})
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK(true), mockKeyResolutionContextOk(t),
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		})
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Constructor}}
@@ -288,9 +285,10 @@ func TestSendTransactionPrivateDeploy(t *testing.T) {
 }
 
 func TestSendTransactionPrivateInvoke(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
-	})
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK(true), mockDomainContractResolve(t, "domain1"), mockKeyResolutionContextOk(t),
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		})
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -312,9 +310,10 @@ func TestSendTransactionPrivateInvoke(t *testing.T) {
 }
 
 func TestSendTransactionPrivateInvokeFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
-	})
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK(false), mockDomainContractResolve(t, "domain1"), mockKeyResolutionContextFail(t),
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+		})
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -336,11 +335,7 @@ func TestSendTransactionPrivateInvokeFail(t *testing.T) {
 }
 
 func TestResolveFunctionOnlyOneToMatch(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitWithDataTxOk(t),
-		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
-				Return([]*tktypes.EthAddress{tktypes.RandAddress()}, nil)
-		})
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK(true), mockSubmitPublicTxOk(t, tktypes.RandAddress()))
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -360,7 +355,7 @@ func TestResolveFunctionOnlyOneToMatch(t *testing.T) {
 }
 
 func TestResolveFunctionOnlyDuplicateMatch(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, mockKeyResolutionContextFail(t))
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -382,7 +377,7 @@ func TestResolveFunctionOnlyDuplicateMatch(t *testing.T) {
 }
 
 func TestResolveFunctionNoMatch(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, mockKeyResolutionContextFail(t))
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -404,7 +399,7 @@ func TestResolveFunctionNoMatch(t *testing.T) {
 }
 
 func TestParseInputsBadTxType(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false)
+	ctx, txm, done := newTestTransactionManager(t, false, mockKeyResolutionContextFail(t), mockBeginRollback)
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -423,8 +418,49 @@ func TestParseInputsBadTxType(t *testing.T) {
 	assert.Regexp(t, "PD012211", err)
 }
 
+func TestParseInputsPrivateLookupFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockKeyResolutionContextFail(t), mockBeginRollback, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.domainManager.On("GetSmartContractByAddress", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+	})
+	defer done()
+
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type: pldapi.TransactionTypePrivate.Enum(),
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
+		},
+	})
+	assert.Regexp(t, "pop", err)
+}
+
+func TestParseInputsPrivateDomainMismatch(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockKeyResolutionContextFail(t), mockBeginRollback, mockDomainContractResolve(t, "domain1"))
+	defer done()
+
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Domain: "domain2",
+			Type:   pldapi.TransactionTypePrivate.Enum(),
+			To:     tktypes.MustEthAddress(tktypes.RandHex(20)),
+		},
+	})
+	assert.Regexp(t, "PD012231", err)
+}
+
+func TestParseInputsPrivateDeployNoDomain(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockKeyResolutionContextFail(t), mockBeginRollback)
+	defer done()
+
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type: pldapi.TransactionTypePrivate.Enum(),
+		},
+	})
+	assert.Regexp(t, "PD012232", err)
+}
+
 func TestParseInputsBadFromRemoteNode(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, mockKeyResolutionContextFail(t))
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -446,7 +482,7 @@ func TestParseInputsBadFromRemoteNode(t *testing.T) {
 }
 
 func TestParseInputsBytecodeNonConstructor(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, mockKeyResolutionContextFail(t))
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -468,7 +504,7 @@ func TestParseInputsBytecodeNonConstructor(t *testing.T) {
 }
 
 func TestParseInputsBytecodeMissingConstructor(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, mockKeyResolutionContextFail(t))
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -488,7 +524,7 @@ func TestParseInputsBytecodeMissingConstructor(t *testing.T) {
 }
 
 func TestParseInputsBadDataJSON(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, mockKeyResolutionContextFail(t))
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -507,7 +543,7 @@ func TestParseInputsBadDataJSON(t *testing.T) {
 }
 
 func TestParseInputsBadDataForFunction(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, mockKeyResolutionContextFail(t))
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -526,7 +562,7 @@ func TestParseInputsBadDataForFunction(t *testing.T) {
 }
 
 func TestParseInputsBadByteString(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, mockKeyResolutionContextFail(t))
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -544,26 +580,16 @@ func TestParseInputsBadByteString(t *testing.T) {
 	assert.Regexp(t, "PD012208", err)
 }
 
-func mockPublicSubmitTxRollback(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
-		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
-		mockSubmissionBatch.On("Completed", mock.Anything, false).Return(nil)
-		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil)
-	}
-}
 func TestInsertTransactionFail(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
-		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnError(fmt.Errorf("pop"))
 		mc.db.ExpectRollback()
-
-		mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
-			Return([]*tktypes.EthAddress{tktypes.RandAddress()}, nil)
-
-	}, mockPublicSubmitTxRollback(t))
+		mockResolveKeyOKThenFail(t, mc, "sender1", tktypes.RandAddress())
+		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	})
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -583,18 +609,8 @@ func TestInsertTransactionFail(t *testing.T) {
 
 func TestInsertTransactionPublicTxPrepareFail(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
-		rejectedSubmission := componentmocks.NewPublicTxRejected(t)
-		rejectedSubmission.On("RejectedError").Return(fmt.Errorf("pop"))
-		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{
-			rejectedSubmission,
-		})
-		mockSubmissionBatch.On("Completed", mock.Anything, false).Return(nil)
-		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil)
-
-		mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
-			Return([]*tktypes.EthAddress{tktypes.RandAddress()}, nil)
-
+		mockResolveKeyOKThenFail(t, mc, "sender1", tktypes.RandAddress())
+		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
 	})
 	defer done()
 
@@ -615,10 +631,10 @@ func TestInsertTransactionPublicTxPrepareFail(t *testing.T) {
 
 func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
-			Return([]*tktypes.EthAddress{tktypes.RandAddress()}, nil)
-
-		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mockResolveKeyOKThenFail(t, mc, "sender1", tktypes.RandAddress())
+		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
+		mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
 	})
 	defer done()
 
@@ -634,11 +650,9 @@ func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
 }
 
 func TestInsertTransactionOkDefaultConstructor(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitWithDataTxOk(t),
-		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
-				Return([]*tktypes.EthAddress{tktypes.RandAddress()}, nil)
-		})
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockInsertABIAndTransactionOK(true),
+		mockSubmitPublicTxOk(t, tktypes.RandAddress()))
 	defer done()
 
 	// Default public constructor invoke
@@ -660,7 +674,7 @@ func TestCheckIdempotencyKeyNoOverrideErrIfFail(t *testing.T) {
 	defer done()
 
 	// Default public constructor invoke
-	err := txm.checkIdempotencyKeys(ctx, fmt.Errorf("pop"), false, []*pldapi.TransactionInput{{TransactionBase: pldapi.TransactionBase{
+	err := txm.checkIdempotencyKeys(ctx, fmt.Errorf("pop"), []*pldapi.TransactionInput{{TransactionBase: pldapi.TransactionBase{
 		IdempotencyKey: "idem1",
 	}}})
 	assert.Regexp(t, "pop", err)
@@ -684,7 +698,7 @@ func TestCallTransactionNoFrom(t *testing.T) {
 	ec := ethclient.NewUnconnectedRPCClient(context.Background(), &pldconf.EthClientConfig{}, 0)
 
 	ctx, txm, done := newTestTransactionManager(t, false,
-		mockInsertABI,
+		mockInsertABINoBegin,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.ethClientFactory.On("HTTPClient").Return(ec)
 		})
@@ -720,7 +734,7 @@ func TestCallTransactionWithFrom(t *testing.T) {
 	ec := ethclient.NewUnconnectedRPCClient(context.Background(), &pldconf.EthClientConfig{}, 0)
 
 	ctx, txm, done := newTestTransactionManager(t, false,
-		mockInsertABI,
+		mockInsertABINoBegin,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.keyManager.On("ResolveEthAddressNewDatabaseTX", mock.Anything, "red.one").
 				Return(tktypes.RandAddress(), nil)
@@ -775,7 +789,7 @@ func TestCallTransactionPrivOk(t *testing.T) {
 		},
 	}
 
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABINoBegin, mockDomainContractResolve(t, "domain1"), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		res, err := fnDef.Outputs.ParseJSON([]byte(`{"spins": 42}`))
 		require.NoError(t, err)
 
@@ -787,7 +801,7 @@ func TestCallTransactionPrivOk(t *testing.T) {
 	tx := pldclient.New().ForABI(ctx, abi.ABI{fnDef}).
 		Function("getSpins").
 		Private().
-		Domain("test1").
+		Domain("domain1").
 		To(tktypes.RandAddress()).
 		Inputs(map[string]any{"wheel": "of fortune"}).
 		DataFormat("mode=array&number=json-number").
@@ -804,7 +818,7 @@ func TestCallTransactionPrivOk(t *testing.T) {
 func TestCallTransactionPrivFail(t *testing.T) {
 	fnDef := &abi.Entry{Name: "ohSnap", Type: abi.Function}
 
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABINoBegin, mockDomainContractResolve(t, "domain1"), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.privateTxMgr.On("CallPrivateSmartContract", mock.Anything, mock.Anything).
 			Return(nil, fmt.Errorf("snap"))
 	})
@@ -813,7 +827,7 @@ func TestCallTransactionPrivFail(t *testing.T) {
 	tx := pldclient.New().ForABI(ctx, abi.ABI{fnDef}).
 		Function("ohSnap").
 		Private().
-		Domain("test1").
+		Domain("domain1").
 		To(tktypes.RandAddress()).
 		BuildTX()
 	require.NoError(t, tx.Error())
@@ -825,13 +839,14 @@ func TestCallTransactionPrivFail(t *testing.T) {
 }
 
 func TestCallTransactionPrivMissingTo(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABINoBegin)
 	defer done()
 
 	err := txm.CallTransaction(ctx, nil, &pldapi.TransactionCall{
 		TransactionInput: pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
-				Type: pldapi.TransactionTypePrivate.Enum(),
+				Type:   pldapi.TransactionTypePrivate.Enum(),
+				Domain: "domain1",
 			},
 		},
 	})
@@ -840,13 +855,14 @@ func TestCallTransactionPrivMissingTo(t *testing.T) {
 }
 
 func TestCallTransactionBadSerializer(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABINoBegin)
 	defer done()
 
 	err := txm.CallTransaction(ctx, nil, &pldapi.TransactionCall{
 		TransactionInput: pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
-				Type: pldapi.TransactionTypePrivate.Enum(),
+				Type:   pldapi.TransactionTypePrivate.Enum(),
+				Domain: "domain1",
 			},
 		},
 		DataFormat: "wrong",
@@ -872,37 +888,69 @@ func newTestInternalTransaction(idempotencyKey string) *pldapi.TransactionInput 
 }
 
 func TestInternalPrivateTXInsertWithIdempotencyKeys(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, true)
+	ctx, txm, done := newTestTransactionManager(t, true, mockDomainContractResolve(t, "domain1"))
 	defer done()
 
+	fifteenPostCommits := make([]func(), 15)
 	fifteenTxns := make([]*components.ValidatedTransaction, 15)
 	err := txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
 		for i := range fifteenTxns {
 			tx := newTestInternalTransaction(fmt.Sprintf("tx_%.3d", i))
-			fifteenTxns[i], err = txm.PrepareInternalPrivateTransaction(ctx, dbTX, tx, pldapi.SubmitModeAuto)
+			// We do a dep chain
+			if i > 0 {
+				tx.DependsOn = []uuid.UUID{*fifteenTxns[i-1].Transaction.ID}
+			}
+			fifteenPostCommits[i], fifteenTxns[i], err = txm.PrepareInternalPrivateTransaction(ctx, dbTX, tx, pldapi.SubmitModeAuto)
 			require.NoError(t, err)
 		}
 		return nil
 	})
 	require.NoError(t, err)
+	for _, pc := range fifteenPostCommits {
+		pc()
+	}
 
 	// Insert first 10 in a Txn
+	var postCommit func()
 	err = txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
-		return txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, fifteenTxns[0:10])
+		postCommit, err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, fifteenTxns[0:10])
+		return err
 	})
 	require.NoError(t, err)
+	postCommit()
 
 	// Insert 5-15 in the second txn so with an overlap
 	err = txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
-		return txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, fifteenTxns[5:15])
+		postCommit, err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, fifteenTxns[5:15])
+		return err
 	})
 	require.NoError(t, err)
+	postCommit()
 
 	// Check we can get each back
+	idemQueryKeys := make([]any, len(fifteenTxns))
 	for _, expected := range fifteenTxns {
 		tx, err := txm.GetTransactionByID(ctx, *expected.Transaction.ID)
 		require.NoError(t, err)
 		require.Equal(t, expected.Transaction.IdempotencyKey, tx.IdempotencyKey)
+
+		rtx, err := txm.GetResolvedTransactionByID(ctx, *expected.Transaction.ID)
+		require.NoError(t, err)
+		require.Equal(t, tx, rtx.Transaction)
+		require.NotNil(t, rtx.Function)
+
+		idemQueryKeys = append(idemQueryKeys, expected.Transaction.IdempotencyKey)
+	}
+
+	// Check we can query them in bulk (as we would to poll the DB to perform TX management)
+	rtxs, err := txm.QueryTransactionsResolved(ctx, query.NewQueryBuilder().Limit(15).In("idempotencyKey", idemQueryKeys).Sort("created").Query(), txm.p.DB(), true)
+	require.NoError(t, err)
+	require.Len(t, rtxs, 15)
+	for i, rtx := range rtxs {
+		if i > 0 {
+			require.Equal(t, []uuid.UUID{*rtxs[i-1].Transaction.ID}, rtx.DependsOn)
+		}
+		require.NotNil(t, rtx.Function)
 	}
 
 }
@@ -911,29 +959,30 @@ func TestPrepareInternalPrivateTransactionNoIdempotencyKey(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	_, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), &pldapi.TransactionInput{}, pldapi.SubmitModeAuto)
+	_, _, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), &pldapi.TransactionInput{}, pldapi.SubmitModeAuto)
 	assert.Regexp(t, "PD012223", err)
 
 }
 
 func TestUpsertInternalPrivateTxsFinalizeIDsInsertFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockDomainContractResolve(t, "domain1"), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnError(fmt.Errorf("pop"))
 	})
 	defer done()
 
-	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
+	postCommit, tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
 	require.NoError(t, err)
+	postCommit()
 
-	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
+	_, err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
 	assert.Regexp(t, "pop", err)
 
 }
 
 func TestUpsertInternalPrivateTxsIdempotencyKeyFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockDomainContractResolve(t, "domain1"), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows) // empty result when we expect one
@@ -941,16 +990,17 @@ func TestUpsertInternalPrivateTxsIdempotencyKeyFail(t *testing.T) {
 	})
 	defer done()
 
-	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
+	postCommit, tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
 	require.NoError(t, err)
+	postCommit()
 
-	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
+	_, err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
 	assert.Regexp(t, "pop", err)
 
 }
 
 func TestUpsertInternalPrivateTxsIdempotencyMisMatch(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockDomainContractResolve(t, "domain1"), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)      // empty result when we expect one
@@ -958,10 +1008,11 @@ func TestUpsertInternalPrivateTxsIdempotencyMisMatch(t *testing.T) {
 	})
 	defer done()
 
-	tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
+	postCommit, tx, err := txm.PrepareInternalPrivateTransaction(ctx, txm.p.DB(), newTestInternalTransaction("tx1"), pldapi.SubmitModeAuto)
 	require.NoError(t, err)
+	postCommit()
 
-	err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
+	_, err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, txm.p.DB(), []*components.ValidatedTransaction{tx})
 	assert.Regexp(t, "PD012224", err)
 
 }

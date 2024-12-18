@@ -37,6 +37,7 @@ import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -81,19 +82,6 @@ public class Testbed implements Closeable {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record TransactionInput(
             @JsonProperty
-            String from,
-            @JsonProperty
-            JsonHex.Address to,
-            @JsonProperty
-            JsonABI.Entry function,
-            @JsonProperty
-            Object inputs
-    ) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record PreparedTransactionInput(
-            @JsonProperty
             String type,
             @JsonProperty
             String domain,
@@ -102,18 +90,22 @@ public class Testbed implements Closeable {
             @JsonProperty
             JsonHex.Address to,
             @JsonProperty
-            JsonNode data,
+            Map<String, Object> data,
             @JsonProperty
-            JsonABI abi
+            JsonABI abi,
+            @JsonProperty
+            String function
     ) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record TransactionResult(
             @JsonProperty
+            String id,
+            @JsonProperty
             JsonHex.Bytes encodedCall,
             @JsonProperty
-            PreparedTransactionInput preparedTransaction,
+            TransactionInput preparedTransaction,
             @JsonProperty
             JsonNode preparedMetadata,
             @JsonProperty
@@ -123,7 +115,7 @@ public class Testbed implements Closeable {
             @JsonProperty
             List<StateEncoded> readStates,
             @JsonProperty
-            JsonNode assembleExtraData
+            JsonNode domainData
     ) {
     }
 

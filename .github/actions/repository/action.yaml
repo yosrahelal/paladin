@@ -1,0 +1,34 @@
+name: "Modify Repository Name"
+description: "Outputs a modified repository name based on given inputs."
+inputs:
+  repository:
+    description: "The original repository name."
+    required: true
+  registry:
+    description: "The registry name."
+    required: true
+outputs:
+  repository:
+    description: "The modified repository name after applying rules."
+    value: ${{ steps.modify_repository.outputs.repository }}
+runs:
+  using: "composite"
+  steps:
+    - name: modify_repository
+      id: modify_repository
+      shell: bash
+      run: |
+        # Step 1: Convert repository name to lowercase
+        repository_lower=$(echo "${{ inputs.repository }}" | tr '[:upper:]' '[:lower:]')
+        
+        # Initialize the modified repository with the lowercase name
+        modified_repository="$repository_lower"
+        
+        # Step 2: If registry is docker.io and repository is lf-decentralized-trust-labs,
+        # remove the '-' characters from the repository name
+        if [ "${{ inputs.registry }}" = "docker.io" ] && [ "$repository_lower" = "lf-decentralized-trust-labs" ]; then
+          modified_repository=$(echo "$repository_lower" | sed 's/-//g')
+        fi
+        
+        # Set the output
+        echo "repository=$modified_repository" >> $GITHUB_OUTPUT

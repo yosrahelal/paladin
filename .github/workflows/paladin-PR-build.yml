@@ -1,24 +1,23 @@
 name: Paladin Build
 permissions:
-  actions: read
-  checks: read
   contents: write
-  deployments: read
-  discussions: read
-  id-token: write
-  issues: read
   packages: write
-  pages: read
-  pull-requests: read
-  repository-projects: read
-  statuses: read
-  security-events: read
+  id-token: write
 
 on:
   push:
-    branches: [main]
+    branches: 
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'operator/charts/**'
   pull_request:
   workflow_dispatch:
+
+# Ensure this workflow only runs for the most recent commit of a pull-request
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -29,33 +28,8 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      # Install protoc only on non-Windows systems
-      - name: Install protoc
-        run: |
-          PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-          curl -LO $PB_REL/download/v25.1/protoc-25.1-linux-x86_64.zip
-          unzip protoc-25.1-linux-x86_64.zip -d protoc
-          echo "${PWD}/protoc/bin" >> $GITHUB_PATH
-
-      # Set up Java
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: 21
-
-      # Set up Go
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          check-latest: true
-          cache-dependency-path: |
-            **/*.sum
-
-      # Set up Gradle
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Install pre-requisites
+        uses: ./.github/actions/setup
 
       # Build with Gradle
       # This does not build any docker images, and does not run any dockerized tests.
@@ -81,6 +55,7 @@ jobs:
       image: paladin
       image_tag: test
       push: false
+      upload-artifact: true
       platforms: linux/amd64
       runs-on: ubuntu-latest
 
@@ -94,8 +69,20 @@ jobs:
         image: paladin-operator
         image_tag: test
         push: false
+        upload-artifact: true
         platforms: linux/amd64
         runs-on: ubuntu-latest
+
+  chart-build:
+    # run only if pull_request and the path operator/** was changed
+    if: github.event_name == 'pull_request'
+    needs: [core-image-build, operator-image-build]
+    uses: ./.github/workflows/build-chart.yaml
+    with:
+      paladin-image: paladin.io/paladin
+      paladin-image-tag: test
+      operator-image: paladin.io/paladin-operator
+      operator-image-tag: test
 
   image-release:
     # run only on pushes to main or manual triggers
@@ -104,7 +91,7 @@ jobs:
     with:
       registry: ghcr.io
       repository: ${{ github.repository_owner }}
-      image_tag: ${{ github.ref_name }}
+      image_tags: ${{ github.ref_name }}
     secrets:
       username: ${{ github.actor }}
       password: ${{ secrets.GITHUB_TOKEN }}

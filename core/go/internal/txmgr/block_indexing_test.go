@@ -22,9 +22,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -66,37 +66,41 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 	txi := newTestConfirm(revertData)
 	var txID *uuid.UUID
 
-	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
-		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
-		mockSubmissionBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
-		mockSubmissionBatch.On("Completed", mock.Anything, true).Return(nil)
-		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil)
+	ctx, txm, done := newTestTransactionManager(t, true,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mockResolveKey(t, mc, "sender1", tktypes.RandAddress())
 
-		mut := mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi})
-		mut.Run(func(args mock.Arguments) {
-			mut.Return([]*components.PublicTxMatch{
-				{
-					PaladinTXReference: components.PaladinTXReference{
-						TransactionID:   *txID, // Transaction ID resolved by this point
-						TransactionType: pldapi.TransactionTypePublic.Enum(),
-					},
-					IndexedTransactionNotify: txi,
+			mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+			mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(
+				func() {},
+				[]*pldapi.PublicTx{
+					{LocalID: confutil.P(uint64(42))},
 				},
-			}, nil)
+				nil,
+			)
+
+			mut := mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi})
+			mut.Run(func(args mock.Arguments) {
+				mut.Return([]*components.PublicTxMatch{
+					{
+						PaladinTXReference: components.PaladinTXReference{
+							TransactionID:   *txID, // Transaction ID resolved by this point
+							TransactionType: pldapi.TransactionTypePublic.Enum(),
+						},
+						IndexedTransactionNotify: txi,
+					},
+				}, nil)
+			})
+
+			mc.publicTxMgr.On("NotifyConfirmPersisted", mock.Anything, mock.MatchedBy(func(matches []*components.PublicTxMatch) bool {
+				return len(matches) == 1 && matches[0].TransactionID == *txID
+			}))
 		})
-
-		mc.publicTxMgr.On("NotifyConfirmPersisted", mock.Anything, mock.MatchedBy(func(matches []*components.PublicTxMatch) bool {
-			return len(matches) == 1 && matches[0].TransactionID == *txID
-		}))
-
-		mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
-			Return([]*tktypes.EthAddress{tktypes.RandAddress()}, nil)
-	})
 	defer done()
 
-	abiRef, err := txm.storeABI(ctx, txm.p.DB(), testABI)
+	postCommit, abiRef, err := txm.storeABI(ctx, txm.p.DB(), testABI)
 	require.NoError(t, err)
+	postCommit()
 
 	txID, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
@@ -108,7 +112,7 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	postCommit, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
+	postCommit, err = txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
 		[]*blockindexer.IndexedTransactionNotify{txi})
 	require.NoError(t, err)
 	postCommit()

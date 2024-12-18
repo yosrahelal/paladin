@@ -43,6 +43,16 @@ contract NotoTrackerPublicERC20 is INotoHooks, ERC20 {
         _executeOperation(prepared);
     }
 
+    function onBurn(
+        address sender,
+        address from,
+        uint256 amount,
+        PreparedTransaction calldata prepared
+    ) external override {
+        _burn(from, amount);
+        _executeOperation(prepared);
+    }
+
     function _executeOperation(PreparedTransaction memory op) internal {
         (bool success, bytes memory result) = op.contractAddress.call(
             op.encodedCall

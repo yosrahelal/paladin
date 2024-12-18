@@ -31,6 +31,8 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/statedistributionmocks"
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -43,6 +45,7 @@ type sequencerDepencyMocks struct {
 	domainSmartContract            *componentmocks.DomainSmartContract
 	domainContext                  *componentmocks.DomainContext
 	domainMgr                      *componentmocks.DomainManager
+	domain                         *componentmocks.Domain
 	transportManager               *componentmocks.TransportManager
 	stateStore                     *componentmocks.StateManager
 	keyManager                     *componentmocks.KeyManager
@@ -52,6 +55,7 @@ type sequencerDepencyMocks struct {
 	stateDistributer               *statedistributionmocks.StateDistributer
 	preparedTransactionDistributer *preparedtxdistributionmocks.PreparedTransactionDistributer
 	txManager                      *componentmocks.TXManager
+	pubTxManager                   *componentmocks.PublicTxManager
 	transportWriter                *privatetxnmgrmocks.TransportWriter
 }
 
@@ -66,6 +70,7 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 		domainSmartContract:            componentmocks.NewDomainSmartContract(t),
 		domainContext:                  componentmocks.NewDomainContext(t),
 		domainMgr:                      componentmocks.NewDomainManager(t),
+		domain:                         componentmocks.NewDomain(t),
 		transportManager:               componentmocks.NewTransportManager(t),
 		stateStore:                     componentmocks.NewStateManager(t),
 		keyManager:                     componentmocks.NewKeyManager(t),
@@ -75,6 +80,7 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 		stateDistributer:               statedistributionmocks.NewStateDistributer(t),
 		preparedTransactionDistributer: preparedtxdistributionmocks.NewPreparedTransactionDistributer(t),
 		txManager:                      componentmocks.NewTXManager(t),
+		pubTxManager:                   componentmocks.NewPublicTxManager(t),
 		transportWriter:                privatetxnmgrmocks.NewTransportWriter(t),
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
@@ -82,15 +88,24 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("TxManager").Return(mocks.txManager).Maybe()
-	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
+	mocks.allComponents.On("PublicTxManager").Return(mocks.pubTxManager).Maybe()
+	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 	p, persistenceDone, err := persistence.NewUnitTestPersistence(ctx, "privatetxmgr")
 	require.NoError(t, err)
 	mocks.allComponents.On("Persistence").Return(p).Maybe()
 	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
+	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
 	mocks.domainSmartContract.On("Address").Return(*domainAddress).Maybe()
+	mocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+	})
 
-	syncPoints := syncpoints.NewSyncPoints(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager)
-	o := NewSequencer(ctx, mocks.privateTxManager, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerSequencerConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.preparedTransactionDistributer, mocks.transportWriter, 30*time.Second)
+	mocks.stateStore.On("NewDomainContext", mock.Anything, mocks.domain, *domainAddress, mock.Anything).Return(mocks.domainContext).Maybe()
+	//mocks.domain.On("Configuration").Return(&prototk.DomainConfig{}).Maybe()
+
+	syncPoints := syncpoints.NewSyncPoints(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager, mocks.pubTxManager)
+	o, err := NewSequencer(ctx, mocks.privateTxManager, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerSequencerConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.preparedTransactionDistributer, mocks.transportWriter, 30*time.Second, 0)
+	require.NoError(t, err)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 
@@ -129,15 +144,26 @@ func TestNewSequencerProcessNewTransactionAssemblyFailed(t *testing.T) {
 	newTxID := uuid.New()
 	testTx := &components.PrivateTransaction{
 		ID: newTxID,
-		Inputs: &components.TransactionInputs{
-			From: "alice",
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From: "alice",
+			},
 		},
-		PreAssembly: &components.TransactionPreAssembly{},
 	}
+	dependencyMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, mock.Anything).Return(&components.ResolvedTransaction{
+		Transaction: &pldapi.Transaction{
+			ID: &newTxID,
+			TransactionBase: pldapi.TransactionBase{
+				Domain: "domain1",
+				To:     &testOc.contractAddress,
+			},
+		},
+	}, nil)
 
 	waitForFinalize := make(chan bool, 1)
-	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("fail assembly. Just happy that we got this far"))
-	dependencyMocks.publisher.On("PublishTransactionAssembleFailedEvent", mock.Anything, newTxID.String(), "mock.Anything").Return(nil).Run(func(args mock.Arguments) {
+	dependencyMocks.domain.On("Name").Return("domain1")
+	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("fail assembly"))
+	dependencyMocks.publisher.On("PublishTransactionAssembleFailedEvent", mock.Anything, newTxID.String(), mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		waitForFinalize <- true
 	})
 	//As we are using a mock publisher, the assemble failed event never gets back onto the event loop to trigger the next step ( finalization )

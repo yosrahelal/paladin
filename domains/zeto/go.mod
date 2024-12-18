@@ -4,9 +4,9 @@ go 1.22.5
 
 require (
 	github.com/go-resty/resty/v2 v2.14.0
-	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20241107154237-9855999483bf
-	github.com/hyperledger/firefly-common v1.4.11
-	github.com/hyperledger/firefly-signer v1.1.19-0.20241027192206-656dd986267e
+	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20241004174307-aa3c1fdf0966
+	github.com/hyperledger/firefly-common v1.4.14
+	github.com/hyperledger/firefly-signer v1.1.19
 	github.com/iden3/go-iden3-crypto v0.0.17
 	github.com/iden3/go-rapidsnark/prover v0.0.12
 	github.com/iden3/go-rapidsnark/types v0.0.3
@@ -14,9 +14,10 @@ require (
 	github.com/iden3/go-rapidsnark/witness/wasmer v0.0.0-20240914111027-9588ce2d7e1b
 	github.com/kaleido-io/paladin/config v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/core v0.0.0-00010101000000-000000000000
+	github.com/kaleido-io/paladin/domains/integration-test v0.0.0-20241115165222-77f5db364e58
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/text v0.19.0
+	golang.org/x/text v0.21.0
 	google.golang.org/protobuf v1.35.1
 	gopkg.in/yaml.v2 v2.4.0
 )
@@ -56,6 +57,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
+	github.com/kaleido-io/paladin/domains/noto v0.0.0-00010101000000-000000000000 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
@@ -86,19 +88,19 @@ require (
 	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.19.0 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
 	gitlab.com/hfuss/mux-prometheus v0.0.5 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.28.0 // indirect
+	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
-	golang.org/x/mod v0.20.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
-	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
-	golang.org/x/term v0.25.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/term v0.27.0 // indirect
 	golang.org/x/time v0.6.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241007155032-5fefd90f89a9 // indirect
 	google.golang.org/grpc v1.67.1 // indirect
@@ -116,3 +118,5 @@ replace github.com/kaleido-io/paladin/core => ../../core/go
 replace github.com/kaleido-io/paladin/toolkit => ../../toolkit/go
 
 replace github.com/kaleido-io/paladin/config => ../../config
+
+replace github.com/kaleido-io/paladin/domains/noto => ../noto

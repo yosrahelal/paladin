@@ -121,7 +121,7 @@ func newTestDomainPluginManager(t *testing.T, setup *testManagers) (context.Cont
 
 func TestDomainRequestsOK(t *testing.T) {
 
-	log.SetLevel("debug")
+	log.InitConfig(&pldconf.LogConfig{Level: confutil.P("debug")}) // test debug specific logging
 	waitForAPI := make(chan components.DomainManagerToDomain, 1)
 	waitForCallbacks := make(chan plugintk.DomainCallbacks, 1)
 

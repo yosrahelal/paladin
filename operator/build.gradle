@@ -56,6 +56,13 @@ ext {
     deleteCluster = project.hasProperty('deleteCluster') ? project.deleteCluster.toBoolean() : false // By default, do not delete the cluster
     buildPaladin = project.hasProperty('buildPaladin') ? project.buildPaladin == 'true' : true // Default is to build Paladin
     buildOperator = project.hasProperty('buildOperator') ? project.buildOperator == 'true' : true // Default is to build the operator
+
+    operatorImageName = project.hasProperty('operatorImageName') ? project.operatorImageName : 'paladin-operator'
+    operatorImageTag = project.hasProperty('operatorImageTag') ? project.operatorImageTag : 'test'
+    paladinImageName = project.hasProperty('paladinImageName') ? project.paladinImageName : 'paladin'
+    paladinImageTag = project.hasProperty('paladinImageTag') ? project.paladinImageTag : 'test'
+
+    artifactDir = project.hasProperty('artifactDir') ? project.artifactDir : 'artifacts'
 }
 
 def printClusterStatus(String namespace) {
@@ -65,17 +72,30 @@ def printClusterStatus(String namespace) {
     println getAllProcess.in.text.trim()
 } 
 
-def verifyResourceCreated(String namespace, String resourceType, String resourceName, int timeoutSeconds = 60) {
-    
-    // Wait for resource creation
-    def existsCommand = ["kubectl", "wait", "--for=create", "${resourceType}", "${resourceName}", "-n", namespace, "--timeout=${timeoutSeconds}s"]
-    def existsProcess = existsCommand.execute()
-    existsProcess.waitFor()
-    println "Creation Output: ${existsProcess.text}"
+def verifyResourceCreated(String namespace, String resourceType, String resourceName, String desiredReplicas = "1", int timeoutSeconds = 60) {
+    def startTime = System.currentTimeMillis()
+    def endTime = startTime + (timeoutSeconds * 1000)
+    def resourceReady = false
 
-    if (existsProcess.exitValue() != 0) {
+    while (System.currentTimeMillis() < endTime) {
+        def command = ["kubectl", "get", resourceType, resourceName, "-n", namespace, "-o", "jsonpath={.status.readyReplicas}"]
+        def process = command.execute()
+        process.waitFor()
+        def readyReplicas = process.text.trim()
+        println "Current Ready Replicas: ${readyReplicas}"
+
+        if (process.exitValue() == 0 && readyReplicas == desiredReplicas) {
+            resourceReady = true
+            break
+        }
+        Thread.sleep(2000) // Wait for 2 seconds before retrying
+    }
+
+    if (!resourceReady) {
         printClusterStatus(namespace)
-        throw new Exception("Resource ${resourceType}/${resourceName} (${namespace}) was not created within the expected time.")
+        throw new Exception("${resourceType} ${resourceName} in namespace ${namespace} did not become ready within ${timeoutSeconds} seconds.")
+    } else {
+        println "${resourceType} ${resourceName} in namespace ${namespace} is ready with ${desiredReplicas} replicas."
     }
 }
 
@@ -100,11 +120,13 @@ task copySolidity(type: Copy) {
         include 'contracts/registry/IdentityRegistry.sol/IdentityRegistry.json'
         include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
         include 'contracts/domains/pente/PenteFactory.sol/PenteFactory.json'
-        include 'contracts/private/NotoTrackerERC20.sol/NotoTrackerERC20.json'
-        include 'contracts/testcontracts/ERC20Simple.sol/ERC20Simple.json'
-        include 'contracts/shared/BondTrackerPublic.sol/BondTrackerPublic.json'
         include 'contracts/private/BondTracker.sol/BondTracker.json'
         include 'contracts/private/BondSubscription.sol/BondSubscription.json'
+        include 'contracts/private/InvestorList.sol/InvestorList.json'
+        include 'contracts/private/NotoTrackerERC20.sol/NotoTrackerERC20.json'
+        include 'contracts/shared/BondTrackerPublic.sol/BondTrackerPublic.json'
+        include 'contracts/shared/Atom.sol/AtomFactory.json'
+        include 'contracts/testcontracts/ERC20Simple.sol/ERC20Simple.json'
     }
     into 'test/e2e/abis'
 
@@ -140,7 +162,7 @@ task copyZetoSolidity(type: Copy) {
 task buildContractSamples(type: Exec, dependsOn: [copySolidity, copyZetoSolidity]) {
     commandLine "go", "run", "./contractpkg", "generate", "./contractpkg/contract_map.json"
 }
-
+ 
 // Task to build the Paladin image from the parent project
 task buildPaladinImage {
     dependsOn ':docker' // Builds the Paladin image in the parent project
@@ -177,6 +199,10 @@ task promoteKindImages(type: Exec, dependsOn: [
     executable 'make'
     args 'kind-promote'
     args "CLUSTER_NAME=${clusterName}"
+    args "OPERATOR_IMAGE_NAME=${operatorImageName}"
+    args "OPERATOR_IMAGE_TAG=${operatorImageTag}"
+    args "PALADIN_IMAGE_NAME=${paladinImageName}"
+    args "PALADIN_IMAGE_TAG=${paladinImageTag}"
 }
 
 task prepareCRDsChart(type: Exec) {
@@ -194,11 +220,19 @@ task prepareOperatorChart(type: Exec, dependsOn: [buildContractSamples]) {
     commandLine "go", "run", "./contractpkg", "template", "config/samples", "charts/paladin-operator/templates/samples"
 }
 
+task prepareArtifacts(type: Exec, dependsOn: [buildContractSamples]) {
+    commandLine "go", "run", "./contractpkg", "artifacts", "config/samples", "${artifactDir}"
+}
+
 // Task to install the operator using Helm
 task installOperator(type: Exec, dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
     executable 'make'
     args 'helm-install'
     args "NAMESPACE=${namespace}"
+    args "OPERATOR_IMAGE_NAME=${operatorImageName}"
+    args "OPERATOR_IMAGE_TAG=${operatorImageTag}"
+    args "PALADIN_IMAGE_NAME=${paladinImageName}"
+    args "PALADIN_IMAGE_TAG=${paladinImageTag}"
 }
 
 
@@ -206,41 +240,36 @@ task installOperator(type: Exec, dependsOn: [installCrds, promoteKindImages, pre
 task verifyOperator(dependsOn: installOperator) {
     doLast {
         println 'Waiting for operator deployment to become ready...'
-        verifyResourceReady(namespace, 'deployment', 'paladin-operator', 'condition=available')
+        verifyResourceCreated(namespace, 'deployment', 'paladin-operator', "1")
     }
 }
 
-// // Task to create the nodes
-// task createNode(type: Exec, dependsOn: verifyOperator) {
-//     executable 'make'
-//     args 'create-node'
-//     args "NAMESPACE=${namespace}"
-// }
-
-// // Task to verify the besu statefulSet
-// task verifyBesu(dependsOn: createNode) {
-//     doLast {
-//         println 'Waiting for besu statefulSet to become ready...'
-
-//         verifyResourceCreated(namespace, 'statefulset', 'besu-node1', 120)
-//         verifyResourceReady(namespace, 'statefulset', 'besu-node1', 'jsonpath=.status.readyReplicas=1', 60)
-//     }
-// }
-
-// // Task to verify the paladin statefulSet
-// task verifyPaladin(dependsOn: createNode) {
-//     doLast {
-//         println 'Waiting for paladin statefulSet to become ready...'
-
-//         verifyResourceCreated(namespace, 'statefulset', 'paladin-node1', 120)
-//         verifyResourceReady(namespace, 'statefulset', 'paladin-node1', 'jsonpath=.status.readyReplicas=1', 60)
-//     }
-// }
-
-// The 'deplay' runs the whole flow
-task deploy(dependsOn: [copySolidity, copyZetoSolidity, verifyOperator]) {
+// Task to verify the besu statefulSet
+task verifyBesu(dependsOn: verifyOperator) {
     doLast {
-        println 'Deplopy setup completed. Operator is running in the paladin namespace.'
+        println 'Waiting for besu statefulSet to become ready...'
+
+        verifyResourceCreated(namespace,  'statefulset', 'besu-node1', "1", 120)
+        verifyResourceCreated(namespace, 'statefulset', 'besu-node2', "1", 120)
+        verifyResourceCreated(namespace, 'statefulset', 'besu-node3', "1", 120)
+    }
+}
+
+// Task to verify the paladin statefulSet
+task verifyPaladin(dependsOn: verifyBesu) {
+    doLast {
+        println 'Waiting for paladin statefulSet to become ready...'
+
+        verifyResourceCreated(namespace, 'statefulset', 'paladin-node1', "1", 120)
+        verifyResourceCreated(namespace, 'statefulset', 'paladin-node2', "1", 120)
+        verifyResourceCreated(namespace, 'statefulset', 'paladin-node3', "1", 120)
+    }
+}
+
+// The 'deploy' runs the whole flow
+task deploy(dependsOn: [copySolidity, copyZetoSolidity, verifyPaladin]) {
+    doLast {
+        println 'Deploy setup completed. Operator is running in the paladin namespace.'
     }
 }
 

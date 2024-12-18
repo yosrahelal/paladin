@@ -114,10 +114,65 @@ func TestFinalizeTransactionsInsertFail(t *testing.T) {
 
 }
 
+func mockKeyResolutionContextOk(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		_ = mockKeyResolver(t, mc)
+	}
+}
+
+func mockKeyResolver(t *testing.T, mc *mockComponents) *componentmocks.KeyResolver {
+	krc := componentmocks.NewKeyResolutionContext(t)
+	kr := componentmocks.NewKeyResolver(t)
+	krc.On("KeyResolver", mock.Anything).Return(kr)
+	krc.On("PreCommit").Return(nil)
+	krc.On("Close", mock.Anything).Return()
+	mc.keyManager.On("NewKeyResolutionContext", mock.Anything).Return(krc)
+	return kr
+}
+
+func mockKeyResolutionContextFail(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		_ = mockKeyResolverForFail(t, mc)
+	}
+}
+
+func mockKeyResolverForFail(t *testing.T, mc *mockComponents) *componentmocks.KeyResolver {
+	krc := componentmocks.NewKeyResolutionContext(t)
+	kr := componentmocks.NewKeyResolver(t)
+	krc.On("KeyResolver", mock.Anything).Return(kr)
+	krc.On("Close", false).Return()
+	mc.keyManager.On("NewKeyResolutionContext", mock.Anything).Return(krc)
+	return kr
+}
+
+func mockDomainContractResolve(t *testing.T, domainName string, contractAddrs ...tktypes.EthAddress) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mgsc := mc.domainManager.On("GetSmartContractByAddress", mock.Anything, mock.Anything, mock.MatchedBy(func(a tktypes.EthAddress) bool {
+			if len(contractAddrs) == 0 {
+				return true
+			}
+			for _, contractAddr := range contractAddrs {
+				if contractAddr == a {
+					return true
+				}
+			}
+			return false
+		}))
+		mgsc.Run(func(args mock.Arguments) {
+			mpsc := componentmocks.NewDomainSmartContract(t)
+			mdmn := componentmocks.NewDomain(t)
+			mdmn.On("Name").Return(domainName)
+			mpsc.On("Domain").Return(mdmn)
+			mpsc.On("Address").Return(args[2].(tktypes.EthAddress)).Maybe()
+			mgsc.Return(mpsc, nil)
+		})
+	}
+}
+
 func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
+	ctx, txm, done := newTestTransactionManager(t, true, mockKeyResolutionContextOk(t), mockDomainContractResolve(t, "domain1"), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	})
 	defer done()
 
@@ -129,14 +184,13 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 		TransactionBase: pldapi.TransactionBase{
 			From:     "me",
 			Type:     pldapi.TransactionTypePrivate.Enum(),
-			Domain:   "domain1",
 			Function: "doIt",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data:     tktypes.JSONString(tktypes.HexBytes(callData)),
 		},
 		ABI: exampleABI,
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = txm.p.DB().Transaction(func(tx *gorm.DB) error {
 		return txm.FinalizeTransactions(ctx, tx, []*components.ReceiptInput{
@@ -160,8 +214,8 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 
 func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
+	ctx, txm, done := newTestTransactionManager(t, true, mockKeyResolutionContextOk(t), mockDomainContractResolve(t, "domain1"), func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 		mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).Return(
 			&pldapi.TransactionStates{None: true}, nil,
@@ -324,8 +378,9 @@ func TestDecodeCall(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, true)
 	defer done()
 
-	_, err := txm.storeABI(ctx, txm.p.DB(), sampleABI)
+	postCommit, _, err := txm.storeABI(ctx, txm.p.DB(), sampleABI)
 	require.NoError(t, err)
+	postCommit()
 
 	validCall, err := sampleABI.Functions()["set"].EncodeCallDataJSON([]byte(`[12345]`))
 	require.NoError(t, err)
@@ -359,8 +414,9 @@ func TestDecodeEvent(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, true)
 	defer done()
 
-	_, err := txm.storeABI(ctx, txm.p.DB(), sampleABI)
+	postCommit, _, err := txm.storeABI(ctx, txm.p.DB(), sampleABI)
 	require.NoError(t, err)
+	postCommit()
 
 	validTopic0 := tktypes.Bytes32(sampleABI.Events()["Updated"].SignatureHashBytes())
 	validTopic1, err := (&abi.ParameterArray{{Type: "uint256"}}).EncodeABIDataJSON([]byte(`["12345"]`))

@@ -112,7 +112,6 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 		},
 		AttestationPlan: []*prototk.AttestationRequest{
 			// Sender confirms the initial request with a signature
-			// Note: although sender is guaranteed to be the notary, this is included for alignment with transfers
 			{
 				Name:            "sender",
 				AttestationType: prototk.AttestationType_SIGN,
@@ -141,6 +140,11 @@ func (h *mintHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, 
 		return nil, err
 	}
 	if err := h.noto.validateMintAmounts(ctx, params, coins); err != nil {
+		return nil, err
+	}
+
+	// Notary checks the signature from the sender, then submits the transaction
+	if err := h.noto.validateTransferSignature(ctx, tx, req, coins); err != nil {
 		return nil, err
 	}
 	return &prototk.EndorseTransactionResponse{

@@ -22,7 +22,7 @@ type LogConfig struct {
 	// the logging level
 	Level *string `json:"level"`
 	// the format ('simple', 'json')
-	Format *string `json:"simple"`
+	Format *string `json:"format"`
 	// the output location ('stdout','stderr','file')
 	Output *string `json:"output"`
 	// forces color to be enabled, even if we do not detect a TTY

@@ -203,14 +203,16 @@ func (r *SmartContractDeploymentReconciler) reconcilePaladin(ctx context.Context
 	}
 
 	scds := &corev1alpha1.SmartContractDeploymentList{}
-	r.Client.List(ctx, scds, client.InNamespace(paladin.Namespace))
-	reqs := make([]ctrl.Request, 0, len(scds.Items))
+	reqs := []ctrl.Request{}
 
-	for _, scd := range scds.Items {
-		if scd.Spec.Node == paladin.Name {
-			reqs = append(reqs, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&scd)})
+	if err := r.Client.List(ctx, scds, client.InNamespace(paladin.Namespace)); err == nil {
+		for _, scd := range scds.Items {
+			if scd.Spec.Node == paladin.Name {
+				reqs = append(reqs, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&scd)})
+			}
 		}
 	}
+
 	return reqs
 }
 

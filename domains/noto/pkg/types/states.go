@@ -44,6 +44,7 @@ var NotoCoinABI = &abi.Parameter{
 }
 
 type TransactionData struct {
+	Salt string           `json:"salt"`
 	Data tktypes.HexBytes `json:"data"`
 }
 
@@ -51,6 +52,7 @@ var TransactionDataABI = &abi.Parameter{
 	Type:         "tuple",
 	InternalType: "struct TransactionData",
 	Components: abi.ParameterArray{
+		{Name: "salt", Type: "bytes32"},
 		{Name: "data", Type: "bytes"},
 	},
 }

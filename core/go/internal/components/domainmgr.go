@@ -41,7 +41,7 @@ type DomainManager interface {
 	ConfiguredDomains() map[string]*pldconf.PluginConfig
 	DomainRegistered(name string, toDomain DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error)
 	GetDomainByName(ctx context.Context, name string) (Domain, error)
-	GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (DomainSmartContract, error)
+	GetSmartContractByAddress(ctx context.Context, dbTX *gorm.DB, addr tktypes.EthAddress) (DomainSmartContract, error)
 	ExecDeployAndWait(ctx context.Context, txID uuid.UUID, call func() error) (dc DomainSmartContract, err error)
 	ExecAndWaitTransaction(ctx context.Context, txID uuid.UUID, call func() error) error
 	GetSigner() signerapi.InMemorySigner
@@ -72,15 +72,15 @@ type DomainSmartContract interface {
 	Address() tktypes.EthAddress
 	ContractConfig() *prototk.ContractConfig
 
-	InitTransaction(ctx context.Context, tx *PrivateTransaction) error
-	AssembleTransaction(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
+	InitTransaction(ctx context.Context, ptx *PrivateTransaction, localTx *ResolvedTransaction) error
+	AssembleTransaction(dCtx DomainContext, readTX *gorm.DB, ptx *PrivateTransaction, localTx *ResolvedTransaction) error
 	WritePotentialStates(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
 	LockStates(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
 	EndorseTransaction(dCtx DomainContext, readTX *gorm.DB, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)
 	PrepareTransaction(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
 
-	InitCall(ctx context.Context, tx *TransactionInputs) ([]*prototk.ResolveVerifierRequest, error)
-	ExecCall(dCtx DomainContext, readTX *gorm.DB, tx *TransactionInputs, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
+	InitCall(ctx context.Context, tx *ResolvedTransaction) ([]*prototk.ResolveVerifierRequest, error)
+	ExecCall(dCtx DomainContext, readTX *gorm.DB, tx *ResolvedTransaction, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
 }
 
 type EndorsementResult struct {

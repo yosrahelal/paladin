@@ -82,14 +82,20 @@ func newRealStateManager(t *testing.T, mc *mockComponents) components.StateManag
 
 func TestPreparedTransactionRealDB(t *testing.T) {
 
+	contractAddressDomain1 := *tktypes.RandAddress()
+	contractAddressDomain2 := *tktypes.RandAddress()
+
 	var stateMgr components.StateManager
-	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		stateMgr = newRealStateManager(t, mc)
-		md := componentmocks.NewDomain(t)
-		md.On("Name").Return("domain1")
-		md.On("CustomHashFunction").Return(false)
-		mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
-	})
+	ctx, txm, done := newTestTransactionManager(t, true,
+		mockDomainContractResolve(t, "domain1", contractAddressDomain1),
+		mockDomainContractResolve(t, "domain2", contractAddressDomain2),
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			stateMgr = newRealStateManager(t, mc)
+			md := componentmocks.NewDomain(t)
+			md.On("Name").Return("domain1")
+			md.On("CustomHashFunction").Return(false)
+			mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
+		})
 	defer done()
 
 	txm.stateMgr = stateMgr
@@ -98,11 +104,10 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 	schemas, err := txm.stateMgr.EnsureABISchemas(ctx, txm.p.DB(), "domain1", []*abi.Parameter{testStateSchema})
 	require.NoError(t, err)
 
-	contractAddressDomain1 := *tktypes.RandAddress()
 	testSchemaID := schemas[0].ID()
 
 	// Create the parent TX
-	parentTx, err := txm.resolveNewTransaction(ctx, txm.p.DB(), &pldapi.TransactionInput{
+	postCommit, parentTx, err := txm.resolveNewTransaction(ctx, txm.p.DB(), &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			From:           "me",
 			IdempotencyKey: "parent_txn",
@@ -114,8 +119,10 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 		ABI: abi.ABI{{Type: abi.Function, Name: "doThing1"}},
 	}, pldapi.SubmitModeAuto)
 	require.NoError(t, err)
-	_, err = txm.insertTransactions(ctx, txm.p.DB(), []*components.ValidatedTransaction{parentTx}, false)
+	postCommit()
+	postCommit, _, err = txm.insertTransactions(ctx, txm.p.DB(), []*components.ValidatedTransaction{parentTx}, false)
 	require.NoError(t, err)
+	postCommit()
 
 	// Mimic some states that it produced
 	spent, spentIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 3)
@@ -124,7 +131,6 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 	info, infoIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 1)
 
 	childFnABI := abi.ABI{{Type: abi.Function, Name: "doThing2"}}
-	contractAddressDomain2 := tktypes.RandAddress()
 	ptInsert := &components.PrepareTransactionWithRefs{
 		ID:     *parentTx.Transaction.ID,
 		Domain: parentTx.Transaction.Domain,
@@ -135,7 +141,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 				IdempotencyKey: "child_txn",
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				Domain:         "domain2",
-				To:             contractAddressDomain2,
+				To:             &contractAddressDomain2,
 				Function:       "doThing2",
 			},
 			ABI: childFnABI,
@@ -149,12 +155,14 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 		Metadata: tktypes.RawJSON(`{"some":"data"}`),
 	}
 
-	storedABI, err := txm.UpsertABI(ctx, txm.p.DB(), childFnABI)
+	postCommit, storedABI, err := txm.UpsertABI(ctx, txm.p.DB(), childFnABI)
 	require.NoError(t, err)
+	postCommit()
 
 	// Write the prepared TX it results in
-	err = txm.WritePreparedTransactions(ctx, txm.p.DB(), []*components.PrepareTransactionWithRefs{ptInsert})
+	postCommit, err = txm.WritePreparedTransactions(ctx, txm.p.DB(), []*components.PrepareTransactionWithRefs{ptInsert})
 	require.NoError(t, err)
+	postCommit()
 
 	// Query it back
 	pt, err := txm.GetPreparedTransactionByID(ctx, txm.p.DB(), *parentTx.Transaction.ID)
@@ -169,9 +177,10 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 				IdempotencyKey: "child_txn",
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				Domain:         "domain2",
-				To:             contractAddressDomain2,
-				Function:       "doThing2()",    // now fully qualified
-				ABIReference:   &storedABI.Hash, // now resolved
+				To:             &contractAddressDomain2,
+				Function:       "doThing2()",          // now fully qualified
+				ABIReference:   &storedABI.Hash,       // now resolved
+				Data:           tktypes.RawJSON(`{}`), // normalized
 			},
 		},
 		States: pldapi.TransactionStates{
@@ -190,7 +199,7 @@ func TestWritePreparedTransactionsBadTX(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	err := txm.WritePreparedTransactions(ctx, txm.p.DB(), []*components.PrepareTransactionWithRefs{{
+	_, err := txm.WritePreparedTransactions(ctx, txm.p.DB(), []*components.PrepareTransactionWithRefs{{
 		Transaction: &pldapi.TransactionInput{},
 	}})
 	assert.Regexp(t, "PD012211", err)

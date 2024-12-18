@@ -71,10 +71,11 @@ var preparedTransactionFilters = filters.FieldMap{
 	"created": filters.TimestampField("created"),
 }
 
-func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.DB, prepared []*components.PrepareTransactionWithRefs) (err error) {
+func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.DB, prepared []*components.PrepareTransactionWithRefs) (postCommit func(), err error) {
 
 	var preparedTxInserts []*preparedTransaction
 	var preparedTxStateInserts []*preparedTransactionState
+	var postCommits []func()
 	for _, p := range prepared {
 		dbPreparedTx := &preparedTransaction{
 			ID:       p.ID,
@@ -83,7 +84,7 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 			Metadata: p.Metadata,
 		}
 		// We do the work for the ABI validation etc. before we insert the TX
-		resolved, err := tm.resolveNewTransaction(ctx, dbTX, p.Transaction, pldapi.SubmitModePrepare)
+		txPostCommit, resolved, err := tm.resolveNewTransaction(ctx, dbTX, p.Transaction, pldapi.SubmitModePrepare)
 		if err == nil {
 			p.Transaction.ABI = nil // move to the reference
 			p.Transaction.ABIReference = resolved.Function.ABIReference
@@ -91,8 +92,9 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 			dbPreparedTx.Transaction, err = json.Marshal(p.Transaction)
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
+		postCommits = append(postCommits, txPostCommit)
 		preparedTxInserts = append(preparedTxInserts, dbPreparedTx)
 		for i, stateID := range p.States.Spent {
 			preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
@@ -136,10 +138,7 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 
 	if len(preparedTxInserts) > 0 {
 		err = dbTX.WithContext(ctx).
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "id"}},
-				DoNothing: true, // immutable
-			}).
+			Clauses(clause.OnConflict{DoNothing: true /* immutable */}).
 			Create(preparedTxInserts).
 			Error
 	}
@@ -147,11 +146,16 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 	if err == nil && len(preparedTxStateInserts) > 0 {
 		err = dbTX.WithContext(ctx).
 			Omit("State").
+			Clauses(clause.OnConflict{DoNothing: true /* immutable */}).
 			Create(preparedTxStateInserts).
 			Error
 	}
 
-	return err
+	return func() {
+		for _, pc := range postCommits {
+			pc()
+		}
+	}, err
 
 }
 

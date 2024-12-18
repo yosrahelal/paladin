@@ -3,7 +3,7 @@
 ## Pre-requisites
 
 * Access to a running Kubernetes cluster
-* [helm](https://helm.sh/) installed
+* [helm](https://helm.sh/) `v3` installed
 * [kubectl](https://kubernetes.io/docs/reference/kubectl/) installed
 
 ## Quick Start with kind
@@ -16,7 +16,8 @@ for kind which will open up the container ports used by the Paladin charts below
 You can create a new cluster with:
 
 ```bash
-kind create cluster --name paladin --config operator/paladin-kind.yaml
+curl https://raw.githubusercontent.com/LF-Decentralized-Trust-labs/paladin/refs/heads/main/operator/paladin-kind.yaml -L -O
+kind create cluster --name paladin --config paladin-kind.yaml
 ```
 
 If you need to start over, you can delete the cluster with:
@@ -170,6 +171,13 @@ Each Paladin node runs an instance of the Paladin UI at the path `/ui`. If you u
 * http://localhost:31648/ui
 * http://localhost:31748/ui
 
+Learn about interacting with the [UI](./user-interface.md), and try out the [Tutorials](./../tutorials/index.md).
+
+## Troubleshooting
+
+If you encounter any issues during installation, please refer to the [Troubleshooting Guide](./troubleshooting.md).  
+
+If your issue is not listed or remains unresolved, please report it by [opening an issue on the Paladin GitHub page](https://github.com/LF-Decentralized-Trust-labs/paladin/issues).
 
 ## Uninstall
 
