@@ -211,6 +211,11 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	if useBatch {
 		expectedCoins = 3
 	}
+	if len(coins) != expectedCoins {
+		for i, coin := range coins {
+			fmt.Printf("==> Coin %d: %+v\n", i, coin)
+		}
+	}
 	require.Len(t, coins, expectedCoins)
 
 	if useBatch {
