@@ -475,7 +475,7 @@ func TestNotoLock(t *testing.T) {
 			To:       &notoAddress,
 			Function: "lock",
 			Data: toJSON(t, &types.LockParams{
-				ID:     lockID,
+				LockID: lockID,
 				Amount: tktypes.Int64ToInt256(50),
 			}),
 		},
@@ -516,6 +516,24 @@ func TestNotoLock(t *testing.T) {
 	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
 	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[0].Data.Owner.String())
 
+	log.L(ctx).Infof("Approve unlock that will return 50 to recipient1")
+	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:     recipient1Name,
+			To:       &notoAddress,
+			Function: "prepareUnlock",
+			Data: toJSON(t, &types.UnlockParams{
+				LockID:  lockID,
+				To:      []string{recipient1Name},
+				Amounts: []*tktypes.HexUint256{tktypes.Int64ToInt256(50)},
+			}),
+		},
+		ABI: types.NotoABI,
+	}, true)
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+
 	log.L(ctx).Infof("Unlock from recipient1 (return 50 to recipient1)")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
@@ -523,7 +541,7 @@ func TestNotoLock(t *testing.T) {
 			To:       &notoAddress,
 			Function: "unlock",
 			Data: toJSON(t, &types.UnlockParams{
-				ID:      lockID,
+				LockID:  lockID,
 				To:      []string{recipient1Name},
 				Amounts: []*tktypes.HexUint256{tktypes.Int64ToInt256(50)},
 			}),
