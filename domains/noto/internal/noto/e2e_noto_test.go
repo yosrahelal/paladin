@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 
@@ -427,7 +428,7 @@ func TestNotoLock(t *testing.T) {
 	noto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: contracts["factory"],
 	})
-	done, tb, rpc, _ := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
+	done, tb, rpc, client := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()
@@ -516,7 +517,7 @@ func TestNotoLock(t *testing.T) {
 	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
 	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[0].Data.Owner.String())
 
-	log.L(ctx).Infof("Approve unlock that will return 50 to recipient1")
+	log.L(ctx).Infof("Prepare unlock that will send all 50 to recipient2")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			From:     recipient1Name,
@@ -524,7 +525,8 @@ func TestNotoLock(t *testing.T) {
 			Function: "prepareUnlock",
 			Data: toJSON(t, &types.UnlockParams{
 				LockID:  lockID,
-				To:      []string{recipient1Name},
+				From:    recipient1Name,
+				To:      []string{recipient2Name},
 				Amounts: []*tktypes.HexUint256{tktypes.Int64ToInt256(50)},
 			}),
 		},
@@ -534,16 +536,15 @@ func TestNotoLock(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	log.L(ctx).Infof("Unlock from recipient1 (return 50 to recipient1)")
+	log.L(ctx).Infof("Approve unlock to be executed by recipient2")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			From:     recipient1Name,
 			To:       &notoAddress,
-			Function: "unlock",
-			Data: toJSON(t, &types.UnlockParams{
-				LockID:  lockID,
-				To:      []string{recipient1Name},
-				Amounts: []*tktypes.HexUint256{tktypes.Int64ToInt256(50)},
+			Function: "approveUnlock",
+			Data: toJSON(t, &types.ApproveUnlockParams{
+				LockID:   lockID,
+				Delegate: tktypes.MustEthAddress(recipient2Key.Verifier.Verifier),
 			}),
 		},
 		ABI: types.NotoABI,
@@ -551,6 +552,19 @@ func TestNotoLock(t *testing.T) {
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
+
+	log.L(ctx).Infof("Unlock from recipient2")
+	tx := client.ForABI(ctx, noto.contractABI).
+		Public().
+		From(recipient2Name).
+		To(&notoAddress).
+		Function("unlockWithApproval").
+		Inputs(&NotoUnlockWithApprovalParams{
+			LockID: lockID,
+		}).
+		Send().
+		Wait(3 * time.Second)
+	require.NoError(t, tx.Error())
 
 	coins = findLockedCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.Len(t, coins, 0)
@@ -559,5 +573,5 @@ func TestNotoLock(t *testing.T) {
 	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
 	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[0].Data.Owner.String())
 	assert.Equal(t, int64(50), coins[1].Data.Amount.Int().Int64())
-	assert.Equal(t, recipient1Key.Verifier.Verifier, coins[1].Data.Owner.String())
+	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[1].Data.Owner.String())
 }
