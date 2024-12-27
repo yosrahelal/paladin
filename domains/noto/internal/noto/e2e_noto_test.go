@@ -227,7 +227,7 @@ func TestNoto(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	require.NotNil(t, rpcerr)
-	assert.ErrorContains(t, rpcerr, "PD200005")
+	assert.ErrorContains(t, rpcerr, "assemble result was REVERT")
 
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.Len(t, coins, 1)
@@ -532,9 +532,7 @@ func TestNotoLock(t *testing.T) {
 		},
 		ABI: types.NotoABI,
 	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
+	require.NoError(t, rpcerr)
 
 	log.L(ctx).Infof("Approve unlock to be executed by recipient2")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
@@ -549,9 +547,7 @@ func TestNotoLock(t *testing.T) {
 		},
 		ABI: types.NotoABI,
 	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
+	require.NoError(t, rpcerr)
 
 	log.L(ctx).Infof("Unlock from recipient2")
 	tx := client.ForABI(ctx, noto.contractABI).
