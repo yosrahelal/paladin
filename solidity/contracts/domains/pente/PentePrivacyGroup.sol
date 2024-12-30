@@ -29,11 +29,13 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
 
     mapping(bytes32 => bool) private _unspent;
     mapping(bytes32 => address) private _approvals;
+    mapping(bytes32 => bool) private _txids;
     address _nextImplementation;
 
     // Config follows the convention of a 4 byte type selector, followed by ABI encoded bytes
     bytes4 public constant PenteConfig_V0 = 0x00010000;
 
+    error PenteDuplicateTransaction(bytes32 txId);
     error PenteUnsupportedConfigType(bytes4 configSelector);
     error PenteDuplicateEndorser(address signer);
     error PenteInvalidEndorser(address signer);
@@ -155,6 +157,13 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         States calldata states,
         ExternalCall[] calldata externalCalls
     ) internal {
+
+        // On-chain enforcement of TXID uniqueness
+        if (_txids[txId] != false) {
+            revert PenteDuplicateTransaction(txId);
+        }
+        _txids[txId] = true;
+
         // Perform the state transitions
         for (uint i = 0; i < states.inputs.length; i++) {
             if (!_unspent[states.inputs[i]]) {

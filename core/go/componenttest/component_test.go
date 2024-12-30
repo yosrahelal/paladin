@@ -400,6 +400,33 @@ func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
 	assert.Regexp(t, domains.SimpleDomainInsufficientFundsError, txFull.Receipt.FailureMessage)
 	assert.Regexp(t, "SDE0001", txFull.Receipt.FailureMessage)
 
+	//Check that the domain is left in a healthy state and we can submit good transactions
+	// Start a private transaction - Mint to alice
+	var goodTxID uuid.UUID
+	err = rpcClient.CallRPC(ctx, &goodTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		TransactionBase: pldapi.TransactionBase{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "goodTx",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			From:           "wallets.org1.aaaaaa",
+			Data: tktypes.RawJSON(`{
+                "from": "",
+                "to": "wallets.org1.bbbbbb",
+                "amount": "123000000000000000000"
+            }`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, goodTxID)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, goodTxID, rpcClient, false),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not receive a receipt",
+	)
 }
 
 func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
