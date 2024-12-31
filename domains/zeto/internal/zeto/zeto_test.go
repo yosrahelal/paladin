@@ -654,7 +654,7 @@ func TestGetHandler(t *testing.T) {
 	}
 	assert.NotNil(t, z.GetHandler("mint"))
 	assert.NotNil(t, z.GetHandler("transfer"))
-	assert.NotNil(t, z.GetHandler("lockProof"))
+	assert.NotNil(t, z.GetHandler("lock"))
 	assert.NotNil(t, z.GetHandler("deposit"))
 	assert.NotNil(t, z.GetHandler("withdraw"))
 	assert.Nil(t, z.GetHandler("bad"))

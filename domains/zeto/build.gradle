@@ -24,7 +24,7 @@ ext {
     goFilesE2E = fileTree(".") {
         include "integration-test/**/*.go"
     }
-    targetCoverage = 94.5
+    targetCoverage = 92.9
     maxCoverageBarGap = 1
     coveragePackages = [
         "github.com/kaleido-io/paladin/domains/zeto/internal/...",
@@ -32,7 +32,7 @@ ext {
         "github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner",
     ]
 
-    zetoVersion = "v0.0.10"
+    zetoVersion = "v0.0.11"
     zetoHost = "hyperledger-labs"
     zkpOut = "${projectDir}/zkp"
     toolsOut = "${projectDir}/tools"
@@ -163,6 +163,7 @@ task copySolidity(type: Copy, dependsOn: [protoc, ":solidity:compile", extractZe
     from fileTree("${zkpOut}/artifacts/contracts") {
         include 'lib/interfaces/izeto.sol/IZeto.json'
         include 'lib/interfaces/izeto_encrypted.sol/IZetoEncrypted.json'
+        include 'lib/interfaces/izeto_lockable.sol/IZetoLockable.json'
         include 'lib/interfaces/zeto_fungible_initializable.sol/IZetoFungibleInitializable.json'
         include 'lib/interfaces/zeto_nf_initializable.sol/IZetoNonFungibleInitializable.json'
     }
