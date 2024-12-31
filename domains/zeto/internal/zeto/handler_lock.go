@@ -89,22 +89,12 @@ func (h *lockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 			InputStates:  []*prototk.StateRef{},
 			OutputStates: []*prototk.NewState{},
 		},
-		AttestationPlan: []*prototk.AttestationRequest{
-			{
-				Name:            "submitter",
-				AttestationType: prototk.AttestationType_ENDORSE,
-				Algorithm:       algorithms.ECDSA_SECP256K1,
-				VerifierType:    verifiers.ETH_ADDRESS,
-				Parties:         []string{tx.Transaction.From},
-			},
-		},
+		AttestationPlan: []*prototk.AttestationRequest{},
 	}, nil
 }
 
 func (h *lockHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
-	return &prototk.EndorseTransactionResponse{
-		EndorsementResult: prototk.EndorseTransactionResponse_ENDORSER_SUBMIT,
-	}, nil
+	return nil, nil
 }
 
 func decodeParams(ctx context.Context, abi *abi.Entry, encodedCall []byte) ([]byte, error) {

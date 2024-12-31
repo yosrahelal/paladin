@@ -133,22 +133,13 @@ func TestLockAssemble(t *testing.T) {
 }
 
 func TestLockEndorse(t *testing.T) {
-	h := lockHandler{
-		zeto: &Zeto{
-			name: "test1",
-		},
-	}
+	h := lockHandler{}
 	ctx := context.Background()
-	tx := &types.ParsedTransaction{
-		Params: &types.LockParams{
-			Delegate: tktypes.RandAddress(),
-			Call:     tktypes.HexBytes([]byte{0x01, 0x02, 0x03}),
-		},
-	}
+	tx := &types.ParsedTransaction{}
 	req := &prototk.EndorseTransactionRequest{}
 	res, err := h.Endorse(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.NotNil(t, res)
+	assert.Nil(t, res)
 }
 
 func TestLockPrepare(t *testing.T) {
