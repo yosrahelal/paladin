@@ -145,6 +145,7 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		Transaction: &prototk.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
+			RequiredSigner:  &tx.Transaction.From,
 		},
 	}, nil
 }
