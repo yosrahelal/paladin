@@ -146,10 +146,7 @@ export class ZetoInstance {
       from: from.lookup,
       data,
     });
-    return this.paladin.pollForPreparedTransaction(
-      txID,
-      this.options.pollTimeout
-    );
+    return this.paladin.pollForReceipt(txID, POLL_TIMEOUT_MS);
   }
 
   async setERC20(from: PaladinVerifier, data: ZetoSetERC20Params) {
