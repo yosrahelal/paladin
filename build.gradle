@@ -233,6 +233,13 @@ task copyZetoZKPFiles(type: Copy) {
         include 'check_nullifiers_value_batch.zkey'
         include 'check_nullifiers_value_batch-vkey.json'
         include 'check_nullifiers_value_batch_js/check_nullifiers_value_batch.wasm'
+        // check_utxos_owner
+        include 'check_utxos_owner.zkey'
+        include 'check_utxos_owner-vkey.json'
+        include 'check_utxos_owner_js/check_utxos_owner.wasm'
+        include 'check_utxos_owner_batch.zkey'
+        include 'check_utxos_owner_batch-vkey.json'
+        include 'check_utxos_owner_batch_js/check_utxos_owner_batch.wasm'
     }
     into zetoZkpDir
 
