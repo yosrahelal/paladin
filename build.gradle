@@ -22,7 +22,7 @@ def transports = [
 def uiClient = [
     'ui/client/dist',
 ]
- 
+
 def assembleSubprojects = [
     ':core:go',
     ':core:java',
@@ -48,16 +48,14 @@ ext {
         },
 
         dumpLogsOnFailure: { task, dockerTaskPath ->
-            // If invoked with -PcomposeLogs=true and the given Exec task fails, look up the
-            // DockerCompose task specified, and ask it to dump logs.
+            // If the given Exec task fails, look up the DockerCompose task specified, and ask it to dump logs.
             task.ignoreExitValue(true)
             task.doLast {
                 def execResult = getExecutionResult().get()
-                def composeLogs = project.findProperty('composeLogs')
-                if (execResult.exitValue != 0 && composeLogs == "true") {
+                if (execResult.exitValue != 0) {
                     def docker = project.tasks.getByPath(dockerTaskPath)
                     println "\nTask '${task.path}' failed. Dumping Docker logs from '${dockerTaskPath}'."
-                    docker.dumpLogs()
+                    docker.dumpLogs(project.file('build/docker-compose.log'))
                 }
                 execResult.assertNormalExitValue()
             }
