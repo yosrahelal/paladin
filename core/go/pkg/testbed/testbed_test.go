@@ -21,6 +21,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 
 	"github.com/stretchr/testify/assert"
@@ -36,6 +37,7 @@ func writeTestConfig(t *testing.T) (configFile string) {
 	var conf *pldconf.PaladinConfig
 	err := pldconf.ReadAndParseYAMLFile(ctx, "../../test/config/sqlite.memory.config.yaml", &conf)
 	require.NoError(t, err)
+
 	// For running in this unit test the dirs are different to the sample config
 	conf.DB.SQLite.MigrationsDir = "../../db/migrations/sqlite"
 	conf.DB.Postgres.MigrationsDir = "../../db/migrations/postgres"
@@ -47,6 +49,15 @@ func writeTestConfig(t *testing.T) (configFile string) {
 			Inline:   mnemonic,
 		},
 	}
+
+	conf.Log = pldconf.LogConfig{
+		Level:  confutil.P("debug"),
+		Output: confutil.P("file"),
+		File: pldconf.LogFileConfig{
+			Filename: confutil.P("build/testbed.component-test.log"),
+		},
+	}
+
 	configFile = path.Join(t.TempDir(), "test.config.yaml")
 	f, err := os.Create(configFile)
 	require.NoError(t, err)
