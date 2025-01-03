@@ -156,7 +156,7 @@ func TestPrepareDeploy(t *testing.T) {
 
 	req.Transaction.ConstructorParamsJson = "{}"
 	_, err = z.PrepareDeploy(context.Background(), req)
-	assert.EqualError(t, err, "PD210007: Failed to find circuit ID based on the token name. PD210000: Contract  not found")
+	assert.EqualError(t, err, "PD210007: Failed to find circuit ID based on the token name. PD210000: Contract '' not found")
 
 	req.Transaction.ConstructorParamsJson = "{\"tokenName\":\"testToken1\"}"
 	_, err = z.PrepareDeploy(context.Background(), req)
