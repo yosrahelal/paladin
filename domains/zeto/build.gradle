@@ -231,7 +231,15 @@ task testE2E(type: Exec, dependsOn: [protoc, copySolidity, copyPkgSolidity, copy
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task unitTests(type: Exec, dependsOn: [protoc, ":core:go:makeMocks", ":testinfra:startTestInfra", downloadZetoCompiledContracts, copySolidity, copyPkgSolidity]) {
+task unitTests(type: Exec, dependsOn: [
+        protoc,
+        ":core:go:makeMocks",
+        ":testinfra:startTestInfra",
+        downloadZetoCompiledContracts,
+        copySolidity,
+        copyPkgSolidity,
+        ":domains:integration-test:copySolidity" // TODO: find a better way to share this
+    ]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
