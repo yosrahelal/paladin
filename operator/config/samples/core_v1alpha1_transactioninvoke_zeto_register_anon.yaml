@@ -63,6 +63,11 @@ spec:
               },
               {
                 "internalType": "address",
+                "name": "lockVerifier",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
                 "name": "verifier",
                 "type": "address"
               },
@@ -74,11 +79,6 @@ spec:
               {
                 "internalType": "address",
                 "name": "batchWithdrawVerifier",
-                "type": "address"
-              },
-              {
-                "internalType": "address",
-                "name": "lockVerifier",
                 "type": "address"
               },
               {
