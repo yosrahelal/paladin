@@ -51,7 +51,9 @@ func DeployNoto(ctx context.Context, t *testing.T, rpc rpcclient.Client, domainN
 	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, "notary", &types.ConstructorParams{
 		Notary:     notary + "@node1",
 		NotaryMode: notaryMode,
-		Hooks:      &types.HookParams{PublicAddress: hooks},
+		Options: types.NotoOptions{
+			Hooks: &types.NotoHooksOptions{PublicAddress: hooks},
+		},
 	})
 	if rpcerr != nil {
 		assert.NoError(t, rpcerr)
