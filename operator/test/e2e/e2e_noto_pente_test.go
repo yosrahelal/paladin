@@ -273,6 +273,7 @@ var _ = Describe("noto/pente - simple", Ordered, func() {
 			deploy := rpc["node1"].ForABI(ctx, abi.ABI{
 				{Type: abi.Constructor, Inputs: abi.ParameterArray{
 					{Name: "notary", Type: "string"},
+					{Name: "notaryMode", Type: "string"},
 				}},
 			}).
 				Private().
@@ -280,7 +281,8 @@ var _ = Describe("noto/pente - simple", Ordered, func() {
 				Constructor().
 				From(notary).
 				Inputs(&nototypes.ConstructorParams{
-					Notary: notary,
+					Notary:     notary,
+					NotaryMode: nototypes.NotaryModeBasic,
 				}).
 				Send().
 				Wait(5 * time.Second)
@@ -657,10 +659,13 @@ var _ = Describe("noto/pente - simple", Ordered, func() {
 			deploy := rpc["node1"].ForABI(ctx, abi.ABI{
 				{Type: abi.Constructor, Inputs: abi.ParameterArray{
 					{Name: "notary", Type: "string"},
-					{Name: "hooks", Type: "tuple", Components: abi.ParameterArray{
-						{Name: "publicAddress", Type: "string"},
-						{Name: "privateAddress", Type: "string"},
-						{Name: "privateGroup", Type: "tuple", Components: pentePrivGroupComps},
+					{Name: "notaryMode", Type: "string"},
+					{Name: "options", Type: "tuple", Components: abi.ParameterArray{
+						{Name: "hooks", Type: "tuple", Components: abi.ParameterArray{
+							{Name: "publicAddress", Type: "string"},
+							{Name: "privateAddress", Type: "string"},
+							{Name: "privateGroup", Type: "tuple", Components: pentePrivGroupComps},
+						}},
 					}},
 				}},
 			}).
@@ -669,7 +674,8 @@ var _ = Describe("noto/pente - simple", Ordered, func() {
 				Constructor().
 				From(notary).
 				Inputs(&nototypes.ConstructorParams{
-					Notary: notary,
+					Notary:     notary,
+					NotaryMode: nototypes.NotaryModeHooks,
 					Options: nototypes.NotoOptions{
 						Hooks: &nototypes.NotoHooksOptions{
 							PublicAddress:  penteContract,
