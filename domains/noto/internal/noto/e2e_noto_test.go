@@ -168,7 +168,8 @@ func TestNoto(t *testing.T) {
 	var notoAddress tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
 		domainName, "me", &types.ConstructorParams{
-			Notary: notaryName,
+			Notary:     notaryName,
+			NotaryMode: types.NotaryModeBasic,
 		})
 	require.NoError(t, rpcerr)
 	log.L(ctx).Infof("Noto instance deployed to %s", notoAddress)
@@ -336,7 +337,8 @@ func TestNotoApprove(t *testing.T) {
 	var notoAddress tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
 		domainName, "me", &types.ConstructorParams{
-			Notary: notaryName,
+			Notary:     notaryName,
+			NotaryMode: types.NotaryModeBasic,
 		})
 	require.NoError(t, rpcerr)
 	log.L(ctx).Infof("Noto instance deployed to %s", notoAddress)
@@ -442,7 +444,8 @@ func TestNotoLock(t *testing.T) {
 	var notoAddress tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
 		domainName, "me", &types.ConstructorParams{
-			Notary: notaryName,
+			Notary:     notaryName,
+			NotaryMode: types.NotaryModeBasic,
 		})
 	require.NoError(t, rpcerr)
 	log.L(ctx).Infof("Noto instance deployed to %s", notoAddress)
