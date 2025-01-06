@@ -17,6 +17,7 @@ package zeto
 
 import (
 	"context"
+	"math/big"
 	"testing"
 
 	"github.com/iden3/go-iden3-crypto/babyjub"
@@ -43,10 +44,14 @@ func TestMintValidateParams(t *testing.T) {
 	assert.EqualError(t, err, "PD210025: Parameter 'to' is required (index=0)")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}]}")
-	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0 (index=0)")
+	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be in the range (0, 2^100) (index=0)")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}]}")
-	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0 (index=0)")
+	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be in the range (0, 2^100) (index=0)")
+
+	max := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(100), nil).Text(10)
+	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":"+max+"}]}")
+	assert.EqualError(t, err, "PD210107: Total amount must be in the range (0, 2^100)")
 
 	params, err := h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}]}")
 	assert.NoError(t, err)
@@ -139,22 +144,11 @@ func TestMintAssemble(t *testing.T) {
 func TestMintEndorse(t *testing.T) {
 	h := mintHandler{}
 	ctx := context.Background()
-	tx := &types.ParsedTransaction{
-		Params: []*types.TransferParamEntry{
-			{
-				To:     "Alice",
-				Amount: tktypes.MustParseHexUint256("0x0a"),
-			},
-		},
-		Transaction: &prototk.TransactionSpecification{
-			From: "Bob",
-		},
-	}
-
+	tx := &types.ParsedTransaction{}
 	req := &prototk.EndorseTransactionRequest{}
 	res, err := h.Endorse(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, prototk.EndorseTransactionResponse_ENDORSER_SUBMIT, res.EndorsementResult)
+	assert.Nil(t, res)
 }
 
 func TestMintPrepare(t *testing.T) {

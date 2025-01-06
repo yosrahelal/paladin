@@ -35,15 +35,21 @@ jobs:
       # This does not build any docker images, and does not run any dockerized tests.
       # It does run Go/Java/Solidity component and integration tests that use PostgreSQL and Besu
       - name: Build with Gradle
-        run: ./gradlew -PcomposeLogs=true -PverboseTests=true --no-daemon --parallel --max-workers=5 build
+        run: ./gradlew -PverboseTests=true --no-daemon --parallel --max-workers=5 build
 
-      - name: Upload logs
+      - name: Upload testbed logs
         uses: actions/upload-artifact@v4
-        if: always()      
+        if: always()
         with:
           name: testbed-logs
-          path: |
-            **/testbed.*.log
+          path: '**/testbed.*.log'
+
+      - name: Upload docker compose logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: docker-compose-logs
+          path: '**/docker-compose.log'
 
   core-image-build:
     # run only on PRs

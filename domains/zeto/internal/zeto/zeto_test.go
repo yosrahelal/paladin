@@ -156,7 +156,7 @@ func TestPrepareDeploy(t *testing.T) {
 
 	req.Transaction.ConstructorParamsJson = "{}"
 	_, err = z.PrepareDeploy(context.Background(), req)
-	assert.EqualError(t, err, "PD210007: Failed to find circuit ID based on the token name. PD210000: Contract  not found")
+	assert.EqualError(t, err, "PD210007: Failed to find circuit ID based on the token name. PD210000: Contract '' not found")
 
 	req.Transaction.ConstructorParamsJson = "{\"tokenName\":\"testToken1\"}"
 	_, err = z.PrepareDeploy(context.Background(), req)
@@ -242,7 +242,7 @@ func TestInitTransaction(t *testing.T) {
 
 	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"0\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210027: Parameter 'amount' must be greater than 0 (index=0)")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210027: Parameter 'amount' must be in the range (0, 2^100) (index=0)")
 
 	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"10\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
@@ -654,7 +654,7 @@ func TestGetHandler(t *testing.T) {
 	}
 	assert.NotNil(t, z.GetHandler("mint"))
 	assert.NotNil(t, z.GetHandler("transfer"))
-	assert.NotNil(t, z.GetHandler("lockProof"))
+	assert.NotNil(t, z.GetHandler("lock"))
 	assert.NotNil(t, z.GetHandler("deposit"))
 	assert.NotNil(t, z.GetHandler("withdraw"))
 	assert.Nil(t, z.GetHandler("bad"))

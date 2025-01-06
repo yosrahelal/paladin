@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"testing"
 
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
@@ -47,10 +48,18 @@ func TestTransferValidateParams(t *testing.T) {
 	assert.EqualError(t, err, "PD210025: Parameter 'to' is required (index=0)")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}]}")
-	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0 (index=0)")
+	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be in the range (0, 2^100) (index=0)")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}]}")
-	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0 (index=0)")
+	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be in the range (0, 2^100) (index=0)")
+
+	amt1 := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(100), nil)
+	amt1.Sub(amt1, big.NewInt(1000))
+	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":"+amt1.Text(10)+"}]}")
+	assert.NoError(t, err)
+	amt2 := big.NewInt(1000)
+	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":"+amt1.Text(10)+"},{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":"+amt2.Text(10)+"}]}")
+	assert.EqualError(t, err, "PD210107: Total amount must be in the range (0, 2^100)")
 
 	params, err := h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}]}")
 	assert.NoError(t, err)
@@ -256,22 +265,11 @@ func TestTransferAssemble(t *testing.T) {
 func TestTransferEndorse(t *testing.T) {
 	h := transferHandler{}
 	ctx := context.Background()
-	tx := &types.ParsedTransaction{
-		Params: []*types.TransferParamEntry{
-			{
-				To:     "Alice",
-				Amount: tktypes.MustParseHexUint256("0x0a"),
-			},
-		},
-		Transaction: &prototk.TransactionSpecification{
-			From: "Bob",
-		},
-	}
-
+	tx := &types.ParsedTransaction{}
 	req := &prototk.EndorseTransactionRequest{}
 	res, err := h.Endorse(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, prototk.EndorseTransactionResponse_ENDORSER_SUBMIT, res.EndorsementResult)
+	assert.Nil(t, res)
 }
 
 func TestTransferPrepare(t *testing.T) {
