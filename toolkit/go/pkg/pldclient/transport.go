@@ -46,6 +46,14 @@ var transportInfo = &rpcModuleInfo{
 			Inputs: []string{"transportName"},
 			Output: "transportDetailsStr",
 		},
+		"transport_peers": {
+			Inputs: []string{},
+			Output: "peers",
+		},
+		"transport_peerInfo": {
+			Inputs: []string{"nodeName"},
+			Output: "peer",
+		},
 	},
 }
 
