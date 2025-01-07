@@ -116,6 +116,15 @@ func (br *domainBridge) RequestReply(ctx context.Context, reqMsg plugintk.Plugin
 				}
 			},
 		)
+	case *prototk.DomainMessage_GetStates:
+		return callManagerImpl(ctx, req.GetStates,
+			br.manager.GetStates,
+			func(resMsg *prototk.DomainMessage, res *prototk.GetStatesResponse) {
+				resMsg.ResponseToDomain = &prototk.DomainMessage_GetStatesRes{
+					GetStatesRes: res,
+				}
+			},
+		)
 	default:
 		return nil, i18n.NewError(ctx, msgs.MsgPluginBadRequestBody, req)
 	}

@@ -48,3 +48,7 @@ func (dc *MockDomainCallbacks) SendTransaction(context.Context, *prototk.SendTra
 func (dc *MockDomainCallbacks) LocalNodeName(context.Context, *prototk.LocalNodeNameRequest) (*prototk.LocalNodeNameResponse, error) {
 	return dc.MockLocalNodeName()
 }
+
+func (dc *MockDomainCallbacks) GetStates(context.Context, *prototk.GetStatesRequest) (*prototk.GetStatesResponse, error) {
+	return nil, nil
+}

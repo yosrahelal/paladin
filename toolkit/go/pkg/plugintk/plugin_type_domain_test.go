@@ -140,6 +140,19 @@ func TestDomainCallback_LocalNodeName(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDomainCallback_GetStates(t *testing.T) {
+	ctx, _, _, callbacks, inOutMap, done := setupDomainTests(t)
+	defer done()
+
+	inOutMap[fmt.Sprintf("%T", &prototk.DomainMessage_GetStates{})] = func(dm *prototk.DomainMessage) {
+		dm.ResponseToDomain = &prototk.DomainMessage_GetStatesRes{
+			GetStatesRes: &prototk.GetStatesResponse{},
+		}
+	}
+	_, err := callbacks.GetStates(ctx, &prototk.GetStatesRequest{})
+	require.NoError(t, err)
+}
+
 func TestDomainFunction_ConfigureDomain(t *testing.T) {
 	_, exerciser, funcs, _, _, done := setupDomainTests(t)
 	defer done()

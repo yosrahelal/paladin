@@ -279,6 +279,26 @@ func (d *domain) Configuration() *prototk.DomainConfig {
 	return d.config
 }
 
+func toProtoStates(states []*pldapi.State) []*prototk.StoredState {
+	pbStates := make([]*prototk.StoredState, len(states))
+	for i, s := range states {
+		pbStates[i] = &prototk.StoredState{
+			Id:        s.ID.String(),
+			SchemaId:  s.Schema.String(),
+			CreatedAt: s.Created.UnixNano(),
+			DataJson:  string(s.Data),
+			Locks:     []*prototk.StateLock{},
+		}
+		for _, l := range s.Locks {
+			pbStates[i].Locks = append(pbStates[i].Locks, &prototk.StateLock{
+				Type:        mapStateLockType(l.Type.V()),
+				Transaction: l.Transaction.String(),
+			})
+		}
+	}
+	return pbStates
+}
+
 // Domain callback to query the state store
 func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
 	c, err := d.checkInFlight(ctx, req.StateQueryContext)
@@ -306,24 +326,8 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 		return nil, err
 	}
 
-	pbStates := make([]*prototk.StoredState, len(states))
-	for i, s := range states {
-		pbStates[i] = &prototk.StoredState{
-			Id:        s.ID.String(),
-			SchemaId:  s.Schema.String(),
-			CreatedAt: s.Created.UnixNano(),
-			DataJson:  string(s.Data),
-			Locks:     []*prototk.StateLock{},
-		}
-		for _, l := range s.Locks {
-			pbStates[i].Locks = append(pbStates[i].Locks, &prototk.StateLock{
-				Type:        mapStateLockType(l.Type.V()),
-				Transaction: l.Transaction.String(),
-			})
-		}
-	}
 	return &prototk.FindAvailableStatesResponse{
-		States: pbStates,
+		States: toProtoStates(states),
 	}, nil
 
 }
@@ -804,5 +808,25 @@ func (d *domain) SendTransaction(ctx context.Context, tx *prototk.SendTransactio
 func (d *domain) LocalNodeName(ctx context.Context, req *prototk.LocalNodeNameRequest) (*prototk.LocalNodeNameResponse, error) {
 	return &prototk.LocalNodeNameResponse{
 		Name: d.dm.transportMgr.LocalNodeName(),
+	}, nil
+}
+
+func (d *domain) GetStates(ctx context.Context, req *prototk.GetStatesRequest) (*prototk.GetStatesResponse, error) {
+	c, err := d.checkInFlight(ctx, req.StateQueryContext)
+	if err != nil {
+		return nil, err
+	}
+
+	schemaID, err := tktypes.ParseBytes32(req.SchemaId)
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidSchemaID, req.SchemaId)
+	}
+
+	_, states, err := c.dCtx.GetStates(c.dbTX, schemaID, req.StateIds)
+	if err != nil {
+		return nil, err
+	}
+	return &prototk.GetStatesResponse{
+		States: toProtoStates(states),
 	}, nil
 }

@@ -72,6 +72,10 @@ func (tp *testDomainManager) LocalNodeName(ctx context.Context, req *prototk.Loc
 	return tp.localNodeName(ctx, req)
 }
 
+func (tp *testDomainManager) GetStates(ctx context.Context, req *prototk.GetStatesRequest) (*prototk.GetStatesResponse, error) {
+	return nil, nil
+}
+
 func domainConnectFactory(ctx context.Context, client prototk.PluginControllerClient) (grpc.BidiStreamingClient[prototk.DomainMessage, prototk.DomainMessage], error) {
 	return client.ConnectDomain(context.Background())
 }
