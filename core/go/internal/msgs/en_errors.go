@@ -418,6 +418,10 @@ var (
 	MsgTxMgrPublicSenderNotValidLocal    = ffe("PD012230", "The from identity '%s' must be a valid identity local to the node")
 	MsgTxMgrDomainMismatch               = ffe("PD012231", "The domain '%s' specified on the transaction does not match the domain '%s' for contract %s")
 	MsgTxMgrDomainMissingForDeploy       = ffe("PD012232", "A domain must be specified for a private smart contract deployment transaction")
+	MsgTxMgrBadReceiptListenerFilter     = ffe("PD012233", "Transaction receipt listener '%s' filters are invalid")
+	MsgTxMgrBadReceiptListenerOptions    = ffe("PD012234", "Transaction receipt listener '%s' options are invalid")
+	MsgTxMgrReceiptListenerDupLoad       = ffe("PD012235", "Transaction receipt listener '%s' already loaded")
+	MsgTxMgrBadReceiptListenerTypeDomain = ffe("PD012235", "Transaction receipt listener '%s' has invalid filter combination type='%s' domain='%s'")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")

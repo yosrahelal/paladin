@@ -1,0 +1,261 @@
+/*
+ * Copyright © 2024 Kaleido, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package txmgr
+
+import (
+	"context"
+	"encoding/json"
+
+	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"gorm.io/gorm"
+)
+
+type persistedReceiptListener struct {
+	Name    string          `gorm:"column:name"`
+	Filters tktypes.RawJSON `gorm:"column:options"`
+	Options tktypes.RawJSON `gorm:"column:options"`
+}
+
+func (persistedReceiptListener) TableName() string {
+	return "transaction_receipt_listeners"
+}
+
+type persistedReceiptCheckpoint struct {
+	Listener string `gorm:"column:listener"`
+	Sequence uint64 `gorm:"column:sequence"`
+}
+
+func (persistedReceiptCheckpoint) TableName() string {
+	return "transaction_receipt_checkpoints"
+}
+
+type persistedReceiptBlock struct {
+	Listener    string              `gorm:"column:listener"`
+	Source      *tktypes.EthAddress `gorm:"column:source"`
+	Transaction uuid.UUID           `gorm:"column:transaction"`
+}
+
+func (persistedReceiptBlock) TableName() string {
+	return "transaction_receipt_checkpoints"
+}
+
+type receiptListener struct {
+	tm *txManager
+
+	ctx       context.Context
+	cancelCtx context.CancelFunc
+
+	spec       *pldapi.TransactionReceiptListener
+	checkpoint *uint64
+
+	newReceipts chan bool
+
+	done chan struct{}
+}
+
+func (tm *txManager) loadReceiptListeners(ctx context.Context) error {
+
+	var lastPageEnd *string
+	const loadPageSize = 100
+	for {
+
+		var page []*persistedReceiptListener
+		q := tm.p.DB().
+			WithContext(ctx).
+			Order("name").
+			Limit(loadPageSize)
+		if lastPageEnd != nil {
+			q = q.Where("name > ?", *lastPageEnd)
+		}
+		if err := q.Find(&page).Error; err != nil {
+			return err
+		}
+
+		for _, pl := range page {
+			if _, err := tm.loadListener(ctx, pl); err != nil {
+				return err
+			}
+		}
+
+		if len(page) < loadPageSize {
+			log.L(ctx).Infof("loaded %d receipted listeners", len(tm.receiptListeners))
+			return nil
+		}
+
+		lastPageEnd = &page[len(page)-1].Name
+	}
+
+}
+
+func (tm *txManager) validateListenerSpec(ctx context.Context, spec *pldapi.TransactionReceiptListener) error {
+	if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, spec.Name, tktypes.DefaultNameMaxLen, "name"); err != nil {
+		return err
+	}
+	if _, err := spec.Options.IncompleteStateReceiptBehavior.Validate(); err != nil {
+		return err
+	}
+	_, err := tm.buildListenerDBQuery(ctx, spec, tm.p.DB())
+	return err
+}
+
+func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.TransactionReceiptListener, dbTX *gorm.DB) (*gorm.DB, error) {
+	q := dbTX
+	switch spec.Filters.Type.V() {
+	case pldapi.TransactionTypePrivate:
+		if spec.Filters.Domain != "" {
+			q = q.Where("domain = ?", spec.Filters.Domain) // specific private domain
+		} else {
+			q = q.Where("domain <> ''") // private
+		}
+	case pldapi.TransactionTypePublic:
+		if spec.Filters.Domain != "" {
+			return nil, i18n.NewError(ctx, msgs.MsgTxMgrBadReceiptListenerTypeDomain, spec.Name, spec.Filters.Type, spec.Filters.Domain)
+		}
+		q = q.Where("domain = ''") // private
+	case "":
+	default:
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrBadReceiptListenerTypeDomain, spec.Name, spec.Filters.Type, spec.Filters.Domain)
+	}
+	q = q.Order("sequence").Limit(tm.receiptsReadPageSize)
+	// Only return non-blocked sequences
+	q = q.Joins(`Block WHERE "Block"."listener" = ?`, spec.Name)
+	q = q.Where(`"Block"."transaction" IS NULL`)
+	return q, nil
+}
+
+func (tm *txManager) loadListener(ctx context.Context, pl *persistedReceiptListener) (*receiptListener, error) {
+	spec := &pldapi.TransactionReceiptListener{
+		Name: pl.Name,
+	}
+	if err := json.Unmarshal(pl.Filters, &spec.Filters); err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrBadReceiptListenerFilter, pl.Name)
+	}
+	if err := json.Unmarshal(pl.Filters, &spec.Options); err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrBadReceiptListenerOptions, pl.Name)
+	}
+	if err := tm.validateListenerSpec(ctx, spec); err != nil {
+		return nil, err
+	}
+	l := &receiptListener{
+		tm:          tm,
+		spec:        spec,
+		newReceipts: make(chan bool, 1),
+	}
+
+	tm.receiptListenerLock.Lock()
+	defer tm.receiptListenerLock.Unlock()
+	if tm.receiptListeners[pl.Name] != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrReceiptListenerDupLoad, pl.Name)
+	}
+	tm.receiptListeners[pl.Name] = l
+	return l, nil
+}
+
+func (l *receiptListener) start(bgCtx context.Context) {
+	if l.done == nil {
+		l.ctx, l.cancelCtx = context.WithCancel(log.WithLogField(bgCtx, "receipt-listener", l.spec.Name))
+		l.done = make(chan struct{})
+		go l.runListener()
+	}
+}
+
+func (l *receiptListener) stop() {
+	if l.done != nil {
+		l.cancelCtx()
+		<-l.done
+		l.done = nil
+	}
+}
+
+func (l *receiptListener) notifyNewReceipts() {
+	select {
+	case l.newReceipts <- true:
+	default:
+	}
+}
+
+func (l *receiptListener) loadCheckpoint() error {
+	var checkpoints []*persistedReceiptCheckpoint
+	err := l.tm.receiptsReadRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+		return true, l.tm.p.DB().
+			WithContext(l.ctx).
+			Where("listener = ?", l.spec.Name).
+			Limit(1).
+			Find(&checkpoints).
+			Error
+	})
+	if err != nil {
+		return err // context cancelled
+	}
+	if len(checkpoints) == 0 {
+		if l.spec.Filters.MinSequence != nil {
+			l.checkpoint = l.spec.Filters.MinSequence
+			log.L(l.ctx).Infof("Started receipt listener with minSequence=%d", *l.checkpoint)
+		} else {
+			log.L(l.ctx).Infof("Started receipt listener from start of chain")
+		}
+	} else {
+		cpSequence := checkpoints[0].Sequence
+		l.checkpoint = &cpSequence
+		log.L(l.ctx).Infof("Started receipt listener with checkpoint=%d", cpSequence)
+	}
+	return nil
+}
+
+func (l *receiptListener) readPage() ([]*transactionReceipt, error) {
+	var receipts []*transactionReceipt
+	err := l.tm.receiptsReadRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+		q, err := l.tm.buildListenerDBQuery(l.ctx, l.spec, l.tm.p.DB())
+		if err == nil && l.checkpoint != nil {
+			q = q.Where("sequence > ?", *l.checkpoint)
+		}
+		if err == nil {
+			err = q.Find(&receipts).Error
+		}
+		return true, err
+	})
+	return receipts, err
+}
+
+func (l *receiptListener) runListener() {
+	defer close(l.done)
+
+	if err := l.loadCheckpoint(); err != nil {
+		log.L(l.ctx).Warnf("listener %s stopping before reading checkpoint: %s", err)
+		return
+	}
+
+	for {
+
+		// Read the next page of receipts from non-blocked sources
+		page, err := l.readPage()
+		if err != nil {
+			log.L(l.ctx).Warnf("listener %s stopping: %s", err) // cancelled context
+			return
+		}
+
+		// Process each one
+		for _, r := range page {
+
+		}
+
+	}
+}

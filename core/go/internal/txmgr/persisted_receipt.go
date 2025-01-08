@@ -35,18 +35,23 @@ import (
 )
 
 type transactionReceipt struct {
-	TransactionID    uuid.UUID           `gorm:"column:transaction"`
-	Indexed          tktypes.Timestamp   `gorm:"column:indexed"`
-	Domain           string              `gorm:"column:domain"`
-	Success          bool                `gorm:"column:success"`
-	TransactionHash  *tktypes.Bytes32    `gorm:"column:tx_hash"`
-	BlockNumber      *int64              `gorm:"column:block_number"`
-	TransactionIndex *int64              `gorm:"column:tx_index"`
-	LogIndex         *int64              `gorm:"column:log_index"`
-	Source           *tktypes.EthAddress `gorm:"column:source"`
-	FailureMessage   *string             `gorm:"column:failure_message"`
-	RevertData       tktypes.HexBytes    `gorm:"column:revert_data"`
-	ContractAddress  *tktypes.EthAddress `gorm:"column:contract_address"`
+	TransactionID    uuid.UUID              `gorm:"column:transaction"`
+	Indexed          tktypes.Timestamp      `gorm:"column:indexed"`
+	Domain           string                 `gorm:"column:domain"`
+	Success          bool                   `gorm:"column:success"`
+	TransactionHash  *tktypes.Bytes32       `gorm:"column:tx_hash"`
+	BlockNumber      *int64                 `gorm:"column:block_number"`
+	TransactionIndex *int64                 `gorm:"column:tx_index"`
+	LogIndex         *int64                 `gorm:"column:log_index"`
+	Source           *tktypes.EthAddress    `gorm:"column:source"`
+	FailureMessage   *string                `gorm:"column:failure_message"`
+	RevertData       tktypes.HexBytes       `gorm:"column:revert_data"`
+	ContractAddress  *tktypes.EthAddress    `gorm:"column:contract_address"`
+	Block            *persistedReceiptBlock `gorm:"foreignKey:Source;references:Source;"`
+}
+
+func (transactionReceipt) TableName() string {
+	return "transaction_receipts"
 }
 
 func mapPersistedReceipt(receipt *transactionReceipt) *pldapi.TransactionReceiptData {
@@ -76,8 +81,12 @@ func mapPersistedReceipt(receipt *transactionReceipt) *pldapi.TransactionReceipt
 
 var transactionReceiptFilters = filters.FieldMap{
 	"id":              filters.UUIDField(`"transaction"`),
+	"sequence":        filters.Int64Field("sequence"),
 	"indexed":         filters.TimestampField("indexed"),
 	"success":         filters.BooleanField("success"),
+	"domain":          filters.StringField("domain"),
+	"contractAddress": filters.StringField("contract_address"),
+	"source":          filters.StringField("source"),
 	"transactionHash": filters.HexBytesField("tx_hash"),
 	"blockNumber":     filters.Int64Field("block_number"),
 }
@@ -304,7 +313,7 @@ func (tm *txManager) QueryTransactionReceipts(ctx context.Context, jq *query.Que
 	qw := &queryWrapper[transactionReceipt, pldapi.TransactionReceipt]{
 		p:           tm.p,
 		table:       "transaction_receipts",
-		defaultSort: "-indexed",
+		defaultSort: "-sequence",
 		filters:     transactionReceiptFilters,
 		query:       jq,
 		mapResult: func(pt *transactionReceipt) (*pldapi.TransactionReceipt, error) {

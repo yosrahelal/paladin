@@ -17,8 +17,10 @@ package txmgr
 
 import (
 	"context"
+	"sync"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 
@@ -26,14 +28,18 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func NewTXManager(ctx context.Context, conf *pldconf.TxManagerConfig) components.TXManager {
 	return &txManager{
-		abiCache: cache.NewCache[tktypes.Bytes32, *pldapi.StoredABI](&conf.ABI.Cache, &pldconf.TxManagerDefaults.ABI.Cache),
-		txCache:  cache.NewCache[uuid.UUID, *components.ResolvedTransaction](&conf.Transactions.Cache, &pldconf.TxManagerDefaults.Transactions.Cache),
+		receiptsReadRetry:    retry.NewRetryIndefinite(&conf.ReceiptListeners.ReadRetry, &pldconf.TxManagerDefaults.ReceiptListeners.ReadRetry),
+		receiptsReadPageSize: confutil.IntMin(conf.ReceiptListeners.ReadPageSize, 1, *pldconf.TxManagerDefaults.ReceiptListeners.ReadPageSize),
+		receiptListeners:     make(map[string]*receiptListener),
+		abiCache:             cache.NewCache[tktypes.Bytes32, *pldapi.StoredABI](&conf.ABI.Cache, &pldconf.TxManagerDefaults.ABI.Cache),
+		txCache:              cache.NewCache[uuid.UUID, *components.ResolvedTransaction](&conf.Transactions.Cache, &pldconf.TxManagerDefaults.Transactions.Cache),
 	}
 }
 
@@ -51,6 +57,11 @@ type txManager struct {
 	abiCache         cache.Cache[tktypes.Bytes32, *pldapi.StoredABI]
 	rpcModule        *rpcserver.RPCModule
 	debugRpcModule   *rpcserver.RPCModule
+
+	receiptsReadRetry    *retry.Retry
+	receiptsReadPageSize int
+	receiptListenerLock  sync.Mutex
+	receiptListeners     map[string]*receiptListener
 }
 
 func (tm *txManager) PostInit(c components.AllComponents) error {
