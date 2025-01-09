@@ -34,7 +34,7 @@ type TransactionsConfig struct {
 }
 
 type ReceiptListeners struct {
-	ReadRetry    RetryConfig `json:"readRetry"`
+	Retry        RetryConfig `json:"retry"`
 	ReadPageSize *int        `json:"readPageSize"`
 }
 
@@ -50,7 +50,7 @@ var TxManagerDefaults = &TxManagerConfig{
 		},
 	},
 	ReceiptListeners: ReceiptListeners{
-		ReadRetry:    GenericRetryDefaults.RetryConfig,
+		Retry:        GenericRetryDefaults.RetryConfig,
 		ReadPageSize: confutil.P(100),
 	},
 }

@@ -77,6 +77,7 @@ type receiptListener struct {
 }
 
 type receiptDeliveryBatch struct {
+	ID       uint64
 	Receipts []*pldapi.TransactionReceiptFull
 	Blocks   []*persistedReceiptBlock
 }
@@ -204,9 +205,35 @@ func (l *receiptListener) notifyNewReceipts() {
 	}
 }
 
+func (l *receiptListener) addReceiver(r components.ReceiptReceiver) {
+	l.receiverLock.Lock()
+	defer l.receiverLock.Unlock()
+
+	l.receivers = append(l.receivers, r)
+	select {
+	case l.newReceivers <- true:
+	default:
+	}
+}
+
+func (l *receiptListener) removeReceiver(r components.ReceiptReceiver) {
+	l.receiverLock.Lock()
+	defer l.receiverLock.Unlock()
+
+	if len(l.receivers) > 0 {
+		newReceivers := make([]components.ReceiptReceiver, len(l.receivers)-1)
+		for _, existing := range l.receivers {
+			if existing != r {
+				newReceivers = append(newReceivers, existing)
+			}
+		}
+		l.receivers = newReceivers
+	}
+}
+
 func (l *receiptListener) loadCheckpoint() error {
 	var checkpoints []*persistedReceiptCheckpoint
-	err := l.tm.receiptsReadRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+	err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
 		return true, l.tm.p.DB().
 			WithContext(l.ctx).
 			Where("listener = ?", l.spec.Name).
@@ -234,7 +261,7 @@ func (l *receiptListener) loadCheckpoint() error {
 
 func (l *receiptListener) readPage() ([]*transactionReceipt, error) {
 	var receipts []*transactionReceipt
-	err := l.tm.receiptsReadRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+	err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
 		q, err := l.tm.buildListenerDBQuery(l.ctx, l.spec, l.tm.p.DB())
 		if err == nil && l.checkpoint != nil {
 			q = q.Where("sequence > ?", *l.checkpoint)
@@ -247,42 +274,79 @@ func (l *receiptListener) readPage() ([]*transactionReceipt, error) {
 	return receipts, err
 }
 
-func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *transactionReceipt) {
-	_ = l.tm.receiptsReadRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
-		// Build the full receipt
-		fr, err := l.tm.buildFullReceipt(l.ctx, &pldapi.TransactionReceipt{
-			ID:                     pr.TransactionID,
-			TransactionReceiptData: *mapPersistedReceipt(pr),
-		}, l.spec.Options.DomainReceipts)
-		if err != nil {
-			return true, nil
+func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *transactionReceipt) error {
+	// Build the full receipt
+	fr, err := l.tm.buildFullReceipt(l.ctx, &pldapi.TransactionReceipt{
+		ID:                     pr.TransactionID,
+		TransactionReceiptData: *mapPersistedReceipt(pr),
+	}, l.spec.Options.DomainReceipts)
+	if err != nil {
+		return err
+	}
+	// If we don't have the state receipt, and we're told to block, then block
+	if fr.TransactionReceiptDataOnchainEvent != nil && fr.Domain != "" &&
+		(fr.States == nil || fr.States.HasUnavailable()) &&
+		l.spec.Options.IncompleteStateReceiptBehavior.V() == pldapi.IncompleteStateReceiptBehaviorBlockContract {
+		log.L(l.ctx).Debugf("States currently unavailable for TXID %s in blockchain TX %s blocking contract %s", fr.ID, fr.TransactionHash, fr.Source)
+		b.Blocks = append(b.Blocks, &persistedReceiptBlock{
+			Listener:    l.spec.Name,
+			Source:      &fr.Source,
+			Transaction: fr.ID,
+		})
+		return nil
+	}
+	// Otherwise we can process the receipt
+	log.L(l.ctx).Infof("Added receipt for TX %s (domain='%s') to batch %d", fr.ID, fr.Domain, b.ID)
+	b.Receipts = append(b.Receipts, fr)
+	return nil
+}
+
+func (l *receiptListener) nextReceiver(b *receiptDeliveryBatch) (r components.ReceiptReceiver, err error) {
+
+	for {
+		l.receiverLock.Lock()
+		if len(l.receivers) > 0 {
+			r = l.receivers[int(b.ID)%len(l.receivers)]
 		}
-		// If we don't have the state receipt, and we're told to block, then block
-		if fr.TransactionReceiptDataOnchainEvent != nil && fr.Domain != "" &&
-			(fr.States == nil || fr.States.HasUnavailable()) &&
-			l.spec.Options.IncompleteStateReceiptBehavior.V() == pldapi.IncompleteStateReceiptBehaviorBlockContract {
-			log.L(l.ctx).Debugf("States currently unavailable for TXID %s in blockchain TX %s blocking contract %s", fr.ID, fr.TransactionHash, fr.Source)
-			b.Blocks = append(b.Blocks, &persistedReceiptBlock{
-				Listener:    l.spec.Name,
-				Source:      &fr.Source,
-				Transaction: fr.ID,
-			})
-			return false, nil
+		l.receiverLock.Unlock()
+
+		if r != nil {
+			return r, nil
 		}
-		// Otherwise we can process the receipt
-		b.Receipts = append(b.Receipts, fr)
-		return false, nil
-	})
+
+		select {
+		case <-l.newReceivers:
+		case <-l.ctx.Done():
+			return nil, i18n.NewError(l.ctx, msgs.MsgContextCanceled)
+		}
+	}
+
+}
+
+func (l *receiptListener) deliverBatch(b *receiptDeliveryBatch) error {
+	r, err := l.nextReceiver(b)
+	if err != nil {
+		return err
+	}
+
+	log.L(l.ctx).Infof("Delivering receipt batch %d (receipts=%d)", b.ID, len(b.Receipts))
+	err = r.DeliverReceiptBatch(l.ctx, b.Receipts)
+	log.L(l.ctx).Infof("Delivered receipt batch %d (err=%v)", b.ID, err)
+	return err
 }
 
 func (l *receiptListener) runListener() {
 	defer close(l.done)
 
-	if err := l.loadCheckpoint(); err != nil {
+	err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+		return true, l.loadCheckpoint()
+	})
+	if err != nil {
 		log.L(l.ctx).Warnf("listener stopping before reading checkpoint: %s", err)
 		return
 	}
 
+	var batchID uint64
 	for {
 
 		// Read the next page of receipts from non-blocked sources
@@ -294,8 +358,28 @@ func (l *receiptListener) runListener() {
 
 		// Process each one building up a batch to process
 		var batch receiptDeliveryBatch
+		batch.ID = batchID
+		batchID++
 		for _, r := range page {
-			l.processPersistedReceipt(&batch, r)
+			err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+				return true, l.processPersistedReceipt(&batch, r)
+			})
+			if err != nil {
+				log.L(l.ctx).Warnf("listener stopping (while processing receipts): %s", err)
+				return
+			}
+		}
+
+		// If our batch contains some work, we need to wait for someone to process that work
+		// (note we're not holding any resource open at this point - no DB TX or anything).
+		if len(batch.Receipts) > 0 {
+			err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+				return true, l.deliverBatch(&batch)
+			})
+			if err != nil {
+				log.L(l.ctx).Warnf("listener stopping (batch %d containing %d events not delivered): %s", batchID, len(batch.Receipts), err) // cancelled context
+				return
+			}
 		}
 
 	}

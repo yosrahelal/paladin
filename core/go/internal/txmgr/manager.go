@@ -35,7 +35,7 @@ import (
 
 func NewTXManager(ctx context.Context, conf *pldconf.TxManagerConfig) components.TXManager {
 	return &txManager{
-		receiptsReadRetry:    retry.NewRetryIndefinite(&conf.ReceiptListeners.ReadRetry, &pldconf.TxManagerDefaults.ReceiptListeners.ReadRetry),
+		receiptsRetry:        retry.NewRetryIndefinite(&conf.ReceiptListeners.Retry, &pldconf.TxManagerDefaults.ReceiptListeners.Retry),
 		receiptsReadPageSize: confutil.IntMin(conf.ReceiptListeners.ReadPageSize, 1, *pldconf.TxManagerDefaults.ReceiptListeners.ReadPageSize),
 		receiptListeners:     make(map[string]*receiptListener),
 		abiCache:             cache.NewCache[tktypes.Bytes32, *pldapi.StoredABI](&conf.ABI.Cache, &pldconf.TxManagerDefaults.ABI.Cache),
@@ -58,7 +58,7 @@ type txManager struct {
 	rpcModule        *rpcserver.RPCModule
 	debugRpcModule   *rpcserver.RPCModule
 
-	receiptsReadRetry    *retry.Retry
+	receiptsRetry        *retry.Retry
 	receiptsReadPageSize int
 	receiptListenerLock  sync.Mutex
 	receiptListeners     map[string]*receiptListener
