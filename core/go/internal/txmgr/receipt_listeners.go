@@ -18,9 +18,11 @@ package txmgr
 import (
 	"context"
 	"encoding/json"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -68,7 +70,15 @@ type receiptListener struct {
 
 	newReceipts chan bool
 
-	done chan struct{}
+	newReceivers chan bool
+	receiverLock sync.Mutex
+	receivers    []components.ReceiptReceiver
+	done         chan struct{}
+}
+
+type receiptDeliveryBatch struct {
+	Receipts []*pldapi.TransactionReceiptFull
+	Blocks   []*persistedReceiptBlock
 }
 
 func (tm *txManager) loadReceiptListeners(ctx context.Context) error {
@@ -109,10 +119,12 @@ func (tm *txManager) validateListenerSpec(ctx context.Context, spec *pldapi.Tran
 	if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, spec.Name, tktypes.DefaultNameMaxLen, "name"); err != nil {
 		return err
 	}
-	if _, err := spec.Options.IncompleteStateReceiptBehavior.Validate(); err != nil {
+	icrb, err := spec.Options.IncompleteStateReceiptBehavior.Validate()
+	if err != nil {
 		return err
 	}
-	_, err := tm.buildListenerDBQuery(ctx, spec, tm.p.DB())
+	spec.Options.IncompleteStateReceiptBehavior = icrb.Enum()
+	_, err = tm.buildListenerDBQuery(ctx, spec, tm.p.DB())
 	return err
 }
 
@@ -235,11 +247,39 @@ func (l *receiptListener) readPage() ([]*transactionReceipt, error) {
 	return receipts, err
 }
 
+func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *transactionReceipt) {
+	_ = l.tm.receiptsReadRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+		// Build the full receipt
+		fr, err := l.tm.buildFullReceipt(l.ctx, &pldapi.TransactionReceipt{
+			ID:                     pr.TransactionID,
+			TransactionReceiptData: *mapPersistedReceipt(pr),
+		}, l.spec.Options.DomainReceipts)
+		if err != nil {
+			return true, nil
+		}
+		// If we don't have the state receipt, and we're told to block, then block
+		if fr.TransactionReceiptDataOnchainEvent != nil && fr.Domain != "" &&
+			(fr.States == nil || fr.States.HasUnavailable()) &&
+			l.spec.Options.IncompleteStateReceiptBehavior.V() == pldapi.IncompleteStateReceiptBehaviorBlockContract {
+			log.L(l.ctx).Debugf("States currently unavailable for TXID %s in blockchain TX %s blocking contract %s", fr.ID, fr.TransactionHash, fr.Source)
+			b.Blocks = append(b.Blocks, &persistedReceiptBlock{
+				Listener:    l.spec.Name,
+				Source:      &fr.Source,
+				Transaction: fr.ID,
+			})
+			return false, nil
+		}
+		// Otherwise we can process the receipt
+		b.Receipts = append(b.Receipts, fr)
+		return false, nil
+	})
+}
+
 func (l *receiptListener) runListener() {
 	defer close(l.done)
 
 	if err := l.loadCheckpoint(); err != nil {
-		log.L(l.ctx).Warnf("listener %s stopping before reading checkpoint: %s", err)
+		log.L(l.ctx).Warnf("listener stopping before reading checkpoint: %s", err)
 		return
 	}
 
@@ -248,13 +288,14 @@ func (l *receiptListener) runListener() {
 		// Read the next page of receipts from non-blocked sources
 		page, err := l.readPage()
 		if err != nil {
-			log.L(l.ctx).Warnf("listener %s stopping: %s", err) // cancelled context
+			log.L(l.ctx).Warnf("listener stopping: %s", err) // cancelled context
 			return
 		}
 
-		// Process each one
+		// Process each one building up a batch to process
+		var batch receiptDeliveryBatch
 		for _, r := range page {
-
+			l.processPersistedReceipt(&batch, r)
 		}
 
 	}

@@ -48,10 +48,11 @@ func (tt IncompleteStateReceiptBehavior) Options() []string {
 	}
 }
 
-func (tt IncompleteStateReceiptBehavior) Default() IncompleteStateReceiptBehavior {
-	return IncompleteStateReceiptBehaviorBlockContract
+func (tt IncompleteStateReceiptBehavior) Default() string {
+	return string(IncompleteStateReceiptBehaviorBlockContract)
 }
 
 type TransactionReceiptListenerOptions struct {
-	IncompleteStateReceiptBehavior tktypes.Enum[IncompleteStateReceiptBehavior] `docstruct:"TransactionReceiptFilters" json:"type,omitempty"`
+	DomainReceipts                 bool                                         `docstruct:"TransactionReceiptFilters" json:"domainReceipts"`
+	IncompleteStateReceiptBehavior tktypes.Enum[IncompleteStateReceiptBehavior] `docstruct:"TransactionReceiptFilters" json:"incompleteStateReceiptBehavior,omitempty"`
 }

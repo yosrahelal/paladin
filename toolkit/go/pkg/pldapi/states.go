@@ -147,6 +147,14 @@ type TransactionStates struct {
 	Unavailable *UnavailableStates `docstruct:"TransactionStates" json:"unavailable,omitempty"` // nil if we have the data for all states
 }
 
+func (ts *TransactionStates) HasUnavailable() bool {
+	return ts.Unavailable != nil &&
+		(len(ts.Unavailable.Confirmed) > 0 ||
+			len(ts.Unavailable.Read) > 0 ||
+			len(ts.Unavailable.Spent) > 0 ||
+			len(ts.Unavailable.Info) > 0)
+}
+
 type UnavailableStates struct {
 	Confirmed []tktypes.HexBytes `docstruct:"UnavailableStates" json:"confirmed"`
 	Read      []tktypes.HexBytes `docstruct:"UnavailableStates" json:"read"`

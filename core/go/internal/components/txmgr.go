@@ -73,6 +73,10 @@ type ResolvedFunction struct {
 	Signature    string           `json:"signature"`
 }
 
+type ReceiptReceiver interface {
+	DeliverReceiptBatch(ctx context.Context, receipts []*pldapi.TransactionReceiptFull) error
+}
+
 type TXManager interface {
 	ManagerLifecycle
 
