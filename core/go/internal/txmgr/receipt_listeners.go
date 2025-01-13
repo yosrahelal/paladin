@@ -23,40 +23,50 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
 
 type persistedReceiptListener struct {
-	Name    string          `gorm:"column:name"`
-	Filters tktypes.RawJSON `gorm:"column:options"`
-	Options tktypes.RawJSON `gorm:"column:options"`
+	Name    string            `gorm:"column:name"`
+	Created tktypes.Timestamp `gorm:"column:created"`
+	Filters tktypes.RawJSON   `gorm:"column:options"`
+	Options tktypes.RawJSON   `gorm:"column:options"`
+}
+
+var receiptListenerFilters = filters.FieldMap{
+	"name":    filters.StringField("name"),
+	"created": filters.TimestampField("created"),
 }
 
 func (persistedReceiptListener) TableName() string {
-	return "transaction_receipt_listeners"
+	return "receipt_listeners"
 }
 
 type persistedReceiptCheckpoint struct {
-	Listener string `gorm:"column:listener"`
-	Sequence uint64 `gorm:"column:sequence"`
+	Listener string            `gorm:"column:listener"`
+	Sequence uint64            `gorm:"column:sequence"`
+	Time     tktypes.Timestamp `gorm:"column:time"`
 }
 
 func (persistedReceiptCheckpoint) TableName() string {
-	return "transaction_receipt_checkpoints"
+	return "receipt_listener_checkpoints"
 }
 
 type persistedReceiptBlock struct {
 	Listener    string              `gorm:"column:listener"`
 	Source      *tktypes.EthAddress `gorm:"column:source"`
 	Transaction uuid.UUID           `gorm:"column:transaction"`
+	Created     tktypes.Timestamp   `gorm:"column:created"`
 }
 
 func (persistedReceiptBlock) TableName() string {
-	return "transaction_receipt_checkpoints"
+	return "receipt_listener_checkpoints"
 }
 
 type receiptListener struct {
@@ -80,6 +90,68 @@ type receiptDeliveryBatch struct {
 	ID       uint64
 	Receipts []*pldapi.TransactionReceiptFull
 	Blocks   []*persistedReceiptBlock
+}
+
+func (tm *txManager) CreateReceiptListener(ctx context.Context, spec *pldapi.TransactionReceiptListener) error {
+
+	log.L(ctx).Infof("Creating receipt listener '%s'", spec.Name)
+	if err := tm.validateListenerSpec(ctx, spec); err != nil {
+		return err
+	}
+
+	dbSpec := &persistedReceiptListener{
+		Name:    spec.Name,
+		Created: tktypes.TimestampNow(),
+		Filters: tktypes.JSONString(&spec.Filters),
+		Options: tktypes.JSONString(&spec.Options),
+	}
+	if insertErr := tm.p.DB().
+		WithContext(ctx).
+		Create(dbSpec).
+		Error; insertErr != nil {
+
+		log.L(ctx).Errorf("Failed to create receipt listener '%s': %s", spec.Name, insertErr)
+
+		// Check for a simple duplicate object
+		if existing := tm.GetReceiptListenerByName(ctx, spec.Name); existing != nil {
+			return i18n.NewError(ctx, msgs.MsgTxMgrDuplicateReceiptListenerName)
+		}
+
+		// Otherwise return the error
+		return insertErr
+	}
+
+	// Load the created listener now - we do not expect (or attempt to reconcile) a post-validation failure to load
+	_, err := tm.loadListener(ctx, dbSpec)
+	return err
+
+}
+
+func (tm *txManager) GetReceiptListenerByName(ctx context.Context, name string) *pldapi.TransactionReceiptListener {
+
+	tm.receiptListenerLock.Lock()
+	defer tm.receiptListenerLock.Unlock()
+
+	l := tm.receiptListeners[name]
+	if l != nil {
+		return l.spec
+	}
+	return nil
+
+}
+
+func (tm *txManager) QueryReceiptListeners(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.TransactionReceiptListener, error) {
+	qw := &queryWrapper[persistedReceiptListener, pldapi.TransactionReceiptListener]{
+		p:           tm.p,
+		table:       "receipt_listeners",
+		defaultSort: "-created",
+		filters:     receiptListenerFilters,
+		query:       jq,
+		mapResult: func(pl *persistedReceiptListener) (*pldapi.TransactionReceiptListener, error) {
+			return tm.mapListener(ctx, pl)
+		},
+	}
+	return qw.run(ctx, dbTX)
 }
 
 func (tm *txManager) loadReceiptListeners(ctx context.Context) error {
@@ -154,7 +226,7 @@ func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.Tran
 	return q, nil
 }
 
-func (tm *txManager) loadListener(ctx context.Context, pl *persistedReceiptListener) (*receiptListener, error) {
+func (tm *txManager) mapListener(ctx context.Context, pl *persistedReceiptListener) (*pldapi.TransactionReceiptListener, error) {
 	spec := &pldapi.TransactionReceiptListener{
 		Name: pl.Name,
 	}
@@ -167,6 +239,16 @@ func (tm *txManager) loadListener(ctx context.Context, pl *persistedReceiptListe
 	if err := tm.validateListenerSpec(ctx, spec); err != nil {
 		return nil, err
 	}
+	return spec, nil
+}
+
+func (tm *txManager) loadListener(ctx context.Context, pl *persistedReceiptListener) (*receiptListener, error) {
+
+	spec, err := tm.mapListener(ctx, pl)
+	if err != nil {
+		return nil, err
+	}
+
 	l := &receiptListener{
 		tm:          tm,
 		spec:        spec,
@@ -292,6 +374,7 @@ func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *t
 			Listener:    l.spec.Name,
 			Source:      &fr.Source,
 			Transaction: fr.ID,
+			Created:     tktypes.TimestampNow(),
 		})
 		return nil
 	}
