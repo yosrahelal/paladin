@@ -36,6 +36,7 @@ import (
 
 type transactionReceipt struct {
 	TransactionID    uuid.UUID              `gorm:"column:transaction"`
+	Sequence         uint64                 `gorm:"column:sequence;autoIncrement"`
 	Indexed          tktypes.Timestamp      `gorm:"column:indexed"`
 	Domain           string                 `gorm:"column:domain"`
 	Success          bool                   `gorm:"column:success"`

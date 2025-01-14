@@ -21,10 +21,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,8 +60,18 @@ var defaultErrorABI = &abi.Entry{
 	},
 }
 
+func mockTxStatesAllAvailable(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).
+		Return(&pldapi.TransactionStates{
+			Spent:     []*pldapi.StateBase{},
+			Read:      []*pldapi.StateBase{},
+			Confirmed: []*pldapi.StateBase{},
+			Info:      []*pldapi.StateBase{},
+		}, nil)
+}
+
 func TestE2EReceiptListenerDeliveryLateAttach(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, true)
+	ctx, txm, done := newTestTransactionManager(t, true, mockTxStatesAllAvailable)
 	defer done()
 
 	// Create listener (started)
@@ -126,12 +138,12 @@ func TestE2EReceiptListenerDeliveryLateAttach(t *testing.T) {
 
 	r := <-receipts.receipts
 	assert.Equal(t, r.ID, receiptInputs[0].TransactionID)
-	assert.Regexp(t, "snap", receiptInputs[0].FailureMessage)
+	assert.Regexp(t, "snap", r.FailureMessage)
 	r = <-receipts.receipts
 	assert.Equal(t, r.ID, receiptInputs[1].TransactionID)
-	assert.Regexp(t, "crackle", receiptInputs[1].FailureMessage)
+	assert.Regexp(t, "crackle", r.FailureMessage)
 	r = <-receipts.receipts
 	assert.Equal(t, r.ID, receiptInputs[2].TransactionID)
-	assert.Regexp(t, "pop", receiptInputs[2].FailureMessage)
+	assert.Regexp(t, "pop", r.FailureMessage)
 
 }

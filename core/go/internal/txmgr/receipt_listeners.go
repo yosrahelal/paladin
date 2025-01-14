@@ -33,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type persistedReceiptListener struct {
@@ -347,21 +348,27 @@ func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.Tran
 	q := dbTX
 
 	// Filter based on the type and/or domain
-	switch spec.Filters.Type.V() {
-	case pldapi.TransactionTypePrivate:
+	if spec.Filters.Type == nil {
 		if spec.Filters.Domain != "" {
-			q = q.Where("domain = ?", spec.Filters.Domain) // specific private domain
-		} else {
-			q = q.Where("domain <> ''") // private
+			return nil, i18n.NewError(ctx, msgs.MsgTxMgrBadReceiptListenerTypeDomain, spec.Name, "", spec.Filters.Domain)
 		}
-	case pldapi.TransactionTypePublic:
-		if spec.Filters.Domain != "" {
+	} else {
+		switch spec.Filters.Type.V() {
+		case pldapi.TransactionTypePrivate:
+			if spec.Filters.Domain != "" {
+				q = q.Where("domain = ?", spec.Filters.Domain) // specific private domain
+			} else {
+				q = q.Where("domain <> ''") // private
+			}
+		case pldapi.TransactionTypePublic:
+			if spec.Filters.Domain != "" {
+				return nil, i18n.NewError(ctx, msgs.MsgTxMgrBadReceiptListenerTypeDomain, spec.Name, spec.Filters.Type, spec.Filters.Domain)
+			}
+			q = q.Where("domain = ''") // private
+		case "":
+		default:
 			return nil, i18n.NewError(ctx, msgs.MsgTxMgrBadReceiptListenerTypeDomain, spec.Name, spec.Filters.Type, spec.Filters.Domain)
 		}
-		q = q.Where("domain = ''") // private
-	case "":
-	default:
-		return nil, i18n.NewError(ctx, msgs.MsgTxMgrBadReceiptListenerTypeDomain, spec.Name, spec.Filters.Type, spec.Filters.Domain)
 	}
 
 	// Standard parts
@@ -386,17 +393,19 @@ func (l *receiptListener) checkMatch(r *transactionReceipt) bool {
 	spec := l.spec
 
 	// Filter based on the type and/or domain
-	switch spec.Filters.Type.V() {
-	case pldapi.TransactionTypePrivate:
-		if spec.Filters.Domain != "" {
-			matches = matches && (r.Domain == spec.Filters.Domain)
-		} else {
-			matches = matches && (r.Domain != "")
+	if spec.Filters.Type != nil {
+		switch spec.Filters.Type.V() {
+		case pldapi.TransactionTypePrivate:
+			if spec.Filters.Domain != "" {
+				matches = matches && (r.Domain == spec.Filters.Domain)
+			} else {
+				matches = matches && (r.Domain != "")
+			}
+		case pldapi.TransactionTypePublic:
+			matches = matches && (r.Domain == "")
+		default:
+			matches = false
 		}
-	case pldapi.TransactionTypePublic:
-		matches = matches && (r.Domain == "")
-	default:
-		matches = false
 	}
 	return matches
 }
@@ -607,6 +616,31 @@ func (l *receiptListener) deliverBatch(b *receiptDeliveryBatch) error {
 	return err
 }
 
+func (l *receiptListener) updateCheckpoint(newSequence uint64) error {
+	err := l.tm.p.DB().
+		WithContext(l.ctx).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "listener"},
+			},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"sequence",
+				"time",
+			}),
+		}).
+		Create(&persistedReceiptCheckpoint{
+			Listener: l.spec.Name,
+			Sequence: newSequence,
+			Time:     tktypes.TimestampNow(),
+		}).
+		Error
+	if err != nil {
+		return err
+	}
+	l.checkpoint = &newSequence
+	return nil
+}
+
 func (l *receiptListener) runListener() {
 	defer close(l.done)
 
@@ -650,6 +684,27 @@ func (l *receiptListener) runListener() {
 			})
 			if err != nil {
 				log.L(l.ctx).Warnf("listener stopping (batch %d containing %d events not delivered): %s", batchID, len(batch.Receipts), err) // cancelled context
+				return
+			}
+		}
+
+		// Whether we processed any receipts or not, we can move our checkpoint forwards
+		if len(page) > 0 {
+			err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+				return true, l.updateCheckpoint(page[len(page)-1].Sequence)
+			})
+			if err != nil {
+				log.L(l.ctx).Warnf("listener stopping (before updating checkpoint for batch %d): %s", batchID, err) // cancelled context
+				return
+			}
+		}
+
+		// If our page was not full, wait for notification of new receipts before we look again
+		if len(page) < l.tm.receiptsReadPageSize {
+			select {
+			case <-l.newReceipts:
+			case <-l.ctx.Done():
+				log.L(l.ctx).Warnf("listener stopping (waiting for new receipts)") // cancelled context
 				return
 			}
 		}
