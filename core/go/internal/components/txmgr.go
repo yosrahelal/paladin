@@ -77,12 +77,16 @@ type ReceiptReceiver interface {
 	DeliverReceiptBatch(ctx context.Context, receipts []*pldapi.TransactionReceiptFull) error
 }
 
+type ReceiptReceiverCloser interface {
+	Close()
+}
+
 type TXManager interface {
 	ManagerLifecycle
 
 	// These are the general purpose functions exposed also as JSON/RPC APIs on the TX Manager
 
-	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) error // requires all transactions to be known
+	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) (postCommit func(), err error) // requires all transactions to be known
 	CalculateRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes) error
 	DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error)
 	DecodeCall(ctx context.Context, dbTX *gorm.DB, callData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error)
@@ -115,6 +119,7 @@ type TXManager interface {
 	StartReceiptListener(ctx context.Context, name string) error
 	StopReceiptListener(ctx context.Context, name string) error
 	DeleteReceiptListener(ctx context.Context, name string) error
+	AddReceiptReceiver(ctx context.Context, name string, r ReceiptReceiver) (ReceiptReceiverCloser, error)
 
 	// These functions for use of the private TX manager for chaining private transactions.
 

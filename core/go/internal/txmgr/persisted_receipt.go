@@ -93,10 +93,10 @@ var transactionReceiptFilters = filters.FieldMap{
 
 // FinalizeTransactions is called by the block indexing routine, but also can be called
 // by the private transaction manager if transactions fail without making it to the blockchain
-func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*components.ReceiptInput) error {
+func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*components.ReceiptInput) (func(), error) {
 
 	if len(info) == 0 {
-		return nil
+		return func() {}, nil
 	}
 
 	receiptsToInsert := make([]*transactionReceipt, 0, len(info))
@@ -119,19 +119,19 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, in
 		switch ri.ReceiptType {
 		case components.RT_Success:
 			if ri.FailureMessage != "" || ri.RevertData != nil {
-				return i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
+				return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
 			}
 			receipt.Success = true
 		case components.RT_FailedWithMessage:
 			if ri.FailureMessage == "" || ri.RevertData != nil {
-				return i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
+				return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
 			}
 			receipt.Success = false
 			failureMsg = ri.FailureMessage
 			receipt.FailureMessage = &ri.FailureMessage
 		case components.RT_FailedOnChainWithRevertData:
 			if ri.FailureMessage != "" {
-				return i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
+				return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
 			}
 			receipt.Success = false
 			receipt.RevertData = ri.RevertData
@@ -139,7 +139,7 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, in
 			failureMsg = tm.CalculateRevertError(ctx, dbTX, ri.RevertData).Error()
 			receipt.FailureMessage = &failureMsg
 		default:
-			return i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
+			return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
 		}
 		log.L(ctx).Infof("Inserting receipt txId=%s success=%t failure=%s txHash=%v", receipt.TransactionID, receipt.Success, failureMsg, receipt.TransactionHash)
 		receiptsToInsert = append(receiptsToInsert, receipt)
@@ -154,14 +154,15 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, in
 			Create(receiptsToInsert).
 			Error
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	// TODO: Need to create an guaranteed increasing event table for these receipts, as applications
-	//       must be able to efficiently and reliably listen for them as they are written (good or bad)
-
-	return nil
+	return func() {
+		if len(receiptsToInsert) > 0 {
+			tm.notifyNewReceipts(receiptsToInsert)
+		}
+	}, nil
 }
 
 func (tm *txManager) CalculateRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes) error {

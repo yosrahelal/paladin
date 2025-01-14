@@ -41,8 +41,9 @@ func TestFinalizeTransactionsNoOp(t *testing.T) {
 	)
 	defer done()
 
-	err := txm.FinalizeTransactions(ctx, txm.p.DB(), nil)
+	fn, err := txm.FinalizeTransactions(ctx, txm.p.DB(), nil)
 	assert.NoError(t, err)
+	fn()
 
 }
 
@@ -54,7 +55,7 @@ func TestFinalizeTransactionsSuccessWithFailure(t *testing.T) {
 	)
 	defer done()
 
-	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
+	_, err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
 		{TransactionID: txID, ReceiptType: components.RT_Success,
 			FailureMessage: "not empty",
 		},
@@ -70,7 +71,7 @@ func TestFinalizeTransactionsBadType(t *testing.T) {
 	)
 	defer done()
 
-	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
+	_, err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
 		{TransactionID: txID, ReceiptType: components.ReceiptType(42)}})
 	assert.Regexp(t, "PD012213", err)
 
@@ -84,7 +85,7 @@ func TestFinalizeTransactionsFailedWithMessageNoMessage(t *testing.T) {
 	)
 	defer done()
 
-	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
+	_, err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
 		{TransactionID: txID, ReceiptType: components.RT_FailedWithMessage}})
 	assert.Regexp(t, "PD012213", err)
 
@@ -98,7 +99,7 @@ func TestFinalizeTransactionsFailedWithRevertDataWithMessage(t *testing.T) {
 	)
 	defer done()
 
-	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
+	_, err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
 		{TransactionID: txID, ReceiptType: components.RT_FailedOnChainWithRevertData,
 			FailureMessage: "not empty"}})
 	assert.Regexp(t, "PD012213", err)
@@ -117,10 +118,11 @@ func TestFinalizeTransactionsInsertFail(t *testing.T) {
 	defer done()
 
 	err := txm.p.DB().Transaction(func(tx *gorm.DB) error {
-		return txm.FinalizeTransactions(ctx, tx, []*components.ReceiptInput{
+		_, err := txm.FinalizeTransactions(ctx, tx, []*components.ReceiptInput{
 			{TransactionID: txID, ReceiptType: components.RT_FailedWithMessage,
 				FailureMessage: "something went wrong"},
 		})
+		return err
 	})
 	assert.Regexp(t, "pop", err)
 
@@ -204,15 +206,18 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = txm.p.DB().Transaction(func(tx *gorm.DB) error {
-		return txm.FinalizeTransactions(ctx, tx, []*components.ReceiptInput{
+	var postCommit func()
+	err = txm.p.DB().Transaction(func(tx *gorm.DB) (err error) {
+		postCommit, err = txm.FinalizeTransactions(ctx, tx, []*components.ReceiptInput{
 			{
 				TransactionID: *txID,
 				ReceiptType:   components.RT_FailedOnChainWithRevertData,
 			},
 		})
+		return err
 	})
 	require.NoError(t, err)
+	postCommit()
 
 	receipt, err := txm.GetTransactionReceiptByID(ctx, *txID)
 	require.NoError(t, err)
@@ -256,8 +261,9 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	err = txm.p.DB().Transaction(func(tx *gorm.DB) error {
-		return txm.FinalizeTransactions(ctx, tx, []*components.ReceiptInput{
+	var postCommit func()
+	err = txm.p.DB().Transaction(func(tx *gorm.DB) (err error) {
+		postCommit, err = txm.FinalizeTransactions(ctx, tx, []*components.ReceiptInput{
 			{
 				TransactionID: *txID,
 				Domain:        "domain1",
@@ -272,8 +278,10 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 				},
 			},
 		})
+		return err
 	})
 	require.NoError(t, err)
+	postCommit()
 
 	receipt, err := txm.GetTransactionReceiptByIDFull(ctx, *txID)
 	require.NoError(t, err)

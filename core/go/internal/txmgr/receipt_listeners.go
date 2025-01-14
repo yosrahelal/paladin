@@ -70,7 +70,7 @@ type persistedReceiptBlock struct {
 }
 
 func (persistedReceiptBlock) TableName() string {
-	return "receipt_listener_checkpoints"
+	return "receipt_listener_blocks"
 }
 
 type receiptListener struct {
@@ -86,8 +86,14 @@ type receiptListener struct {
 
 	newReceivers chan bool
 	receiverLock sync.Mutex
-	receivers    []components.ReceiptReceiver
+	receivers    []*registeredReceiptReceiver
 	done         chan struct{}
+}
+
+type registeredReceiptReceiver struct {
+	id uuid.UUID
+	l  *receiptListener
+	components.ReceiptReceiver
 }
 
 type receiptDeliveryBatch struct {
@@ -140,6 +146,22 @@ func (tm *txManager) CreateReceiptListener(ctx context.Context, spec *pldapi.Tra
 		l.start()
 	}
 	return err
+}
+
+func (rr *registeredReceiptReceiver) Close() {
+	rr.l.removeReceiver(rr.id)
+}
+
+func (tm *txManager) AddReceiptReceiver(ctx context.Context, name string, r components.ReceiptReceiver) (components.ReceiptReceiverCloser, error) {
+	tm.receiptListenerLock.Lock()
+	defer tm.receiptListenerLock.Unlock()
+
+	l := tm.receiptListeners[name]
+	if l == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrReceiptListenerNotLoaded, name)
+	}
+
+	return l.addReceiver(r), nil
 }
 
 func (tm *txManager) GetReceiptListener(ctx context.Context, name string) *pldapi.TransactionReceiptListener {
@@ -229,6 +251,23 @@ func (tm *txManager) QueryReceiptListeners(ctx context.Context, dbTX *gorm.DB, j
 	return qw.run(ctx, dbTX)
 }
 
+func (tm *txManager) notifyNewReceipts(receipts []*transactionReceipt) {
+	log := log.L(tm.bgCtx)
+	for _, l := range tm.getReceiptListenerList() {
+		hasMatch := false
+		for _, r := range receipts {
+			if l.checkMatch(r) {
+				log.Debugf("Receipt %s (domain='%s') triggering re-poll of listener '%s'", r.TransactionID, r.Domain, l.spec.Name)
+				hasMatch = true
+				break
+			}
+		}
+		if hasMatch {
+			l.notifyNewReceipts()
+		}
+	}
+}
+
 func (tm *txManager) loadReceiptListeners() error {
 
 	var lastPageEnd *string
@@ -264,6 +303,18 @@ func (tm *txManager) loadReceiptListeners() error {
 
 }
 
+func (tm *txManager) getReceiptListenerList() []*receiptListener {
+
+	tm.receiptListenerLock.Lock()
+	defer tm.receiptListenerLock.Unlock()
+
+	listeners := make([]*receiptListener, 0, len(tm.receiptListeners))
+	for _, l := range tm.receiptListeners {
+		listeners = append(listeners, l)
+	}
+	return listeners
+}
+
 func (tm *txManager) startReceiptListeners() {
 
 	tm.receiptListenerLock.Lock()
@@ -289,8 +340,13 @@ func (tm *txManager) validateListenerSpec(ctx context.Context, spec *pldapi.Tran
 	return err
 }
 
+// Build parts of the matching that can be pre-filtered efficiently in the DB.
+//
+// IMPORTANT: Make sure to also update checkMatch() when adding filter dimensions
 func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.TransactionReceiptListener, dbTX *gorm.DB) (*gorm.DB, error) {
 	q := dbTX
+
+	// Filter based on the type and/or domain
 	switch spec.Filters.Type.V() {
 	case pldapi.TransactionTypePrivate:
 		if spec.Filters.Domain != "" {
@@ -307,11 +363,42 @@ func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.Tran
 	default:
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrBadReceiptListenerTypeDomain, spec.Name, spec.Filters.Type, spec.Filters.Domain)
 	}
+
+	// Standard parts
 	q = q.Order("sequence").Limit(tm.receiptsReadPageSize)
 	// Only return non-blocked sequences
-	q = q.Joins(`Block WHERE "Block"."listener" = ?`, spec.Name)
+	q = q.Joins(`Block`, dbTX.Where(&persistedReceiptBlock{Listener: spec.Name}))
 	q = q.Where(`"Block"."transaction" IS NULL`)
 	return q, nil
+}
+
+// Applies all the rules in-memory to a receipt, including:
+// - Those which we pre-filter in the DB
+// - Those too complex to efficiently pre-filter in the DB
+// We do both, so that we can use this as a trigger-guard for re-polling the
+// DB, as well as a post-filter on results from the DB.
+//
+// Note that blocked sequences are ONLY maintained in the DB, so we can never bypass the DB polling.
+//
+// IMPORTANT: Make sure to also consider adding pre-filters to buildListenerDBQuery() when adding filter dimensions
+func (l *receiptListener) checkMatch(r *transactionReceipt) bool {
+	matches := true
+	spec := l.spec
+
+	// Filter based on the type and/or domain
+	switch spec.Filters.Type.V() {
+	case pldapi.TransactionTypePrivate:
+		if spec.Filters.Domain != "" {
+			matches = matches && (r.Domain == spec.Filters.Domain)
+		} else {
+			matches = matches && (r.Domain != "")
+		}
+	case pldapi.TransactionTypePublic:
+		matches = matches && (r.Domain == "")
+	default:
+		matches = false
+	}
+	return matches
 }
 
 func (tm *txManager) mapListener(ctx context.Context, pl *persistedReceiptListener) (*pldapi.TransactionReceiptListener, error) {
@@ -377,25 +464,33 @@ func (l *receiptListener) notifyNewReceipts() {
 	}
 }
 
-func (l *receiptListener) addReceiver(r components.ReceiptReceiver) {
+func (l *receiptListener) addReceiver(r components.ReceiptReceiver) *registeredReceiptReceiver {
 	l.receiverLock.Lock()
 	defer l.receiverLock.Unlock()
 
-	l.receivers = append(l.receivers, r)
+	registered := &registeredReceiptReceiver{
+		id:              uuid.New(),
+		l:               l,
+		ReceiptReceiver: r,
+	}
+	l.receivers = append(l.receivers, registered)
+
 	select {
 	case l.newReceivers <- true:
 	default:
 	}
+
+	return registered
 }
 
-func (l *receiptListener) removeReceiver(r components.ReceiptReceiver) {
+func (l *receiptListener) removeReceiver(rid uuid.UUID) {
 	l.receiverLock.Lock()
 	defer l.receiverLock.Unlock()
 
 	if len(l.receivers) > 0 {
-		newReceivers := make([]components.ReceiptReceiver, len(l.receivers)-1)
+		newReceivers := make([]*registeredReceiptReceiver, len(l.receivers)-1)
 		for _, existing := range l.receivers {
-			if existing != r {
+			if existing.id != rid {
 				newReceivers = append(newReceivers, existing)
 			}
 		}
@@ -447,6 +542,10 @@ func (l *receiptListener) readPage() ([]*transactionReceipt, error) {
 }
 
 func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *transactionReceipt) error {
+	if !l.checkMatch(pr) {
+		return nil
+	}
+
 	// Build the full receipt
 	fr, err := l.tm.buildFullReceipt(l.ctx, &pldapi.TransactionReceipt{
 		ID:                     pr.TransactionID,

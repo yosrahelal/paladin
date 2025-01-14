@@ -231,6 +231,7 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 		}
 	}
 
+	var finalizeTxPostCommit func()
 	if len(txCompletions) > 0 {
 		// Ensure we are sorted in block order, as the above processing extracted the array in two
 		// phases (contract deployments, then transactions) so the list will be out of order.
@@ -250,13 +251,17 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 		// for ALL private transactions (not just those where we're the sender) as there
 		// might be in-memory coordination activities that need to re-process now these
 		// transactions have been finalized.
-		if err := d.dm.txManager.FinalizeTransactions(ctx, dbTX, receipts); err != nil {
+		finalizeTxPostCommit, err = d.dm.txManager.FinalizeTransactions(ctx, dbTX, receipts)
+		if err != nil {
 			return nil, err
 		}
 	}
 
 	return func() {
 		d.dm.notifyTransactions(txCompletions)
+		if finalizeTxPostCommit != nil {
+			finalizeTxPostCommit()
+		}
 	}, nil
 }
 

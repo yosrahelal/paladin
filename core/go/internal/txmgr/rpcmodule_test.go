@@ -252,7 +252,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	// Finalize the deploy as a success
 	txHash1 := tktypes.Bytes32(tktypes.RandBytes(32))
 	blockNumber1 := int64(12345)
-	err = tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
+	postCommit, err := tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
 		{
 			TransactionID: tx1ID,
 			ReceiptType:   components.RT_Success,
@@ -264,6 +264,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+	postCommit()
 
 	// We should get that back with full
 	var txWithReceipt *pldapi.TransactionFull
@@ -291,7 +292,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	blockNumber2 := int64(12345)
 	revertData, err := sampleABI.Errors()["BadValue"].EncodeCallDataValuesCtx(ctx, []any{12345})
 	require.NoError(t, err)
-	err = tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
+	postCommit, err = tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
 		{
 			TransactionID: tx2ID,
 			ReceiptType:   components.RT_FailedOnChainWithRevertData,
@@ -304,6 +305,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+	postCommit()
 
 	var de *pldapi.ABIDecodedData
 	err = rpcClient.CallRPC(ctx, &de, "ptx_decodeError", tktypes.HexBytes(revertData), tktypes.DefaultJSONFormatOptions)
