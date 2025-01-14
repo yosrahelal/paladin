@@ -609,3 +609,100 @@ func TestPrepareTransactions(t *testing.T) {
 	require.Equal(t, pldapi.SubmitModeExternal, returnedTX.SubmitMode.V())
 
 }
+
+func TestRCPReceiptListenersCRUDRealDB(t *testing.T) {
+	ctx, url, txm, done := newTestTransactionManagerWithRPC(t)
+	defer done()
+
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
+	require.NoError(t, err)
+
+	// Create listener in default (started)
+	var boolRes *bool
+	err = rpcClient.CallRPC(ctx, &boolRes, "ptx_createReceiptListener", &pldapi.TransactionReceiptListener{
+		Name: "listener1",
+	})
+	require.NoError(t, err)
+	require.True(t, *boolRes)
+
+	// should be queryable
+	var listeners []*pldapi.TransactionReceiptListener
+	err = rpcClient.CallRPC(ctx, &listeners, "ptx_queryReceiptListeners", query.NewQueryBuilder().Limit(1).Query())
+	require.NoError(t, err)
+	require.Len(t, listeners, 1)
+	assert.Equal(t, listeners[0].Name, "listener1")
+
+	// should be started
+	var l *pldapi.TransactionReceiptListener
+	err = rpcClient.CallRPC(ctx, &l, "ptx_getReceiptListener", "listener1")
+	require.NoError(t, err)
+	require.NotNil(t, l)
+	assert.True(t, *l.Started)
+
+	// delete listener
+	err = rpcClient.CallRPC(ctx, &boolRes, "ptx_deleteReceiptListener", "listener1")
+	require.NoError(t, err)
+	err = rpcClient.CallRPC(ctx, &l, "ptx_getReceiptListener", "listener1")
+	require.NoError(t, err)
+	require.Nil(t, l)
+
+	// Create listener stopped
+	err = rpcClient.CallRPC(ctx, &boolRes, "ptx_createReceiptListener", &pldapi.TransactionReceiptListener{
+		Name:    "listener1",
+		Started: confutil.P(false),
+	})
+	require.NoError(t, err)
+	require.True(t, *boolRes)
+
+	// should be stopped
+	err = rpcClient.CallRPC(ctx, &l, "ptx_getReceiptListener", "listener1")
+	require.NoError(t, err)
+	assert.False(t, *l.Started)
+
+	// start it
+	err = rpcClient.CallRPC(ctx, &boolRes, "ptx_startReceiptListener", "listener1")
+	require.NoError(t, err)
+	require.True(t, *boolRes)
+
+	// should be started
+	err = rpcClient.CallRPC(ctx, &l, "ptx_getReceiptListener", "listener1")
+	require.NoError(t, err)
+	assert.True(t, *l.Started)
+
+	// stop it
+	err = rpcClient.CallRPC(ctx, &boolRes, "ptx_stopReceiptListener", "listener1")
+	require.NoError(t, err)
+	require.True(t, *boolRes)
+
+	// should be stopped
+	err = rpcClient.CallRPC(ctx, &l, "ptx_getReceiptListener", "listener1")
+	require.NoError(t, err)
+	assert.False(t, *l.Started)
+
+	// Simulate restart so we can do startup processing
+	txm.receiptsInit()
+
+	// Force persistent state to be started
+	err = txm.p.DB().Model(&persistedReceiptListener{}).
+		Where("name = ?", "listener1").Update("started", true).Error
+	require.NoError(t, err)
+
+	// Load the listeners
+	err = txm.loadReceiptListeners()
+	require.NoError(t, err)
+
+	// Check it's not actually started (yet)
+	require.Nil(t, txm.receiptListeners["listener1"].done)
+
+	// Do the startup
+	txm.startReceiptListeners()
+
+	// Check it's started now
+	err = rpcClient.CallRPC(ctx, &l, "ptx_getReceiptListener", "listener1")
+	require.NoError(t, err)
+	assert.True(t, *l.Started)
+
+	// Check it's now actually started
+	require.NotNil(t, txm.receiptListeners["listener1"].done)
+
+}

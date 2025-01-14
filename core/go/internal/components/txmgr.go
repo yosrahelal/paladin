@@ -112,6 +112,9 @@ type TXManager interface {
 	CreateReceiptListener(ctx context.Context, spec *pldapi.TransactionReceiptListener) error
 	GetReceiptListener(ctx context.Context, name string) *pldapi.TransactionReceiptListener
 	QueryReceiptListeners(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.TransactionReceiptListener, error)
+	StartReceiptListener(ctx context.Context, name string) error
+	StopReceiptListener(ctx context.Context, name string) error
+	DeleteReceiptListener(ctx context.Context, name string) error
 
 	// These functions for use of the private TX manager for chaining private transactions.
 
