@@ -57,12 +57,13 @@ INSERT INTO transaction_receipts (
 CREATE TABLE receipt_listeners (
     "name"           TEXT       NOT NULL,
     "created"        BIGINT     NOT NULL,
+    "started"        BOOLEAN    NOT NULL,
     "filters"        TEXT       NOT NULL,
     "options"        TEXT       NOT NULL,
     PRIMARY KEY("name")
 );
 
-CREATE TABLE transaction_receipt_blocks (
+CREATE TABLE receipt_listener_blocks (
     "listener"           TEXT    NOT NULL,
     "source"             TEXT    NOT NULL,
     "transaction"        UUID    NOT NULL,
@@ -71,7 +72,7 @@ CREATE TABLE transaction_receipt_blocks (
     FOREIGN KEY ("listener") REFERENCES receipt_listeners ("name") ON DELETE CASCADE
 );
 
-CREATE INDEX transaction_receipt_blocks_txid ON transaction_receipt_blocks("transaction");
+CREATE INDEX receipt_listener_blocks_txid ON receipt_listener_blocks("transaction");
 
 CREATE TABLE receipt_listener_checkpoints (
     "listener"           TEXT    NOT NULL,

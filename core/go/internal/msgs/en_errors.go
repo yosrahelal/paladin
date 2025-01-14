@@ -423,6 +423,7 @@ var (
 	MsgTxMgrReceiptListenerDupLoad       = ffe("PD012235", "Transaction receipt listener '%s' already loaded")
 	MsgTxMgrBadReceiptListenerTypeDomain = ffe("PD012236", "Transaction receipt listener '%s' has invalid filter combination type='%s' domain='%s'")
 	MsgTxMgrDuplicateReceiptListenerName = ffe("PD012237", "A receipt listener named '%s' already exists")
+	MsgTxMgrReceiptListenerNotLoaded     = ffe("PD012238", "Receipt listener '%s' does not exist")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")

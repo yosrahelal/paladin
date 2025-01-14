@@ -113,7 +113,7 @@ func (tm *txManager) QueryTransactionsFull(ctx context.Context, jq *query.QueryJ
 func (tm *txManager) QueryTransactionsResolved(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) ([]*components.ResolvedTransaction, error) {
 	qw := &queryWrapper[persistedTransaction, components.ResolvedTransaction]{
 		p:           tm.p,
-		table:       "receipt_listeners",
+		table:       "transactions",
 		defaultSort: "-created",
 		filters:     transactionFilters,
 		query:       jq,

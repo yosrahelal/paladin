@@ -20,6 +20,8 @@ import "github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 type TransactionReceiptListener struct {
 	Name    string                            `docstruct:"TransactionReceiptStream" json:"name"`
+	Created tktypes.Timestamp                 `docstruct:"TransactionReceiptStream" json:"created"`
+	Started *bool                             `docstruct:"TransactionReceiptStream" json:"started"`
 	Filters TransactionReceiptFilters         `docstruct:"TransactionReceiptStream" json:"filters"`
 	Options TransactionReceiptListenerOptions `docstruct:"TransactionReceiptStream" json:"options"`
 }

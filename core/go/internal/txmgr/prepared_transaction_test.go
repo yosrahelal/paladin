@@ -223,7 +223,9 @@ func stateIDs(states []*pldapi.StateBase) []tktypes.HexBytes {
 
 func TestWritePreparedTransactionsBadTX(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false)
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+	)
 	defer done()
 
 	_, err := txm.WritePreparedTransactions(ctx, txm.p.DB(), []*components.PreparedTransactionWithRefs{{
@@ -235,7 +237,9 @@ func TestWritePreparedTransactionsBadTX(t *testing.T) {
 
 func TestQueryPreparedTransactionFailNoLimit(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false)
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+	)
 	defer done()
 
 	_, err := txm.QueryPreparedTransactions(ctx, txm.p.DB(), query.NewQueryBuilder().Query())
@@ -245,7 +249,9 @@ func TestQueryPreparedTransactionFailNoLimit(t *testing.T) {
 
 func TestQueryPreparedTransactionWithRefsFailNoLimit(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false)
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+	)
 	defer done()
 
 	_, err := txm.QueryPreparedTransactionsWithRefs(ctx, txm.p.DB(), query.NewQueryBuilder().Query())
@@ -256,12 +262,14 @@ func TestQueryPreparedTransactionWithRefsFailNoLimit(t *testing.T) {
 func TestQueryPreparedTransactionFailStates(t *testing.T) {
 
 	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*prepared_txns").WillReturnRows(
-			sqlmock.NewRows([]string{"id", "transaction"}).
-				AddRow(txID, `{}`))
-		mc.db.ExpectQuery("SELECT.*prepared_txn_states").WillReturnError(fmt.Errorf("pop"))
-	})
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectQuery("SELECT.*prepared_txns").WillReturnRows(
+				sqlmock.NewRows([]string{"id", "transaction"}).
+					AddRow(txID, `{}`))
+			mc.db.ExpectQuery("SELECT.*prepared_txn_states").WillReturnError(fmt.Errorf("pop"))
+		})
 	defer done()
 
 	_, err := txm.QueryPreparedTransactions(ctx, txm.p.DB(), query.NewQueryBuilder().Limit(1).Query())
@@ -272,12 +280,14 @@ func TestQueryPreparedTransactionFailStates(t *testing.T) {
 func TestQueryPreparedTransactionWithRefsFailStates(t *testing.T) {
 
 	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*prepared_txns").WillReturnRows(
-			sqlmock.NewRows([]string{"id", "transaction"}).
-				AddRow(txID, `{}`))
-		mc.db.ExpectQuery("SELECT.*prepared_txn_states").WillReturnError(fmt.Errorf("pop"))
-	})
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectQuery("SELECT.*prepared_txns").WillReturnRows(
+				sqlmock.NewRows([]string{"id", "transaction"}).
+					AddRow(txID, `{}`))
+			mc.db.ExpectQuery("SELECT.*prepared_txn_states").WillReturnError(fmt.Errorf("pop"))
+		})
 	defer done()
 
 	_, err := txm.QueryPreparedTransactionsWithRefs(ctx, txm.p.DB(), query.NewQueryBuilder().Limit(1).Query())
@@ -287,10 +297,12 @@ func TestQueryPreparedTransactionWithRefsFailStates(t *testing.T) {
 
 func TestGetPreparedTransactionWithRefsByIDNotFound(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*prepared_txns").WillReturnRows(
-			sqlmock.NewRows([]string{"id", "transaction"}))
-	})
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectQuery("SELECT.*prepared_txns").WillReturnRows(
+				sqlmock.NewRows([]string{"id", "transaction"}))
+		})
 	defer done()
 
 	pt, err := txm.GetPreparedTransactionWithRefsByID(ctx, txm.p.DB(), uuid.New())

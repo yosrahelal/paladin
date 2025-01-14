@@ -22,12 +22,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
@@ -35,7 +38,8 @@ import (
 type persistedReceiptListener struct {
 	Name    string            `gorm:"column:name"`
 	Created tktypes.Timestamp `gorm:"column:created"`
-	Filters tktypes.RawJSON   `gorm:"column:options"`
+	Started *bool             `gorm:"column:started"`
+	Filters tktypes.RawJSON   `gorm:"column:filters"`
 	Options tktypes.RawJSON   `gorm:"column:options"`
 }
 
@@ -92,6 +96,13 @@ type receiptDeliveryBatch struct {
 	Blocks   []*persistedReceiptBlock
 }
 
+func (tm *txManager) receiptsInit() {
+	tm.receiptsRetry = retry.NewRetryIndefinite(&tm.conf.ReceiptListeners.Retry, &pldconf.TxManagerDefaults.ReceiptListeners.Retry)
+	tm.receiptsReadPageSize = confutil.IntMin(tm.conf.ReceiptListeners.ReadPageSize, 1, *pldconf.TxManagerDefaults.ReceiptListeners.ReadPageSize)
+	tm.receiptListeners = make(map[string]*receiptListener)
+
+}
+
 func (tm *txManager) CreateReceiptListener(ctx context.Context, spec *pldapi.TransactionReceiptListener) error {
 
 	log.L(ctx).Infof("Creating receipt listener '%s'", spec.Name)
@@ -99,8 +110,10 @@ func (tm *txManager) CreateReceiptListener(ctx context.Context, spec *pldapi.Tra
 		return err
 	}
 
+	started := (spec.Started == nil /* default is true */) || *spec.Started
 	dbSpec := &persistedReceiptListener{
 		Name:    spec.Name,
+		Started: &started,
 		Created: tktypes.TimestampNow(),
 		Filters: tktypes.JSONString(&spec.Filters),
 		Options: tktypes.JSONString(&spec.Options),
@@ -113,7 +126,7 @@ func (tm *txManager) CreateReceiptListener(ctx context.Context, spec *pldapi.Tra
 		log.L(ctx).Errorf("Failed to create receipt listener '%s': %s", spec.Name, insertErr)
 
 		// Check for a simple duplicate object
-		if existing := tm.GetReceiptListenerByName(ctx, spec.Name); existing != nil {
+		if existing := tm.GetReceiptListener(ctx, spec.Name); existing != nil {
 			return i18n.NewError(ctx, msgs.MsgTxMgrDuplicateReceiptListenerName)
 		}
 
@@ -122,12 +135,14 @@ func (tm *txManager) CreateReceiptListener(ctx context.Context, spec *pldapi.Tra
 	}
 
 	// Load the created listener now - we do not expect (or attempt to reconcile) a post-validation failure to load
-	_, err := tm.loadListener(ctx, dbSpec)
+	l, err := tm.loadListener(ctx, dbSpec)
+	if err == nil && *l.spec.Started {
+		l.start()
+	}
 	return err
-
 }
 
-func (tm *txManager) GetReceiptListenerByName(ctx context.Context, name string) *pldapi.TransactionReceiptListener {
+func (tm *txManager) GetReceiptListener(ctx context.Context, name string) *pldapi.TransactionReceiptListener {
 
 	tm.receiptListenerLock.Lock()
 	defer tm.receiptListenerLock.Unlock()
@@ -138,6 +153,66 @@ func (tm *txManager) GetReceiptListenerByName(ctx context.Context, name string) 
 	}
 	return nil
 
+}
+
+func (tm *txManager) StartReceiptListener(ctx context.Context, name string) error {
+	return tm.setReceiptListenerStatus(ctx, name, true)
+}
+
+func (tm *txManager) StopReceiptListener(ctx context.Context, name string) error {
+	return tm.setReceiptListenerStatus(ctx, name, false)
+}
+
+func (tm *txManager) setReceiptListenerStatus(ctx context.Context, name string, started bool) error {
+	tm.receiptListenerLock.Lock()
+	defer tm.receiptListenerLock.Unlock()
+
+	log.L(ctx).Infof("Setting receipt listener '%s' status. Started=%t", name, started)
+
+	l := tm.receiptListeners[name]
+	if l == nil {
+		return i18n.NewError(ctx, msgs.MsgTxMgrReceiptListenerNotLoaded, name)
+	}
+	err := tm.p.DB().
+		WithContext(ctx).
+		Model(&persistedReceiptListener{}).
+		Where("name = ?", name).
+		Update("started", started).
+		Error
+	if err != nil {
+		return err
+	}
+	l.spec.Started = &started
+	if started {
+		l.start()
+	} else {
+		l.stop()
+	}
+	return nil
+}
+
+func (tm *txManager) DeleteReceiptListener(ctx context.Context, name string) error {
+	tm.receiptListenerLock.Lock()
+	defer tm.receiptListenerLock.Unlock()
+
+	l := tm.receiptListeners[name]
+	if l == nil {
+		return i18n.NewError(ctx, msgs.MsgTxMgrReceiptListenerNotLoaded, name)
+	}
+
+	l.stop()
+
+	err := tm.p.DB().
+		WithContext(ctx).
+		Where("name = ?", name).
+		Delete(&persistedReceiptListener{}).
+		Error
+	if err != nil {
+		return err
+	}
+
+	delete(tm.receiptListeners, name)
+	return nil
 }
 
 func (tm *txManager) QueryReceiptListeners(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.TransactionReceiptListener, error) {
@@ -154,10 +229,11 @@ func (tm *txManager) QueryReceiptListeners(ctx context.Context, dbTX *gorm.DB, j
 	return qw.run(ctx, dbTX)
 }
 
-func (tm *txManager) loadReceiptListeners(ctx context.Context) error {
+func (tm *txManager) loadReceiptListeners() error {
 
 	var lastPageEnd *string
 	const loadPageSize = 100
+	ctx := tm.bgCtx
 	for {
 
 		var page []*persistedReceiptListener
@@ -186,6 +262,18 @@ func (tm *txManager) loadReceiptListeners(ctx context.Context) error {
 		lastPageEnd = &page[len(page)-1].Name
 	}
 
+}
+
+func (tm *txManager) startReceiptListeners() {
+
+	tm.receiptListenerLock.Lock()
+	defer tm.receiptListenerLock.Unlock()
+
+	for _, l := range tm.receiptListeners {
+		if *l.spec.Started {
+			l.start()
+		}
+	}
 }
 
 func (tm *txManager) validateListenerSpec(ctx context.Context, spec *pldapi.TransactionReceiptListener) error {
@@ -228,7 +316,9 @@ func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.Tran
 
 func (tm *txManager) mapListener(ctx context.Context, pl *persistedReceiptListener) (*pldapi.TransactionReceiptListener, error) {
 	spec := &pldapi.TransactionReceiptListener{
-		Name: pl.Name,
+		Name:    pl.Name,
+		Started: pl.Started,
+		Created: pl.Created,
 	}
 	if err := json.Unmarshal(pl.Filters, &spec.Filters); err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrBadReceiptListenerFilter, pl.Name)
@@ -264,9 +354,9 @@ func (tm *txManager) loadListener(ctx context.Context, pl *persistedReceiptListe
 	return l, nil
 }
 
-func (l *receiptListener) start(bgCtx context.Context) {
+func (l *receiptListener) start() {
 	if l.done == nil {
-		l.ctx, l.cancelCtx = context.WithCancel(log.WithLogField(bgCtx, "receipt-listener", l.spec.Name))
+		l.ctx, l.cancelCtx = context.WithCancel(log.WithLogField(l.tm.bgCtx, "receipt-listener", l.spec.Name))
 		l.done = make(chan struct{})
 		go l.runListener()
 	}

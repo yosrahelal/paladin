@@ -110,7 +110,7 @@ type TXManager interface {
 	CallTransaction(ctx context.Context, result any, tx *pldapi.TransactionCall) (err error)
 	UpsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (func(), *pldapi.StoredABI, error)
 	CreateReceiptListener(ctx context.Context, spec *pldapi.TransactionReceiptListener) error
-	GetReceiptListenerByName(ctx context.Context, name string) *pldapi.TransactionReceiptListener
+	GetReceiptListener(ctx context.Context, name string) *pldapi.TransactionReceiptListener
 	QueryReceiptListeners(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.TransactionReceiptListener, error)
 
 	// These functions for use of the private TX manager for chaining private transactions.

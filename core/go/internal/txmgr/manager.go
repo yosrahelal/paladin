@@ -20,7 +20,6 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 
@@ -34,16 +33,19 @@ import (
 )
 
 func NewTXManager(ctx context.Context, conf *pldconf.TxManagerConfig) components.TXManager {
-	return &txManager{
-		receiptsRetry:        retry.NewRetryIndefinite(&conf.ReceiptListeners.Retry, &pldconf.TxManagerDefaults.ReceiptListeners.Retry),
-		receiptsReadPageSize: confutil.IntMin(conf.ReceiptListeners.ReadPageSize, 1, *pldconf.TxManagerDefaults.ReceiptListeners.ReadPageSize),
-		receiptListeners:     make(map[string]*receiptListener),
-		abiCache:             cache.NewCache[tktypes.Bytes32, *pldapi.StoredABI](&conf.ABI.Cache, &pldconf.TxManagerDefaults.ABI.Cache),
-		txCache:              cache.NewCache[uuid.UUID, *components.ResolvedTransaction](&conf.Transactions.Cache, &pldconf.TxManagerDefaults.Transactions.Cache),
+	tm := &txManager{
+		bgCtx:    ctx,
+		conf:     conf,
+		abiCache: cache.NewCache[tktypes.Bytes32, *pldapi.StoredABI](&conf.ABI.Cache, &pldconf.TxManagerDefaults.ABI.Cache),
+		txCache:  cache.NewCache[uuid.UUID, *components.ResolvedTransaction](&conf.Transactions.Cache, &pldconf.TxManagerDefaults.Transactions.Cache),
 	}
+	tm.receiptsInit()
+	return tm
 }
 
 type txManager struct {
+	bgCtx            context.Context
+	conf             *pldconf.TxManagerConfig
 	p                persistence.Persistence
 	localNodeName    string
 	ethClientFactory ethclient.EthClientFactory
@@ -64,6 +66,14 @@ type txManager struct {
 	receiptListeners     map[string]*receiptListener
 }
 
+func (tm *txManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
+	tm.buildRPCModule()
+	return &components.ManagerInitResult{
+		RPCModules:       []*rpcserver.RPCModule{tm.rpcModule, tm.debugRpcModule},
+		PreCommitHandler: tm.blockIndexerPreCommit,
+	}, nil
+}
+
 func (tm *txManager) PostInit(c components.AllComponents) error {
 	tm.p = c.Persistence()
 	tm.ethClientFactory = c.EthClientFactory()
@@ -74,17 +84,13 @@ func (tm *txManager) PostInit(c components.AllComponents) error {
 	tm.stateMgr = c.StateManager()
 	tm.identityResolver = c.IdentityResolver()
 	tm.localNodeName = c.TransportManager().LocalNodeName()
+
+	return tm.loadReceiptListeners()
+}
+
+func (tm *txManager) Start() error {
+	tm.startReceiptListeners()
 	return nil
 }
-
-func (tm *txManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
-	tm.buildRPCModule()
-	return &components.ManagerInitResult{
-		RPCModules:       []*rpcserver.RPCModule{tm.rpcModule, tm.debugRpcModule},
-		PreCommitHandler: tm.blockIndexerPreCommit,
-	}, nil
-}
-
-func (tm *txManager) Start() error { return nil }
 
 func (tm *txManager) Stop() {}
