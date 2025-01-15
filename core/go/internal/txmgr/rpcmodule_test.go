@@ -627,6 +627,12 @@ func TestRCPReceiptListenersCRUDRealDB(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, *boolRes)
 
+	// Duplpicate
+	err = rpcClient.CallRPC(ctx, &boolRes, "ptx_createReceiptListener", &pldapi.TransactionReceiptListener{
+		Name: "listener1",
+	})
+	require.Regexp(t, "PD012237.*listener1", err)
+
 	// should be queryable
 	var listeners []*pldapi.TransactionReceiptListener
 	err = rpcClient.CallRPC(ctx, &listeners, "ptx_queryReceiptListeners", query.NewQueryBuilder().Limit(1).Query())

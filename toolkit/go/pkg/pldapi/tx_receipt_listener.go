@@ -27,9 +27,9 @@ type TransactionReceiptListener struct {
 }
 
 type TransactionReceiptFilters struct {
-	MinSequence *uint64                        `docstruct:"TransactionReceiptFilters" json:"minSequence,omitempty"`
-	Type        *tktypes.Enum[TransactionType] `docstruct:"TransactionReceiptFilters" json:"type,omitempty"`
-	Domain      string                         `docstruct:"TransactionReceiptFilters" json:"domain,omitempty"`
+	SequenceAbove *uint64                        `docstruct:"TransactionReceiptFilters" json:"sequenceAbove,omitempty"`
+	Type          *tktypes.Enum[TransactionType] `docstruct:"TransactionReceiptFilters" json:"type,omitempty"`
+	Domain        string                         `docstruct:"TransactionReceiptFilters" json:"domain,omitempty"`
 }
 
 type IncompleteStateReceiptBehavior string

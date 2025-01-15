@@ -60,10 +60,11 @@ type txManager struct {
 	rpcModule        *rpcserver.RPCModule
 	debugRpcModule   *rpcserver.RPCModule
 
-	receiptsRetry        *retry.Retry
-	receiptsReadPageSize int
-	receiptListenerLock  sync.Mutex
-	receiptListeners     map[string]*receiptListener
+	receiptsRetry                *retry.Retry
+	receiptsReadPageSize         int
+	receiptListenersLoadPageSize int
+	receiptListenerLock          sync.Mutex
+	receiptListeners             map[string]*receiptListener
 }
 
 func (tm *txManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
@@ -93,4 +94,6 @@ func (tm *txManager) Start() error {
 	return nil
 }
 
-func (tm *txManager) Stop() {}
+func (tm *txManager) Stop() {
+	tm.stopReceiptListeners()
+}

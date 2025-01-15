@@ -107,6 +107,7 @@ func (tm *txManager) receiptsInit() {
 	tm.receiptsRetry = retry.NewRetryIndefinite(&tm.conf.ReceiptListeners.Retry, &pldconf.TxManagerDefaults.ReceiptListeners.Retry)
 	tm.receiptsReadPageSize = confutil.IntMin(tm.conf.ReceiptListeners.ReadPageSize, 1, *pldconf.TxManagerDefaults.ReceiptListeners.ReadPageSize)
 	tm.receiptListeners = make(map[string]*receiptListener)
+	tm.receiptListenersLoadPageSize = 100 /* not currently tunable */
 
 }
 
@@ -134,7 +135,7 @@ func (tm *txManager) CreateReceiptListener(ctx context.Context, spec *pldapi.Tra
 
 		// Check for a simple duplicate object
 		if existing := tm.GetReceiptListener(ctx, spec.Name); existing != nil {
-			return i18n.NewError(ctx, msgs.MsgTxMgrDuplicateReceiptListenerName)
+			return i18n.NewError(ctx, msgs.MsgTxMgrDuplicateReceiptListenerName, spec.Name)
 		}
 
 		// Otherwise return the error
@@ -272,7 +273,6 @@ func (tm *txManager) notifyNewReceipts(receipts []*transactionReceipt) {
 func (tm *txManager) loadReceiptListeners() error {
 
 	var lastPageEnd *string
-	const loadPageSize = 100
 	ctx := tm.bgCtx
 	for {
 
@@ -280,7 +280,7 @@ func (tm *txManager) loadReceiptListeners() error {
 		q := tm.p.DB().
 			WithContext(ctx).
 			Order("name").
-			Limit(loadPageSize)
+			Limit(tm.receiptListenersLoadPageSize)
 		if lastPageEnd != nil {
 			q = q.Where("name > ?", *lastPageEnd)
 		}
@@ -294,7 +294,7 @@ func (tm *txManager) loadReceiptListeners() error {
 			}
 		}
 
-		if len(page) < loadPageSize {
+		if len(page) < tm.receiptListenersLoadPageSize {
 			log.L(ctx).Infof("loaded %d receipted listeners", len(tm.receiptListeners))
 			return nil
 		}
@@ -325,6 +325,16 @@ func (tm *txManager) startReceiptListeners() {
 		if *l.spec.Started {
 			l.start()
 		}
+	}
+}
+
+func (tm *txManager) stopReceiptListeners() {
+
+	tm.receiptListenerLock.Lock()
+	defer tm.receiptListenerLock.Unlock()
+
+	for _, l := range tm.receiptListeners {
+		l.stop()
 	}
 }
 
@@ -365,7 +375,6 @@ func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.Tran
 				return nil, i18n.NewError(ctx, msgs.MsgTxMgrBadReceiptListenerTypeDomain, spec.Name, spec.Filters.Type, spec.Filters.Domain)
 			}
 			q = q.Where("domain = ''") // private
-		case "":
 		default:
 			return nil, i18n.NewError(ctx, msgs.MsgTxMgrBadReceiptListenerTypeDomain, spec.Name, spec.Filters.Type, spec.Filters.Domain)
 		}
@@ -407,6 +416,11 @@ func (l *receiptListener) checkMatch(r *transactionReceipt) bool {
 			matches = false
 		}
 	}
+
+	if l.spec.Filters.SequenceAbove != nil {
+		matches = matches && r.Sequence > *l.spec.Filters.SequenceAbove
+	}
+
 	return matches
 }
 
@@ -419,7 +433,7 @@ func (tm *txManager) mapListener(ctx context.Context, pl *persistedReceiptListen
 	if err := json.Unmarshal(pl.Filters, &spec.Filters); err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrBadReceiptListenerFilter, pl.Name)
 	}
-	if err := json.Unmarshal(pl.Filters, &spec.Options); err != nil {
+	if err := json.Unmarshal(pl.Options, &spec.Options); err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrBadReceiptListenerOptions, pl.Name)
 	}
 	if err := tm.validateListenerSpec(ctx, spec); err != nil {
@@ -436,9 +450,10 @@ func (tm *txManager) loadListener(ctx context.Context, pl *persistedReceiptListe
 	}
 
 	l := &receiptListener{
-		tm:          tm,
-		spec:        spec,
-		newReceipts: make(chan bool, 1),
+		tm:           tm,
+		spec:         spec,
+		newReceivers: make(chan bool, 1),
+		newReceipts:  make(chan bool, 1),
 	}
 
 	tm.receiptListenerLock.Lock()
@@ -450,10 +465,14 @@ func (tm *txManager) loadListener(ctx context.Context, pl *persistedReceiptListe
 	return l, nil
 }
 
+func (l *receiptListener) initStart() {
+	l.ctx, l.cancelCtx = context.WithCancel(log.WithLogField(l.tm.bgCtx, "receipt-listener", l.spec.Name))
+	l.done = make(chan struct{})
+}
+
 func (l *receiptListener) start() {
 	if l.done == nil {
-		l.ctx, l.cancelCtx = context.WithCancel(log.WithLogField(l.tm.bgCtx, "receipt-listener", l.spec.Name))
-		l.done = make(chan struct{})
+		l.initStart()
 		go l.runListener()
 	}
 }
@@ -497,7 +516,7 @@ func (l *receiptListener) removeReceiver(rid uuid.UUID) {
 	defer l.receiverLock.Unlock()
 
 	if len(l.receivers) > 0 {
-		newReceivers := make([]*registeredReceiptReceiver, len(l.receivers)-1)
+		newReceivers := make([]*registeredReceiptReceiver, 0, len(l.receivers)-1)
 		for _, existing := range l.receivers {
 			if existing.id != rid {
 				newReceivers = append(newReceivers, existing)
@@ -509,20 +528,18 @@ func (l *receiptListener) removeReceiver(rid uuid.UUID) {
 
 func (l *receiptListener) loadCheckpoint() error {
 	var checkpoints []*persistedReceiptCheckpoint
-	err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
-		return true, l.tm.p.DB().
-			WithContext(l.ctx).
-			Where("listener = ?", l.spec.Name).
-			Limit(1).
-			Find(&checkpoints).
-			Error
-	})
+	err := l.tm.p.DB().
+		WithContext(l.ctx).
+		Where("listener = ?", l.spec.Name).
+		Limit(1).
+		Find(&checkpoints).
+		Error
 	if err != nil {
-		return err // context cancelled
+		return err
 	}
 	if len(checkpoints) == 0 {
-		if l.spec.Filters.MinSequence != nil {
-			l.checkpoint = l.spec.Filters.MinSequence
+		if l.spec.Filters.SequenceAbove != nil {
+			l.checkpoint = l.spec.Filters.SequenceAbove
 			log.L(l.ctx).Infof("Started receipt listener with minSequence=%d", *l.checkpoint)
 		} else {
 			log.L(l.ctx).Infof("Started receipt listener from start of chain")
