@@ -184,13 +184,13 @@ func TestE2EReceiptListenerDeliveryLateAttach(t *testing.T) {
 	assert.Empty(t, r.FailureMessage)
 }
 
-func randOnChain() tktypes.OnChainLocation {
+func randOnChain(addr *tktypes.EthAddress) tktypes.OnChainLocation {
 	return tktypes.OnChainLocation{
 		Type:             tktypes.OnChainTransaction,
 		TransactionHash:  tktypes.Bytes32(tktypes.RandBytes(32)),
 		BlockNumber:      23456,
 		TransactionIndex: 30,
-		Source:           tktypes.RandAddress(),
+		Source:           addr,
 	}
 }
 
@@ -275,7 +275,7 @@ func TestLoadListenersMultiPageFilters(t *testing.T) {
 			ReceiptType:   components.RT_Success,
 			Domain:        "domain2",
 			TransactionID: tx1,
-			OnChain:       randOnChain(),
+			OnChain:       randOnChain(tktypes.RandAddress()),
 		},
 	})
 	require.NoError(t, err)
@@ -289,7 +289,7 @@ func TestLoadListenersMultiPageFilters(t *testing.T) {
 			ReceiptType:   components.RT_Success,
 			Domain:        "domain1",
 			TransactionID: tx2,
-			OnChain:       randOnChain(),
+			OnChain:       randOnChain(tktypes.RandAddress()),
 		},
 	})
 	require.NoError(t, err)
@@ -304,7 +304,7 @@ func TestLoadListenersMultiPageFilters(t *testing.T) {
 			ReceiptType:   components.RT_Success,
 			Domain:        "",
 			TransactionID: tx3,
-			OnChain:       randOnChain(),
+			OnChain:       randOnChain(tktypes.RandAddress()),
 		},
 	})
 	require.NoError(t, err)
@@ -334,12 +334,105 @@ func TestLoadListenersMultiPageFilters(t *testing.T) {
 			ReceiptType:   components.RT_Success,
 			Domain:        "",
 			TransactionID: tx4,
-			OnChain:       randOnChain(),
+			OnChain:       randOnChain(tktypes.RandAddress()),
 		},
 	})
 	require.NoError(t, err)
 	postCommit()
 	require.Equal(t, tx4, (<-r3.receipts).ID)
+
+}
+
+func TestBlockingDomainsForNonAvailableReceipts(t *testing.T) {
+	txID1 := uuid.New()
+	txID2 := uuid.New()
+	txID3 := uuid.New()
+	txID4 := uuid.New()
+	txID5 := uuid.New()
+
+	ctx, txm, done := newTestTransactionManager(t, true,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			// Mock TX2 being unavailable when first attempted, so it will block TX3
+			mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, txID2).
+				Return(&pldapi.TransactionStates{
+					Unavailable: &pldapi.UnavailableStates{
+						Confirmed: []tktypes.HexBytes{tktypes.RandBytes(32)},
+					},
+				}, nil).
+				Once()
+			// Other calls return ok for when we unblock
+			mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).Return(&pldapi.TransactionStates{}, nil)
+		},
+	)
+	defer done()
+
+	err := txm.CreateReceiptListener(ctx, &pldapi.TransactionReceiptListener{
+		Name: "listener1",
+		Filters: pldapi.TransactionReceiptFilters{
+			Type:   confutil.P(pldapi.TransactionTypePrivate.Enum()),
+			Domain: "domain1",
+		},
+		Options: pldapi.TransactionReceiptListenerOptions{
+			IncompleteStateReceiptBehavior: pldapi.IncompleteStateReceiptBehaviorBlockContract.Enum(),
+		},
+	})
+	require.NoError(t, err)
+
+	r1 := newTestReceiptReceiver(nil)
+	close1, err := txm.AddReceiptReceiver(ctx, "listener1", r1)
+	require.NoError(t, err)
+	defer close1.Close()
+
+	contract1 := tktypes.RandAddress()
+	contract2 := tktypes.RandAddress()
+	postCommit, err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
+		{
+			ReceiptType:   components.RT_Success,
+			Domain:        "domain1",
+			TransactionID: txID1,
+			OnChain:       randOnChain(contract1),
+		},
+		{
+			ReceiptType:   components.RT_Success,
+			Domain:        "domain1",
+			TransactionID: txID2,
+			OnChain:       randOnChain(contract1),
+		},
+		{
+			ReceiptType:   components.RT_Success,
+			Domain:        "domain1",
+			TransactionID: txID3,
+			OnChain:       randOnChain(contract1),
+		},
+		{
+			ReceiptType:   components.RT_Success,
+			Domain:        "domain1",
+			TransactionID: txID4,
+			OnChain:       randOnChain(contract2),
+		},
+	})
+	require.NoError(t, err)
+	postCommit()
+
+	// We get the first one, before the block
+	require.Equal(t, txID1, (<-r1.receipts).ID)
+	// .. then we skip to the 4th one, for a different contract address
+	require.Equal(t, txID4, (<-r1.receipts).ID)
+
+	// We can get new batches on the unblocked contracts
+	postCommit, err = txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
+		{
+			ReceiptType:   components.RT_Success,
+			Domain:        "domain1",
+			TransactionID: txID5,
+			OnChain:       randOnChain(contract2),
+		},
+	})
+	require.NoError(t, err)
+	postCommit()
+	require.Equal(t, txID5, (<-r1.receipts).ID)
+
+	// and if we unblock the first contract, things start moving again
 
 }
 
@@ -677,6 +770,7 @@ func TestClosedRetryingWritingCheckpoint(t *testing.T) {
 					int64(1000),
 					tktypes.RandHex(32),
 				))
+			mc.db.ExpectBegin()
 			mc.db.ExpectExec("INSERT.*receipt_listener_checkpoints").WillReturnError(fmt.Errorf("pop"))
 		},
 	)

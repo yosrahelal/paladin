@@ -61,16 +61,18 @@ CREATE TABLE receipt_listeners (
     PRIMARY KEY("name")
 );
 
-CREATE TABLE receipt_listener_blocks (
+CREATE TABLE receipt_listener_gap (
     "listener"           TEXT    NOT NULL,
     "source"             TEXT    NOT NULL,
     "transaction"        UUID    NOT NULL,
+    "sequence"           BIGINT  NOT NULL,
     "created"            BIGINT  NOT NULL,
+    "stale"              BOOLEAN NOT NULL,
     PRIMARY KEY ("listener", "source"),
     FOREIGN KEY ("listener") REFERENCES receipt_listeners ("name") ON DELETE CASCADE
 );
 
-CREATE INDEX receipt_listener_blocks_txid ON receipt_listener_blocks("transaction");
+CREATE INDEX receipt_listener_gap_txid ON receipt_listener_gap("transaction");
 
 CREATE TABLE receipt_listener_checkpoints (
     "listener"           TEXT    NOT NULL,

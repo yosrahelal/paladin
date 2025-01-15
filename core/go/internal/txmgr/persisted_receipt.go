@@ -35,20 +35,20 @@ import (
 )
 
 type transactionReceipt struct {
-	TransactionID    uuid.UUID              `gorm:"column:transaction"`
-	Sequence         uint64                 `gorm:"column:sequence;autoIncrement"`
-	Indexed          tktypes.Timestamp      `gorm:"column:indexed"`
-	Domain           string                 `gorm:"column:domain"`
-	Success          bool                   `gorm:"column:success"`
-	TransactionHash  *tktypes.Bytes32       `gorm:"column:tx_hash"`
-	BlockNumber      *int64                 `gorm:"column:block_number"`
-	TransactionIndex *int64                 `gorm:"column:tx_index"`
-	LogIndex         *int64                 `gorm:"column:log_index"`
-	Source           *tktypes.EthAddress    `gorm:"column:source"`
-	FailureMessage   *string                `gorm:"column:failure_message"`
-	RevertData       tktypes.HexBytes       `gorm:"column:revert_data"`
-	ContractAddress  *tktypes.EthAddress    `gorm:"column:contract_address"`
-	Block            *persistedReceiptBlock `gorm:"foreignKey:Source;references:Source;"`
+	TransactionID    uuid.UUID            `gorm:"column:transaction"`
+	Sequence         uint64               `gorm:"column:sequence;autoIncrement"`
+	Indexed          tktypes.Timestamp    `gorm:"column:indexed"`
+	Domain           string               `gorm:"column:domain"`
+	Success          bool                 `gorm:"column:success"`
+	TransactionHash  *tktypes.Bytes32     `gorm:"column:tx_hash"`
+	BlockNumber      *int64               `gorm:"column:block_number"`
+	TransactionIndex *int64               `gorm:"column:tx_index"`
+	LogIndex         *int64               `gorm:"column:log_index"`
+	Source           *tktypes.EthAddress  `gorm:"column:source"`
+	FailureMessage   *string              `gorm:"column:failure_message"`
+	RevertData       tktypes.HexBytes     `gorm:"column:revert_data"`
+	ContractAddress  *tktypes.EthAddress  `gorm:"column:contract_address"`
+	Block            *persistedReceiptGap `gorm:"foreignKey:Source;references:Source;"`
 }
 
 func (transactionReceipt) TableName() string {
