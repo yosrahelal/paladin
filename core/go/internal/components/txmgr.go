@@ -121,8 +121,9 @@ type TXManager interface {
 	DeleteReceiptListener(ctx context.Context, name string) error
 	AddReceiptReceiver(ctx context.Context, name string, r ReceiptReceiver) (ReceiptReceiverCloser, error)
 
-	// These functions for use of the private TX manager for chaining private transactions.
+	// These functions for use of other components
 
+	NotifyStatesDBChanged() // called by state manager after committing DB TXs writing new states that might fill in gaps
 	PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (func(), *ValidatedTransaction, error)
 	UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX *gorm.DB, txis []*ValidatedTransaction) (postCommit func(), err error)
 	WritePreparedTransactions(ctx context.Context, dbTX *gorm.DB, prepared []*PreparedTransactionWithRefs) (postCommit func(), err error)

@@ -18,6 +18,8 @@ package txmgr
 import (
 	"context"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
@@ -44,24 +46,26 @@ func NewTXManager(ctx context.Context, conf *pldconf.TxManagerConfig) components
 }
 
 type txManager struct {
-	bgCtx            context.Context
-	conf             *pldconf.TxManagerConfig
-	p                persistence.Persistence
-	localNodeName    string
-	ethClientFactory ethclient.EthClientFactory
-	keyManager       components.KeyManager
-	publicTxMgr      components.PublicTxManager
-	privateTxMgr     components.PrivateTxManager
-	domainMgr        components.DomainManager
-	stateMgr         components.StateManager
-	identityResolver components.IdentityResolver
-	txCache          cache.Cache[uuid.UUID, *components.ResolvedTransaction]
-	abiCache         cache.Cache[tktypes.Bytes32, *pldapi.StoredABI]
-	rpcModule        *rpcserver.RPCModule
-	debugRpcModule   *rpcserver.RPCModule
+	bgCtx               context.Context
+	conf                *pldconf.TxManagerConfig
+	p                   persistence.Persistence
+	localNodeName       string
+	ethClientFactory    ethclient.EthClientFactory
+	keyManager          components.KeyManager
+	publicTxMgr         components.PublicTxManager
+	privateTxMgr        components.PrivateTxManager
+	domainMgr           components.DomainManager
+	stateMgr            components.StateManager
+	identityResolver    components.IdentityResolver
+	txCache             cache.Cache[uuid.UUID, *components.ResolvedTransaction]
+	abiCache            cache.Cache[tktypes.Bytes32, *pldapi.StoredABI]
+	rpcModule           *rpcserver.RPCModule
+	debugRpcModule      *rpcserver.RPCModule
+	lastStateUpdateTime atomic.Int64
 
 	receiptsRetry                *retry.Retry
 	receiptsReadPageSize         int
+	receiptsStateGapCheckTime    time.Duration
 	receiptListenersLoadPageSize int
 	receiptListenerLock          sync.Mutex
 	receiptListeners             map[string]*receiptListener

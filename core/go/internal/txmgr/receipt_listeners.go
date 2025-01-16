@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -121,7 +122,8 @@ func (tm *txManager) receiptsInit() {
 	tm.receiptsReadPageSize = confutil.IntMin(tm.conf.ReceiptListeners.ReadPageSize, 1, *pldconf.TxManagerDefaults.ReceiptListeners.ReadPageSize)
 	tm.receiptListeners = make(map[string]*receiptListener)
 	tm.receiptListenersLoadPageSize = 100 /* not currently tunable */
-
+	tm.receiptsStateGapCheckTime = confutil.DurationMin(tm.conf.ReceiptListeners.StateGapCheckInterval, 100*time.Millisecond, *pldconf.TxManagerDefaults.ReceiptListeners.StateGapCheckInterval)
+	tm.lastStateUpdateTime.Store(int64(tktypes.TimestampNow()))
 }
 
 func (tm *txManager) CreateReceiptListener(ctx context.Context, spec *pldapi.TransactionReceiptListener) error {
@@ -198,6 +200,10 @@ func (tm *txManager) StartReceiptListener(ctx context.Context, name string) erro
 
 func (tm *txManager) StopReceiptListener(ctx context.Context, name string) error {
 	return tm.setReceiptListenerStatus(ctx, name, false)
+}
+
+func (tm *txManager) NotifyStatesDBChanged() {
+	tm.lastStateUpdateTime.Store(int64(tktypes.TimestampNow()))
 }
 
 func (tm *txManager) setReceiptListenerStatus(ctx context.Context, name string, started bool) error {
@@ -861,45 +867,65 @@ func (l *receiptListener) runListener() {
 		return
 	}
 
+	newReceipts := true
+	newStates := true
+	lastStateCheck := time.Now()
+	stateGapCheckTicker := time.NewTicker(l.tm.receiptsStateGapCheckTime)
+	defer stateGapCheckTicker.Stop()
 	for {
 
-		// Process up all stale gaps before we process the head
-		if err := l.processStaleGaps(); err != nil {
-			log.L(l.ctx).Warnf("listener stopping (processing stale gaps): %s", err) // cancelled context
-			return
-		}
+		if newStates {
+			lastStateCheck = time.Now()
 
-		// Read the next page of receipts from non-gapped sources - the head
-		page, err := l.readHeadPage()
-		if err != nil {
-			log.L(l.ctx).Warnf("listener stopping: %s", err) // cancelled context
-			return
-		}
-
-		// Deliver those events
-		batch, err := l.processPage(page)
-		if err != nil {
-			log.L(l.ctx).Warnf("listener stopping (processing page of %d receipts): %s", len(page), err) // cancelled context
-			return
-		}
-
-		// Whether we processed any receipts or not, we can move our checkpoint forwards
-		if len(page) > 0 {
-			err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
-				return true, l.updateCheckpoint(batch, page[len(page)-1].Sequence)
-			})
-			if err != nil {
-				log.L(l.ctx).Warnf("listener stopping (before updating checkpoint for batch %d): %s", batch.ID, err) // cancelled context
+			// Process up all stale gaps before we process the head
+			if err := l.processStaleGaps(); err != nil {
+				log.L(l.ctx).Warnf("listener stopping (processing stale gaps): %s", err) // cancelled context
 				return
 			}
+
+			newStates = false
+		}
+
+		if newReceipts {
+			// Read the next page of receipts from non-gapped sources - the head
+			page, err := l.readHeadPage()
+			if err != nil {
+				log.L(l.ctx).Warnf("listener stopping: %s", err) // cancelled context
+				return
+			}
+
+			// Deliver those events
+			batch, err := l.processPage(page)
+			if err != nil {
+				log.L(l.ctx).Warnf("listener stopping (processing page of %d receipts): %s", len(page), err) // cancelled context
+				return
+			}
+
+			// Whether we processed any receipts or not, we can move our checkpoint forwards
+			if len(page) > 0 {
+				err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+					return true, l.updateCheckpoint(batch, page[len(page)-1].Sequence)
+				})
+				if err != nil {
+					log.L(l.ctx).Warnf("listener stopping (before updating checkpoint for batch %d): %s", batch.ID, err) // cancelled context
+					return
+				}
+			}
+
+			// We need to poll immediately if we have a full page
+			newReceipts = len(page) == l.tm.receiptsReadPageSize
 		}
 
 		// If our page was not full, wait for notification of new receipts before we look again
-		if len(page) < l.tm.receiptsReadPageSize {
+		for !newReceipts && !newStates {
 			select {
 			case <-l.newReceipts:
+				newReceipts = true
+			case <-stateGapCheckTicker.C:
+				// Only do the DB check if we've had the tap that new states have been received
+				newStates = tktypes.Timestamp(l.tm.lastStateUpdateTime.Load()).Time().After(lastStateCheck)
 			case <-l.ctx.Done():
-				log.L(l.ctx).Warnf("listener stopping (waiting for new receipts)") // cancelled context
+				log.L(l.ctx).Warnf("listener stopping (waiting for new receipts/states)") // cancelled context
 				return
 			}
 		}

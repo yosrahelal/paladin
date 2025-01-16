@@ -58,8 +58,9 @@ func writeStates(t *testing.T, txm *txManager, testSchemaID tktypes.Bytes32, fak
 			}),
 		}
 	}
-	written, err := txm.stateMgr.WriteReceivedStates(context.Background(), txm.p.DB(), "domain1", stateInputs)
+	pc, written, err := txm.stateMgr.WriteReceivedStates(context.Background(), txm.p.DB(), "domain1", stateInputs)
 	require.NoError(t, err)
+	pc()
 	states := make([]*pldapi.StateBase, len(written))
 	stateIDs := make([]tktypes.HexBytes, len(written))
 	for i, s := range written {

@@ -466,7 +466,7 @@ func testGapsDomainsForNonAvailableReceipts(t *testing.T, pageSize int) {
 	require.NoError(t, err)
 
 	// Trigger a poll
-	txm.receiptListeners["listener1"].notifyNewReceipts()
+	txm.NotifyStatesDBChanged()
 
 	// .. now TX2 is unblocked
 	require.Equal(t, txID2, (<-r1.receipts).ID)
@@ -478,7 +478,7 @@ func testGapsDomainsForNonAvailableReceipts(t *testing.T, pageSize int) {
 	require.NoError(t, err)
 
 	// Trigger a poll
-	txm.receiptListeners["listener1"].notifyNewReceipts()
+	txm.NotifyStatesDBChanged()
 
 	// .. and TX3 is unblocked
 	require.Equal(t, txID3, (<-r1.receipts).ID)
