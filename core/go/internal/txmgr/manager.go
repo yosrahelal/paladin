@@ -65,6 +65,8 @@ type txManager struct {
 	receiptListenersLoadPageSize int
 	receiptListenerLock          sync.Mutex
 	receiptListeners             map[string]*receiptListener
+	receiptTxIDsInfluxLock       sync.Mutex
+	receiptTxIDsInflux           map[uuid.UUID]bool
 }
 
 func (tm *txManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {

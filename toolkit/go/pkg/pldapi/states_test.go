@@ -24,28 +24,36 @@ import (
 )
 
 func TestTransactionStatesHasUnavailable(t *testing.T) {
-	assert.False(t, (&TransactionStates{}).HasUnavailable())
-	assert.False(t, (&TransactionStates{
+	assert.Nil(t, (&TransactionStates{}).FirstUnavailable())
+	assert.Nil(t, (&TransactionStates{
 		Unavailable: &UnavailableStates{},
-	}).HasUnavailable())
-	assert.True(t, (&TransactionStates{
+	}).FirstUnavailable())
+	assert.NotNil(t, (&TransactionStates{
 		Unavailable: &UnavailableStates{
 			Confirmed: []tktypes.HexBytes{tktypes.RandBytes(32)},
 		},
-	}).HasUnavailable())
-	assert.True(t, (&TransactionStates{
+	}).FirstUnavailable())
+	assert.NotNil(t, (&TransactionStates{
 		Unavailable: &UnavailableStates{
 			Spent: []tktypes.HexBytes{tktypes.RandBytes(32)},
 		},
-	}).HasUnavailable())
-	assert.True(t, (&TransactionStates{
+	}).FirstUnavailable())
+	assert.NotNil(t, (&TransactionStates{
 		Unavailable: &UnavailableStates{
 			Read: []tktypes.HexBytes{tktypes.RandBytes(32)},
 		},
-	}).HasUnavailable())
-	assert.True(t, (&TransactionStates{
+	}).FirstUnavailable())
+	assert.NotNil(t, (&TransactionStates{
 		Unavailable: &UnavailableStates{
 			Info: []tktypes.HexBytes{tktypes.RandBytes(32)},
 		},
-	}).HasUnavailable())
+	}).FirstUnavailable())
+	assert.Nil(t, (&TransactionStates{
+		Unavailable: &UnavailableStates{
+			Confirmed: []tktypes.HexBytes{},
+			Spent:     []tktypes.HexBytes{},
+			Read:      []tktypes.HexBytes{},
+			Info:      []tktypes.HexBytes{},
+		},
+	}).FirstUnavailable())
 }

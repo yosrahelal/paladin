@@ -57,6 +57,7 @@ func (transactionReceipt) TableName() string {
 
 func mapPersistedReceipt(receipt *transactionReceipt) *pldapi.TransactionReceiptData {
 	r := &pldapi.TransactionReceiptData{
+		Sequence:        receipt.Sequence,
 		Domain:          receipt.Domain,
 		Success:         receipt.Success,
 		FailureMessage:  stringOrEmpty(receipt.FailureMessage),

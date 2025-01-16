@@ -224,8 +224,9 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 	require.NotNil(t, receipt)
 	require.JSONEq(t, fmt.Sprintf(`{
 		"id":"%s",
+		"sequence":%d,
 		"failureMessage":"PD012214: Unable to decode revert data (no revert data available)"
-	}`, txID), string(tktypes.JSONString(receipt)))
+	}`, txID, receipt.Sequence), string(tktypes.JSONString(receipt)))
 
 }
 
@@ -289,6 +290,7 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 	require.NotNil(t, receipt)
 	require.JSONEq(t, fmt.Sprintf(`{
 		"id":"%s",
+		"sequence":%d,
 		"domain": "domain1",
 		"blockNumber":12345, 
 		"logIndex":5,
@@ -298,7 +300,7 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 		"transactionIndex":10,
 		"states": {"none": true},
 		"domainReceiptError": "not available"
-	}`, txID), tktypes.JSONString(receipt).Pretty())
+	}`, txID, receipt.Sequence), tktypes.JSONString(receipt).Pretty())
 
 }
 

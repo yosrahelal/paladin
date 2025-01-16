@@ -63,12 +63,23 @@ func (persistedReceiptCheckpoint) TableName() string {
 	return "receipt_listener_checkpoints"
 }
 
+type stateRef struct {
+	DomainName string           `gorm:"column:domain_name;primaryKey"`
+	ID         tktypes.HexBytes `gorm:"column:id;primaryKey"`
+}
+
+func (sr stateRef) TableName() string {
+	return "states"
+}
+
 type persistedReceiptGap struct {
-	Listener    string              `gorm:"column:listener"`
-	Source      *tktypes.EthAddress `gorm:"column:source"`
+	Listener    string              `gorm:"column:listener;primaryKey"`
+	Source      *tktypes.EthAddress `gorm:"column:source;primaryKey"`
 	Transaction uuid.UUID           `gorm:"column:transaction"`
 	Sequence    uint64              `gorm:"column:sequence"`
-	Stale       bool                `gorm:"column:stale"`
+	DomainName  string              `gorm:"column:domain_name"`
+	StateID     tktypes.HexBytes    `gorm:"column:state"`
+	State       *stateRef           `gorm:"foreignKey:DomainName,ID;references:DomainName,StateID"`
 }
 
 func (persistedReceiptGap) TableName() string {
@@ -154,38 +165,6 @@ func (tm *txManager) CreateReceiptListener(ctx context.Context, spec *pldapi.Tra
 
 func (rr *registeredReceiptReceiver) Close() {
 	rr.l.removeReceiver(rr.id)
-}
-
-func (tm *txManager) NotifyStateArrivalForTransactions(ctx context.Context, dbTX *gorm.DB, txIDs ...uuid.UUID) (func(), error) {
-	// Get any gaps associated with these, so we can wake up the listeners
-	var gaps []*persistedReceiptGap
-	err := dbTX.
-		WithContext(ctx).
-		Select("listener").
-		Where(`"transaction" IN (?)`, txIDs).
-		Find(&gaps).
-		Error
-	if err != nil {
-		return nil, err
-	}
-	if len(gaps) == 0 {
-		return func() {}, nil
-	}
-
-	// Set all the affected gaps to be stale, and tap all the listeners to look for the gap
-	// and see if it can now be moved forwards, or removed all together.
-	listeners := tm.listenersForGaps(gaps)
-	err = dbTX.Model(&persistedReceiptGap{}).
-		Where(`"transaction" IN (?)`, txIDs).Update("stale", true).Error
-	if err != nil {
-		return nil, err
-	}
-
-	return func() {
-		for _, l := range listeners {
-			l.notifyNewReceipts()
-		}
-	}, nil
 }
 
 func (tm *txManager) listenersForGaps(blocks []*persistedReceiptGap) map[string]*receiptListener {
@@ -660,19 +639,21 @@ func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *t
 	}
 	// If we don't have the state receipt, and we're told to block, then block
 	if fr.TransactionReceiptDataOnchainEvent != nil && fr.Domain != "" &&
-		(fr.States == nil || fr.States.HasUnavailable()) &&
+		(fr.States == nil || fr.States.FirstUnavailable() != nil) &&
 		l.spec.Options.IncompleteStateReceiptBehavior.V() == pldapi.IncompleteStateReceiptBehaviorBlockContract {
 		log.L(l.ctx).Infof("States currently unavailable for TXID %s in blockchain TX %s blocking contract %s", fr.ID, fr.TransactionHash, fr.Source)
 		b.Gaps = append(b.Gaps, &persistedReceiptGap{
 			Listener:    l.spec.Name,
 			Source:      &fr.Source,
 			Sequence:    pr.Sequence,
+			DomainName:  fr.Domain,
+			StateID:     fr.States.FirstUnavailable(),
 			Transaction: fr.ID,
 		})
 		return nil
 	}
 	// Otherwise we can process the receipt
-	log.L(l.ctx).Infof("Added receipt for TX %s (domain='%s') to batch %d", fr.ID, fr.Domain, b.ID)
+	log.L(l.ctx).Infof("Added receipt %d/%s (domain='%s') to batch %d", pr.Sequence, fr.ID, fr.Domain, b.ID)
 	b.Receipts = append(b.Receipts, fr)
 	return nil
 }
@@ -788,7 +769,8 @@ func (l *receiptListener) processStaleGaps() error {
 		err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
 			return true, l.tm.p.DB().
 				WithContext(l.ctx).
-				Where("stale IS TRUE").
+				Joins("State").
+				Where(`"State"."id" IS NOT NULL`). // the state exists
 				Limit(l.tm.receiptListenersLoadPageSize).
 				Find(&gaps).
 				Error
@@ -838,7 +820,7 @@ func (l *receiptListener) processStaleGap(gap *persistedReceiptGap) error {
 						},
 						DoUpdates: clause.AssignmentColumns([]string{
 							"sequence", // might move forwards
-							"stale",    // set to false
+							"state",    // set to new state
 						}),
 					}).
 					Create(batch.Gaps).
@@ -861,20 +843,18 @@ func (l *receiptListener) processStaleGap(gap *persistedReceiptGap) error {
 		// We need to move the stale gap forwards, to the next record after this page.
 		// Then we continue to query, until we run out of messages
 		gap.Sequence = page[len(page)-1].Sequence + 1
+		gap.StateID = nil
+		gap.State = nil
 		if err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
 			return true, l.tm.p.DB().
 				WithContext(l.ctx).
-				Clauses(clause.OnConflict{
-					Columns: []clause.Column{
-						{Name: "listener"},
-						{Name: "source"},
-					},
-					DoUpdates: clause.AssignmentColumns([]string{
-						"sequence", // move forwards
-						"stale",    // set to false
-					}),
+				Model(&persistedReceiptGap{}).
+				Where("listener = ?", gap.Listener).
+				Where("source = ?", gap.Source).
+				Updates(map[string]any{
+					"sequence": gap.Sequence,
+					"state":    nil, // clear the state ref, so this will be stale immediately
 				}).
-				Create(gap).
 				Error
 		}); err != nil {
 			return err

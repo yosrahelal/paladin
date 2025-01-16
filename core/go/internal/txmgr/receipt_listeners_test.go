@@ -349,6 +349,9 @@ func TestGapsDomainsForNonAvailableReceipts(t *testing.T) {
 	txID3 := uuid.New()
 	txID4 := uuid.New()
 	txID5 := uuid.New()
+	txID6 := uuid.New()
+	missingStateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	missingStateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
 
 	ctx, txm, done := newTestTransactionManager(t, true,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
@@ -356,7 +359,15 @@ func TestGapsDomainsForNonAvailableReceipts(t *testing.T) {
 			mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, txID2).
 				Return(&pldapi.TransactionStates{
 					Unavailable: &pldapi.UnavailableStates{
-						Confirmed: []tktypes.HexBytes{tktypes.RandBytes(32)},
+						Confirmed: []tktypes.HexBytes{missingStateID1},
+					},
+				}, nil).
+				Once()
+			// Mock TX3 being unavailable when first attempted, so it will block TX5
+			mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, txID3).
+				Return(&pldapi.TransactionStates{
+					Unavailable: &pldapi.UnavailableStates{
+						Spent: []tktypes.HexBytes{missingStateID2},
 					},
 				}, nil).
 				Once()
@@ -365,6 +376,8 @@ func TestGapsDomainsForNonAvailableReceipts(t *testing.T) {
 		},
 	)
 	defer done()
+
+	txm.receiptsReadPageSize = 1 // forcing pagination
 
 	err := txm.CreateReceiptListener(ctx, &pldapi.TransactionReceiptListener{
 		Name: "listener1",
@@ -410,6 +423,12 @@ func TestGapsDomainsForNonAvailableReceipts(t *testing.T) {
 			TransactionID: txID4,
 			OnChain:       randOnChain(contract2),
 		},
+		{
+			ReceiptType:   components.RT_Success,
+			Domain:        "domain1",
+			TransactionID: txID5,
+			OnChain:       randOnChain(contract1),
+		},
 	})
 	require.NoError(t, err)
 	postCommit()
@@ -424,23 +443,39 @@ func TestGapsDomainsForNonAvailableReceipts(t *testing.T) {
 		{
 			ReceiptType:   components.RT_Success,
 			Domain:        "domain1",
-			TransactionID: txID5,
+			TransactionID: txID6,
 			OnChain:       randOnChain(contract2),
 		},
 	})
 	require.NoError(t, err)
 	postCommit()
-	require.Equal(t, txID5, (<-r1.receipts).ID)
+	require.Equal(t, txID6, (<-r1.receipts).ID)
 
-	// and if we unblock the first contract, things start moving again
-	postCommit, err = txm.NotifyStateArrivalForTransactions(ctx, txm.p.DB(), txID2)
+	// Write the state that's missing
+	err = txm.p.DB().WithContext(ctx).Exec("INSERT INTO states ( id, created, domain_name, contract_address ) VALUES ( ?, ?, ?, ? )",
+		missingStateID1, tktypes.TimestampNow(), "domain1", contract1,
+	).Error
 	require.NoError(t, err)
-	postCommit()
 
-	// .. now TX2 is complete
+	// Trigger a poll
+	txm.receiptListeners["listener1"].notifyNewReceipts()
+
+	// .. now TX2 is unblocked
 	require.Equal(t, txID2, (<-r1.receipts).ID)
+
+	// Write the second state that's missing
+	err = txm.p.DB().WithContext(ctx).Exec("INSERT INTO states ( id, created, domain_name, contract_address ) VALUES ( ?, ?, ?, ? )",
+		missingStateID2, tktypes.TimestampNow(), "domain1", contract1,
+	).Error
+	require.NoError(t, err)
+
+	// Trigger a poll
+	txm.receiptListeners["listener1"].notifyNewReceipts()
+
 	// .. and TX3 is unblocked
 	require.Equal(t, txID3, (<-r1.receipts).ID)
+	// .. and TX5 is unblocked immediately
+	require.Equal(t, txID5, (<-r1.receipts).ID)
 
 }
 
