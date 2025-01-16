@@ -1022,6 +1022,29 @@ func TestRecoverSignerFailCases(t *testing.T) {
 	assert.Regexp(t, "PD011638", err)
 }
 
+func TestSendTransactionFailCases(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+
+	_, err := td.d.SendTransaction(td.ctx, &prototk.SendTransactionRequest{
+		Transaction: &prototk.TransactionInput{
+			ContractAddress: "badnotgood",
+			FunctionAbiJson: `{}`,
+			ParamsJson:      `{}`,
+		},
+	})
+	require.ErrorContains(t, err, "bad address")
+
+	_, err = td.d.SendTransaction(td.ctx, &prototk.SendTransactionRequest{
+		Transaction: &prototk.TransactionInput{
+			ContractAddress: "0x05d936207F04D81a85881b72A0D17854Ee8BE45A",
+			FunctionAbiJson: `bad`,
+			ParamsJson:      `{}`,
+		},
+	})
+	require.ErrorContains(t, err, "invalid character")
+}
+
 func TestMapStateLockType(t *testing.T) {
 	for _, pldType := range pldapi.StateLockType("").Options() {
 		assert.NotNil(t, mapStateLockType(pldapi.StateLockType(pldType)))

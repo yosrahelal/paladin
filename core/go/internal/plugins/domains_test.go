@@ -285,6 +285,19 @@ func TestDomainRequestsOK(t *testing.T) {
 		}, nil
 	}
 
+	tdm.sendTransaction = func(ctx context.Context, str *prototk.SendTransactionRequest) (*prototk.SendTransactionResponse, error) {
+		assert.Equal(t, str.Transaction.From, "user1")
+		return &prototk.SendTransactionResponse{
+			Id: "tx1",
+		}, nil
+	}
+
+	tdm.localNodeName = func(ctx context.Context, lnr *prototk.LocalNodeNameRequest) (*prototk.LocalNodeNameResponse, error) {
+		return &prototk.LocalNodeNameResponse{
+			Name: "node1",
+		}, nil
+	}
+
 	ctx, pc, done := newTestDomainPluginManager(t, &testManagers{
 		testDomainManager: tdm,
 	})
@@ -427,6 +440,18 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "some verifier", string(rsr.Verifier))
+
+	str, err := callbacks.SendTransaction(ctx, &prototk.SendTransactionRequest{
+		Transaction: &prototk.TransactionInput{
+			From: "user1",
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "tx1", str.Id)
+
+	lnr, err := callbacks.LocalNodeName(ctx, &prototk.LocalNodeNameRequest{})
+	require.NoError(t, err)
+	assert.Equal(t, "node1", lnr.Name)
 }
 
 func TestDomainRegisterFail(t *testing.T) {
