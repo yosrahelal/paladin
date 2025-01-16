@@ -24,18 +24,20 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
-	"github.com/kaleido-io/paladin/domains/integration-test/helpers"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+//go:embed abis/ZetoFactory.json
+var zetoFactoryJSON []byte
+
 type ZetoDomainContracts struct {
 	FactoryAddress       *tktypes.EthAddress
 	factoryAbi           abi.ABI
 	deployedContracts    map[string]*tktypes.EthAddress
-	deployedContractAbis map[string]abi.ABI
+	DeployedContractAbis map[string]abi.ABI
 	cloneableContracts   map[string]cloneableContract
 }
 
@@ -46,10 +48,12 @@ type cloneableContract struct {
 	depositVerifier       string
 	withdrawVerifier      string
 	batchWithdrawVerifier string
+	lockVerifier          string
+	batchLockVerifier     string
 }
 
 func newZetoDomainContracts() *ZetoDomainContracts {
-	factory := solutils.MustLoadBuild(helpers.ZetoFactoryJSON)
+	factory := solutils.MustLoadBuild(zetoFactoryJSON)
 
 	return &ZetoDomainContracts{
 		factoryAbi: factory.ABI,
@@ -81,7 +85,7 @@ func deployDomainContracts(ctx context.Context, rpc rpcbackend.Backend, deployer
 	ctrs := newZetoDomainContracts()
 	ctrs.FactoryAddress = factoryAddr
 	ctrs.deployedContracts = deployedContracts
-	ctrs.deployedContractAbis = deployedContractAbis
+	ctrs.DeployedContractAbis = deployedContractAbis
 	ctrs.cloneableContracts = cloneableContracts
 	return ctrs, nil
 }
@@ -97,6 +101,8 @@ func findCloneableContracts(config *domainConfig) map[string]cloneableContract {
 				depositVerifier:       contract.DepositVerifier,
 				withdrawVerifier:      contract.WithdrawVerifier,
 				batchWithdrawVerifier: contract.BatchWithdrawVerifier,
+				lockVerifier:          contract.LockVerifier,
+				batchLockVerifier:     contract.BatchLockVerifier,
 			}
 		}
 	}
@@ -174,6 +180,8 @@ func registerImpl(ctx context.Context, name string, domainContracts *ZetoDomainC
 	depositVerifierName := domainContracts.cloneableContracts[name].depositVerifier
 	withdrawVerifierName := domainContracts.cloneableContracts[name].withdrawVerifier
 	batchWithdrawVerifierName := domainContracts.cloneableContracts[name].batchWithdrawVerifier
+	lockVerifierName := domainContracts.cloneableContracts[name].lockVerifier
+	batchLockVerifierName := domainContracts.cloneableContracts[name].batchLockVerifier
 	implAddr, ok := domainContracts.deployedContracts[name]
 	if !ok {
 		return fmt.Errorf("implementation contract %s not found among the deployed contracts", name)
@@ -198,6 +206,14 @@ func registerImpl(ctx context.Context, name string, domainContracts *ZetoDomainC
 	if !ok {
 		return fmt.Errorf("batch withdraw verifier contract not found among the deployed contracts")
 	}
+	lockVerifierAddr, ok := domainContracts.deployedContracts[lockVerifierName]
+	if !ok {
+		return fmt.Errorf("lock verifier contract not found among the deployed contracts")
+	}
+	batchLockVerifierAddr, ok := domainContracts.deployedContracts[batchLockVerifierName]
+	if !ok {
+		return fmt.Errorf("batch lock verifier contract not found among the deployed contracts")
+	}
 	params := &setImplementationParams{
 		Name: name,
 		Implementation: implementationInfo{
@@ -207,6 +223,8 @@ func registerImpl(ctx context.Context, name string, domainContracts *ZetoDomainC
 			DepositVerifier:       depositVerifierAddr.String(),
 			WithdrawVerifier:      withdrawVerifierAddr.String(),
 			BatchWithdrawVerifier: batchWithdrawVerifierAddr.String(),
+			LockVerifier:          lockVerifierAddr.String(),
+			BatchLockVerifier:     batchLockVerifierAddr.String(),
 		},
 	}
 	_, err := tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
@@ -219,5 +237,6 @@ func registerImpl(ctx context.Context, name string, domainContracts *ZetoDomainC
 		},
 		ABI: abi.ABI{abiFunc},
 	})
+	log.L(ctx).Infof("Registered implementation %s", name)
 	return err
 }

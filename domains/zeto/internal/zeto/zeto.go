@@ -18,6 +18,7 @@ package zeto
 import (
 	"context"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"math/big"
 
@@ -55,6 +56,7 @@ type Zeto struct {
 	transferSignature        string
 	transferWithEncSignature string
 	withdrawSignature        string
+	lockSignature            string
 	snarkProver              signerapi.InMemorySigner
 }
 
@@ -82,6 +84,13 @@ type WithdrawEvent struct {
 	Inputs []tktypes.HexUint256 `json:"inputs"`
 	Output tktypes.HexUint256   `json:"output"`
 	Data   tktypes.HexBytes     `json:"data"`
+}
+
+type LockedEvent struct {
+	UTXOs     []tktypes.HexUint256 `json:"utxos"`
+	Delegate  tktypes.EthAddress   `json:"delegate"`
+	Submitter tktypes.EthAddress   `json:"submitter"`
+	Data      tktypes.HexBytes     `json:"data"`
 }
 
 var factoryDeployABI = &abi.Entry{
@@ -289,7 +298,7 @@ func (z *Zeto) GetHandler(method string) types.DomainHandler {
 		return &mintHandler{zeto: z}
 	case "transfer":
 		return &transferHandler{zeto: z}
-	case "lockProof":
+	case "lock":
 		return &lockHandler{zeto: z}
 	case "deposit":
 		return &depositHandler{zeto: z}
@@ -373,6 +382,8 @@ func (z *Zeto) registerEventSignatures(eventAbis abi.ABI) {
 			z.transferWithEncSignature = event.SolString()
 		case "UTXOWithdraw":
 			z.withdrawSignature = event.SolString()
+		case "UTXOsLocked":
+			z.lockSignature = event.SolString()
 		}
 	}
 }
@@ -413,6 +424,8 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 			err = z.handleTransferWithEncryptionEvent(ctx, tree, storage, ev, domainConfig.TokenName, &res)
 		case z.withdrawSignature:
 			err = z.handleWithdrawEvent(ctx, tree, storage, ev, domainConfig.TokenName, &res)
+		case z.lockSignature:
+			err = z.handleLockedEvent(ctx, ev, &res)
 		}
 		if err != nil {
 			errors = append(errors, err.Error())
@@ -445,6 +458,11 @@ func (z *Zeto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest)
 
 func intTo32ByteSlice(bigInt *big.Int) (res []byte) {
 	return bigInt.FillBytes(make([]byte, 32))
+}
+
+func hexUint256To32ByteHexString(v *tktypes.HexUint256) string {
+	paddedBytes := intTo32ByteSlice(v.Int())
+	return hex.EncodeToString(paddedBytes)
 }
 
 func (z *Zeto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.SignResponse, error) {
@@ -493,12 +511,14 @@ func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateSta
 			log.L(ctx).Errorf("Error hashing state data: %s", err)
 			return nil, i18n.NewError(ctx, msgs.MsgErrorHashOutputState, err)
 		}
+		hashString := hexUint256To32ByteHexString(hash)
 		if state.Id == "" {
 			// if the requested state ID is empty, we simply set it
-			res.StateIds = append(res.StateIds, hash.String())
+			res.StateIds = append(res.StateIds, hashString)
 		} else {
 			// if the requested state ID is set, we compare it with the calculated hash
-			if hash.String() != state.Id {
+			stateId := tktypes.MustParseHexUint256(state.Id)
+			if hash.Int().Cmp(stateId.Int()) != 0 {
 				log.L(ctx).Errorf("State hash mismatch (hashed vs. received): %s != %s", hash.String(), state.Id)
 				return nil, i18n.NewError(ctx, msgs.MsgErrorStateHashMismatch, hash.String(), state.Id)
 			}

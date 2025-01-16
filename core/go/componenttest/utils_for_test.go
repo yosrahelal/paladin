@@ -188,7 +188,6 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	}
 	i.ctx = log.WithLogField(context.Background(), "node-name", binding.name)
 
-	i.conf.Log.Level = confutil.P("info")
 	i.conf.BlockIndexer.FromBlock = json.RawMessage(`"latest"`)
 	i.conf.DomainManagerConfig.Domains = make(map[string]*pldconf.DomainConfig, 1)
 	if domainConfig == nil {
@@ -279,14 +278,6 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	//i.conf.DB.SQLite.DSN = "./sql." + i.name + ".db"
 	//uncomment to use postgres - TODO once all tests are using postgres, we can parameterize this and run in both modes
 	//i.conf.DB.Type = "postgres"
-	i.conf.Log = pldconf.LogConfig{
-		Level:  confutil.P("debug"),
-		Output: confutil.P("file"),
-		File: pldconf.LogFileConfig{
-			Filename: confutil.P("build/testbed.component-test.log"),
-		},
-	}
-	log.InitConfig(&i.conf.Log)
 
 	if i.conf.DB.Type == "postgres" {
 		dns, cleanUp := initPostgres(t, context.Background())
@@ -390,10 +381,21 @@ func testConfig(t *testing.T) pldconf.PaladinConfig {
 	conf.RPCServer.WS.Disabled = true
 	conf.Log.Level = confutil.P("info")
 
+	conf.TransportManagerConfig.ReliableMessageWriter.BatchMaxSize = confutil.P(1)
+
 	conf.Wallets[0].Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{
 		Encoding: "hex",
 		Inline:   tktypes.RandHex(32),
 	}
+
+	conf.Log = pldconf.LogConfig{
+		Level:  confutil.P("debug"),
+		Output: confutil.P("file"),
+		File: pldconf.LogFileConfig{
+			Filename: confutil.P("build/testbed.component-test.log"),
+		},
+	}
+	log.InitConfig(&conf.Log)
 
 	return *conf
 

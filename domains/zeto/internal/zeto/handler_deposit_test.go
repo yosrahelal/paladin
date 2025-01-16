@@ -28,7 +28,7 @@ func TestDepositValidateParams(t *testing.T) {
 	require.ErrorContains(t, err, "PD210105: Failed to decode the deposit call.")
 
 	_, err = h.ValidateParams(ctx, config, "{\"amount\":-100}")
-	require.ErrorContains(t, err, "PD210027: Parameter 'amount' must be greater than 0 (index=0)")
+	require.ErrorContains(t, err, "PD210027: Parameter 'amount' must be in the range (0, 2^100) (index=0)")
 }
 
 func TestDepositInit(t *testing.T) {
@@ -120,17 +120,11 @@ func TestDepositAssemble(t *testing.T) {
 func TestDepositEndorse(t *testing.T) {
 	h := depositHandler{}
 	ctx := context.Background()
-	tx := &types.ParsedTransaction{
-		Params: tktypes.MustParseHexUint256("100"),
-		Transaction: &prototk.TransactionSpecification{
-			From: "Bob",
-		},
-	}
-
+	tx := &types.ParsedTransaction{}
 	req := &prototk.EndorseTransactionRequest{}
 	res, err := h.Endorse(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, prototk.EndorseTransactionResponse_ENDORSER_SUBMIT, res.EndorsementResult)
+	assert.Nil(t, res)
 }
 
 func TestDepositPrepare(t *testing.T) {

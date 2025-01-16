@@ -39,7 +39,7 @@ class DockerCompose extends DefaultTask {
         this.args += [*args]
     }
 
-    void dumpLogs(String service = '') {
+    void dumpLogs(Object outputFile, String service = '') {
         List<String> cmd = [*dockerCommand(), 'logs']
         if (startTime != null) {
             cmd += ['--since', dateFormat.format(startTime)]
@@ -47,7 +47,14 @@ class DockerCompose extends DefaultTask {
         if (service != '') {
             cmd << service
         }
-        project.exec { commandLine cmd }
+        File output = project.file(outputFile)
+        output.parentFile.mkdirs()
+        new ProcessBuilder(*cmd)
+            .redirectOutput(output)
+            .redirectErrorStream(true)
+            .start()
+            .waitFor()
+        println "Docker logs dumped to ${outputFile}"
     }
 
     @TaskAction
@@ -56,8 +63,8 @@ class DockerCompose extends DefaultTask {
         List<String> cmd = [*dockerCommand(), *args]
         ExecResult execResult = project.exec { commandLine cmd }
         if (execResult.exitValue != 0) {
-            println "\nDocker command failed: '${cmd}'. Dumping Docker logs."
-            dumpLogs()
+            println "\nDocker command failed: '${cmd}'"
+            dumpLogs("build/docker-compose.log")
         }
         execResult.assertNormalExitValue()
     }
@@ -67,7 +74,7 @@ class DockerCompose extends DefaultTask {
         List<String> cmd = dockerComposeV2Check.contains('Docker Compose')
             ? ['docker', 'compose'] : ['docker-compose']
         composeFiles.each { f ->
-            cmd += ['-f', f]
+            cmd += ['-f', f.path]
         }
         if (projectName != null) {
             cmd += ['-p', projectName]

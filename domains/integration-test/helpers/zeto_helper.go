@@ -26,9 +26,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-//go:embed abis/ZetoFactory.json
-var ZetoFactoryJSON []byte
-
 type ZetoHelper struct {
 	t       *testing.T
 	rpc     rpcbackend.Backend
@@ -74,8 +71,8 @@ func (n *ZetoHelper) Transfer(ctx context.Context, to string, amount uint64) *Do
 	}))
 }
 
-func (z *ZetoHelper) LockProof(ctx context.Context, delegate *tktypes.EthAddress, call []byte) *DomainTransactionHelper {
-	fn := types.ZetoABI.Functions()["lockProof"]
+func (z *ZetoHelper) Lock(ctx context.Context, delegate *tktypes.EthAddress, call []byte) *DomainTransactionHelper {
+	fn := types.ZetoABI.Functions()["lock"]
 	return NewDomainTransactionHelper(ctx, z.t, z.rpc, z.Address, fn, toJSON(z.t, &types.LockParams{
 		Delegate: delegate,
 		Call:     call,

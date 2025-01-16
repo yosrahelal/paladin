@@ -20,7 +20,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
@@ -43,6 +42,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
+
+//go:embed abis/SampleERC20.json
+var erc20ABI []byte
 
 var (
 	controllerName = "controller"
@@ -184,8 +186,8 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	assert.Regexp(t, "PD012216: Transaction reverted OwnableUnauthorizedAccount.*", err)
 
 	if useBatch {
-		// for testing the batch circuits, we transfer 50 which would require 3 UTXOs (>2)
-		amount1 := 10
+		// for testing the batch circuits, we transfer 55 which would require 3 UTXOs (>2)
+		amount1 := 15
 		amount2 := 40
 		log.L(ctx).Info("*************************************")
 		log.L(ctx).Infof("Transfer %d from controller to recipient1 (%d) and recipient2 (%d)", amount1+amount2, amount1, amount2)
@@ -207,14 +209,22 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	// one for the recipient (value=25)
 	expectedCoins := 2
 	if useBatch {
+		// one for the controller from the successful transaction as change (value=5)
+		// one for the recipient1 (value=15)
+		// one for the recipient2 (value=40)
 		expectedCoins = 3
+	}
+	if len(coins) != expectedCoins {
+		for i, coin := range coins {
+			fmt.Printf("==> Coin %d: %+v\n", i, coin)
+		}
 	}
 	require.Len(t, coins, expectedCoins)
 
 	if useBatch {
-		assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64()) // state for recipient1
+		assert.Equal(t, int64(15), coins[0].Data.Amount.Int().Int64()) // state for recipient1
 		assert.Equal(t, int64(40), coins[1].Data.Amount.Int().Int64()) // state for recipient2
-		assert.Equal(t, int64(10), coins[2].Data.Amount.Int().Int64()) // change for controller
+		assert.Equal(t, int64(5), coins[2].Data.Amount.Int().Int64())  // change for controller
 		assert.Equal(t, controllerAddr.String(), coins[2].Data.Owner.String())
 	} else {
 		assert.Equal(t, int64(25), coins[0].Data.Amount.Int().Int64()) // state for recipient1
@@ -250,7 +260,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 func (s *zetoDomainTestSuite) setupContractsAbi(t *testing.T, ctx context.Context, tokenName string) {
 	var result tktypes.HexBytes
 
-	contractAbi, ok := s.deployedContracts.deployedContractAbis[tokenName]
+	contractAbi, ok := s.deployedContracts.DeployedContractAbis[tokenName]
 	require.True(t, ok, "Missing ABI for contract %s", tokenName)
 	rpcerr := s.rpc.CallRPC(ctx, &result, "ptx_storeABI", contractAbi)
 	if rpcerr != nil {
@@ -462,11 +472,7 @@ func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[
 }
 
 func getERC20Spec() (*solutils.SolidityBuild, error) {
-	bytes, err := os.ReadFile("./abis/SampleERC20.json")
-	if err != nil {
-		return nil, err
-	}
-	build := solutils.MustLoadBuild(bytes)
+	build := solutils.MustLoadBuild(erc20ABI)
 	return build, nil
 }
 
