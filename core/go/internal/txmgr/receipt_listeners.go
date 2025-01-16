@@ -167,19 +167,6 @@ func (rr *registeredReceiptReceiver) Close() {
 	rr.l.removeReceiver(rr.id)
 }
 
-func (tm *txManager) listenersForGaps(blocks []*persistedReceiptGap) map[string]*receiptListener {
-	tm.receiptListenerLock.Lock()
-	defer tm.receiptListenerLock.Unlock()
-	listeners := make(map[string]*receiptListener)
-	for _, b := range blocks {
-		l := tm.receiptListeners[b.Listener]
-		if l != nil {
-			listeners[b.Listener] = l
-		}
-	}
-	return listeners
-}
-
 func (tm *txManager) AddReceiptReceiver(ctx context.Context, name string, r components.ReceiptReceiver) (components.ReceiptReceiverCloser, error) {
 	tm.receiptListenerLock.Lock()
 	defer tm.receiptListenerLock.Unlock()
@@ -624,7 +611,7 @@ func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *t
 	// If we already have a block for this contract earlier in the same batch, we need to skip
 	for _, block := range b.Gaps {
 		if pr.Domain != "" && pr.Source.Equals(block.Source) {
-			log.L(l.ctx).Infof("TXID %s is blocked by a block created in the same batch by TXID %s", pr.TransactionID, block.Transaction)
+			log.L(l.ctx).Infof("TXID %s is blocked by a gap created in the same batch by TXID %s", pr.TransactionID, block.Transaction)
 			return nil
 		}
 	}

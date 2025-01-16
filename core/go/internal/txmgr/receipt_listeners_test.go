@@ -344,6 +344,14 @@ func TestLoadListenersMultiPageFilters(t *testing.T) {
 }
 
 func TestGapsDomainsForNonAvailableReceipts(t *testing.T) {
+	testGapsDomainsForNonAvailableReceipts(t, 100)
+}
+
+func TestGapsDomainsForNonAvailableReceiptsForcingPagination(t *testing.T) {
+	testGapsDomainsForNonAvailableReceipts(t, 1)
+}
+
+func testGapsDomainsForNonAvailableReceipts(t *testing.T, pageSize int) {
 	txID1 := uuid.New()
 	txID2 := uuid.New()
 	txID3 := uuid.New()
@@ -377,7 +385,7 @@ func TestGapsDomainsForNonAvailableReceipts(t *testing.T) {
 	)
 	defer done()
 
-	txm.receiptsReadPageSize = 1 // forcing pagination
+	txm.receiptsReadPageSize = pageSize
 
 	err := txm.CreateReceiptListener(ctx, &pldapi.TransactionReceiptListener{
 		Name: "listener1",
@@ -757,24 +765,51 @@ func TestClosedRetryingLoadingCheckpoint(t *testing.T) {
 	l.runListener()
 }
 
+func mockPublicReceipts(count int) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.db.MatchExpectationsInOrder(false)
+		rows := sqlmock.
+			NewRows([]string{
+				"transaction",
+				"sequence",
+				"tx_hash",
+			})
+		for i := 0; i < count; i++ {
+			rows = rows.AddRow(
+				uuid.NewString(),
+				int64(1000),
+				tktypes.RandHex(32),
+			)
+		}
+		mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(rows)
+	}
+}
+
+func mockPrivateReceipt(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	mc.db.MatchExpectationsInOrder(false)
+	mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(sqlmock.
+		NewRows([]string{
+			"transaction",
+			"sequence",
+			"tx_hash",
+			"domain",
+		}).
+		AddRow(
+			uuid.NewString(),
+			int64(1000),
+			tktypes.RandHex(32),
+			"domain1",
+		))
+}
+
 func TestClosedRetryingBatchDeliver(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
 		mockNoGaps,
+		mockPublicReceipts(1),
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectQuery("SELECT.*receipt_listener_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
-			mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(sqlmock.
-				NewRows([]string{
-					"transaction",
-					"sequence",
-					"tx_hash",
-				}).
-				AddRow(
-					uuid.NewString(),
-					int64(1000),
-					tktypes.RandHex(32),
-				))
 		},
 	)
 	defer done()
@@ -801,21 +836,11 @@ func TestClosedRetryingWritingCheckpoint(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
 		mockNoGaps,
+		mockPublicReceipts(1),
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectBegin()
 			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectQuery("SELECT.*receipt_listener_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
-			mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(sqlmock.
-				NewRows([]string{
-					"transaction",
-					"sequence",
-					"tx_hash",
-				}).
-				AddRow(
-					uuid.NewString(),
-					int64(1000),
-					tktypes.RandHex(32),
-				))
-			mc.db.ExpectBegin()
 			mc.db.ExpectExec("INSERT.*receipt_listener_checkpoints").WillReturnError(fmt.Errorf("pop"))
 		},
 	)
@@ -843,22 +868,10 @@ func TestClosedRetryingQueryReceiptStates(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
 		mockNoGaps,
+		mockPrivateReceipt,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectQuery("SELECT.*receipt_listener_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
-			mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(sqlmock.
-				NewRows([]string{
-					"transaction",
-					"sequence",
-					"tx_hash",
-					"domain",
-				}).
-				AddRow(
-					uuid.NewString(),
-					int64(1000),
-					tktypes.RandHex(32),
-					"domain1",
-				))
 			mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 		},
 	)
@@ -978,6 +991,111 @@ func TestProcessPersistedReceiptPostFilter(t *testing.T) {
 
 	err = l.processPersistedReceipt(&receiptDeliveryBatch{}, &transactionReceipt{})
 	require.NoError(t, err)
+	close(l.done)
+
+}
+
+func mockGap(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	mc.db.MatchExpectationsInOrder(false)
+	contractAddr := tktypes.RandAddress()
+	txID := uuid.New()
+	stateID := tktypes.HexBytes(tktypes.RandBytes(32))
+	mc.db.ExpectQuery("SELECT.*receipt_listener_gap").WillReturnRows(sqlmock.NewRows([]string{
+		"listener", "source", "transaction", "sequence", "domain_name", "state",
+	}).AddRow(
+		"listener1", contractAddr, txID, 12345, "domain1", stateID,
+	))
+}
+
+func TestProcessStaleGapFailRetryingReadPage(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		mockGap,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
+			mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnError(fmt.Errorf("pop"))
+		},
+	)
+	defer done()
+
+	txm.receiptsRetry.UTSetMaxAttempts(1)
+
+	err := txm.CreateReceiptListener(ctx, &pldapi.TransactionReceiptListener{
+		Name:    "listener1",
+		Started: confutil.P(false),
+	})
+	require.NoError(t, err)
+
+	l := txm.receiptListeners["listener1"]
+	l.initStart()
+
+	err = l.processStaleGaps()
+	assert.Regexp(t, "pop", err)
+	close(l.done)
+
+}
+
+func TestProcessStaleGapFailRetryingProcessPage(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		mockGap,
+		mockPrivateReceipt,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
+			mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).
+				Return(nil, fmt.Errorf("pop"))
+		},
+	)
+	defer done()
+
+	txm.receiptsRetry.UTSetMaxAttempts(1)
+
+	err := txm.CreateReceiptListener(ctx, &pldapi.TransactionReceiptListener{
+		Name:    "listener1",
+		Started: confutil.P(false),
+	})
+	require.NoError(t, err)
+
+	l := txm.receiptListeners["listener1"]
+	l.initStart()
+
+	err = l.processStaleGaps()
+	assert.Regexp(t, "pop", err)
+	close(l.done)
+
+}
+
+func TestProcessStaleGapFailRetryingUpdateGapForPage(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		mockGap,
+		mockPublicReceipts(1),
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
+			mc.db.ExpectExec("UPDATE.*receipt_listener_gap").WillReturnError(fmt.Errorf("pop"))
+		},
+	)
+	defer done()
+
+	txm.receiptsReadPageSize = 1
+	txm.receiptsRetry.UTSetMaxAttempts(1)
+
+	err := txm.CreateReceiptListener(ctx, &pldapi.TransactionReceiptListener{
+		Name:    "listener1",
+		Started: confutil.P(false),
+	})
+	require.NoError(t, err)
+
+	receipts := newTestReceiptReceiver(nil)
+	closeReceiver, err := txm.AddReceiptReceiver(ctx, "listener1", receipts)
+	require.NoError(t, err)
+	defer closeReceiver.Close()
+
+	l := txm.receiptListeners["listener1"]
+	l.initStart()
+
+	err = l.processStaleGaps()
+	assert.Regexp(t, "pop", err)
 	close(l.done)
 
 }
