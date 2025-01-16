@@ -343,7 +343,7 @@ func TestLoadListenersMultiPageFilters(t *testing.T) {
 
 }
 
-func TestBlockingDomainsForNonAvailableReceipts(t *testing.T) {
+func TestGapsDomainsForNonAvailableReceipts(t *testing.T) {
 	txID1 := uuid.New()
 	txID2 := uuid.New()
 	txID3 := uuid.New()
@@ -433,6 +433,14 @@ func TestBlockingDomainsForNonAvailableReceipts(t *testing.T) {
 	require.Equal(t, txID5, (<-r1.receipts).ID)
 
 	// and if we unblock the first contract, things start moving again
+	postCommit, err = txm.NotifyStateArrivalForTransactions(ctx, txm.p.DB(), txID2)
+	require.NoError(t, err)
+	postCommit()
+
+	// .. now TX2 is complete
+	require.Equal(t, txID2, (<-r1.receipts).ID)
+	// .. and TX3 is unblocked
+	require.Equal(t, txID3, (<-r1.receipts).ID)
 
 }
 
@@ -717,6 +725,7 @@ func TestClosedRetryingLoadingCheckpoint(t *testing.T) {
 func TestClosedRetryingBatchDeliver(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
+		mockNoGaps,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectQuery("SELECT.*receipt_listener_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
@@ -756,6 +765,7 @@ func TestClosedRetryingBatchDeliver(t *testing.T) {
 func TestClosedRetryingWritingCheckpoint(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
+		mockNoGaps,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectQuery("SELECT.*receipt_listener_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
@@ -797,6 +807,7 @@ func TestClosedRetryingWritingCheckpoint(t *testing.T) {
 func TestClosedRetryingQueryReceiptStates(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
+		mockNoGaps,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectQuery("SELECT.*receipt_listener_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
@@ -833,6 +844,7 @@ func TestClosedRetryingQueryReceiptStates(t *testing.T) {
 func TestClosedRetryingQueryReceipts(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
+		mockNoGaps,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectQuery("SELECT.*receipt_listener_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))

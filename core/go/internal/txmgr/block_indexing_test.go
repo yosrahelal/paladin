@@ -129,6 +129,11 @@ func mockEmptyReceiptListeners(conf *pldconf.TxManagerConfig, mc *mockComponents
 	mc.db.ExpectQuery("SELECT.*receipt_listeners").WillReturnRows(sqlmock.NewRows([]string{}))
 }
 
+func mockNoGaps(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	mc.db.MatchExpectationsInOrder(false)
+	mc.db.ExpectQuery("SELECT.*receipt_listener_gap").WillReturnRows(sqlmock.NewRows([]string{}))
+}
+
 func TestPublicConfirmMatch(t *testing.T) {
 
 	txi := newTestConfirm()

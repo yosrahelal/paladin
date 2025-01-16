@@ -68,7 +68,6 @@ type persistedReceiptGap struct {
 	Source      *tktypes.EthAddress `gorm:"column:source"`
 	Transaction uuid.UUID           `gorm:"column:transaction"`
 	Sequence    uint64              `gorm:"column:sequence"`
-	Created     tktypes.Timestamp   `gorm:"column:created"`
 	Stale       bool                `gorm:"column:stale"`
 }
 
@@ -87,6 +86,7 @@ type receiptListener struct {
 
 	newReceipts chan bool
 
+	nextBatchID  uint64
 	newReceivers chan bool
 	receiverLock sync.Mutex
 	receivers    []*registeredReceiptReceiver
@@ -102,7 +102,7 @@ type registeredReceiptReceiver struct {
 type receiptDeliveryBatch struct {
 	ID       uint64
 	Receipts []*pldapi.TransactionReceiptFull
-	NewGaps  []*persistedReceiptGap
+	Gaps     []*persistedReceiptGap
 }
 
 func (tm *txManager) receiptsInit() {
@@ -162,7 +162,7 @@ func (tm *txManager) NotifyStateArrivalForTransactions(ctx context.Context, dbTX
 	err := dbTX.
 		WithContext(ctx).
 		Select("listener").
-		Where("transaction IN (?)", txIDs).
+		Where(`"transaction" IN (?)`, txIDs).
 		Find(&gaps).
 		Error
 	if err != nil {
@@ -176,7 +176,7 @@ func (tm *txManager) NotifyStateArrivalForTransactions(ctx context.Context, dbTX
 	// and see if it can now be moved forwards, or removed all together.
 	listeners := tm.listenersForGaps(gaps)
 	err = dbTX.Model(&persistedReceiptGap{}).
-		Where("transaction IN (?)").Update("stale", true).Error
+		Where(`"transaction" IN (?)`, txIDs).Update("stale", true).Error
 	if err != nil {
 		return nil, err
 	}
@@ -429,9 +429,6 @@ func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.Tran
 
 	// Standard parts
 	q = q.Order("sequence").Limit(tm.receiptsReadPageSize)
-	// Only return non-blocked sequences
-	q = q.Joins(`Block`, dbTX.Where(&persistedReceiptGap{Listener: spec.Name}))
-	q = q.Where(`"Block"."transaction" IS NULL`)
 	return q, nil
 }
 
@@ -599,12 +596,38 @@ func (l *receiptListener) loadCheckpoint() error {
 	return nil
 }
 
-func (l *receiptListener) readPage() ([]*transactionReceipt, error) {
+func (l *receiptListener) readHeadPage() ([]*transactionReceipt, error) {
+	var receipts []*transactionReceipt
+	err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+		db := l.tm.p.DB()
+		q, err := l.tm.buildListenerDBQuery(l.ctx, l.spec, db)
+		if err == nil {
+			// Only return non-blocked sequences
+			q = q.Joins(`Block`, db.Where(&persistedReceiptGap{Listener: l.spec.Name})).
+				Where(`"Block"."transaction" IS NULL`)
+			if l.checkpoint != nil {
+				q = q.Where(`"transaction_receipts"."sequence" > ?`, *l.checkpoint)
+			}
+		}
+		if err == nil {
+			err = q.Find(&receipts).Error
+		}
+		return true, err
+	})
+	return receipts, err
+}
+
+func (l *receiptListener) readGapPage(gap *persistedReceiptGap) ([]*transactionReceipt, error) {
 	var receipts []*transactionReceipt
 	err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
 		q, err := l.tm.buildListenerDBQuery(l.ctx, l.spec, l.tm.p.DB())
-		if err == nil && l.checkpoint != nil {
-			q = q.Where(`"transaction_receipts"."sequence" > ?`, *l.checkpoint)
+		if err == nil {
+			q = q.
+				Where(`"transaction_receipts"."source" = ?`, gap.Source).
+				Where(`"transaction_receipts"."sequence" >= ?`, gap.Sequence)
+			if l.checkpoint != nil {
+				q = q.Where(`"transaction_receipts"."sequence" <= ?`, *l.checkpoint)
+			}
 		}
 		if err == nil {
 			err = q.Find(&receipts).Error
@@ -620,7 +643,7 @@ func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *t
 	}
 
 	// If we already have a block for this contract earlier in the same batch, we need to skip
-	for _, block := range b.NewGaps {
+	for _, block := range b.Gaps {
 		if pr.Domain != "" && pr.Source.Equals(block.Source) {
 			log.L(l.ctx).Infof("TXID %s is blocked by a block created in the same batch by TXID %s", pr.TransactionID, block.Transaction)
 			return nil
@@ -640,11 +663,11 @@ func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *t
 		(fr.States == nil || fr.States.HasUnavailable()) &&
 		l.spec.Options.IncompleteStateReceiptBehavior.V() == pldapi.IncompleteStateReceiptBehaviorBlockContract {
 		log.L(l.ctx).Infof("States currently unavailable for TXID %s in blockchain TX %s blocking contract %s", fr.ID, fr.TransactionHash, fr.Source)
-		b.NewGaps = append(b.NewGaps, &persistedReceiptGap{
+		b.Gaps = append(b.Gaps, &persistedReceiptGap{
 			Listener:    l.spec.Name,
 			Source:      &fr.Source,
+			Sequence:    pr.Sequence,
 			Transaction: fr.ID,
-			Created:     tktypes.TimestampNow(),
 		})
 		return nil
 	}
@@ -707,13 +730,13 @@ func (l *receiptListener) updateCheckpoint(batch *receiptDeliveryBatch, newSeque
 				Time:     tktypes.TimestampNow(),
 			}).
 			Error
-		if err == nil && len(batch.NewGaps) > 0 {
+		if err == nil && len(batch.Gaps) > 0 {
 			err = dbTX.
 				WithContext(l.ctx).
 				Clauses(clause.OnConflict{
 					DoNothing: true,
 				}).
-				Create(batch.NewGaps).
+				Create(batch.Gaps).
 				Error
 		}
 		if err != nil {
@@ -722,6 +745,141 @@ func (l *receiptListener) updateCheckpoint(batch *receiptDeliveryBatch, newSeque
 		l.checkpoint = &newSequence
 		return nil
 	})
+
+}
+
+func (l *receiptListener) processPage(page []*transactionReceipt) (*receiptDeliveryBatch, error) {
+	// Process each one building up a batch to process
+	var batch receiptDeliveryBatch
+	batch.ID = l.nextBatchID
+	l.nextBatchID++
+	for _, r := range page {
+		err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+			return true, l.processPersistedReceipt(&batch, r)
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// If our batch contains some work, we need to wait for someone to process that work
+	// (note we're not holding any resource open at this point - no DB TX or anything).
+	if len(batch.Receipts) > 0 {
+		err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+			return true, l.deliverBatch(&batch)
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &batch, nil
+
+}
+
+func (l *receiptListener) processStaleGaps() error {
+
+	// We process stale gaps one at a time, as the outcome is to:
+	// 1) if still a problem, remove the stale flag from the gap
+	// 2) move the gap onwards to the new gap
+	// 3) remove the gap completely so the contract is in the head group again
+	for {
+		var gaps []*persistedReceiptGap
+		err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+			return true, l.tm.p.DB().
+				WithContext(l.ctx).
+				Where("stale IS TRUE").
+				Limit(l.tm.receiptListenersLoadPageSize).
+				Find(&gaps).
+				Error
+		})
+		if err != nil {
+			return err
+		}
+		if len(gaps) == 0 {
+			// no gaps to process
+			return nil
+		}
+
+		for _, gap := range gaps {
+			if err := l.processStaleGap(gap); err != nil {
+				return err
+			}
+		}
+	}
+
+}
+
+func (l *receiptListener) processStaleGap(gap *persistedReceiptGap) error {
+
+	for {
+		// Read a page of events from the gap
+		page, err := l.readGapPage(gap)
+		if err != nil {
+			return err
+		}
+
+		// Deliver the events
+		batch, err := l.processPage(page)
+		if err != nil {
+			return err
+		}
+
+		// We find a gap still, then we update the gap to this new (non-stale) position
+		if len(batch.Gaps) > 0 {
+			log.L(l.ctx).Infof("Gap for contract %s remains old=%d/%s new=%d/%s", gap.Source, gap.Sequence, gap.Transaction, batch.Gaps[0].Sequence, batch.Gaps[0].Transaction)
+			return l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+				return true, l.tm.p.DB().
+					WithContext(l.ctx).
+					Clauses(clause.OnConflict{
+						Columns: []clause.Column{
+							{Name: "listener"},
+							{Name: "source"},
+						},
+						DoUpdates: clause.AssignmentColumns([]string{
+							"sequence", // might move forwards
+							"stale",    // set to false
+						}),
+					}).
+					Create(batch.Gaps).
+					Error
+			})
+		}
+
+		if len(page) < l.tm.receiptsReadPageSize {
+			// We are done at this point - delete the gap
+			return l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+				return true, l.tm.p.DB().
+					WithContext(l.ctx).
+					Where("listener = ?", gap.Listener).
+					Where("source = ?", gap.Source).
+					Delete(&persistedReceiptGap{}).
+					Error
+			})
+		}
+
+		// We need to move the stale gap forwards, to the next record after this page.
+		// Then we continue to query, until we run out of messages
+		gap.Sequence = page[len(page)-1].Sequence + 1
+		if err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
+			return true, l.tm.p.DB().
+				WithContext(l.ctx).
+				Clauses(clause.OnConflict{
+					Columns: []clause.Column{
+						{Name: "listener"},
+						{Name: "source"},
+					},
+					DoUpdates: clause.AssignmentColumns([]string{
+						"sequence", // move forwards
+						"stale",    // set to false
+					}),
+				}).
+				Create(gap).
+				Error
+		}); err != nil {
+			return err
+		}
+	}
 
 }
 
@@ -736,49 +894,35 @@ func (l *receiptListener) runListener() {
 		return
 	}
 
-	var batchID uint64
 	for {
 
-		// Read the next page of receipts from non-blocked sources
-		page, err := l.readPage()
+		// Process up all stale gaps before we process the head
+		if err := l.processStaleGaps(); err != nil {
+			log.L(l.ctx).Warnf("listener stopping (processing stale gaps): %s", err) // cancelled context
+			return
+		}
+
+		// Read the next page of receipts from non-gapped sources - the head
+		page, err := l.readHeadPage()
 		if err != nil {
 			log.L(l.ctx).Warnf("listener stopping: %s", err) // cancelled context
 			return
 		}
 
-		// Process each one building up a batch to process
-		var batch receiptDeliveryBatch
-		batch.ID = batchID
-		batchID++
-		for _, r := range page {
-			err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
-				return true, l.processPersistedReceipt(&batch, r)
-			})
-			if err != nil {
-				log.L(l.ctx).Warnf("listener stopping (while processing receipts): %s", err)
-				return
-			}
-		}
-
-		// If our batch contains some work, we need to wait for someone to process that work
-		// (note we're not holding any resource open at this point - no DB TX or anything).
-		if len(batch.Receipts) > 0 {
-			err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
-				return true, l.deliverBatch(&batch)
-			})
-			if err != nil {
-				log.L(l.ctx).Warnf("listener stopping (batch %d containing %d events not delivered): %s", batchID, len(batch.Receipts), err) // cancelled context
-				return
-			}
+		// Deliver those events
+		batch, err := l.processPage(page)
+		if err != nil {
+			log.L(l.ctx).Warnf("listener stopping (processing page of %d receipts): %s", len(page), err) // cancelled context
+			return
 		}
 
 		// Whether we processed any receipts or not, we can move our checkpoint forwards
 		if len(page) > 0 {
 			err := l.tm.receiptsRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
-				return true, l.updateCheckpoint(&batch, page[len(page)-1].Sequence)
+				return true, l.updateCheckpoint(batch, page[len(page)-1].Sequence)
 			})
 			if err != nil {
-				log.L(l.ctx).Warnf("listener stopping (before updating checkpoint for batch %d): %s", batchID, err) // cancelled context
+				log.L(l.ctx).Warnf("listener stopping (before updating checkpoint for batch %d): %s", batch.ID, err) // cancelled context
 				return
 			}
 		}

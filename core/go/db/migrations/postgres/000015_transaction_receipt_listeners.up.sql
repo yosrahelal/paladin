@@ -68,7 +68,6 @@ CREATE TABLE receipt_listener_gap (
     "source"             TEXT    NOT NULL,
     "transaction"        UUID    NOT NULL,
     "sequence"           BIGINT  NOT NULL,
-    "created"            BIGINT  NOT NULL,
     "stale"              BOOLEAN NOT NULL,
     PRIMARY KEY ("listener", "source"),
     FOREIGN KEY ("listener") REFERENCES receipt_listeners ("name") ON DELETE CASCADE
