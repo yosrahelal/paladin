@@ -39,8 +39,6 @@ type RPCServer interface {
 	WSAddr() net.Addr
 
 	Register(module *RPCModule)
-	EthPublish(eventType string, result interface{}) // Note this is an `eth_` specific extension, with no ack or reliability
-	WSSubscriptionCount(eventType string) int
 
 	WSHandler(w http.ResponseWriter, r *http.Request)   // Provides access to the WebSocket handler directly to be able to install it into another server
 	HTTPHandler(w http.ResponseWriter, r *http.Request) // Provides access to the http handler directly to be able to install it into another server

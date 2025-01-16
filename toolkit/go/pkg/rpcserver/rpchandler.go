@@ -45,7 +45,7 @@ func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketC
 			log.L(ctx).Errorf("Bad RPC array received %s", b)
 			return s.replyRPCParseError(ctx, b, err)
 		}
-		return s.handleRPCBatch(ctx, rpcArray)
+		return s.handleRPCBatch(ctx, rpcArray, wsc)
 	}
 
 	var rpcRequest rpcclient.RPCRequest
@@ -53,14 +53,7 @@ func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketC
 	if err != nil {
 		return s.replyRPCParseError(ctx, b, err)
 	}
-	if wsc != nil {
-		if rpcRequest.Method == "eth_subscribe" {
-			return s.processSubscribe(ctx, &rpcRequest, wsc)
-		} else if rpcRequest.Method == "eth_unsubscribe" {
-			return s.processUnsubscribe(ctx, &rpcRequest, wsc)
-		}
-	}
-	return s.processRPC(ctx, &rpcRequest)
+	return s.processRPC(ctx, &rpcRequest, wsc)
 
 }
 
@@ -86,7 +79,7 @@ func (s *rpcServer) sniffFirstByte(data []byte) byte {
 	return 0x00
 }
 
-func (s *rpcServer) handleRPCBatch(ctx context.Context, rpcArray []*rpcclient.RPCRequest) ([]*rpcclient.RPCResponse, bool) {
+func (s *rpcServer) handleRPCBatch(ctx context.Context, rpcArray []*rpcclient.RPCRequest, wsc *webSocketConnection) ([]*rpcclient.RPCResponse, bool) {
 
 	// Kick off a routine to fill in each
 	rpcResponses := make([]*rpcclient.RPCResponse, len(rpcArray))
@@ -96,7 +89,7 @@ func (s *rpcServer) handleRPCBatch(ctx context.Context, rpcArray []*rpcclient.RP
 		rpcReq := r
 		go func() {
 			var ok bool
-			rpcResponses[responseNumber], ok = s.processRPC(ctx, rpcReq)
+			rpcResponses[responseNumber], ok = s.processRPC(ctx, rpcReq, wsc)
 			results <- ok
 		}()
 	}
