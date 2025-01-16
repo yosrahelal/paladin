@@ -46,6 +46,7 @@ type testDomainManager struct {
 	recoverSigner       func(context.Context, *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error)
 	sendTransaction     func(context.Context, *prototk.SendTransactionRequest) (*prototk.SendTransactionResponse, error)
 	localNodeName       func(context.Context, *prototk.LocalNodeNameRequest) (*prototk.LocalNodeNameResponse, error)
+	getStates           func(context.Context, *prototk.GetStatesRequest) (*prototk.GetStatesResponse, error)
 }
 
 func (tp *testDomainManager) FindAvailableStates(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
@@ -73,7 +74,7 @@ func (tp *testDomainManager) LocalNodeName(ctx context.Context, req *prototk.Loc
 }
 
 func (tp *testDomainManager) GetStates(ctx context.Context, req *prototk.GetStatesRequest) (*prototk.GetStatesResponse, error) {
-	return nil, nil
+	return tp.getStates(ctx, req)
 }
 
 func domainConnectFactory(ctx context.Context, client prototk.PluginControllerClient) (grpc.BidiStreamingClient[prototk.DomainMessage, prototk.DomainMessage], error) {
@@ -302,6 +303,13 @@ func TestDomainRequestsOK(t *testing.T) {
 		}, nil
 	}
 
+	tdm.getStates = func(ctx context.Context, gsr *prototk.GetStatesRequest) (*prototk.GetStatesResponse, error) {
+		assert.Equal(t, "schema1", gsr.SchemaId)
+		return &prototk.GetStatesResponse{
+			States: []*prototk.StoredState{{}},
+		}, nil
+	}
+
 	ctx, pc, done := newTestDomainPluginManager(t, &testManagers{
 		testDomainManager: tdm,
 	})
@@ -456,6 +464,12 @@ func TestDomainRequestsOK(t *testing.T) {
 	lnr, err := callbacks.LocalNodeName(ctx, &prototk.LocalNodeNameRequest{})
 	require.NoError(t, err)
 	assert.Equal(t, "node1", lnr.Name)
+
+	gsr, err := callbacks.GetStates(ctx, &prototk.GetStatesRequest{
+		SchemaId: "schema1",
+	})
+	require.NoError(t, err)
+	assert.Len(t, gsr.States, 1)
 }
 
 func TestDomainRegisterFail(t *testing.T) {

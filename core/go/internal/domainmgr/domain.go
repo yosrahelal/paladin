@@ -823,10 +823,7 @@ func (d *domain) GetStates(ctx context.Context, req *prototk.GetStatesRequest) (
 	}
 
 	_, states, err := c.dCtx.GetStates(c.dbTX, schemaID, req.StateIds)
-	if err != nil {
-		return nil, err
-	}
 	return &prototk.GetStatesResponse{
 		States: toProtoStates(states),
-	}, nil
+	}, err
 }
