@@ -400,7 +400,7 @@ func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.Tran
 	}
 
 	// Standard parts
-	q = q.Order("sequence").Limit(tm.receiptsReadPageSize)
+	q = q.Order(`"transaction_receipts"."sequence"`).Limit(tm.receiptsReadPageSize)
 	return q, nil
 }
 

@@ -359,7 +359,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 	}
 
 	// Write any new states first
-	var writeStatePostCommit func()
+	writeStatePostCommit := func() {}
 	if len(newStates) > 0 {
 		// These states are trusted as they come from the domain on our local node (no need to go back round VerifyStateHashes for customer hash functions)
 		writeStatePostCommit, _, err = d.dm.stateStore.WritePreVerifiedStates(ctx, dbTX, d.name, newStates)
