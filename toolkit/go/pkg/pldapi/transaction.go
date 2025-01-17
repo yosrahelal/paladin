@@ -40,6 +40,22 @@ func (tt TransactionType) Options() []string {
 	}
 }
 
+type PTXEventType string
+
+const (
+	PTXEventTypeReceipts PTXEventType = "receipts"
+)
+
+func (tt PTXEventType) Enum() tktypes.Enum[PTXEventType] {
+	return tktypes.Enum[PTXEventType](tt)
+}
+
+func (tt PTXEventType) Options() []string {
+	return []string{
+		string(PTXEventTypeReceipts),
+	}
+}
+
 type SubmitMode string
 
 const (

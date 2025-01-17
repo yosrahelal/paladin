@@ -64,7 +64,8 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_getReceiptListener", tm.rpcGetReceiptListener()).
 		Add("ptx_startReceiptListener", tm.rpcStartReceiptListener()).
 		Add("ptx_stopReceiptListener", tm.rpcStopReceiptListener()).
-		Add("ptx_deleteReceiptListener", tm.rpcDeleteReceiptListener())
+		Add("ptx_deleteReceiptListener", tm.rpcDeleteReceiptListener()).
+		AddAsync(tm.rpcEventStreams)
 
 	tm.debugRpcModule = rpcserver.NewRPCModule("debug").
 		Add("debug_getTransactionStatus", tm.rpcDebugTransactionStatus())

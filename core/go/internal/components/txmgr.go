@@ -74,7 +74,7 @@ type ResolvedFunction struct {
 }
 
 type ReceiptReceiver interface {
-	DeliverReceiptBatch(ctx context.Context, receipts []*pldapi.TransactionReceiptFull) error
+	DeliverReceiptBatch(ctx context.Context, batchID uint64, receipts []*pldapi.TransactionReceiptFull) error
 }
 
 type ReceiptReceiverCloser interface {

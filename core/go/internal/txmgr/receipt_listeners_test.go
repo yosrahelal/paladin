@@ -42,7 +42,7 @@ type testReceiptReceiver struct {
 	receipts  chan *pldapi.TransactionReceiptFull
 }
 
-func (trr *testReceiptReceiver) DeliverReceiptBatch(ctx context.Context, receipts []*pldapi.TransactionReceiptFull) error {
+func (trr *testReceiptReceiver) DeliverReceiptBatch(ctx context.Context, batchID uint64, receipts []*pldapi.TransactionReceiptFull) error {
 	if trr.callCount == 0 {
 		close(trr.called)
 	}

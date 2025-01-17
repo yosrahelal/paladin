@@ -42,6 +42,7 @@ func NewTXManager(ctx context.Context, conf *pldconf.TxManagerConfig) components
 		txCache:  cache.NewCache[uuid.UUID, *components.ResolvedTransaction](&conf.Transactions.Cache, &pldconf.TxManagerDefaults.Transactions.Cache),
 	}
 	tm.receiptsInit()
+	tm.rpcEventStreams = newRPCEventStreams(tm)
 	return tm
 }
 
@@ -57,6 +58,7 @@ type txManager struct {
 	domainMgr           components.DomainManager
 	stateMgr            components.StateManager
 	identityResolver    components.IdentityResolver
+	rpcEventStreams     *rpcEventStreams
 	txCache             cache.Cache[uuid.UUID, *components.ResolvedTransaction]
 	abiCache            cache.Cache[tktypes.Bytes32, *pldapi.StoredABI]
 	rpcModule           *rpcserver.RPCModule

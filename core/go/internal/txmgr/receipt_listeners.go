@@ -680,7 +680,7 @@ func (l *receiptListener) deliverBatch(b *receiptDeliveryBatch) error {
 	}
 
 	log.L(l.ctx).Infof("Delivering receipt batch %d (receipts=%d)", b.ID, len(b.Receipts))
-	err = r.DeliverReceiptBatch(l.ctx, b.Receipts)
+	err = r.DeliverReceiptBatch(l.ctx, b.ID, b.Receipts)
 	log.L(l.ctx).Infof("Delivered receipt batch %d (err=%v)", b.ID, err)
 	return err
 }
