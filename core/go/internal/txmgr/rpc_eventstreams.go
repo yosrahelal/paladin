@@ -65,6 +65,7 @@ type receiptListenerSubscription struct {
 	rrc       components.ReceiptReceiverCloser
 	ctrl      rpcserver.RPCAsyncControl
 	acksNacks chan *rpcAckNack
+	closed    chan struct{}
 }
 
 func (es *rpcEventStreams) HandleStart(ctx context.Context, req *rpcclient.RPCRequest, ctrl rpcserver.RPCAsyncControl) (rpcserver.RPCAsyncInstance, *rpcclient.RPCResponse) {
@@ -87,6 +88,7 @@ func (es *rpcEventStreams) HandleStart(ctx context.Context, req *rpcclient.RPCRe
 		es:        es,
 		ctrl:      ctrl,
 		acksNacks: make(chan *rpcAckNack, 1),
+		closed:    make(chan struct{}),
 	}
 	es.receiptSubs[ctrl.ID()] = sub
 	var err error
@@ -102,17 +104,21 @@ func (es *rpcEventStreams) HandleStart(ctx context.Context, req *rpcclient.RPCRe
 	}
 }
 
-func (es *rpcEventStreams) popSubForUnsubscribe(subID string) *receiptListenerSubscription {
+func (es *rpcEventStreams) cleanupSubscription(subID string) {
 	es.subLock.Lock()
 	defer es.subLock.Unlock()
 
 	sub := es.receiptSubs[subID]
 	if sub != nil {
-		delete(es.receiptSubs, subID)
-		return sub
+		es.cleanupLocked(sub)
 	}
+}
 
-	return nil
+func (es *rpcEventStreams) getSubscription(subID string) *receiptListenerSubscription {
+	es.subLock.Lock()
+	defer es.subLock.Unlock()
+
+	return es.receiptSubs[subID]
 }
 
 func (es *rpcEventStreams) HandleLifecycle(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
@@ -121,7 +127,7 @@ func (es *rpcEventStreams) HandleLifecycle(ctx context.Context, req *rpcclient.R
 		return rpcclient.NewRPCErrorResponse(i18n.NewError(ctx, msgs.MsgTxMgrSubIDRequired), req.ID, rpcclient.RPCCodeInvalidRequest)
 	}
 	subID := req.Params[0].AsString()
-	sub := es.popSubForUnsubscribe(subID)
+	sub := es.getSubscription(subID)
 	switch req.Method {
 	case "ptx_ack", "ptx_nack":
 		if sub != nil {
@@ -136,6 +142,7 @@ func (es *rpcEventStreams) HandleLifecycle(ctx context.Context, req *rpcclient.R
 		if sub != nil {
 			sub.ctrl.Closed()
 		}
+		es.cleanupSubscription(subID)
 		return &rpcclient.RPCResponse{
 			JSONRpc: "2.0",
 			ID:      req.ID,
@@ -149,28 +156,40 @@ func (es *rpcEventStreams) HandleLifecycle(ctx context.Context, req *rpcclient.R
 
 func (sub *receiptListenerSubscription) DeliverReceiptBatch(ctx context.Context, batchID uint64, receipts []*pldapi.TransactionReceiptFull) error {
 	log.L(ctx).Infof("Delivering receipt batch %d to subscription %s over JSON/RPC", batchID, sub.ctrl.ID())
-	sub.ctrl.Send("ptx_receiptBatch", receipts)
-	ackNack, ok := <-sub.acksNacks
-	if !ok {
+	sub.ctrl.Send("ptx_receiptBatch", &pldapi.TransactionReceiptBatch{
+		Subscription: sub.ctrl.ID(),
+		Batch:        batchID,
+		Receipts:     receipts,
+	})
+	select {
+	case ackNack := <-sub.acksNacks:
+		if !ackNack.ack {
+			log.L(ctx).Warnf("Batch %d negatively acknowledged by subscription %s over JSON/RPC", batchID, sub.ctrl.ID())
+			return i18n.NewError(ctx, msgs.MsgTxMgrJSONRPCSubscriptionNack, sub.ctrl.ID())
+		}
+		log.L(ctx).Infof("Batch %d acknowledged by subscription %s over JSON/RPC", batchID, sub.ctrl.ID())
+		return nil
+	case <-sub.closed:
 		return i18n.NewError(ctx, msgs.MsgTxMgrJSONRPCSubscriptionClosed, sub.ctrl.ID())
 	}
-	if !ackNack.ack {
-		log.L(ctx).Warnf("Batch %d negatively acknowledged by subscription %s over JSON/RPC", batchID, sub.ctrl.ID())
-		return i18n.NewError(ctx, msgs.MsgTxMgrJSONRPCSubscriptionNack, sub.ctrl.ID())
-	}
-	log.L(ctx).Infof("Batch %d acknowledged by subscription %s over JSON/RPC", batchID, sub.ctrl.ID())
-	return nil
 }
 
 func (sub *receiptListenerSubscription) ConnectionClosed() {
-	sub.es.cleanupSub(sub)
+	sub.es.cleanupSubscription(sub.ctrl.ID())
 }
 
-func (es *rpcEventStreams) cleanupSub(sub *receiptListenerSubscription) {
+func (es *rpcEventStreams) cleanupLocked(sub *receiptListenerSubscription) {
+	delete(sub.es.receiptSubs, sub.ctrl.ID())
+	sub.rrc.Close()
+	close(sub.closed)
+}
+
+func (es *rpcEventStreams) stop() {
 	es.subLock.Lock()
 	defer es.subLock.Unlock()
 
-	close(sub.acksNacks) // cancels any DeliverReceiptBatch() in-flight
-	sub.rrc.Close()
-	delete(es.receiptSubs, sub.ctrl.ID())
+	for _, sub := range es.receiptSubs {
+		es.cleanupLocked(sub)
+	}
+
 }

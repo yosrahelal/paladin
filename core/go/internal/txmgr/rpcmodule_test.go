@@ -69,6 +69,33 @@ func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*pldconf.TxMana
 
 }
 
+func newTestTransactionManagerWithWebSocketRPC(t *testing.T, init ...func(*pldconf.TxManagerConfig, *mockComponents)) (context.Context, string, *txManager, func()) {
+	ctx, txm, txmDone := newTestTransactionManager(t, true, init...)
+
+	rpcServer, err := rpcserver.NewRPCServer(ctx, &pldconf.RPCServerConfig{
+		HTTP: pldconf.RPCServerConfigHTTP{Disabled: true},
+		WS: pldconf.RPCServerConfigWS{
+			HTTPServerConfig: pldconf.HTTPServerConfig{
+				Port:            confutil.P(0),
+				ShutdownTimeout: confutil.P("0"),
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	rpcServer.Register(txm.rpcModule)
+	rpcServer.Register(txm.debugRpcModule)
+
+	err = rpcServer.Start()
+	require.NoError(t, err)
+
+	return ctx, fmt.Sprintf("ws://%s", rpcServer.WSAddr()), txm, func() {
+		txmDone()
+		rpcServer.Stop()
+	}
+
+}
+
 func mockResolveKeyOKThenFail(t *testing.T, mc *mockComponents, identifier string, senderAddr *tktypes.EthAddress) {
 	kr := mockKeyResolverForFail(t, mc)
 	kr.On("ResolveKey", identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).

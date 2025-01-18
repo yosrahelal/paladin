@@ -170,9 +170,9 @@ func (c *webSocketConnection) sender() {
 }
 
 func (c *webSocketConnection) handleMessage(payload []byte) {
-	res, _ := c.server.rpcHandler(c.ctx, bytes.NewBuffer(payload), c)
-	if res != nil {
-		c.sendMessage(res)
+	r := c.server.rpcHandler(c.ctx, bytes.NewBuffer(payload), c)
+	if r.sendRes {
+		c.sendMessage(r.res)
 	}
 }
 

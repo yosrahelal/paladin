@@ -29,7 +29,13 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketConnection) (interface{}, bool) {
+type handlerResult struct {
+	sendRes bool
+	isOK    bool
+	res     any
+}
+
+func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketConnection) handlerResult {
 
 	b, err := io.ReadAll(r)
 	if err != nil {
@@ -45,7 +51,8 @@ func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketC
 			log.L(ctx).Errorf("Bad RPC array received %s", b)
 			return s.replyRPCParseError(ctx, b, err)
 		}
-		return s.handleRPCBatch(ctx, rpcArray, wsc)
+		batchRes, isOK := s.handleRPCBatch(ctx, rpcArray, wsc)
+		return handlerResult{isOK: isOK, sendRes: true, res: batchRes}
 	}
 
 	var rpcRequest rpcclient.RPCRequest
@@ -53,17 +60,22 @@ func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketC
 	if err != nil {
 		return s.replyRPCParseError(ctx, b, err)
 	}
-	return s.processRPC(ctx, &rpcRequest, wsc)
+	res, isOK := s.processRPC(ctx, &rpcRequest, wsc)
+	return handlerResult{isOK: isOK, sendRes: res != nil, res: res}
 
 }
 
-func (s *rpcServer) replyRPCParseError(ctx context.Context, b []byte, err error) (*rpcclient.RPCResponse, bool) {
+func (s *rpcServer) replyRPCParseError(ctx context.Context, b []byte, err error) handlerResult {
 	log.L(ctx).Errorf("Request could not be parsed (err=%v): %s", err, b)
-	return rpcclient.NewRPCErrorResponse(
-		i18n.NewError(ctx, tkmsgs.MsgJSONRPCInvalidRequest),
-		tktypes.RawJSON(`"1"`),
-		rpcclient.RPCCodeInvalidRequest,
-	), false
+	return handlerResult{
+		isOK:    false,
+		sendRes: true,
+		res: rpcclient.NewRPCErrorResponse(
+			i18n.NewError(ctx, tkmsgs.MsgJSONRPCInvalidRequest),
+			tktypes.RawJSON(`"1"`),
+			rpcclient.RPCCodeInvalidRequest,
+		),
+	}
 }
 
 func (s *rpcServer) sniffFirstByte(data []byte) byte {

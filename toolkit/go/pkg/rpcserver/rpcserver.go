@@ -132,15 +132,15 @@ func (s *rpcServer) httpHandler(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(http.StatusMethodNotAllowed)
 	}
 
-	rpcRes, isOK := s.rpcHandler(req.Context(), req.Body, nil /* not websockets */)
+	r := s.rpcHandler(req.Context(), req.Body, nil /* not websockets */)
 
 	res.Header().Set("Content-Type", "application/json; charset=utf-8")
 	status := http.StatusOK
-	if !isOK {
+	if !r.isOK {
 		status = http.StatusInternalServerError
 	}
 	res.WriteHeader(status)
-	_ = json.NewEncoder(res).Encode(rpcRes)
+	_ = json.NewEncoder(res).Encode(r.res)
 }
 
 func (s *rpcServer) wsHandler(res http.ResponseWriter, req *http.Request) {

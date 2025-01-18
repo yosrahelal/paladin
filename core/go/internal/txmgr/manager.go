@@ -101,5 +101,6 @@ func (tm *txManager) Start() error {
 }
 
 func (tm *txManager) Stop() {
+	tm.rpcEventStreams.stop()
 	tm.stopReceiptListeners()
 }
