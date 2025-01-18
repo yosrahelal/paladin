@@ -44,10 +44,6 @@ func newRPCEventStreams(tm *txManager) *rpcEventStreams {
 	return es
 }
 
-func (es *rpcEventStreams) RPCAsyncHandler() rpcserver.RPCAsyncHandler {
-	return es
-}
-
 func (es *rpcEventStreams) StartMethod() string {
 	return "ptx_subscribe"
 }
@@ -132,7 +128,7 @@ func (es *rpcEventStreams) HandleLifecycle(ctx context.Context, req *rpcclient.R
 	case "ptx_ack", "ptx_nack":
 		if sub != nil {
 			select {
-			case sub.acksNacks <- &rpcAckNack{ack: req.Method == "ptx_ack"}:
+			case sub.acksNacks <- &rpcAckNack{ack: (req.Method == "ptx_ack")}:
 				log.L(ctx).Infof("ack/nack received for subID %s ack=%t", subID, req.Method == "ptx_ack")
 			default:
 			}
@@ -141,8 +137,8 @@ func (es *rpcEventStreams) HandleLifecycle(ctx context.Context, req *rpcclient.R
 	case "ptx_unsubscribe":
 		if sub != nil {
 			sub.ctrl.Closed()
+			es.cleanupSubscription(subID)
 		}
-		es.cleanupSubscription(subID)
 		return &rpcclient.RPCResponse{
 			JSONRpc: "2.0",
 			ID:      req.ID,
@@ -180,7 +176,9 @@ func (sub *receiptListenerSubscription) ConnectionClosed() {
 
 func (es *rpcEventStreams) cleanupLocked(sub *receiptListenerSubscription) {
 	delete(sub.es.receiptSubs, sub.ctrl.ID())
-	sub.rrc.Close()
+	if sub.rrc != nil {
+		sub.rrc.Close()
+	}
 	close(sub.closed)
 }
 
