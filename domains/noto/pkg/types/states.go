@@ -78,6 +78,13 @@ var NotoCoinABI = &abi.Parameter{
 	},
 }
 
+type NotoLockedCoinState struct {
+	ID              tktypes.Bytes32    `json:"id"`
+	Created         tktypes.Timestamp  `json:"created"`
+	ContractAddress tktypes.EthAddress `json:"contractAddress"`
+	Data            NotoLockedCoin     `json:"data"`
+}
+
 type NotoLockedCoin struct {
 	Salt   tktypes.Bytes32     `json:"salt"`
 	LockID tktypes.Bytes32     `json:"lockId"`

@@ -94,7 +94,9 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				if err != nil {
 					return nil, err
 				}
-				if domainConfig.IsNotary && domainConfig.NotaryMode == types.NotaryModeHooks.Enum() && !domainConfig.Options.Hooks.PublicAddress.Equals(unlock.Sender) {
+				if domainConfig.IsNotary &&
+					domainConfig.NotaryMode == types.NotaryModeHooks.Enum() &&
+					!domainConfig.Options.Hooks.PublicAddress.Equals(unlock.Sender) {
 					err = n.handleNotaryPrivateUnlock(ctx, req.StateQueryContext, domainConfig, &unlock)
 					if err != nil {
 						// Should all errors cause retry?
