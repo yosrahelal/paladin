@@ -210,7 +210,7 @@ func (h *burnHandler) baseLedgerInvoke(ctx context.Context, req *prototk.Prepare
 	}
 	return &TransactionWrapper{
 		transactionType: prototk.PreparedTransaction_PUBLIC,
-		functionABI:     h.noto.contractABI.Functions()["transfer"],
+		functionABI:     contractBuild.ABI.Functions()["transfer"],
 		paramsJSON:      paramsJSON,
 	}, nil
 }
@@ -240,7 +240,7 @@ func (h *burnHandler) hookInvoke(ctx context.Context, tx *types.ParsedTransactio
 
 	transactionType, functionABI, paramsJSON, err := h.noto.wrapHookTransaction(
 		tx.DomainConfig,
-		h.noto.hooksABI.Functions()["onBurn"],
+		hooksBuild.ABI.Functions()["onBurn"],
 		params,
 	)
 	if err != nil {

@@ -77,7 +77,7 @@ func (n *Noto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptReques
 
 	if receipt.LockInfo != nil && len(receipt.States.ReadLockedInputs) > 0 && len(receipt.States.PreparedOutputs) > 0 {
 		// For prepareUnlock transactions, include the encoded "unlock" call that can be used to unlock the coins
-		unlock := n.contractABI.Functions()["unlock"]
+		unlock := contractBuild.ABI.Functions()["unlock"]
 		params := &NotoUnlockParams{
 			LockID:        receipt.LockInfo.LockID,
 			LockedInputs:  endorsableStateIDs(n.filterSchema(req.ReadStates, []string{n.lockedCoinSchema.Id})),

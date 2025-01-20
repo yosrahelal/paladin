@@ -232,7 +232,7 @@ func (h *transferHandler) baseLedgerInvoke(ctx context.Context, tx *types.Parsed
 		fn = "transferWithApproval"
 	}
 	return &TransactionWrapper{
-		functionABI: h.noto.contractABI.Functions()[fn],
+		functionABI: contractBuild.ABI.Functions()[fn],
 		paramsJSON:  paramsJSON,
 	}, nil
 }
@@ -267,7 +267,7 @@ func (h *transferHandler) hookInvoke(ctx context.Context, tx *types.ParsedTransa
 
 	transactionType, functionABI, paramsJSON, err := h.noto.wrapHookTransaction(
 		tx.DomainConfig,
-		h.noto.hooksABI.Functions()["onTransfer"],
+		hooksBuild.ABI.Functions()["onTransfer"],
 		params,
 	)
 	if err != nil {

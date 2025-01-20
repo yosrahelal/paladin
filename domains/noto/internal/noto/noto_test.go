@@ -52,6 +52,15 @@ var mockCallbacks = &domain.MockDomainCallbacks{
 	},
 }
 
+func TestConfigureDomainSuccess(t *testing.T) {
+	n := &Noto{Callbacks: mockCallbacks}
+	res, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
+		ConfigJson: "{}",
+	})
+	assert.NoError(t, err)
+	assert.Len(t, res.DomainConfig.AbiStateSchemasJson, 4)
+}
+
 func TestConfigureDomainBadConfig(t *testing.T) {
 	n := &Noto{Callbacks: mockCallbacks}
 	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{

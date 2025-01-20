@@ -48,6 +48,12 @@ var notoInterfaceJSON []byte
 var notoHooksJSON []byte
 
 var (
+	factoryBuild  = solutils.MustLoadBuild(notoFactoryJSON)
+	contractBuild = solutils.MustLoadBuild(notoInterfaceJSON)
+	hooksBuild    = solutils.MustLoadBuild(notoHooksJSON)
+)
+
+var (
 	NotoTransfer       = "NotoTransfer"
 	NotoApproved       = "NotoApproved"
 	NotoLock           = "NotoLock"
@@ -65,6 +71,18 @@ var allEvents = []string{
 	NotoLockDelegated,
 }
 
+var eventsJSON = mustBuildEventsJSON(contractBuild.ABI)
+var eventSignatures = mustLoadEventSignatures(contractBuild.ABI, allEvents)
+
+var allSchemas = []*abi.Parameter{
+	types.NotoCoinABI,
+	types.NotoLockInfoABI,
+	types.NotoLockedCoinABI,
+	types.TransactionDataABI,
+}
+
+var schemasJSON = mustParseSchemas(allSchemas)
+
 func NewNoto(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
 	return &Noto{Callbacks: callbacks}
 }
@@ -79,10 +97,6 @@ type Noto struct {
 	lockedCoinSchema *prototk.StateSchema
 	dataSchema       *prototk.StateSchema
 	lockInfoSchema   *prototk.StateSchema
-	factoryABI       abi.ABI
-	contractABI      abi.ABI
-	hooksABI         abi.ABI
-	eventSignatures  map[string]string
 }
 
 type NotoDeployParams struct {
@@ -209,12 +223,43 @@ type parsedCoins struct {
 	lockedTotal  *big.Int
 }
 
-func getEventSignature(ctx context.Context, abi abi.ABI, eventName string) (string, error) {
-	event := abi.Events()[eventName]
-	if event == nil {
-		return "", i18n.NewError(ctx, msgs.MsgUnknownEvent, eventName)
+func mustLoadEventSignatures(contractABI abi.ABI, allEvents []string) map[string]string {
+	events := contractABI.Events()
+	signatures := make(map[string]string, len(allEvents))
+	for _, eventName := range allEvents {
+		event := events[eventName]
+		if event == nil {
+			panic(fmt.Errorf("unknown event: %s", eventName))
+		}
+		signatures[eventName] = event.SolString()
 	}
-	return event.SolString(), nil
+	return signatures
+}
+
+func mustBuildEventsJSON(contractABI abi.ABI) string {
+	var events abi.ABI
+	for _, entry := range contractABI {
+		if entry.Type == abi.Event {
+			events = append(events, entry)
+		}
+	}
+	eventsJSON, err := json.Marshal(events)
+	if err != nil {
+		panic(err)
+	}
+	return string(eventsJSON)
+}
+
+func mustParseSchemas(allSchemas []*abi.Parameter) []string {
+	schemas := make([]string, len(allSchemas))
+	for i, schema := range allSchemas {
+		schemaJSON, err := json.Marshal(schema)
+		if err != nil {
+			panic(err)
+		}
+		schemas[i] = string(schemaJSON)
+	}
+	return schemas
 }
 
 func (n *Noto) Name() string {
@@ -239,71 +284,30 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 		return nil, err
 	}
 
-	factory := solutils.MustLoadBuild(notoFactoryJSON)
-	contract := solutils.MustLoadBuild(notoInterfaceJSON)
-	hooks := solutils.MustLoadBuild(notoHooksJSON)
-
 	n.name = req.Name
 	n.chainID = req.ChainId
-	n.factoryABI = factory.ABI
-	n.contractABI = contract.ABI
-	n.hooksABI = hooks.ABI
-
-	n.eventSignatures = make(map[string]string, len(allEvents))
-	for _, eventName := range allEvents {
-		signature, err := getEventSignature(ctx, contract.ABI, eventName)
-		if err != nil {
-			return nil, err
-		}
-		n.eventSignatures[eventName] = signature
-	}
-
-	coinSchemaJSON, err := json.Marshal(types.NotoCoinABI)
-	if err != nil {
-		return nil, err
-	}
-	lockSchemaJSON, err := json.Marshal(types.NotoLockInfoABI)
-	if err != nil {
-		return nil, err
-	}
-	lockedCoinSchemaJSON, err := json.Marshal(types.NotoLockedCoinABI)
-	if err != nil {
-		return nil, err
-	}
-	infoSchemaJSON, err := json.Marshal(types.TransactionDataABI)
-	if err != nil {
-		return nil, err
-	}
-
-	var events abi.ABI
-	for _, entry := range contract.ABI {
-		if entry.Type == abi.Event {
-			events = append(events, entry)
-		}
-	}
-	eventsJSON, err := json.Marshal(events)
-	if err != nil {
-		return nil, err
-	}
 
 	return &prototk.ConfigureDomainResponse{
 		DomainConfig: &prototk.DomainConfig{
-			AbiStateSchemasJson: []string{
-				string(coinSchemaJSON),
-				string(lockedCoinSchemaJSON),
-				string(infoSchemaJSON),
-				string(lockSchemaJSON),
-			},
-			AbiEventsJson: string(eventsJSON),
+			AbiStateSchemasJson: schemasJSON,
+			AbiEventsJson:       eventsJSON,
 		},
 	}, nil
 }
 
 func (n *Noto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error) {
-	n.coinSchema = req.AbiStateSchemas[0]
-	n.lockedCoinSchema = req.AbiStateSchemas[1]
-	n.dataSchema = req.AbiStateSchemas[2]
-	n.lockInfoSchema = req.AbiStateSchemas[3]
+	for i, schema := range allSchemas {
+		switch schema.Name {
+		case types.NotoCoinABI.Name:
+			n.coinSchema = req.AbiStateSchemas[i]
+		case types.NotoLockedCoinABI.Name:
+			n.lockedCoinSchema = req.AbiStateSchemas[i]
+		case types.TransactionDataABI.Name:
+			n.dataSchema = req.AbiStateSchemas[i]
+		case types.NotoLockInfoABI.Name:
+			n.lockInfoSchema = req.AbiStateSchemas[i]
+		}
+	}
 	return &prototk.InitDomainResponse{}, nil
 }
 
@@ -410,7 +414,7 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	if deployParams.Name != "" {
 		functionName = "deployImplementation"
 	}
-	functionJSON, err := json.Marshal(n.factoryABI.Functions()[functionName])
+	functionJSON, err := json.Marshal(factoryBuild.ABI.Functions()[functionName])
 	if err != nil {
 		return nil, err
 	}

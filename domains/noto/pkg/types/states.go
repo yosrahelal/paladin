@@ -69,6 +69,7 @@ type NotoCoin struct {
 }
 
 var NotoCoinABI = &abi.Parameter{
+	Name:         "NotoCoin",
 	Type:         "tuple",
 	InternalType: "struct NotoCoin",
 	Components: abi.ParameterArray{
@@ -93,6 +94,7 @@ type NotoLockedCoin struct {
 }
 
 var NotoLockedCoinABI = &abi.Parameter{
+	Name:         "NotoLockedCoin",
 	Type:         "tuple",
 	InternalType: "struct NotoLockedCoin",
 	Components: abi.ParameterArray{
@@ -111,6 +113,7 @@ type NotoLockInfo struct {
 }
 
 var NotoLockInfoABI = &abi.Parameter{
+	Name:         "NotoLockInfo",
 	Type:         "tuple",
 	InternalType: "struct NotoLockInfo",
 	Components: abi.ParameterArray{
@@ -127,6 +130,7 @@ type TransactionData struct {
 }
 
 var TransactionDataABI = &abi.Parameter{
+	Name:         "TransactionData",
 	Type:         "tuple",
 	InternalType: "struct TransactionData",
 	Components: abi.ParameterArray{

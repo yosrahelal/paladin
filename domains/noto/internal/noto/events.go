@@ -32,7 +32,7 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	var res prototk.HandleEventBatchResponse
 	for _, ev := range req.Events {
 		switch ev.SoliditySignature {
-		case n.eventSignatures[NotoTransfer]:
+		case eventSignatures[NotoTransfer]:
 			log.L(ctx).Infof("Processing '%s' event in batch %s", ev.SoliditySignature, req.BatchId)
 			var transfer NotoTransfer_Event
 			if err := json.Unmarshal([]byte(ev.DataJson), &transfer); err == nil {
@@ -47,7 +47,7 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				log.L(ctx).Warnf("Ignoring malformed NotoTransfer event in batch %s: %s", req.BatchId, err)
 			}
 
-		case n.eventSignatures[NotoApproved]:
+		case eventSignatures[NotoApproved]:
 			log.L(ctx).Infof("Processing '%s' event in batch %s", ev.SoliditySignature, req.BatchId)
 			var approved NotoApproved_Event
 			if err := json.Unmarshal([]byte(ev.DataJson), &approved); err == nil {
@@ -60,7 +60,7 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				log.L(ctx).Warnf("Ignoring malformed NotoApproved event in batch %s: %s", req.BatchId, err)
 			}
 
-		case n.eventSignatures[NotoLock]:
+		case eventSignatures[NotoLock]:
 			log.L(ctx).Infof("Processing '%s' event in batch %s", ev.SoliditySignature, req.BatchId)
 			var lock NotoLock_Event
 			if err := json.Unmarshal([]byte(ev.DataJson), &lock); err == nil {
@@ -76,7 +76,7 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				log.L(ctx).Warnf("Ignoring malformed NotoLock event in batch %s: %s", req.BatchId, err)
 			}
 
-		case n.eventSignatures[NotoUnlock]:
+		case eventSignatures[NotoUnlock]:
 			log.L(ctx).Infof("Processing '%s' event in batch %s", ev.SoliditySignature, req.BatchId)
 			var unlock NotoUnlock_Event
 			if err := json.Unmarshal([]byte(ev.DataJson), &unlock); err == nil {
@@ -108,7 +108,7 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				log.L(ctx).Warnf("Ignoring malformed NotoUnlock event in batch %s: %s", req.BatchId, err)
 			}
 
-		case n.eventSignatures[NotoUnlockPrepared]:
+		case eventSignatures[NotoUnlockPrepared]:
 			log.L(ctx).Infof("Processing '%s' event in batch %s", ev.SoliditySignature, req.BatchId)
 			var unlockPrepared NotoUnlockPrepared_Event
 			if err := json.Unmarshal([]byte(ev.DataJson), &unlockPrepared); err == nil {
@@ -122,7 +122,7 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				log.L(ctx).Warnf("Ignoring malformed NotoUnlockPrepared event in batch %s: %s", req.BatchId, err)
 			}
 
-		case n.eventSignatures[NotoLockDelegated]:
+		case eventSignatures[NotoLockDelegated]:
 			log.L(ctx).Infof("Processing '%s' event in batch %s", ev.SoliditySignature, req.BatchId)
 			var lockDelegated NotoLockDelegated_Event
 			if err := json.Unmarshal([]byte(ev.DataJson), &lockDelegated); err == nil {

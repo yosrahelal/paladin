@@ -193,7 +193,7 @@ func (h *delegateLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.Pa
 		return nil, err
 	}
 	return &TransactionWrapper{
-		functionABI: h.noto.contractABI.Functions()["delegateLock"],
+		functionABI: contractBuild.ABI.Functions()["delegateLock"],
 		paramsJSON:  paramsJSON,
 	}, nil
 }
@@ -223,7 +223,7 @@ func (h *delegateLockHandler) hookInvoke(ctx context.Context, tx *types.ParsedTr
 
 	transactionType, functionABI, paramsJSON, err := h.noto.wrapHookTransaction(
 		tx.DomainConfig,
-		h.noto.hooksABI.Functions()["onDelegateLock"],
+		hooksBuild.ABI.Functions()["onDelegateLock"],
 		params,
 	)
 	if err != nil {

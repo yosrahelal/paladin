@@ -197,7 +197,7 @@ func (h *mintHandler) baseLedgerInvoke(ctx context.Context, req *prototk.Prepare
 	}
 	return &TransactionWrapper{
 		transactionType: prototk.PreparedTransaction_PUBLIC,
-		functionABI:     h.noto.contractABI.Functions()["mint"],
+		functionABI:     contractBuild.ABI.Functions()["mint"],
 		paramsJSON:      paramsJSON,
 	}, nil
 }
@@ -231,7 +231,7 @@ func (h *mintHandler) hookInvoke(ctx context.Context, tx *types.ParsedTransactio
 
 	transactionType, functionABI, paramsJSON, err := h.noto.wrapHookTransaction(
 		tx.DomainConfig,
-		h.noto.hooksABI.Functions()["onMint"],
+		hooksBuild.ABI.Functions()["onMint"],
 		params,
 	)
 	if err != nil {

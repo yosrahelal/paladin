@@ -238,7 +238,7 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, lockID tktypes.Bytes
 		return nil, err
 	}
 	return &TransactionWrapper{
-		functionABI: h.noto.contractABI.Functions()["lock"],
+		functionABI: contractBuild.ABI.Functions()["lock"],
 		paramsJSON:  paramsJSON,
 	}, nil
 }
@@ -269,7 +269,7 @@ func (h *lockHandler) hookInvoke(ctx context.Context, lockID tktypes.Bytes32, tx
 
 	transactionType, functionABI, paramsJSON, err := h.noto.wrapHookTransaction(
 		tx.DomainConfig,
-		h.noto.hooksABI.Functions()["onLock"],
+		hooksBuild.ABI.Functions()["onLock"],
 		params,
 	)
 	if err != nil {
