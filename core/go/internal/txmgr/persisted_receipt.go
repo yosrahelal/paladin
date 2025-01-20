@@ -148,13 +148,21 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, in
 	}
 
 	if len(receiptsToInsert) > 0 {
-		err := dbTX.Table("transaction_receipts").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "transaction"}},
-				DoNothing: true, // once inserted, the receipt is immutable
-			}).
-			Create(receiptsToInsert).
-			Error
+		// It is very important that the sequence number for receipts increases in the commit order of the transactions.
+		// Otherwise receipt listeners might miss receipts that appear behind it's polling checkpoint.
+		// So we use an advisory lock on the DB to ensure the allocation of sequence numbers occurs under a lock.
+		// This means if transaction A commits before transaction B, it is guaranteed that the sequence number(s) allocated
+		// in transaction A will be lower than transaction B (not guaranteed otherwise).
+		err := tm.p.TakeNamedLock(ctx, dbTX, "transaction_receipts")
+		if err == nil {
+			err = dbTX.Table("transaction_receipts").
+				Clauses(clause.OnConflict{
+					Columns:   []clause.Column{{Name: "transaction"}},
+					DoNothing: true, // once inserted, the receipt is immutable
+				}).
+				Create(receiptsToInsert).
+				Error
+		}
 		if err != nil {
 			return nil, err
 		}
