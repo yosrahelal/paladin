@@ -324,6 +324,16 @@ func TestInitDeployBadMode(t *testing.T) {
 	assert.ErrorContains(t, err, "PD200007")
 }
 
+func TestInitDeployMissingNotary(t *testing.T) {
+	n := &Noto{Callbacks: mockCallbacks}
+	_, err := n.InitDeploy(context.Background(), &prototk.InitDeployRequest{
+		Transaction: &prototk.DeployTransactionSpecification{
+			ConstructorParamsJson: `{}`,
+		},
+	})
+	assert.ErrorContains(t, err, "PD200007")
+}
+
 func TestInitDeployMissingHooksOptions(t *testing.T) {
 	n := &Noto{Callbacks: mockCallbacks}
 
@@ -525,6 +535,19 @@ func TestInitTransactionBadAbi(t *testing.T) {
 	assert.ErrorContains(t, err, "invalid character")
 }
 
+func TestInitTransactionBadConfig(t *testing.T) {
+	n := &Noto{Callbacks: mockCallbacks}
+	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
+		Transaction: &prototk.TransactionSpecification{
+			ContractInfo: &prototk.ContractInfo{
+				ContractConfigJson: `!!wrong`,
+			},
+			FunctionAbiJson: `{}`,
+		},
+	})
+	assert.ErrorContains(t, err, "invalid character")
+}
+
 func TestInitTransactionBadFunction(t *testing.T) {
 	n := &Noto{Callbacks: mockCallbacks}
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
@@ -538,12 +561,27 @@ func TestInitTransactionBadFunction(t *testing.T) {
 	assert.ErrorContains(t, err, "PD200001")
 }
 
+func TestInitTransactionBadAddress(t *testing.T) {
+	n := &Noto{Callbacks: mockCallbacks}
+	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
+		Transaction: &prototk.TransactionSpecification{
+			ContractInfo: &prototk.ContractInfo{
+				ContractConfigJson: `{"notaryLookup":"notary"}`,
+				ContractAddress:    "!!wrong",
+			},
+			FunctionAbiJson: `{"name": "transfer"}`,
+		},
+	})
+	assert.ErrorContains(t, err, "bad address")
+}
+
 func TestInitTransactionBadParams(t *testing.T) {
 	n := &Noto{Callbacks: mockCallbacks}
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
 			ContractInfo: &prototk.ContractInfo{
 				ContractConfigJson: `{"notaryLookup":"notary"}`,
+				ContractAddress:    tktypes.RandAddress().String(),
 			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: "!!wrong",
@@ -558,6 +596,7 @@ func TestInitTransactionMissingTo(t *testing.T) {
 		Transaction: &prototk.TransactionSpecification{
 			ContractInfo: &prototk.ContractInfo{
 				ContractConfigJson: `{"notaryLookup":"notary"}`,
+				ContractAddress:    tktypes.RandAddress().String(),
 			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: "{}",
@@ -572,6 +611,7 @@ func TestInitTransactionMissingAmount(t *testing.T) {
 		Transaction: &prototk.TransactionSpecification{
 			ContractInfo: &prototk.ContractInfo{
 				ContractConfigJson: `{"notaryLookup":"notary"}`,
+				ContractAddress:    tktypes.RandAddress().String(),
 			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: `{"to": "recipient"}`,
@@ -586,6 +626,7 @@ func TestInitTransactionBadSignature(t *testing.T) {
 		Transaction: &prototk.TransactionSpecification{
 			ContractInfo: &prototk.ContractInfo{
 				ContractConfigJson: `{"notaryLookup":"notary"}`,
+				ContractAddress:    tktypes.RandAddress().String(),
 			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: `{"to": "recipient", "amount": 1}`,
@@ -642,4 +683,20 @@ func TestUnimplementedMethods(t *testing.T) {
 
 	_, err = n.ExecCall(ctx, nil)
 	assert.ErrorContains(t, err, "PD200022")
+}
+
+func TestDecodeConfigInvalid(t *testing.T) {
+	n := &Noto{}
+	ctx := context.Background()
+
+	_, _, err := n.decodeConfig(ctx, types.NotoConfigID_V0)
+	assert.ErrorContains(t, err, "FF22047")
+}
+
+func TestRecoverSignatureInvalid(t *testing.T) {
+	n := &Noto{}
+	ctx := context.Background()
+
+	_, err := n.recoverSignature(ctx, nil, nil)
+	assert.ErrorContains(t, err, "FF22087")
 }

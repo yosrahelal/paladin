@@ -523,17 +523,15 @@ func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.No
 	if err != nil {
 		return nil, nil, err
 	}
-	configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
-	if err != nil {
-		return nil, nil, err
-	}
 	var config types.NotoConfig_V0
-	err = json.Unmarshal(configJSON, &config)
-	if err != nil {
-		return nil, nil, err
-	}
 	var decodedData types.NotoConfigData_V0
-	err = json.Unmarshal(config.Data, &decodedData)
+	configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
+	if err == nil {
+		err = json.Unmarshal(configJSON, &config)
+	}
+	if err == nil {
+		err = json.Unmarshal(config.Data, &decodedData)
+	}
 	return &config, &decodedData, err
 }
 
@@ -564,20 +562,21 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 	if abi == nil || handler == nil {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, functionABI.Name)
 	}
+
+	contractAddress, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	params, err := handler.ValidateParams(ctx, &domainConfig, tx.FunctionParamsJson)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	signature, err := abi.SolidityStringCtx(ctx)
-	if err != nil {
-		return nil, nil, err
+	if err == nil && tx.FunctionSignature != signature {
+		err = i18n.NewError(ctx, msgs.MsgUnexpectedFunctionSignature, functionABI.Name, signature, tx.FunctionSignature)
 	}
-	if tx.FunctionSignature != signature {
-		return nil, nil, i18n.NewError(ctx, msgs.MsgUnexpectedFunctionSignature, functionABI.Name, signature, tx.FunctionSignature)
-	}
-
-	contractAddress, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
 	if err != nil {
 		return nil, nil, err
 	}
