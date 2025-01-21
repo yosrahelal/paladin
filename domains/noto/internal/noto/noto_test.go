@@ -623,3 +623,23 @@ func TestPrepareTransactionBadAbi(t *testing.T) {
 	})
 	assert.ErrorContains(t, err, "invalid character")
 }
+
+func TestUnimplementedMethods(t *testing.T) {
+	n := &Noto{}
+	ctx := context.Background()
+
+	_, err := n.Sign(ctx, nil)
+	assert.ErrorContains(t, err, "PD200022")
+
+	_, err = n.GetVerifier(ctx, nil)
+	assert.ErrorContains(t, err, "PD200022")
+
+	_, err = n.ValidateStateHashes(ctx, nil)
+	assert.ErrorContains(t, err, "PD200022")
+
+	_, err = n.InitCall(ctx, nil)
+	assert.ErrorContains(t, err, "PD200022")
+
+	_, err = n.ExecCall(ctx, nil)
+	assert.ErrorContains(t, err, "PD200022")
+}
