@@ -33,19 +33,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMint(t *testing.T) {
+func TestTransfer(t *testing.T) {
 	n := &Noto{
 		Callbacks:  mockCallbacks,
 		coinSchema: &prototk.StateSchema{Id: "coin"},
 		dataSchema: &prototk.StateSchema{Id: "data"},
 	}
 	ctx := context.Background()
-	fn := types.NotoABI.Functions()["mint"]
+	fn := types.NotoABI.Functions()["transfer"]
 
 	notaryAddress := "0x1000000000000000000000000000000000000000"
 	receiverAddress := "0x2000000000000000000000000000000000000000"
 	senderKey, err := secp256k1.GenerateSecp256k1KeyPair()
 	require.NoError(t, err)
+
+	inputCoin := &types.NotoCoinState{
+		ID: tktypes.RandBytes32(),
+		Data: types.NotoCoin{
+			Owner:  (*tktypes.EthAddress)(&senderKey.Address),
+			Amount: tktypes.Int64ToInt256(100),
+		},
+	}
+	mockCallbacks.MockFindAvailableStates = func() (*prototk.FindAvailableStatesResponse, error) {
+		return &prototk.FindAvailableStatesResponse{
+			States: []*prototk.StoredState{
+				{
+					Id:       inputCoin.ID.String(),
+					SchemaId: "coin",
+					DataJson: mustParseJSON(inputCoin.Data),
+				},
+			},
+		}, nil
+	}
 
 	contractAddress := "0xf6a75f065db3cef95de7aa786eee1d0cb1aeafc3"
 	tx := &prototk.TransactionSpecification{
@@ -102,10 +121,11 @@ func TestMint(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, prototk.AssembleTransactionResponse_OK, assembleRes.AssemblyResult)
-	require.Len(t, assembleRes.AssembledTransaction.InputStates, 0)
+	require.Len(t, assembleRes.AssembledTransaction.InputStates, 1)
 	require.Len(t, assembleRes.AssembledTransaction.OutputStates, 1)
 	require.Len(t, assembleRes.AssembledTransaction.ReadStates, 0)
 	require.Len(t, assembleRes.AssembledTransaction.InfoStates, 1)
+	assert.Equal(t, inputCoin.ID.String(), assembleRes.AssembledTransaction.InputStates[0].Id)
 	outputCoin, err := n.unmarshalCoin(assembleRes.AssembledTransaction.OutputStates[0].StateDataJson)
 	require.NoError(t, err)
 	assert.Equal(t, receiverAddress, outputCoin.Owner.String())
@@ -114,12 +134,19 @@ func TestMint(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "0x1234", outputInfo.Data.String())
 
-	encodedMint, err := n.encodeTransferUnmasked(ctx, ethtypes.MustNewAddress(contractAddress), []*types.NotoCoin{}, []*types.NotoCoin{outputCoin})
+	encodedTransfer, err := n.encodeTransferUnmasked(ctx, ethtypes.MustNewAddress(contractAddress), []*types.NotoCoin{&inputCoin.Data}, []*types.NotoCoin{outputCoin})
 	require.NoError(t, err)
-	signature, err := senderKey.SignDirect(encodedMint)
+	signature, err := senderKey.SignDirect(encodedTransfer)
 	require.NoError(t, err)
 	signatureBytes := tktypes.HexBytes(signature.CompactRSV())
 
+	inputStates := []*prototk.EndorsableState{
+		{
+			SchemaId:      "coin",
+			Id:            inputCoin.ID.String(),
+			StateDataJson: mustParseJSON(inputCoin.Data),
+		},
+	}
 	outputStates := []*prototk.EndorsableState{
 		{
 			SchemaId:      "coin",
@@ -138,6 +165,7 @@ func TestMint(t *testing.T) {
 	endorseRes, err := n.EndorseTransaction(ctx, &prototk.EndorseTransactionRequest{
 		Transaction:       tx,
 		ResolvedVerifiers: verifiers,
+		Inputs:            inputStates,
 		Outputs:           outputStates,
 		Info:              infoStates,
 		EndorsementRequest: &prototk.AttestationRequest{
@@ -158,6 +186,7 @@ func TestMint(t *testing.T) {
 	prepareRes, err := n.PrepareTransaction(ctx, &prototk.PrepareTransactionRequest{
 		Transaction:       tx,
 		ResolvedVerifiers: verifiers,
+		InputStates:       inputStates,
 		OutputStates:      outputStates,
 		InfoStates:        infoStates,
 		AttestationResult: []*prototk.AttestationResult{
@@ -169,14 +198,15 @@ func TestMint(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	expectedFunction := mustParseJSON(contractBuild.ABI.Functions()["mint"])
+	expectedFunction := mustParseJSON(contractBuild.ABI.Functions()["transfer"])
 	assert.JSONEq(t, expectedFunction, prepareRes.Transaction.FunctionAbiJson)
 	assert.Nil(t, prepareRes.Transaction.ContractAddress)
 	assert.JSONEq(t, fmt.Sprintf(`{
+		"inputs": ["%s"],
 		"outputs": ["0x26b394af655bdc794a6d7cd7f8004eec20bffb374e4ddd24cdaefe554878d945"],
 		"signature": "%s",
 		"data": "0x00010000015e1881f2ba769c22d05c841f06949ec6e1bd573f5e1e0328885494212f077d000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000014cc7840e186de23c4127b4853c878708d2642f1942959692885e098f1944547d"
-	}`, signatureBytes), prepareRes.Transaction.ParamsJson)
+	}`, inputCoin.ID, signatureBytes), prepareRes.Transaction.ParamsJson)
 
 	var invokeFn abi.Entry
 	err = json.Unmarshal([]byte(prepareRes.Transaction.FunctionAbiJson), &invokeFn)
@@ -199,6 +229,7 @@ func TestMint(t *testing.T) {
 	prepareRes, err = n.PrepareTransaction(ctx, &prototk.PrepareTransactionRequest{
 		Transaction:       tx,
 		ResolvedVerifiers: verifiers,
+		InputStates:       inputStates,
 		OutputStates:      outputStates,
 		InfoStates:        infoStates,
 		AttestationResult: []*prototk.AttestationResult{
@@ -210,11 +241,12 @@ func TestMint(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	expectedFunction = mustParseJSON(hooksBuild.ABI.Functions()["onMint"])
+	expectedFunction = mustParseJSON(hooksBuild.ABI.Functions()["onTransfer"])
 	assert.JSONEq(t, expectedFunction, prepareRes.Transaction.FunctionAbiJson)
 	assert.Equal(t, &hookAddress, prepareRes.Transaction.ContractAddress)
 	assert.JSONEq(t, fmt.Sprintf(`{
 		"sender": "%s",
+		"from": "%s",
 		"to": "0x2000000000000000000000000000000000000000",
 		"amount": "0x64",
 		"data": "0x1234",
@@ -222,5 +254,5 @@ func TestMint(t *testing.T) {
 			"contractAddress": "%s",
 			"encodedCall": "%s"
 		}
-	}`, senderKey.Address, contractAddress, tktypes.HexBytes(encodedCall)), prepareRes.Transaction.ParamsJson)
+	}`, senderKey.Address, senderKey.Address, contractAddress, tktypes.HexBytes(encodedCall)), prepareRes.Transaction.ParamsJson)
 }
