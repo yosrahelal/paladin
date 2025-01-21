@@ -83,10 +83,6 @@ var allSchemas = []*abi.Parameter{
 
 var schemasJSON = mustParseSchemas(allSchemas)
 
-func NewNoto(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
-	return &Noto{Callbacks: callbacks}
-}
-
 type Noto struct {
 	Callbacks plugintk.DomainCallbacks
 
@@ -236,6 +232,14 @@ func mustLoadEventSignatures(contractABI abi.ABI, allEvents []string) map[string
 	return signatures
 }
 
+func mustParseJSON[T any](obj T) string {
+	parsed, err := json.Marshal(obj)
+	if err != nil {
+		panic(err)
+	}
+	return string(parsed)
+}
+
 func mustBuildEventsJSON(contractABI abi.ABI) string {
 	var events abi.ABI
 	for _, entry := range contractABI {
@@ -243,21 +247,13 @@ func mustBuildEventsJSON(contractABI abi.ABI) string {
 			events = append(events, entry)
 		}
 	}
-	eventsJSON, err := json.Marshal(events)
-	if err != nil {
-		panic(err)
-	}
-	return string(eventsJSON)
+	return mustParseJSON(events)
 }
 
 func mustParseSchemas(allSchemas []*abi.Parameter) []string {
 	schemas := make([]string, len(allSchemas))
 	for i, schema := range allSchemas {
-		schemaJSON, err := json.Marshal(schema)
-		if err != nil {
-			panic(err)
-		}
-		schemas[i] = string(schemaJSON)
+		schemas[i] = mustParseJSON(schema)
 	}
 	return schemas
 }
@@ -276,6 +272,10 @@ func (n *Noto) LockedCoinSchemaID() string {
 
 func (n *Noto) LockInfoSchemaID() string {
 	return n.lockInfoSchema.Id
+}
+
+func (n *Noto) DataSchemaID() string {
+	return n.dataSchema.Id
 }
 
 func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
@@ -325,7 +325,7 @@ func (n *Noto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (
 			return nil, i18n.NewError(ctx, msgs.MsgParameterRequired, "options.hooks")
 		}
 		if params.Options.Hooks.PublicAddress == nil {
-			return nil, i18n.NewError(ctx, msgs.MsgParameterRequired, "options.hooks.notaryAddress")
+			return nil, i18n.NewError(ctx, msgs.MsgParameterRequired, "options.hooks.publicAddress")
 		}
 		if !params.Options.Hooks.DevUsePublicHooks {
 			if params.Options.Hooks.PrivateAddress == nil {
@@ -355,12 +355,12 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	if err != nil {
 		return nil, err
 	}
-	notaryAddress, err := n.findEthAddressVerifier(ctx, "notary", params.Notary, req.ResolvedVerifiers)
+	localNodeName, _ := n.Callbacks.LocalNodeName(ctx, &prototk.LocalNodeNameRequest{})
+	notaryQualified, err := tktypes.PrivateIdentityLocator(params.Notary).FullyQualified(ctx, localNodeName.Name)
 	if err != nil {
 		return nil, err
 	}
-	localNodeName, _ := n.Callbacks.LocalNodeName(ctx, &prototk.LocalNodeNameRequest{})
-	notaryQualified, err := tktypes.PrivateIdentityLocator(params.Notary).FullyQualified(ctx, localNodeName.Name)
+	notaryAddress, err := n.findEthAddressVerifier(ctx, "notary", params.Notary, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -396,38 +396,37 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 		notaryAddress = params.Options.Hooks.PublicAddress
 	}
 
-	deployDataJSON, err := json.Marshal(deployData)
-	if err != nil {
-		return nil, err
-	}
-	deployParams := &NotoDeployParams{
-		Name:          params.Implementation,
-		TransactionID: req.Transaction.TransactionId,
-		NotaryAddress: *notaryAddress,
-		Data:          deployDataJSON,
-	}
-	paramsJSON, err := json.Marshal(deployParams)
-	if err != nil {
-		return nil, err
-	}
-	functionName := "deploy"
-	if deployParams.Name != "" {
-		functionName = "deployImplementation"
-	}
-	functionJSON, err := json.Marshal(factoryBuild.ABI.Functions()[functionName])
-	if err != nil {
-		return nil, err
-	}
+	var functionJSON []byte
+	var paramsJSON []byte
+	var deployDataJSON []byte
 
 	// Use a random key to deploy
+	// TODO: shouldn't it be possible to omit this and let Paladin choose?
 	signer := fmt.Sprintf("%s.deploy.%s", n.name, uuid.New())
+
+	functionName := "deploy"
+	if params.Implementation != "" {
+		functionName = "deployImplementation"
+	}
+	functionJSON, err = json.Marshal(factoryBuild.ABI.Functions()[functionName])
+	if err == nil {
+		deployDataJSON, err = json.Marshal(deployData)
+	}
+	if err == nil {
+		paramsJSON, err = json.Marshal(&NotoDeployParams{
+			Name:          params.Implementation,
+			TransactionID: req.Transaction.TransactionId,
+			NotaryAddress: *notaryAddress,
+			Data:          deployDataJSON,
+		})
+	}
 	return &prototk.PrepareDeployResponse{
 		Transaction: &prototk.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
 		},
 		Signer: &signer,
-	}, nil
+	}, err
 }
 
 func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
@@ -469,10 +468,6 @@ func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractReques
 	}
 
 	notoContractConfigJSON, err = json.Marshal(parsedConfig)
-	if err != nil {
-		return nil, err
-	}
-
 	return &prototk.InitContractResponse{
 		Valid: true,
 		ContractConfig: &prototk.ContractConfig{
@@ -481,7 +476,7 @@ func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractReques
 			StaticCoordinator:    &decodedData.NotaryLookup,
 			SubmitterSelection:   prototk.ContractConfig_SUBMITTER_COORDINATOR,
 		},
-	}, nil
+	}, err
 }
 
 func (n *Noto) InitTransaction(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
@@ -517,7 +512,10 @@ func (n *Noto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTrans
 }
 
 func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.NotoConfig_V0, *types.NotoConfigData_V0, error) {
-	configSelector := ethtypes.HexBytes0xPrefix(domainConfig[0:4])
+	var configSelector ethtypes.HexBytes0xPrefix
+	if len(domainConfig) >= 4 {
+		configSelector = ethtypes.HexBytes0xPrefix(domainConfig[0:4])
+	}
 	if configSelector.String() != types.NotoConfigID_V0.String() {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgUnexpectedConfigType, configSelector)
 	}
@@ -542,6 +540,9 @@ func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.No
 func (n *Noto) validateDeploy(tx *prototk.DeployTransactionSpecification) (*types.ConstructorParams, error) {
 	var params types.ConstructorParams
 	err := json.Unmarshal([]byte(tx.ConstructorParamsJson), &params)
+	if err == nil && params.Notary == "" {
+		err = i18n.NewError(context.Background(), msgs.MsgParameterRequired, "notary")
+	}
 	return &params, err
 }
 
@@ -552,7 +553,7 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, err
 	}
 
-	var domainConfig *types.NotoParsedConfig
+	var domainConfig types.NotoParsedConfig
 	err = json.Unmarshal([]byte(tx.ContractInfo.ContractConfigJson), &domainConfig)
 	if err != nil {
 		return nil, nil, err
@@ -563,7 +564,7 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 	if abi == nil || handler == nil {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, functionABI.Name)
 	}
-	params, err := handler.ValidateParams(ctx, domainConfig, tx.FunctionParamsJson)
+	params, err := handler.ValidateParams(ctx, &domainConfig, tx.FunctionParamsJson)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -585,7 +586,7 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		Transaction:     tx,
 		FunctionABI:     &functionABI,
 		ContractAddress: contractAddress,
-		DomainConfig:    domainConfig,
+		DomainConfig:    &domainConfig,
 		Params:          params,
 	}, handler, nil
 }
