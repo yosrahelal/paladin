@@ -32,6 +32,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 var (
@@ -40,34 +41,51 @@ var (
 	recipient2Name = "recipient2@node1"
 )
 
+func TestNotoSuite(t *testing.T) {
+	suite.Run(t, new(notoTestSuite))
+}
+
+type notoTestSuite struct {
+	suite.Suite
+	hdWalletSeed   *testbed.UTInitFunction
+	domainName     string
+	factoryAddress string
+}
+
+func (s *notoTestSuite) SetupSuite() {
+	ctx := context.Background()
+	s.domainName = "noto_" + tktypes.RandHex(8)
+	log.L(ctx).Infof("Domain name = %s", s.domainName)
+
+	s.hdWalletSeed = testbed.HDWalletSeedScopedToTest()
+
+	log.L(ctx).Infof("Deploying Noto factory")
+	contractSource := map[string][]byte{
+		"factory": helpers.NotoFactoryJSON,
+	}
+	contracts := deployContracts(ctx, s.T(), s.hdWalletSeed, notaryName, contractSource)
+	for name, address := range contracts {
+		log.L(ctx).Infof("%s deployed to %s", name, address)
+	}
+	s.factoryAddress = contracts["factory"]
+}
+
 func toJSON(t *testing.T, v any) []byte {
 	result, err := json.Marshal(v)
 	require.NoError(t, err)
 	return result
 }
 
-func TestNoto(t *testing.T) {
+func (s *notoTestSuite) TestNoto() {
 	ctx := context.Background()
+	t := s.T()
 	log.L(ctx).Infof("TestNoto")
-	domainName := "noto_" + tktypes.RandHex(8)
-	log.L(ctx).Infof("Domain name = %s", domainName)
-
-	hdWalletSeed := testbed.HDWalletSeedScopedToTest()
-
-	log.L(ctx).Infof("Deploying Noto factory")
-	contractSource := map[string][]byte{
-		"factory": helpers.NotoFactoryJSON,
-	}
-	contracts := deployContracts(ctx, t, hdWalletSeed, notaryName, contractSource)
-	for name, address := range contracts {
-		log.L(ctx).Infof("%s deployed to %s", name, address)
-	}
 
 	waitForNoto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
-		FactoryAddress: contracts["factory"],
+		FactoryAddress: s.factoryAddress,
 	})
-	done, _, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
-		domainName: notoTestbed,
+	done, _, tb, rpc := newTestbed(t, s.hdWalletSeed, map[string]*testbed.TestbedDomain{
+		s.domainName: notoTestbed,
 	})
 	defer done()
 
@@ -81,7 +99,7 @@ func TestNoto(t *testing.T) {
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
-	noto := helpers.DeployNoto(ctx, t, rpc, domainName, notary, nil)
+	noto := helpers.DeployNoto(ctx, t, rpc, s.domainName, notary, nil)
 	log.L(ctx).Infof("Noto deployed to %s", noto.Address)
 
 	log.L(ctx).Infof("Mint 100 from notary to notary")
@@ -215,28 +233,16 @@ func TestNoto(t *testing.T) {
 	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[1].Data.Owner.String())
 }
 
-func TestNotoApprove(t *testing.T) {
+func (s *notoTestSuite) TestNotoApprove() {
 	ctx := context.Background()
+	t := s.T()
 	log.L(ctx).Infof("TestNotoApprove")
-	domainName := "noto_" + tktypes.RandHex(8)
-	log.L(ctx).Infof("Domain name = %s", domainName)
-
-	hdWalletSeed := testbed.HDWalletSeedScopedToTest()
-
-	log.L(ctx).Infof("Deploying Noto factory")
-	contractSource := map[string][]byte{
-		"factory": helpers.NotoFactoryJSON,
-	}
-	contracts := deployContracts(ctx, t, hdWalletSeed, notaryName, contractSource)
-	for name, address := range contracts {
-		log.L(ctx).Infof("%s deployed to %s", name, address)
-	}
 
 	_, notoTestbed := newNotoDomain(t, &types.DomainConfig{
-		FactoryAddress: contracts["factory"],
+		FactoryAddress: s.factoryAddress,
 	})
-	done, _, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
-		domainName: notoTestbed,
+	done, _, tb, rpc := newTestbed(t, s.hdWalletSeed, map[string]*testbed.TestbedDomain{
+		s.domainName: notoTestbed,
 	})
 	defer done()
 
@@ -244,7 +250,7 @@ func TestNotoApprove(t *testing.T) {
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
-	noto := helpers.DeployNoto(ctx, t, rpc, domainName, notary, nil)
+	noto := helpers.DeployNoto(ctx, t, rpc, s.domainName, notary, nil)
 	log.L(ctx).Infof("Noto deployed to %s", noto.Address)
 
 	log.L(ctx).Infof("Mint 100 from notary to notary")
@@ -315,28 +321,16 @@ func TestNotoApprove(t *testing.T) {
 	log.L(ctx).Infof("Claimed with transaction: %s", receipt.TransactionHash)
 }
 
-func TestNotoLock(t *testing.T) {
+func (s *notoTestSuite) TestNotoLock() {
 	ctx := context.Background()
+	t := s.T()
 	log.L(ctx).Infof("TestNotoLock")
-	domainName := "noto_" + tktypes.RandHex(8)
-	log.L(ctx).Infof("Domain name = %s", domainName)
-
-	hdWalletSeed := testbed.HDWalletSeedScopedToTest()
-
-	log.L(ctx).Infof("Deploying Noto factory")
-	contractSource := map[string][]byte{
-		"factory": helpers.NotoFactoryJSON,
-	}
-	contracts := deployContracts(ctx, t, hdWalletSeed, notaryName, contractSource)
-	for name, address := range contracts {
-		log.L(ctx).Infof("%s deployed to %s", name, address)
-	}
 
 	waitForNoto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
-		FactoryAddress: contracts["factory"],
+		FactoryAddress: s.factoryAddress,
 	})
-	done, _, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
-		domainName: notoTestbed,
+	done, _, tb, rpc := newTestbed(t, s.hdWalletSeed, map[string]*testbed.TestbedDomain{
+		s.domainName: notoTestbed,
 	})
 	defer done()
 	pld := helpers.NewPaladinClient(t, ctx, tb)
@@ -349,7 +343,7 @@ func TestNotoLock(t *testing.T) {
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
-	noto := helpers.DeployNoto(ctx, t, rpc, domainName, notary, nil)
+	noto := helpers.DeployNoto(ctx, t, rpc, s.domainName, notary, nil)
 	log.L(ctx).Infof("Noto deployed to %s", noto.Address)
 
 	log.L(ctx).Infof("Mint 100 from notary to recipient1")

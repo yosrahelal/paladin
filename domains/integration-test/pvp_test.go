@@ -38,6 +38,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 var (
@@ -46,23 +47,45 @@ var (
 	bob    = "bob"
 )
 
-type NotoTransferParams struct {
-	Inputs  []tktypes.Bytes32 `json:"inputs"`
-	Outputs []tktypes.Bytes32 `json:"outputs"`
-	Data    tktypes.HexBytes  `json:"data"`
+func TestPvPSuite(t *testing.T) {
+	suite.Run(t, new(pvpTestSuite))
 }
 
-type NotoTransferHookParams struct {
-	Sender   *tktypes.EthAddress      `json:"sender"`
-	From     *tktypes.EthAddress      `json:"from"`
-	To       *tktypes.EthAddress      `json:"to"`
-	Amount   *tktypes.HexUint256      `json:"amount"`
-	Prepared PentePreparedTransaction `json:"prepared"`
+type pvpTestSuite struct {
+	suite.Suite
+	hdWalletSeed       *testbed.UTInitFunction
+	notoDomainName     string
+	zetoDomainName     string
+	notoFactoryAddress string
+	atomFactoryAddress string
+	zetoContracts      *zetotests.ZetoDomainContracts
+	zetoConfig         *zetotypes.DomainFactoryConfig
 }
 
-type PentePreparedTransaction struct {
-	ContractAddress tktypes.EthAddress `json:"contractAddress"`
-	EncodedCall     tktypes.HexBytes   `json:"encodedCall"`
+func (s *pvpTestSuite) SetupSuite() {
+	ctx := context.Background()
+	s.notoDomainName = "noto_" + tktypes.RandHex(8)
+	s.zetoDomainName = "zeto_" + tktypes.RandHex(8)
+	log.L(ctx).Infof("Noto domain = %s", s.notoDomainName)
+	log.L(ctx).Infof("Zeto domain = %s", s.zetoDomainName)
+
+	s.hdWalletSeed = testbed.HDWalletSeedScopedToTest()
+
+	log.L(ctx).Infof("Deploying factories")
+	contractSource := map[string][]byte{
+		"noto": helpers.NotoFactoryJSON,
+		"atom": helpers.AtomFactoryJSON,
+	}
+	contracts := deployContracts(ctx, s.T(), s.hdWalletSeed, notary, contractSource)
+	for name, address := range contracts {
+		log.L(ctx).Infof("%s deployed to %s", name, address)
+	}
+	s.notoFactoryAddress = contracts["noto"]
+	s.atomFactoryAddress = contracts["atom"]
+
+	log.L(ctx).Infof("Deploying Zeto dependencies")
+	s.zetoContracts = zetotests.DeployZetoContracts(s.T(), s.hdWalletSeed, "./zeto/config-for-deploy.yaml", notary)
+	s.zetoConfig = zetotests.PrepareZetoConfig(s.T(), s.zetoContracts, "../../domains/zeto/zkp")
 }
 
 func decodeTransactionResult(t *testing.T, resultInput map[string]any) *testbed.TransactionResult {
@@ -126,36 +149,25 @@ func buildUnlock(ctx context.Context, notoDomain noto.Noto, abi abi.ABI, lockID 
 	return notoInputStates, notoOutputStates, unlockParams, encodedCall, err
 }
 
-func TestNotoForNoto(t *testing.T) {
-	pvpNotoNoto(t, testbed.HDWalletSeedScopedToTest(), false)
+func (s *pvpTestSuite) TestNotoForNoto() {
+	s.pvpNotoNoto(false)
 }
 
-func TestNotoForNotoWithHooks(t *testing.T) {
-	pvpNotoNoto(t, testbed.HDWalletSeedScopedToTest(), true)
+func (s *pvpTestSuite) TestNotoForNotoWithHooks() {
+	s.pvpNotoNoto(true)
 }
 
-func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withHooks bool) {
+func (s *pvpTestSuite) pvpNotoNoto(withHooks bool) {
 	ctx := context.Background()
+	t := s.T()
 	log.L(ctx).Infof("TestNotoForNoto (withHooks=%t)", withHooks)
-	domainName := "noto_" + tktypes.RandHex(8)
-	log.L(ctx).Infof("Domain name = %s", domainName)
-
-	log.L(ctx).Infof("Deploying factories")
-	contractSource := map[string][]byte{
-		"noto": helpers.NotoFactoryJSON,
-		"atom": helpers.AtomFactoryJSON,
-	}
-	contracts := deployContracts(ctx, t, hdWalletSeed, notary, contractSource)
-	for name, address := range contracts {
-		log.L(ctx).Infof("%s deployed to %s", name, address)
-	}
 
 	log.L(ctx).Infof("Initializing testbed")
 	_, notoTestbed := newNotoDomain(t, &nototypes.DomainConfig{
-		FactoryAddress: contracts["noto"],
+		FactoryAddress: s.notoFactoryAddress,
 	})
-	done, _, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
-		domainName: notoTestbed,
+	done, _, tb, rpc := newTestbed(t, s.hdWalletSeed, map[string]*testbed.TestbedDomain{
+		s.notoDomainName: notoTestbed,
 	})
 	defer done()
 	pld := helpers.NewPaladinClient(t, ctx, tb)
@@ -165,7 +177,7 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withHooks b
 	bobKey, err := tb.ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
-	atomFactory := helpers.InitAtom(t, tb, pld, contracts["atom"])
+	atomFactory := helpers.InitAtom(t, tb, pld, s.atomFactoryAddress)
 
 	var tracker *helpers.NotoTrackerHelper
 	var trackerAddress *tktypes.EthAddress
@@ -175,8 +187,8 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withHooks b
 	}
 
 	log.L(ctx).Infof("Deploying 2 instances of Noto")
-	notoGold := helpers.DeployNoto(ctx, t, rpc, domainName, notary, trackerAddress)
-	notoSilver := helpers.DeployNoto(ctx, t, rpc, domainName, notary, nil)
+	notoGold := helpers.DeployNoto(ctx, t, rpc, s.notoDomainName, notary, trackerAddress)
+	notoSilver := helpers.DeployNoto(ctx, t, rpc, s.notoDomainName, notary, nil)
 	log.L(ctx).Infof("Noto gold deployed to %s", notoGold.Address)
 	log.L(ctx).Infof("Noto silver deployed to %s", notoSilver.Address)
 
@@ -311,39 +323,19 @@ notReady:
 	return states
 }
 
-func TestNotoForZeto(t *testing.T) {
+func (s *pvpTestSuite) TestNotoForZeto() {
 	ctx := context.Background()
+	t := s.T()
 	log.L(ctx).Infof("TestNotoForZeto")
-
-	hdWalletSeed := testbed.HDWalletSeedScopedToTest()
-
-	notoDomainName := "noto_" + tktypes.RandHex(8)
-	zetoDomainName := "zeto_" + tktypes.RandHex(8)
-	log.L(ctx).Infof("Noto domain = %s", notoDomainName)
-	log.L(ctx).Infof("Zeto domain = %s", zetoDomainName)
-
-	log.L(ctx).Infof("Deploying factories")
-	contractSource := map[string][]byte{
-		"noto": helpers.NotoFactoryJSON,
-		"atom": helpers.AtomFactoryJSON,
-	}
-	contracts := deployContracts(ctx, t, hdWalletSeed, notary, contractSource)
-	for name, address := range contracts {
-		log.L(ctx).Infof("%s deployed to %s", name, address)
-	}
-
-	log.L(ctx).Infof("Deploying Zeto dependencies")
-	zetoContracts := zetotests.DeployZetoContracts(t, hdWalletSeed, "./zeto/config-for-deploy.yaml", notary)
-	zetoConfig := zetotests.PrepareZetoConfig(t, zetoContracts, "../../domains/zeto/zkp")
 
 	log.L(ctx).Infof("Initializing testbed")
 	waitForNoto, notoTestbed := newNotoDomain(t, &nototypes.DomainConfig{
-		FactoryAddress: contracts["noto"],
+		FactoryAddress: s.notoFactoryAddress,
 	})
-	waitForZeto, zetoTestbed := newZetoDomain(t, zetoConfig, zetoContracts.FactoryAddress)
-	done, _, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
-		notoDomainName: notoTestbed,
-		zetoDomainName: zetoTestbed,
+	waitForZeto, zetoTestbed := newZetoDomain(t, s.zetoConfig, s.zetoContracts.FactoryAddress)
+	done, _, tb, rpc := newTestbed(t, s.hdWalletSeed, map[string]*testbed.TestbedDomain{
+		s.notoDomainName: notoTestbed,
+		s.zetoDomainName: zetoTestbed,
 	})
 	defer done()
 	pld := helpers.NewPaladinClient(t, ctx, tb)
@@ -352,7 +344,7 @@ func TestNotoForZeto(t *testing.T) {
 	zetoDomain := <-waitForZeto
 
 	tokenName := "Zeto_Anon"
-	contractAbi, ok := zetoContracts.DeployedContractAbis[tokenName]
+	contractAbi, ok := s.zetoContracts.DeployedContractAbis[tokenName]
 	require.True(t, ok, "Missing ABI for contract %s", tokenName)
 	var result tktypes.HexBytes
 	rpcerr := rpc.CallRPC(ctx, &result, "ptx_storeABI", contractAbi)
@@ -365,11 +357,11 @@ func TestNotoForZeto(t *testing.T) {
 	bobKey, err := tb.ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
-	atomFactory := helpers.InitAtom(t, tb, pld, contracts["atom"])
+	atomFactory := helpers.InitAtom(t, tb, pld, s.atomFactoryAddress)
 
 	log.L(ctx).Infof("Deploying Noto and Zeto")
-	noto := helpers.DeployNoto(ctx, t, rpc, notoDomainName, notary, nil)
-	zeto := helpers.DeployZeto(ctx, t, rpc, zetoDomainName, notary, tokenName)
+	noto := helpers.DeployNoto(ctx, t, rpc, s.notoDomainName, notary, nil)
+	zeto := helpers.DeployZeto(ctx, t, rpc, s.zetoDomainName, notary, tokenName)
 	log.L(ctx).Infof("Noto deployed to %s", noto.Address)
 	log.L(ctx).Infof("Zeto deployed to %s", zeto.Address)
 
