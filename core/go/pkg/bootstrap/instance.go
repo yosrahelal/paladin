@@ -17,8 +17,6 @@ package bootstrap
 
 import (
 	"context"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"strconv"
@@ -80,16 +78,6 @@ func (i *instance) signalHandler() {
 	}
 }
 
-func (i *instance) startProfiler() {
-	go func() {
-		address := "localhost:6060"
-		log.L(i.ctx).Infof("Starting profiler on '%s'", address)
-		if err := http.ListenAndServe(address, nil); err != nil {
-			log.L(i.ctx).Errorf("Profiler failed: %s", err)
-		}
-	}()
-}
-
 func (i *instance) run() RC {
 	defer func() {
 		close(i.done)
@@ -122,11 +110,6 @@ func (i *instance) run() RC {
 	cm := componentManagerFactory(i.ctx, i.grpcTarget, id, &conf, additionalManagers...)
 	// From this point need to ensure we stop the component manager
 	defer cm.Stop()
-
-	// Notice: The logger is initialized in the ManagerFactory constructor
-	if log.IsDebugEnabled() {
-		i.startProfiler()
-	}
 
 	// Start it up
 	err = cm.Init()
