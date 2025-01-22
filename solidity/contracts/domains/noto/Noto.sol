@@ -138,6 +138,19 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     }
 
     /**
+     * @dev query whether a TXO is currently locked
+     * @param lockId the lock identifier
+     * @param id the UTXO identifier
+     * @return locked true or false depending on whether the identifier is locked
+     */
+    function isLocked(
+        bytes32 lockId,
+        bytes32 id
+    ) public view returns (bool locked) {
+        return _locks[lockId].states[id];
+    }
+
+    /**
      * @dev query whether an approval exists for the given transaction
      * @param txhash the transaction hash
      * @return delegate the non-zero owner address, or zero if the TXO ID is not in the approval map
