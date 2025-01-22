@@ -199,20 +199,8 @@ func (h *lockHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, 
 }
 
 func (h *lockHandler) baseLedgerInvoke(ctx context.Context, lockID tktypes.Bytes32, req *prototk.PrepareTransactionRequest) (*TransactionWrapper, error) {
-	inputs := make([]string, len(req.InputStates))
-	for i, state := range req.InputStates {
-		inputs[i] = state.Id
-	}
-
-	lockedOutput, err := tktypes.ParseBytes32Ctx(ctx, req.OutputStates[0].Id)
-	if err != nil {
-		return nil, err
-	}
-
-	remainderOutputs := make([]string, len(req.OutputStates)-1)
-	for i, state := range req.OutputStates[1:] {
-		remainderOutputs[i] = state.Id
-	}
+	inputs := req.InputStates
+	outputs, lockedOutputs := h.noto.splitStates(req.OutputStates)
 
 	// Include the signature from the sender
 	// This is not verified on the base ledger, but can be verified by anyone with the unmasked state data
@@ -227,9 +215,9 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, lockID tktypes.Bytes
 	}
 	params := &NotoLockParams{
 		LockID:        lockID,
-		Inputs:        inputs,
-		Outputs:       remainderOutputs,
-		LockedOutputs: []string{lockedOutput.String()},
+		Inputs:        endorsableStateIDs(inputs),
+		Outputs:       endorsableStateIDs(outputs),
+		LockedOutputs: endorsableStateIDs(lockedOutputs),
 		Signature:     lockSignature.Payload,
 		Data:          data,
 	}
