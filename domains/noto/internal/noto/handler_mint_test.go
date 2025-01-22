@@ -166,6 +166,10 @@ func TestMint(t *testing.T) {
 				Verifier: &prototk.ResolvedVerifier{Verifier: senderKey.Address.String()},
 				Payload:  signatureBytes,
 			},
+			{
+				Name:     "notary",
+				Verifier: &prototk.ResolvedVerifier{Lookup: "notary@node1"},
+			},
 		},
 	})
 	require.NoError(t, err)
@@ -206,6 +210,10 @@ func TestMint(t *testing.T) {
 				Name:     "sender",
 				Verifier: &prototk.ResolvedVerifier{Verifier: senderKey.Address.String()},
 				Payload:  signatureBytes,
+			},
+			{
+				Name:     "notary",
+				Verifier: &prototk.ResolvedVerifier{Lookup: "notary@node1"},
 			},
 		},
 	})

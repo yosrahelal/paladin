@@ -212,6 +212,11 @@ func (h *approveHandler) hookInvoke(ctx context.Context, tx *types.ParsedTransac
 }
 
 func (h *approveHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
+	endorsement := domain.FindAttestation("notary", req.AttestationResult)
+	if endorsement == nil || endorsement.Verifier.Lookup != tx.DomainConfig.NotaryLookup {
+		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "notary")
+	}
+
 	baseTransaction, err := h.baseLedgerInvoke(ctx, tx, req)
 	if err != nil {
 		return nil, err

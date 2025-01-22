@@ -302,6 +302,11 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		return nil, err
 	}
 
+	endorsement := domain.FindAttestation("notary", req.AttestationResult)
+	if endorsement == nil || endorsement.Verifier.Lookup != tx.DomainConfig.NotaryLookup {
+		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "notary")
+	}
+
 	baseTransaction, err := h.baseLedgerInvoke(ctx, lockID, req)
 	if err != nil {
 		return nil, err
