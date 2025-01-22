@@ -35,11 +35,12 @@ import (
 
 func WrapWSConfig(wsConf *wsclient.WSConfig) WSClient {
 	return &wsRPCClient{
-		wsConf:             *wsConf,
-		calls:              make(map[string]chan *RPCResponse),
-		configuredSubs:     make(map[uuid.UUID]*sub),
-		pendingSubsByReqID: make(map[string]*sub),
-		activeSubsBySubID:  make(map[string]*sub),
+		wsConf:              *wsConf,
+		calls:               make(map[string]chan *RPCResponse),
+		configuredSubs:      make(map[uuid.UUID]*sub),
+		pendingSubsByReqID:  make(map[string]*sub),
+		activeSubsBySubID:   make(map[string]*sub),
+		notificationMethods: make(map[string]bool),
 	}
 }
 
@@ -58,23 +59,37 @@ type Subscription interface {
 }
 
 type RPCSubscriptionNotification struct {
+	wsc          *wsRPCClient
+	sub          *sub
 	CurrentSubID string // will change on each reconnect
 	Result       tktypes.RawJSON
 }
 
+func (n *RPCSubscriptionNotification) Ack(ctx context.Context) ErrorRPC {
+	id, req := n.wsc.newAsyncReq(n.sub.AckMethod, tktypes.JSONString(n.CurrentSubID))
+	return n.wsc.sendRPC(ctx, id, req)
+}
+
+func (n *RPCSubscriptionNotification) Nack(ctx context.Context) ErrorRPC {
+	id, req := n.wsc.newAsyncReq(n.sub.NackMethod, tktypes.JSONString(n.CurrentSubID))
+	return n.wsc.sendRPC(ctx, id, req)
+}
+
 type wsRPCClient struct {
-	mux                sync.Mutex
-	wsConf             wsclient.WSConfig
-	client             wsclient.WSClient
-	requestCounter     int64
-	connected          chan struct{}
-	calls              map[string]chan *RPCResponse
-	configuredSubs     map[uuid.UUID]*sub
-	pendingSubsByReqID map[string]*sub
-	activeSubsBySubID  map[string]*sub
+	mux                 sync.Mutex
+	wsConf              wsclient.WSConfig
+	client              wsclient.WSClient
+	requestCounter      int64
+	connected           chan struct{}
+	calls               map[string]chan *RPCResponse
+	configuredSubs      map[uuid.UUID]*sub
+	pendingSubsByReqID  map[string]*sub
+	activeSubsBySubID   map[string]*sub
+	notificationMethods map[string]bool
 }
 
 type sub struct {
+	SubscriptionConfig
 	localID        uuid.UUID
 	rc             *wsRPCClient
 	ctx            context.Context
@@ -140,6 +155,19 @@ func (rc *wsRPCClient) handleReconnect(ctx context.Context, w wsclient.WSClient)
 		rc.connected = nil
 	}
 	return nil
+}
+
+func (rc *wsRPCClient) newAsyncReq(method string, params ...tktypes.RawJSON) (string, *RPCRequest) {
+	rc.mux.Lock()
+	defer rc.mux.Unlock()
+	rc.requestCounter++
+	reqID := fmt.Sprintf(`"%.9d"`, rc.requestCounter)
+	return reqID, &RPCRequest{
+		JSONRpc: "2.0",
+		ID:      tktypes.RawJSON(reqID),
+		Method:  method,
+		Params:  params,
+	}
 }
 
 func (rc *wsRPCClient) addInflightRequest(req *RPCRequest) (string, chan *RPCResponse) {
@@ -208,18 +236,20 @@ func (rc *wsRPCClient) removeSubscription(s *sub) string {
 	return s.currentSubID
 }
 
-func (rc *wsRPCClient) addConfiguredSub(ctx context.Context, params []interface{}) (*sub, chan ErrorRPC) {
+func (rc *wsRPCClient) addConfiguredSub(ctx context.Context, conf SubscriptionConfig, params []interface{}) (*sub, chan ErrorRPC) {
 	rc.mux.Lock()
 	defer rc.mux.Unlock()
 	s := &sub{
-		rc:             rc,
-		localID:        uuid.New(),
-		params:         params,
-		newSubResponse: make(chan ErrorRPC, 1),
-		notifications:  make(chan *RPCSubscriptionNotification), // blocking channel for these, but Unsubscribe will unblock by cancelling ctx
+		SubscriptionConfig: conf,
+		rc:                 rc,
+		localID:            uuid.New(),
+		params:             params,
+		newSubResponse:     make(chan ErrorRPC, 1),
+		notifications:      make(chan *RPCSubscriptionNotification), // blocking channel for these, but Unsubscribe will unblock by cancelling ctx
 	}
 	s.ctx, s.cancelCtx = context.WithCancel(ctx)
 	rc.configuredSubs[s.localID] = s
+	rc.notificationMethods[conf.NotificationMethod] = true // trigger notification handling for this method type
 	// need to return newSubResponse because it's a use-once thing (not on reconnect)
 	// and will be nilled out (under lock) when the first creation response comes in
 	return s, s.newSubResponse
@@ -266,9 +296,9 @@ func (rc *wsRPCClient) removeInflightRequest(reqID string) {
 	delete(rc.calls, reqID)
 }
 
-func (rc *wsRPCClient) Subscribe(ctx context.Context, params ...interface{}) (sub Subscription, error ErrorRPC) {
+func (rc *wsRPCClient) Subscribe(ctx context.Context, conf SubscriptionConfig, params ...interface{}) (sub Subscription, error ErrorRPC) {
 
-	s, newSubResponse := rc.addConfiguredSub(ctx, params)
+	s, newSubResponse := rc.addConfiguredSub(ctx, conf, params)
 
 	reqID, rpcErr := s.sendSubscribe(ctx)
 	if rpcErr != nil {
@@ -286,7 +316,7 @@ func (rc *wsRPCClient) Subscribe(ctx context.Context, params ...interface{}) (su
 }
 
 func (s *sub) sendSubscribe(ctx context.Context) (string, ErrorRPC) {
-	rpcReq, rpcErr := buildRequest(ctx, "eth_subscribe", s.params)
+	rpcReq, rpcErr := buildRequest(ctx, s.SubscribeMethod, s.params)
 	if rpcErr != nil {
 		return "", rpcErr
 	}
@@ -309,7 +339,7 @@ func (s *sub) Unsubscribe(ctx context.Context) ErrorRPC {
 	var resultBool bool
 	if currentSubID != "" {
 		// If currently active, we need to unsubscribe
-		rpcErr := s.rc.CallRPC(ctx, &resultBool, "eth_unsubscribe", currentSubID)
+		rpcErr := s.rc.CallRPC(ctx, &resultBool, s.UnsubscribeMethod, currentSubID)
 		if rpcErr != nil {
 			return rpcErr
 		}
@@ -417,6 +447,8 @@ func (rc *wsRPCClient) handleSubscriptionNotification(ctx context.Context, rpcRe
 	log.L(ctx).Debugf("RPC[%s] <-- Notification for subscription %s (serverId=%s)", rpcRes.ID.StringValue(), s.localID, s.currentSubID)
 	select {
 	case s.notifications <- &RPCSubscriptionNotification{
+		sub:          s,
+		wsc:          rc,
 		CurrentSubID: s.currentSubID,
 		Result:       subParams.Result,
 	}:
@@ -464,6 +496,12 @@ func (rc *wsRPCClient) deliverCallResponse(inflightCall chan *RPCResponse, rpcRe
 	}
 }
 
+func (rc *wsRPCClient) isNotificationMethod(method string) bool {
+	rc.mux.Lock()
+	defer rc.mux.Unlock()
+	return rc.notificationMethods[method]
+}
+
 func (rc *wsRPCClient) receiveLoop(ctx context.Context) {
 	for {
 		bytes, ok := <-rc.client.Receive()
@@ -476,7 +514,7 @@ func (rc *wsRPCClient) receiveLoop(ctx context.Context) {
 		switch {
 		case err != nil:
 			log.L(ctx).Errorf("RPC <-- ERROR invalid data '%s': %s", bytes, err)
-		case rpcRes.Method == "eth_subscription":
+		case rc.isNotificationMethod(rpcRes.Method):
 			rc.handleSubscriptionNotification(ctx, &rpcRes)
 		default:
 			// ID should match a request we sent

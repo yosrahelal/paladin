@@ -102,7 +102,7 @@ func TestWSRPCSubscribe(t *testing.T) {
 
 		// Test error cases first to make sure client ignores stuff it doesn't care about
 		// should log: WARN: Received subscription event for untracked subscription
-		fromServer <- `{"jsonrpc":"2.0","method":"eth_subscription","params":{"result":{"extraData":"0xd983010305844765746887676f312e342e328777696e646f7773","gasLimit":"0x47e7c4","gasUsed":"0x38658","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","nonce":"0x084149998194cc5f","number":"0x1348c9","parentHash":"0x7736fab79e05dc611604d22470dadad26f56fe494421b5b333de816ce1f25701","receiptRoot":"0x2fab35823ad00c7bb388595cb46652fe7886e00660a01e867824d3dceb1c8d36","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","stateRoot":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378","timestamp":"0x56ffeff8","transactionsRoot":"0x0167ffa60e3ebc0b080cdb95f7c0087dd6c0e61413140e39d94d3468d7c9689f","hash":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378"},"subscription":"0x99999999999999999999999999999999"}}`
+		fromServer <- `{"jsonrpc":"2.0","method":"eth_subscription","params":{"result":{"extraData":"0xd983010305844765746887676f312e342e328777696e646f7773","gasLimit":"0x47e7c4","gasUsed":"0x38658","logsBloom":"0x12340000","nonce":"0x084149998194cc5f","number":"0x1348c9","parentHash":"0x7736fab79e05dc611604d22470dadad26f56fe494421b5b333de816ce1f25701","receiptRoot":"0x2fab35823ad00c7bb388595cb46652fe7886e00660a01e867824d3dceb1c8d36","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","stateRoot":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378","timestamp":"0x56ffeff8","transactionsRoot":"0x0167ffa60e3ebc0b080cdb95f7c0087dd6c0e61413140e39d94d3468d7c9689f","hash":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378"},"subscription":"0x99999999999999999999999999999999"}}`
 		// should log: ERROR: Unable to process received message
 		fromServer <- `{"nonsense": true}`
 		// should log a deserialization error
@@ -112,13 +112,13 @@ func TestWSRPCSubscribe(t *testing.T) {
 		fromServer <- `{"jsonrpc":"2.0","id":"000000001","result":"0x9ce59a13059e417087c02d3236a0b1cc"}`
 	}()
 
-	s, rpcErr := rc.Subscribe(ctx, "newHeads")
+	s, rpcErr := rc.Subscribe(ctx, EthSubscribeConfig(), "newHeads")
 	assert.Nil(t, rpcErr)
 	assert.NotEmpty(t, s, s.LocalID())
 
 	assert.Len(t, rc.Subscriptions(), 1)
 
-	fromServer <- `{"jsonrpc":"2.0","method":"eth_subscription","params":{"result":{"extraData":"0xd983010305844765746887676f312e342e328777696e646f7773","gasLimit":"0x47e7c4","gasUsed":"0x38658","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","nonce":"0x084149998194cc5f","number":"0x1348c9","parentHash":"0x7736fab79e05dc611604d22470dadad26f56fe494421b5b333de816ce1f25701","receiptRoot":"0x2fab35823ad00c7bb388595cb46652fe7886e00660a01e867824d3dceb1c8d36","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","stateRoot":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378","timestamp":"0x56ffeff8","transactionsRoot":"0x0167ffa60e3ebc0b080cdb95f7c0087dd6c0e61413140e39d94d3468d7c9689f","hash":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378"},"subscription":"0x9ce59a13059e417087c02d3236a0b1cc"}}`
+	fromServer <- `{"jsonrpc":"2.0","method":"eth_subscription","params":{"result":{"extraData":"0xd983010305844765746887676f312e342e328777696e646f7773","gasLimit":"0x47e7c4","gasUsed":"0x38658","logsBloom":"0x12340000","nonce":"0x084149998194cc5f","number":"0x1348c9","parentHash":"0x7736fab79e05dc611604d22470dadad26f56fe494421b5b333de816ce1f25701","receiptRoot":"0x2fab35823ad00c7bb388595cb46652fe7886e00660a01e867824d3dceb1c8d36","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","stateRoot":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378","timestamp":"0x56ffeff8","transactionsRoot":"0x0167ffa60e3ebc0b080cdb95f7c0087dd6c0e61413140e39d94d3468d7c9689f","hash":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378"},"subscription":"0x9ce59a13059e417087c02d3236a0b1cc"}}`
 
 	newHead := <-s.Notifications()
 	assert.NotNil(t, newHead)
@@ -154,7 +154,7 @@ func TestWSRPCSubscribeError(t *testing.T) {
 	assert.NoError(t, err)
 
 	done()
-	_, rpcErr := rc.Subscribe(ctx, []bool{false})
+	_, rpcErr := rc.Subscribe(ctx, EthSubscribeConfig(), []bool{false})
 	assert.Regexp(t, "PD020502|PD020000", rpcErr)
 }
 
@@ -169,7 +169,7 @@ func TestWSRPCSubscribeClose(t *testing.T) {
 		done()
 	}()
 
-	_, rpcErr := rc.Subscribe(ctx, []bool{false})
+	_, rpcErr := rc.Subscribe(ctx, EthSubscribeConfig(), []bool{false})
 	assert.Regexp(t, "PD020000", rpcErr)
 }
 
@@ -193,7 +193,7 @@ func TestWSRPCSubscribeRPCError(t *testing.T) {
 	assert.NoError(t, err)
 
 	bad := map[bool]bool{false: true}
-	_, rpcErr := rc.Subscribe(ctx, bad)
+	_, rpcErr := rc.Subscribe(ctx, EthSubscribeConfig(), bad)
 	assert.Error(t, rpcErr)
 }
 
@@ -207,7 +207,7 @@ func TestWSRPCUnsubscribeError(t *testing.T) {
 		msg := <-toServer
 		assert.Equal(t, `{"jsonrpc":"2.0","id":"000000001","method":"eth_subscribe","params":["newHeads"]}`, msg)
 		fromServer <- `{"jsonrpc":"2.0","id":"000000001","result":"0x9ce59a13059e417087c02d3236a0b1cc"}`
-		fromServer <- `{"jsonrpc":"2.0","method":"eth_subscription","params":{"result":{"extraData":"0xd983010305844765746887676f312e342e328777696e646f7773","gasLimit":"0x47e7c4","gasUsed":"0x38658","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","nonce":"0x084149998194cc5f","number":"0x1348c9","parentHash":"0x7736fab79e05dc611604d22470dadad26f56fe494421b5b333de816ce1f25701","receiptRoot":"0x2fab35823ad00c7bb388595cb46652fe7886e00660a01e867824d3dceb1c8d36","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","stateRoot":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378","timestamp":"0x56ffeff8","transactionsRoot":"0x0167ffa60e3ebc0b080cdb95f7c0087dd6c0e61413140e39d94d3468d7c9689f","hash":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378"},"subscription":"0x9ce59a13059e417087c02d3236a0b1cc"}}`
+		fromServer <- `{"jsonrpc":"2.0","method":"eth_subscription","params":{"result":{"extraData":"0xd983010305844765746887676f312e342e328777696e646f7773","gasLimit":"0x47e7c4","gasUsed":"0x38658","logsBloom":"0x12340000","nonce":"0x084149998194cc5f","number":"0x1348c9","parentHash":"0x7736fab79e05dc611604d22470dadad26f56fe494421b5b333de816ce1f25701","receiptRoot":"0x2fab35823ad00c7bb388595cb46652fe7886e00660a01e867824d3dceb1c8d36","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","stateRoot":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378","timestamp":"0x56ffeff8","transactionsRoot":"0x0167ffa60e3ebc0b080cdb95f7c0087dd6c0e61413140e39d94d3468d7c9689f","hash":"0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378"},"subscription":"0x9ce59a13059e417087c02d3236a0b1cc"}}`
 
 		msg = <-toServer
 		assert.Equal(t, `{"jsonrpc":"2.0","id":"000000002","method":"eth_unsubscribe","params":["0x9ce59a13059e417087c02d3236a0b1cc"]}`, msg)
@@ -215,7 +215,7 @@ func TestWSRPCUnsubscribeError(t *testing.T) {
 
 	}()
 
-	s, rpcErr := rc.Subscribe(ctx, "newHeads")
+	s, rpcErr := rc.Subscribe(ctx, EthSubscribeConfig(), "newHeads")
 	assert.Nil(t, rpcErr)
 
 	newHead := <-s.Notifications()
@@ -383,7 +383,7 @@ func TestHandleReonnnectOK(t *testing.T) {
 
 	go rc.receiveLoop(ctx)
 
-	s, errChl := rc.addConfiguredSub(ctx, []interface{}{"newHeads"})
+	s, errChl := rc.addConfiguredSub(ctx, EthSubscribeConfig(), []interface{}{"newHeads"})
 
 	inflightID, inflightRes := rc.addInflightRequest(&RPCRequest{})
 
@@ -414,7 +414,7 @@ func TestHandleReonnnectFail(t *testing.T) {
 
 	rc.wsConf.DisableReconnect = false
 
-	_, _ = rc.addConfiguredSub(ctx, []interface{}{
+	_, _ = rc.addConfiguredSub(ctx, EthSubscribeConfig(), []interface{}{
 		map[bool]bool{false: true}, // cannot be serialized
 	})
 
@@ -440,4 +440,56 @@ func TestDeliverCallResponseNonBlocking(t *testing.T) {
 	defer done()
 
 	rc.deliverCallResponse(make(chan *RPCResponse), &RPCResponse{})
+}
+
+func TestHandleAckNack(t *testing.T) {
+	ctx, rc, toServer, fromServer, done := newTestWSRPC(t)
+	defer done()
+
+	var err error
+	rc.client, err = wsclient.New(ctx, &rc.wsConf, nil, nil)
+	assert.NoError(t, err)
+
+	err = rc.client.Connect()
+	assert.NoError(t, err)
+
+	rc.wsConf.DisableReconnect = false
+
+	go rc.receiveLoop(ctx)
+
+	subDone := make(chan struct{})
+	go func() {
+		msg := <-toServer
+		assert.Equal(t, `{"jsonrpc":"2.0","id":"000000001","method":"ptx_subscribe","params":["newHeads"]}`, msg)
+		fromServer <- `{"jsonrpc":"2.0","id":"000000001","result":"0x9ce59a13059e417087c02d3236a0b1cc"}`
+		fromServer <- `{"jsonrpc":"2.0","method":"ptx_subscription","params":{"subscription": "0x9ce59a13059e417087c02d3236a0b1cc", "result": "11111"}}`
+		msg = <-toServer
+		assert.Equal(t, `{"jsonrpc":"2.0","id":"000000002","method":"ptx_nack","params":["0x9ce59a13059e417087c02d3236a0b1cc"]}`, msg)
+		fromServer <- `{"jsonrpc":"2.0","method":"ptx_subscription","params":{"subscription": "0x9ce59a13059e417087c02d3236a0b1cc", "result": "22222"}}`
+		msg = <-toServer
+		assert.Equal(t, `{"jsonrpc":"2.0","id":"000000003","method":"ptx_ack","params":["0x9ce59a13059e417087c02d3236a0b1cc"]}`, msg)
+		close(subDone)
+	}()
+
+	s, err := rc.Subscribe(ctx, SubscriptionConfig{
+		SubscribeMethod:    "ptx_subscribe",
+		UnsubscribeMethod:  "ptx_unsubscribe",
+		NotificationMethod: "ptx_subscription",
+		AckMethod:          "ptx_ack",
+		NackMethod:         "ptx_nack",
+	}, "newHeads")
+	require.NoError(t, err)
+
+	n1 := <-s.Notifications()
+	assert.Equal(t, "0x9ce59a13059e417087c02d3236a0b1cc", n1.CurrentSubID)
+	assert.Equal(t, "11111", n1.Result.StringValue())
+	err = n1.Nack(ctx)
+	assert.NoError(t, err)
+	n2 := <-s.Notifications()
+	assert.Equal(t, "0x9ce59a13059e417087c02d3236a0b1cc", n2.CurrentSubID)
+	assert.Equal(t, "22222", n2.Result.StringValue())
+	err = n1.Ack(ctx)
+	assert.NoError(t, err)
+
+	<-subDone
 }

@@ -148,9 +148,6 @@ func parseParams(ctx context.Context, req *rpcclient.RPCRequest, params ...inter
 	}
 	for i := range params {
 		b := req.Params[i].Bytes()
-		if b == nil {
-			b = ([]byte)(`null`)
-		}
 		if err := json.Unmarshal(b, &params[i]); err != nil {
 			return rpcclient.RPCCodeInvalidRequest, i18n.NewError(ctx, tkmsgs.MsgJSONRPCInvalidParam, req.Method, i, err)
 		}

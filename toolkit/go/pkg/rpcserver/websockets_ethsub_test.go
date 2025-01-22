@@ -183,10 +183,10 @@ func TestWebSocketEthSubscribeUnsubscribe(t *testing.T) {
 	rpcErr = client.CallRPC(context.Background(), &tktypes.RawJSON{}, "eth_unsubscribe")
 	assert.Regexp(t, "eth_unsubscribe requires single parameter", rpcErr)
 
-	sub1, rpcErr := client.Subscribe(context.Background(), "myEvents", map[string]interface{}{"extra": "params"})
+	sub1, rpcErr := client.Subscribe(context.Background(), rpcclient.EthSubscribeConfig(), "myEvents", map[string]interface{}{"extra": "params"})
 	assert.Nil(t, rpcErr)
 
-	_, rpcErr = client.Subscribe(context.Background(), "otherEvents")
+	_, rpcErr = client.Subscribe(context.Background(), rpcclient.EthSubscribeConfig(), "otherEvents")
 	assert.Nil(t, rpcErr)
 
 	assert.Len(t, ethSubs.subsByEventType["myEvents"], 1)

@@ -82,9 +82,25 @@ type Client interface {
 	CallRPC(ctx context.Context, result interface{}, method string, params ...interface{}) ErrorRPC
 }
 
+type SubscriptionConfig struct {
+	SubscribeMethod    string
+	UnsubscribeMethod  string
+	NotificationMethod string
+	AckMethod          string
+	NackMethod         string
+}
+
+func EthSubscribeConfig() SubscriptionConfig {
+	return SubscriptionConfig{
+		SubscribeMethod:    "eth_subscribe",
+		UnsubscribeMethod:  "eth_unsubscribe",
+		NotificationMethod: "eth_subscription",
+	}
+}
+
 type WSClient interface {
 	Client
-	Subscribe(ctx context.Context, params ...interface{}) (Subscription, ErrorRPC)
+	Subscribe(ctx context.Context, conf SubscriptionConfig, params ...interface{}) (Subscription, ErrorRPC)
 	Subscriptions() []Subscription
 	UnsubscribeAll(ctx context.Context) ErrorRPC
 	Connect(ctx context.Context) error
