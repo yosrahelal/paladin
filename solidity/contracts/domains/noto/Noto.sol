@@ -195,23 +195,23 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     }
 
     /**
-     * @dev Check the inputs are all existing unspent ids
+     * @dev Check the inputs are all unspent, and remove them
      */
     function _processInputs(bytes32[] memory inputs) internal {
         for (uint256 i = 0; i < inputs.length; ++i) {
-            if (_unspent[inputs[i]] == false) {
+            if (!_unspent[inputs[i]]) {
                 revert NotoInvalidInput(inputs[i]);
             }
-            delete (_unspent[inputs[i]]);
+            delete _unspent[inputs[i]];
         }
     }
 
     /**
-     * @dev Check the outputs are all new unspent ids
+     * @dev Check the outputs are all new, and mark them as unspent
      */
     function _processOutputs(bytes32[] memory outputs) internal {
         for (uint256 i = 0; i < outputs.length; ++i) {
-            if (_unspent[outputs[i]] == true) {
+            if (_unspent[outputs[i]]) {
                 revert NotoInvalidOutput(outputs[i]);
             }
             _unspent[outputs[i]] = true;
@@ -241,15 +241,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
         bytes calldata signature,
         bytes calldata data
     ) external virtual onlyNotary {
-        _approveTransfer(delegate, txhash, signature, data);
-    }
-
-    function _approveTransfer(
-        address delegate,
-        bytes32 txhash,
-        bytes calldata signature,
-        bytes calldata data
-    ) internal {
         _approvals[txhash] = delegate;
         emit NotoApproved(delegate, txhash, signature, data);
     }
@@ -484,6 +475,9 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
         emit NotoLockDelegated(lockId, delegate, signature, data);
     }
 
+    /**
+     * @dev Check the inputs are all locked
+     */
     function _checkLockedInputs(
         bytes32 id,
         bytes32[] calldata inputs
@@ -496,27 +490,33 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
         }
     }
 
+    /**
+     * @dev Check the inputs are all locked, and remove them
+     */
     function _processLockedInputs(
         bytes32 id,
         bytes32[] calldata inputs
     ) internal {
         LockDetail storage lock_ = _locks[id];
         for (uint256 i = 0; i < inputs.length; ++i) {
-            if (lock_.states[inputs[i]] == false) {
+            if (!lock_.states[inputs[i]]) {
                 revert NotoInvalidInput(inputs[i]);
             }
-            delete (lock_.states[inputs[i]]);
+            delete lock_.states[inputs[i]];
             lock_.stateCount--;
         }
     }
 
+    /**
+     * @dev Check the outputs are all new, and mark them as locked
+     */
     function _processLockedOutputs(
         bytes32 id,
         bytes32[] calldata outputs
     ) internal {
         LockDetail storage lock_ = _locks[id];
         for (uint256 i = 0; i < outputs.length; ++i) {
-            if (lock_.states[outputs[i]] == true) {
+            if (lock_.states[outputs[i]]) {
                 revert NotoInvalidOutput(outputs[i]);
             }
             lock_.states[outputs[i]] = true;
