@@ -22,9 +22,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -37,13 +35,13 @@ var nextReq atomic.Uint64
 
 func rpcTestRequest(method string, params ...any) (uint64, []byte) {
 	reqID := nextReq.Add(1)
-	jsonParams := make([]*fftypes.JSONAny, len(params))
+	jsonParams := make([]tktypes.RawJSON, len(params))
 	for i, p := range params {
-		jsonParams[i] = fftypes.JSONAnyPtr(tktypes.JSONString((p)).Pretty())
+		jsonParams[i] = tktypes.JSONString(p)
 	}
-	req := &rpcbackend.RPCRequest{
+	req := &rpcclient.RPCRequest{
 		JSONRpc: "2.0",
-		ID:      fftypes.JSONAnyPtr(fmt.Sprintf("%d", reqID)),
+		ID:      tktypes.RawJSON(fmt.Sprintf("%d", reqID)),
 		Method:  method,
 		Params:  jsonParams,
 	}
@@ -82,7 +80,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 
 	go func() {
 		for payload := range wsc.Receive() {
-			var rpcPayload *rpcbackend.RPCResponse
+			var rpcPayload *rpcclient.RPCResponse
 			err := json.Unmarshal(payload, &rpcPayload)
 			require.NoError(t, err)
 
@@ -97,7 +95,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 
 				switch rpcID {
 				case subReqID: // Subscribe reply
-					subIDChan <- rpcPayload.Result.AsString()
+					subIDChan <- rpcPayload.Result.StringValue()
 				case unSubReqID.Load(): // Unsubscribe reply
 					unSubChan <- true
 				}
@@ -193,7 +191,7 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 
 	go func() {
 		for payload := range wsc.Receive() {
-			var rpcPayload *rpcbackend.RPCResponse
+			var rpcPayload *rpcclient.RPCResponse
 			err := json.Unmarshal(payload, &rpcPayload)
 			require.NoError(t, err)
 
@@ -208,7 +206,7 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 
 				switch rpcID {
 				case subReqID: // Subscribe reply
-					subIDChan <- rpcPayload.Result.AsString()
+					subIDChan <- rpcPayload.Result.StringValue()
 				case unSubReqID.Load(): // Unsubscribe reply
 					unSubChan <- true
 				}
@@ -292,7 +290,7 @@ func TestRPCSubscribeNoType(t *testing.T) {
 
 	payload := <-wsc.Receive()
 
-	var rpcPayload *rpcbackend.RPCResponse
+	var rpcPayload *rpcclient.RPCResponse
 	err = json.Unmarshal(payload, &rpcPayload)
 	require.NoError(t, err)
 	require.Regexp(t, "PD020003", rpcPayload.Error.Error())
@@ -325,7 +323,7 @@ func TestRPCSubscribeNoListener(t *testing.T) {
 
 	payload := <-wsc.Receive()
 
-	var rpcPayload *rpcbackend.RPCResponse
+	var rpcPayload *rpcclient.RPCResponse
 	err = json.Unmarshal(payload, &rpcPayload)
 	require.NoError(t, err)
 	require.Regexp(t, "PD012241", rpcPayload.Error.Error())
@@ -358,7 +356,7 @@ func TestRPCSubscribeBadListener(t *testing.T) {
 
 	payload := <-wsc.Receive()
 
-	var rpcPayload *rpcbackend.RPCResponse
+	var rpcPayload *rpcclient.RPCResponse
 	err = json.Unmarshal(payload, &rpcPayload)
 	require.NoError(t, err)
 	require.Regexp(t, "PD012238", rpcPayload.Error.Error())
@@ -391,7 +389,7 @@ func TestUnsubscribeNoSubscriptionID(t *testing.T) {
 
 	payload := <-wsc.Receive()
 
-	var rpcPayload *rpcbackend.RPCResponse
+	var rpcPayload *rpcclient.RPCResponse
 	err = json.Unmarshal(payload, &rpcPayload)
 	require.NoError(t, err)
 	require.Regexp(t, "PD012240", rpcPayload.Error.Error())
@@ -402,9 +400,9 @@ func TestHandleLifecycleUnkonwn(t *testing.T) {
 	ctx, _, txm, done := newTestTransactionManagerWithWebSocketRPC(t)
 	defer done()
 
-	res := txm.rpcEventStreams.HandleLifecycle(ctx, &rpcbackend.RPCRequest{
+	res := txm.rpcEventStreams.HandleLifecycle(ctx, &rpcclient.RPCRequest{
 		Method: "wrong",
-		Params: []*fftypes.JSONAny{fftypes.JSONAnyPtr(`"any"`)},
+		Params: []tktypes.RawJSON{tktypes.RawJSON(`"any"`)},
 	})
 	require.Regexp(t, "PD012239", res.Error.Error())
 
@@ -429,11 +427,11 @@ func TestHandleLifecycleNoBlockNack(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	res := es.HandleLifecycle(ctx, &rpcbackend.RPCRequest{
+	res := es.HandleLifecycle(ctx, &rpcclient.RPCRequest{
 		JSONRpc: "2.0",
-		ID:      fftypes.JSONAnyPtr("12345"),
+		ID:      tktypes.RawJSON("12345"),
 		Method:  "ptx_nack",
-		Params:  []*fftypes.JSONAny{fftypes.JSONAnyPtr(`"sub1"`)},
+		Params:  []tktypes.RawJSON{tktypes.RawJSON(`"sub1"`)},
 	})
 	require.Nil(t, res)
 

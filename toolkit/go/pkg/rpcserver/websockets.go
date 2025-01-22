@@ -24,8 +24,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
@@ -79,10 +77,10 @@ type asyncWrapper struct {
 }
 
 func (aw *asyncWrapper) Send(method string, params any) {
-	aw.wsc.sendMessage(&rpcbackend.RPCResponse{
+	aw.wsc.sendMessage(&rpcclient.RPCResponse{
 		JSONRpc: "2.0",
 		Method:  method,
-		Params:  fftypes.JSONAnyPtrBytes(tktypes.JSONString(params)),
+		Params:  tktypes.JSONString(params),
 	})
 }
 

@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
@@ -76,7 +75,7 @@ type ethSubscription struct {
 	es        *EthSubscribe
 	ctrl      RPCAsyncControl
 	eventType string
-	params    []*fftypes.JSONAny
+	params    []tktypes.RawJSON
 }
 
 func (es *EthSubscribe) HandleStart(ctx context.Context, req *rpcclient.RPCRequest, ctrl RPCAsyncControl) (RPCAsyncInstance, *rpcclient.RPCResponse) {
@@ -86,7 +85,7 @@ func (es *EthSubscribe) HandleStart(ctx context.Context, req *rpcclient.RPCReque
 	if len(req.Params) < 1 {
 		return nil, rpcclient.NewRPCErrorResponse(fmt.Errorf("eth_subscribe requires a type parameter"), req.ID, rpcclient.RPCCodeInvalidRequest)
 	}
-	eventType := req.Params[0].AsString() // additional validation recommended here
+	eventType := req.Params[0].StringValue() // additional validation recommended here
 	subMap := es.subsByEventType[eventType]
 	if subMap == nil {
 		subMap = make(map[string]*ethSubscription)
@@ -102,7 +101,7 @@ func (es *EthSubscribe) HandleStart(ctx context.Context, req *rpcclient.RPCReque
 	return sub, &rpcclient.RPCResponse{
 		JSONRpc: "2.0",
 		ID:      req.ID,
-		Result:  fftypes.JSONAnyPtrBytes(tktypes.JSONString(ctrl.ID())),
+		Result:  tktypes.JSONString(ctrl.ID()),
 	}
 }
 
@@ -130,14 +129,14 @@ func (es *EthSubscribe) HandleLifecycle(ctx context.Context, req *rpcclient.RPCR
 	if len(req.Params) != 1 {
 		return rpcclient.NewRPCErrorResponse(fmt.Errorf("eth_unsubscribe requires single parameter"), req.ID, rpcclient.RPCCodeInvalidRequest)
 	}
-	sub := es.popSubForUnsubscribe(req.Params[0].AsString())
+	sub := es.popSubForUnsubscribe(req.Params[0].StringValue())
 	if sub != nil {
 		sub.ctrl.Closed()
 	}
 	return &rpcclient.RPCResponse{
 		JSONRpc: "2.0",
 		ID:      req.ID,
-		Result:  fftypes.JSONAnyPtrBytes(tktypes.JSONString(sub != nil)),
+		Result:  tktypes.JSONString(sub != nil),
 	}
 
 }

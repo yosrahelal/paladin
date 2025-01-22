@@ -24,7 +24,6 @@ import (
 
 	_ "embed"
 
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -32,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -67,7 +67,7 @@ func deployContracts(ctx context.Context, t *testing.T, hdWalletSeed *testbed.UT
 	url, _, done, err := tb.StartForTest("../../testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
 	require.NoError(t, err)
 	defer done()
-	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
+	rpc := rpcclient.NewRPCClient(resty.New().SetBaseURL(url))
 
 	deployed := make(map[string]string, len(contracts))
 	for name, contract := range contracts {
@@ -95,15 +95,15 @@ func newNotoDomain(t *testing.T, config *types.DomainConfig) (*Noto, *testbed.Te
 	}
 }
 
-func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
+func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcclient.Backend) {
 	tb := testbed.NewTestBed()
 	url, _, done, err := tb.StartForTest("../../testbed.config.yaml", domains, hdWalletSeed)
 	assert.NoError(t, err)
-	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
+	rpc := rpcclient.NewRPCClient(resty.New().SetBaseURL(url))
 	return done, tb, rpc
 }
 
-func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, noto *Noto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.NotoCoinState {
+func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcclient.Backend, noto *Noto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.NotoCoinState {
 	if jq == nil {
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}

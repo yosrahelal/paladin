@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
@@ -35,6 +34,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -62,7 +62,7 @@ type zetoDomainTestSuite struct {
 	deployedContracts *ZetoDomainContracts
 	domainName        string
 	domain            zeto.Zeto
-	rpc               rpcbackend.Backend
+	rpc               rpcclient.Backend
 	tb                testbed.Testbed
 	done              func()
 }
@@ -421,7 +421,7 @@ func (s *zetoDomainTestSuite) approveERC20(ctx context.Context, erc20Address, ze
 	return err
 }
 
-func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON, useNullifiers bool) []*types.ZetoCoinState {
+func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcclient.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON, useNullifiers bool) []*types.ZetoCoinState {
 	if jq == nil {
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
@@ -463,11 +463,11 @@ func newZetoDomain(t *testing.T, domainContracts *ZetoDomainContracts, config *t
 	}
 }
 
-func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
+func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcclient.Backend) {
 	tb := testbed.NewTestBed()
 	url, _, done, err := tb.StartForTest("./testbed.config.yaml", domains, hdWalletSeed)
 	assert.NoError(t, err)
-	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
+	rpc := rpcclient.NewRPCClient(resty.New().SetBaseURL(url))
 	return done, tb, rpc
 }
 
@@ -476,7 +476,7 @@ func getERC20Spec() (*solutils.SolidityBuild, error) {
 	return build, nil
 }
 
-func deployERC20(ctx context.Context, rpc rpcbackend.Backend, controllerAddr string) (*tktypes.EthAddress, error) {
+func deployERC20(ctx context.Context, rpc rpcclient.Backend, controllerAddr string) (*tktypes.EthAddress, error) {
 	build, err := getERC20Spec()
 	if err != nil {
 		return nil, err

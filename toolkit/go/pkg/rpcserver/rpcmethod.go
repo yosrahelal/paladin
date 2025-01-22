@@ -20,10 +20,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 // RPCHandler should not be implemented directly - use RPCMethod0 ... RPCMethod5 to implement your function
@@ -167,7 +167,7 @@ func mapResponse(ctx context.Context, req *rpcclient.RPCRequest, result interfac
 			return &rpcclient.RPCResponse{
 				JSONRpc: "2.0",
 				ID:      req.ID,
-				Result:  fftypes.JSONAnyPtrBytes(b),
+				Result:  tktypes.RawJSON(b),
 			}
 		}
 	}

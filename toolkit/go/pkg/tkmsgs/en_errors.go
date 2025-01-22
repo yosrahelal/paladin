@@ -90,8 +90,13 @@ var (
 	MsgTLSInvalidTLSDnMismatch      = ffe("PD020406", "Certificate subject does not meet requirements")
 
 	// RPCClient PD0205XX
-	MsgRPCClientInvalidWebSocketURL = ffe("PD020500", "Invalid WebSocket URL: %s")
-	MsgRPCClientInvalidHTTPURL      = ffe("PD020501", "Invalid HTTP URL: %s")
+	MsgRPCClientInvalidWebSocketURL      = ffe("PD020500", "Invalid WebSocket URL: %s")
+	MsgRPCClientInvalidHTTPURL           = ffe("PD020501", "Invalid HTTP URL: %s")
+	MsgRPCClientRequestFailed            = ffe("PD020502", "Backend RPC request failed: %s")
+	MsgRPCClientWebSocketReconnected     = ffe("PD020503", "WebSocket reconnected during JSON/RPC call")
+	MsgRPCClientResultParseFailed        = ffe("PD020504", "Failed to parse result (expected=%T): %s")
+	MsgRPCClientInvalidParam             = ffe("PD020505", "Invalid parameter at position %d for method %s: %s")
+	MsgRPCClientSubscribeResponseInvalid = ffe("PD020506", "Subscription response invalid")
 
 	// HTTPServer PD0108XX
 	MsgHTTPServerStartFailed        = ffe("PD020600", "Failed to start server on '%s'")

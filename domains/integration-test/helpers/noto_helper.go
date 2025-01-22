@@ -21,8 +21,8 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -36,12 +36,12 @@ var NotoInterfaceJSON []byte
 
 type NotoHelper struct {
 	t       *testing.T
-	rpc     rpcbackend.Backend
+	rpc     rpcclient.Backend
 	Address *tktypes.EthAddress
 	ABI     abi.ABI
 }
 
-func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domainName, notary string, hooks *tktypes.EthAddress) *NotoHelper {
+func DeployNoto(ctx context.Context, t *testing.T, rpc rpcclient.Backend, domainName, notary string, hooks *tktypes.EthAddress) *NotoHelper {
 	var addr tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, "notary", &types.ConstructorParams{
 		Notary: notary + "@node1",

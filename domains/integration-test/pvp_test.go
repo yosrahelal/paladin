@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/log"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/domains/integration-test/helpers"
 	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
@@ -31,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
@@ -211,13 +211,13 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withHooks b
 	}
 }
 
-func resolveZetoKey(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, domainName, identity string) (verifier string) {
+func resolveZetoKey(t *testing.T, ctx context.Context, rpc rpcclient.Backend, domainName, identity string) (verifier string) {
 	err := rpc.CallRPC(ctx, &verifier, "ptx_resolveVerifier", identity, zetosignerapi.AlgoDomainZetoSnarkBJJ(domainName), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X)
 	require.Nil(t, err)
 	return
 }
 
-func findAvailableCoins[T any](t *testing.T, ctx context.Context, rpc rpcbackend.Backend, domainName, coinSchemaID string, address *tktypes.EthAddress, jq *query.QueryJSON, readiness ...func(coins []*T) bool) []*T {
+func findAvailableCoins[T any](t *testing.T, ctx context.Context, rpc rpcclient.Backend, domainName, coinSchemaID string, address *tktypes.EthAddress, jq *query.QueryJSON, readiness ...func(coins []*T) bool) []*T {
 	if jq == nil {
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}

@@ -131,6 +131,14 @@ func (m RawJSON) Value() driver.Value {
 	return (string)(m)
 }
 
+func (m RawJSON) ToMap() (jm map[string]any) {
+	_ = json.Unmarshal(m, &jm)
+	if jm == nil {
+		jm = map[string]any{}
+	}
+	return jm
+}
+
 func (m *RawJSON) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case string:

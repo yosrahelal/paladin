@@ -19,7 +19,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -70,7 +69,7 @@ func (es *rpcEventStreams) HandleStart(ctx context.Context, req *rpcclient.RPCRe
 
 	var eventType tktypes.Enum[pldapi.PTXEventType]
 	if len(req.Params) >= 1 {
-		eventType = tktypes.Enum[pldapi.PTXEventType](req.Params[0].AsString())
+		eventType = tktypes.Enum[pldapi.PTXEventType](req.Params[0].StringValue())
 	}
 	if _, err := eventType.Validate(); err != nil {
 		return nil, rpcclient.NewRPCErrorResponse(err, req.ID, rpcclient.RPCCodeInvalidRequest)
@@ -88,7 +87,7 @@ func (es *rpcEventStreams) HandleStart(ctx context.Context, req *rpcclient.RPCRe
 	}
 	es.receiptSubs[ctrl.ID()] = sub
 	var err error
-	sub.rrc, err = es.tm.AddReceiptReceiver(ctx, req.Params[1].AsString(), sub)
+	sub.rrc, err = es.tm.AddReceiptReceiver(ctx, req.Params[1].StringValue(), sub)
 	if err != nil {
 		return nil, rpcclient.NewRPCErrorResponse(err, req.ID, rpcclient.RPCCodeInvalidRequest)
 	}
@@ -96,7 +95,7 @@ func (es *rpcEventStreams) HandleStart(ctx context.Context, req *rpcclient.RPCRe
 	return sub, &rpcclient.RPCResponse{
 		JSONRpc: "2.0",
 		ID:      req.ID,
-		Result:  fftypes.JSONAnyPtrBytes(tktypes.JSONString(ctrl.ID())),
+		Result:  tktypes.JSONString(ctrl.ID()),
 	}
 }
 
@@ -122,7 +121,7 @@ func (es *rpcEventStreams) HandleLifecycle(ctx context.Context, req *rpcclient.R
 	if len(req.Params) < 1 {
 		return rpcclient.NewRPCErrorResponse(i18n.NewError(ctx, msgs.MsgTxMgrSubIDRequired), req.ID, rpcclient.RPCCodeInvalidRequest)
 	}
-	subID := req.Params[0].AsString()
+	subID := req.Params[0].StringValue()
 	sub := es.getSubscription(subID)
 	switch req.Method {
 	case "ptx_ack", "ptx_nack":
@@ -142,7 +141,7 @@ func (es *rpcEventStreams) HandleLifecycle(ctx context.Context, req *rpcclient.R
 		return &rpcclient.RPCResponse{
 			JSONRpc: "2.0",
 			ID:      req.ID,
-			Result:  fftypes.JSONAnyPtrBytes(tktypes.JSONString(sub != nil)),
+			Result:  tktypes.JSONString(sub != nil),
 		}
 	default:
 		return rpcclient.NewRPCErrorResponse(i18n.NewError(ctx, msgs.MsgTxMgrLifecycleMethodUnknown, req.Method), req.ID, rpcclient.RPCCodeInvalidRequest)

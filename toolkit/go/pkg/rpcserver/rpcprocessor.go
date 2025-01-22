@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
@@ -50,7 +49,7 @@ func (s *rpcServer) processRPC(ctx context.Context, rpcReq *rpcclient.RPCRequest
 
 	startTime := time.Now()
 	log.L(ctx).Debugf("RPC-> %s", rpcReq.Method)
-	var rpcRes *rpcbackend.RPCResponse
+	var rpcRes *rpcclient.RPCResponse
 	if mh.methodType == rpcMethodTypeMethod {
 		rpcRes = mh.handler.Handle(ctx, rpcReq)
 	} else {

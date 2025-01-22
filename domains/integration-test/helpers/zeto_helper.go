@@ -20,19 +20,19 @@ import (
 	_ "embed"
 	"testing"
 
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
 
 type ZetoHelper struct {
 	t       *testing.T
-	rpc     rpcbackend.Backend
+	rpc     rpcclient.Backend
 	Address *tktypes.EthAddress
 }
 
-func DeployZeto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domainName, controllerName, tokenName string) *ZetoHelper {
+func DeployZeto(ctx context.Context, t *testing.T, rpc rpcclient.Backend, domainName, controllerName, tokenName string) *ZetoHelper {
 	var addr tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, controllerName, &types.InitializerParams{
 		TokenName: tokenName,
