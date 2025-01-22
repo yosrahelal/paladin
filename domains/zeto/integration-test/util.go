@@ -83,7 +83,7 @@ func DeployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction, con
 	url, _, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
 	assert.NoError(t, err)
 	defer done()
-	rpc := rpcclient.NewRPCClient(resty.New().SetBaseURL(url))
+	rpc := rpcclient.WrapRestyClient(resty.New().SetBaseURL(url))
 
 	var config domainConfig
 	testZetoConfigYaml, err := os.ReadFile(configFile)

@@ -29,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type testRPCHander func(rpcReq *RPCRequest) (int, *RPCResponse)
@@ -51,7 +52,7 @@ func newTestServer(t *testing.T, rpcHandler testRPCHander) (context.Context, *rp
 		w.Header().Add("Content-Type", "application/json")
 		w.Header().Add("Content-Length", strconv.Itoa(len(b)))
 		w.WriteHeader(status)
-		w.Write(b)
+		_, _ = w.Write(b)
 
 	}))
 
@@ -205,7 +206,7 @@ func TestSyncRPCCallBadJSONResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(500)
-		w.Write([]byte(`{!!!!`))
+		_, _ = w.Write([]byte(`{!!!!`))
 	}))
 	defer server.Close()
 
@@ -216,7 +217,7 @@ func TestSyncRPCCallBadJSONResponse(t *testing.T) {
 
 	var txCount tktypes.HexUint64
 	rpcErr := c.CallRPC(context.Background(), &txCount, "eth_getTransactionCount", tktypes.MustEthAddress("0xfb075bb99f2aa4c49955bf703509a227d7a12248"), "pending")
-	assert.Regexp(t, "PD020502", rpcErr.Error())
+	assert.Regexp(t, "PD020502", rpcErr)
 }
 
 func TestSyncRPCCallFailParseJSONResponse(t *testing.T) {
@@ -224,7 +225,7 @@ func TestSyncRPCCallFailParseJSONResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(200)
-		w.Write([]byte(`{"result":"not an object"}`))
+		_, _ = w.Write([]byte(`{"result":"not an object"}`))
 	}))
 	defer server.Close()
 
@@ -235,7 +236,7 @@ func TestSyncRPCCallFailParseJSONResponse(t *testing.T) {
 
 	var mapResult map[string]interface{}
 	rpcErr := c.CallRPC(context.Background(), &mapResult, "eth_getTransactionCount", tktypes.MustEthAddress("0xfb075bb99f2aa4c49955bf703509a227d7a12248"), "pending")
-	assert.Regexp(t, "PD020504", rpcErr.Error())
+	assert.Regexp(t, "PD020504", rpcErr)
 }
 
 func TestSyncRPCCallErrorBadInput(t *testing.T) {
@@ -273,4 +274,8 @@ func TestRPCErrorResponse(t *testing.T) {
 			Message: "pop",
 		},
 	}, rpcRes)
+}
+
+func TestWrapRPCError(t *testing.T) {
+	require.Regexp(t, "pop", WrapRPCError(RPCCodeInternalError, fmt.Errorf("pop")))
 }

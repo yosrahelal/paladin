@@ -227,7 +227,7 @@ func mockBlocksRPCCallsDynamic(mRPC *rpcclientmocks.WSClient, dynamic func(args 
 		blockReturn := args[1].(**BlockInfoJSONRPC)
 		blockNumber := int(args[3].(ethtypes.HexUint64))
 		if blockNumber >= len(blocks) {
-			byBlock.Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
+			byBlock.Return(rpcclient.WrapRPCError(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 		} else {
 			*blockReturn = blocks[blockNumber]
 			byBlock.Return(nil)
@@ -241,7 +241,7 @@ func mockBlocksRPCCallsDynamic(mRPC *rpcclientmocks.WSClient, dynamic func(args 
 		blockHash := args[3].(ethtypes.HexBytes0xPrefix)
 		*blockReturn = receipts[blockHash.String()]
 		if *blockReturn == nil {
-			blockReceipts.Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
+			blockReceipts.Return(rpcclient.WrapRPCError(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 		} else {
 			blockReceipts.Return(nil)
 		}
@@ -261,7 +261,7 @@ func mockBlocksRPCCallsDynamic(mRPC *rpcclientmocks.WSClient, dynamic func(args 
 			}
 		}
 		if *blockReturn == nil {
-			txReceipt.Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
+			txReceipt.Return(rpcclient.WrapRPCError(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 		} else {
 			txReceipt.Return(nil)
 		}
@@ -1034,7 +1034,7 @@ func TestWaitForTransactionSuccessGetReceiptFail(t *testing.T) {
 	defer done()
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", mock.Anything).Return(
-		rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop")),
+		rpcclient.WrapRPCError(rpcclient.RPCCodeInternalError, fmt.Errorf("pop")),
 	)
 
 	err := bi.getReceiptRevertError(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), nil)
@@ -1077,7 +1077,7 @@ func TestHydrateBlockErrorCase(t *testing.T) {
 	bi.retry.UTSetMaxAttempts(1)
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockReceipts", mock.Anything).Return(
-		rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop")),
+		rpcclient.WrapRPCError(rpcclient.RPCCodeInternalError, fmt.Errorf("pop")),
 	)
 
 	batch := &blockWriterBatch{

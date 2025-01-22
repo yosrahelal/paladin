@@ -178,7 +178,7 @@ func NewUnconnectedRPCClient(ctx context.Context, conf *pldconf.EthClientConfig,
 type unconnectedRPC struct{}
 
 func (u *unconnectedRPC) CallRPC(ctx context.Context, result interface{}, method string, params ...interface{}) rpcclient.ErrorRPC {
-	return rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, i18n.NewError(ctx, msgs.MsgEthClientNoConnection))
+	return rpcclient.NewRPCError(ctx, rpcclient.RPCCodeInternalError, msgs.MsgEthClientNoConnection)
 }
 
 func (ec *ethClient) Close() {
@@ -252,7 +252,7 @@ func (ec *ethClient) CallContractNoResolve(ctx context.Context, tx *ethsigner.Tr
 	if err := ec.rpc.CallRPC(ctx, &res.Data, "eth_call", tx, block); err != nil {
 		rpcErr := err.RPCError()
 		log.L(ctx).Errorf("eth_call failed: %+v", rpcErr)
-		if rpcErr.Data != "" {
+		if len(rpcErr.Data) != 0 {
 			log.L(ctx).Debugf("Received error data in revert: %s", rpcErr.Data)
 			_ = json.Unmarshal(rpcErr.Data.Bytes(), &res.RevertData)
 			if len(res.RevertData) > 0 {
@@ -264,7 +264,7 @@ func (ec *ethClient) CallContractNoResolve(ctx context.Context, tx *ethsigner.Tr
 			}
 		}
 		// Or fallback to whatever the error we got was
-		return res, rpcErr.Error()
+		return res, rpcErr
 	}
 
 	// See if we can decode the result

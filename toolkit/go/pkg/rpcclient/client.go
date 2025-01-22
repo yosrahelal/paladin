@@ -256,3 +256,7 @@ func buildRequest(ctx context.Context, method string, params []interface{}) (*RP
 func NewRPCError(ctx context.Context, code RPCCode, msg i18n.ErrorMessageKey, inserts ...interface{}) *RPCError {
 	return &RPCError{Code: int64(code), Message: i18n.NewError(ctx, msg, inserts...).Error()}
 }
+
+func WrapRPCError(code RPCCode, err error) *RPCError {
+	return &RPCError{Code: int64(code), Message: err.Error()}
+}

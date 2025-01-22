@@ -97,7 +97,7 @@ func TestRPC(t *testing.T) {
 	jsonTestLog(t, "pstate_storeState", state)
 	assert.Nil(t, rpcErr)
 	if rpcErr != nil {
-		assert.NoError(t, rpcErr.RPCError().Error())
+		assert.NoError(t, rpcErr)
 	}
 	assert.Equal(t, schemas[0].ID, state.Schema)
 	assert.Equal(t, "domain1", state.DomainName)

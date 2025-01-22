@@ -376,7 +376,7 @@ func (rc *wsRPCClient) waitResponse(ctx context.Context, result interface{}, req
 	case rpcRes = <-resChannel:
 	case <-ctx.Done():
 		rpcErr := NewRPCError(ctx, RPCCodeInternalError, tkmsgs.MsgContextCanceled, reqID)
-		log.L(ctx).Errorf("RPC[%s] <-- ERROR: %s", reqID, rpcErr.Error())
+		log.L(ctx).Errorf("RPC[%s] <-- ERROR: %s", reqID, rpcErr)
 		return rpcErr
 	}
 	if rpcRes.Error != nil && rpcRes.Error.RPCError().Code != 0 {

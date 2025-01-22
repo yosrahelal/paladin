@@ -85,7 +85,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 			require.NoError(t, err)
 
 			if rpcPayload.Error != nil {
-				require.NoError(t, rpcPayload.Error.Error())
+				require.NoError(t, rpcPayload.Error)
 			}
 
 			if !rpcPayload.ID.IsNil() {
@@ -196,7 +196,7 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 			require.NoError(t, err)
 
 			if rpcPayload.Error != nil {
-				require.NoError(t, rpcPayload.Error.Error())
+				require.NoError(t, rpcPayload.Error)
 			}
 
 			if !rpcPayload.ID.IsNil() {

@@ -155,7 +155,7 @@ func TestWSRPCSubscribeError(t *testing.T) {
 
 	done()
 	_, rpcErr := rc.Subscribe(ctx, []bool{false})
-	assert.Regexp(t, "PD020502|PD020000", rpcErr.Error())
+	assert.Regexp(t, "PD020502|PD020000", rpcErr)
 }
 
 func TestWSRPCSubscribeClose(t *testing.T) {
@@ -170,7 +170,7 @@ func TestWSRPCSubscribeClose(t *testing.T) {
 	}()
 
 	_, rpcErr := rc.Subscribe(ctx, []bool{false})
-	assert.Regexp(t, "PD020000", rpcErr.Error())
+	assert.Regexp(t, "PD020000", rpcErr)
 }
 
 func TestWSRPCCallRPCError(t *testing.T) {
@@ -230,7 +230,7 @@ func TestWSRPCUnsubscribeError(t *testing.T) {
 
 	done()
 	rpcErr = rc.UnsubscribeAll(ctx)
-	assert.Regexp(t, "PD020502|PD020000", rpcErr.Error())
+	assert.Regexp(t, "PD020502|PD020000", rpcErr)
 }
 
 func TestCallRPC(t *testing.T) {
@@ -258,7 +258,7 @@ func TestWaitResponseClosedContext(t *testing.T) {
 
 	done()
 	rpcErr := rc.waitResponse(ctx, nil, "000000001", &RPCRequest{}, time.Now(), make(chan *RPCResponse))
-	assert.Regexp(t, "PD020000", rpcErr.Error())
+	assert.Regexp(t, "PD020000", rpcErr)
 }
 
 func TestWaitResponseErrorCode(t *testing.T) {
@@ -276,7 +276,7 @@ func TestWaitResponseErrorCode(t *testing.T) {
 	}()
 
 	rpcErr := rc.waitResponse(ctx, nil, "000000001", &RPCRequest{}, time.Now(), resChl)
-	assert.Regexp(t, "pop", rpcErr.Error())
+	assert.Regexp(t, "pop", rpcErr)
 }
 
 func TestWaitResponseNilNilOk(t *testing.T) {
@@ -305,7 +305,7 @@ func TestWaitResponseBadUnmarshal(t *testing.T) {
 
 	var needString string
 	rpcErr := rc.waitResponse(ctx, &needString, "000000001", &RPCRequest{}, time.Now(), resChl)
-	assert.Regexp(t, "PD020504", rpcErr.Error())
+	assert.Regexp(t, "PD020504", rpcErr)
 }
 
 func TestHandleSubscriptionNotificationBadSubID(t *testing.T) {
@@ -341,7 +341,7 @@ func TestHandleSubscriptionConfirmServerError(t *testing.T) {
 		},
 	})
 	rpcErr := <-errChl
-	assert.Regexp(t, "pop", rpcErr.Error())
+	assert.Regexp(t, "pop", rpcErr)
 }
 
 func TestHandleSubscriptionConfirmBadSub(t *testing.T) {
@@ -351,7 +351,7 @@ func TestHandleSubscriptionConfirmBadSub(t *testing.T) {
 	errChl := make(chan ErrorRPC, 1)
 	rc.handleSubscriptionConfirm(ctx, &sub{newSubResponse: errChl}, &RPCResponse{})
 	rpcErr := <-errChl
-	assert.Regexp(t, "PD020506", rpcErr.Error())
+	assert.Regexp(t, "PD020506", rpcErr)
 }
 
 func TestRemoveSubscriptionPending(t *testing.T) {

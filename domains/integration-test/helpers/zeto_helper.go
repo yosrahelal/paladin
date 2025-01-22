@@ -28,17 +28,17 @@ import (
 
 type ZetoHelper struct {
 	t       *testing.T
-	rpc     rpcclient.Backend
+	rpc     rpcclient.Client
 	Address *tktypes.EthAddress
 }
 
-func DeployZeto(ctx context.Context, t *testing.T, rpc rpcclient.Backend, domainName, controllerName, tokenName string) *ZetoHelper {
+func DeployZeto(ctx context.Context, t *testing.T, rpc rpcclient.Client, domainName, controllerName, tokenName string) *ZetoHelper {
 	var addr tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, controllerName, &types.InitializerParams{
 		TokenName: tokenName,
 	})
 	if rpcerr != nil {
-		assert.NoError(t, rpcerr.Error())
+		assert.NoError(t, rpcerr)
 	}
 	return &ZetoHelper{
 		t:       t,

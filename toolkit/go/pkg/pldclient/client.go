@@ -20,7 +20,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
@@ -147,7 +146,7 @@ func (c *paladinClient) WebSocket(ctx context.Context, conf *pldconf.WSClientCon
 type unconnectedRPC struct{}
 
 func (u *unconnectedRPC) CallRPC(ctx context.Context, result interface{}, method string, params ...interface{}) rpcclient.ErrorRPC {
-	return rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, i18n.NewError(ctx, tkmsgs.MsgPaladinClientNoConnection))
+	return rpcclient.NewRPCError(ctx, rpcclient.RPCCodeInternalError, tkmsgs.MsgPaladinClientNoConnection)
 }
 
 func (c *paladinClient) ReceiptPollingInterval(t time.Duration) PaladinClient {

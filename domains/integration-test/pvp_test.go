@@ -211,13 +211,13 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withHooks b
 	}
 }
 
-func resolveZetoKey(t *testing.T, ctx context.Context, rpc rpcclient.Backend, domainName, identity string) (verifier string) {
+func resolveZetoKey(t *testing.T, ctx context.Context, rpc rpcclient.Client, domainName, identity string) (verifier string) {
 	err := rpc.CallRPC(ctx, &verifier, "ptx_resolveVerifier", identity, zetosignerapi.AlgoDomainZetoSnarkBJJ(domainName), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X)
 	require.Nil(t, err)
 	return
 }
 
-func findAvailableCoins[T any](t *testing.T, ctx context.Context, rpc rpcclient.Backend, domainName, coinSchemaID string, address *tktypes.EthAddress, jq *query.QueryJSON, readiness ...func(coins []*T) bool) []*T {
+func findAvailableCoins[T any](t *testing.T, ctx context.Context, rpc rpcclient.Client, domainName, coinSchemaID string, address *tktypes.EthAddress, jq *query.QueryJSON, readiness ...func(coins []*T) bool) []*T {
 	if jq == nil {
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
@@ -231,7 +231,7 @@ notReady:
 			jq,
 			"available")
 		if rpcerr != nil {
-			require.NoError(t, rpcerr.Error())
+			require.NoError(t, rpcerr)
 		}
 		for _, fn := range readiness {
 			if t.Failed() {
@@ -293,7 +293,7 @@ func TestNotoForZeto(t *testing.T) {
 	var result tktypes.HexBytes
 	rpcerr := rpc.CallRPC(ctx, &result, "ptx_storeABI", contractAbi)
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 
 	aliceKey, err := tb.ResolveKey(ctx, alice, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)

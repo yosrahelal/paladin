@@ -67,7 +67,7 @@ func deployContracts(ctx context.Context, t *testing.T, hdWalletSeed *testbed.UT
 	url, _, done, err := tb.StartForTest("../../testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
 	require.NoError(t, err)
 	defer done()
-	rpc := rpcclient.NewRPCClient(resty.New().SetBaseURL(url))
+	rpc := rpcclient.WrapRestyClient(resty.New().SetBaseURL(url))
 
 	deployed := make(map[string]string, len(contracts))
 	for name, contract := range contracts {
@@ -76,7 +76,7 @@ func deployContracts(ctx context.Context, t *testing.T, hdWalletSeed *testbed.UT
 		rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deployBytecode",
 			notaryName, build.ABI, build.Bytecode.String(), tktypes.RawJSON(`{}`))
 		if rpcerr != nil {
-			assert.NoError(t, rpcerr.Error())
+			assert.NoError(t, rpcerr)
 		}
 		deployed[name] = addr
 	}
@@ -95,15 +95,15 @@ func newNotoDomain(t *testing.T, config *types.DomainConfig) (*Noto, *testbed.Te
 	}
 }
 
-func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcclient.Backend) {
+func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcclient.Client) {
 	tb := testbed.NewTestBed()
 	url, _, done, err := tb.StartForTest("../../testbed.config.yaml", domains, hdWalletSeed)
 	assert.NoError(t, err)
-	rpc := rpcclient.NewRPCClient(resty.New().SetBaseURL(url))
+	rpc := rpcclient.WrapRestyClient(resty.New().SetBaseURL(url))
 	return done, tb, rpc
 }
 
-func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcclient.Backend, noto *Noto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.NotoCoinState {
+func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcclient.Client, noto *Noto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.NotoCoinState {
 	if jq == nil {
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
@@ -115,7 +115,7 @@ func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcclient.Backend
 		jq,
 		"available")
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 	return notoCoins
 }
@@ -159,7 +159,7 @@ func TestNoto(t *testing.T) {
 			Notary: notaryName,
 		})
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 	log.L(ctx).Infof("Noto instance deployed to %s", notoAddress)
 
@@ -178,7 +178,7 @@ func TestNoto(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 
 	coins := findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
@@ -200,7 +200,7 @@ func TestNoto(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	require.NotNil(t, rpcerr)
-	assert.ErrorContains(t, rpcerr.Error(), "PD200009")
+	assert.ErrorContains(t, rpcerr, "PD200009")
 
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.Len(t, coins, 1)
@@ -219,7 +219,7 @@ func TestNoto(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	require.NotNil(t, rpcerr)
-	assert.ErrorContains(t, rpcerr.Error(), "PD200005")
+	assert.ErrorContains(t, rpcerr, "PD200005")
 
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.Len(t, coins, 1)
@@ -238,7 +238,7 @@ func TestNoto(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
@@ -264,7 +264,7 @@ func TestNoto(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
@@ -289,7 +289,7 @@ func TestNoto(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
@@ -337,7 +337,7 @@ func TestNotoApprove(t *testing.T) {
 			Notary: notaryName,
 		})
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 	log.L(ctx).Infof("Noto instance deployed to %s", notoAddress)
 
@@ -356,7 +356,7 @@ func TestNotoApprove(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 
 	log.L(ctx).Infof("Approve recipient1 to claim 50")
@@ -374,7 +374,7 @@ func TestNotoApprove(t *testing.T) {
 		ABI: types.NotoABI,
 	})
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 
 	var transferParams NotoTransferParams
@@ -396,7 +396,7 @@ func TestNotoApprove(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 
 	log.L(ctx).Infof("Claim 50 using approval")
@@ -485,7 +485,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 		},
 	})
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 	require.NotEmpty(t, callResult["implementation"])
 
@@ -498,7 +498,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 		},
 	)
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 	log.L(ctx).Infof("Noto instance deployed to %s", notoAddress)
 
@@ -517,7 +517,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 
 	coins := findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
@@ -540,7 +540,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
@@ -566,7 +566,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 		ABI: types.NotoABI,
 	}, true)
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr)
 	}
 
 	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
