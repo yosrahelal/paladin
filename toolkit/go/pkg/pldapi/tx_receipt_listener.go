@@ -19,11 +19,11 @@ package pldapi
 import "github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 type TransactionReceiptListener struct {
-	Name    string                            `docstruct:"TransactionReceiptStream" json:"name"`
-	Created tktypes.Timestamp                 `docstruct:"TransactionReceiptStream" json:"created"`
-	Started *bool                             `docstruct:"TransactionReceiptStream" json:"started"`
-	Filters TransactionReceiptFilters         `docstruct:"TransactionReceiptStream" json:"filters"`
-	Options TransactionReceiptListenerOptions `docstruct:"TransactionReceiptStream" json:"options"`
+	Name    string                            `docstruct:"TransactionReceiptListener" json:"name"`
+	Created tktypes.Timestamp                 `docstruct:"TransactionReceiptListener" json:"created"`
+	Started *bool                             `docstruct:"TransactionReceiptListener" json:"started"`
+	Filters TransactionReceiptFilters         `docstruct:"TransactionReceiptListener" json:"filters"`
+	Options TransactionReceiptListenerOptions `docstruct:"TransactionReceiptListener" json:"options"`
 }
 
 type TransactionReceiptFilters struct {
@@ -55,6 +55,6 @@ func (tt IncompleteStateReceiptBehavior) Default() string {
 }
 
 type TransactionReceiptListenerOptions struct {
-	DomainReceipts                 bool                                         `docstruct:"TransactionReceiptFilters" json:"domainReceipts"`
-	IncompleteStateReceiptBehavior tktypes.Enum[IncompleteStateReceiptBehavior] `docstruct:"TransactionReceiptFilters" json:"incompleteStateReceiptBehavior,omitempty"`
+	DomainReceipts                 bool                                         `docstruct:"TransactionReceiptOptions" json:"domainReceipts"`
+	IncompleteStateReceiptBehavior tktypes.Enum[IncompleteStateReceiptBehavior] `docstruct:"TransactionReceiptOptions" json:"incompleteStateReceiptBehavior,omitempty"`
 }

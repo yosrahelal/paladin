@@ -156,6 +156,17 @@ var (
 	DecodedSummary                                = ffm("ABIDecodedData.summary", "A string formatted summary - errors only")
 	DecodedDefinition                             = ffm("ABIDecodedData.definition", "The ABI definition entry matched from the dictionary of ABIs")
 	DecodedSignature                              = ffm("ABIDecodedData.signature", "The signature of the matched ABI definition")
+	TransactionReceiptListenerName                = ffm("TransactionReceiptListener.name", "Unique name for the receipt listener")
+	TransactionReceiptListenerCreated             = ffm("TransactionReceiptListener.created", "Time the listener was created")
+	TransactionReceiptListenerStarted             = ffm("TransactionReceiptListener.started", "If the listener is started - can be set to false to disable delivery server-side")
+	TransactionReceiptListenerFilters             = ffm("TransactionReceiptListener.filters", "Filters to apply to receipts")
+
+	TransactionReceiptListenerOptions                       = ffm("TransactionReceiptListener.options", "Options for the receipt listener")
+	TransactionReceiptFiltersSequenceAbove                  = ffm("TransactionReceiptFilters.sequenceAbove", "Only deliver receipts above a certain sequence (rather than from the beginning of indexing of the chain)")
+	TransactionReceiptFiltersType                           = ffm("TransactionReceiptFilters.type", "Only deliver receipts for one transaction type (public/private)")
+	TransactionReceiptFiltersDomain                         = ffm("TransactionReceiptFilters.domain", "Only deliver receipts for an individual domain (only valid with type=private)")
+	TransactionReceiptOptionsDomainReceipts                 = ffm("TransactionReceiptOptions.domainReceipts", "When true, a full domain receipt will be generated for each event with complete state data")
+	TransactionReceiptOptionsIncompleteStateReceiptBehavior = ffm("TransactionReceiptOptions.incompleteStateReceiptBehavior", "When set to 'block_contract', if a transaction with incomplete state data is detected then delivery of all receipts on that individual smart contract address will pause until the missing state arrives. Receipts for other contract addresses continue to be delivered")
 )
 
 // query/query_json.go

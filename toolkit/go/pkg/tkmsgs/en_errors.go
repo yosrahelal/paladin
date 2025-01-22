@@ -73,6 +73,7 @@ var (
 	MsgPaladinClientNoDomain          = ffe("PD020214", "No domain specified for private transaction")
 	MsgPaladinClientNoFunction        = ffe("PD020215", "No function specified")
 	MsgPaladinClientPollTxTimedOut    = ffe("PD020216", "Polling timed out after %d attempts in %s for transaction %s")
+	MsgPaladinClientWebSocketRequired = ffe("PD020217", "WebSocket connection required for async notifications")
 
 	// Plugin PD0203XX
 	MsgPluginUnsupportedRequest   = ffe("PD020300", "Unsupported request %T")

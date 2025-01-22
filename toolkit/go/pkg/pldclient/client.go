@@ -20,6 +20,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
@@ -71,9 +72,16 @@ type RPCMethodInfo struct {
 	Output string
 }
 
+type RPCSubscriptionInfo struct {
+	rpcclient.SubscriptionConfig
+	FixedInputs []string
+	Inputs      []string
+}
+
 type rpcModuleInfo struct {
-	group      string
-	methodInfo map[string]RPCMethodInfo
+	group         string
+	methodInfo    map[string]RPCMethodInfo
+	subscriptions []RPCSubscriptionInfo
 }
 
 func (fg *rpcModuleInfo) Group() string {
@@ -120,6 +128,14 @@ func Wrap(rpc rpcclient.Client) PaladinClient {
 
 func New() PaladinClient {
 	return Wrap(&unconnectedRPC{})
+}
+
+func (c *paladinClient) WSClient(ctx context.Context) (rpcclient.WSClient, error) {
+	wsc, ok := c.Client.(rpcclient.WSClient)
+	if !ok {
+		return nil, i18n.NewError(ctx, tkmsgs.MsgPaladinClientWebSocketRequired)
+	}
+	return wsc, nil
 }
 
 func (c *paladinClient) HTTP(ctx context.Context, conf *pldconf.HTTPClientConfig) (PaladinClient, error) {

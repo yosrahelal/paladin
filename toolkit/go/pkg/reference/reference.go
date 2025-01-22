@@ -28,6 +28,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -78,6 +79,13 @@ var allTypes = []interface{}{
 	pldapi.IndexedEvent{},
 	pldapi.TransactionReceipt{},
 	pldapi.TransactionReceiptFull{},
+	pldapi.TransactionReceiptListener{
+		Name:    "listener1",
+		Created: tktypes.TimestampNow(),
+		Started: confutil.P(true),
+	},
+	pldapi.TransactionReceiptFilters{},
+	pldapi.TransactionReceiptListenerOptions{},
 	pldapi.TransactionStates{},
 	pldapi.TransactionInput{},
 	pldapi.TransactionFull{},
