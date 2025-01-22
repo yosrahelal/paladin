@@ -238,7 +238,7 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, lockID tktypes.Bytes
 		return nil, err
 	}
 	return &TransactionWrapper{
-		functionABI: contractBuild.ABI.Functions()["lock"],
+		functionABI: interfaceBuild.ABI.Functions()["lock"],
 		paramsJSON:  paramsJSON,
 	}, nil
 }

@@ -193,7 +193,7 @@ func (h *delegateLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.Pa
 		return nil, err
 	}
 	return &TransactionWrapper{
-		functionABI: contractBuild.ABI.Functions()["delegateLock"],
+		functionABI: interfaceBuild.ABI.Functions()["delegateLock"],
 		paramsJSON:  paramsJSON,
 	}, nil
 }

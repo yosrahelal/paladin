@@ -173,7 +173,7 @@ func TestMint(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	expectedFunction := mustParseJSON(contractBuild.ABI.Functions()["mint"])
+	expectedFunction := mustParseJSON(interfaceBuild.ABI.Functions()["mint"])
 	assert.JSONEq(t, expectedFunction, prepareRes.Transaction.FunctionAbiJson)
 	assert.Nil(t, prepareRes.Transaction.ContractAddress)
 	assert.JSONEq(t, fmt.Sprintf(`{

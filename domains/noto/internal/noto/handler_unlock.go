@@ -315,7 +315,7 @@ func (h *unlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTr
 		return nil, err
 	}
 	return &TransactionWrapper{
-		functionABI: contractBuild.ABI.Functions()["unlock"],
+		functionABI: interfaceBuild.ABI.Functions()["unlock"],
 		paramsJSON:  paramsJSON,
 	}, nil
 }

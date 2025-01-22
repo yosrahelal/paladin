@@ -197,7 +197,7 @@ func (h *mintHandler) baseLedgerInvoke(ctx context.Context, req *prototk.Prepare
 	}
 	return &TransactionWrapper{
 		transactionType: prototk.PreparedTransaction_PUBLIC,
-		functionABI:     contractBuild.ABI.Functions()["mint"],
+		functionABI:     interfaceBuild.ABI.Functions()["mint"],
 		paramsJSON:      paramsJSON,
 	}, nil
 }

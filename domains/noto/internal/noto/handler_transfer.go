@@ -211,7 +211,7 @@ func (h *transferHandler) baseLedgerInvoke(ctx context.Context, req *prototk.Pre
 		fn = "transferWithApproval"
 	}
 	return &TransactionWrapper{
-		functionABI: contractBuild.ABI.Functions()[fn],
+		functionABI: interfaceBuild.ABI.Functions()[fn],
 		paramsJSON:  paramsJSON,
 	}, nil
 }

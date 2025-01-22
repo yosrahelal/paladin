@@ -210,7 +210,7 @@ func (h *burnHandler) baseLedgerInvoke(ctx context.Context, req *prototk.Prepare
 	}
 	return &TransactionWrapper{
 		transactionType: prototk.PreparedTransaction_PUBLIC,
-		functionABI:     contractBuild.ABI.Functions()["transfer"],
+		functionABI:     interfaceBuild.ABI.Functions()["transfer"],
 		paramsJSON:      paramsJSON,
 	}, nil
 }

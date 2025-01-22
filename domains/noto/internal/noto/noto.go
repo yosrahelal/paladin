@@ -44,13 +44,17 @@ var notoFactoryJSON []byte
 //go:embed abis/INoto.json
 var notoInterfaceJSON []byte
 
+//go:embed abis/INotoErrors.json
+var notoErrorsJSON []byte
+
 //go:embed abis/INotoHooks.json
 var notoHooksJSON []byte
 
 var (
-	factoryBuild  = solutils.MustLoadBuild(notoFactoryJSON)
-	contractBuild = solutils.MustLoadBuild(notoInterfaceJSON)
-	hooksBuild    = solutils.MustLoadBuild(notoHooksJSON)
+	factoryBuild   = solutils.MustLoadBuild(notoFactoryJSON)
+	interfaceBuild = solutils.MustLoadBuild(notoInterfaceJSON)
+	errorsBuild    = solutils.MustLoadBuild(notoErrorsJSON)
+	hooksBuild     = solutils.MustLoadBuild(notoHooksJSON)
 )
 
 var (
@@ -71,8 +75,8 @@ var allEvents = []string{
 	NotoLockDelegated,
 }
 
-var eventsJSON = mustBuildEventsJSON(contractBuild.ABI)
-var eventSignatures = mustLoadEventSignatures(contractBuild.ABI, allEvents)
+var eventsJSON = mustBuildEventsJSON(interfaceBuild.ABI, errorsBuild.ABI)
+var eventSignatures = mustLoadEventSignatures(interfaceBuild.ABI, allEvents)
 
 var allSchemas = []*abi.Parameter{
 	types.NotoCoinABI,
@@ -240,11 +244,14 @@ func mustParseJSON[T any](obj T) string {
 	return string(parsed)
 }
 
-func mustBuildEventsJSON(contractABI abi.ABI) string {
+func mustBuildEventsJSON(abis ...abi.ABI) string {
 	var events abi.ABI
-	for _, entry := range contractABI {
-		if entry.Type == abi.Event {
-			events = append(events, entry)
+	for _, a := range abis {
+		for _, entry := range a {
+			// We include errors as well as events, so that Paladin will decode domain errors
+			if entry.Type == abi.Event || entry.Type == abi.Error {
+				events = append(events, entry)
+			}
 		}
 	}
 	return mustParseJSON(events)

@@ -166,7 +166,7 @@ func (h *approveHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedT
 		return nil, err
 	}
 	return &TransactionWrapper{
-		functionABI: contractBuild.ABI.Functions()["approveTransfer"],
+		functionABI: interfaceBuild.ABI.Functions()["approveTransfer"],
 		paramsJSON:  paramsJSON,
 	}, nil
 }

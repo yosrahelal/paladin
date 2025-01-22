@@ -188,7 +188,7 @@ func TestBurn(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	expectedFunction := mustParseJSON(contractBuild.ABI.Functions()["transfer"])
+	expectedFunction := mustParseJSON(interfaceBuild.ABI.Functions()["transfer"])
 	assert.JSONEq(t, expectedFunction, prepareRes.Transaction.FunctionAbiJson)
 	assert.Nil(t, prepareRes.Transaction.ContractAddress)
 	assert.JSONEq(t, fmt.Sprintf(`{

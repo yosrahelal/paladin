@@ -144,7 +144,7 @@ func (h *prepareUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.P
 		return nil, err
 	}
 	return &TransactionWrapper{
-		functionABI: contractBuild.ABI.Functions()["prepareUnlock"],
+		functionABI: interfaceBuild.ABI.Functions()["prepareUnlock"],
 		paramsJSON:  paramsJSON,
 	}, nil
 }
