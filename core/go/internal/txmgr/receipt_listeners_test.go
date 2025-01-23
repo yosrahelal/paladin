@@ -981,7 +981,8 @@ func TestProcessPersistedReceiptPostFilter(t *testing.T) {
 		Name:    "listener1",
 		Started: confutil.P(false),
 		Filters: pldapi.TransactionReceiptFilters{
-			SequenceAbove: confutil.P(uint64(10000)),
+			Type:   confutil.P(pldapi.TransactionTypePrivate.Enum()),
+			Domain: "domain1",
 		},
 	})
 	require.NoError(t, err)
@@ -989,7 +990,9 @@ func TestProcessPersistedReceiptPostFilter(t *testing.T) {
 	l := txm.receiptListeners["listener1"]
 	l.initStart()
 
-	err = l.processPersistedReceipt(&receiptDeliveryBatch{}, &transactionReceipt{})
+	err = l.processPersistedReceipt(&receiptDeliveryBatch{}, &transactionReceipt{
+		Domain: "domain2",
+	})
 	require.NoError(t, err)
 	close(l.done)
 

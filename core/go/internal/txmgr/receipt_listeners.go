@@ -433,9 +433,7 @@ func (l *receiptListener) checkMatch(r *transactionReceipt) bool {
 		}
 	}
 
-	if l.spec.Filters.SequenceAbove != nil {
-		matches = matches && r.Sequence > *l.spec.Filters.SequenceAbove
-	}
+	// Note we don't factor sequence into the tap - as the notification does not contain the DB-generated sequence
 
 	return matches
 }
