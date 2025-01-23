@@ -71,7 +71,7 @@ type PTX interface {
 var ptxReceiptsSubscriptionConfig = rpcclient.SubscriptionConfig{
 	SubscribeMethod:    "ptx_subscribe",
 	UnsubscribeMethod:  "ptx_unsubscribe",
-	NotificationMethod: "ptx_receiptBatch",
+	NotificationMethod: "ptx_subscription",
 	AckMethod:          "ptx_ack",
 	NackMethod:         "ptx_nack",
 }
