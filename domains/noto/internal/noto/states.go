@@ -522,6 +522,32 @@ func (n *Noto) encodeUnlockMasked(ctx context.Context, contract *ethtypes.Addres
 	})
 }
 
+func (n *Noto) unlockHashFromEncodedCall(ctx context.Context, contract *ethtypes.Address0xHex, encodedUnlock tktypes.HexBytes, data tktypes.HexBytes) (ethtypes.HexBytes0xPrefix, error) {
+	decodedUnlock, err := interfaceBuild.ABI.Functions()["unlock"].DecodeCallDataCtx(ctx, encodedUnlock)
+	if err != nil {
+		return nil, err
+	}
+	unlockJSON, err := tktypes.StandardABISerializer().SerializeJSON(decodedUnlock)
+	if err != nil {
+		return nil, err
+	}
+	var unlockParams NotoUnlockParams
+	if err := json.Unmarshal(unlockJSON, &unlockParams); err != nil {
+		return nil, err
+	}
+	return eip712.EncodeTypedDataV4(ctx, &eip712.TypedData{
+		Types:       NotoUnlockMaskedTypeSet,
+		PrimaryType: "Unlock",
+		Domain:      n.eip712Domain(contract),
+		Message: map[string]any{
+			"lockedInputs":  stringToAny(unlockParams.LockedInputs),
+			"lockedOutputs": stringToAny(unlockParams.LockedOutputs),
+			"outputs":       stringToAny(unlockParams.Outputs),
+			"data":          data,
+		},
+	})
+}
+
 func (n *Noto) encodeDelegateLock(ctx context.Context, contract *ethtypes.Address0xHex, lockID tktypes.Bytes32, delegate *tktypes.EthAddress, data tktypes.HexBytes) (ethtypes.HexBytes0xPrefix, error) {
 	return eip712.EncodeTypedDataV4(ctx, &eip712.TypedData{
 		Types:       NotoDelegateLockTypeSet,

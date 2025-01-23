@@ -49,6 +49,7 @@ interface INotoPrivate {
 
     function delegateLock(
         bytes32 lockId,
+        bytes calldata unlock,
         address delegate,
         bytes calldata data
     ) external;

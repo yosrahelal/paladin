@@ -97,22 +97,26 @@ func decodeTransactionResult(t *testing.T, resultInput map[string]any) *testbed.
 	return &result
 }
 
-func extractLockID(noto noto.Noto, invokeResult *testbed.TransactionResult) (tktypes.Bytes32, error) {
+// TODO: this should be retrieved from the domain receipt (not currently available in testbed)
+func extractLockInfo(noto noto.Noto, invokeResult *testbed.TransactionResult) (*nototypes.ReceiptLockInfo, error) {
 	for _, state := range invokeResult.InfoStates {
 		if state.Schema.String() == noto.LockInfoSchemaID() {
 			var lockInfo map[string]any
 			err := json.Unmarshal(state.Data, &lockInfo)
 			if err != nil {
-				return tktypes.Bytes32{}, err
+				return nil, err
 			}
-			return tktypes.MustParseBytes32(lockInfo["lockId"].(string)), nil
+			receiptInfo := &nototypes.ReceiptLockInfo{
+				LockID: tktypes.MustParseBytes32(lockInfo["lockId"].(string)),
+			}
+			return receiptInfo, nil
 		}
 	}
-	return tktypes.Bytes32{}, nil
+	return nil, nil
 }
 
-// TODO: make this easier to extract
-func buildUnlock(ctx context.Context, notoDomain noto.Noto, abi abi.ABI, lockID tktypes.Bytes32, prepareUnlockResult *testbed.TransactionResult) ([]*pldapi.StateEncoded, []*pldapi.StateEncoded, map[string]any, []byte, error) {
+// TODO: this should be retrieved from the domain receipt (not currently available in testbed)
+func buildUnlock(ctx context.Context, notoDomain noto.Noto, abi abi.ABI, prepareUnlockResult *testbed.TransactionResult) ([]*pldapi.StateEncoded, []*pldapi.StateEncoded, map[string]any, []byte, error) {
 	notoInputStates := make([]*pldapi.StateEncoded, 0, len(prepareUnlockResult.ReadStates))
 	notoOutputStates := make([]*pldapi.StateEncoded, 0, len(prepareUnlockResult.InfoStates))
 	lockedInputs := make([]tktypes.HexBytes, 0)
@@ -134,7 +138,6 @@ func buildUnlock(ctx context.Context, notoDomain noto.Noto, abi abi.ABI, lockID 
 	}
 
 	unlockParams := map[string]any{
-		"lockId":        lockID,
 		"lockedInputs":  lockedInputs,
 		"lockedOutputs": lockedOutputs,
 		"outputs":       unlockedOutputs,
@@ -404,13 +407,14 @@ func (s *pvpTestSuite) TestNotoForZeto() {
 	}).SignAndSend(alice).Wait()
 	notoLockResult := decodeTransactionResult(t, notoLock)
 
-	lockID, err := extractLockID(notoDomain, notoLockResult)
+	lockInfo, err := extractLockInfo(notoDomain, notoLockResult)
 	require.NoError(t, err)
-	require.NotEmpty(t, lockID)
+	require.NotNil(t, lockInfo)
+	require.NotEmpty(t, lockInfo.LockID)
 
 	time.Sleep(1 * time.Second) // TODO: remove
 	notoPrepareUnlock := noto.PrepareUnlock(ctx, &nototypes.UnlockParams{
-		LockID: lockID,
+		LockID: lockInfo.LockID,
 		From:   alice,
 		Recipients: []*nototypes.UnlockRecipient{{
 			To:     bob,
@@ -420,7 +424,7 @@ func (s *pvpTestSuite) TestNotoForZeto() {
 	require.NotNil(t, notoPrepareUnlock)
 	prepareUnlockResult := decodeTransactionResult(t, notoPrepareUnlock)
 
-	notoInputStates, notoOutputStates, _, transferNoto, err := buildUnlock(ctx, notoDomain, noto.ABI, lockID, prepareUnlockResult)
+	notoInputStates, notoOutputStates, _, transferNoto, err := buildUnlock(ctx, notoDomain, noto.ABI, prepareUnlockResult)
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Prepare the Zeto transfer")
@@ -480,7 +484,8 @@ func (s *pvpTestSuite) TestNotoForZeto() {
 
 	log.L(ctx).Infof("Approve both transfers")
 	noto.DelegateLock(ctx, &nototypes.DelegateLockParams{
-		LockID:   lockID,
+		LockID:   lockInfo.LockID,
+		Unlock:   transferNoto,
 		Delegate: transferAtom.Address,
 	}).SignAndSend(alice).Wait()
 	zeto.Lock(ctx, transferAtom.Address, transferZeto.EncodedCall).SignAndSend(bob).Wait()

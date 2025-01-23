@@ -21,7 +21,6 @@ interface INoto {
     );
 
     event NotoLock(
-        bytes32 lockId,
         bytes32[] inputs,
         bytes32[] outputs,
         bytes32[] lockedOutputs,
@@ -30,7 +29,6 @@ interface INoto {
     );
 
     event NotoUnlock(
-        bytes32 lockId,
         address sender,
         bytes32[] lockedInputs,
         bytes32[] lockedOutputs,
@@ -40,7 +38,6 @@ interface INoto {
     );
 
     event NotoUnlockPrepared(
-        bytes32 lockId,
         bytes32[] lockedInputs,
         bytes32 unlockHash,
         bytes signature,
@@ -48,7 +45,7 @@ interface INoto {
     );
 
     event NotoLockDelegated(
-        bytes32 lockId,
+        bytes32 unlockHash,
         address delegate,
         bytes signature,
         bytes data
@@ -87,7 +84,6 @@ interface INoto {
     ) external;
 
     function lock(
-        bytes32 lockId,
         bytes32[] calldata inputs,
         bytes32[] calldata outputs,
         bytes32[] calldata lockedOutputs,
@@ -96,7 +92,6 @@ interface INoto {
     ) external;
 
     function unlock(
-        bytes32 lockId,
         bytes32[] calldata lockedInputs,
         bytes32[] calldata lockedOutputs,
         bytes32[] calldata outputs,
@@ -105,7 +100,6 @@ interface INoto {
     ) external;
 
     function prepareUnlock(
-        bytes32 lockId,
         bytes32[] calldata lockedInputs,
         bytes32 unlockHash,
         bytes calldata signature,
@@ -113,7 +107,7 @@ interface INoto {
     ) external;
 
     function delegateLock(
-        bytes32 lockId,
+        bytes32 unlockHash,
         address delegate,
         bytes calldata signature,
         bytes calldata data

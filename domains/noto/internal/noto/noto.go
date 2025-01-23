@@ -134,7 +134,6 @@ type NotoApproveTransferParams struct {
 }
 
 type NotoLockParams struct {
-	LockID        tktypes.Bytes32  `json:"lockId"`
 	Inputs        []string         `json:"inputs"`
 	Outputs       []string         `json:"outputs"`
 	LockedOutputs []string         `json:"lockedOutputs"`
@@ -143,7 +142,6 @@ type NotoLockParams struct {
 }
 
 type NotoUnlockParams struct {
-	LockID        tktypes.Bytes32  `json:"lockId"`
 	LockedInputs  []string         `json:"lockedInputs"`
 	LockedOutputs []string         `json:"lockedOutputs"`
 	Outputs       []string         `json:"outputs"`
@@ -152,7 +150,6 @@ type NotoUnlockParams struct {
 }
 
 type NotoPrepareUnlockParams struct {
-	LockID       tktypes.Bytes32  `json:"lockId"`
 	LockedInputs []string         `json:"lockedInputs"`
 	UnlockHash   tktypes.Bytes32  `json:"unlockHash"`
 	Signature    tktypes.HexBytes `json:"signature"`
@@ -160,10 +157,10 @@ type NotoPrepareUnlockParams struct {
 }
 
 type NotoDelegateLockParams struct {
-	LockID    tktypes.Bytes32     `json:"lockId"`
-	Delegate  *tktypes.EthAddress `json:"delegate"`
-	Signature tktypes.HexBytes    `json:"signature"`
-	Data      tktypes.HexBytes    `json:"data"`
+	UnlockHash tktypes.Bytes32     `json:"unlockHash"`
+	Delegate   *tktypes.EthAddress `json:"delegate"`
+	Signature  tktypes.HexBytes    `json:"signature"`
+	Data       tktypes.HexBytes    `json:"data"`
 }
 
 type NotoTransfer_Event struct {
@@ -181,7 +178,6 @@ type NotoApproved_Event struct {
 }
 
 type NotoLock_Event struct {
-	LockID        tktypes.Bytes32   `json:"lockId"`
 	Inputs        []tktypes.Bytes32 `json:"inputs"`
 	Outputs       []tktypes.Bytes32 `json:"outputs"`
 	LockedOutputs []tktypes.Bytes32 `json:"lockedOutputs"`
@@ -190,7 +186,6 @@ type NotoLock_Event struct {
 }
 
 type NotoUnlock_Event struct {
-	LockID        tktypes.Bytes32     `json:"lockId"`
 	Sender        *tktypes.EthAddress `json:"sender"`
 	LockedInputs  []tktypes.Bytes32   `json:"lockedInputs"`
 	LockedOutputs []tktypes.Bytes32   `json:"lockedOutputs"`
@@ -200,7 +195,6 @@ type NotoUnlock_Event struct {
 }
 
 type NotoUnlockPrepared_Event struct {
-	LockID       tktypes.Bytes32   `json:"lockId"`
 	LockedInputs []tktypes.Bytes32 `json:"lockedInputs"`
 	UnlockHash   tktypes.Bytes32   `json:"unlockHash"`
 	Signature    tktypes.HexBytes  `json:"signature"`
@@ -208,10 +202,10 @@ type NotoUnlockPrepared_Event struct {
 }
 
 type NotoLockDelegated_Event struct {
-	LockID    tktypes.Bytes32     `json:"lockId"`
-	Delegate  *tktypes.EthAddress `json:"delegate"`
-	Signature tktypes.HexBytes    `json:"signature"`
-	Data      tktypes.HexBytes    `json:"data"`
+	UnlockHash tktypes.Bytes32     `json:"unlockHash"`
+	Delegate   *tktypes.EthAddress `json:"delegate"`
+	Signature  tktypes.HexBytes    `json:"signature"`
+	Data       tktypes.HexBytes    `json:"data"`
 }
 
 type parsedCoins struct {

@@ -39,9 +39,10 @@ type ReceiptStates struct {
 }
 
 type ReceiptLockInfo struct {
-	LockID   tktypes.Bytes32     `json:"lockId"`
-	Delegate *tktypes.EthAddress `json:"delegate,omitempty"` // only set for delegateLock
-	Unlock   tktypes.HexBytes    `json:"unlock,omitempty"`   // only set for prepareUnlock
+	LockID     tktypes.Bytes32     `json:"lockId"`
+	Delegate   *tktypes.EthAddress `json:"delegate,omitempty"`   // only set for delegateLock
+	UnlockHash tktypes.Bytes32     `json:"unlockHash,omitempty"` // only set for prepareUnlock/delegateLock
+	Unlock     tktypes.HexBytes    `json:"unlock,omitempty"`     // only set for prepareUnlock
 }
 
 type ReceiptState struct {

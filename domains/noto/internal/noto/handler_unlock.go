@@ -286,8 +286,7 @@ func (h *unlockHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction
 	return h.endorse(ctx, tx, params, req, inputs, outputs)
 }
 
-func (h *unlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*TransactionWrapper, error) {
-	inParams := tx.Params.(*types.UnlockParams)
+func (h *unlockHandler) baseLedgerInvoke(ctx context.Context, req *prototk.PrepareTransactionRequest) (*TransactionWrapper, error) {
 	lockedInputs := req.InputStates
 	outputs, lockedOutputs := h.noto.splitStates(req.OutputStates)
 
@@ -303,7 +302,6 @@ func (h *unlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTr
 		return nil, err
 	}
 	params := &NotoUnlockParams{
-		LockID:        inParams.LockID,
 		LockedInputs:  endorsableStateIDs(lockedInputs),
 		LockedOutputs: endorsableStateIDs(lockedOutputs),
 		Outputs:       endorsableStateIDs(outputs),
@@ -374,7 +372,7 @@ func (h *unlockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction
 		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "notary")
 	}
 
-	baseTransaction, err := h.baseLedgerInvoke(ctx, tx, req)
+	baseTransaction, err := h.baseLedgerInvoke(ctx, req)
 	if err != nil {
 		return nil, err
 	}

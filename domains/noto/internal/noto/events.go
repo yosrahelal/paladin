@@ -167,9 +167,20 @@ func (n *Noto) handleNotaryPrivateUnlock(ctx context.Context, stateQueryContext 
 		return i18n.NewError(ctx, msgs.MsgMissingStateData, unlock.Outputs)
 	}
 
+	var lockID tktypes.Bytes32
+	for _, state := range inputStates {
+		coin, err := n.unmarshalLockedCoin(state.DataJson)
+		if err != nil {
+			return err
+		}
+		lockID = coin.LockID
+		// TODO: should we check that all inputs have the same lock ID?
+		break
+	}
+
 	recipients := make([]*ResolvedUnlockRecipient, len(outputStates))
 	for i, state := range outputStates {
-		coin, err := n.unmarshalLockedCoin(state.DataJson)
+		coin, err := n.unmarshalCoin(state.DataJson)
 		if err != nil {
 			return err
 		}
@@ -184,7 +195,7 @@ func (n *Noto) handleNotaryPrivateUnlock(ctx context.Context, stateQueryContext 
 		solutils.MustLoadBuild(notoHooksJSON).ABI.Functions()["handleDelegateUnlock"],
 		&DelegateUnlockHookParams{
 			Sender:     unlock.Sender,
-			LockID:     unlock.LockID,
+			LockID:     lockID,
 			Recipients: recipients,
 			Data:       unlock.Data,
 		},

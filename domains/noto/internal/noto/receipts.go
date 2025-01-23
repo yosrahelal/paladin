@@ -37,9 +37,9 @@ func (n *Noto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptReques
 		receipt.Data = info.Data
 	}
 
-	lockStates := n.filterSchema(req.InfoStates, []string{n.lockInfoSchema.Id})
-	if len(lockStates) == 1 {
-		lock, err := n.unmarshalLock(lockStates[0].StateDataJson)
+	lockInfoStates := n.filterSchema(req.InfoStates, []string{n.lockInfoSchema.Id})
+	if len(lockInfoStates) == 1 {
+		lock, err := n.unmarshalLock(lockInfoStates[0].StateDataJson)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +79,6 @@ func (n *Noto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptReques
 		// For prepareUnlock transactions, include the encoded "unlock" call that can be used to unlock the coins
 		unlock := interfaceBuild.ABI.Functions()["unlock"]
 		params := &NotoUnlockParams{
-			LockID:        receipt.LockInfo.LockID,
 			LockedInputs:  endorsableStateIDs(n.filterSchema(req.ReadStates, []string{n.lockedCoinSchema.Id})),
 			LockedOutputs: endorsableStateIDs(n.filterSchema(req.InfoStates, []string{n.lockedCoinSchema.Id})),
 			Outputs:       endorsableStateIDs(n.filterSchema(req.InfoStates, []string{n.coinSchema.Id})),

@@ -65,7 +65,7 @@ describe("Noto", function () {
 
   it("lock and unlock", async function () {
     const { noto, notary } = await loadFixture(deployNotoFixture);
-    const [_, delegate] = await ethers.getSigners();
+    const [_, delegate, other] = await ethers.getSigners();
     expect(notary.address).to.not.equal(delegate.address);
 
     const txo1 = fakeTXO();
@@ -81,11 +81,9 @@ describe("Noto", function () {
     await doTransfer(notary, noto, [], [txo1, txo2], randomBytes32());
 
     // Lock both of them
-    const lockId = randomBytes32();
     await doLock(
       notary,
       noto,
-      lockId,
       [txo1, txo2],
       [txo3],
       [locked1],
@@ -94,7 +92,7 @@ describe("Noto", function () {
 
     // Check that the same state cannot be locked again with the same lock
     await expect(
-      doLock(notary, noto, lockId, [], [], [locked1], randomBytes32())
+      doLock(notary, noto, [], [], [locked1], randomBytes32())
     ).to.be.rejectedWith("NotoInvalidOutput");
 
     // Check that locked value cannot be spent
@@ -103,19 +101,11 @@ describe("Noto", function () {
     ).to.be.rejectedWith("NotoInvalidInput");
 
     // Unlock the UTXO
-    await doUnlock(
-      notary,
-      noto,
-      lockId,
-      [locked1],
-      [locked2],
-      [txo4],
-      randomBytes32()
-    );
+    await doUnlock(notary, noto, [locked1], [locked2], [txo4], randomBytes32());
 
     // Check that the same state cannot be unlocked again
     await expect(
-      doUnlock(notary, noto, lockId, [locked1], [], [], randomBytes32())
+      doUnlock(notary, noto, [locked1], [], [], randomBytes32())
     ).to.be.rejectedWith("NotoInvalidInput");
 
     // Prepare an unlock operation
@@ -127,33 +117,29 @@ describe("Noto", function () {
       [txo5],
       unlockData
     );
-    await doPrepareUnlock(
-      notary,
-      noto,
-      lockId,
-      [locked2],
-      unlockHash,
-      unlockData
-    );
+    await doPrepareUnlock(notary, noto, [locked2], unlockHash, unlockData);
 
     // Delegate the unlock
     await doDelegateLock(
       notary,
       noto,
-      lockId,
+      unlockHash,
       delegate.address,
       randomBytes32()
     );
 
     // Attempt to perform an incorrect unlock
     await expect(
-      doUnlock(delegate, noto, lockId, [locked2], [], [], unlockData) // missing output state
+      doUnlock(delegate, noto, [locked1, locked2], [], [txo5], unlockData) // mismatched input states
+    ).to.be.rejectedWith("NotoInvalidInput");
+    await expect(
+      doUnlock(delegate, noto, [locked2], [], [txo5], randomBytes32()) // wrong data
     ).to.be.rejectedWith("NotoInvalidUnlockHash");
     await expect(
-      doUnlock(delegate, noto, lockId, [locked2], [], [txo5], randomBytes32()) // wrong data
-    ).to.be.rejectedWith("NotoInvalidUnlockHash");
+      doUnlock(other, noto, [locked2], [], [txo5], unlockData) // wrong delegate
+    ).to.be.rejectedWith("NotoInvalidDelegate");
 
     // Perform the prepared unlock
-    await doUnlock(delegate, noto, lockId, [locked2], [], [txo5], unlockData);
+    await doUnlock(delegate, noto, [locked2], [], [txo5], unlockData);
   });
 });
