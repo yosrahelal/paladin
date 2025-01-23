@@ -46,11 +46,6 @@ import (
 
 const workerPrefix = "worker-"
 
-var paladinSubscriptionConfig = rpcclient.SubscriptionConfig{
-	SubscribeMethod:   "ptx_subscribe",
-	UnsubscribeMethod: "eth_unsubscribe",
-}
-
 var METRICS_NAMESPACE = "pldperf"
 var METRICS_SUBSYSTEM = "runner"
 
