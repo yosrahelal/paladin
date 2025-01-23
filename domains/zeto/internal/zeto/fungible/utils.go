@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zeto
+package fungible
 
 import (
 	"context"
@@ -22,13 +22,13 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -37,18 +37,6 @@ import (
 // the maximum transfer amount is (2^100 - 1)
 // Reference: https://github.com/hyperledger-labs/zeto/blob/main/zkp/circuits/lib/check-positive.circom
 var MAX_TRANSFER_AMOUNT = big.NewInt(0).Exp(big.NewInt(2), big.NewInt(100), nil)
-
-func isNullifiersCircuit(circuitId string) bool {
-	return circuitId == constants.CIRCUIT_ANON_NULLIFIER || circuitId == constants.CIRCUIT_ANON_NULLIFIER_BATCH
-}
-
-func isNullifiersToken(tokenName string) bool {
-	return tokenName == constants.TOKEN_ANON_NULLIFIER
-}
-
-func isEncryptionToken(tokenName string) bool {
-	return tokenName == constants.TOKEN_ANON_ENC
-}
 
 // the Zeto implementations support two input/output sizes for the circuits: 2 and 10,
 // if the input or output size is larger than 2, then the batch circuit is used with
@@ -60,7 +48,7 @@ func getInputSize(sizeOfEndorsableStates int) int {
 	return 10
 }
 
-func validateTransferParams(ctx context.Context, params []*types.TransferParamEntry) error {
+func validateTransferParams(ctx context.Context, params []*types.FungibleTransferParamEntry) error {
 	if len(params) == 0 {
 		return i18n.NewError(ctx, msgs.MsgNoTransferParams)
 	}
@@ -91,51 +79,9 @@ func validateAmountParam(ctx context.Context, amount *tktypes.HexUint256, i int)
 	return nil
 }
 
-func encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
-	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorParseTxId, err)
-	}
-	var data []byte
-	data = append(data, types.ZetoTransactionData_V0...)
-	data = append(data, txID...)
-	return data, nil
-}
-
-func decodeTransactionData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
-	if len(data) < 4 {
-		return nil
-	}
-	dataPrefix := data[0:4]
-	if dataPrefix.String() != types.ZetoTransactionData_V0.String() {
-		return nil
-	}
-	return data[4:]
-}
-
-func encodeProof(proof *corepb.SnarkProof) map[string]interface{} {
-	// Convert the proof json to the format that the Solidity verifier expects
-	return map[string]interface{}{
-		"pA": []string{proof.A[0], proof.A[1]},
-		"pB": [][]string{
-			{proof.B[0].Items[1], proof.B[0].Items[0]},
-			{proof.B[1].Items[1], proof.B[1].Items[0]},
-		},
-		"pC": []string{proof.C[0], proof.C[1]},
-	}
-}
-
-func loadBabyJubKey(payload []byte) (*babyjub.PublicKey, error) {
-	var keyCompressed babyjub.PublicKeyComp
-	if err := keyCompressed.UnmarshalText(payload); err != nil {
-		return nil, err
-	}
-	return keyCompressed.Decompress()
-}
-
-func generateMerkleProofs(ctx context.Context, zeto *Zeto, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
+func generateMerkleProofs(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
 	smtName := smt.MerkleTreeName(tokenName, contractAddress)
-	storage := smt.NewStatesStorage(zeto.Callbacks, smtName, stateQueryContext, zeto.merkleTreeRootSchema.Id, zeto.merkleTreeNodeSchema.Id)
+	storage := smt.NewStatesStorage(callbacks, smtName, stateQueryContext, merkleTreeRootSchema.Id, merkleTreeNodeSchema.Id)
 	mt, err := smt.NewSmt(storage)
 	if err != nil {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
@@ -201,4 +147,7 @@ func generateMerkleProofs(ctx context.Context, zeto *Zeto, tokenName string, sta
 	}
 
 	return proofs, &extrasObj, nil
+}
+func getAlgoZetoSnarkBJJ(name string) string {
+	return zetosignerapi.AlgoDomainZetoSnarkBJJ(name)
 }

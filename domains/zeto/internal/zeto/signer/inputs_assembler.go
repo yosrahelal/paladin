@@ -23,13 +23,14 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/key"
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/utxo"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 )
 
 func assembleInputs_anon(inputs *commonWitnessInputs, keyEntry *core.KeyEntry) map[string]interface{} {
-	witnessInputs := map[string]interface{}{
+	return map[string]interface{}{
 		"inputCommitments":      inputs.inputCommitments,
 		"inputValues":           inputs.inputValues,
 		"inputSalts":            inputs.inputSalts,
@@ -39,7 +40,36 @@ func assembleInputs_anon(inputs *commonWitnessInputs, keyEntry *core.KeyEntry) m
 		"outputSalts":           inputs.outputSalts,
 		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
 	}
-	return witnessInputs
+}
+func assembleInputs_nfanon(ctx context.Context, inputs *commonWitnessInputs, tokenData *pb.ProvingRequestExtras_NonFungible, keyEntry *core.KeyEntry) map[string]interface{} {
+	tokenIds := make([]*big.Int, len(tokenData.TokenIds))
+	for i, id := range tokenData.TokenIds {
+		t, k := new(big.Int).SetString(id, 0)
+		if !k {
+			panic(i18n.NewError(ctx, msgs.MsgErrorTokenIDToString, id))
+		}
+		tokenIds[i] = t
+	}
+
+	tokenUris := make([]*big.Int, len(tokenData.TokenUris))
+	for i := range tokenData.TokenUris {
+		uri, err := utxo.HashTokenUri(tokenData.TokenUris[i])
+		if err != nil {
+			panic(i18n.NewError(ctx, msgs.MsgErrorHashState, err))
+		}
+		tokenUris[i] = uri
+	}
+
+	return map[string]interface{}{
+		"tokenIds":              tokenIds,
+		"tokenUris":             tokenUris,
+		"inputCommitments":      inputs.inputCommitments,
+		"inputSalts":            inputs.inputSalts,
+		"outputCommitments":     inputs.outputCommitments,
+		"outputSalts":           inputs.outputSalts,
+		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
+		"inputOwnerPrivateKey":  keyEntry.PrivateKeyForZkp, //
+	}
 }
 
 func assembleInputs_anon_enc(ctx context.Context, inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Encryption, keyEntry *core.KeyEntry) (map[string]any, error) {

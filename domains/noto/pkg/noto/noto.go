@@ -23,7 +23,7 @@ import (
 
 type Noto interface {
 	plugintk.DomainAPI
-	GetHandler(method string) types.DomainHandler
+	GetHandler(method, tokenName string) types.DomainHandler
 	Name() string
 	CoinSchemaID() string
 }

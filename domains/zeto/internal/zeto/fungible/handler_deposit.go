@@ -13,12 +13,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zeto
+package fungible
 
 import (
 	"context"
 	"encoding/json"
 
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
@@ -26,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -33,8 +35,19 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+var _ types.DomainHandler = &depositHandler{}
+
 type depositHandler struct {
-	zeto *Zeto
+	// callbacks  plugintk.DomainCallbacks
+	name       string
+	coinSchema *pb.StateSchema
+}
+
+func NewDepositHandler(name string, coinSchema *pb.StateSchema) *depositHandler {
+	return &depositHandler{
+		name:       name,
+		coinSchema: coinSchema,
+	}
 }
 
 var depositABI = &abi.Entry{
@@ -66,7 +79,7 @@ func (h *depositHandler) Init(ctx context.Context, tx *types.ParsedTransaction, 
 		RequiredVerifiers: []*pb.ResolveVerifierRequest{
 			{
 				Lookup:       tx.Transaction.From,
-				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+				Algorithm:    h.getAlgoZetoSnarkBJJ(),
 				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 		},
@@ -77,13 +90,13 @@ func (h *depositHandler) Init(ctx context.Context, tx *types.ParsedTransaction, 
 func (h *depositHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
 	amount := tx.Params.(*tktypes.HexUint256)
 
-	resolvedSender := domain.FindVerifier(tx.Transaction.From, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
+	resolvedSender := domain.FindVerifier(tx.Transaction.From, h.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
 	if resolvedSender == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, tx.Transaction.From)
 	}
 
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	outputCoins, outputStates, err := h.zeto.prepareOutputsForDeposit(ctx, useNullifiers, amount, resolvedSender)
+	outputCoins, outputStates, err := h.prepareOutputs(ctx, useNullifiers, amount, resolvedSender)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
@@ -104,7 +117,7 @@ func (h *depositHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 			{
 				Name:            "sender",
 				AttestationType: pb.AttestationType_SIGN,
-				Algorithm:       h.zeto.getAlgoZetoSnarkBJJ(),
+				Algorithm:       h.getAlgoZetoSnarkBJJ(),
 				VerifierType:    zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 				PayloadType:     zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK,
 				Payload:         payloadBytes,
@@ -114,8 +127,48 @@ func (h *depositHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 	}, nil
 }
 
+func (h *depositHandler) prepareOutputs(ctx context.Context, useNullifiers bool, amount *tktypes.HexUint256, resolvedSender *pb.ResolvedVerifier) ([]*types.ZetoCoin, []*pb.NewState, error) {
+	var coins []*types.ZetoCoin
+	// the token implementation allows up to 2 output states, we will use one of them
+	// to bear the deposit amount, and set the other to value of 0. we randomize
+	// which one to use and which one to set to 0
+	var newStates []*pb.NewState
+	amounts := make([]*tktypes.HexUint256, 2)
+	size := 2
+	randomIdx := randomSlot(size)
+	amounts[randomIdx] = amount
+	amounts[size-randomIdx-1] = tktypes.MustParseHexUint256("0x0")
+	for _, amt := range amounts {
+		resolvedRecipient := resolvedSender
+		recipientKey, err := common.LoadBabyJubKey([]byte(resolvedRecipient.Verifier))
+		if err != nil {
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
+		}
+
+		salt := crypto.NewSalt()
+		compressedKeyStr := zetosigner.EncodeBabyJubJubPublicKey(recipientKey)
+		newCoin := &types.ZetoCoin{
+			Salt:   (*tktypes.HexUint256)(salt),
+			Owner:  tktypes.MustParseHexBytes(compressedKeyStr),
+			Amount: amt,
+		}
+
+		newState, err := makeNewState(ctx, h.coinSchema, useNullifiers, newCoin, h.name, resolvedRecipient.Lookup)
+		if err != nil {
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorCreateNewState, err)
+		}
+		coins = append(coins, newCoin)
+		newStates = append(newStates, newState)
+	}
+	return coins, newStates, nil
+}
+
 func (h *depositHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
 	return nil, nil
+}
+
+func (h *depositHandler) getAlgoZetoSnarkBJJ() string {
+	return zetosignerapi.AlgoDomainZetoSnarkBJJ(h.name)
 }
 
 func (h *depositHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
@@ -133,7 +186,7 @@ func (h *depositHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 	for i := 0; i < outputSize; i++ {
 		if i < len(req.OutputStates) {
 			state := req.OutputStates[i]
-			coin, err := h.zeto.makeCoin(state.StateDataJson)
+			coin, err := makeCoin(state.StateDataJson)
 			if err != nil {
 				return nil, i18n.NewError(ctx, msgs.MsgErrorParseOutputStates, err)
 			}
@@ -147,7 +200,7 @@ func (h *depositHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 		}
 	}
 
-	data, err := encodeTransactionData(ctx, req.Transaction)
+	data, err := common.EncodeTransactionData(ctx, req.Transaction, types.ZetoTransactionData_V0)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}
@@ -155,7 +208,7 @@ func (h *depositHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 	params := map[string]any{
 		"amount":  amount.Int().Text(10),
 		"outputs": outputs,
-		"proof":   encodeProof(proofRes.Proof),
+		"proof":   common.EncodeProof(proofRes.Proof),
 		"data":    data,
 	}
 	depositFunction := depositABI

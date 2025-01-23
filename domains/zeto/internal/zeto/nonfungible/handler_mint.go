@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zeto
+package nonfungible
 
 import (
 	"context"
@@ -37,12 +37,22 @@ var mintABI = &abi.Entry{
 	},
 }
 
+var _ types.DomainHandler = &mintHandler{}
+
 type mintHandler struct {
-	zeto *Zeto
+	name        string
+	stateSchema *pb.StateSchema
+}
+
+func NewMintHandler(name string, stateSchema *pb.StateSchema) *mintHandler {
+	return &mintHandler{
+		name:        name,
+		stateSchema: stateSchema,
+	}
 }
 
 func (h *mintHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
-	var mintParams types.MintParams
+	var mintParams types.NonFungibleMintParams
 	if err := json.Unmarshal([]byte(params), &mintParams); err != nil {
 		return nil, err
 	}
@@ -55,7 +65,7 @@ func (h *mintHandler) ValidateParams(ctx context.Context, config *types.DomainIn
 }
 
 func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
-	params := tx.Params.([]*types.TransferParamEntry)
+	params := tx.Params.([]*types.NonFungibleTransferParamEntry)
 
 	res := &pb.InitTransactionResponse{
 		RequiredVerifiers: []*pb.ResolveVerifierRequest{},
@@ -63,7 +73,7 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 	for _, param := range params {
 		verifier := &pb.ResolveVerifierRequest{
 			Lookup:       param.To,
-			Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+			Algorithm:    h.getAlgoZetoSnarkBJJ(),
 			VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 		}
 		res.RequiredVerifiers = append(res.RequiredVerifiers, verifier)
@@ -73,10 +83,10 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 }
 
 func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
-	params := tx.Params.([]*types.TransferParamEntry)
+	params := tx.Params.([]*types.NonFungibleTransferParamEntry)
 
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	_, outputStates, err := h.zeto.prepareOutputsForTransfer(ctx, useNullifiers, params, req.ResolvedVerifiers)
+	_, outputStates, err := prepareOutputsForTransfer(ctx, useNullifiers, params, req.ResolvedVerifiers, h.stateSchema, h.name)
 	if err != nil {
 		return nil, err
 	}
@@ -96,18 +106,18 @@ func (h *mintHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, 
 func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
 	outputs := make([]string, len(req.OutputStates))
 	for i, state := range req.OutputStates {
-		coin, err := h.zeto.makeCoin(state.StateDataJson)
+		token, err := makeNFToken(state.StateDataJson)
 		if err != nil {
 			return nil, err
 		}
-		hash, err := coin.Hash(ctx)
+		hash, err := token.Hash(ctx)
 		if err != nil {
 			return nil, err
 		}
 		outputs[i] = hash.String()
 	}
 
-	data, err := encodeTransactionData(ctx, req.Transaction)
+	data, err := common.EncodeTransactionData(ctx, req.Transaction, types.ZetoTransactionData_V0)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}
@@ -131,4 +141,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 			RequiredSigner:  &req.Transaction.From, // must be signed by the authorized minter on-chain
 		},
 	}, nil
+}
+func (h *mintHandler) getAlgoZetoSnarkBJJ() string {
+	return zetosignerapi.AlgoDomainZetoSnarkBJJ(h.name)
 }

@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zeto
+package fungible
 
 import (
 	"context"
@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -35,8 +36,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+var _ types.DomainHandler = &lockHandler{}
+
 type lockHandler struct {
-	zeto *Zeto
+	callbacks  plugintk.DomainCallbacks
+	name       string
+	coinSchema *pb.StateSchema
 }
 
 type TransferParams struct {
@@ -57,6 +62,13 @@ var lockStatesABI = &abi.Entry{
 	},
 }
 
+func NewLockHandler(name string, coinSchema *pb.StateSchema) *lockHandler {
+	return &lockHandler{
+		name:       name,
+		coinSchema: coinSchema,
+	}
+}
+
 func (h *lockHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
 	var lockParams types.LockParams
 	if err := json.Unmarshal([]byte(params), &lockParams); err != nil {
@@ -75,13 +87,15 @@ func (h *lockHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
 				Lookup:       tx.Transaction.From,
-				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+				Algorithm:    h.getAlgoZetoSnarkBJJ(),
 				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 		},
 	}, nil
 }
-
+func (h *lockHandler) getAlgoZetoSnarkBJJ() string {
+	return zetosignerapi.AlgoDomainZetoSnarkBJJ(h.name)
+}
 func (h *lockHandler) decodeTransferCall(ctx context.Context, config *types.DomainInstanceConfig, encodedCall []byte) (*TransferParams, error) {
 	transferABI := getTransferABI(config.TokenName)
 	if transferABI == nil {
@@ -109,7 +123,7 @@ func (h *lockHandler) loadCoins(ctx context.Context, ids []any, stateQueryContex
 	}
 
 	queryBuilder := query.NewQueryBuilder().In(".id", inputIDs)
-	inputStates, err := h.zeto.findAvailableStates(ctx, false, stateQueryContext, queryBuilder.Query().String())
+	inputStates, err := findAvailableStates(ctx, h.callbacks, h.coinSchema, false, stateQueryContext, queryBuilder.Query().String())
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +152,7 @@ func (h *lockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 		return nil, err
 	}
 
-	resolvedSender := domain.FindVerifier(tx.Transaction.From, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
+	resolvedSender := domain.FindVerifier(tx.Transaction.From, h.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
 	if resolvedSender == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, tx.Transaction.From)
 	}
@@ -162,7 +176,7 @@ func (h *lockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 			{
 				Name:            "sender",
 				AttestationType: pb.AttestationType_SIGN,
-				Algorithm:       h.zeto.getAlgoZetoSnarkBJJ(),
+				Algorithm:       h.getAlgoZetoSnarkBJJ(),
 				VerifierType:    zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 				PayloadType:     zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK,
 				Payload:         payloadBytes,
@@ -200,13 +214,13 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		return nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalProvingRes, err)
 	}
 
-	data, err := encodeTransactionData(ctx, req.Transaction)
+	data, err := common.EncodeTransactionData(ctx, req.Transaction, types.ZetoTransactionData_V0)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}
 	LockParams := map[string]interface{}{
 		"utxos":    decodedTransfer.Inputs,
-		"proof":    encodeProof(proofRes.Proof),
+		"proof":    common.EncodeProof(proofRes.Proof),
 		"delegate": params.Delegate,
 		"data":     data,
 	}

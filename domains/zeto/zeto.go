@@ -18,13 +18,14 @@ import (
 	"C"
 )
 import (
-	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
+	zetoimpl "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 )
 
 var ple = plugintk.NewPluginLibraryEntrypoint(func() plugintk.PluginBase {
 	return plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
-		return zeto.New(callbacks)
+		return New(callbacks)
 	})
 })
 
@@ -39,6 +40,10 @@ func Run(grpcTargetPtr, pluginUUIDPtr *C.char) int {
 //export Stop
 func Stop(pluginUUIDPtr *C.char) {
 	ple.Stop(C.GoString(pluginUUIDPtr))
+}
+
+func New(callbacks plugintk.DomainCallbacks) zeto.Zeto {
+	return zetoimpl.New(callbacks)
 }
 
 func main() {}

@@ -11,6 +11,6 @@ await copyFile(
 );
 
 await copyFile(
-  "../../solidity/artifacts/contracts/domains/interfaces/IZetoPrivate.sol/IZetoPrivate.json",
-  "src/domains/abis/IZetoPrivate.json"
+  "../../solidity/artifacts/contracts/domains/interfaces/IZetoFungible.sol/IZetoFungible.json",
+  "src/domains/abis/IZetoFungible.json"
 );

@@ -445,7 +445,7 @@ func TestValidateInputs(t *testing.T) {
 		InputValues:      []uint64{30},
 		InputSalts:       []string{"salt1", "salt2"},
 	}
-	err := validateInputs(ctx, inputs1)
+	err := validateInputsFungible(ctx, inputs1)
 	assert.ErrorContains(t, err, "input commitments, values, and salts must have the same length")
 
 	inputs2 := &pb.ProvingRequestCommon{
@@ -453,7 +453,7 @@ func TestValidateInputs(t *testing.T) {
 		InputValues:      []uint64{30, 40},
 		InputSalts:       []string{"salt1"},
 	}
-	err = validateInputs(ctx, inputs2)
+	err = validateInputsFungible(ctx, inputs2)
 	assert.ErrorContains(t, err, "input commitments, values, and salts must have the same length")
 
 	inputs3 := &pb.ProvingRequestCommon{
@@ -463,7 +463,7 @@ func TestValidateInputs(t *testing.T) {
 		OutputValues:     []uint64{32, 38},
 		OutputOwners:     []string{"bob"},
 	}
-	err = validateInputs(ctx, inputs3)
+	err = validateInputsFungible(ctx, inputs3)
 	assert.ErrorContains(t, err, "output values and owner keys must have the same length")
 }
 

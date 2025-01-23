@@ -1,8 +1,7 @@
-package zeto
+package fungible
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
@@ -33,9 +32,7 @@ func TestDepositValidateParams(t *testing.T) {
 
 func TestDepositInit(t *testing.T) {
 	h := depositHandler{
-		zeto: &Zeto{
-			name: "test1",
-		},
+		name: "test1",
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
@@ -54,17 +51,9 @@ func TestDepositInit(t *testing.T) {
 
 func TestDepositAssemble(t *testing.T) {
 	h := depositHandler{
-		zeto: &Zeto{
-			name: "test1",
-			coinSchema: &prototk.StateSchema{
-				Id: "coin",
-			},
-			merkleTreeRootSchema: &prototk.StateSchema{
-				Id: "merkle_tree_root",
-			},
-			merkleTreeNodeSchema: &prototk.StateSchema{
-				Id: "merkle_tree_node",
-			},
+		name: "test1",
+		coinSchema: &prototk.StateSchema{
+			Id: "coin",
 		},
 	}
 	ctx := context.Background()
@@ -87,7 +76,7 @@ func TestDepositAssemble(t *testing.T) {
 			{
 				Lookup:       "Alice",
 				Verifier:     "0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922",
-				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+				Algorithm:    h.getAlgoZetoSnarkBJJ(),
 				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 		},
@@ -99,15 +88,10 @@ func TestDepositAssemble(t *testing.T) {
 	req.ResolvedVerifiers = append(req.ResolvedVerifiers, &prototk.ResolvedVerifier{
 		Lookup:       "Bob",
 		Verifier:     "0x1234567890123456789012345678901234567890",
-		Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+		Algorithm:    h.getAlgoZetoSnarkBJJ(),
 		VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 	})
-	testCallbacks := &testDomainCallbacks{
-		returnFunc: func() (*prototk.FindAvailableStatesResponse, error) {
-			return nil, errors.New("test error")
-		},
-	}
-	h.zeto.Callbacks = testCallbacks
+
 	_, err = h.Assemble(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210040: Failed to prepare transaction outputs. PD210037: Failed load owner public key")
 
@@ -128,11 +112,8 @@ func TestDepositEndorse(t *testing.T) {
 }
 
 func TestDepositPrepare(t *testing.T) {
-	z := &Zeto{
-		name: "test1",
-	}
 	h := depositHandler{
-		zeto: z,
+		name: "test1",
 	}
 	txSpec := &prototk.TransactionSpecification{
 		TransactionId: "bad hex",
@@ -207,17 +188,6 @@ func TestDepositPrepare(t *testing.T) {
 	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id. PD020007: Invalid hex:")
 
 	txSpec.TransactionId = "0x1234567890123456789012345678901234567890123456789012345678901234"
-	z.config = &types.DomainFactoryConfig{
-		DomainContracts: types.DomainConfigContracts{
-			Implementations: []*types.DomainContract{},
-		},
-	}
-	z.config.DomainContracts.Implementations = []*types.DomainContract{
-		{
-			Name: constants.TOKEN_ANON_ENC,
-		},
-	}
-
 	res, err := h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Equal(t, "{\"amount\":\"100\",\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)

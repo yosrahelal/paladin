@@ -32,7 +32,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
-func (n *Noto) GetHandler(method string) types.DomainHandler {
+func (n *Noto) GetHandler(method, _ string) types.DomainHandler {
 	switch method {
 	case "mint":
 		return &mintHandler{noto: n}

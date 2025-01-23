@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zeto
+package fungible
 
 import (
 	"context"
@@ -48,19 +48,7 @@ func sampleTransferPayload() map[string]any {
 
 func TestLockValidateParams(t *testing.T) {
 	h := lockHandler{
-		zeto: &Zeto{
-			name: "test1",
-			config: &types.DomainFactoryConfig{
-				DomainContracts: types.DomainConfigContracts{
-					Implementations: []*types.DomainContract{
-						{
-							Name:      "Zeto_Anon",
-							CircuitId: "anon",
-						},
-					},
-				},
-			},
-		},
+		name: "test1",
 	}
 	config := &types.DomainInstanceConfig{
 		TokenName: "test",
@@ -96,9 +84,7 @@ func TestLockValidateParams(t *testing.T) {
 
 func TestLocktInit(t *testing.T) {
 	h := lockHandler{
-		zeto: &Zeto{
-			name: "test1",
-		},
+		name: "test1",
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
@@ -134,13 +120,11 @@ func TestLockAssemble(t *testing.T) {
 	}
 
 	h := lockHandler{
-		zeto: &Zeto{
-			name: "test1",
-			coinSchema: &prototk.StateSchema{
-				Id: "coin",
-			},
-			Callbacks: testCallbacks,
+		name: "test1",
+		coinSchema: &prototk.StateSchema{
+			Id: "coin",
 		},
+		callbacks: testCallbacks,
 	}
 	ctx := context.Background()
 
@@ -171,7 +155,7 @@ func TestLockAssemble(t *testing.T) {
 			{
 				Lookup:       "Alice",
 				Verifier:     "0x1234567890123456789012345678901234567890",
-				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+				Algorithm:    h.getAlgoZetoSnarkBJJ(),
 				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 		},
@@ -194,19 +178,7 @@ func TestLockEndorse(t *testing.T) {
 
 func TestLockPrepare(t *testing.T) {
 	h := lockHandler{
-		zeto: &Zeto{
-			name: "test1",
-			config: &types.DomainFactoryConfig{
-				DomainContracts: types.DomainConfigContracts{
-					Implementations: []*types.DomainContract{
-						{
-							Name:      "Zeto_Anon",
-							CircuitId: "anon",
-						},
-					},
-				},
-			},
-		},
+		name: "test1",
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{

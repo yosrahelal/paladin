@@ -74,12 +74,15 @@ func buildCircuitInputs(ctx context.Context, commonInputs *pb.ProvingRequestComm
 	inputValues := make([]*big.Int, len(commonInputs.InputValues))
 	inputSalts := make([]*big.Int, len(commonInputs.InputSalts))
 	for i, c := range commonInputs.InputCommitments {
+		// commitment
 		commitment, ok := new(big.Int).SetString(c, 16)
 		if !ok {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorParseInputCommitment)
 		}
 		inputCommitments[i] = commitment
 		inputValues[i] = new(big.Int).SetUint64(commonInputs.InputValues[i])
+
+		// slat
 		salt, ok := new(big.Int).SetString(commonInputs.InputSalts[i], 16)
 		if !ok {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorParseInputSalt)
@@ -92,6 +95,61 @@ func buildCircuitInputs(ctx context.Context, commonInputs *pb.ProvingRequestComm
 		inputSalts:            inputSalts,
 		outputCommitments:     outputCommitments,
 		outputValues:          outputValues,
+		outputSalts:           outputSalts,
+		outputOwnerPublicKeys: outputOwnerPublicKeys,
+	}, nil
+}
+
+func buildCircuitInputsNonFungible(ctx context.Context, commonInputs *pb.ProvingRequestCommon) (*commonWitnessInputs, error) {
+
+	// input UTXOs
+	inputCommitments := make([]*big.Int, len(commonInputs.InputCommitments))
+	inputSalts := make([]*big.Int, len(commonInputs.InputSalts))
+	for i := range commonInputs.InputCommitments {
+		commitment, ok := new(big.Int).SetString(commonInputs.InputCommitments[i], 16)
+		if !ok {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorParseInputCommitment)
+		}
+		inputCommitments[i] = commitment
+
+		salt, ok := new(big.Int).SetString(commonInputs.InputSalts[i], 16)
+		if !ok {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorParseInputSalt)
+		}
+		inputSalts[i] = salt
+	}
+
+	// output UTXOs
+	outputCommitments := make([]*big.Int, len(commonInputs.OutputCommitments))
+	outputSalts := make([]*big.Int, len(commonInputs.OutputSalts))
+	outputOwnerPublicKeys := make([][]*big.Int, len(commonInputs.OutputSalts))
+	for i := range commonInputs.OutputOwners {
+		ownerPubKey, err := DecodeBabyJubJubPublicKey(commonInputs.OutputOwners[i])
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
+		}
+		outputOwnerPublicKeys[i] = []*big.Int{ownerPubKey.X, ownerPubKey.Y}
+	}
+	for i := range commonInputs.OutputSalts {
+		salt, ok := new(big.Int).SetString(commonInputs.OutputSalts[i], 16)
+		if !ok {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorParseOutputSalt)
+		}
+		outputSalts[i] = salt
+	}
+
+	for i := range commonInputs.OutputCommitments {
+		commitment, ok := new(big.Int).SetString(commonInputs.OutputCommitments[i], 16)
+		if !ok {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorParseOutputStates)
+		}
+		outputCommitments[i] = commitment
+	}
+
+	return &commonWitnessInputs{
+		inputCommitments:      inputCommitments,
+		inputSalts:            inputSalts,
+		outputCommitments:     outputCommitments,
 		outputSalts:           outputSalts,
 		outputOwnerPublicKeys: outputOwnerPublicKeys,
 	}, nil

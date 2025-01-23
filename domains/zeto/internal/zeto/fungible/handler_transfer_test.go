@@ -13,13 +13,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zeto
+package fungible
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"math/big"
 	"testing"
 
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
@@ -35,46 +34,80 @@ import (
 func TestTransferValidateParams(t *testing.T) {
 	h := transferHandler{}
 	ctx := context.Background()
-	_, err := h.ValidateParams(ctx, nil, "bad json")
-	assert.EqualError(t, err, "invalid character 'b' looking for beginning of value")
 
-	_, err = h.ValidateParams(ctx, nil, "{}")
-	assert.EqualError(t, err, "PD210024: No transfer parameters provided")
+	tests := []struct {
+		name        string
+		input       string
+		expectedErr string
+		validate    func(t *testing.T, result interface{}, err error)
+	}{
+		{
+			name:  "Valid transfer within range",
+			input: "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":1267650600228229401496703205375}]}",
+			validate: func(t *testing.T, result interface{}, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, "0x1234567890123456789012345678901234567890", result.([]*types.FungibleTransferParamEntry)[0].To)
+			},
+		},
+		{
+			name:        "Invalid JSON",
+			input:       "bad json",
+			expectedErr: "invalid character 'b' looking for beginning of value",
+		},
+		{
+			name:        "No transfer parameters",
+			input:       "{}",
+			expectedErr: "PD210024: No transfer parameters provided",
+		},
+		{
+			name:        "Invalid transfers structure",
+			input:       "{\"transfers\":{}}",
+			expectedErr: "json: cannot unmarshal object into Go struct field FungibleTransferParams.transfers of type []*types.FungibleTransferParamEntry",
+		},
+		{
+			name:        "Missing 'to' parameter",
+			input:       "{\"transfers\":[{}]}",
+			expectedErr: "PD210025: Parameter 'to' is required (index=0)",
+		},
+		{
+			name:        "Invalid 'amount' parameter (0)",
+			input:       "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}]}",
+			expectedErr: "PD210027: Parameter 'amount' must be in the range (0, 2^100) (index=0)",
+		},
+		{
+			name:        "Invalid 'amount' parameter (-10)",
+			input:       "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}]}",
+			expectedErr: "PD210027: Parameter 'amount' must be in the range (0, 2^100) (index=0)",
+		},
+		{
+			name:        "Total amount exceeds range",
+			input:       "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":1267650600228229401496703205375},{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":1000}]}",
+			expectedErr: "PD210107: Total amount must be in the range (0, 2^100)",
+		},
+	}
 
-	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":{}}")
-	assert.EqualError(t, err, "json: cannot unmarshal object into Go struct field TransferParams.transfers of type []*types.TransferParamEntry")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := h.ValidateParams(ctx, nil, tc.input)
 
-	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{}]}")
-	assert.EqualError(t, err, "PD210025: Parameter 'to' is required (index=0)")
+			if tc.expectedErr != "" {
+				assert.EqualError(t, err, tc.expectedErr)
+			}
 
-	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}]}")
-	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be in the range (0, 2^100) (index=0)")
-
-	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}]}")
-	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be in the range (0, 2^100) (index=0)")
-
-	amt1 := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(100), nil)
-	amt1.Sub(amt1, big.NewInt(1000))
-	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":"+amt1.Text(10)+"}]}")
-	assert.NoError(t, err)
-	amt2 := big.NewInt(1000)
-	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":"+amt1.Text(10)+"},{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":"+amt2.Text(10)+"}]}")
-	assert.EqualError(t, err, "PD210107: Total amount must be in the range (0, 2^100)")
-
-	params, err := h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}]}")
-	assert.NoError(t, err)
-	assert.Equal(t, "0x1234567890123456789012345678901234567890", params.([]*types.TransferParamEntry)[0].To)
+			if tc.validate != nil {
+				tc.validate(t, result, err)
+			}
+		})
+	}
 }
 
 func TestTransferInit(t *testing.T) {
 	h := transferHandler{
-		zeto: &Zeto{
-			name: "test1",
-		},
+		name: "test1",
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
-		Params: []*types.TransferParamEntry{
+		Params: []*types.FungibleTransferParamEntry{
 			{
 				To:     "Alice",
 				Amount: tktypes.MustParseHexUint256("0x0a"),
@@ -88,24 +121,22 @@ func TestTransferInit(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, req.RequiredVerifiers, 2)
 	assert.Equal(t, "Bob", req.RequiredVerifiers[0].Lookup)
-	assert.Equal(t, h.zeto.getAlgoZetoSnarkBJJ(), req.RequiredVerifiers[0].Algorithm)
+	assert.Equal(t, h.getAlgoZetoSnarkBJJ(), req.RequiredVerifiers[0].Algorithm)
 	assert.Equal(t, zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.RequiredVerifiers[0].VerifierType)
 	assert.Equal(t, "Alice", req.RequiredVerifiers[1].Lookup)
 }
 
 func TestTransferAssemble(t *testing.T) {
 	h := transferHandler{
-		zeto: &Zeto{
-			name: "test1",
-			coinSchema: &prototk.StateSchema{
-				Id: "coin",
-			},
-			merkleTreeRootSchema: &prototk.StateSchema{
-				Id: "merkle_tree_root",
-			},
-			merkleTreeNodeSchema: &prototk.StateSchema{
-				Id: "merkle_tree_node",
-			},
+		name: "test1",
+		coinSchema: &prototk.StateSchema{
+			Id: "coin",
+		},
+		merkleTreeRootSchema: &prototk.StateSchema{
+			Id: "merkle_tree_root",
+		},
+		merkleTreeNodeSchema: &prototk.StateSchema{
+			Id: "merkle_tree_node",
 		},
 	}
 	ctx := context.Background()
@@ -116,7 +147,7 @@ func TestTransferAssemble(t *testing.T) {
 		},
 	}
 	tx := &types.ParsedTransaction{
-		Params: []*types.TransferParamEntry{
+		Params: []*types.FungibleTransferParamEntry{
 			{
 				To:     "Alice",
 				Amount: tktypes.MustParseHexUint256("0x09"),
@@ -133,7 +164,7 @@ func TestTransferAssemble(t *testing.T) {
 			{
 				Lookup:       "Alice",
 				Verifier:     "0x1234567890123456789012345678901234567890",
-				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+				Algorithm:    h.getAlgoZetoSnarkBJJ(),
 				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 		},
@@ -145,7 +176,7 @@ func TestTransferAssemble(t *testing.T) {
 	req.ResolvedVerifiers = append(req.ResolvedVerifiers, &prototk.ResolvedVerifier{
 		Lookup:       "Bob",
 		Verifier:     "0x1234567890123456789012345678901234567890",
-		Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+		Algorithm:    h.getAlgoZetoSnarkBJJ(),
 		VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 	})
 	testCallbacks := &testDomainCallbacks{
@@ -153,7 +184,7 @@ func TestTransferAssemble(t *testing.T) {
 			return nil, errors.New("test error")
 		},
 	}
-	h.zeto.Callbacks = testCallbacks
+	h.callbacks = testCallbacks
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210039: Failed to prepare transaction inputs. PD210032: Failed to query the state store for available coins. test error")
 
@@ -256,7 +287,7 @@ func TestTransferAssemble(t *testing.T) {
 		}, nil
 
 	}
-	h.zeto.Callbacks = testCallbacks
+	h.callbacks = testCallbacks
 	res, err = h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Len(t, res.AssembledTransaction.OutputStates, 2)
@@ -273,18 +304,15 @@ func TestTransferEndorse(t *testing.T) {
 }
 
 func TestTransferPrepare(t *testing.T) {
-	z := &Zeto{
-		name: "test1",
-	}
 	h := transferHandler{
-		zeto: z,
+		name: "test1",
 	}
 	txSpec := &prototk.TransactionSpecification{
 		TransactionId: "bad hex",
 		From:          "Bob",
 	}
 	tx := &types.ParsedTransaction{
-		Params: []*types.TransferParamEntry{
+		Params: []*types.FungibleTransferParamEntry{
 			{
 				To:     "Alice",
 				Amount: tktypes.MustParseHexUint256("0x0a"),
@@ -359,16 +387,6 @@ func TestTransferPrepare(t *testing.T) {
 	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id. PD020007: Invalid hex:")
 
 	txSpec.TransactionId = "0x1234567890123456789012345678901234567890123456789012345678901234"
-	z.config = &types.DomainFactoryConfig{
-		DomainContracts: types.DomainConfigContracts{
-			Implementations: []*types.DomainContract{},
-		},
-	}
-	z.config.DomainContracts.Implementations = []*types.DomainContract{
-		{
-			Name: constants.TOKEN_ANON_ENC,
-		},
-	}
 
 	res, err := h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
@@ -381,7 +399,6 @@ func TestTransferPrepare(t *testing.T) {
 	payload, err = proto.Marshal(&proofReq)
 	assert.NoError(t, err)
 	req.AttestationResult[0].Payload = payload
-	z.config.DomainContracts.Implementations[0].Name = constants.TOKEN_ANON_NULLIFIER
 	res, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Equal(t, "{\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"nullifiers\":[\"0x1234567890\",\"0x1234567890\"],\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]},\"root\":\"0x1234567890\"}", res.Transaction.ParamsJson)
@@ -394,18 +411,16 @@ func TestGenerateMerkleProofs(t *testing.T) {
 		},
 	}
 	h := transferHandler{
-		zeto: &Zeto{
-			name:      "test1",
-			Callbacks: testCallbacks,
-			coinSchema: &prototk.StateSchema{
-				Id: "coin",
-			},
-			merkleTreeRootSchema: &prototk.StateSchema{
-				Id: "merkle_tree_root",
-			},
-			merkleTreeNodeSchema: &prototk.StateSchema{
-				Id: "merkle_tree_node",
-			},
+		name:      "test1",
+		callbacks: testCallbacks,
+		coinSchema: &prototk.StateSchema{
+			Id: "coin",
+		},
+		merkleTreeRootSchema: &prototk.StateSchema{
+			Id: "merkle_tree_root",
+		},
+		merkleTreeNodeSchema: &prototk.StateSchema{
+			Id: "merkle_tree_node",
 		},
 	}
 	addr, err := tktypes.ParseEthAddress("0x1234567890123456789012345678901234567890")
@@ -419,7 +434,7 @@ func TestGenerateMerkleProofs(t *testing.T) {
 	}
 	ctx := context.Background()
 	queryContext := "queryContext"
-	_, _, err = generateMerkleProofs(ctx, h.zeto, "Zeto_Anon", queryContext, addr, inputCoins)
+	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.merkleTreeRootSchema, h.merkleTreeNodeSchema, constants.TOKEN_ANON, queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "PD210019: Failed to create Merkle tree for smt_Zeto_Anon_0x1234567890123456789012345678901234567890: PD210065: Failed to find available states for the merkle tree. test error")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
@@ -431,11 +446,11 @@ func TestGenerateMerkleProofs(t *testing.T) {
 			},
 		}, nil
 	}
-	_, _, err = generateMerkleProofs(ctx, h.zeto, "Zeto_Anon", queryContext, addr, inputCoins)
+	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.merkleTreeRootSchema, h.merkleTreeNodeSchema, constants.TOKEN_ANON, queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "PD210037: Failed load owner public key. PD210072: Invalid compressed public key length: 2")
 
 	inputCoins[0].Owner = tktypes.MustParseHexBytes("0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
-	_, _, err = generateMerkleProofs(ctx, h.zeto, "Zeto_Anon", queryContext, addr, inputCoins)
+	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.merkleTreeRootSchema, h.merkleTreeNodeSchema, constants.TOKEN_ANON, queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "PD210054: Failed to create new leaf node. inputs values not inside Finite Field")
 
 	inputCoins[0].Salt = tktypes.MustParseHexUint256("0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec")
@@ -456,7 +471,7 @@ func TestGenerateMerkleProofs(t *testing.T) {
 			}, nil
 		}
 	}
-	_, _, err = generateMerkleProofs(ctx, h.zeto, "Zeto_Anon", queryContext, addr, inputCoins)
+	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.merkleTreeRootSchema, h.merkleTreeNodeSchema, constants.TOKEN_ANON, queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "PD210055: Failed to query the smt DB for leaf node (ref=789c99b9a2196addb3ac11567135877e8b86bc9b5f7725808a79757fd36b2a2a). key not found")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
@@ -479,7 +494,7 @@ func TestGenerateMerkleProofs(t *testing.T) {
 			}, nil
 		}
 	}
-	_, _, err = generateMerkleProofs(ctx, h.zeto, "Zeto_Anon", queryContext, addr, inputCoins)
+	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.merkleTreeRootSchema, h.merkleTreeNodeSchema, constants.TOKEN_ANON, queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "PD210057: Coin (ref=789c99b9a2196addb3ac11567135877e8b86bc9b5f7725808a79757fd36b2a2a) found in the merkle tree but the persisted hash 26e3879b46b15a4ddbaca5d96af1bd2743f67f13f0bb85c40782950a2a700138 (index=3801702a0a958207c485bbf0137ff64327bdf16ad9a5acdb4d5ab1469b87e326) did not match the expected hash 0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f (index=5f5d5e50a650a20986d496e6645ea31770758d924796f0dfc5ac2ad234b03e30)")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
@@ -502,7 +517,7 @@ func TestGenerateMerkleProofs(t *testing.T) {
 			}, nil
 		}
 	}
-	_, _, err = generateMerkleProofs(ctx, h.zeto, "Zeto_Anon", queryContext, addr, inputCoins)
+	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.merkleTreeRootSchema, h.merkleTreeNodeSchema, constants.TOKEN_ANON, queryContext, addr, inputCoins)
 	assert.NoError(t, err)
 }
 
