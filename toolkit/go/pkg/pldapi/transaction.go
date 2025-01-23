@@ -148,9 +148,8 @@ type TransactionReceiptFull struct {
 }
 
 type TransactionReceiptBatch struct {
-	Subscription string                    `docstruct:"TransactionReceiptBatch" json:"subscription,omitempty"`
-	Batch        uint64                    `docstruct:"TransactionReceiptBatch" json:"batch,omitempty"`
-	Receipts     []*TransactionReceiptFull `docstruct:"TransactionReceiptBatch" json:"receipts,omitempty"`
+	BatchID  uint64                    `docstruct:"TransactionReceiptBatch" json:"batchId,omitempty"`
+	Receipts []*TransactionReceiptFull `docstruct:"TransactionReceiptBatch" json:"receipts,omitempty"`
 }
 
 type TransactionReceiptDataOnchain struct {
