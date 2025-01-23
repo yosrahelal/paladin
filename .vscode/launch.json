@@ -37,7 +37,7 @@
             "request": "launch",
             "mode": "debug",
             "program": "${workspaceRoot}/perf/pldperf/main.go",
-            "args": ["run", "-c", "../config/example-quick-start.yaml", "-n", "test"],
+            "args": ["run", "-c", "../config/example-quick-start.yaml", "-i", "0"],
         }
     ]
 }
