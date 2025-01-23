@@ -60,7 +60,7 @@ func newTestBlockListenerConf(t *testing.T, ctx context.Context, config *pldconf
 	mSub.On("Notifications").Return(subsChan).Maybe()
 
 	mRPC.On("Connect", mock.Anything).Return(nil).Maybe()
-	mRPC.On("Subscribe", mock.Anything, "newHeads").Return(
+	mRPC.On("Subscribe", mock.Anything, mock.Anything, "newHeads").Return(
 		mSub, nil,
 	).Maybe()
 	mRPC.On("UnsubscribeAll", mock.Anything).Return(nil).Maybe()

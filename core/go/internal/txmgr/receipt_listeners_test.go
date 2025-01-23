@@ -981,7 +981,8 @@ func TestProcessPersistedReceiptPostFilter(t *testing.T) {
 		Name:    "listener1",
 		Started: confutil.P(false),
 		Filters: pldapi.TransactionReceiptFilters{
-			SequenceAbove: confutil.P(uint64(10000)),
+			Type:   confutil.P(pldapi.TransactionTypePrivate.Enum()),
+			Domain: "domain1",
 		},
 	})
 	require.NoError(t, err)
@@ -989,7 +990,9 @@ func TestProcessPersistedReceiptPostFilter(t *testing.T) {
 	l := txm.receiptListeners["listener1"]
 	l.initStart()
 
-	err = l.processPersistedReceipt(&receiptDeliveryBatch{}, &transactionReceipt{})
+	err = l.processPersistedReceipt(&receiptDeliveryBatch{}, &transactionReceipt{
+		Domain: "domain2",
+	})
 	require.NoError(t, err)
 	close(l.done)
 
@@ -1005,6 +1008,34 @@ func mockGap(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 	}).AddRow(
 		"listener1", contractAddr, txID, 12345, "domain1", stateID,
 	))
+}
+
+func TestProcessStaleGapFailRetryingReadGapPage(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
+			mc.db.MatchExpectationsInOrder(false)
+			mc.db.ExpectQuery("SELECT.*receipt_listener_gap").WillReturnError(fmt.Errorf("pop"))
+		},
+	)
+	defer done()
+
+	txm.receiptsRetry.UTSetMaxAttempts(1)
+
+	err := txm.CreateReceiptListener(ctx, &pldapi.TransactionReceiptListener{
+		Name:    "listener1",
+		Started: confutil.P(false),
+	})
+	require.NoError(t, err)
+
+	l := txm.receiptListeners["listener1"]
+	l.initStart()
+
+	err = l.processStaleGaps()
+	assert.Regexp(t, "pop", err)
+	close(l.done)
+
 }
 
 func TestProcessStaleGapFailRetryingReadPage(t *testing.T) {

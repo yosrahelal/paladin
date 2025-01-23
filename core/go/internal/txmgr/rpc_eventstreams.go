@@ -151,10 +151,12 @@ func (es *rpcEventStreams) HandleLifecycle(ctx context.Context, req *rpcclient.R
 
 func (sub *receiptListenerSubscription) DeliverReceiptBatch(ctx context.Context, batchID uint64, receipts []*pldapi.TransactionReceiptFull) error {
 	log.L(ctx).Infof("Delivering receipt batch %d to subscription %s over JSON/RPC", batchID, sub.ctrl.ID())
-	sub.ctrl.Send("ptx_receiptBatch", &pldapi.TransactionReceiptBatch{
+	sub.ctrl.Send("ptx_receiptBatch", &pldapi.JSONRPCSubscriptionNotification[pldapi.TransactionReceiptBatch]{
 		Subscription: sub.ctrl.ID(),
-		Batch:        batchID,
-		Receipts:     receipts,
+		Result: pldapi.TransactionReceiptBatch{
+			BatchID:  batchID,
+			Receipts: receipts,
+		},
 	})
 	select {
 	case ackNack := <-sub.acksNacks:

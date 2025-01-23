@@ -7,9 +7,9 @@ title: TransactionReceiptListener
 
 ```json
 {
-    "name": "listener1",
-    "created": 1737520328419604000,
-    "started": true,
+    "name": "",
+    "created": 0,
+    "started": null,
     "filters": {},
     "options": {
         "domainReceipts": false
