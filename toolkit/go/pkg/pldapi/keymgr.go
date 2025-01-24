@@ -52,3 +52,16 @@ type KeyPathSegment struct {
 	Name  string `docstruct:"KeyPathSegment" json:"name"`
 	Index int64  `docstruct:"KeyPathSegment" json:"index"`
 }
+
+type KeyQueryEntry struct {
+	IsKey       bool   `docstruct:"KeyListEntry" json:"isKey"`
+	HasChildren bool   `docstruct:"KeyListEntry" json:"hasChildren"`
+	Parent      string `docstruct:"KeyListEntry" json:"parent"`
+	Path        string `docstruct:"KeyListEntry" json:"path"`
+	Index       int64  `docstruct:"KeyListEntry" json:"index"`
+	Type        string `docstruct:"KeyListEntry" json:"type"`
+	Algorithm   string `docstruct:"KeyListEntry" json:"algorithm"`
+	Verifier    string `docstruct:"KeyListEntry" json:"verifier"`
+	Wallet      string `docstruct:"KeyListEntry" json:"wallet"`
+	KeyHandle   string `docstruct:"KeyListEntry" json:"keyHandle"`
+}

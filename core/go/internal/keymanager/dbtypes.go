@@ -15,6 +15,8 @@
 
 package keymanager
 
+import "github.com/kaleido-io/paladin/core/internal/filters"
+
 type DBKeyPath struct {
 	Parent string `gorm:"column:parent;primaryKey"`
 	Index  int64  `gorm:"column:index;primaryKey"`
@@ -44,4 +46,16 @@ type DBKeyVerifier struct {
 
 func (t DBKeyVerifier) TableName() string {
 	return "key_verifiers"
+}
+
+var KeyEntryFilters filters.FieldSet = filters.FieldMap{
+	"isKey":       filters.BooleanField("isKey"),
+	"hasChildren": filters.BooleanField("hasChildren"),
+	"parent":      filters.StringField("parent"),
+	"index":       filters.Int64Field("index"),
+	"path":        filters.StringField("path"),
+	"type":        filters.StringField("type"),
+	"verifier":    filters.StringField("verifier"),
+	"wallet":      filters.StringField("wallet"),
+	"keyHandle":   filters.StringField("keyKandle"),
 }

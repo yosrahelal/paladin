@@ -22,6 +22,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"gorm.io/gorm"
@@ -30,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -241,4 +243,35 @@ func (km *keyManager) ReverseKeyLookup(ctx context.Context, dbTX *gorm.DB, algor
 	}
 	km.verifierReverseCache.Set(vKey, mapping)
 	return mapping, nil
+}
+
+func (km *keyManager) QueryKeys(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) (keyList []*pldapi.KeyQueryEntry, err error) {
+
+	q := filters.BuildGORM(ctx, jq,
+		dbTX.WithContext(ctx).
+			Table("key_paths"), KeyEntryFilters)
+
+	q.Select(`key_verifiers.identifier IS NOT NULL AS "is_key",` +
+		`k.p IS NOT NULL AS "has_children",` +
+		`key_paths.parent AS "parent",` +
+		`key_paths.index AS "index",` +
+		`key_paths.path AS "path",` +
+		`key_verifiers.type AS "type",` +
+		`key_verifiers.algorithm AS "algorithm",` +
+		`key_verifiers.verifier AS "verifier",` +
+		`key_mappings.wallet AS "wallet",` +
+		`key_mappings.key_handle AS "key_handle"`,
+	)
+
+	q.Joins("LEFT OUTER JOIN key_verifiers ON key_paths.path = key_verifiers.identifier")
+	q.Joins("LEFT OUTER JOIN key_mappings ON key_paths.path = key_mappings.identifier")
+	q.Joins(`LEFT OUTER JOIN (SELECT parent AS "p" from key_paths AS p) AS k ON key_paths.path = k.p`)
+	q.Where("key_paths.path != ''")
+
+	err = q.Find(&keyList).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return keyList, nil
 }
