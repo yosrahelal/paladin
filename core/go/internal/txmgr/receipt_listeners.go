@@ -393,7 +393,7 @@ func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.Tran
 			if spec.Filters.Domain != "" {
 				return nil, i18n.NewError(ctx, msgs.MsgTxMgrBadReceiptListenerTypeDomain, spec.Name, spec.Filters.Type, spec.Filters.Domain)
 			}
-			q = q.Where("domain = ''") // private
+			q = q.Where("domain = ''") // public
 		default:
 			return nil, i18n.NewError(ctx, msgs.MsgTxMgrBadReceiptListenerTypeDomain, spec.Name, spec.Filters.Type, spec.Filters.Domain)
 		}
@@ -573,8 +573,8 @@ func (l *receiptListener) readHeadPage() ([]*transactionReceipt, error) {
 		q, err := l.tm.buildListenerDBQuery(l.ctx, l.spec, db)
 		if err == nil {
 			// Only return non-blocked sequences
-			q = q.Joins(`Block`, db.Where(&persistedReceiptGap{Listener: l.spec.Name})).
-				Where(`"Block"."transaction" IS NULL`)
+			q = q.Joins(`Gap`, db.Where(&persistedReceiptGap{Listener: l.spec.Name})).
+				Where(`"Gap"."transaction" IS NULL`)
 			if l.checkpoint != nil {
 				q = q.Where(`"transaction_receipts"."sequence" > ?`, *l.checkpoint)
 			}
