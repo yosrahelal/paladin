@@ -73,6 +73,7 @@ var (
 	MsgPaladinClientNoDomain          = ffe("PD020214", "No domain specified for private transaction")
 	MsgPaladinClientNoFunction        = ffe("PD020215", "No function specified")
 	MsgPaladinClientPollTxTimedOut    = ffe("PD020216", "Polling timed out after %d attempts in %s for transaction %s")
+	MsgPaladinClientWebSocketRequired = ffe("PD020217", "WebSocket connection required for async notifications")
 
 	// Plugin PD0203XX
 	MsgPluginUnsupportedRequest   = ffe("PD020300", "Unsupported request %T")
@@ -90,8 +91,13 @@ var (
 	MsgTLSInvalidTLSDnMismatch      = ffe("PD020406", "Certificate subject does not meet requirements")
 
 	// RPCClient PD0205XX
-	MsgRPCClientInvalidWebSocketURL = ffe("PD020500", "Invalid WebSocket URL: %s")
-	MsgRPCClientInvalidHTTPURL      = ffe("PD020501", "Invalid HTTP URL: %s")
+	MsgRPCClientInvalidWebSocketURL      = ffe("PD020500", "Invalid WebSocket URL: %s")
+	MsgRPCClientInvalidHTTPURL           = ffe("PD020501", "Invalid HTTP URL: %s")
+	MsgRPCClientRequestFailed            = ffe("PD020502", "Backend RPC request failed: %s")
+	MsgRPCClientWebSocketReconnected     = ffe("PD020503", "WebSocket reconnected during JSON/RPC call")
+	MsgRPCClientResultParseFailed        = ffe("PD020504", "Failed to parse result (expected=%T): %s")
+	MsgRPCClientInvalidParam             = ffe("PD020505", "Invalid parameter at position %d for method %s: %s")
+	MsgRPCClientSubscribeResponseInvalid = ffe("PD020506", "Subscription response invalid")
 
 	// HTTPServer PD0108XX
 	MsgHTTPServerStartFailed        = ffe("PD020600", "Failed to start server on '%s'")
@@ -106,6 +112,7 @@ var (
 	MsgJSONRPCIncorrectParamCount = ffe("PD020703", "method %s requires %d params (supplied=%d)")
 	MsgJSONRPCInvalidParam        = ffe("PD020704", "method %s parameter %d invalid: %s")
 	MsgJSONRPCResultSerialization = ffe("PD020705", "method %s result serialization failed: %s")
+	MsgJSONRPCAysncNonWSConn      = ffe("PD020706", "method %s only available on WebSocket connections")
 
 	// Signing module PD0208XX
 	MsgSigningModuleBadPathError                = ffe("PD020800", "Path '%s' does not exist, or it is not a directory")

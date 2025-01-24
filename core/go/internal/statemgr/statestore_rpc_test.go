@@ -68,6 +68,7 @@ func TestRPC(t *testing.T) {
 	defer done()
 
 	_ = mockDomain(t, m, "domain1", false)
+	mockStateCallback(m)
 
 	var abiParam abi.Parameter
 	err := json.Unmarshal([]byte(widgetABI), &abiParam)
@@ -96,7 +97,7 @@ func TestRPC(t *testing.T) {
 	jsonTestLog(t, "pstate_storeState", state)
 	assert.Nil(t, rpcErr)
 	if rpcErr != nil {
-		assert.NoError(t, rpcErr.RPCError().Error())
+		assert.NoError(t, rpcErr)
 	}
 	assert.Equal(t, schemas[0].ID, state.Schema)
 	assert.Equal(t, "domain1", state.DomainName)

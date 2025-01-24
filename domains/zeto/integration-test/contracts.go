@@ -22,10 +22,10 @@ import (
 	"os"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -60,7 +60,7 @@ func newZetoDomainContracts() *ZetoDomainContracts {
 	}
 }
 
-func deployDomainContracts(ctx context.Context, rpc rpcbackend.Backend, deployer string, config *domainConfig) (*ZetoDomainContracts, error) {
+func deployDomainContracts(ctx context.Context, rpc rpcclient.Client, deployer string, config *domainConfig) (*ZetoDomainContracts, error) {
 	if len(config.DomainContracts.Implementations) == 0 {
 		return nil, fmt.Errorf("no implementations specified for factory contract")
 	}
@@ -109,7 +109,7 @@ func findCloneableContracts(config *domainConfig) map[string]cloneableContract {
 	return cloneableContracts
 }
 
-func deployImplementations(ctx context.Context, rpc rpcbackend.Backend, deployer string, contracts []domainContract) (map[string]*tktypes.EthAddress, map[string]abi.ABI, error) {
+func deployImplementations(ctx context.Context, rpc rpcclient.Client, deployer string, contracts []domainContract) (map[string]*tktypes.EthAddress, map[string]abi.ABI, error) {
 	deployedContracts := make(map[string]*tktypes.EthAddress)
 	deployedContractAbis := make(map[string]abi.ABI)
 	for _, contract := range contracts {
@@ -125,7 +125,7 @@ func deployImplementations(ctx context.Context, rpc rpcbackend.Backend, deployer
 	return deployedContracts, deployedContractAbis, nil
 }
 
-func deployContract(ctx context.Context, rpc rpcbackend.Backend, deployer string, contract *domainContract, deployedContracts map[string]*tktypes.EthAddress) (*tktypes.EthAddress, abi.ABI, error) {
+func deployContract(ctx context.Context, rpc rpcclient.Client, deployer string, contract *domainContract, deployedContracts map[string]*tktypes.EthAddress) (*tktypes.EthAddress, abi.ABI, error) {
 	if contract.AbiAndBytecode.Path == "" {
 		return nil, nil, fmt.Errorf("no path or JSON specified for the abi and bytecode for contract %s", contract.Name)
 	}
@@ -150,11 +150,11 @@ func getContractSpec(contract *domainContract, deployedContracts map[string]*tkt
 	return build, nil
 }
 
-func deployBytecode(ctx context.Context, rpc rpcbackend.Backend, deployer string, build *solutils.SolidityBuild) (*tktypes.EthAddress, error) {
+func deployBytecode(ctx context.Context, rpc rpcclient.Client, deployer string, build *solutils.SolidityBuild) (*tktypes.EthAddress, error) {
 	var addr string
 	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deployBytecode", deployer, build.ABI, build.Bytecode.String(), tktypes.RawJSON(`{}`))
 	if rpcerr != nil {
-		return nil, rpcerr.Error()
+		return nil, rpcerr
 	}
 	return tktypes.MustEthAddress(addr), nil
 }

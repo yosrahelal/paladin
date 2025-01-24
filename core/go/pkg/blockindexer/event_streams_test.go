@@ -757,7 +757,7 @@ func TestProcessCatchupEventPageFailRPC(t *testing.T) {
 
 	bi.retry.UTSetMaxAttempts(2)
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.MustNewHexBytes0xPrefix(txHash.String())).
-		Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop"))).Once()
+		Return(rpcclient.WrapRPCError(rpcclient.RPCCodeInternalError, fmt.Errorf("pop"))).Once()
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.MustNewHexBytes0xPrefix(txHash.String())).
 		Return(nil) // but still not found
 

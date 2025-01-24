@@ -130,7 +130,7 @@ func (bl *blockListener) establishBlockHeightWithRetry() error {
 		}
 		if bl.newHeadsSub == nil {
 			// Once subscribed the backend will keep us subscribed over reconnect
-			sub, rpcErr := bl.wsConn.Subscribe(bl.ctx, "newHeads")
+			sub, rpcErr := bl.wsConn.Subscribe(bl.ctx, rpcclient.EthSubscribeConfig(), "newHeads")
 			if rpcErr != nil {
 				return true, rpcErr
 			}
