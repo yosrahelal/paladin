@@ -48,7 +48,7 @@ type transactionReceipt struct {
 	FailureMessage   *string              `gorm:"column:failure_message"`
 	RevertData       tktypes.HexBytes     `gorm:"column:revert_data"`
 	ContractAddress  *tktypes.EthAddress  `gorm:"column:contract_address"`
-	Block            *persistedReceiptGap `gorm:"foreignKey:Source;references:Source;"`
+	Gap              *persistedReceiptGap `gorm:"foreignKey:Source;references:Source;"`
 }
 
 func (transactionReceipt) TableName() string {
