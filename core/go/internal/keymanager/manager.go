@@ -251,7 +251,7 @@ func (km *keyManager) QueryKeys(ctx context.Context, dbTX *gorm.DB, jq *query.Qu
 		dbTX.WithContext(ctx).
 			Table("key_paths"), KeyEntryFilters)
 
-	q.Select(`key_verifiers.identifier IS NOT NULL AS "is_key",` +
+	q.Select(`DISTINCT key_verifiers.identifier IS NOT NULL AS "is_key",` +
 		`k.p IS NOT NULL AS "has_children",` +
 		`key_paths.parent AS "parent",` +
 		`key_paths.index AS "index",` +

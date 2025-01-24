@@ -52,16 +52,16 @@ func TestRPCLocalDetails(t *testing.T) {
 	assert.Equal(t, "m/44'/60'/1'/0/0", resolvedKey.KeyHandle)
 
 	/*
-			       Keys used for testing
-		    |---------------------------------|
-			| Segment | Is key | Has children |
-			|---------|--------|--------------|
-			| a       | No     | Yes          |
-			| b       | Yes    | Yes          |
-			| c       | Yes    | No           |
-			|---------|--------|--------------|
-
+		Keys used for testing
+		|---------------------------------|
+		| Segment | Is key | Has children |
+		|---------|--------|--------------|
+		| a       | No     | Yes          |
+		| b       | Yes    | Yes          |
+		| c       | Yes    | No           |
+		|---------|--------|--------------|
 	*/
+
 	var key *pldapi.KeyMappingAndVerifier
 	err = rpc.CallRPC(ctx, &key, "keymgr_resolveKey", "a.b", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
