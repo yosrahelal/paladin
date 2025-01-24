@@ -144,12 +144,12 @@ func TestDomainCallback_GetStates(t *testing.T) {
 	ctx, _, _, callbacks, inOutMap, done := setupDomainTests(t)
 	defer done()
 
-	inOutMap[fmt.Sprintf("%T", &prototk.DomainMessage_GetStates{})] = func(dm *prototk.DomainMessage) {
-		dm.ResponseToDomain = &prototk.DomainMessage_GetStatesRes{
-			GetStatesRes: &prototk.GetStatesResponse{},
+	inOutMap[fmt.Sprintf("%T", &prototk.DomainMessage_GetStatesById{})] = func(dm *prototk.DomainMessage) {
+		dm.ResponseToDomain = &prototk.DomainMessage_GetStatesByIdRes{
+			GetStatesByIdRes: &prototk.GetStatesByIDResponse{},
 		}
 	}
-	_, err := callbacks.GetStates(ctx, &prototk.GetStatesRequest{})
+	_, err := callbacks.GetStatesByID(ctx, &prototk.GetStatesByIDRequest{})
 	require.NoError(t, err)
 }
 

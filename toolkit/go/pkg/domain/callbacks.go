@@ -49,6 +49,6 @@ func (dc *MockDomainCallbacks) LocalNodeName(context.Context, *prototk.LocalNode
 	return dc.MockLocalNodeName()
 }
 
-func (dc *MockDomainCallbacks) GetStates(context.Context, *prototk.GetStatesRequest) (*prototk.GetStatesResponse, error) {
+func (dc *MockDomainCallbacks) GetStates(context.Context, *prototk.GetStatesByIDRequest) (*prototk.GetStatesByIDResponse, error) {
 	return nil, nil
 }

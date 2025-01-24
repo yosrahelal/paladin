@@ -340,12 +340,6 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	// Flush the states to the database
 	syncFlushContext(t, dc)
 
-	// Query state by ID
-	_, statesByID, err := dc.GetStates(ss.p.DB(), schemaID, []string{states[0].ID.String()})
-	require.NoError(t, err)
-	assert.Len(t, statesByID, 1)
-	assert.Equal(t, int64(50), parseFakeCoin(t, statesByID[0]).Amount.Int64())
-
 	// Check the DB persisted state is what we expect
 	_, states, err = dc.FindAvailableStates(ss.p.DB(), schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
 	require.NoError(t, err)
@@ -382,6 +376,13 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 	assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
+
+	// Query states by ID - including unflushed, and consumed
+	_, statesByID, err := dc.GetStatesByID(ss.p.DB(), schemaID, []string{tx3states[1].ID.String(), tx4states[0].ID.String()})
+	require.NoError(t, err)
+	assert.Len(t, statesByID, 2)
+	assert.Equal(t, int64(50), parseFakeCoin(t, statesByID[0]).Amount.Int64())
+	assert.Equal(t, int64(20), parseFakeCoin(t, statesByID[1]).Amount.Int64())
 
 	syncFlushContext(t, dc)
 
@@ -1323,4 +1324,16 @@ func TestImportSnapshotJSONError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Regexp(t, "PD010132", err)
 
+}
+
+func TestGetStatesByIDFail(t *testing.T) {
+	ctx, ss, db, _, done := newDBMockStateManager(t)
+	defer done()
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
+
+	db.ExpectQuery("SELECT.*schemas").WillReturnError(fmt.Errorf("pop"))
+
+	_, _, err := dc.GetStatesByID(dc.ss.p.DB(), tktypes.Bytes32(tktypes.RandBytes(32)), []string{tktypes.RandHex(32)})
+	assert.Regexp(t, "pop", err)
 }

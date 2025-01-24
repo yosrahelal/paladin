@@ -116,12 +116,12 @@ func (br *domainBridge) RequestReply(ctx context.Context, reqMsg plugintk.Plugin
 				}
 			},
 		)
-	case *prototk.DomainMessage_GetStates:
-		return callManagerImpl(ctx, req.GetStates,
-			br.manager.GetStates,
-			func(resMsg *prototk.DomainMessage, res *prototk.GetStatesResponse) {
-				resMsg.ResponseToDomain = &prototk.DomainMessage_GetStatesRes{
-					GetStatesRes: res,
+	case *prototk.DomainMessage_GetStatesById:
+		return callManagerImpl(ctx, req.GetStatesById,
+			br.manager.GetStatesByID,
+			func(resMsg *prototk.DomainMessage, res *prototk.GetStatesByIDResponse) {
+				resMsg.ResponseToDomain = &prototk.DomainMessage_GetStatesByIdRes{
+					GetStatesByIdRes: res,
 				}
 			},
 		)

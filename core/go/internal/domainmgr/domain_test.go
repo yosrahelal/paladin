@@ -1058,12 +1058,12 @@ func TestGetStatesFailCases(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
 
-	_, err := td.d.GetStates(td.ctx, &prototk.GetStatesRequest{
+	_, err := td.d.GetStatesByID(td.ctx, &prototk.GetStatesByIDRequest{
 		StateQueryContext: "bad",
 	})
 	require.ErrorContains(t, err, "PD011649")
 
-	_, err = td.d.GetStates(td.ctx, &prototk.GetStatesRequest{
+	_, err = td.d.GetStatesByID(td.ctx, &prototk.GetStatesByIDRequest{
 		StateQueryContext: td.c.id,
 		SchemaId:          "bad",
 	})
@@ -1072,7 +1072,7 @@ func TestGetStatesFailCases(t *testing.T) {
 	schemaID := tktypes.Bytes32(tktypes.RandBytes(32))
 	td.mdc.On("GetStates", mock.Anything, schemaID, []string{"id1"}).Return(nil, nil, fmt.Errorf("pop"))
 
-	_, err = td.d.GetStates(td.ctx, &prototk.GetStatesRequest{
+	_, err = td.d.GetStatesByID(td.ctx, &prototk.GetStatesByIDRequest{
 		StateQueryContext: td.c.id,
 		SchemaId:          schemaID.String(),
 		StateIds:          []string{"id1"},

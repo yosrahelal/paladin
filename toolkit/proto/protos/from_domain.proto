@@ -86,13 +86,13 @@ message LocalNodeNameResponse {
   string name = 1;
 }
 
-message GetStatesRequest {
+message GetStatesByIDRequest {
   string state_query_context = 1; // Must hold a valid state query context to perform a query
   string schema_id = 2; // The ID of the schema
   repeated string state_ids = 3; // The state IDs
 }
 
-message GetStatesResponse {
+message GetStatesByIDResponse {
   repeated StoredState states = 1;
 }
 

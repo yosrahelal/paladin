@@ -141,6 +141,25 @@ func (dc *domainContext) mergeUnFlushedApplyLocks(schema components.Schema, dbSt
 		return nil, flushErr
 	}
 
+	retStates := dbStates
+	matches, err := dc.mergeUnFlushed(schema, dbStates, query, requireNullifier)
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) > 0 {
+		// Build the merged list - this involves extra cost, as we deliberately don't reconstitute
+		// the labels in JOIN on DB load (affecting every call at the DB side), instead we re-parse
+		// them as we need them
+		if retStates, err = dc.mergeInMemoryMatches(schema, dbStates, matches, query); err != nil {
+			return nil, err
+		}
+	}
+
+	return dc.applyLocks(retStates), nil
+}
+
+func (dc *domainContext) mergeUnFlushed(schema components.Schema, dbStates []*pldapi.State, query *query.QueryJSON, requireNullifier bool) (_ []*components.StateWithLabels, err error) {
+
 	// Get the list of new un-flushed states, which are not already locked for spend
 	matches := make([]*components.StateWithLabels, 0, len(dc.creatingStates))
 	schemaId := schema.Persisted().ID
@@ -187,17 +206,7 @@ func (dc *domainContext) mergeUnFlushedApplyLocks(schema components.Schema, dbSt
 		}
 	}
 
-	retStates := dbStates
-	if len(matches) > 0 {
-		// Build the merged list - this involves extra cost, as we deliberately don't reconstitute
-		// the labels in JOIN on DB load (affecting every call at the DB side), instead we re-parse
-		// them as we need them
-		if retStates, err = dc.mergeInMemoryMatches(schema, dbStates, matches, query); err != nil {
-			return nil, err
-		}
-	}
-
-	return dc.applyLocks(retStates), nil
+	return matches, nil
 }
 
 func (dc *domainContext) Info() components.DomainContextInfo {
@@ -249,13 +258,24 @@ func (dc *domainContext) mergeInMemoryMatches(schema components.Schema, states [
 
 }
 
-func (dc *domainContext) GetStates(dbTX *gorm.DB, schemaID tktypes.Bytes32, ids []string) (components.Schema, []*pldapi.State, error) {
+func (dc *domainContext) GetStatesByID(dbTX *gorm.DB, schemaID tktypes.Bytes32, ids []string) (components.Schema, []*pldapi.State, error) {
 	idsAny := make([]any, len(ids))
 	for i, id := range ids {
 		idsAny[i] = id
 	}
-	query := query.NewQueryBuilder().In(".id", idsAny).Query()
-	return dc.ss.findStates(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, pldapi.StateStatusAll)
+	query := query.NewQueryBuilder().In(".id", idsAny).Sort(".created").Query()
+	schema, matches, err := dc.ss.findStates(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, pldapi.StateStatusAll)
+	if err == nil {
+		var memMatches []*components.StateWithLabels
+		memMatches, err = dc.mergeUnFlushed(schema, matches, query, false)
+		if err == nil && len(memMatches) > 0 {
+			matches, err = dc.mergeInMemoryMatches(schema, matches, memMatches, query)
+		}
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return schema, matches, err
 }
 
 func (dc *domainContext) FindAvailableStates(dbTX *gorm.DB, schemaID tktypes.Bytes32, query *query.QueryJSON) (components.Schema, []*pldapi.State, error) {

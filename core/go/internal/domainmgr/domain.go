@@ -839,7 +839,7 @@ func (d *domain) LocalNodeName(ctx context.Context, req *prototk.LocalNodeNameRe
 	}, nil
 }
 
-func (d *domain) GetStates(ctx context.Context, req *prototk.GetStatesRequest) (*prototk.GetStatesResponse, error) {
+func (d *domain) GetStatesByID(ctx context.Context, req *prototk.GetStatesByIDRequest) (*prototk.GetStatesByIDResponse, error) {
 	c, err := d.checkInFlight(ctx, req.StateQueryContext, false)
 	if err != nil {
 		return nil, err
@@ -850,8 +850,8 @@ func (d *domain) GetStates(ctx context.Context, req *prototk.GetStatesRequest) (
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidSchemaID, req.SchemaId)
 	}
 
-	_, states, err := c.dCtx.GetStates(c.dbTX, schemaID, req.StateIds)
-	return &prototk.GetStatesResponse{
+	_, states, err := c.dCtx.GetStatesByID(c.dbTX, schemaID, req.StateIds)
+	return &prototk.GetStatesByIDResponse{
 		States: toProtoStates(states),
 	}, err
 }
