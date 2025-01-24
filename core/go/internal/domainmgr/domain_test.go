@@ -1070,7 +1070,7 @@ func TestGetStatesFailCases(t *testing.T) {
 	require.ErrorContains(t, err, "PD011641")
 
 	schemaID := tktypes.Bytes32(tktypes.RandBytes(32))
-	td.mdc.On("GetStates", mock.Anything, schemaID, []string{"id1"}).Return(nil, nil, fmt.Errorf("pop"))
+	td.mdc.On("GetStatesByID", mock.Anything, schemaID, []string{"id1"}).Return(nil, nil, fmt.Errorf("pop"))
 
 	_, err = td.d.GetStatesByID(td.ctx, &prototk.GetStatesByIDRequest{
 		StateQueryContext: td.c.id,

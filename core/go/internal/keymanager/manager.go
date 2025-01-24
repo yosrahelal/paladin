@@ -116,7 +116,7 @@ func DBTransactionWithKRC(ctx context.Context, p persistence.Persistence, km com
 			postCommit()
 		}
 	}()
-	err = km.(*keyManager).p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+	err = p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
 		postCommit, err = fn(dbTX, krc.KeyResolver(dbTX))
 		if err == nil {
 			err = krc.PreCommit()
