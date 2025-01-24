@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
@@ -644,7 +643,7 @@ func TestInvokeNewWidgetCustomError(t *testing.T) {
 				Error: &rpcclient.RPCError{
 					Code:    int64(rpcclient.RPCCodeInternalError),
 					Message: "reverted",
-					Data:    *fftypes.JSONAnyPtr(fmt.Sprintf(`"%s"`, tktypes.HexBytes(errData))),
+					Data:    tktypes.JSONString(tktypes.HexBytes(errData)),
 				},
 			}
 		},
