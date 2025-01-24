@@ -75,7 +75,7 @@ func (tm *txManager) rpcSendTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		tx pldapi.TransactionInput,
 	) (*uuid.UUID, error) {
-		return tm.SendTransaction(ctx, &tx)
+		return tm.sendTransactionNewDBTX(ctx, &tx)
 	})
 }
 
@@ -83,7 +83,7 @@ func (tm *txManager) rpcSendTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		txs []*pldapi.TransactionInput,
 	) ([]uuid.UUID, error) {
-		return tm.SendTransactions(ctx, txs)
+		return tm.sendTransactionsNewDBTX(ctx, txs)
 	})
 }
 
@@ -91,7 +91,7 @@ func (tm *txManager) rpcPrepareTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		tx pldapi.TransactionInput,
 	) (*uuid.UUID, error) {
-		return tm.PrepareTransaction(ctx, &tx)
+		return tm.prepareTransactionNewDBTX(ctx, &tx)
 	})
 }
 
@@ -99,7 +99,7 @@ func (tm *txManager) rpcPrepareTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		txs []*pldapi.TransactionInput,
 	) ([]uuid.UUID, error) {
-		return tm.PrepareTransactions(ctx, txs)
+		return tm.prepareTransactionsNewDBTX(ctx, txs)
 	})
 }
 

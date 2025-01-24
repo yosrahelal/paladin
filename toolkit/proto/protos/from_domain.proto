@@ -71,7 +71,8 @@ message RecoverSignerResponse {
 }
 
 message SendTransactionRequest {
-  TransactionInput transaction = 1;
+  string state_query_context = 1; // Must hold a valid state query context to perform a submit
+  TransactionInput transaction = 2;
 }
 
 message SendTransactionResponse {

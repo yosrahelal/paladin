@@ -221,13 +221,13 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 	addr := *tktypes.RandAddress()
 	if realDB {
 		dCtx := dm.stateStore.NewDomainContext(ctx, tp.d, addr)
-		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), dCtx)
+		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), dCtx, true /* readonly unless modified by test */)
 	} else {
 		mdc = componentmocks.NewDomainContext(t)
 		mdc.On("Ctx").Return(ctx).Maybe()
 		mdc.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()
 		mdc.On("Close").Return()
-		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), mdc)
+		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), mdc, true /* readonly unless modified by test */)
 		mc.stateStore.On("NewDomainContext", mock.Anything, tp.d, mock.Anything, mock.Anything).Return(mdc).Maybe()
 	}
 
@@ -1027,6 +1027,14 @@ func TestSendTransactionFailCases(t *testing.T) {
 	defer done()
 
 	_, err := td.d.SendTransaction(td.ctx, &prototk.SendTransactionRequest{
+		StateQueryContext: td.c.id,
+	})
+	require.ErrorContains(t, err, "PD011663")
+
+	td.c.readOnly = false
+
+	_, err = td.d.SendTransaction(td.ctx, &prototk.SendTransactionRequest{
+		StateQueryContext: td.c.id,
 		Transaction: &prototk.TransactionInput{
 			ContractAddress: "badnotgood",
 			FunctionAbiJson: `{}`,
@@ -1036,6 +1044,7 @@ func TestSendTransactionFailCases(t *testing.T) {
 	require.ErrorContains(t, err, "bad address")
 
 	_, err = td.d.SendTransaction(td.ctx, &prototk.SendTransactionRequest{
+		StateQueryContext: td.c.id,
 		Transaction: &prototk.TransactionInput{
 			ContractAddress: "0x05d936207F04D81a85881b72A0D17854Ee8BE45A",
 			FunctionAbiJson: `bad`,

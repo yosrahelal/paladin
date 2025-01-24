@@ -524,13 +524,23 @@ func TestRecoverSignature(t *testing.T) {
 
 func TestSendTransaction(t *testing.T) {
 	txID := uuid.New()
+	postCommitCalled := false
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
-		mc.txManager.On("SendTransaction", mock.Anything, mock.Anything).Return(&txID, nil)
+		mkrc := componentmocks.NewKeyResolutionContext(t)
+		mkr := componentmocks.NewKeyResolver(t)
+		mkrc.On("KeyResolver", mock.Anything).Return(mkr)
+		mc.keyManager.On("NewKeyResolutionContext", mock.Anything).Return(mkrc)
+		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mkr, mock.Anything).Return(func() {
+			postCommitCalled = true
+		}, []uuid.UUID{txID}, nil)
 	})
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
+	td.c.readOnly = false
+
 	_, err := td.d.SendTransaction(td.ctx, &prototk.SendTransactionRequest{
+		StateQueryContext: td.c.id,
 		Transaction: &prototk.TransactionInput{
 			ContractAddress: "0x05d936207F04D81a85881b72A0D17854Ee8BE45A",
 			FunctionAbiJson: `{}`,
@@ -538,16 +548,26 @@ func TestSendTransaction(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+
+	td.c.postCommits[0]()
+	require.True(t, postCommitCalled)
 }
 
 func TestSendTransactionFail(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
-		mc.txManager.On("SendTransaction", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mkrc := componentmocks.NewKeyResolutionContext(t)
+		mkr := componentmocks.NewKeyResolver(t)
+		mkrc.On("KeyResolver", mock.Anything).Return(mkr)
+		mc.keyManager.On("NewKeyResolutionContext", mock.Anything).Return(mkrc)
+		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mkr, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
 	})
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
+	td.c.readOnly = false
+
 	_, err := td.d.SendTransaction(td.ctx, &prototk.SendTransactionRequest{
+		StateQueryContext: td.c.id,
 		Transaction: &prototk.TransactionInput{
 			ContractAddress: "0x05d936207F04D81a85881b72A0D17854Ee8BE45A",
 			FunctionAbiJson: `{}`,

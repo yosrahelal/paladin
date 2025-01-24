@@ -74,10 +74,13 @@ type domain struct {
 }
 
 type inFlightDomainRequest struct {
-	d    *domain
-	id   string                   // each request gets a unique ID
-	dbTX *gorm.DB                 // only if there's a DB transactions such as when called by block indexer
-	dCtx components.DomainContext // might be short lived, or managed externally (by private TX manager)
+	d           *domain
+	id          string                          // each request gets a unique ID
+	dbTX        *gorm.DB                        // only if there's a DB transactions such as when called by block indexer
+	dCtx        components.DomainContext        // might be short lived, or managed externally (by private TX manager)
+	krc         components.KeyResolutionContext // created on first use
+	readOnly    bool
+	postCommits []func()
 }
 
 func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDomain components.DomainManagerToDomain) *domain {
@@ -224,12 +227,13 @@ func (d *domain) init() {
 	}
 }
 
-func (d *domain) newInFlightDomainRequest(dbTX *gorm.DB, dc components.DomainContext) *inFlightDomainRequest {
+func (d *domain) newInFlightDomainRequest(dbTX *gorm.DB, dc components.DomainContext, readOnly bool) *inFlightDomainRequest {
 	c := &inFlightDomainRequest{
-		d:    d,
-		dCtx: dc,
-		id:   tktypes.ShortID(),
-		dbTX: dbTX,
+		d:        d,
+		dCtx:     dc,
+		id:       tktypes.ShortID(),
+		dbTX:     dbTX,
+		readOnly: readOnly,
 	}
 	d.inFlightLock.Lock()
 	defer d.inFlightLock.Unlock()
@@ -243,7 +247,22 @@ func (i *inFlightDomainRequest) close() {
 	delete(i.d.inFlight, i.id)
 }
 
-func (d *domain) checkInFlight(ctx context.Context, stateQueryContext string) (*inFlightDomainRequest, error) {
+func (i *inFlightDomainRequest) keyResolver() components.KeyResolver {
+	i.d.inFlightLock.Lock()
+	defer i.d.inFlightLock.Unlock()
+	if i.krc == nil {
+		i.krc = i.d.dm.keyManager.NewKeyResolutionContext(i.dCtx.Ctx())
+	}
+	return i.krc.KeyResolver(i.dbTX)
+}
+
+func (i *inFlightDomainRequest) addPostCommit(pc func()) {
+	i.d.inFlightLock.Lock()
+	defer i.d.inFlightLock.Unlock()
+	i.postCommits = append(i.postCommits, pc)
+}
+
+func (d *domain) checkInFlight(ctx context.Context, stateQueryContext string, needWrite bool) (*inFlightDomainRequest, error) {
 	if err := d.checkInit(ctx); err != nil {
 		return nil, err
 	}
@@ -252,6 +271,9 @@ func (d *domain) checkInFlight(ctx context.Context, stateQueryContext string) (*
 	c := d.inFlight[stateQueryContext]
 	if c == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgDomainRequestNotInFlight, stateQueryContext)
+	}
+	if needWrite && c.readOnly {
+		return nil, i18n.NewError(ctx, msgs.MsgDomainWriteActionNotPossibleInContext)
 	}
 	return c, nil
 }
@@ -301,7 +323,7 @@ func toProtoStates(states []*pldapi.State) []*prototk.StoredState {
 
 // Domain callback to query the state store
 func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
-	c, err := d.checkInFlight(ctx, req.StateQueryContext)
+	c, err := d.checkInFlight(ctx, req.StateQueryContext, false)
 	if err != nil {
 		return nil, err
 	}
@@ -776,33 +798,39 @@ func (d *domain) BuildDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uui
 	return tktypes.RawJSON(res.ReceiptJson), nil
 }
 
-func (d *domain) SendTransaction(ctx context.Context, tx *prototk.SendTransactionRequest) (*prototk.SendTransactionResponse, error) {
+func (d *domain) SendTransaction(ctx context.Context, req *prototk.SendTransactionRequest) (*prototk.SendTransactionResponse, error) {
+	c, err := d.checkInFlight(ctx, req.StateQueryContext, true /* need write */)
+	if err != nil {
+		return nil, err
+	}
+
 	txType := pldapi.TransactionTypePrivate
-	if tx.Transaction.Type == prototk.TransactionInput_PUBLIC {
+	if req.Transaction.Type == prototk.TransactionInput_PUBLIC {
 		txType = pldapi.TransactionTypePublic
 	}
-	contractAddress, err := tktypes.ParseEthAddress(tx.Transaction.ContractAddress)
+	contractAddress, err := tktypes.ParseEthAddress(req.Transaction.ContractAddress)
 	if err != nil {
 		return nil, err
 	}
 	var functionABI abi.Entry
-	if err = json.Unmarshal([]byte(tx.Transaction.FunctionAbiJson), &functionABI); err != nil {
+	if err = json.Unmarshal([]byte(req.Transaction.FunctionAbiJson), &functionABI); err != nil {
 		return nil, err
 	}
 
-	id, err := d.dm.txManager.SendTransaction(ctx, &pldapi.TransactionInput{
+	postCommit, txIDs, err := d.dm.txManager.SendTransactions(ctx, c.dbTX, c.keyResolver(), &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			Type: txType.Enum(),
-			From: tx.Transaction.From,
+			From: req.Transaction.From,
 			To:   contractAddress,
-			Data: tktypes.RawJSON(tx.Transaction.ParamsJson),
+			Data: tktypes.RawJSON(req.Transaction.ParamsJson),
 		},
 		ABI: abi.ABI{&functionABI},
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &prototk.SendTransactionResponse{Id: id.String()}, nil
+	c.addPostCommit(postCommit)
+	return &prototk.SendTransactionResponse{Id: txIDs[0].String()}, nil
 }
 
 func (d *domain) LocalNodeName(ctx context.Context, req *prototk.LocalNodeNameRequest) (*prototk.LocalNodeNameResponse, error) {
@@ -812,7 +840,7 @@ func (d *domain) LocalNodeName(ctx context.Context, req *prototk.LocalNodeNameRe
 }
 
 func (d *domain) GetStates(ctx context.Context, req *prototk.GetStatesRequest) (*prototk.GetStatesResponse, error) {
-	c, err := d.checkInFlight(ctx, req.StateQueryContext)
+	c, err := d.checkInFlight(ctx, req.StateQueryContext, false)
 	if err != nil {
 		return nil, err
 	}
