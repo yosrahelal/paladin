@@ -671,7 +671,7 @@ func TestDomainContextFlushErrorCapture(t *testing.T) {
 	_, _, err = dc.FindAvailableNullifiers(ss.p.DB(), schemas[0].ID(), nil)
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
-	_, err = dc.mergeUnFlushedApplyLocks(schemas[0], nil, nil, false)
+	_, err = dc.mergeUnFlushedApplyLocks(schemas[0], nil, nil, true, false)
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
 	_, err = dc.UpsertStates(ss.p.DB(), genWidget(t, schemas[0].ID(), &tx1, data1))
@@ -755,14 +755,14 @@ func TestDCMergeUnFlushedWhileFlushing(t *testing.T) {
 	// We'll merge in creating
 	states, err := dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
-	}, false /* no nullifier required */)
+	}, true /* exclude locked */, false /* no nullifier required */)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
 	// Unless we require a nullifier
 	states, err = dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
-	}, true /* nullifier required */)
+	}, true /* exclude locked */, true /* nullifier required */)
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
@@ -776,7 +776,7 @@ func TestDCMergeUnFlushedWhileFlushing(t *testing.T) {
 	// And then it will return the state
 	states, err = dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
-	}, true /* nullifier required */)
+	}, true /* exclude locked */, true /* nullifier required */)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
@@ -811,7 +811,7 @@ func TestDSIMergeUnFlushedMultipleSchemas(t *testing.T) {
 	dc.creatingStates[s2.ID.String()] = s2
 
 	states, err := dc.mergeUnFlushedApplyLocks(schema1, []*pldapi.State{},
-		query.NewQueryBuilder().Sort(".created").Query(), false)
+		query.NewQueryBuilder().Sort(".created").Query(), true, false)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 	assert.Equal(t, s1.State, states[0])
@@ -839,7 +839,7 @@ func TestDSIMergeUnFlushedBadDBRecord(t *testing.T) {
 
 	_, err = dc.mergeUnFlushedApplyLocks(schema1, []*pldapi.State{
 		{StateBase: pldapi.StateBase{ID: tktypes.RandBytes(32), Data: tktypes.RawJSON("wrong")}},
-	}, query.NewQueryBuilder().Sort(".created").Query(), false)
+	}, query.NewQueryBuilder().Sort(".created").Query(), true, false)
 	assert.Regexp(t, "PD010116", err)
 
 }
@@ -892,7 +892,7 @@ func TestDCMergeUnFlushedWhileFlushingDedup(t *testing.T) {
 		inTheFlush.State,
 	}, &query.QueryJSON{
 		Sort: []string{".created"},
-	}, false)
+	}, true, false)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
@@ -919,7 +919,7 @@ func TestDCMergeUnFlushedEvalError(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{},
-		query.NewQueryBuilder().Equal("wrong", "any").Query(), false)
+		query.NewQueryBuilder().Equal("wrong", "any").Query(), true, false)
 	assert.Regexp(t, "PD010700", err)
 
 }

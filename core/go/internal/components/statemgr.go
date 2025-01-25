@@ -96,7 +96,7 @@ type DomainContext interface {
 	// The dbTX is passed in to allow re-use of a connection during read operations.
 	FindAvailableStates(dbTX *gorm.DB, schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*pldapi.State, error)
 
-	// GetStates retrieves a set of states by ID - regardless of whether they are:
+	// GetStatesByID retrieves a set of states by ID - regardless of whether they are:
 	// - Written to the DB or not (or just pending in the domain context)
 	// - Confirmed or not
 	// - Spent or not
