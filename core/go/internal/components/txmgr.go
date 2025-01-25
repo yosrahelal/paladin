@@ -91,10 +91,8 @@ type TXManager interface {
 	DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error)
 	DecodeCall(ctx context.Context, dbTX *gorm.DB, callData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error)
 	DecodeEvent(ctx context.Context, dbTX *gorm.DB, topics []tktypes.Bytes32, eventData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error)
-	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error)
-	SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
-	PrepareTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error)
-	PrepareTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
+	SendTransactions(ctx context.Context, dbTX *gorm.DB, kr KeyResolver, txs ...*pldapi.TransactionInput) (postCommit func(), txIDs []uuid.UUID, err error)
+	PrepareTransactions(ctx context.Context, dbTX *gorm.DB, kr KeyResolver, txs ...*pldapi.TransactionInput) (postCommit func(), txIDs []uuid.UUID, err error)
 	GetTransactionByID(ctx context.Context, id uuid.UUID) (*pldapi.Transaction, error)
 	GetResolvedTransactionByID(ctx context.Context, id uuid.UUID) (*ResolvedTransaction, error) // cache optimized
 	GetTransactionByIDFull(ctx context.Context, id uuid.UUID) (result *pldapi.TransactionFull, err error)

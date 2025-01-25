@@ -221,13 +221,13 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 	addr := *tktypes.RandAddress()
 	if realDB {
 		dCtx := dm.stateStore.NewDomainContext(ctx, tp.d, addr)
-		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), dCtx)
+		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), dCtx, true /* readonly unless modified by test */)
 	} else {
 		mdc = componentmocks.NewDomainContext(t)
 		mdc.On("Ctx").Return(ctx).Maybe()
 		mdc.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()
 		mdc.On("Close").Return()
-		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), mdc)
+		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), mdc, true /* readonly unless modified by test */)
 		mc.stateStore.On("NewDomainContext", mock.Anything, tp.d, mock.Anything, mock.Anything).Return(mdc).Maybe()
 	}
 
@@ -1020,6 +1020,64 @@ func TestRecoverSignerFailCases(t *testing.T) {
 		Signature:   ([]byte)("not a signature RSV"),
 	})
 	assert.Regexp(t, "PD011638", err)
+}
+
+func TestSendTransactionFailCases(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+
+	_, err := td.d.SendTransaction(td.ctx, &prototk.SendTransactionRequest{
+		StateQueryContext: td.c.id,
+	})
+	require.ErrorContains(t, err, "PD011663")
+
+	td.c.readOnly = false
+
+	_, err = td.d.SendTransaction(td.ctx, &prototk.SendTransactionRequest{
+		StateQueryContext: td.c.id,
+		Transaction: &prototk.TransactionInput{
+			ContractAddress: "badnotgood",
+			FunctionAbiJson: `{}`,
+			ParamsJson:      `{}`,
+		},
+	})
+	require.ErrorContains(t, err, "bad address")
+
+	_, err = td.d.SendTransaction(td.ctx, &prototk.SendTransactionRequest{
+		StateQueryContext: td.c.id,
+		Transaction: &prototk.TransactionInput{
+			ContractAddress: "0x05d936207F04D81a85881b72A0D17854Ee8BE45A",
+			FunctionAbiJson: `bad`,
+			ParamsJson:      `{}`,
+		},
+	})
+	require.ErrorContains(t, err, "invalid character")
+}
+
+func TestGetStatesFailCases(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+
+	_, err := td.d.GetStatesByID(td.ctx, &prototk.GetStatesByIDRequest{
+		StateQueryContext: "bad",
+	})
+	require.ErrorContains(t, err, "PD011649")
+
+	_, err = td.d.GetStatesByID(td.ctx, &prototk.GetStatesByIDRequest{
+		StateQueryContext: td.c.id,
+		SchemaId:          "bad",
+	})
+	require.ErrorContains(t, err, "PD011641")
+
+	schemaID := tktypes.Bytes32(tktypes.RandBytes(32))
+	td.mdc.On("GetStatesByID", mock.Anything, schemaID, []string{"id1"}).Return(nil, nil, fmt.Errorf("pop"))
+
+	_, err = td.d.GetStatesByID(td.ctx, &prototk.GetStatesByIDRequest{
+		StateQueryContext: td.c.id,
+		SchemaId:          schemaID.String(),
+		StateIds:          []string{"id1"},
+	})
+	require.EqualError(t, err, "pop")
 }
 
 func TestMapStateLockType(t *testing.T) {

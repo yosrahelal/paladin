@@ -194,7 +194,7 @@ func TestFinalizeTransactionsInsertOkOffChain(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+	txID, err := txm.sendTransactionNewDBTX(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			From:     "me",
 			Type:     pldapi.TransactionTypePrivate.Enum(),
@@ -249,7 +249,7 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+	txID, err := txm.sendTransactionNewDBTX(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			From:     "me",
 			Type:     pldapi.TransactionTypePrivate.Enum(),

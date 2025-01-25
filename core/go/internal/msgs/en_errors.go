@@ -279,6 +279,7 @@ var (
 	MsgDomainNullifierForPartyOutsideDistro   = ffe("PD011660", "A nullifier was requested for a party that is not in the distribution list")
 	MsgDomainInvalidFromAddress               = ffe("PD011661", "Invalid from identity in transaction")
 	MsgDomainInvalidCoordinatorSelection      = ffe("PD011662", "Invalid coordinator selection of '%s' configured. valid options are: COORDINATOR_SENDER, COORDINATOR_STATIC, COORDINATOR_ENDORSER")
+	MsgDomainWriteActionNotPossibleInContext  = ffe("PD011663", "Requested write action is not possible in this domain context")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")

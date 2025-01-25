@@ -377,6 +377,13 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	assert.Len(t, states, 1)
 	assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
 
+	// Query states by ID - including unflushed, and consumed
+	_, statesByID, err := dc.GetStatesByID(ss.p.DB(), schemaID, []string{tx3states[1].ID.String(), tx4states[0].ID.String()})
+	require.NoError(t, err)
+	assert.Len(t, statesByID, 2)
+	assert.Equal(t, int64(50), parseFakeCoin(t, statesByID[0]).Amount.Int64())
+	assert.Equal(t, int64(20), parseFakeCoin(t, statesByID[1]).Amount.Int64())
+
 	syncFlushContext(t, dc)
 
 	// Write confirmations for all the things that happened above
@@ -664,7 +671,7 @@ func TestDomainContextFlushErrorCapture(t *testing.T) {
 	_, _, err = dc.FindAvailableNullifiers(ss.p.DB(), schemas[0].ID(), nil)
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
-	_, err = dc.mergeUnFlushedApplyLocks(schemas[0], nil, nil, false)
+	_, err = dc.mergeUnFlushedApplyLocks(schemas[0], nil, nil, true, false)
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
 	_, err = dc.UpsertStates(ss.p.DB(), genWidget(t, schemas[0].ID(), &tx1, data1))
@@ -748,14 +755,14 @@ func TestDCMergeUnFlushedWhileFlushing(t *testing.T) {
 	// We'll merge in creating
 	states, err := dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
-	}, false /* no nullifier required */)
+	}, true /* exclude locked */, false /* no nullifier required */)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
 	// Unless we require a nullifier
 	states, err = dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
-	}, true /* nullifier required */)
+	}, true /* exclude locked */, true /* nullifier required */)
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
@@ -769,7 +776,7 @@ func TestDCMergeUnFlushedWhileFlushing(t *testing.T) {
 	// And then it will return the state
 	states, err = dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
-	}, true /* nullifier required */)
+	}, true /* exclude locked */, true /* nullifier required */)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
@@ -804,7 +811,7 @@ func TestDSIMergeUnFlushedMultipleSchemas(t *testing.T) {
 	dc.creatingStates[s2.ID.String()] = s2
 
 	states, err := dc.mergeUnFlushedApplyLocks(schema1, []*pldapi.State{},
-		query.NewQueryBuilder().Sort(".created").Query(), false)
+		query.NewQueryBuilder().Sort(".created").Query(), true, false)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 	assert.Equal(t, s1.State, states[0])
@@ -832,7 +839,7 @@ func TestDSIMergeUnFlushedBadDBRecord(t *testing.T) {
 
 	_, err = dc.mergeUnFlushedApplyLocks(schema1, []*pldapi.State{
 		{StateBase: pldapi.StateBase{ID: tktypes.RandBytes(32), Data: tktypes.RawJSON("wrong")}},
-	}, query.NewQueryBuilder().Sort(".created").Query(), false)
+	}, query.NewQueryBuilder().Sort(".created").Query(), true, false)
 	assert.Regexp(t, "PD010116", err)
 
 }
@@ -885,7 +892,7 @@ func TestDCMergeUnFlushedWhileFlushingDedup(t *testing.T) {
 		inTheFlush.State,
 	}, &query.QueryJSON{
 		Sort: []string{".created"},
-	}, false)
+	}, true, false)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
@@ -912,7 +919,7 @@ func TestDCMergeUnFlushedEvalError(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{},
-		query.NewQueryBuilder().Equal("wrong", "any").Query(), false)
+		query.NewQueryBuilder().Equal("wrong", "any").Query(), true, false)
 	assert.Regexp(t, "PD010700", err)
 
 }
@@ -1317,4 +1324,16 @@ func TestImportSnapshotJSONError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Regexp(t, "PD010132", err)
 
+}
+
+func TestGetStatesByIDFail(t *testing.T) {
+	ctx, ss, db, _, done := newDBMockStateManager(t)
+	defer done()
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
+
+	db.ExpectQuery("SELECT.*schemas").WillReturnError(fmt.Errorf("pop"))
+
+	_, _, err := dc.GetStatesByID(dc.ss.p.DB(), tktypes.Bytes32(tktypes.RandBytes(32)), []string{tktypes.RandHex(32)})
+	assert.Regexp(t, "pop", err)
 }

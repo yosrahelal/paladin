@@ -21,25 +21,33 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/keymanager"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"gorm.io/gorm"
 )
 
 func (tb *testbed) ExecTransactionSync(ctx context.Context, tx *pldapi.TransactionInput) (receipt *pldapi.TransactionReceipt, err error) {
 	txm := tb.c.TxManager()
-	txID, err := tb.c.TxManager().SendTransaction(ctx, tx)
+	var txIDs []uuid.UUID
+	err = keymanager.DBTransactionWithKRC(ctx, tb.c.Persistence(), tb.c.KeyManager(), func(dbTX *gorm.DB, kr components.KeyResolver) (postCommit func(), err error) {
+		postCommit, txIDs, err = tb.c.TxManager().SendTransactions(ctx, dbTX, kr, tx)
+		return postCommit, err
+	})
 	if err != nil {
 		return nil, err
 	}
+	txID := txIDs[0]
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
 		<-ticker.C
-		receipt, err = txm.GetTransactionReceiptByID(ctx, *txID)
+		receipt, err = txm.GetTransactionReceiptByID(ctx, txID)
 		if err != nil {
 			return nil, fmt.Errorf("error checking for transaction receipt: %s", err)
 		}
