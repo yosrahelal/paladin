@@ -141,14 +141,6 @@ type NotoLockParams struct {
 	Data          tktypes.HexBytes `json:"data"`
 }
 
-type NotoUnlockParams struct {
-	LockedInputs  []string         `json:"lockedInputs"`
-	LockedOutputs []string         `json:"lockedOutputs"`
-	Outputs       []string         `json:"outputs"`
-	Signature     tktypes.HexBytes `json:"signature"`
-	Data          tktypes.HexBytes `json:"data"`
-}
-
 type NotoPrepareUnlockParams struct {
 	LockedInputs []string         `json:"lockedInputs"`
 	UnlockHash   tktypes.Bytes32  `json:"unlockHash"`

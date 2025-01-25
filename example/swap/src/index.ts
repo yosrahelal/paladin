@@ -147,8 +147,9 @@ async function main(): Promise<boolean> {
   receipt = await paladin2.getTransactionReceipt(receipt.id, true);
 
   domainReceipt = receipt?.domainReceipt as INotoDomainReceipt | undefined;
-  const encodedAssetTransfer = domainReceipt?.lockInfo?.unlock;
-  if (encodedAssetTransfer === undefined) {
+  const assetUnlockParams = domainReceipt?.lockInfo?.unlockParams;
+  const assetUnlockCall = domainReceipt?.lockInfo?.unlockCall;
+  if (assetUnlockParams === undefined || assetUnlockCall === undefined) {
     logger.error("No unlock data found in domain receipt");
     return false;
   }
@@ -183,7 +184,7 @@ async function main(): Promise<boolean> {
   const atom = await atomFactory.create(cashIssuer, [
     {
       contractAddress: notoAsset.address,
-      callData: encodedAssetTransfer,
+      callData: assetUnlockCall,
     },
     {
       contractAddress: zetoCash.address,
@@ -196,7 +197,7 @@ async function main(): Promise<boolean> {
   logger.log("Approving asset leg...");
   receipt = await notoAsset.using(paladin2).delegateLock(investor1, {
     lockId,
-    unlock: encodedAssetTransfer,
+    unlock: assetUnlockParams,
     delegate: atom.address,
     data: "0x",
   });

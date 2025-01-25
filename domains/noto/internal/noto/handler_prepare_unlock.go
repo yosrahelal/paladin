@@ -116,7 +116,7 @@ func (h *prepareUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.P
 
 	lockedInputs := req.ReadStates
 	outputs, lockedOutputs := h.noto.splitStates(req.InfoStates)
-	unlockHash, err := h.noto.encodeUnlockMasked(ctx, tx.ContractAddress, lockedInputs, lockedOutputs, outputs, inParams.Data)
+	unlockHash, err := h.noto.unlockHashFromStates(ctx, tx.ContractAddress, lockedInputs, lockedOutputs, outputs, inParams.Data)
 	if err != nil {
 		return nil, err
 	}

@@ -78,12 +78,14 @@ func (n *Noto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptReques
 	if receipt.LockInfo != nil && len(receipt.States.ReadLockedInputs) > 0 && len(receipt.States.PreparedOutputs) > 0 {
 		// For prepareUnlock transactions, include the encoded "unlock" call that can be used to unlock the coins
 		unlock := interfaceBuild.ABI.Functions()["unlock"]
-		params := &NotoUnlockParams{
+		receipt.LockInfo.UnlockParams = &types.UnlockPublicParams{
 			LockedInputs:  endorsableStateIDs(n.filterSchema(req.ReadStates, []string{n.lockedCoinSchema.Id})),
 			LockedOutputs: endorsableStateIDs(n.filterSchema(req.InfoStates, []string{n.lockedCoinSchema.Id})),
 			Outputs:       endorsableStateIDs(n.filterSchema(req.InfoStates, []string{n.coinSchema.Id})),
+			Signature:     tktypes.HexBytes{},
+			Data:          tktypes.HexBytes{},
 		}
-		paramsJSON, err := json.Marshal(params)
+		paramsJSON, err := json.Marshal(receipt.LockInfo.UnlockParams)
 		if err != nil {
 			return nil, err
 		}
@@ -91,7 +93,7 @@ func (n *Noto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptReques
 		if err != nil {
 			return nil, err
 		}
-		receipt.LockInfo.Unlock = encodedCall
+		receipt.LockInfo.UnlockCall = encodedCall
 	}
 
 	receipt.Transfers, err = n.receiptTransfers(ctx, req)

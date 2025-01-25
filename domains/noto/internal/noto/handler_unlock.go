@@ -301,7 +301,7 @@ func (h *unlockHandler) baseLedgerInvoke(ctx context.Context, req *prototk.Prepa
 	if err != nil {
 		return nil, err
 	}
-	params := &NotoUnlockParams{
+	params := &types.UnlockPublicParams{
 		LockedInputs:  endorsableStateIDs(lockedInputs),
 		LockedOutputs: endorsableStateIDs(lockedOutputs),
 		Outputs:       endorsableStateIDs(outputs),

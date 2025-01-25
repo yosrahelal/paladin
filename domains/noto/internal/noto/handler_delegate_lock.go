@@ -181,7 +181,7 @@ func (h *delegateLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.Pa
 		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 	}
 
-	unlockHash, err := h.noto.unlockHashFromEncodedCall(ctx, tx.ContractAddress, inParams.Unlock, inParams.Data)
+	unlockHash, err := h.noto.unlockHashFromIDs(ctx, tx.ContractAddress, inParams.Unlock.LockedInputs, inParams.Unlock.LockedOutputs, inParams.Unlock.Outputs, inParams.Unlock.Data)
 	if err != nil {
 		return nil, err
 	}

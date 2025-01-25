@@ -117,7 +117,7 @@ export interface UnlockRecipient {
 
 export interface NotoDelegateLockParams {
   lockId: string;
-  unlock: string;
+  unlock: NotoUnlockPublicParams;
   delegate: string;
   data: string;
 }

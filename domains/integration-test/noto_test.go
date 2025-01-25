@@ -439,7 +439,7 @@ func (s *notoTestSuite) TestNotoLock() {
 	}, true)
 	require.NoError(t, rpcerr)
 
-	_, _, unlockParams, encodedUnlock, err := buildUnlock(ctx, notoDomain, noto.ABI, &invokeResult)
+	_, _, unlockParams, _, err := buildUnlock(ctx, notoDomain, noto.ABI, &invokeResult)
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Delegate lock to recipient2")
@@ -450,7 +450,7 @@ func (s *notoTestSuite) TestNotoLock() {
 			Function: "delegateLock",
 			Data: toJSON(t, &types.DelegateLockParams{
 				LockID:   lockInfo.LockID,
-				Unlock:   encodedUnlock,
+				Unlock:   unlockParams,
 				Delegate: tktypes.MustEthAddress(recipient2Key.Verifier.Verifier),
 			}),
 		},

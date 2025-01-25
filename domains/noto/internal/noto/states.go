@@ -508,41 +508,19 @@ func (n *Noto) encodeUnlock(ctx context.Context, contract *ethtypes.Address0xHex
 	})
 }
 
-func (n *Noto) encodeUnlockMasked(ctx context.Context, contract *ethtypes.Address0xHex, lockedInputs, lockedOutputs, outputs []*prototk.EndorsableState, data tktypes.HexBytes) (ethtypes.HexBytes0xPrefix, error) {
-	return eip712.EncodeTypedDataV4(ctx, &eip712.TypedData{
-		Types:       NotoUnlockMaskedTypeSet,
-		PrimaryType: "Unlock",
-		Domain:      n.eip712Domain(contract),
-		Message: map[string]any{
-			"lockedInputs":  stringToAny(endorsableStateIDs(lockedInputs)),
-			"lockedOutputs": stringToAny(endorsableStateIDs(lockedOutputs)),
-			"outputs":       stringToAny(endorsableStateIDs(outputs)),
-			"data":          data,
-		},
-	})
+func (n *Noto) unlockHashFromStates(ctx context.Context, contract *ethtypes.Address0xHex, lockedInputs, lockedOutputs, outputs []*prototk.EndorsableState, data tktypes.HexBytes) (ethtypes.HexBytes0xPrefix, error) {
+	return n.unlockHashFromIDs(ctx, contract, endorsableStateIDs(lockedInputs), endorsableStateIDs(lockedOutputs), endorsableStateIDs(outputs), data)
 }
 
-func (n *Noto) unlockHashFromEncodedCall(ctx context.Context, contract *ethtypes.Address0xHex, encodedUnlock tktypes.HexBytes, data tktypes.HexBytes) (ethtypes.HexBytes0xPrefix, error) {
-	decodedUnlock, err := interfaceBuild.ABI.Functions()["unlock"].DecodeCallDataCtx(ctx, encodedUnlock)
-	if err != nil {
-		return nil, err
-	}
-	unlockJSON, err := tktypes.StandardABISerializer().SerializeJSON(decodedUnlock)
-	if err != nil {
-		return nil, err
-	}
-	var unlockParams NotoUnlockParams
-	if err := json.Unmarshal(unlockJSON, &unlockParams); err != nil {
-		return nil, err
-	}
+func (n *Noto) unlockHashFromIDs(ctx context.Context, contract *ethtypes.Address0xHex, lockedInputs, lockedOutputs, outputs []string, data tktypes.HexBytes) (ethtypes.HexBytes0xPrefix, error) {
 	return eip712.EncodeTypedDataV4(ctx, &eip712.TypedData{
 		Types:       NotoUnlockMaskedTypeSet,
 		PrimaryType: "Unlock",
 		Domain:      n.eip712Domain(contract),
 		Message: map[string]any{
-			"lockedInputs":  stringToAny(unlockParams.LockedInputs),
-			"lockedOutputs": stringToAny(unlockParams.LockedOutputs),
-			"outputs":       stringToAny(unlockParams.Outputs),
+			"lockedInputs":  stringToAny(lockedInputs),
+			"lockedOutputs": stringToAny(lockedOutputs),
+			"outputs":       stringToAny(outputs),
 			"data":          data,
 		},
 	})

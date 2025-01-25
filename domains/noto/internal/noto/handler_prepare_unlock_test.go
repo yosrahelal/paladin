@@ -196,7 +196,7 @@ func TestPrepareUnlock(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, prototk.EndorseTransactionResponse_ENDORSER_SUBMIT, endorseRes.EndorsementResult)
 
-	unlockHash, err := n.encodeUnlockMasked(ctx, ethtypes.MustNewAddress(contractAddress), readStates, nil, n.filterSchema(infoStates, []string{"coin"}), tktypes.MustParseHexBytes("0x1234"))
+	unlockHash, err := n.unlockHashFromStates(ctx, ethtypes.MustNewAddress(contractAddress), readStates, nil, n.filterSchema(infoStates, []string{"coin"}), tktypes.MustParseHexBytes("0x1234"))
 	require.NoError(t, err)
 
 	// Prepare once to test base invoke
