@@ -196,6 +196,7 @@ async function main(): Promise<boolean> {
   logger.log("Approving asset leg...");
   receipt = await notoAsset.using(paladin2).delegateLock(investor1, {
     lockId,
+    unlock: encodedAssetTransfer,
     delegate: atom.address,
     data: "0x",
   });

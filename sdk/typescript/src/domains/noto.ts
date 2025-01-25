@@ -117,12 +117,12 @@ export interface UnlockRecipient {
 
 export interface NotoDelegateLockParams {
   lockId: string;
+  unlock: string;
   delegate: string;
   data: string;
 }
 
 export interface NotoUnlockPublicParams {
-  lockId: string;
   lockedInputs: string[];
   lockedOutputs: string[];
   outputs: string[];
@@ -345,7 +345,6 @@ export class NotoInstance {
 
   encodeUnlock(data: NotoUnlockPublicParams) {
     return new ethers.Interface(notoJSON.abi).encodeFunctionData("unlock", [
-      data.lockId,
       data.lockedInputs,
       data.lockedOutputs,
       data.outputs,

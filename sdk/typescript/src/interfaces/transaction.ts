@@ -101,6 +101,7 @@ export interface INotoDomainReceipt {
   lockInfo?: {
     lockId: string;
     delegate?: string;
+    unlockHash?: string;
     unlock?: string;
   };
   data?: string;
