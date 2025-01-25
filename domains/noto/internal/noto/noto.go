@@ -941,6 +941,7 @@ func (n *Noto) handleNotaryPrivateUnlock(ctx context.Context, stateQueryContext 
 	}
 
 	_, err = n.Callbacks.SendTransaction(ctx, &prototk.SendTransactionRequest{
+		StateQueryContext: stateQueryContext,
 		Transaction: &prototk.TransactionInput{
 			Type:            mapSendTransactionType(transactionType),
 			From:            domainConfig.NotaryLookup,
