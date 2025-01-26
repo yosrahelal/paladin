@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/keymanager"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -222,18 +223,18 @@ func (tm *txManager) parseInputs(
 	return
 }
 
-func (tm *txManager) SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error) {
+func (tm *txManager) sendTransactionNewDBTX(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error) {
 	// TODO: Add flush writer for parallel performance here, that calls sendTransactions
 	// in the flush writer on the batch (rather than doing a DB commit per TX)
-	txIDs, err := tm.SendTransactions(ctx, []*pldapi.TransactionInput{tx})
+	txIDs, err := tm.sendTransactionsNewDBTX(ctx, []*pldapi.TransactionInput{tx})
 	if err != nil {
 		return nil, err
 	}
 	return &txIDs[0], nil
 }
 
-func (tm *txManager) PrepareTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error) {
-	txIDs, err := tm.PrepareTransactions(ctx, []*pldapi.TransactionInput{tx})
+func (tm *txManager) prepareTransactionNewDBTX(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error) {
+	txIDs, err := tm.prepareTransactionsNewDBTX(ctx, []*pldapi.TransactionInput{tx})
 	if err != nil {
 		return nil, err
 	}
@@ -361,45 +362,29 @@ func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, db
 	return txiPostCommit, nil
 }
 
-func (tm *txManager) runWithDBTxnKeyResolver(ctx context.Context, fn func(dbTX *gorm.DB, kr components.KeyResolver) error) (err error) {
-	krc := tm.keyManager.NewKeyResolutionContext(ctx)
-	committed := false
-	defer func() {
-		krc.Close(committed)
-	}()
-	err = tm.p.DB().Transaction(func(dbTX *gorm.DB) error {
-		err := fn(dbTX, krc.KeyResolver(dbTX))
-		if err == nil {
-			err = krc.PreCommit()
-		}
-		return err
-	})
-	committed = (err == nil)
-	return err
+func (tm *txManager) SendTransactions(ctx context.Context, dbTX *gorm.DB, kr components.KeyResolver, txs ...*pldapi.TransactionInput) (postCommit func(), txIDs []uuid.UUID, err error) {
+	return tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeAuto)
 }
 
-func (tm *txManager) SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
-	var postCommit func()
-	err = tm.runWithDBTxnKeyResolver(ctx, func(dbTX *gorm.DB, kr components.KeyResolver) (err error) {
-		postCommit, txIDs, err = tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeAuto)
-		return
+func (tm *txManager) sendTransactionsNewDBTX(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
+	err = keymanager.DBTransactionWithKRC(ctx, tm.p, tm.keyManager, func(dbTX *gorm.DB, kr components.KeyResolver) (postCommit func(), err error) {
+		postCommit, txIDs, err = tm.SendTransactions(ctx, dbTX, kr, txs...)
+		return postCommit, err
 	})
-	if err == nil {
-		postCommit()
-	}
-	return
+	return txIDs, err
 }
 
-func (tm *txManager) PrepareTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
-	var postCommit func()
-	err = tm.runWithDBTxnKeyResolver(ctx, func(dbTX *gorm.DB, kr components.KeyResolver) (err error) {
-		postCommit, txIDs, err = tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeExternal)
-		return
+func (tm *txManager) prepareTransactionsNewDBTX(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
+	err = keymanager.DBTransactionWithKRC(ctx, tm.p, tm.keyManager, func(dbTX *gorm.DB, kr components.KeyResolver) (postCommit func(), err error) {
+		postCommit, txIDs, err = tm.PrepareTransactions(ctx, dbTX, kr, txs...)
+		return postCommit, err
 	})
-	if err == nil {
-		postCommit()
-	}
-	return
+	return txIDs, err
+
+}
+
+func (tm *txManager) PrepareTransactions(ctx context.Context, dbTX *gorm.DB, kr components.KeyResolver, txs ...*pldapi.TransactionInput) (postCommit func(), txIDs []uuid.UUID, err error) {
+	return tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeExternal)
 }
 
 func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, kr components.KeyResolver, txs []*pldapi.TransactionInput, submitMode pldapi.SubmitMode) (postCommit func(), txIDs []uuid.UUID, err error) {

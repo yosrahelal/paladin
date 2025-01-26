@@ -137,7 +137,7 @@ func deployDomainRegistry(t *testing.T) *tktypes.EthAddress {
 	require.NoError(t, err)
 	err = cmTmp.CompleteStart()
 	require.NoError(t, err)
-	domainRegistryAddress := domains.DeploySmartContract(t, cmTmp.TxManager())
+	domainRegistryAddress := domains.DeploySmartContract(t, cmTmp.Persistence(), cmTmp.TxManager(), cmTmp.KeyManager())
 
 	cmTmp.Stop()
 	return domainRegistryAddress

@@ -26,6 +26,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -231,6 +232,7 @@ func TestHandleEventBatch(t *testing.T) {
 		Data:              tktypes.RawJSON(`{"result": "success"}`),
 	}
 
+	sendPostCommitCalled := false
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 
 		mc.stateStore.On("WriteStateFinalizations", mock.Anything, mock.Anything, []*pldapi.StateSpendRecord{
@@ -268,6 +270,14 @@ func TestHandleEventBatch(t *testing.T) {
 		})).Return(func() {}, nil)
 
 		mc.privateTxManager.On("PrivateTransactionConfirmed", mock.Anything, mock.Anything).Return()
+
+		mkrc := componentmocks.NewKeyResolutionContext(t)
+		mkr := componentmocks.NewKeyResolver(t)
+		mkrc.On("KeyResolver", mock.Anything).Return(mkr)
+		mc.keyManager.On("NewKeyResolutionContext", mock.Anything).Return(mkrc)
+		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mkr, mock.Anything).Return(func() {
+			sendPostCommitCalled = true
+		}, []uuid.UUID{txID}, nil)
 	})
 	defer done()
 	d := td.d
@@ -288,6 +298,18 @@ func TestHandleEventBatch(t *testing.T) {
 		assert.Equal(t, batchID.String(), req.BatchId)
 		assert.Equal(t, contract2.String(), req.ContractInfo.ContractAddress)
 		assert.Equal(t, `{"result": "success"}`, req.Events[0].DataJson)
+
+		// Can call send TX in this flow
+		_, err := td.d.SendTransaction(ctx, &prototk.SendTransactionRequest{
+			StateQueryContext: req.StateQueryContext,
+			Transaction: &prototk.TransactionInput{
+				ContractAddress: "0x05d936207F04D81a85881b72A0D17854Ee8BE45A",
+				FunctionAbiJson: `{}`,
+				ParamsJson:      `{}`,
+			},
+		})
+		require.NoError(t, err)
+
 		return &prototk.HandleEventBatchResponse{
 			TransactionsComplete: []*prototk.CompletedTransaction{
 				{
@@ -343,6 +365,8 @@ func TestHandleEventBatch(t *testing.T) {
 	cb()
 	_, err = req.Wait()
 	assert.NoError(t, err)
+
+	require.True(t, sendPostCommitCalled)
 }
 
 func TestHandleEventBatchFinalizeFail(t *testing.T) {

@@ -283,7 +283,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 
 	// We have a domain context for queries, but we never flush it to DB - as the only updates
 	// we allow in this function are those performed within our dbTX.
-	c := d.newInFlightDomainRequest(dbTX, d.dm.stateStore.NewDomainContext(ctx, d, addr))
+	c := d.newInFlightDomainRequest(dbTX, d.dm.stateStore.NewDomainContext(ctx, d, addr), false /* write enabled */)
 	defer c.close()
 
 	batch.StateQueryContext = c.id
@@ -359,7 +359,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 	}
 
 	// Write any new states first
-	writeStatePostCommit := func() {}
+	var writeStatePostCommit func()
 	if len(newStates) > 0 {
 		// These states are trusted as they come from the domain on our local node (no need to go back round VerifyStateHashes for customer hash functions)
 		writeStatePostCommit, _, err = d.dm.stateStore.WritePreVerifiedStates(ctx, dbTX, d.name, newStates)
@@ -374,7 +374,14 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 			return nil, nil, err
 		}
 	}
-	return writeStatePostCommit, res, err
+	return func() {
+		if writeStatePostCommit != nil {
+			writeStatePostCommit()
+		}
+		for _, postCommit := range c.postCommits {
+			postCommit()
+		}
+	}, res, err
 }
 
 func (d *domain) prepareIndexRecord(ctx context.Context, txIDStr, stateIDStr string) (uuid.UUID, tktypes.HexBytes, error) {
