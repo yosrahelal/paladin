@@ -74,6 +74,8 @@ var (
 	MsgComponentAdditionalMgrInitError     = ffe("PD010031", "Error initializing %s manager")
 	MsgComponentAdditionalMgrStartError    = ffe("PD010032", "Error initializing %s manager")
 	MsgComponentDebugServerStartError      = ffe("PD010033", "Error starting debug server")
+	MsgComponentGroupManagerInitError      = ffe("PD010034", "Error initializing privacy group manager")
+	MsgComponentGroupManagerStartError     = ffe("PD010035", "Error starting group manager ")
 
 	// States PD0101XX
 	MsgStateInvalidLength             = ffe("PD010101", "Invalid hash len expected=%d actual=%d")
