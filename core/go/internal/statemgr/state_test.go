@@ -50,10 +50,10 @@ func TestPersistStateMissingSchema(t *testing.T) {
 		},
 	}
 
-	_, _, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), "domain1", upserts)
+	_, _, err := ss.WritePreVerifiedStates(ctx, ss.p.NOTX(), "domain1", upserts)
 	assert.Regexp(t, "PD010106", err)
 
-	_, _, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", upserts)
+	_, _, err = ss.WriteReceivedStates(ctx, ss.p.NOTX(), "domain1", upserts)
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -76,10 +76,10 @@ func TestPersistStateInvalidState(t *testing.T) {
 		},
 	}
 
-	_, _, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), "domain1", upserts)
+	_, _, err := ss.WritePreVerifiedStates(ctx, ss.p.NOTX(), "domain1", upserts)
 	assert.Regexp(t, "PD010116", err)
 
-	_, _, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", upserts)
+	_, _, err = ss.WriteReceivedStates(ctx, ss.p.NOTX(), "domain1", upserts)
 	assert.Regexp(t, "PD010116", err)
 }
 
@@ -90,7 +90,7 @@ func TestGetStateMissing(t *testing.T) {
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.GetState(ctx, ss.p.DB(), "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("state1")).Bytes(), true, false)
+	_, err := ss.GetState(ctx, ss.p.NOTX(), "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("state1")).Bytes(), true, false)
 	assert.Regexp(t, "PD010112", err)
 }
 
@@ -101,7 +101,7 @@ func TestFindStatesMissingSchema(t *testing.T) {
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("schema1")), &query.QueryJSON{}, "all")
+	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("schema1")), &query.QueryJSON{}, "all")
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -116,7 +116,7 @@ func TestFindStatesBadQuery(t *testing.T) {
 	})
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
+	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				Equal: []*query.OpSingleVal{
@@ -143,7 +143,7 @@ func TestFindStatesFail(t *testing.T) {
 	db.ExpectQuery("SELECT.*created").WillReturnError(fmt.Errorf("pop"))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
+	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				GreaterThan: []*query.OpSingleVal{
@@ -164,7 +164,7 @@ func TestFindStatesUnknownContext(t *testing.T) {
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
+	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				GreaterThan: []*query.OpSingleVal{
@@ -185,10 +185,10 @@ func TestWritePreVerifiedStateInvalidDomain(t *testing.T) {
 
 	m.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(nil, fmt.Errorf("not found"))
 
-	_, _, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{})
+	_, _, err := ss.WritePreVerifiedStates(ctx, ss.p.NOTX(), "domain1", []*components.StateUpsertOutsideContext{})
 	assert.Regexp(t, "not found", err)
 
-	_, _, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{})
+	_, _, err = ss.WriteReceivedStates(ctx, ss.p.NOTX(), "domain1", []*components.StateUpsertOutsideContext{})
 	assert.Regexp(t, "not found", err)
 
 }
@@ -200,7 +200,7 @@ func TestWriteReceivedStatesValidateHashFail(t *testing.T) {
 	md := mockDomain(t, m, "domain1", true)
 	md.On("ValidateStateHashes", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 
-	_, _, err := ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{
+	_, _, err := ss.WriteReceivedStates(ctx, ss.p.NOTX(), "domain1", []*components.StateUpsertOutsideContext{
 		{ID: tktypes.RandBytes(32), SchemaID: tktypes.Bytes32(tktypes.RandBytes(32)),
 			Data: tktypes.RawJSON(fmt.Sprintf(
 				`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
@@ -223,7 +223,7 @@ func TestWriteReceivedStatesValidateHashOkInsertFail(t *testing.T) {
 	stateID1 := tktypes.RandBytes(32)
 	md.On("ValidateStateHashes", mock.Anything, mock.Anything).Return([]tktypes.HexBytes{stateID1}, nil)
 
-	_, _, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{
+	_, _, err = ss.WriteReceivedStates(ctx, ss.p.NOTX(), "domain1", []*components.StateUpsertOutsideContext{
 		{SchemaID: schema1.ID(), Data: tktypes.RawJSON(fmt.Sprintf(
 			`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 			tktypes.RandHex(32)))},
@@ -240,7 +240,7 @@ func TestWriteNullifiersForReceivedStatesOkRealDB(t *testing.T) {
 	md.On("Name").Return("domain1")
 	m.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
 
-	err := ss.WriteNullifiersForReceivedStates(ctx, ss.p.DB(), "domain1", []*components.NullifierUpsert{
+	err := ss.WriteNullifiersForReceivedStates(ctx, ss.p.NOTX(), "domain1", []*components.NullifierUpsert{
 		{
 			ID:    tktypes.HexBytes(tktypes.RandHex(32)),
 			State: tktypes.HexBytes(tktypes.RandHex(32)),
@@ -260,7 +260,7 @@ func TestWriteNullifiersForReceivedStatesBadDomain(t *testing.T) {
 
 	m.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(nil, fmt.Errorf("not found"))
 
-	err := ss.WriteNullifiersForReceivedStates(ctx, ss.p.DB(), "domain1", []*components.NullifierUpsert{
+	err := ss.WriteNullifiersForReceivedStates(ctx, ss.p.NOTX(), "domain1", []*components.NullifierUpsert{
 		{
 			ID:    tktypes.HexBytes(tktypes.RandHex(32)),
 			State: tktypes.HexBytes(tktypes.RandHex(32)),
@@ -291,7 +291,7 @@ func TestFindNullifiersInContext(t *testing.T) {
 	defer dCtx.Close()
 
 	contractAddress := tktypes.RandAddress()
-	results, err := ss.FindContractNullifiers(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID,
+	results, err := ss.FindContractNullifiers(ctx, ss.p.NOTX(), "domain1", *contractAddress, schemaID,
 		query.NewQueryBuilder().Limit(1).Query(), pldapi.StateStatusQualifier(dCtx.Info().ID.String()))
 	require.NoError(t, err)
 	require.Empty(t, results)
@@ -304,7 +304,7 @@ func TestFindNullifiersUnknownContext(t *testing.T) {
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindContractNullifiers(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
+	_, err := ss.FindContractNullifiers(ctx, ss.p.NOTX(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				GreaterThan: []*query.OpSingleVal{

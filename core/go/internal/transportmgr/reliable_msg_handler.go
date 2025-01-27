@@ -24,10 +24,10 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"gorm.io/gorm"
 )
 
 const (
@@ -60,7 +60,7 @@ type stateAndAck struct {
 	ack   *ackInfo
 }
 
-func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX *gorm.DB, values []*reliableMsgOp) (func(error), []flushwriter.Result[*noResult], error) {
+func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX persistence.DBTX, values []*reliableMsgOp) (func(error), []flushwriter.Result[*noResult], error) {
 
 	var acksToWrite []*components.ReliableMessageAck
 	var acksToSend []*ackInfo
@@ -69,7 +69,7 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX *go
 	var preparedTxnToAdd []*components.PreparedTransactionWithRefs
 	var txReceiptsToFinalize []*components.ReceiptInput
 	var writePreparedTxPostCommit func()
-	var krc components.KeyResolutionContext
+	var krc components.KeyResolver
 	var finalizeTxPostCommit func()
 	stateWritePostCommits := make([]func(), 0, 1)
 
@@ -106,7 +106,7 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX *go
 			if err == nil && sd.NullifierAlgorithm != nil && sd.NullifierVerifierType != nil && sd.NullifierPayloadType != nil {
 				// We need to build any nullifiers that are required, before we dispatch to persistence
 				if krc == nil {
-					krc = tm.keyManager.NewKeyResolutionContext(ctx)
+					krc = tm.keyManager.KeyResolverForDBTX(ctx)
 				}
 				var nullifier *components.NullifierUpsert
 				nullifier, err = tm.privateTxManager.BuildNullifier(ctx, krc.KeyResolver(dbTX), sd)
@@ -294,7 +294,7 @@ func (tm *transportManager) parseReceivedAckNack(ctx context.Context, msg *compo
 	return ackNackToWrite
 }
 
-func (tm *transportManager) buildStateDistributionMsg(ctx context.Context, dbTX *gorm.DB, rm *components.ReliableMessage) (*prototk.PaladinMsg, error, error) {
+func (tm *transportManager) buildStateDistributionMsg(ctx context.Context, dbTX persistence.DBTX, rm *components.ReliableMessage) (*prototk.PaladinMsg, error, error) {
 
 	// Validate the message first (not retryable)
 	sd, parsed, parseErr := parseStateDistribution(ctx, rm.ID, rm.Metadata)

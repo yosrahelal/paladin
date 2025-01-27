@@ -23,6 +23,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -85,7 +86,7 @@ func (tm *txManager) mapPersistedTXResolved(pt *persistedTransaction) *component
 	return res
 }
 
-func (tm *txManager) QueryTransactions(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) ([]*pldapi.Transaction, error) {
+func (tm *txManager) QueryTransactions(ctx context.Context, jq *query.QueryJSON, dbTX persistence.DBTX, pending bool) ([]*pldapi.Transaction, error) {
 	qw := &queryWrapper[persistedTransaction, pldapi.Transaction]{
 		p:           tm.p,
 		table:       "transactions",
@@ -106,11 +107,11 @@ func (tm *txManager) QueryTransactions(ctx context.Context, jq *query.QueryJSON,
 	return qw.run(ctx, dbTX)
 }
 
-func (tm *txManager) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) (results []*pldapi.TransactionFull, err error) {
+func (tm *txManager) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON, dbTX persistence.DBTX, pending bool) (results []*pldapi.TransactionFull, err error) {
 	return tm.QueryTransactionsFullTx(ctx, jq, dbTX, pending)
 }
 
-func (tm *txManager) QueryTransactionsResolved(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) ([]*components.ResolvedTransaction, error) {
+func (tm *txManager) QueryTransactionsResolved(ctx context.Context, jq *query.QueryJSON, dbTX persistence.DBTX, pending bool) ([]*components.ResolvedTransaction, error) {
 	qw := &queryWrapper[persistedTransaction, components.ResolvedTransaction]{
 		p:           tm.p,
 		table:       "transactions",
@@ -138,7 +139,7 @@ func (tm *txManager) QueryTransactionsResolved(ctx context.Context, jq *query.Qu
 	return tm.resolveABIReferencesAndCache(ctx, dbTX, ptxs)
 }
 
-func (tm *txManager) QueryTransactionsFullTx(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) ([]*pldapi.TransactionFull, error) {
+func (tm *txManager) QueryTransactionsFullTx(ctx context.Context, jq *query.QueryJSON, dbTX persistence.DBTX, pending bool) ([]*pldapi.TransactionFull, error) {
 	qw := &queryWrapper[persistedTransaction, pldapi.TransactionFull]{
 		p:           tm.p,
 		table:       "transactions",
@@ -166,7 +167,7 @@ func (tm *txManager) QueryTransactionsFullTx(ctx context.Context, jq *query.Quer
 	return tm.mergePublicTransactions(ctx, dbTX, ptxs)
 }
 
-func (tm *txManager) mergePublicTransactions(ctx context.Context, dbTX *gorm.DB, txs []*pldapi.TransactionFull) ([]*pldapi.TransactionFull, error) {
+func (tm *txManager) mergePublicTransactions(ctx context.Context, dbTX persistence.DBTX, txs []*pldapi.TransactionFull) ([]*pldapi.TransactionFull, error) {
 	txIDs := make([]uuid.UUID, len(txs))
 	for i, tx := range txs {
 		txIDs[i] = *tx.ID
@@ -182,7 +183,7 @@ func (tm *txManager) mergePublicTransactions(ctx context.Context, dbTX *gorm.DB,
 
 }
 
-func (tm *txManager) resolveABIReferencesAndCache(ctx context.Context, dbTX *gorm.DB, txs []*components.ResolvedTransaction) (_ []*components.ResolvedTransaction, err error) {
+func (tm *txManager) resolveABIReferencesAndCache(ctx context.Context, dbTX persistence.DBTX, txs []*components.ResolvedTransaction) (_ []*components.ResolvedTransaction, err error) {
 	abis := make(map[tktypes.Bytes32]*pldapi.StoredABI, len(txs))
 	for _, tx := range txs {
 		a := abis[*tx.Transaction.ABIReference]

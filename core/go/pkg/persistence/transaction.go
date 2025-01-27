@@ -18,87 +18,92 @@ package persistence
 
 import (
 	"context"
-	"runtime/debug"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"gorm.io/gorm"
 )
+
+type singletonVal struct {
+	key   any
+	value any
+	next  *singletonVal
+}
 
 type DBTX interface {
 	// Access the Gorm DB object for the transaction
 	DB() *gorm.DB
 	// Functions to be run at the end of the transaction, before it has committed. An error from these will cause a rollback of the transaction itself
-	AddPreCommit(func(tx DBTX) error)
+	AddPreCommit(func(txCtx context.Context, tx DBTX) error)
 	// Only called after a transaction is successfully committed - useful for triggering other actions that are conditional on new data
-	AddPostCommit(func())
+	AddPostCommit(func(txCtx context.Context))
 	// Called in all cases (including panic cases) AFTER the transaction commits, to release resources. An error indicates the transaction rolled back. Can be used as a post-commit too by checking err==nil.
-	AddFinalizer(func(error))
+	AddFinalizer(func(txCtx context.Context, err error))
+	// Management of singleton component interfaces, using a value key (similar to contexts)
+	Singleton(key any, new func(txCtx context.Context) any) any
 }
 
 type transaction struct {
-	db          *gorm.DB
-	preCommits  []func(tx DBTX) error
-	postCommits []func()
-	finalizers  []func(error)
+	txCtx       context.Context
+	gdb         *gorm.DB
+	preCommits  []func(txCtx context.Context, tx DBTX) error
+	postCommits []func(txCtx context.Context)
+	finalizers  []func(txCtx context.Context, err error)
+	singletons  *singletonVal
 }
 
 func (t *transaction) DB() *gorm.DB {
-	return t.db
+	return t.gdb
 }
 
-func (t *transaction) AddPreCommit(fn func(tx DBTX) error) {
+func (t *transaction) AddPreCommit(fn func(txCtx context.Context, tx DBTX) error) {
 	t.preCommits = append(t.preCommits, fn)
 }
 
-func (t *transaction) AddPostCommit(fn func()) {
+func (t *transaction) AddPostCommit(fn func(txCtx context.Context)) {
 	t.postCommits = append(t.postCommits, fn)
 }
 
-func (t *transaction) AddFinalizer(fn func(error)) {
+func (t *transaction) AddFinalizer(fn func(txCtx context.Context, err error)) {
 	t.finalizers = append(t.finalizers, fn)
 }
 
-// Run a transaction with preCommit, postCommit and finalizer support to propagate between components in a simple and consistent way.
-func Transaction(ctx context.Context, db *gorm.DB, fn func(tx DBTX) error) (err error) {
+func (t *transaction) Singleton(key any, new func(ctx context.Context) any) any {
+	v := t.singletons
+	for v != nil {
+		if v.key == key {
+			return v.value
+		}
+		v = v.next
+	}
+	newValue := new(t.txCtx)
+	newRoot := &singletonVal{next: t.singletons, key: key, value: newValue}
+	t.singletons = newRoot
+	return newValue
+}
 
-	completed := false
-	tx := &transaction{}
-	defer func() {
-		if !completed {
-			log.L(ctx).Errorf("Panic within database transaction: %s", debug.Stack())
-			if err == nil {
-				err = i18n.NewError(ctx, msgs.MsgPersistenceErrorInDBTransaction, recover())
-			}
-		}
-		for _, fn := range tx.finalizers {
-			// Finalizers are called with success or failure
-			fn(err)
-		}
-		if err == nil {
-			for _, fn := range tx.postCommits {
-				fn()
-			}
-		}
-		if !completed {
-			panic(err) // having logged this, we continue to panic rather than switching to normal error handling
-		}
-	}()
+func newNOTX(gdb *gorm.DB) DBTX {
+	return &noTransaction{gdb: gdb}
+}
 
-	// Run the database transaction itself
-	err = db.Transaction(func(gormTX *gorm.DB) error {
-		tx.db = gormTX
-		innerErr := fn(tx)
-		for _, fn := range tx.preCommits {
-			if innerErr == nil {
-				innerErr = fn(tx)
-			}
-		}
-		return innerErr
-	})
+type noTransaction struct {
+	gdb *gorm.DB
+}
 
-	completed = true
-	return err // important that this is the function var used in the defer processing
+func (t *noTransaction) DB() *gorm.DB {
+	return t.gdb
+}
 
+func (t *noTransaction) AddPreCommit(fn func(txCtx context.Context, tx DBTX) error) {
+	panic("pre-commit used outside of transaction context")
+}
+
+func (t *noTransaction) AddPostCommit(fn func(txCtx context.Context)) {
+	panic("post-commit used outside of transaction context")
+}
+
+func (t *noTransaction) AddFinalizer(fn func(txCtx context.Context, err error)) {
+	panic("finalizer used outside of transaction context")
+}
+
+func (t *noTransaction) Singleton(key any, new func(txCtx context.Context) any) any {
+	panic("singleton components used outside of transaction context")
 }

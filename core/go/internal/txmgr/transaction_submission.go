@@ -29,13 +29,13 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/keymanager"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
-	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -73,7 +73,7 @@ var defaultConstructorSignature = func() string {
 	return sig
 }()
 
-func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputABI abi.ABI, inputABIRef *tktypes.Bytes32, requiredFunction string, to *tktypes.EthAddress) (postCommit func(), _ *components.ResolvedFunction, err error) {
+func (tm *txManager) resolveFunction(ctx context.Context, dbTX persistence.DBTX, inputABI abi.ABI, inputABIRef *tktypes.Bytes32, requiredFunction string, to *tktypes.EthAddress) (postCommit func(), _ *components.ResolvedFunction, err error) {
 
 	// Lookup the ABI we're working with.
 	// Only needs to contain the function definition we're calling, but can be the whole ABI of the contract.
@@ -307,7 +307,7 @@ func (tm *txManager) callTransactionPublic(ctx context.Context, result any, call
 	return err
 }
 
-func (tm *txManager) PrepareInternalPrivateTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (func(), *components.ValidatedTransaction, error) {
+func (tm *txManager) PrepareInternalPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (func(), *components.ValidatedTransaction, error) {
 	tx.Type = pldapi.TransactionTypePrivate.Enum()
 	if tx.IdempotencyKey == "" {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateChainedTXIdemKey)
@@ -315,7 +315,7 @@ func (tm *txManager) PrepareInternalPrivateTransaction(ctx context.Context, dbTX
 	return tm.resolveNewTransaction(ctx, dbTX, tx, submitMode)
 }
 
-func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX *gorm.DB, txis []*components.ValidatedTransaction) (func(), error) {
+func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX persistence.DBTX, txis []*components.ValidatedTransaction) (func(), error) {
 	// On this path we handle the idempotency key matching - noting that we validate the existence of an idempotency key in PrepareInternalPrivateTransaction
 	txiPostCommit, insertCount, err := tm.insertTransactions(ctx, dbTX, txis, true /* on conflict do nothing */)
 	if err != nil {
@@ -362,12 +362,12 @@ func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, db
 	return txiPostCommit, nil
 }
 
-func (tm *txManager) SendTransactions(ctx context.Context, dbTX *gorm.DB, kr components.KeyResolver, txs ...*pldapi.TransactionInput) (postCommit func(), txIDs []uuid.UUID, err error) {
+func (tm *txManager) SendTransactions(ctx context.Context, dbTX persistence.DBTX, kr components.KeyResolver, txs ...*pldapi.TransactionInput) (postCommit func(), txIDs []uuid.UUID, err error) {
 	return tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeAuto)
 }
 
 func (tm *txManager) sendTransactionsNewDBTX(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
-	err = keymanager.DBTransactionWithKRC(ctx, tm.p, tm.keyManager, func(dbTX *gorm.DB, kr components.KeyResolver) (postCommit func(), err error) {
+	err = keymanager.DBTransactionWithKRC(ctx, tm.p, tm.keyManager, func(dbTX persistence.DBTX, kr components.KeyResolver) (postCommit func(), err error) {
 		postCommit, txIDs, err = tm.SendTransactions(ctx, dbTX, kr, txs...)
 		return postCommit, err
 	})
@@ -375,7 +375,7 @@ func (tm *txManager) sendTransactionsNewDBTX(ctx context.Context, txs []*pldapi.
 }
 
 func (tm *txManager) prepareTransactionsNewDBTX(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
-	err = keymanager.DBTransactionWithKRC(ctx, tm.p, tm.keyManager, func(dbTX *gorm.DB, kr components.KeyResolver) (postCommit func(), err error) {
+	err = keymanager.DBTransactionWithKRC(ctx, tm.p, tm.keyManager, func(dbTX persistence.DBTX, kr components.KeyResolver) (postCommit func(), err error) {
 		postCommit, txIDs, err = tm.PrepareTransactions(ctx, dbTX, kr, txs...)
 		return postCommit, err
 	})
@@ -383,11 +383,11 @@ func (tm *txManager) prepareTransactionsNewDBTX(ctx context.Context, txs []*plda
 
 }
 
-func (tm *txManager) PrepareTransactions(ctx context.Context, dbTX *gorm.DB, kr components.KeyResolver, txs ...*pldapi.TransactionInput) (postCommit func(), txIDs []uuid.UUID, err error) {
+func (tm *txManager) PrepareTransactions(ctx context.Context, dbTX persistence.DBTX, kr components.KeyResolver, txs ...*pldapi.TransactionInput) (postCommit func(), txIDs []uuid.UUID, err error) {
 	return tm.processNewTransactions(ctx, dbTX, kr, txs, pldapi.SubmitModeExternal)
 }
 
-func (tm *txManager) processNewTransactions(ctx context.Context, dbTX *gorm.DB, kr components.KeyResolver, txs []*pldapi.TransactionInput, submitMode pldapi.SubmitMode) (postCommit func(), txIDs []uuid.UUID, err error) {
+func (tm *txManager) processNewTransactions(ctx context.Context, dbTX persistence.DBTX, kr components.KeyResolver, txs []*pldapi.TransactionInput, submitMode pldapi.SubmitMode) (postCommit func(), txIDs []uuid.UUID, err error) {
 
 	// Public transactions need a signing address resolution and nonce allocation trackers
 	// before we open the database transaction
@@ -500,7 +500,7 @@ func (tm *txManager) checkIdempotencyKeys(ctx context.Context, origErr error, tx
 	return origErr
 }
 
-func (tm *txManager) resolvePrivateDomain(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput) error {
+func (tm *txManager) resolvePrivateDomain(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.TransactionInput) error {
 	if tx.To != nil {
 		// We've been given the contract to invoke, we need to check it's valid
 		psc, err := tm.domainMgr.GetSmartContractByAddress(ctx, dbTX, *tx.To)
@@ -520,7 +520,7 @@ func (tm *txManager) resolvePrivateDomain(ctx context.Context, dbTX *gorm.DB, tx
 	return nil
 }
 
-func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX *gorm.DB, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (func(), *components.ValidatedTransaction, error) {
+func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (func(), *components.ValidatedTransaction, error) {
 	txID := uuid.New()
 	// Useful to have a correlation from transactionID to idempotencyKey in the logs
 	log.L(ctx).Debugf("Resolving new transaction TransactionID: %s, idempotencyKey: %s ", txID, tx.IdempotencyKey)
@@ -608,7 +608,7 @@ func (tm *txManager) getPublicTxData(ctx context.Context, fnDef *abi.Entry, byte
 	}
 }
 
-func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txis []*components.ValidatedTransaction, ignoreConflicts bool) (func(), int64, error) {
+func (tm *txManager) insertTransactions(ctx context.Context, dbTX persistence.DBTX, txis []*components.ValidatedTransaction, ignoreConflicts bool) (func(), int64, error) {
 	ptxs := make([]*persistedTransaction, len(txis))
 	var transactionDeps []*transactionDep
 	for i, txi := range txis {

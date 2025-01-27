@@ -135,12 +135,12 @@ func mockKeyResolutionContextOk(t *testing.T) func(conf *pldconf.TxManagerConfig
 }
 
 func mockKeyResolver(t *testing.T, mc *mockComponents) *componentmocks.KeyResolver {
-	krc := componentmocks.NewKeyResolutionContext(t)
+	krc := componentmocks.KeyResolverForDBTX(t)
 	kr := componentmocks.NewKeyResolver(t)
 	krc.On("KeyResolver", mock.Anything).Return(kr)
 	krc.On("PreCommit").Return(nil)
 	krc.On("Close", mock.Anything).Return()
-	mc.keyManager.On("NewKeyResolutionContext", mock.Anything).Return(krc)
+	mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(krc)
 	return kr
 }
 
@@ -151,11 +151,11 @@ func mockKeyResolutionContextFail(t *testing.T) func(conf *pldconf.TxManagerConf
 }
 
 func mockKeyResolverForFail(t *testing.T, mc *mockComponents) *componentmocks.KeyResolver {
-	krc := componentmocks.NewKeyResolutionContext(t)
+	krc := componentmocks.KeyResolverForDBTX(t)
 	kr := componentmocks.NewKeyResolver(t)
 	krc.On("KeyResolver", mock.Anything).Return(kr)
 	krc.On("Close", false).Return()
-	mc.keyManager.On("NewKeyResolutionContext", mock.Anything).Return(krc)
+	mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(krc)
 	return kr
 }
 

@@ -71,13 +71,13 @@ func TestReceiveMessageStateWithNullifierSendAckRealDB(t *testing.T) {
 			nullifier := &components.NullifierUpsert{ID: tktypes.RandBytes(32)}
 			mc.stateManager.On("WriteNullifiersForReceivedStates", mock.Anything, mock.Anything, "domain1", []*components.NullifierUpsert{nullifier}).
 				Return(nil).Once()
-			mkrc := componentmocks.NewKeyResolutionContext(t)
+			mkrc := componentmocks.KeyResolverForDBTX(t)
 			mkr := componentmocks.NewKeyResolver(t)
 			mc.privateTxManager.On("BuildNullifier", mock.Anything, mkr, mock.Anything).Return(nullifier, nil)
 			mkrc.On("KeyResolver", mock.Anything).Return(mkr)
 			mkrc.On("PreCommit").Return(nil)
 			mkrc.On("Close", true).Return(nil)
-			mc.keyManager.On("NewKeyResolutionContext", mock.Anything).
+			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).
 				Return(mkrc).Once()
 		},
 	)
@@ -213,13 +213,13 @@ func TestHandleStateDistroBadNullifier(t *testing.T) {
 		mockGoodTransport,
 		mockEmptyReliableMsgs,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-			mkrc := componentmocks.NewKeyResolutionContext(t)
+			mkrc := componentmocks.KeyResolverForDBTX(t)
 			mkr := componentmocks.NewKeyResolver(t)
 			mc.privateTxManager.On("BuildNullifier", mock.Anything, mkr, mock.Anything).Return(nil, fmt.Errorf("bad nullifier"))
 			mkrc.On("KeyResolver", mock.Anything).Return(mkr)
 			mkrc.On("PreCommit").Return(nil)
 			mkrc.On("Close", true).Return(nil)
-			mc.keyManager.On("NewKeyResolutionContext", mock.Anything).
+			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).
 				Return(mkrc).Once()
 		},
 	)
@@ -470,12 +470,12 @@ func TestHandleNullifierFail(t *testing.T) {
 			nullifier := &components.NullifierUpsert{ID: tktypes.RandBytes(32)}
 			mc.stateManager.On("WriteNullifiersForReceivedStates", mock.Anything, mock.Anything, "domain1", []*components.NullifierUpsert{nullifier}).
 				Return(fmt.Errorf("pop")).Once()
-			mkrc := componentmocks.NewKeyResolutionContext(t)
+			mkrc := componentmocks.KeyResolverForDBTX(t)
 			mkr := componentmocks.NewKeyResolver(t)
 			mc.privateTxManager.On("BuildNullifier", mock.Anything, mkr, mock.Anything).Return(nullifier, nil)
 			mkrc.On("KeyResolver", mock.Anything).Return(mkr)
 			mkrc.On("Close", false).Return(nil)
-			mc.keyManager.On("NewKeyResolutionContext", mock.Anything).
+			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).
 				Return(mkrc).Once()
 		},
 	)
@@ -516,13 +516,13 @@ func TestHandleNullifierPreCommitKRCFail(t *testing.T) {
 			nullifier := &components.NullifierUpsert{ID: tktypes.RandBytes(32)}
 			mc.stateManager.On("WriteNullifiersForReceivedStates", mock.Anything, mock.Anything, "domain1", []*components.NullifierUpsert{nullifier}).
 				Return(nil).Once()
-			mkrc := componentmocks.NewKeyResolutionContext(t)
+			mkrc := componentmocks.KeyResolverForDBTX(t)
 			mkr := componentmocks.NewKeyResolver(t)
 			mc.privateTxManager.On("BuildNullifier", mock.Anything, mkr, mock.Anything).Return(nullifier, nil)
 			mkrc.On("KeyResolver", mock.Anything).Return(mkr)
 			mkrc.On("PreCommit").Return(fmt.Errorf("pop"))
 			mkrc.On("Close", false).Return(nil)
-			mc.keyManager.On("NewKeyResolutionContext", mock.Anything).
+			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).
 				Return(mkrc).Once()
 		},
 	)

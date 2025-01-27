@@ -70,6 +70,6 @@ func (p *SQLMockProvider) GetMigrationDriver(db *sql.DB) (migratedb.Driver, erro
 	return nil, fmt.Errorf("not supported")
 }
 
-func (p *SQLMockProvider) TakeNamedLock(ctx context.Context, dbTX *gorm.DB, lockName string) error {
+func (p *SQLMockProvider) TakeNamedLock(ctx context.Context, dbTX persistence.DBTX, lockName string) error {
 	return nil // no-op
 }

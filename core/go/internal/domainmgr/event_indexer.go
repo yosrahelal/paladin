@@ -25,11 +25,11 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -47,7 +47,7 @@ type pscEventBatch struct {
 	psc *domainContract
 }
 
-func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) ([]*pldapi.EventWithData, txCompletionsOrdered, error) {
+func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX persistence.DBTX, batch *blockindexer.EventDeliveryBatch) ([]*pldapi.EventWithData, txCompletionsOrdered, error) {
 
 	var contracts []*PrivateSmartContract
 	var txCompletions txCompletionsOrdered
@@ -105,7 +105,7 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 
 	// Insert the batch of new contracts in this DB transaction (we do this before we call the domain to process the events)
 	if len(contracts) > 0 {
-		err := dbTX.
+		err := dbTX.DB().
 			Table("private_smart_contracts").
 			WithContext(ctx).
 			Clauses(clause.OnConflict{
@@ -137,7 +137,7 @@ func (dm *domainManager) notifyTransactions(txCompletions txCompletionsOrdered) 
 
 }
 
-func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID string, events []*pldapi.EventWithData) (map[tktypes.EthAddress]*pscEventBatch, error) {
+func (d *domain) batchEventsByAddress(ctx context.Context, dbTX persistence.DBTX, batchID string, events []*pldapi.EventWithData) (map[tktypes.EthAddress]*pscEventBatch, error) {
 
 	batches := make(map[tktypes.EthAddress]*pscEventBatch)
 
@@ -147,7 +147,7 @@ func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID 
 			// Note: hits will be cached, but events from unrecognized contracts will always
 			// result in a cache miss and a database lookup
 			// TODO: revisit if we should optimize this
-			_, psc, err := d.dm.getSmartContractCached(ctx, tx, ev.Address)
+			_, psc, err := d.dm.getSmartContractCached(ctx, dbTX, ev.Address)
 			if err != nil {
 				return nil, err
 			}
@@ -183,7 +183,7 @@ func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID 
 	return batches, nil
 }
 
-func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+func (d *domain) handleEventBatch(ctx context.Context, dbTX persistence.DBTX, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
 
 	// First index any domain contract deployments
 	nonDeployEvents, txCompletions, err := d.dm.registrationIndexer(ctx, dbTX, batch)
@@ -279,7 +279,7 @@ func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*
 	return &txUUID, nil
 }
 
-func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB, addr tktypes.EthAddress, batch *pscEventBatch) (func(), *prototk.HandleEventBatchResponse, error) {
+func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persistence.DBTX, addr tktypes.EthAddress, batch *pscEventBatch) (func(), *prototk.HandleEventBatchResponse, error) {
 
 	// We have a domain context for queries, but we never flush it to DB - as the only updates
 	// we allow in this function are those performed within our dbTX.

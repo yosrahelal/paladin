@@ -64,7 +64,7 @@ func checkLimitSet(ctx context.Context, jq *query.QueryJSON) error {
 	return nil
 }
 
-func (qw *queryWrapper[PT, T]) run(ctx context.Context, dbTX *gorm.DB) ([]*T, error) {
+func (qw *queryWrapper[PT, T]) run(ctx context.Context, dbTX persistence.DBTX) ([]*T, error) {
 	if err := checkLimitSet(ctx, qw.query); err != nil {
 		return nil, err
 	}

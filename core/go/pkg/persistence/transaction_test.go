@@ -22,17 +22,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	gormPostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 func TestTransactionOk(t *testing.T) {
 	ctx := context.Background()
 
-	db, mdb, _ := sqlmock.New()
+	p, mdb := newMockGormPSQLPersistence(t)
 
 	preCommitCalled := false
 	finalizerCalled := false
@@ -43,23 +40,21 @@ func TestTransactionOk(t *testing.T) {
 	mdb.ExpectExec("INSERT.*b_table").WillReturnResult(driver.ResultNoRows)
 	mdb.ExpectCommit()
 
-	gdb, err := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: db}), &gorm.Config{})
-	require.NoError(t, err)
-	err = Transaction(ctx, gdb, func(tx DBTX) error {
+	err := p.Transaction(ctx, func(ctx context.Context, tx DBTX) error {
 		err := tx.DB().Exec("INSERT INPUT a_table (col1) VALUES ('abc');").Error
 		require.NoError(t, err)
-		tx.AddPreCommit(func(preCommitTX DBTX) error {
+		tx.AddPreCommit(func(ctx context.Context, preCommitTX DBTX) error {
 			preCommitCalled = true
 			err := preCommitTX.DB().Exec("INSERT INPUT b_table (col1) VALUES ('def');").Error
 			require.Same(t, tx, preCommitTX)
 			require.NoError(t, err)
 			return nil
 		})
-		tx.AddFinalizer(func(err error) {
+		tx.AddFinalizer(func(ctx context.Context, err error) {
 			require.Nil(t, err)
 			finalizerCalled = true
 		})
-		tx.AddPostCommit(func() {
+		tx.AddPostCommit(func(ctx context.Context) {
 			postCommitCalled = true
 		})
 		return nil
@@ -76,7 +71,7 @@ func TestTransactionOk(t *testing.T) {
 func TestTransactionPreCommitErr(t *testing.T) {
 	ctx := context.Background()
 
-	db, mdb, _ := sqlmock.New()
+	p, mdb := newMockGormPSQLPersistence(t)
 
 	preCommitCalled := false
 	finalizerCalled := false
@@ -86,20 +81,18 @@ func TestTransactionPreCommitErr(t *testing.T) {
 	mdb.ExpectExec("INSERT.*a_table").WillReturnResult(driver.ResultNoRows)
 	mdb.ExpectRollback()
 
-	gdb, err := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: db}), &gorm.Config{})
-	require.NoError(t, err)
-	err = Transaction(ctx, gdb, func(tx DBTX) error {
+	err := p.Transaction(ctx, func(ctx context.Context, tx DBTX) error {
 		err := tx.DB().Exec("INSERT INPUT a_table (col1) VALUES ('abc');").Error
 		require.NoError(t, err)
-		tx.AddPreCommit(func(preCommitTX DBTX) error {
+		tx.AddPreCommit(func(ctx context.Context, preCommitTX DBTX) error {
 			preCommitCalled = true
 			return fmt.Errorf("pop")
 		})
-		tx.AddFinalizer(func(err error) {
+		tx.AddFinalizer(func(ctx context.Context, err error) {
 			require.Regexp(t, "pop", err)
 			finalizerCalled = true
 		})
-		tx.AddPostCommit(func() {
+		tx.AddPostCommit(func(ctx context.Context) {
 			postCommitCalled = true
 		})
 		return nil
@@ -116,7 +109,7 @@ func TestTransactionPreCommitErr(t *testing.T) {
 func TestTransactionPanic(t *testing.T) {
 	ctx := context.Background()
 
-	db, mdb, _ := sqlmock.New()
+	p, mdb := newMockGormPSQLPersistence(t)
 
 	preCommitCalled := false
 	finalizerCalled := false
@@ -126,18 +119,16 @@ func TestTransactionPanic(t *testing.T) {
 	mdb.ExpectRollback()
 
 	assert.Panics(t, func() {
-		gdb, err := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: db}), &gorm.Config{})
-		require.NoError(t, err)
-		err = Transaction(ctx, gdb, func(tx DBTX) error {
-			tx.AddPreCommit(func(preCommitTX DBTX) error {
+		err := p.Transaction(ctx, func(ctx context.Context, tx DBTX) error {
+			tx.AddPreCommit(func(ctx context.Context, preCommitTX DBTX) error {
 				preCommitCalled = true
 				return nil
 			})
-			tx.AddFinalizer(func(err error) {
+			tx.AddFinalizer(func(ctx context.Context, err error) {
 				require.Regexp(t, "pop", err)
 				finalizerCalled = true
 			})
-			tx.AddPostCommit(func() {
+			tx.AddPostCommit(func(ctx context.Context) {
 				postCommitCalled = true
 			})
 			panic("pop")
@@ -150,4 +141,60 @@ func TestTransactionPanic(t *testing.T) {
 	require.False(t, postCommitCalled) // post-commit should not be called
 
 	require.NoError(t, mdb.ExpectationsWereMet())
+}
+
+func TestTransactionSingletons(t *testing.T) {
+
+	type testSingletonKey1 struct{}
+	type testSingletonKey2 struct{}
+
+	value := 100
+	newVal := func(ctx context.Context) any {
+		v := value
+		value++
+		return v
+	}
+
+	p, mdb := newMockGormPSQLPersistence(t)
+	mdb.ExpectBegin()
+	mdb.ExpectCommit()
+	err := p.Transaction(context.Background(), func(ctx context.Context, tx DBTX) error {
+
+		s1 := tx.Singleton(testSingletonKey1{}, newVal)
+		require.Equal(t, 100, s1)
+
+		s2 := tx.Singleton(testSingletonKey2{}, newVal)
+		require.Equal(t, 101, s2)
+
+		s3 := tx.Singleton(testSingletonKey1{}, newVal)
+		require.Equal(t, 100, s3)
+
+		s4 := tx.Singleton(testSingletonKey2{}, newVal)
+		require.Equal(t, 101, s4)
+
+		return nil
+
+	})
+	require.NoError(t, err)
+
+}
+
+func TestNOTXFailures(t *testing.T) {
+	p, _ := newMockGormPSQLPersistence(t)
+
+	require.NotNil(t, p.NOTX().DB())
+
+	assert.Panics(t, func() {
+		p.NOTX().AddPreCommit(func(ctx context.Context, tx DBTX) error { return nil })
+	})
+	assert.Panics(t, func() {
+		p.NOTX().AddPostCommit(func(ctx context.Context) {})
+	})
+	assert.Panics(t, func() {
+		p.NOTX().AddFinalizer(func(ctx context.Context, err error) {})
+	})
+	assert.Panics(t, func() {
+		p.NOTX().Singleton("", nil)
+	})
+
 }

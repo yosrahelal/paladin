@@ -30,13 +30,13 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -150,7 +150,7 @@ func (r *registry) configureEventStream(ctx context.Context) (err error) {
 
 func (r *registry) UpsertRegistryRecords(ctx context.Context, req *prototk.UpsertRegistryRecordsRequest) (*prototk.UpsertRegistryRecordsResponse, error) {
 	var postCommit func()
-	err := r.rm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+	err := r.rm.p.DB().Transaction(func(dbTX persistence.DBTX) (err error) {
 		postCommit, err = r.upsertRegistryRecords(ctx, dbTX, req.Entries, req.Properties)
 		return err
 	})
@@ -161,7 +161,7 @@ func (r *registry) UpsertRegistryRecords(ctx context.Context, req *prototk.Upser
 	return &prototk.UpsertRegistryRecordsResponse{}, nil
 }
 
-func (r *registry) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+func (r *registry) handleEventBatch(ctx context.Context, dbTX persistence.DBTX, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
 
 	// Build the proto version of these events
 	events := make([]*prototk.OnChainEvent, len(batch.Events))
@@ -193,7 +193,7 @@ func (r *registry) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *b
 
 }
 
-func (r *registry) upsertRegistryRecords(ctx context.Context, dbTX *gorm.DB, protoEntries []*prototk.RegistryEntry, protoProps []*prototk.RegistryProperty) (func(), error) {
+func (r *registry) upsertRegistryRecords(ctx context.Context, dbTX persistence.DBTX, protoEntries []*prototk.RegistryEntry, protoProps []*prototk.RegistryProperty) (func(), error) {
 
 	dbEntries := make([]*DBEntry, len(protoEntries))
 	for i, protoEntry := range protoEntries {
@@ -377,7 +377,7 @@ func (dfs *dynamicFieldSet) ResolverFor(propName string) filters.FieldResolver {
 	return filters.StringField(fmt.Sprintf("p%d.value", idx))
 }
 
-func (r *registry) QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, jq *query.QueryJSON) ([]*pldapi.RegistryEntry, error) {
+func (r *registry) QueryEntries(ctx context.Context, dbTX persistence.DBTX, fActive pldapi.ActiveFilter, jq *query.QueryJSON) ([]*pldapi.RegistryEntry, error) {
 
 	if jq.Limit == nil || *jq.Limit == 0 {
 		return nil, i18n.NewError(ctx, msgs.MsgRegistryQueryLimitRequired)
@@ -452,7 +452,7 @@ func (r *registry) QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive plda
 
 }
 
-func (r *registry) GetEntryProperties(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, entryIDs ...tktypes.HexBytes) ([]*pldapi.RegistryProperty, error) {
+func (r *registry) GetEntryProperties(ctx context.Context, dbTX persistence.DBTX, fActive pldapi.ActiveFilter, entryIDs ...tktypes.HexBytes) ([]*pldapi.RegistryProperty, error) {
 
 	var dbProps []*DBProperty
 	q := dbTX.WithContext(ctx).
@@ -512,7 +512,7 @@ func filteredPropsMap(entryProps []*pldapi.RegistryProperty, entryID tktypes.Hex
 	return props
 }
 
-func (r *registry) QueryEntriesWithProps(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, jq *query.QueryJSON) ([]*pldapi.RegistryEntryWithProperties, error) {
+func (r *registry) QueryEntriesWithProps(ctx context.Context, dbTX persistence.DBTX, fActive pldapi.ActiveFilter, jq *query.QueryJSON) ([]*pldapi.RegistryEntryWithProperties, error) {
 
 	entries, err := r.QueryEntries(ctx, dbTX, fActive, jq)
 	if err != nil {

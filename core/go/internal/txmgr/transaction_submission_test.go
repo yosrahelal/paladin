@@ -27,7 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"gorm.io/gorm"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -967,7 +967,7 @@ func TestInternalPrivateTXInsertWithIdempotencyKeys(t *testing.T) {
 
 	fifteenPostCommits := make([]func(), 15)
 	fifteenTxns := make([]*components.ValidatedTransaction, 15)
-	err := txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+	err := txm.p.DB().Transaction(func(dbTX persistence.DBTX) (err error) {
 		for i := range fifteenTxns {
 			tx := newTestInternalTransaction(fmt.Sprintf("tx_%.3d", i))
 			// We do a dep chain
@@ -986,7 +986,7 @@ func TestInternalPrivateTXInsertWithIdempotencyKeys(t *testing.T) {
 
 	// Insert first 10 in a Txn
 	var postCommit func()
-	err = txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+	err = txm.p.DB().Transaction(func(dbTX persistence.DBTX) (err error) {
 		postCommit, err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, fifteenTxns[0:10])
 		return err
 	})
@@ -994,7 +994,7 @@ func TestInternalPrivateTXInsertWithIdempotencyKeys(t *testing.T) {
 	postCommit()
 
 	// Insert 5-15 in the second txn so with an overlap
-	err = txm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+	err = txm.p.DB().Transaction(func(dbTX persistence.DBTX) (err error) {
 		postCommit, err = txm.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, fifteenTxns[5:15])
 		return err
 	})

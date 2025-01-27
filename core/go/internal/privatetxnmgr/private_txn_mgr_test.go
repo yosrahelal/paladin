@@ -2617,20 +2617,20 @@ func TestCallPrivateSmartContractExecCallFail(t *testing.T) {
 /* Utils */
 
 type dependencyMocks struct {
-	preInitComponents   *componentmocks.PreInitComponents
-	allComponents       *componentmocks.AllComponents
-	db                  *mockpersistence.SQLMockProvider
-	domain              *componentmocks.Domain
-	domainSmartContract *componentmocks.DomainSmartContract
-	domainContext       *componentmocks.DomainContext
-	domainMgr           *componentmocks.DomainManager
-	transportManager    *componentmocks.TransportManager
-	stateStore          *componentmocks.StateManager
-	keyManager          *componentmocks.KeyManager
-	keyResolver         *componentmocks.KeyResolver
-	publicTxManager     *componentmocks.PublicTxManager
-	identityResolver    *componentmocks.IdentityResolver
-	txManager           *componentmocks.TXManager
+	preInitComponents    *componentmocks.PreInitComponents
+	allComponents        *componentmocks.AllComponents
+	db                   *mockpersistence.SQLMockProvider
+	domain               *componentmocks.Domain
+	domainSmartContract  *componentmocks.DomainSmartContract
+	domainContext        *componentmocks.DomainContext
+	domainMgr            *componentmocks.DomainManager
+	transportManager     *componentmocks.TransportManager
+	stateStore           *componentmocks.StateManager
+	keyManager           *componentmocks.KeyManager
+	keyResolutionContext *componentmocks.KeyResolver
+	publicTxManager      *componentmocks.PublicTxManager
+	identityResolver     *componentmocks.IdentityResolver
+	txManager            *componentmocks.TXManager
 }
 
 func (m *dependencyMocks) mockDomain(domainAddress *tktypes.EthAddress) {
@@ -2760,7 +2760,7 @@ func (m *dependencyMocks) mockForEndorsementOnTrigger(_ *testing.T, txID uuid.UU
 
 type privateTransactionMgrForPackageTesting interface {
 	components.PrivateTxManager
-	PreCommitHandler(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error)
+	PreCommitHandler(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error)
 	DependencyMocks() *dependencyMocks
 	NodeName() string
 	//Wrapper around a call to PreCommitHandler to notify of a new block with given height
@@ -2775,7 +2775,7 @@ type privateTransactionMgrForPackageTestingStruct struct {
 	t                *testing.T
 }
 
-func (p *privateTransactionMgrForPackageTestingStruct) PreCommitHandler(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
+func (p *privateTransactionMgrForPackageTestingStruct) PreCommitHandler(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
 	return p.preCommitHandler(ctx, dbTX, blocks, transactions)
 }
 
@@ -2817,19 +2817,19 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{
-		preInitComponents:   componentmocks.NewPreInitComponents(t),
-		allComponents:       componentmocks.NewAllComponents(t),
-		domain:              componentmocks.NewDomain(t),
-		domainSmartContract: componentmocks.NewDomainSmartContract(t),
-		domainContext:       componentmocks.NewDomainContext(t),
-		domainMgr:           componentmocks.NewDomainManager(t),
-		transportManager:    componentmocks.NewTransportManager(t),
-		stateStore:          componentmocks.NewStateManager(t),
-		keyManager:          componentmocks.NewKeyManager(t),
-		keyResolver:         componentmocks.NewKeyResolver(t),
-		identityResolver:    componentmocks.NewIdentityResolver(t),
-		txManager:           componentmocks.NewTXManager(t),
-		publicTxManager:     componentmocks.NewPublicTxManager(t),
+		preInitComponents:    componentmocks.NewPreInitComponents(t),
+		allComponents:        componentmocks.NewAllComponents(t),
+		domain:               componentmocks.NewDomain(t),
+		domainSmartContract:  componentmocks.NewDomainSmartContract(t),
+		domainContext:        componentmocks.NewDomainContext(t),
+		domainMgr:            componentmocks.NewDomainManager(t),
+		transportManager:     componentmocks.NewTransportManager(t),
+		stateStore:           componentmocks.NewStateManager(t),
+		keyManager:           componentmocks.NewKeyManager(t),
+		keyResolutionContext: componentmocks.NewKeyResolver(t),
+		identityResolver:     componentmocks.NewIdentityResolver(t),
+		txManager:            componentmocks.NewTXManager(t),
+		publicTxManager:      componentmocks.NewPublicTxManager(t),
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -2843,11 +2843,11 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 	mocks.domainSmartContract.On("LockStates", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	mocks.domainMgr.On("GetDomainByName", mock.Anything, "domain1").Return(mocks.domain, nil).Maybe()
 	mocks.domain.On("Name").Return("domain1").Maybe()
-	mkrc := componentmocks.NewKeyResolutionContextLazyDB(t)
-	mkrc.On("KeyResolverLazyDB").Return(mocks.keyResolver).Maybe()
+	mkrc := componentmocks.KeyResolverForDBTXLazyDB(t)
+	mkrc.On("KeyResolverLazyDB").Return(mocks.keyResolutionContext).Maybe()
 	mkrc.On("Commit").Return(nil).Maybe()
 	mkrc.On("Rollback").Return().Maybe()
-	mocks.keyManager.On("NewKeyResolutionContextLazyDB", mock.Anything).Return(mkrc).Maybe()
+	mocks.keyManager.On("KeyResolverForDBTXLazyDB", mock.Anything).Return(mkrc).Maybe()
 
 	mocks.domainContext.On("Ctx").Return(ctx).Maybe()
 	mocks.domainContext.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()

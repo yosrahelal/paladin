@@ -22,8 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
-
-	"gorm.io/gorm"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -66,7 +65,7 @@ func (dso *syncPointOperation) WriteKey() string {
 
 type noResult struct{}
 
-func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*syncPointOperation) (func(error), []flushwriter.Result[*noResult], error) {
+func (s *syncPoints) runBatch(ctx context.Context, dbTX persistence.DBTX, values []*syncPointOperation) (func(error), []flushwriter.Result[*noResult], error) {
 
 	finalizeOperations := make([]*finalizeOperation, 0, len(values))
 	dispatchOperations := make([]*dispatchOperation, 0, len(values))

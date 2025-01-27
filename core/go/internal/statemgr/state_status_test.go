@@ -75,7 +75,7 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName
 	states := make([]*pldapi.State, len(withoutSalt))
 	for i, w := range withoutSalt {
 		withSalt := genWidget(t, schemaID, nil, w)
-		pc, newStates, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), domainName, []*components.StateUpsertOutsideContext{
+		pc, newStates, err := ss.WritePreVerifiedStates(ctx, ss.p.NOTX(), domainName, []*components.StateUpsertOutsideContext{
 			{
 				ContractAddress: contractAddress,
 				SchemaID:        schemaID,
@@ -91,7 +91,7 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName
 }
 
 func syncFlushContext(t *testing.T, dc components.DomainContext) {
-	postDBTx, err := dc.Flush(dc.(*domainContext).ss.p.DB())
+	postDBTx, err := dc.Flush(dc.(*domainContext).ss.p.NOTX())
 	require.NoError(t, err)
 	postDBTx(nil)
 }
@@ -115,7 +115,7 @@ func TestStateLockingQuery(t *testing.T) {
 
 	schema, err := newABISchema(ctx, "domain1", testABIParam(t, widgetABI))
 	require.NoError(t, err)
-	err = ss.persistSchemas(ctx, ss.p.DB(), []*pldapi.Schema{schema.Schema})
+	err = ss.persistSchemas(ctx, ss.p.NOTX(), []*pldapi.Schema{schema.Schema})
 	require.NoError(t, err)
 	schemaID := schema.ID()
 
@@ -131,7 +131,7 @@ func TestStateLockingQuery(t *testing.T) {
 	})
 
 	checkQuery := func(jq *query.QueryJSON, status pldapi.StateStatusQualifier, expected ...int) {
-		states, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", contractAddress, schemaID, jq, status)
+		states, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", contractAddress, schemaID, jq, status)
 		require.NoError(t, err)
 		assert.Len(t, states, len(expected))
 		for _, wIndex := range expected {
@@ -160,7 +160,7 @@ func TestStateLockingQuery(t *testing.T) {
 	// Mark them all confirmed apart from one
 	for i, w := range widgets {
 		if i != 3 {
-			err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*pldapi.StateSpendRecord{}, []*pldapi.StateReadRecord{},
+			err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.NOTX(), []*pldapi.StateSpendRecord{}, []*pldapi.StateReadRecord{},
 				[]*pldapi.StateConfirmRecord{
 					{DomainName: "domain1", State: w.ID, Transaction: uuid.New()},
 				}, []*pldapi.StateInfoRecord{})
@@ -176,7 +176,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(all, seqQual, 0, 1, 2, 4)                     // added all but 3
 
 	// Mark one spent
-	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.NOTX(),
 		[]*pldapi.StateSpendRecord{
 			{DomainName: "domain1", State: widgets[0].ID, Transaction: uuid.New()},
 		}, []*pldapi.StateReadRecord{}, []*pldapi.StateConfirmRecord{}, []*pldapi.StateInfoRecord{})
@@ -191,7 +191,7 @@ func TestStateLockingQuery(t *testing.T) {
 
 	// add a new state only within the domain context
 	txID1 := uuid.New()
-	contextStates, err := dc.UpsertStates(ss.p.DB(),
+	contextStates, err := dc.UpsertStates(ss.p.NOTX(),
 		genWidget(t, schemaID, &txID1, `{"size": 66666, "color": "blue", "price": 600}`))
 	require.NoError(t, err)
 	widgets = append(widgets, contextStates...)
@@ -231,7 +231,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(all, seqQual, 1, 2, 4, 5)                     // added 5 back
 
 	// Mark that new state confirmed
-	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.NOTX(),
 		[]*pldapi.StateSpendRecord{},
 		[]*pldapi.StateReadRecord{
 			{DomainName: "domain1", State: widgets[1].ID, Transaction: uuid.New()}, // this is inert
@@ -255,7 +255,7 @@ func TestStateLockingQuery(t *testing.T) {
 	// Note we have to re-supply the data here, so that the domain context can
 	// have it in memory for queries
 	txID13 := uuid.New()
-	_, err = dc.UpsertStates(ss.p.DB(), &components.StateUpsert{
+	_, err = dc.UpsertStates(ss.p.NOTX(), &components.StateUpsert{
 		ID:        widgets[3].ID,
 		Schema:    widgets[3].Schema,
 		Data:      widgets[3].Data,

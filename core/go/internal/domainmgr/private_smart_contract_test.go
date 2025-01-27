@@ -526,10 +526,10 @@ func TestSendTransaction(t *testing.T) {
 	txID := uuid.New()
 	postCommitCalled := false
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
-		mkrc := componentmocks.NewKeyResolutionContext(t)
+		mkrc := componentmocks.KeyResolverForDBTX(t)
 		mkr := componentmocks.NewKeyResolver(t)
 		mkrc.On("KeyResolver", mock.Anything).Return(mkr)
-		mc.keyManager.On("NewKeyResolutionContext", mock.Anything).Return(mkrc)
+		mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(mkrc)
 		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mkr, mock.Anything).Return(func() {
 			postCommitCalled = true
 		}, []uuid.UUID{txID}, nil)
@@ -555,10 +555,10 @@ func TestSendTransaction(t *testing.T) {
 
 func TestSendTransactionFail(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
-		mkrc := componentmocks.NewKeyResolutionContext(t)
+		mkrc := componentmocks.KeyResolverForDBTX(t)
 		mkr := componentmocks.NewKeyResolver(t)
 		mkrc.On("KeyResolver", mock.Anything).Return(mkr)
-		mc.keyManager.On("NewKeyResolutionContext", mock.Anything).Return(mkrc)
+		mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(mkrc)
 		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mkr, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
 	})
 	defer done()

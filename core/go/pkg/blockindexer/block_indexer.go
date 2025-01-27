@@ -44,7 +44,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"gorm.io/gorm"
 )
 
 type BlockIndexer interface {
@@ -602,7 +601,7 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 	var postCommits []PostCommit
 	err := bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
 		postCommits = nil
-		err = bi.persistence.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		err = bi.persistence.DB().Transaction(func(dbTX persistence.DBTX) (err error) {
 			for _, preCommitHandler := range bi.preCommitHandlers {
 				var postCommit PostCommit
 				postCommit, err = preCommitHandler(ctx, dbTX, blocks, notifyTransactions)

@@ -44,7 +44,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 //go:embed abis/SimpleDomain.json
@@ -137,7 +136,7 @@ func DeploySmartContract(t *testing.T, p persistence.Persistence, txm components
 
 	// In this test we deploy the factory in-line
 	var txIDs []uuid.UUID
-	err := keymanager.DBTransactionWithKRC(ctx, p, km, func(dbTX *gorm.DB, kr components.KeyResolver) (postCommit func(), err error) {
+	err := keymanager.DBTransactionWithKRC(ctx, p, km, func(dbTX persistence.DBTX, kr components.KeyResolver) (postCommit func(), err error) {
 		postCommit, txIDs, err = txm.SendTransactions(ctx, dbTX, kr, &pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
 				Type: pldapi.TransactionTypePublic.Enum(),

@@ -28,7 +28,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -286,7 +285,7 @@ func (tm *transportManager) queueFireAndForget(ctx context.Context, nodeName str
 }
 
 // See docs in components package
-func (tm *transportManager) SendReliable(ctx context.Context, dbTX *gorm.DB, msgs ...*components.ReliableMessage) (preCommit func(), err error) {
+func (tm *transportManager) SendReliable(ctx context.Context, dbTX persistence.DBTX, msgs ...*components.ReliableMessage) (preCommit func(), err error) {
 
 	peers := make(map[string]*peer)
 	for _, msg := range msgs {
@@ -326,7 +325,7 @@ func (tm *transportManager) SendReliable(ctx context.Context, dbTX *gorm.DB, msg
 
 }
 
-func (tm *transportManager) writeAcks(ctx context.Context, dbTX *gorm.DB, acks ...*components.ReliableMessageAck) error {
+func (tm *transportManager) writeAcks(ctx context.Context, dbTX persistence.DBTX, acks ...*components.ReliableMessageAck) error {
 	for _, ack := range acks {
 		log.L(ctx).Infof("ack received for message %s", ack.MessageID)
 		ack.Time = tktypes.TimestampNow()
@@ -338,7 +337,7 @@ func (tm *transportManager) writeAcks(ctx context.Context, dbTX *gorm.DB, acks .
 		Error
 }
 
-func (tm *transportManager) getReliableMessageByID(ctx context.Context, dbTX *gorm.DB, id uuid.UUID) (*components.ReliableMessage, error) {
+func (tm *transportManager) getReliableMessageByID(ctx context.Context, dbTX persistence.DBTX, id uuid.UUID) (*components.ReliableMessage, error) {
 	var rms []*components.ReliableMessage
 	err := dbTX.
 		WithContext(ctx).

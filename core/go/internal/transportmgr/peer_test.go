@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -36,7 +37,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func mockGetStateRetryThenOk(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
@@ -89,7 +89,7 @@ func TestReliableMessageResendRealDB(t *testing.T) {
 
 	sds := make([]*components.StateDistribution, 2)
 	postCommits := make([]func(), 0)
-	_ = tm.persistence.DB().Transaction(func(dbTX *gorm.DB) error {
+	_ = tm.persistence.DB().Transaction(func(dbTX persistence.DBTX) error {
 		for i := 0; i < len(sds); i++ {
 			sds[i] = &components.StateDistribution{
 				Domain:          "domain1",

@@ -55,7 +55,7 @@ func (p *privateTxManager) withKeyResolutionContext(ctx context.Context, fn func
 
 	// Unlikely we'll be resolving any new identities on this path - if we do, we'll start a new DB transaction
 	// Note: This requires we're not on an existing DB TX coming into this function
-	krc := p.components.KeyManager().NewKeyResolutionContextLazyDB(ctx)
+	krc := p.components.KeyManager().KeyResolverForDBTXLazyDB(ctx)
 	defer func() {
 		if err == nil {
 			err = krc.Commit()

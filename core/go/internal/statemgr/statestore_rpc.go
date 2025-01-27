@@ -44,7 +44,7 @@ func (ss *stateManager) rpcListSchema() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		domain string,
 	) ([]*pldapi.Schema, error) {
-		return ss.ListSchemasForJSON(ctx, ss.p.DB(), domain)
+		return ss.ListSchemasForJSON(ctx, ss.p.NOTX(), domain)
 	})
 }
 
@@ -56,7 +56,7 @@ func (ss *stateManager) rpcStoreState() rpcserver.RPCHandler {
 		data tktypes.RawJSON,
 	) (*pldapi.State, error) {
 		var state *pldapi.State
-		pc, newStates, err := ss.WriteReceivedStates(ctx, ss.p.DB(), domain, []*components.StateUpsertOutsideContext{
+		pc, newStates, err := ss.WriteReceivedStates(ctx, ss.p.NOTX(), domain, []*components.StateUpsertOutsideContext{
 			{
 				ContractAddress: contractAddress,
 				SchemaID:        schema,
@@ -78,7 +78,7 @@ func (ss *stateManager) rpcQueryStates() rpcserver.RPCHandler {
 		query query.QueryJSON,
 		status pldapi.StateStatusQualifier,
 	) ([]*pldapi.State, error) {
-		return ss.FindStates(ctx, ss.p.DB(), domain, schema, &query, status)
+		return ss.FindStates(ctx, ss.p.NOTX(), domain, schema, &query, status)
 	})
 }
 
@@ -90,7 +90,7 @@ func (ss *stateManager) rpcQueryContractStates() rpcserver.RPCHandler {
 		query query.QueryJSON,
 		status pldapi.StateStatusQualifier,
 	) ([]*pldapi.State, error) {
-		return ss.FindContractStates(ctx, ss.p.DB(), domain, contractAddress, schema, &query, status)
+		return ss.FindContractStates(ctx, ss.p.NOTX(), domain, contractAddress, schema, &query, status)
 	})
 }
 
@@ -101,7 +101,7 @@ func (ss *stateManager) rpcQueryNullifiers() rpcserver.RPCHandler {
 		query query.QueryJSON,
 		status pldapi.StateStatusQualifier,
 	) ([]*pldapi.State, error) {
-		return ss.FindNullifiers(ctx, ss.p.DB(), domain, schema, &query, status)
+		return ss.FindNullifiers(ctx, ss.p.NOTX(), domain, schema, &query, status)
 	})
 }
 
@@ -113,6 +113,6 @@ func (ss *stateManager) rpcQueryContractNullifiers() rpcserver.RPCHandler {
 		query query.QueryJSON,
 		status pldapi.StateStatusQualifier,
 	) ([]*pldapi.State, error) {
-		return ss.FindContractNullifiers(ctx, ss.p.DB(), domain, contractAddress, schema, &query, status)
+		return ss.FindContractNullifiers(ctx, ss.p.NOTX(), domain, contractAddress, schema, &query, status)
 	})
 }
