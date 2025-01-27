@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 20245 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -23,10 +23,11 @@ const MAX_LENGTH_WITHOUT_COLLAPSE = 16;
 type Props = {
   Icon?: JSX.Element
   title: string
+  hideTitle?: boolean
   hash: string
 }
 
-export const Hash: React.FC<Props> = ({ Icon, title, hash }) => {
+export const Hash: React.FC<Props> = ({ Icon, title, hideTitle, hash }) => {
 
   const [hashDialogOpen, setHashDialogOpen] = useState(false);
 
@@ -37,6 +38,7 @@ export const Hash: React.FC<Props> = ({ Icon, title, hash }) => {
     return `${value.substring(0, 5)}...${value.substring(value.length - 3)}`
   };
 
+  const content = hideTitle ? getHash(hash) : `${title} | ${getHash(hash)}`
 
   return (
     <>
@@ -49,7 +51,7 @@ export const Hash: React.FC<Props> = ({ Icon, title, hash }) => {
         color="secondary"
         sx={{ paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400', whiteSpace: 'nowrap' }}
         size="small">
-        {`${title} | ${getHash(hash)}`}
+        {content}
       </Button>
       <HashDialog dialogOpen={hashDialogOpen} setDialogOpen={setHashDialogOpen} title={title} hash={hash} />
     </>

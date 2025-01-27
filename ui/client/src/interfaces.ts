@@ -145,3 +145,14 @@ export interface ITransportPeer {
     endpoint: string
   }
 }
+
+export interface IKeyEntry {
+  isKey: boolean
+  hasChildren: boolean
+  path: string
+  index: number
+  type: string
+  verifier: string
+  wallet: string
+  keyHandle: string
+}
