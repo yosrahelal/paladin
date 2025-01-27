@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024 Kaleido, Inc.
+ * Copyright © 2025 Kaleido, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -107,6 +107,12 @@ func TestRPCLocalDetails(t *testing.T) {
 	// Check entry is key and has children
 	assert.Equal(t, queryEntries[0].IsKey, true)
 	assert.Equal(t, queryEntries[0].HasChildren, true)
+
+	// Check verifier
+	assert.Equal(t, len(queryEntries[0].Verifiers), 1)
+	assert.Equal(t, queryEntries[0].Verifiers[0].Type, verifiers.ETH_ADDRESS)
+	assert.Equal(t, queryEntries[0].Verifiers[0].Algorithm, algorithms.ECDSA_SECP256K1)
+	assert.NotNil(t, queryEntries[0].Verifiers[0].Verifier)
 
 	// Query keys with parent "a.b"
 	err = rpc.CallRPC(ctx, &queryEntries, "keymgr_queryKeys", query.NewQueryBuilder().Equal("parent", "a.b").Limit(10).Query())

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024 Kaleido, Inc.
+ * Copyright © 2025 Kaleido, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -274,19 +274,15 @@ func (km *keyManager) QueryKeys(ctx context.Context, dbTX *gorm.DB, jq *query.Qu
 		dbTX.WithContext(ctx).
 			Table("key_paths"), KeyEntryFilters)
 
-	q.Select(`DISTINCT key_verifiers.identifier IS NOT NULL AS "is_key",` +
+	q.Select(`DISTINCT key_mappings.identifier IS NOT NULL AS "is_key",` +
 		`k.p IS NOT NULL AS "has_children",` +
 		`key_paths.parent AS "parent",` +
 		`key_paths.index AS "index",` +
 		`key_paths.path AS "path",` +
-		`key_verifiers.type AS "type",` +
-		`key_verifiers.algorithm AS "algorithm",` +
-		`key_verifiers.verifier AS "verifier",` +
 		`key_mappings.wallet AS "wallet",` +
 		`key_mappings.key_handle AS "key_handle"`,
 	)
 
-	q.Joins("LEFT OUTER JOIN key_verifiers ON key_paths.path = key_verifiers.identifier")
 	q.Joins("LEFT OUTER JOIN key_mappings ON key_paths.path = key_mappings.identifier")
 	q.Joins(`LEFT OUTER JOIN (SELECT parent AS "p" from key_paths AS p) AS k ON key_paths.path = k.p`)
 	q.Where("key_paths.path != ''")
@@ -294,6 +290,32 @@ func (km *keyManager) QueryKeys(ctx context.Context, dbTX *gorm.DB, jq *query.Qu
 	err = q.Find(&keyList).Error
 	if err != nil {
 		return nil, err
+	}
+
+	var ids []string
+	for _, k := range keyList {
+		ids = append(ids, k.Path)
+	}
+
+	var verifiers []*DBKeyVerifier
+
+	err = dbTX.Table("key_verifiers").
+		Where("identifier IN ?", ids).
+		Scan(&verifiers).Error
+	if err != nil {
+		return nil, err
+	}
+
+	for _, k := range keyList {
+		for _, v := range verifiers {
+			if k.Path == v.Identifier {
+				k.Verifiers = append(k.Verifiers, &pldapi.KeyVerifier{
+					Verifier:  v.Verifier,
+					Type:      v.Type,
+					Algorithm: v.Algorithm,
+				})
+			}
+		}
 	}
 
 	return keyList, nil
