@@ -44,6 +44,9 @@ type testDomainManager struct {
 	encodeData          func(context.Context, *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error)
 	decodeData          func(context.Context, *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error)
 	recoverSigner       func(context.Context, *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error)
+	sendTransaction     func(context.Context, *prototk.SendTransactionRequest) (*prototk.SendTransactionResponse, error)
+	localNodeName       func(context.Context, *prototk.LocalNodeNameRequest) (*prototk.LocalNodeNameResponse, error)
+	getStates           func(context.Context, *prototk.GetStatesByIDRequest) (*prototk.GetStatesByIDResponse, error)
 }
 
 func (tp *testDomainManager) FindAvailableStates(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
@@ -60,6 +63,18 @@ func (tp *testDomainManager) DecodeData(ctx context.Context, req *prototk.Decode
 
 func (tp *testDomainManager) RecoverSigner(ctx context.Context, req *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error) {
 	return tp.recoverSigner(ctx, req)
+}
+
+func (tp *testDomainManager) SendTransaction(ctx context.Context, req *prototk.SendTransactionRequest) (*prototk.SendTransactionResponse, error) {
+	return tp.sendTransaction(ctx, req)
+}
+
+func (tp *testDomainManager) LocalNodeName(ctx context.Context, req *prototk.LocalNodeNameRequest) (*prototk.LocalNodeNameResponse, error) {
+	return tp.localNodeName(ctx, req)
+}
+
+func (tp *testDomainManager) GetStatesByID(ctx context.Context, req *prototk.GetStatesByIDRequest) (*prototk.GetStatesByIDResponse, error) {
+	return tp.getStates(ctx, req)
 }
 
 func domainConnectFactory(ctx context.Context, client prototk.PluginControllerClient) (grpc.BidiStreamingClient[prototk.DomainMessage, prototk.DomainMessage], error) {
@@ -275,6 +290,26 @@ func TestDomainRequestsOK(t *testing.T) {
 		}, nil
 	}
 
+	tdm.sendTransaction = func(ctx context.Context, str *prototk.SendTransactionRequest) (*prototk.SendTransactionResponse, error) {
+		assert.Equal(t, str.Transaction.From, "user1")
+		return &prototk.SendTransactionResponse{
+			Id: "tx1",
+		}, nil
+	}
+
+	tdm.localNodeName = func(ctx context.Context, lnr *prototk.LocalNodeNameRequest) (*prototk.LocalNodeNameResponse, error) {
+		return &prototk.LocalNodeNameResponse{
+			Name: "node1",
+		}, nil
+	}
+
+	tdm.getStates = func(ctx context.Context, gsr *prototk.GetStatesByIDRequest) (*prototk.GetStatesByIDResponse, error) {
+		assert.Equal(t, "schema1", gsr.SchemaId)
+		return &prototk.GetStatesByIDResponse{
+			States: []*prototk.StoredState{{}},
+		}, nil
+	}
+
 	ctx, pc, done := newTestDomainPluginManager(t, &testManagers{
 		testDomainManager: tdm,
 	})
@@ -417,6 +452,24 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "some verifier", string(rsr.Verifier))
+
+	str, err := callbacks.SendTransaction(ctx, &prototk.SendTransactionRequest{
+		Transaction: &prototk.TransactionInput{
+			From: "user1",
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "tx1", str.Id)
+
+	lnr, err := callbacks.LocalNodeName(ctx, &prototk.LocalNodeNameRequest{})
+	require.NoError(t, err)
+	assert.Equal(t, "node1", lnr.Name)
+
+	gsr, err := callbacks.GetStatesByID(ctx, &prototk.GetStatesByIDRequest{
+		SchemaId: "schema1",
+	})
+	require.NoError(t, err)
+	assert.Len(t, gsr.States, 1)
 }
 
 func TestDomainRegisterFail(t *testing.T) {
@@ -426,9 +479,10 @@ func TestDomainRegisterFail(t *testing.T) {
 	tdm := &testDomainManager{
 		domains: map[string]plugintk.Plugin{
 			"domain1": &mockPlugin[prototk.DomainMessage]{
-				t:              t,
-				connectFactory: domainConnectFactory,
-				headerAccessor: domainHeaderAccessor,
+				t:                   t,
+				allowRegisterErrors: true,
+				connectFactory:      domainConnectFactory,
+				headerAccessor:      domainHeaderAccessor,
 				preRegister: func(domainID string) *prototk.DomainMessage {
 					return &prototk.DomainMessage{
 						Header: &prototk.Header{

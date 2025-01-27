@@ -101,7 +101,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 				}
 			}
 
-			if rpcPayload.Method == "ptx_receiptBatch" {
+			if rpcPayload.Method == "ptx_subscription" {
 				var batchPayload pldapi.JSONRPCSubscriptionNotification[pldapi.TransactionReceiptBatch]
 				err := json.Unmarshal(rpcPayload.Params.Bytes(), &batchPayload)
 				require.NoError(t, err)
@@ -212,7 +212,7 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 				}
 			}
 
-			if rpcPayload.Method == "ptx_receiptBatch" {
+			if rpcPayload.Method == "ptx_subscription" {
 				var batchPayload pldapi.JSONRPCSubscriptionNotification[pldapi.TransactionReceiptBatch]
 				err := json.Unmarshal(rpcPayload.Params.Bytes(), &batchPayload)
 				require.NoError(t, err)

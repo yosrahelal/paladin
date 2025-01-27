@@ -151,7 +151,20 @@ func (es *rpcEventStreams) HandleLifecycle(ctx context.Context, req *rpcclient.R
 
 func (sub *receiptListenerSubscription) DeliverReceiptBatch(ctx context.Context, batchID uint64, receipts []*pldapi.TransactionReceiptFull) error {
 	log.L(ctx).Infof("Delivering receipt batch %d to subscription %s over JSON/RPC", batchID, sub.ctrl.ID())
-	sub.ctrl.Send("ptx_receiptBatch", &pldapi.JSONRPCSubscriptionNotification[pldapi.TransactionReceiptBatch]{
+
+	// Note we attempt strong consistency with etH_subscribe semantics here, as described in https://geth.ethereum.org/docs/interacting-with-geth/rpc/pubsub
+	// However, we have layered acks on top - so we're not 100%.
+	// We also end up with quite a bit of nesting doing this:
+	// { "jsonrpc": "2.0", "method": "ptx_subscription",
+	//    "params": {
+	//       "subscription": "0xcd0c3e8af590364c09d0fa6a1210faf5",
+	//       "result": {
+	//         "batchId": 12345,
+	//         "receipts": [ ... interesting stuff ]
+	//       }
+	//     }
+	// }
+	sub.ctrl.Send("ptx_subscription", &pldapi.JSONRPCSubscriptionNotification[pldapi.TransactionReceiptBatch]{
 		Subscription: sub.ctrl.ID(),
 		Result: pldapi.TransactionReceiptBatch{
 			BatchID:  batchID,
