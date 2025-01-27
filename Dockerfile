@@ -126,6 +126,7 @@ COPY toolkit/java toolkit/java
 COPY domains/pente domains/pente
 COPY domains/zeto domains/zeto
 COPY domains/noto domains/noto
+COPY perf/go.mod perf/go.mod
 COPY domains/integration-test domains/integration-test
 COPY registries/static registries/static
 COPY registries/evm registries/evm
