@@ -408,7 +408,9 @@ func TestTimeoutWaitingForLock(t *testing.T) {
 
 	readyToTry := make(chan struct{})
 	waitDone := make(chan struct{})
+	workerDone := make(chan struct{})
 	go func() {
+		defer close(workerDone)
 		err := km.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 			mapping1, err := km.KeyResolverForDBTX(dbTX).ResolveKey(ctx, "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 			require.NoError(t, err)
@@ -435,6 +437,8 @@ func TestTimeoutWaitingForLock(t *testing.T) {
 
 	// Double unlock is a warned no-op
 	km.unlockAllocation(ctx, kr2)
+
+	<-workerDone
 
 }
 

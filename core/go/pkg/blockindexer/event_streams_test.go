@@ -38,7 +38,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func mockBlockListenerNil(mRPC *rpcclientmocks.WSClient) {
@@ -73,7 +72,7 @@ func TestInternalEventStreamDeliveryAtHead(t *testing.T) {
 	var esID string
 	calledPostCommit := false
 	err := bi.Start(&InternalEventStream{
-		Handler: func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
+		Handler: func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) (PostCommit, error) {
 			if esID == "" {
 				esID = batch.StreamID.String()
 			} else {
@@ -165,7 +164,7 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 	var esID string
 	calledPostCommit := false
 	err := bi.Start(&InternalEventStream{
-		Handler: func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
+		Handler: func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) (PostCommit, error) {
 			if esID == "" {
 				esID = batch.StreamID.String()
 			} else {
@@ -214,7 +213,7 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	// Set up our handler, even though it won't be driven with anything yet
 	eventCollector := make(chan *pldapi.EventWithData)
 	var esID string
-	handler := func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
+	handler := func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) (PostCommit, error) {
 		if esID == "" {
 			esID = batch.StreamID.String()
 		} else {
@@ -349,7 +348,7 @@ func TestNoMatchingEvents(t *testing.T) {
 			}, nil
 		},
 	}, &InternalEventStream{
-		Handler: func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
+		Handler: func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) (PostCommit, error) {
 			require.Fail(t, "should not be called")
 			return nil, nil
 		},
@@ -730,7 +729,7 @@ func TestDispatcherDispatchClosed(t *testing.T) {
 		batchTimeout:   1 * time.Microsecond, // but not going to wait
 		dispatch:       make(chan *eventDispatch),
 		dispatcherDone: make(chan struct{}),
-		handler: func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
+		handler: func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) (PostCommit, error) {
 			called = true
 			return nil, fmt.Errorf("pop")
 		},

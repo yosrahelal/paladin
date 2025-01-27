@@ -601,7 +601,7 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 	var postCommits []PostCommit
 	err := bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
 		postCommits = nil
-		err = bi.persistence.DB().Transaction(func(dbTX persistence.DBTX) (err error) {
+		err = bi.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
 			for _, preCommitHandler := range bi.preCommitHandlers {
 				var postCommit PostCommit
 				postCommit, err = preCommitHandler(ctx, dbTX, blocks, notifyTransactions)
@@ -610,21 +610,21 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 				}
 			}
 			if err == nil && len(blocks) > 0 {
-				err = dbTX.
+				err = dbTX.DB().
 					WithContext(ctx).
 					Table("indexed_blocks").
 					Create(blocks).
 					Error
 			}
 			if err == nil && len(transactions) > 0 {
-				err = dbTX.
+				err = dbTX.DB().
 					WithContext(ctx).
 					Table("indexed_transactions").
 					Create(transactions).
 					Error
 			}
 			if err == nil && len(events) > 0 {
-				err = dbTX.
+				err = dbTX.DB().
 					WithContext(ctx).
 					Table("indexed_events").
 					Omit("Transaction").

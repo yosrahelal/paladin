@@ -103,47 +103,47 @@ func (km *keyManager) Sign(ctx context.Context, mapping *pldapi.KeyMappingAndVer
 	return w.sign(ctx, mapping, payloadType, payload)
 }
 
-func (km *keyManager) lockAllocationOrGetOwner(krc *keyResolver) *keyResolver {
+func (km *keyManager) lockAllocationOrGetOwner(kr *keyResolver) *keyResolver {
 	km.allocLock.Lock()
 	defer km.allocLock.Unlock()
 	if km.allocLockHolder != nil {
 		return km.allocLockHolder
 	}
-	km.allocLockHolder = krc
+	km.allocLockHolder = kr
 	return nil
 }
 
-func (km *keyManager) takeAllocationLock(ctx context.Context, krc *keyResolver) error {
+func (km *keyManager) takeAllocationLock(ctx context.Context, kr *keyResolver) error {
 	for {
-		lockingKRC := km.lockAllocationOrGetOwner(krc)
+		lockingKRC := km.lockAllocationOrGetOwner(kr)
 		if lockingKRC == nil {
-			log.L(ctx).Debugf("key resolution context %s locked allocation", krc.id)
+			log.L(ctx).Debugf("key resolution context %s locked allocation", kr.id)
 			return nil
 		}
 		// There is contention on this path - wait until the lock is released, and try to get it again
 		select {
 		case <-lockingKRC.done:
 		case <-ctx.Done():
-			log.L(ctx).Debugf("key resolution context %s cancelled while waiting for allocation unlocked by %s", krc.id, lockingKRC.id)
+			log.L(ctx).Debugf("key resolution context %s cancelled while waiting for allocation unlocked by %s", kr.id, lockingKRC.id)
 			return i18n.NewError(ctx, msgs.MsgContextCanceled)
 		}
 	}
 }
 
-func (km *keyManager) unlockAllocation(ctx context.Context, krc *keyResolver) {
+func (km *keyManager) unlockAllocation(ctx context.Context, kr *keyResolver) {
 	km.allocLock.Lock()
 	defer km.allocLock.Unlock()
 
 	// We will have locks on all the parent paths
-	if km.allocLockHolder == krc {
-		log.L(ctx).Debugf("key resolution context %s unlocked allocation", krc.id)
+	if km.allocLockHolder == kr {
+		log.L(ctx).Debugf("key resolution context %s unlocked allocation", kr.id)
 		km.allocLockHolder = nil
 	} else {
 		existingID := "null"
 		if km.allocLockHolder != nil {
 			existingID = km.allocLockHolder.id
 		}
-		log.L(ctx).Errorf("key resolution context %s attempted to unlock allocation lock held by %s", krc.id, existingID)
+		log.L(ctx).Errorf("key resolution context %s attempted to unlock allocation lock held by %s", kr.id, existingID)
 	}
 }
 
@@ -189,10 +189,10 @@ func (km *keyManager) ResolveEthAddressBatchNewDatabaseTX(ctx context.Context, i
 func (km *keyManager) ResolveBatchNewDatabaseTX(ctx context.Context, algorithm, verifierType string, identifiers []string) (resolvedKeys []*pldapi.KeyMappingAndVerifier, err error) {
 	resolvedKeys = make([]*pldapi.KeyMappingAndVerifier, len(identifiers))
 	err = km.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		krc := km.KeyResolverForDBTX(dbTX)
+		kr := km.KeyResolverForDBTX(dbTX)
 		for i, identifier := range identifiers {
 			if err == nil {
-				resolvedKeys[i], err = krc.ResolveKey(ctx, identifier, algorithm, verifierType)
+				resolvedKeys[i], err = kr.ResolveKey(ctx, identifier, algorithm, verifierType)
 			}
 		}
 		return err
@@ -226,8 +226,8 @@ func (km *keyManager) ReverseKeyLookup(ctx context.Context, dbTX persistence.DBT
 
 	// Now we need to look up the associated mapping and rebuild it
 	// NOTE: this is an internal-only use mode of a KRC that does not follow the external convention. Which means
-	krc := km.newKeyResolver(ctx, dbTX, false /* allowing use with NOTX() */).(*keyResolver)
-	mapping, err = krc.resolveKey(ctx, dbVerifiers[0].Identifier, algorithm, verifierType, true /* existing only */)
+	kr := km.newKeyResolver(dbTX, false /* allowing use with NOTX() */).(*keyResolver)
+	mapping, err = kr.resolveKey(ctx, dbVerifiers[0].Identifier, algorithm, verifierType, true /* existing only */)
 	if err != nil {
 		return nil, err
 	}

@@ -24,12 +24,12 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -488,13 +488,14 @@ func (es *eventStream) runBatch(batch *eventBatch) error {
 	// We start a database transaction, run the callback function
 	return es.bi.retry.Do(es.ctx, func(attempt int) (retryable bool, err error) {
 		var postCommit PostCommit
-		err = es.bi.persistence.DB().Transaction(func(tx *gorm.DB) (err error) {
-			postCommit, err = es.handler(es.ctx, tx, &batch.EventDeliveryBatch)
+		err = es.bi.persistence.Transaction(es.ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+			postCommit, err = es.handler(ctx, dbTX, &batch.EventDeliveryBatch)
 			if err != nil {
 				return err
 			}
 			// commit the checkpoint
-			return tx.
+			return dbTX.DB().
+				WithContext(ctx).
 				Table("event_stream_checkpoints").
 				Clauses(clause.OnConflict{
 					Columns: []clause.Column{{Name: "stream"}},
@@ -506,7 +507,6 @@ func (es *eventStream) runBatch(batch *eventBatch) error {
 					Stream:      es.definition.ID,
 					BlockNumber: int64(batch.checkpointAfterBatch),
 				}).
-				WithContext(es.ctx).
 				Error
 		})
 		if err == nil && postCommit != nil {

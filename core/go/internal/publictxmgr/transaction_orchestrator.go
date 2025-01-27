@@ -294,7 +294,7 @@ func (oc *orchestrator) allocateNonces(ctx context.Context, txns []*DBPublicTxn)
 	}
 
 	// Run the DB TXN using a VALUES temp table to update multiple rows in a single operation
-	err := oc.p.Transaction(ctx, func(dbTX persistence.DBTX) error {
+	err := oc.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		sqlQuery := `WITH nonce_updates ("pub_txn_id", "nonce") AS ( VALUES `
 		values := make([]any, 0, len(toAlloc)*2)
 		for i, tx := range toAlloc {
