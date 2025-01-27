@@ -29,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -97,7 +98,7 @@ func newTestTransactionManagerWithWebSocketRPC(t *testing.T, init ...func(*pldco
 }
 
 func mockResolveKeyOKThenFail(t *testing.T, mc *mockComponents, identifier string, senderAddr *tktypes.EthAddress) {
-	kr := mockKeyResolverForFail(t, mc)
+	kr := mockKeyResolver(t, mc)
 	kr.On("ResolveKey", identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 		Return(&pldapi.KeyMappingAndVerifier{Verifier: &pldapi.KeyVerifier{
 			Verifier: senderAddr.String(),
@@ -279,19 +280,20 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	// Finalize the deploy as a success
 	txHash1 := tktypes.Bytes32(tktypes.RandBytes(32))
 	blockNumber1 := int64(12345)
-	postCommit, err := tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
-		{
-			TransactionID: tx1ID,
-			ReceiptType:   components.RT_Success,
-			OnChain: tktypes.OnChainLocation{
-				Type:            tktypes.OnChainTransaction,
-				TransactionHash: txHash1,
-				BlockNumber:     blockNumber1,
+	err = tmr.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return tmr.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				TransactionID: tx1ID,
+				ReceiptType:   components.RT_Success,
+				OnChain: tktypes.OnChainLocation{
+					Type:            tktypes.OnChainTransaction,
+					TransactionHash: txHash1,
+					BlockNumber:     blockNumber1,
+				},
 			},
-		},
+		})
 	})
 	require.NoError(t, err)
-	postCommit()
 
 	// We should get that back with full
 	var txWithReceipt *pldapi.TransactionFull
@@ -319,20 +321,21 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	blockNumber2 := int64(12345)
 	revertData, err := sampleABI.Errors()["BadValue"].EncodeCallDataValuesCtx(ctx, []any{12345})
 	require.NoError(t, err)
-	postCommit, err = tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
-		{
-			TransactionID: tx2ID,
-			ReceiptType:   components.RT_FailedOnChainWithRevertData,
-			OnChain: tktypes.OnChainLocation{
-				Type:            tktypes.OnChainTransaction,
-				TransactionHash: txHash2,
-				BlockNumber:     blockNumber2,
+	err = tmr.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return tmr.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				TransactionID: tx2ID,
+				ReceiptType:   components.RT_FailedOnChainWithRevertData,
+				OnChain: tktypes.OnChainLocation{
+					Type:            tktypes.OnChainTransaction,
+					TransactionHash: txHash2,
+					BlockNumber:     blockNumber2,
+				},
+				RevertData: revertData,
 			},
-			RevertData: revertData,
-		},
+		})
 	})
 	require.NoError(t, err)
-	postCommit()
 
 	var de *pldapi.ABIDecodedData
 	err = rpcClient.CallRPC(ctx, &de, "ptx_decodeError", tktypes.HexBytes(revertData), tktypes.DefaultJSONFormatOptions)

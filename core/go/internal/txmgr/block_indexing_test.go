@@ -99,9 +99,8 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 		})
 	defer done()
 
-	postCommit, abiRef, err := txm.storeABI(ctx, txm.p.DB(), testABI)
+	abiRef, err := txm.storeABI(ctx, txm.p.NOTX(), testABI)
 	require.NoError(t, err)
-	postCommit()
 
 	txID, err = txm.sendTransactionNewDBTX(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
@@ -113,10 +112,9 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	postCommit, err = txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
+	err = txm.blockIndexerPreCommit(ctx, txm.p.NOTX(), []*pldapi.IndexedBlock{},
 		[]*blockindexer.IndexedTransactionNotify{txi})
 	require.NoError(t, err)
-	postCommit()
 
 	// Check we can query the receipt
 	receipt, err := txm.GetTransactionReceiptByID(ctx, *txID)
@@ -162,10 +160,9 @@ func TestPublicConfirmMatch(t *testing.T) {
 		})
 	defer done()
 
-	postCommit, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
+	err := txm.blockIndexerPreCommit(ctx, txm.p.NOTX(), []*pldapi.IndexedBlock{},
 		[]*blockindexer.IndexedTransactionNotify{txi})
 	require.NoError(t, err)
-	postCommit()
 }
 
 func TestPrivateConfirmMatchPrivateFailures(t *testing.T) {
@@ -217,10 +214,9 @@ func TestPrivateConfirmMatchPrivateFailures(t *testing.T) {
 		})
 	defer done()
 
-	postCommit, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
+	err = txm.blockIndexerPreCommit(ctx, txm.p.NOTX(), []*pldapi.IndexedBlock{},
 		[]*blockindexer.IndexedTransactionNotify{txiOk1, txiFail2})
 	require.NoError(t, err)
-	postCommit()
 }
 
 func TestNoConfirmMatch(t *testing.T) {
@@ -235,10 +231,9 @@ func TestNoConfirmMatch(t *testing.T) {
 		})
 	defer done()
 
-	postCommit, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
+	err := txm.blockIndexerPreCommit(ctx, txm.p.NOTX(), []*pldapi.IndexedBlock{},
 		[]*blockindexer.IndexedTransactionNotify{txi})
 	require.NoError(t, err)
-	postCommit()
 }
 
 func TestConfirmMatchFAil(t *testing.T) {
@@ -253,7 +248,7 @@ func TestConfirmMatchFAil(t *testing.T) {
 		})
 	defer done()
 
-	_, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
+	err := txm.blockIndexerPreCommit(ctx, txm.p.NOTX(), []*pldapi.IndexedBlock{},
 		[]*blockindexer.IndexedTransactionNotify{txi})
 	assert.Regexp(t, "pop", err)
 }
@@ -280,7 +275,7 @@ func TestPrivateConfirmError(t *testing.T) {
 		})
 	defer done()
 
-	_, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
+	err := txm.blockIndexerPreCommit(ctx, txm.p.NOTX(), []*pldapi.IndexedBlock{},
 		[]*blockindexer.IndexedTransactionNotify{txi})
 	assert.Regexp(t, "pop", err)
 }
@@ -308,7 +303,7 @@ func TestConfirmInsertError(t *testing.T) {
 		})
 	defer done()
 
-	_, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
+	err := txm.blockIndexerPreCommit(ctx, txm.p.NOTX(), []*pldapi.IndexedBlock{},
 		[]*blockindexer.IndexedTransactionNotify{txi})
 	assert.Regexp(t, "pop", err)
 }

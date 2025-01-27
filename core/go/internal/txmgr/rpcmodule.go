@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
@@ -140,7 +141,7 @@ func (tm *txManager) rpcQueryTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
 	) ([]*pldapi.Transaction, error) {
-		return tm.QueryTransactions(ctx, &query, tm.p.DB(), false)
+		return tm.QueryTransactions(ctx, &query, tm.p.NOTX(), false)
 	})
 }
 
@@ -148,7 +149,7 @@ func (tm *txManager) rpcQueryTransactionsFull() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
 	) ([]*pldapi.TransactionFull, error) {
-		return tm.QueryTransactionsFull(ctx, &query, tm.p.DB(), false)
+		return tm.QueryTransactionsFull(ctx, &query, tm.p.NOTX(), false)
 	})
 }
 
@@ -158,9 +159,9 @@ func (tm *txManager) rpcQueryPendingTransactions() rpcserver.RPCHandler {
 		full bool,
 	) (any, error) {
 		if full {
-			return tm.QueryTransactionsFull(ctx, &query, tm.p.DB(), true)
+			return tm.QueryTransactionsFull(ctx, &query, tm.p.NOTX(), true)
 		}
-		return tm.QueryTransactions(ctx, &query, tm.p.DB(), true)
+		return tm.QueryTransactions(ctx, &query, tm.p.NOTX(), true)
 	})
 }
 
@@ -184,7 +185,7 @@ func (tm *txManager) rpcGetPreparedTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
 	) (*pldapi.PreparedTransaction, error) {
-		return tm.GetPreparedTransactionByID(ctx, tm.p.DB(), id)
+		return tm.GetPreparedTransactionByID(ctx, tm.p.NOTX(), id)
 	})
 }
 
@@ -225,7 +226,7 @@ func (tm *txManager) rpcQueryPreparedTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
 	) ([]*pldapi.PreparedTransaction, error) {
-		return tm.QueryPreparedTransactions(ctx, tm.p.DB(), &query)
+		return tm.QueryPreparedTransactions(ctx, tm.p.NOTX(), &query)
 	})
 }
 
@@ -265,12 +266,12 @@ func (tm *txManager) rpcGetPublicTransactionByHash() rpcserver.RPCHandler {
 func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		a abi.ABI,
-	) (*tktypes.Bytes32, error) {
-		postCommit, abiHashRef, err := tm.storeABI(ctx, tm.p.DB(), a)
-		if err == nil {
-			postCommit()
-		}
-		return abiHashRef, err
+	) (hash *tktypes.Bytes32, err error) {
+		err = tm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+			hash, err = tm.storeABI(ctx, tm.p.NOTX(), a)
+			return err
+		})
+		return hash, err
 	})
 }
 
@@ -278,7 +279,7 @@ func (tm *txManager) rpcGetStoredABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		hash tktypes.Bytes32,
 	) (*pldapi.StoredABI, error) {
-		return tm.getABIByHash(ctx, tm.p.DB(), hash)
+		return tm.getABIByHash(ctx, tm.p.NOTX(), hash)
 	})
 }
 
@@ -314,7 +315,7 @@ func (tm *txManager) rpcDecodeError() rpcserver.RPCHandler {
 		revertError tktypes.HexBytes,
 		dataFormat tktypes.JSONFormatOptions,
 	) (*pldapi.ABIDecodedData, error) {
-		return tm.DecodeRevertError(ctx, tm.p.DB(), revertError, dataFormat)
+		return tm.DecodeRevertError(ctx, tm.p.NOTX(), revertError, dataFormat)
 	})
 }
 
@@ -323,7 +324,7 @@ func (tm *txManager) rpcDecodeCall() rpcserver.RPCHandler {
 		callData tktypes.HexBytes,
 		dataFormat tktypes.JSONFormatOptions,
 	) (*pldapi.ABIDecodedData, error) {
-		return tm.DecodeCall(ctx, tm.p.DB(), callData, dataFormat)
+		return tm.DecodeCall(ctx, tm.p.NOTX(), callData, dataFormat)
 	})
 }
 
@@ -333,7 +334,7 @@ func (tm *txManager) rpcDecodeEvent() rpcserver.RPCHandler {
 		data tktypes.HexBytes,
 		dataFormat tktypes.JSONFormatOptions,
 	) (*pldapi.ABIDecodedData, error) {
-		return tm.DecodeEvent(ctx, tm.p.DB(), topics, data, dataFormat)
+		return tm.DecodeEvent(ctx, tm.p.NOTX(), topics, data, dataFormat)
 	})
 }
 
@@ -350,7 +351,7 @@ func (tm *txManager) rpcQueryReceiptListeners() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
 	) ([]*pldapi.TransactionReceiptListener, error) {
-		return tm.QueryReceiptListeners(ctx, tm.p.DB(), &query)
+		return tm.QueryReceiptListeners(ctx, tm.p.NOTX(), &query)
 	})
 }
 

@@ -119,12 +119,9 @@ type EventDeliveryBatch struct {
 	Events     []*pldapi.EventWithData `json:"events"`
 }
 
-// Post commit callback is invoked after the DB transaction completes (only on success)
-type PostCommit func()
+type PreCommitHandler func(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*IndexedTransactionNotify) error
 
-type PreCommitHandler func(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error)
-
-type InternalStreamCallback func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) (PostCommit, error)
+type InternalStreamCallback func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) error
 
 type IESType int
 

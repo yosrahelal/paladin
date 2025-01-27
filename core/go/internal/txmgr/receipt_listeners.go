@@ -374,9 +374,7 @@ func (tm *txManager) validateListenerSpec(ctx context.Context, spec *pldapi.Tran
 // Build parts of the matching that can be pre-filtered efficiently in the DB.
 //
 // IMPORTANT: Make sure to also update checkMatch() when adding filter dimensions
-func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.TransactionReceiptListener, dbTX persistence.DBTX) (*gorm.DB, error) {
-	q := dbTX
-
+func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.TransactionReceiptListener, q *gorm.DB) (*gorm.DB, error) {
 	// Filter based on the type and/or domain
 	if spec.Filters.Type == nil {
 		if spec.Filters.Domain != "" {
@@ -685,9 +683,9 @@ func (l *receiptListener) deliverBatch(b *receiptDeliveryBatch) error {
 }
 
 func (l *receiptListener) updateCheckpoint(batch *receiptDeliveryBatch, newSequence uint64) error {
-	return l.tm.p.DB().Transaction(func(dbTX persistence.DBTX) error {
-		err := dbTX.
-			WithContext(l.ctx).
+	return l.tm.p.Transaction(l.ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		err := dbTX.DB().
+			WithContext(ctx).
 			Clauses(clause.OnConflict{
 				Columns: []clause.Column{
 					{Name: "listener"},
@@ -704,8 +702,8 @@ func (l *receiptListener) updateCheckpoint(batch *receiptDeliveryBatch, newSeque
 			}).
 			Error
 		if err == nil && len(batch.Gaps) > 0 {
-			err = dbTX.
-				WithContext(l.ctx).
+			err = dbTX.DB().
+				WithContext(ctx).
 				Clauses(clause.OnConflict{
 					DoNothing: true,
 				}).

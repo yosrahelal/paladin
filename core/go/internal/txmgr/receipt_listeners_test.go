@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -138,9 +139,10 @@ func TestE2EReceiptListenerDeliveryLateAttach(t *testing.T) {
 			},
 		},
 	}
-	postCommit, err := txm.FinalizeTransactions(ctx, txm.p.DB(), receiptInputs)
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, receiptInputs)
+	})
 	require.NoError(t, err)
-	postCommit()
 
 	// Create a receiver and check we get everything delivered
 	receipts := newTestReceiptReceiver(nil)
@@ -174,14 +176,16 @@ func TestE2EReceiptListenerDeliveryLateAttach(t *testing.T) {
 			},
 		},
 	}
-	postCommit, err = txm.FinalizeTransactions(ctx, txm.p.DB(), receiptInputs2)
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, receiptInputs2)
+	})
 	require.NoError(t, err)
-	postCommit()
 
 	// This one is assured to be in a new batch
 	r = <-receipts.receipts
 	assert.Equal(t, r.ID, receiptInputs2[0].TransactionID)
 	assert.Empty(t, r.FailureMessage)
+
 }
 
 func randOnChain(addr *tktypes.EthAddress) tktypes.OnChainLocation {
@@ -268,47 +272,50 @@ func TestLoadListenersMultiPageFilters(t *testing.T) {
 	err = txm.StartReceiptListener(ctx, "listener4")
 	require.NoError(t, err)
 
-	// Private domain2 to listener2 only
 	tx1 := uuid.New()
-	postCommit, err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
-		{
-			ReceiptType:   components.RT_Success,
-			Domain:        "domain2",
-			TransactionID: tx1,
-			OnChain:       randOnChain(tktypes.RandAddress()),
-		},
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		// Private domain2 to listener2 only
+		return txm.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				ReceiptType:   components.RT_Success,
+				Domain:        "domain2",
+				TransactionID: tx1,
+				OnChain:       randOnChain(tktypes.RandAddress()),
+			},
+		})
 	})
 	require.NoError(t, err)
-	postCommit()
 	require.Equal(t, tx1, (<-r2.receipts).ID)
 
 	// Private domain1 to listener 1&2
 	tx2 := uuid.New()
-	postCommit, err = txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
-		{
-			ReceiptType:   components.RT_Success,
-			Domain:        "domain1",
-			TransactionID: tx2,
-			OnChain:       randOnChain(tktypes.RandAddress()),
-		},
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				ReceiptType:   components.RT_Success,
+				Domain:        "domain1",
+				TransactionID: tx2,
+				OnChain:       randOnChain(tktypes.RandAddress()),
+			},
+		})
 	})
 	require.NoError(t, err)
-	postCommit()
 	require.Equal(t, tx2, (<-r1.receipts).ID)
 	require.Equal(t, tx2, (<-r2.receipts).ID)
 
 	// Public to listener3
 	tx3 := uuid.New()
-	postCommit, err = txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
-		{
-			ReceiptType:   components.RT_Success,
-			Domain:        "",
-			TransactionID: tx3,
-			OnChain:       randOnChain(tktypes.RandAddress()),
-		},
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				ReceiptType:   components.RT_Success,
+				Domain:        "",
+				TransactionID: tx3,
+				OnChain:       randOnChain(tktypes.RandAddress()),
+			},
+		})
 	})
 	require.NoError(t, err)
-	postCommit()
 	require.Equal(t, tx3, (<-r3.receipts).ID)
 
 	// Nothing should have gone to 4
@@ -329,16 +336,17 @@ func TestLoadListenersMultiPageFilters(t *testing.T) {
 
 	// Public to listener3 again
 	tx4 := uuid.New()
-	postCommit, err = txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
-		{
-			ReceiptType:   components.RT_Success,
-			Domain:        "",
-			TransactionID: tx4,
-			OnChain:       randOnChain(tktypes.RandAddress()),
-		},
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				ReceiptType:   components.RT_Success,
+				Domain:        "",
+				TransactionID: tx4,
+				OnChain:       randOnChain(tktypes.RandAddress()),
+			},
+		})
 	})
 	require.NoError(t, err)
-	postCommit()
 	require.Equal(t, tx4, (<-r3.receipts).ID)
 
 }
@@ -406,40 +414,41 @@ func testGapsDomainsForNonAvailableReceipts(t *testing.T, pageSize int) {
 
 	contract1 := tktypes.RandAddress()
 	contract2 := tktypes.RandAddress()
-	postCommit, err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
-		{
-			ReceiptType:   components.RT_Success,
-			Domain:        "domain1",
-			TransactionID: txID1,
-			OnChain:       randOnChain(contract1),
-		},
-		{
-			ReceiptType:   components.RT_Success,
-			Domain:        "domain1",
-			TransactionID: txID2,
-			OnChain:       randOnChain(contract1),
-		},
-		{
-			ReceiptType:   components.RT_Success,
-			Domain:        "domain1",
-			TransactionID: txID3,
-			OnChain:       randOnChain(contract1),
-		},
-		{
-			ReceiptType:   components.RT_Success,
-			Domain:        "domain1",
-			TransactionID: txID4,
-			OnChain:       randOnChain(contract2),
-		},
-		{
-			ReceiptType:   components.RT_Success,
-			Domain:        "domain1",
-			TransactionID: txID5,
-			OnChain:       randOnChain(contract1),
-		},
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				ReceiptType:   components.RT_Success,
+				Domain:        "domain1",
+				TransactionID: txID1,
+				OnChain:       randOnChain(contract1),
+			},
+			{
+				ReceiptType:   components.RT_Success,
+				Domain:        "domain1",
+				TransactionID: txID2,
+				OnChain:       randOnChain(contract1),
+			},
+			{
+				ReceiptType:   components.RT_Success,
+				Domain:        "domain1",
+				TransactionID: txID3,
+				OnChain:       randOnChain(contract1),
+			},
+			{
+				ReceiptType:   components.RT_Success,
+				Domain:        "domain1",
+				TransactionID: txID4,
+				OnChain:       randOnChain(contract2),
+			},
+			{
+				ReceiptType:   components.RT_Success,
+				Domain:        "domain1",
+				TransactionID: txID5,
+				OnChain:       randOnChain(contract1),
+			},
+		})
 	})
 	require.NoError(t, err)
-	postCommit()
 
 	// We get the first one, before the block
 	require.Equal(t, txID1, (<-r1.receipts).ID)
@@ -447,16 +456,17 @@ func testGapsDomainsForNonAvailableReceipts(t *testing.T, pageSize int) {
 	require.Equal(t, txID4, (<-r1.receipts).ID)
 
 	// We can get new batches on the unblocked contracts
-	postCommit, err = txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
-		{
-			ReceiptType:   components.RT_Success,
-			Domain:        "domain1",
-			TransactionID: txID6,
-			OnChain:       randOnChain(contract2),
-		},
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				ReceiptType:   components.RT_Success,
+				Domain:        "domain1",
+				TransactionID: txID6,
+				OnChain:       randOnChain(contract2),
+			},
+		})
 	})
 	require.NoError(t, err)
-	postCommit()
 	require.Equal(t, txID6, (<-r1.receipts).ID)
 
 	// Write the state that's missing

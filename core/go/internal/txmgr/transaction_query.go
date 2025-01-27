@@ -205,7 +205,7 @@ func (tm *txManager) resolveABIReferencesAndCache(ctx context.Context, dbTX pers
 }
 
 func (tm *txManager) GetTransactionByIDFull(ctx context.Context, id uuid.UUID) (result *pldapi.TransactionFull, err error) {
-	ptxs, err := tm.QueryTransactionsFull(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), tm.p.DB(), false)
+	ptxs, err := tm.QueryTransactionsFull(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), tm.p.NOTX(), false)
 	if len(ptxs) == 0 || err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (tm *txManager) GetResolvedTransactionByID(ctx context.Context, id uuid.UUI
 	}
 
 	// Do the query - this function also does the caching (so individual TXs get cached from paginated queries)
-	rtxs, err := tm.QueryTransactionsResolved(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), tm.p.DB(), false)
+	rtxs, err := tm.QueryTransactionsResolved(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), tm.p.NOTX(), false)
 	if len(rtxs) == 0 || err != nil {
 		return nil, err
 	}
@@ -230,7 +230,7 @@ func (tm *txManager) GetResolvedTransactionByID(ctx context.Context, id uuid.UUI
 }
 
 func (tm *txManager) GetTransactionByID(ctx context.Context, id uuid.UUID) (*pldapi.Transaction, error) {
-	ptxs, err := tm.QueryTransactions(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), tm.p.DB(), false)
+	ptxs, err := tm.QueryTransactions(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), tm.p.NOTX(), false)
 	if len(ptxs) == 0 || err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (tm *txManager) GetTransactionByID(ctx context.Context, id uuid.UUID) (*pld
 }
 
 func (tm *txManager) GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey string) (*pldapi.Transaction, error) {
-	ptxs, err := tm.QueryTransactions(ctx, query.NewQueryBuilder().Limit(1).Equal("idempotencyKey", idempotencyKey).Query(), tm.p.DB(), false)
+	ptxs, err := tm.QueryTransactions(ctx, query.NewQueryBuilder().Limit(1).Equal("idempotencyKey", idempotencyKey).Query(), tm.p.NOTX(), false)
 	if len(ptxs) == 0 || err != nil {
 		return nil, err
 	}
@@ -275,11 +275,11 @@ func (tm *txManager) queryPublicTransactions(ctx context.Context, jq *query.Quer
 	if err := checkLimitSet(ctx, jq); err != nil {
 		return nil, err
 	}
-	return tm.publicTxMgr.QueryPublicTxWithBindings(ctx, tm.p.DB(), jq)
+	return tm.publicTxMgr.QueryPublicTxWithBindings(ctx, tm.p.NOTX(), jq)
 }
 
 func (tm *txManager) GetPublicTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce tktypes.HexUint64) (*pldapi.PublicTxWithBinding, error) {
-	prs, err := tm.publicTxMgr.QueryPublicTxWithBindings(ctx, tm.p.DB(),
+	prs, err := tm.publicTxMgr.QueryPublicTxWithBindings(ctx, tm.p.NOTX(),
 		query.NewQueryBuilder().Limit(1).
 			Equal("from", from).
 			Equal("nonce", nonce).
@@ -291,5 +291,5 @@ func (tm *txManager) GetPublicTransactionByNonce(ctx context.Context, from tktyp
 }
 
 func (tm *txManager) GetPublicTransactionByHash(ctx context.Context, hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error) {
-	return tm.publicTxMgr.GetPublicTransactionForHash(ctx, tm.p.DB(), hash)
+	return tm.publicTxMgr.GetPublicTransactionForHash(ctx, tm.p.NOTX(), hash)
 }

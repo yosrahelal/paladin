@@ -76,11 +76,11 @@ func (qw *queryWrapper[PT, T]) run(ctx context.Context, dbTX persistence.DBTX) (
 	// Build the query
 	var dbResults []*PT
 	if dbTX == nil {
-		dbTX = qw.p.DB()
+		dbTX = qw.p.NOTX()
 	}
 	q := filters.BuildGORM(ctx,
 		qw.query,
-		dbTX.Table(qw.table).WithContext(ctx),
+		dbTX.DB().Table(qw.table).WithContext(ctx),
 		qw.filters)
 	if qw.finalize != nil {
 		q = qw.finalize(q)

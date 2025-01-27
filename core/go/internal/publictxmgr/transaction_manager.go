@@ -234,17 +234,14 @@ func buildEthTX(
 }
 
 func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, txi *components.PublicTxSubmission) (tx *pldapi.PublicTx, err error) {
-	var txs []*pldapi.PublicTx
-	var cb func()
-	err = ble.ValidateTransaction(ctx, ble.p.NOTX(), txi)
-	if err == nil {
-		cb, txs, err = ble.WriteNewTransactions(ctx, ble.p.NOTX(), []*components.PublicTxSubmission{txi})
-	}
-	if err == nil {
-		tx = txs[0]
-		cb()
-	}
-	return
+	err = ble.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		txs, err := ble.WriteNewTransactions(ctx, dbTX, []*components.PublicTxSubmission{txi})
+		if err == nil {
+			tx = txs[0]
+		}
+		return err
+	})
+	return tx, err
 }
 
 func (ble *pubTxManager) ValidateTransaction(ctx context.Context, dbTX persistence.DBTX, txi *components.PublicTxSubmission) error {
@@ -293,7 +290,7 @@ func (ble *pubTxManager) ValidateTransaction(ctx context.Context, dbTX persisten
 
 }
 
-func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persistence.DBTX, transactions []*components.PublicTxSubmission) (postCommit func(), pubTxns []*pldapi.PublicTx, err error) {
+func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persistence.DBTX, transactions []*components.PublicTxSubmission) (pubTxns []*pldapi.PublicTx, err error) {
 	persistedTransactions := make([]*DBPublicTxn, len(transactions))
 	for i, txi := range transactions {
 		persistedTransactions[i] = &DBPublicTxn{
@@ -342,14 +339,14 @@ func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persiste
 			pubTxns[i] = mapPersistedTransaction(ptx)
 			toNotify[ptx.From] = true
 		}
-		postCommit = ble.postCommitNewTransactions(ctx, toNotify)
+		dbTX.AddPostCommit(ble.postCommitNewTransactions(toNotify))
 	}
 
-	return postCommit, pubTxns, err
+	return pubTxns, err
 }
 
-func (ble *pubTxManager) postCommitNewTransactions(ctx context.Context, toNotify map[tktypes.EthAddress]bool) func() {
-	return func() {
+func (ble *pubTxManager) postCommitNewTransactions(toNotify map[tktypes.EthAddress]bool) func(ctx context.Context) {
+	return func(ctx context.Context) {
 		// Mark any active orchestrators stale
 		inactive := false
 		for addr := range toNotify {

@@ -306,8 +306,9 @@ func checkIndexedBlockEqual(t *testing.T, expected *BlockInfoJSONRPC, indexed *p
 }
 
 func addBlockPostCommit(bi *blockIndexer, postCommit func([]*pldapi.IndexedBlock)) {
-	bi.preCommitHandlers = append(bi.preCommitHandlers, func(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
-		return func() { postCommit(blocks) }, nil
+	bi.preCommitHandlers = append(bi.preCommitHandlers, func(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*IndexedTransactionNotify) error {
+		dbTX.AddPostCommit(func(txCtx context.Context) { postCommit(blocks) })
+		return nil
 	})
 }
 

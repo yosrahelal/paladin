@@ -78,7 +78,6 @@ type inFlightDomainRequest struct {
 	id          string                   // each request gets a unique ID
 	dbTX        persistence.DBTX         // only if there's a DB transactions such as when called by block indexer
 	dCtx        components.DomainContext // might be short lived, or managed externally (by private TX manager)
-	krc         components.KeyResolver   // created on first use
 	readOnly    bool
 	postCommits []func()
 }
@@ -245,15 +244,6 @@ func (i *inFlightDomainRequest) close() {
 	i.d.inFlightLock.Lock()
 	defer i.d.inFlightLock.Unlock()
 	delete(i.d.inFlight, i.id)
-}
-
-func (i *inFlightDomainRequest) keyResolutionContext() components.KeyResolver {
-	i.d.inFlightLock.Lock()
-	defer i.d.inFlightLock.Unlock()
-	if i.krc == nil {
-		i.krc = i.d.dm.keyManager.KeyResolverForDBTX(i.dCtx.Ctx())
-	}
-	return i.krc.KeyResolver(i.dbTX)
 }
 
 func (i *inFlightDomainRequest) addPostCommit(pc func()) {
@@ -817,7 +807,7 @@ func (d *domain) SendTransaction(ctx context.Context, req *prototk.SendTransacti
 		return nil, err
 	}
 
-	postCommit, txIDs, err := d.dm.txManager.SendTransactions(ctx, c.dbTX, c.keyResolutionContext(), &pldapi.TransactionInput{
+	postCommit, txIDs, err := d.dm.txManager.SendTransactions(ctx, c.dbTX, d.dm.keyManager.KeyResolverForDBTX(c.dbTX), &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			Type: txType.Enum(),
 			From: req.Transaction.From,

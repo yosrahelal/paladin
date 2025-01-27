@@ -262,13 +262,16 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 		err := ble.ValidateTransaction(ctx, ble.p.NOTX(), tx)
 		require.NoError(t, err)
 	}
-	postCommit, batch, err := ble.WriteNewTransactions(ctx, ble.p.NOTX(), txs[1:])
+	var batch []*pldapi.PublicTx
+	err = ble.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		batch, err = ble.WriteNewTransactions(ctx, dbTX, txs[1:])
+		return err
+	})
 	require.NoError(t, err)
 	require.Len(t, batch, len(txs[1:]))
 	for _, tx := range batch {
 		require.Greater(t, *tx.LocalID, uint64(0))
 	}
-	postCommit()
 
 	// Get one back again by ID
 	txRead, err := ble.QueryPublicTxWithBindings(ctx, ble.p.NOTX(), query.NewQueryBuilder().Equal("localId", *batch[1].LocalID).Limit(1).Query())

@@ -91,7 +91,7 @@ type PrivateTxManager interface {
 	// in the meantime, this is handy for some blackish box testing
 	Subscribe(ctx context.Context, subscriber PrivateTxEventSubscriber)
 
-	NotifyFailedPublicTx(ctx context.Context, dbTX persistence.DBTX, confirms []*PublicTxMatch) (func(), error)
+	NotifyFailedPublicTx(ctx context.Context, dbTX persistence.DBTX, confirms []*PublicTxMatch) error
 
 	PrivateTransactionConfirmed(ctx context.Context, receipt *TxCompletion)
 

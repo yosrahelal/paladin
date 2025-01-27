@@ -31,13 +31,13 @@ func (tm *txManager) blockIndexerPreCommit(
 	dbTX persistence.DBTX,
 	blocks []*pldapi.IndexedBlock,
 	transactions []*blockindexer.IndexedTransactionNotify,
-) (blockindexer.PostCommit, error) {
+) error {
 
 	// Pass the list of transactions to the public transaction manager, who will pass us back an
 	// ORDERED list of matches to transaction IDs based on the bindings.
 	txMatches, err := tm.publicTxMgr.MatchUpdateConfirmedTransactions(ctx, dbTX, transactions)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Ok now we have an ordered list of completions that match Paladin transactions
@@ -66,34 +66,28 @@ func (tm *txManager) blockIndexerPreCommit(
 
 	// Write the receipts themselves - only way of duplicates should be a rewind of
 	// the block explorer, so we simply OnConflict ignore
-	finalizeTxPostCommit1, err := tm.FinalizeTransactions(ctx, dbTX, finalizeInfo)
+	err = tm.FinalizeTransactions(ctx, dbTX, finalizeInfo)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Deliver the failures to the private transaction manager
-	var finalizeTxPostCommit2 func()
 	if len(failedForPrivateTx) > 0 {
-		finalizeTxPostCommit2, err = tm.privateTxMgr.NotifyFailedPublicTx(ctx, dbTX, failedForPrivateTx)
+		err = tm.privateTxMgr.NotifyFailedPublicTx(ctx, dbTX, failedForPrivateTx)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return func() {
+	dbTX.AddPostCommit(func(ctx context.Context) {
 		// We need to notify the public TX manager when the DB transaction for these has completed,
 		// so it can remove any in-memory processing (this is regardless of they were matched to
 		// a public or private transaction)
 		if len(txMatches) > 0 {
 			tm.publicTxMgr.NotifyConfirmPersisted(ctx, txMatches)
 		}
-		if finalizeTxPostCommit1 != nil {
-			finalizeTxPostCommit1()
-		}
-		if finalizeTxPostCommit2 != nil {
-			finalizeTxPostCommit2()
-		}
-	}, nil
+	})
+	return nil
 }
 
 func (tm *txManager) mapBlockchainReceipt(pubTx *components.PublicTxMatch) *components.ReceiptInput {

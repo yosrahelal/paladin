@@ -598,15 +598,11 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 		}
 	}
 
-	var postCommits []PostCommit
 	err := bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
-		postCommits = nil
 		err = bi.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
 			for _, preCommitHandler := range bi.preCommitHandlers {
-				var postCommit PostCommit
-				postCommit, err = preCommitHandler(ctx, dbTX, blocks, notifyTransactions)
 				if err == nil {
-					postCommits = append(postCommits, postCommit)
+					err = preCommitHandler(ctx, dbTX, blocks, notifyTransactions)
 				}
 			}
 			if err == nil && len(blocks) > 0 {
@@ -644,9 +640,6 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 		bi.highestConfirmedBlock.Store(newHighestBlock)
 	}
 	if err == nil {
-		for _, postCommitHandler := range postCommits {
-			postCommitHandler()
-		}
 		for _, t := range transactions {
 			if inflight := bi.txWaiters.GetInflight(t.Hash); inflight != nil {
 				inflight.Complete(t)

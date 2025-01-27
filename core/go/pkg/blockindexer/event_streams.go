@@ -487,9 +487,8 @@ func (es *eventStream) runBatch(batch *eventBatch) error {
 
 	// We start a database transaction, run the callback function
 	return es.bi.retry.Do(es.ctx, func(attempt int) (retryable bool, err error) {
-		var postCommit PostCommit
 		err = es.bi.persistence.Transaction(es.ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
-			postCommit, err = es.handler(ctx, dbTX, &batch.EventDeliveryBatch)
+			err = es.handler(ctx, dbTX, &batch.EventDeliveryBatch)
 			if err != nil {
 				return err
 			}
@@ -509,9 +508,6 @@ func (es *eventStream) runBatch(batch *eventBatch) error {
 				}).
 				Error
 		})
-		if err == nil && postCommit != nil {
-			postCommit()
-		}
 		return true, err
 	})
 

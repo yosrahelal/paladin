@@ -64,7 +64,7 @@ type PublicTxManager interface {
 	// Perform (potentially expensive) transaction level validation, such as gas estimation. Call before starting a DB transaction
 	ValidateTransaction(ctx context.Context, dbTX persistence.DBTX, transaction *PublicTxSubmission) error
 	// Write a set of validated transactions to the public TX mgr database, notifying the relevant orchestrator(s) to wake, assign nonces, and start the submission process
-	WriteNewTransactions(ctx context.Context, dbTX persistence.DBTX, transactions []*PublicTxSubmission) (func(), []*pldapi.PublicTx, error)
+	WriteNewTransactions(ctx context.Context, dbTX persistence.DBTX, transactions []*PublicTxSubmission) ([]*pldapi.PublicTx, error)
 	// Convenience function that does ValidateTransaction+WriteNewTransactions for a single Tx
 	SingleTransactionSubmit(ctx context.Context, transaction *PublicTxSubmission) (*pldapi.PublicTx, error)
 

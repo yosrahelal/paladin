@@ -86,13 +86,13 @@ type TXManager interface {
 
 	// These are the general purpose functions exposed also as JSON/RPC APIs on the TX Manager
 
-	FinalizeTransactions(ctx context.Context, dbTX persistence.DBTX, info []*ReceiptInput) (postCommit func(), err error) // requires all transactions to be known
+	FinalizeTransactions(ctx context.Context, dbTX persistence.DBTX, info []*ReceiptInput) error // requires all transactions to be known
 	CalculateRevertError(ctx context.Context, dbTX persistence.DBTX, revertData tktypes.HexBytes) error
 	DecodeRevertError(ctx context.Context, dbTX persistence.DBTX, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error)
 	DecodeCall(ctx context.Context, dbTX persistence.DBTX, callData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error)
 	DecodeEvent(ctx context.Context, dbTX persistence.DBTX, topics []tktypes.Bytes32, eventData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.ABIDecodedData, error)
-	SendTransactions(ctx context.Context, dbTX persistence.DBTX, kr KeyResolver, txs ...*pldapi.TransactionInput) (postCommit func(), txIDs []uuid.UUID, err error)
-	PrepareTransactions(ctx context.Context, dbTX persistence.DBTX, kr KeyResolver, txs ...*pldapi.TransactionInput) (postCommit func(), txIDs []uuid.UUID, err error)
+	SendTransactions(ctx context.Context, dbTX persistence.DBTX, txs ...*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
+	PrepareTransactions(ctx context.Context, dbTX persistence.DBTX, txs ...*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
 	GetTransactionByID(ctx context.Context, id uuid.UUID) (*pldapi.Transaction, error)
 	GetResolvedTransactionByID(ctx context.Context, id uuid.UUID) (*ResolvedTransaction, error) // cache optimized
 	GetTransactionByIDFull(ctx context.Context, id uuid.UUID) (result *pldapi.TransactionFull, err error)
@@ -110,7 +110,7 @@ type TXManager interface {
 	QueryPreparedTransactions(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PreparedTransaction, error)
 	QueryPreparedTransactionsWithRefs(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*PreparedTransactionWithRefs, error)
 	CallTransaction(ctx context.Context, result any, tx *pldapi.TransactionCall) (err error)
-	UpsertABI(ctx context.Context, dbTX persistence.DBTX, a abi.ABI) (func(), *pldapi.StoredABI, error)
+	UpsertABI(ctx context.Context, dbTX persistence.DBTX, a abi.ABI) (*pldapi.StoredABI, error)
 	CreateReceiptListener(ctx context.Context, spec *pldapi.TransactionReceiptListener) error
 	GetReceiptListener(ctx context.Context, name string) *pldapi.TransactionReceiptListener
 	QueryReceiptListeners(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.TransactionReceiptListener, error)
@@ -122,7 +122,7 @@ type TXManager interface {
 	// These functions for use of other components
 
 	NotifyStatesDBChanged() // called by state manager after committing DB TXs writing new states that might fill in gaps
-	PrepareInternalPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (func(), *ValidatedTransaction, error)
-	UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX persistence.DBTX, txis []*ValidatedTransaction) (postCommit func(), err error)
-	WritePreparedTransactions(ctx context.Context, dbTX persistence.DBTX, prepared []*PreparedTransactionWithRefs) (postCommit func(), err error)
+	PrepareInternalPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*ValidatedTransaction, error)
+	UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX persistence.DBTX, txis []*ValidatedTransaction) error
+	WritePreparedTransactions(ctx context.Context, dbTX persistence.DBTX, prepared []*PreparedTransactionWithRefs) error
 }

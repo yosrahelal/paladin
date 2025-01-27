@@ -56,7 +56,7 @@ func (tm *txManager) getABIByHash(ctx context.Context, dbTX persistence.DBTX, ha
 		return pa, nil
 	}
 	var pABIs []*PersistedABI
-	err := dbTX.
+	err := dbTX.DB().
 		WithContext(ctx).
 		Table("abis").
 		Where("hash = ?", hash).
@@ -73,25 +73,25 @@ func (tm *txManager) getABIByHash(ctx context.Context, dbTX persistence.DBTX, ha
 	return pa, nil
 }
 
-func (tm *txManager) storeABI(ctx context.Context, dbTX persistence.DBTX, a abi.ABI) (func(), *tktypes.Bytes32, error) {
-	postCommit, pa, err := tm.UpsertABI(ctx, dbTX, a)
+func (tm *txManager) storeABI(ctx context.Context, dbTX persistence.DBTX, a abi.ABI) (*tktypes.Bytes32, error) {
+	pa, err := tm.UpsertABI(ctx, dbTX, a)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return postCommit, &pa.Hash, err
+	return &pa.Hash, err
 }
 
-func (tm *txManager) UpsertABI(ctx context.Context, dbTX persistence.DBTX, a abi.ABI) (func(), *pldapi.StoredABI, error) {
+func (tm *txManager) UpsertABI(ctx context.Context, dbTX persistence.DBTX, a abi.ABI) (*pldapi.StoredABI, error) {
 	hash, err := tktypes.ABISolDefinitionHash(ctx, a)
 	if err != nil {
-		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidABI)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidABI)
 	}
 
 	// If cached, nothing to do (note must not cache until written for this to be true)
 	pa, existing := tm.abiCache.Get(*hash)
 	if existing {
 		log.L(ctx).Debugf("ABI %s already cached", hash)
-		return func() {}, pa, nil
+		return pa, nil
 	}
 
 	// Grab all the error definitions for reverse lookup
@@ -113,7 +113,7 @@ func (tm *txManager) UpsertABI(ctx context.Context, dbTX persistence.DBTX, a abi
 	// Otherwise ask the DB to store
 	abiBytes, err := json.Marshal(a)
 	if err == nil {
-		err = dbTX.
+		err = dbTX.DB().
 			Table("abis").
 			Clauses(clause.OnConflict{
 				Columns: []clause.Column{
@@ -128,20 +128,21 @@ func (tm *txManager) UpsertABI(ctx context.Context, dbTX persistence.DBTX, a abi
 			Error
 	}
 	if err == nil && len(abiEntries) > 0 {
-		err = dbTX.
+		err = dbTX.DB().
 			Table("abi_entries").
 			Clauses(clause.OnConflict{DoNothing: true}).
 			Create(abiEntries).
 			Error
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	pa = &pldapi.StoredABI{Hash: *hash, ABI: a}
-	return func() {
+	dbTX.AddPostCommit(func(ctx context.Context) {
 		// Caching must only be done post-commit of the DB transaction
 		tm.abiCache.Set(*hash, pa)
-	}, pa, err
+	})
+	return pa, err
 }
 
 func (tm *txManager) queryABIs(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.StoredABI, error) {

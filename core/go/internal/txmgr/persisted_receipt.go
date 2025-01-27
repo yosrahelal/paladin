@@ -95,10 +95,10 @@ var transactionReceiptFilters = filters.FieldMap{
 
 // FinalizeTransactions is called by the block indexing routine, but also can be called
 // by the private transaction manager if transactions fail without making it to the blockchain
-func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.DBTX, info []*components.ReceiptInput) (func(), error) {
+func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.DBTX, info []*components.ReceiptInput) error {
 
 	if len(info) == 0 {
-		return func() {}, nil
+		return nil
 	}
 
 	receiptsToInsert := make([]*transactionReceipt, 0, len(info))
@@ -121,19 +121,19 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 		switch ri.ReceiptType {
 		case components.RT_Success:
 			if ri.FailureMessage != "" || ri.RevertData != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
+				return i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
 			}
 			receipt.Success = true
 		case components.RT_FailedWithMessage:
 			if ri.FailureMessage == "" || ri.RevertData != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
+				return i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
 			}
 			receipt.Success = false
 			failureMsg = ri.FailureMessage
 			receipt.FailureMessage = &ri.FailureMessage
 		case components.RT_FailedOnChainWithRevertData:
 			if ri.FailureMessage != "" {
-				return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
+				return i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
 			}
 			receipt.Success = false
 			receipt.RevertData = ri.RevertData
@@ -141,7 +141,7 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 			failureMsg = tm.CalculateRevertError(ctx, dbTX, ri.RevertData).Error()
 			receipt.FailureMessage = &failureMsg
 		default:
-			return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
+			return i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
 		}
 		log.L(ctx).Infof("Inserting receipt txId=%s success=%t failure=%s txHash=%v", receipt.TransactionID, receipt.Success, failureMsg, receipt.TransactionHash)
 		receiptsToInsert = append(receiptsToInsert, receipt)
@@ -155,7 +155,7 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 		// in transaction A will be lower than transaction B (not guaranteed otherwise).
 		err := tm.p.TakeNamedLock(ctx, dbTX, "transaction_receipts")
 		if err == nil {
-			err = dbTX.Table("transaction_receipts").
+			err = dbTX.DB().Table("transaction_receipts").
 				Clauses(clause.OnConflict{
 					Columns:   []clause.Column{{Name: "transaction"}},
 					DoNothing: true, // once inserted, the receipt is immutable
@@ -164,15 +164,16 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 				Error
 		}
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return func() {
+	dbTX.AddPostCommit(func(ctx context.Context) {
 		if len(receiptsToInsert) > 0 {
 			tm.notifyNewReceipts(receiptsToInsert)
 		}
-	}, nil
+	})
+	return nil
 }
 
 func (tm *txManager) CalculateRevertError(ctx context.Context, dbTX persistence.DBTX, revertData tktypes.HexBytes) error {
@@ -192,7 +193,7 @@ func (tm *txManager) DecodeRevertError(ctx context.Context, dbTX persistence.DBT
 
 	// There is potential with a 4 byte selector for clashes, so we do a distinct on the full hash
 	var errorDefs []*PersistedABIEntry
-	err := dbTX.Table("abi_entries").
+	err := dbTX.DB().Table("abi_entries").
 		Where("selector = ?", selector).
 		Where("type = ?", abi.Error).
 		Distinct("full_hash", "definition").
@@ -240,7 +241,7 @@ func (tm *txManager) DecodeCall(ctx context.Context, dbTX persistence.DBTX, call
 
 	// There is potential with a 4 byte selector for clashes, so we do a distinct on the full hash
 	var functionDefs []*PersistedABIEntry
-	err := dbTX.Table("abi_entries").
+	err := dbTX.DB().Table("abi_entries").
 		Where("selector = ?", selector).
 		Where("type = ?", abi.Function).
 		Distinct("full_hash", "definition").
@@ -286,7 +287,7 @@ func (tm *txManager) DecodeEvent(ctx context.Context, dbTX persistence.DBTX, top
 	}
 
 	var eventDefs []*PersistedABIEntry
-	err := dbTX.Table("abi_entries").
+	err := dbTX.DB().Table("abi_entries").
 		Where("full_hash = ?", topics[0]).
 		Where("type = ?", abi.Event).
 		Find(&eventDefs).
@@ -348,14 +349,14 @@ func (tm *txManager) GetTransactionReceiptByID(ctx context.Context, id uuid.UUID
 func (tm *txManager) buildFullReceipt(ctx context.Context, receipt *pldapi.TransactionReceipt, domainReceipt bool) (fullReceipt *pldapi.TransactionReceiptFull, err error) {
 	fullReceipt = &pldapi.TransactionReceiptFull{TransactionReceipt: receipt}
 	if receipt.Domain != "" {
-		fullReceipt.States, err = tm.stateMgr.GetTransactionStates(ctx, tm.p.DB(), fullReceipt.ID)
+		fullReceipt.States, err = tm.stateMgr.GetTransactionStates(ctx, tm.p.NOTX(), fullReceipt.ID)
 		if err != nil {
 			return nil, err
 		}
 		if domainReceipt {
 			d, domainErr := tm.domainMgr.GetDomainByName(ctx, receipt.Domain)
 			if domainErr == nil {
-				fullReceipt.DomainReceipt, domainErr = d.BuildDomainReceipt(ctx, tm.p.DB(), fullReceipt.ID, fullReceipt.States)
+				fullReceipt.DomainReceipt, domainErr = d.BuildDomainReceipt(ctx, tm.p.NOTX(), fullReceipt.ID, fullReceipt.States)
 			}
 			if domainErr != nil {
 				fullReceipt.DomainReceiptError = domainErr.Error()
@@ -378,9 +379,9 @@ func (tm *txManager) GetDomainReceiptByID(ctx context.Context, domain string, id
 	if err != nil {
 		return nil, err
 	}
-	return d.GetDomainReceipt(ctx, tm.p.DB(), id)
+	return d.GetDomainReceipt(ctx, tm.p.NOTX(), id)
 }
 
 func (tm *txManager) GetStateReceiptByID(ctx context.Context, id uuid.UUID) (*pldapi.TransactionStates, error) {
-	return tm.stateMgr.GetTransactionStates(ctx, tm.p.DB(), id)
+	return tm.stateMgr.GetTransactionStates(ctx, tm.p.NOTX(), id)
 }
