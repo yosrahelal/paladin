@@ -234,13 +234,17 @@ func buildEthTX(
 }
 
 func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, txi *components.PublicTxSubmission) (tx *pldapi.PublicTx, err error) {
+	var txs []*pldapi.PublicTx
 	err = ble.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		txs, err := ble.WriteNewTransactions(ctx, dbTX, []*components.PublicTxSubmission{txi})
+		err := ble.ValidateTransaction(ctx, dbTX, txi)
 		if err == nil {
-			tx = txs[0]
+			txs, err = ble.WriteNewTransactions(ctx, dbTX, []*components.PublicTxSubmission{txi})
 		}
 		return err
 	})
+	if err == nil {
+		tx = txs[0]
+	}
 	return tx, err
 }
 

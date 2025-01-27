@@ -18,7 +18,6 @@ package publictxmgr
 import (
 	"context"
 	"crypto/rand"
-	"database/sql/driver"
 	"fmt"
 	"math/big"
 	"testing"
@@ -425,6 +424,7 @@ func TestSubmitFailures(t *testing.T) {
 	defer done()
 
 	// estimation failure - for non-revert
+	m.db.ExpectBegin()
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
 		Return(ethclient.EstimateGasResult{}, fmt.Errorf("GasEstimate error")).Once()
 	_, err := ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
@@ -435,6 +435,7 @@ func TestSubmitFailures(t *testing.T) {
 	assert.Regexp(t, "GasEstimate error", err)
 
 	// estimation failure - for revert
+	m.db.ExpectBegin()
 	sampleRevertData := tktypes.HexBytes("some data")
 	m.txManager.On("CalculateRevertError", mock.Anything, mock.Anything, sampleRevertData).Return(fmt.Errorf("mapped revert error"))
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
@@ -480,8 +481,10 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	ctx := context.Background()
 	_, ble, _, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		mocks.db.MatchExpectationsInOrder(false)
+		mocks.db.ExpectBegin()
 		mocks.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{}))
-		mocks.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
+		mocks.db.ExpectQuery("INSERT.*public_txns").WillReturnRows(mocks.db.NewRows([]string{"pub_txn_id"}).AddRow(12345))
+		mocks.db.ExpectCommit()
 	})
 	defer done()
 
