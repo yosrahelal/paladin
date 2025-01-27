@@ -26,7 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"gorm.io/driver/mysql"
+	gormPostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -60,10 +60,7 @@ func (p *SQLMockProvider) DBName() string {
 }
 
 func (p *SQLMockProvider) Open(uri string) gorm.Dialector {
-	return mysql.New(mysql.Config{
-		Conn:                      p.DB,
-		SkipInitializeWithVersion: true,
-	})
+	return gormPostgres.New(gormPostgres.Config{Conn: p.DB})
 }
 
 func (p *SQLMockProvider) GetMigrationDriver(db *sql.DB) (migratedb.Driver, error) {

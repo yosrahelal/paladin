@@ -252,7 +252,7 @@ func (kr *keyResolver) resolveKey(ctx context.Context, identifier, algorithm, ve
 		mapping, _ = kr.km.identifierCache.Get(identifier)
 	}
 
-	var newMapping = false
+	var isNewMapping = false
 	var dbPath *resolvedDBPath
 	db := kr.dbTX.DB()
 	if mapping == nil {
@@ -293,9 +293,9 @@ func (kr *keyResolver) resolveKey(ctx context.Context, identifier, algorithm, ve
 			}
 		} else {
 			if requireExistingMapping {
-				return nil, i18n.NewError(ctx, msgs.MsgKeyManagerExistingIdentifierNotFound)
+				return nil, i18n.NewError(ctx, msgs.MsgKeyManagerExistingIdentifierNotFound, identifier)
 			}
-			newMapping = true
+			isNewMapping = true
 			mapping = &pldapi.KeyMappingWithPath{
 				KeyMapping: &pldapi.KeyMapping{
 					Identifier: identifier,
@@ -305,8 +305,12 @@ func (kr *keyResolver) resolveKey(ctx context.Context, identifier, algorithm, ve
 		}
 	}
 
+	return kr.resolveMapping(ctx, mapping, isNewMapping, identifier, algorithm, verifierType, requireExistingMapping)
+}
+
+func (kr *keyResolver) resolveMapping(ctx context.Context, mapping *pldapi.KeyMappingWithPath, isNewMapping bool, identifier, algorithm, verifierType string, requireExistingMapping bool) (_ *pldapi.KeyMappingAndVerifier, err error) {
 	var w *wallet
-	if newMapping {
+	if isNewMapping {
 		// Match it to a wallet (or fail)
 		w, err = kr.km.selectWallet(ctx, identifier)
 		if err != nil {
@@ -335,10 +339,7 @@ func (kr *keyResolver) resolveKey(ctx context.Context, identifier, algorithm, ve
 		}
 
 		// Check the DB for a verifier for this existing mapping.
-		var v *pldapi.KeyVerifier
-		if err == nil {
-			v, err = kr.getStoredVerifier(ctx, identifier, algorithm, verifierType)
-		}
+		v, err := kr.getStoredVerifier(ctx, identifier, algorithm, verifierType)
 		if err != nil {
 			return nil, err
 		}
@@ -361,7 +362,7 @@ func (kr *keyResolver) resolveKey(ctx context.Context, identifier, algorithm, ve
 
 	// We shouldn't get here for an existing mapping
 	if requireExistingMapping {
-		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerExistingIdentifierNotFound)
+		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerExistingIdentifierNotFound, identifier)
 	}
 
 	// Ok - we are ready to talk to the wallet signing module to resolve the
@@ -372,7 +373,7 @@ func (kr *keyResolver) resolveKey(ctx context.Context, identifier, algorithm, ve
 	}
 
 	// We have a verifier and possibly a new mapping to write in our pre-commit
-	if newMapping {
+	if isNewMapping {
 		kr.newMappings = append(kr.newMappings, result.KeyMappingWithPath)
 	}
 	// We add the verifier to our list to create here - but there is one small edge case where

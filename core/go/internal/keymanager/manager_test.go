@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
@@ -424,12 +425,13 @@ func TestTimeoutWaitingForLock(t *testing.T) {
 
 	// Wait until we know we are blocked
 	<-readyToTry
-	cancelled, cancelCtx := context.WithCancel(ctx)
-	cancelCtx()
+	withTimeout, cancelCtx := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancelCtx()
 	var kr2 *keyResolver
 	err := km.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		kr2 = km.KeyResolverForDBTX(dbTX).(*keyResolver)
-		return km.takeAllocationLock(cancelled, kr2)
+		_, err := kr2.ResolveKey(withTimeout, "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+		return err
 	})
 	assert.Regexp(t, "PD010301", err)
 
