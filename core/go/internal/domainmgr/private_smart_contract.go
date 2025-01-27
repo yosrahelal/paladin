@@ -216,7 +216,7 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 	// at this point if we're re-assembling.
 	preAssembly := tx.PreAssembly
 
-	c := dc.d.newInFlightDomainRequest(readTX, dCtx)
+	c := dc.d.newInFlightDomainRequest(readTX, dCtx, true)
 	defer c.close()
 
 	// Now we have the required verifiers, we can ask the domain to do the heavy lifting
@@ -445,7 +445,7 @@ func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, read
 		return nil, i18n.NewError(dCtx.Ctx(), msgs.MsgDomainReqIncompleteEndorseTransaction)
 	}
 
-	c := dc.d.newInFlightDomainRequest(readTX, dCtx)
+	c := dc.d.newInFlightDomainRequest(readTX, dCtx, true)
 	defer c.close()
 
 	// This function does NOT FLUSH before or after doing endorse. The assumption is that this
@@ -494,7 +494,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 	preAssembly := tx.PreAssembly
 	postAssembly := tx.PostAssembly
 
-	c := dc.d.newInFlightDomainRequest(readTX, dCtx)
+	c := dc.d.newInFlightDomainRequest(readTX, dCtx, true)
 	defer c.close()
 
 	// Run the prepare
@@ -601,7 +601,7 @@ func (dc *domainContract) ExecCall(dCtx components.DomainContext, readTX *gorm.D
 	}
 
 	// We expect queries to the state store during this call
-	c := dc.d.newInFlightDomainRequest(readTX, dCtx)
+	c := dc.d.newInFlightDomainRequest(readTX, dCtx, true)
 	defer c.close()
 
 	// Call the domain

@@ -163,9 +163,8 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 			km.verifierByIdentityCache.Clear()
 		}
 
-		krc := km.NewKeyResolutionContext(ctx)
-		err := km.p.DB().Transaction(func(dbTX *gorm.DB) error {
-			kr := krc.KeyResolver(dbTX)
+		postCommitCalled := false
+		err := DBTransactionWithKRC(ctx, km.p, km, func(dbTX *gorm.DB, kr components.KeyResolver) (postCommit func(), err error) {
 
 			// one key out of the blue
 			resolved1, err := kr.ResolveKey("bob.keys.blue.42", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
@@ -218,10 +217,10 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 				assert.Equal(t, fmt.Sprintf("m/44'/60'/2'/%d", i), resolved.KeyHandle)
 			}
 
-			return krc.PreCommit()
+			return func() { postCommitCalled = true }, nil
 		})
 		require.NoError(t, err)
-		krc.Close(true) // note a cheat in this unit test to not have a defer on this in a sub-function
+		require.True(t, postCommitCalled)
 	}
 
 	// Sub-test two - concurrent resolution with a consistent outcome

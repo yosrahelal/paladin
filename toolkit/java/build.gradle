@@ -49,8 +49,8 @@ tasks.register("protoc") {
     dependsOn tasks.generateProto
 }
 
-def grpcVersion = '1.65+'
-def protobufVersion = '3.25+'
+def grpcVersion = '1.69+'
+def protobufVersion = '4.29+'
 def protocVersion = protobufVersion
 
 dependencies {

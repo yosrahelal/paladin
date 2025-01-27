@@ -106,6 +106,29 @@ func (km *keyManager) Sign(ctx context.Context, mapping *pldapi.KeyMappingAndVer
 	return w.sign(ctx, mapping, payloadType, payload)
 }
 
+// Run a new DB transaction with access to the KeyResolver, as well as the DB.
+// Any postCommit returned by the inner function will be called if the TX is successful.
+func DBTransactionWithKRC(ctx context.Context, p persistence.Persistence, km components.KeyManager, fn func(dbTX *gorm.DB, kr components.KeyResolver) (postCommit func(), err error)) (err error) {
+	krc := km.NewKeyResolutionContext(ctx)
+	committed := false
+	var postCommit func()
+	defer func() {
+		krc.Close(committed)
+		if postCommit != nil && committed {
+			postCommit()
+		}
+	}()
+	err = p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		postCommit, err = fn(dbTX, krc.KeyResolver(dbTX))
+		if err == nil {
+			err = krc.PreCommit()
+		}
+		return err
+	})
+	committed = (err == nil)
+	return err
+}
+
 func (km *keyManager) lockAllocationOrGetOwner(krc *keyResolver) *keyResolver {
 	km.allocLock.Lock()
 	defer km.allocLock.Unlock()
