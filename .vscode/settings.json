@@ -3,6 +3,7 @@
     "go.lintTool": "golangci-lint",
     "go.lintFlags": ["--fast", "--allow-parallel-runners"],
     "cSpell.words": [
+      "Finalizers",
       "idempotency",
       "remoting",
       "Upsert"
