@@ -152,7 +152,11 @@ export interface IKeyEntry {
   path: string
   index: number
   type: string
-  verifier: string
+  verifiers: {
+    verifier: string
+    type: string
+    algorithm: string
+  }[] | null
   wallet: string
   keyHandle: string
 }

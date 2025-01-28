@@ -25,9 +25,10 @@ type Props = {
   title: string
   hideTitle?: boolean
   hash: string
+  secondary?: boolean
 }
 
-export const Hash: React.FC<Props> = ({ Icon, title, hideTitle, hash }) => {
+export const Hash: React.FC<Props> = ({ Icon, title, hideTitle, hash, secondary }) => {
 
   const [hashDialogOpen, setHashDialogOpen] = useState(false);
 
@@ -35,7 +36,7 @@ export const Hash: React.FC<Props> = ({ Icon, title, hideTitle, hash }) => {
     if (value.length < MAX_LENGTH_WITHOUT_COLLAPSE) {
       return hash;
     }
-    return `${value.substring(0, 5)}...${value.substring(value.length - 3)}`
+    return `${value.substring(0, 6)}...${value.substring(value.length - 4)}`
   };
 
   const content = hideTitle ? getHash(hash) : `${title} | ${getHash(hash)}`
@@ -48,7 +49,7 @@ export const Hash: React.FC<Props> = ({ Icon, title, hideTitle, hash }) => {
         onClick={() => setHashDialogOpen(true)}
         fullWidth
         variant="contained"
-        color="secondary"
+        color={ secondary? 'secondary' : 'primary' }
         sx={{ paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400', whiteSpace: 'nowrap' }}
         size="small">
         {content}
