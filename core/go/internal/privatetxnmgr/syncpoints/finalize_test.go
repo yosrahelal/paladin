@@ -48,7 +48,10 @@ func TestWriteFinalizeOperations(t *testing.T) {
 		},
 	}
 
-	m.txMgr.On("FinalizeTransactions", ctx, mock.Anything, expectedReceipts).Return(nil)
+	m.txMgr.On("FinalizeTransactions", mock.Anything, mock.Anything, expectedReceipts).Return(nil)
+	m.persistence.Mock.ExpectBegin()
+	m.persistence.Mock.ExpectCommit()
+
 	err := m.persistence.P.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		return s.writeFailureOperations(ctx, dbTX, finalizeOperations)
 	})

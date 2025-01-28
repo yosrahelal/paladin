@@ -39,7 +39,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
-	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
@@ -116,19 +115,21 @@ func TestPrivateTxManagerInvalidTransactionMissingDomain(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), &components.ValidatedTransaction{
-		ResolvedTransaction: components.ResolvedTransaction{
-			Function: &components.ResolvedFunction{
-				Definition: testABI[0],
-			},
-			Transaction: &pldapi.Transaction{
-				ID: confutil.P(uuid.New()),
-				TransactionBase: pldapi.TransactionBase{
-					To:   domainAddress,
-					From: "alice@node1",
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, &components.ValidatedTransaction{
+			ResolvedTransaction: components.ResolvedTransaction{
+				Function: &components.ResolvedFunction{
+					Definition: testABI[0],
+				},
+				Transaction: &pldapi.Transaction{
+					ID: confutil.P(uuid.New()),
+					TransactionBase: pldapi.TransactionBase{
+						To:   domainAddress,
+						From: "alice@node1",
+					},
 				},
 			},
-		},
+		})
 	})
 	// no input domain should err
 	assert.Regexp(t, "PD011800", err)
@@ -148,20 +149,22 @@ func TestPrivateTxManagerInvalidTransactionMismatchedDomain(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), &components.ValidatedTransaction{
-		ResolvedTransaction: components.ResolvedTransaction{
-			Function: &components.ResolvedFunction{
-				Definition: testABI[0],
-			},
-			Transaction: &pldapi.Transaction{
-				ID: confutil.P(uuid.New()),
-				TransactionBase: pldapi.TransactionBase{
-					To:     domainAddress,
-					Domain: "domain2",
-					From:   "alice@node1",
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, &components.ValidatedTransaction{
+			ResolvedTransaction: components.ResolvedTransaction{
+				Function: &components.ResolvedFunction{
+					Definition: testABI[0],
+				},
+				Transaction: &pldapi.Transaction{
+					ID: confutil.P(uuid.New()),
+					TransactionBase: pldapi.TransactionBase{
+						To:     domainAddress,
+						Domain: "domain2",
+						From:   "alice@node1",
+					},
 				},
 			},
-		},
+		})
 	})
 	// no input domain should err
 	assert.Regexp(t, "PD011825", err)
@@ -179,20 +182,22 @@ func TestPrivateTxManagerInvalidTransactionEmptyAddress(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), &components.ValidatedTransaction{
-		ResolvedTransaction: components.ResolvedTransaction{
-			Function: &components.ResolvedFunction{
-				Definition: testABI[0],
-			},
-			Transaction: &pldapi.Transaction{
-				ID: confutil.P(uuid.New()),
-				TransactionBase: pldapi.TransactionBase{
-					To:     domainAddress,
-					Domain: "domain1",
-					From:   "alice@node1",
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, &components.ValidatedTransaction{
+			ResolvedTransaction: components.ResolvedTransaction{
+				Function: &components.ResolvedFunction{
+					Definition: testABI[0],
+				},
+				Transaction: &pldapi.Transaction{
+					ID: confutil.P(uuid.New()),
+					TransactionBase: pldapi.TransactionBase{
+						To:     domainAddress,
+						Domain: "domain1",
+						From:   "alice@node1",
+					},
 				},
 			},
-		},
+		})
 	})
 	// no input domain should err
 	assert.Regexp(t, "PD011811", err)
@@ -357,7 +362,9 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		},
 	}
 	mocks.txManager.On("GetResolvedTransactionByID", mock.Anything, mock.Anything).Return(&tx.ResolvedTransaction, nil)
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), tx)
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, tx)
+	})
 	require.NoError(t, err)
 
 	// testTimeout := 2 * time.Second
@@ -537,7 +544,9 @@ func TestPrivateTxManagerSimplePreparedTransaction(t *testing.T) {
 			},
 		},
 	}
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), tx)
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, tx)
+	})
 	require.NoError(t, err)
 
 	// testTimeout := 2 * time.Second
@@ -762,7 +771,9 @@ func TestPrivateTxManagerMultipleSignature(t *testing.T) {
 		},
 	}
 	mocks.txManager.On("GetResolvedTransactionByID", mock.Anything, mock.Anything).Return(&tx.ResolvedTransaction, nil)
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), tx)
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, tx)
+	})
 	require.NoError(t, err)
 
 	// testTimeout := 2 * time.Second
@@ -951,7 +962,9 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	}
 	localNodeMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, mock.Anything).Return(&tx.ResolvedTransaction, nil)
 
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), tx)
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, tx)
+	})
 	assert.NoError(t, err)
 
 	status := pollForStatus(ctx, t, "delegated", privateTxManager, domainAddressString, testTransactionID.String(), 200*time.Second)
@@ -1145,7 +1158,9 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 	}
 	localNodeMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, mock.Anything).Return(&tx.ResolvedTransaction, nil)
 
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), tx)
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, tx)
+	})
 	assert.NoError(t, err)
 
 	status := pollForStatus(ctx, t, "delegated", privateTxManager, domainAddressString, testTransactionID.String(), 200*time.Second)
@@ -1301,7 +1316,9 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	}
 	aliceEngineMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, mock.Anything).Return(&tx.ResolvedTransaction, nil)
 
-	err = aliceEngine.HandleNewTx(ctx, aliceEngine.DB(), tx)
+	err = aliceEngine.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return aliceEngine.HandleNewTx(ctx, dbTX, tx)
+	})
 	assert.NoError(t, err)
 
 	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID.String(), 200*time.Second)
@@ -1482,7 +1499,9 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 	bobEngine.SetBlockHeight(ctx, 99)
 	carolEngine.SetBlockHeight(ctx, 99)
 
-	err = aliceEngine.HandleNewTx(ctx, aliceEngine.DB(), tx1)
+	err = aliceEngine.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return aliceEngine.HandleNewTx(ctx, dbTX, tx1)
+	})
 	assert.NoError(t, err)
 
 	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID1.String(), 200*time.Second)
@@ -1510,7 +1529,9 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 	aliceEngine.SetBlockHeight(ctx, 100)
 	bobEngine.SetBlockHeight(ctx, 100)
 	carolEngine.SetBlockHeight(ctx, 100)
-	err = aliceEngine.HandleNewTx(ctx, aliceEngine.DB(), tx2)
+	err = aliceEngine.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return aliceEngine.HandleNewTx(ctx, dbTX, tx2)
+	})
 	assert.NoError(t, err)
 
 	status = pollForStatus(ctx, t, "delegated", aliceEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
@@ -1696,7 +1717,9 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 	bobEngine.SetBlockHeight(ctx, 199)
 	carolEngine.SetBlockHeight(ctx, 199)
 
-	err = aliceEngine.HandleNewTx(ctx, aliceEngine.DB(), tx1)
+	err = aliceEngine.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return aliceEngine.HandleNewTx(ctx, dbTX, tx1)
+	})
 	assert.NoError(t, err)
 
 	//wait until alice had delegated to bob and bob has dispatched
@@ -1716,7 +1739,9 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 	carolEndorsementTrigger := carolEngineMocks.mockForEndorsementOnTrigger(t, *testTransactionID2, &carol, []byte("carol-endorsement-bytes2"), []byte("carol-signature-bytes2"))
 
 	//send transaction 2 and it should get delegated to bob, because we have not moved the block height but it should not get dispatched yet because carol's endorsement is delayed
-	err = aliceEngine.HandleNewTx(ctx, aliceEngine.DB(), tx2)
+	err = aliceEngine.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return aliceEngine.HandleNewTx(ctx, dbTX, tx2)
+	})
 	assert.NoError(t, err)
 
 	status = pollForStatus(ctx, t, "delegated", aliceEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
@@ -1950,7 +1975,9 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	}
 	aliceEngineMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, *testTransactionID1).Return(&tx1.ResolvedTransaction, nil)
 
-	err = aliceEngine.HandleNewTx(ctx, aliceEngine.DB(), tx1)
+	err = aliceEngine.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return aliceEngine.HandleNewTx(ctx, dbTX, tx1)
+	})
 	require.NoError(t, err)
 
 	tx2 := &components.ValidatedTransaction{
@@ -1970,7 +1997,9 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	}
 	aliceEngineMocks.txManager.On("GetResolvedTransactionByID", mock.Anything, *testTransactionID2).Return(&tx2.ResolvedTransaction, nil)
 
-	err = aliceEngine.HandleNewTx(ctx, aliceEngine.DB(), tx2)
+	err = aliceEngine.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return aliceEngine.HandleNewTx(ctx, dbTX, tx2)
+	})
 	require.NoError(t, err)
 
 	// Neither transaction should be dispatched yet
@@ -2139,7 +2168,9 @@ func TestPrivateTxManagerDeploy(t *testing.T) {
 			},
 		},
 	}
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), deployTx)
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, deployTx)
+	})
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -2178,7 +2209,9 @@ func TestPrivateTxManagerDeployErrorInvalidSubmitMode(t *testing.T) {
 			},
 		},
 	}
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), deployTx)
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, deployTx)
+	})
 	assert.Error(t, err)
 	assert.Regexp(t, "PD011827", err.Error())
 
@@ -2214,7 +2247,9 @@ func TestPrivateTxManagerDeployFailInit(t *testing.T) {
 		},
 	}
 
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), tx)
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, tx)
+	})
 	assert.Error(t, err)
 	assert.Regexp(t, regexp.MustCompile(".*failed to init.*"), err.Error())
 }
@@ -2268,7 +2303,9 @@ func TestPrivateTxManagerDeployFailPrepare(t *testing.T) {
 	err := privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), vtx)
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, vtx)
+	})
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -2354,7 +2391,9 @@ func TestPrivateTxManagerFailSignerResolve(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), vtx)
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, vtx)
+	})
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -2429,7 +2468,9 @@ func TestPrivateTxManagerDeployFailNoInvokeOrDeploy(t *testing.T) {
 	err := privateTxManager.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, privateTxManager.DB(), vtx)
+	err = privateTxManager.P().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return privateTxManager.HandleNewTx(ctx, dbTX, vtx)
+	})
 	require.NoError(t, err)
 
 	deadlineTimer := time.NewTimer(timeTillDeadline(t))
@@ -2617,20 +2658,20 @@ func TestCallPrivateSmartContractExecCallFail(t *testing.T) {
 /* Utils */
 
 type dependencyMocks struct {
-	preInitComponents    *componentmocks.PreInitComponents
-	allComponents        *componentmocks.AllComponents
-	db                   *mockpersistence.SQLMockProvider
-	domain               *componentmocks.Domain
-	domainSmartContract  *componentmocks.DomainSmartContract
-	domainContext        *componentmocks.DomainContext
-	domainMgr            *componentmocks.DomainManager
-	transportManager     *componentmocks.TransportManager
-	stateStore           *componentmocks.StateManager
-	keyManager           *componentmocks.KeyManager
-	keyResolutionContext *componentmocks.KeyResolver
-	publicTxManager      *componentmocks.PublicTxManager
-	identityResolver     *componentmocks.IdentityResolver
-	txManager            *componentmocks.TXManager
+	preInitComponents   *componentmocks.PreInitComponents
+	allComponents       *componentmocks.AllComponents
+	db                  *mockpersistence.SQLMockProvider
+	domain              *componentmocks.Domain
+	domainSmartContract *componentmocks.DomainSmartContract
+	domainContext       *componentmocks.DomainContext
+	domainMgr           *componentmocks.DomainManager
+	transportManager    *componentmocks.TransportManager
+	stateStore          *componentmocks.StateManager
+	keyManager          *componentmocks.KeyManager
+	keyResolver         *componentmocks.KeyResolver
+	publicTxManager     *componentmocks.PublicTxManager
+	identityResolver    *componentmocks.IdentityResolver
+	txManager           *componentmocks.TXManager
 }
 
 func (m *dependencyMocks) mockDomain(domainAddress *tktypes.EthAddress) {
@@ -2760,12 +2801,12 @@ func (m *dependencyMocks) mockForEndorsementOnTrigger(_ *testing.T, txID uuid.UU
 
 type privateTransactionMgrForPackageTesting interface {
 	components.PrivateTxManager
-	PreCommitHandler(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error)
+	PreCommitHandler(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) error
 	DependencyMocks() *dependencyMocks
 	NodeName() string
 	//Wrapper around a call to PreCommitHandler to notify of a new block with given height
 	SetBlockHeight(ctx context.Context, height int64)
-	DB() *gorm.DB
+	P() persistence.Persistence
 }
 type privateTransactionMgrForPackageTestingStruct struct {
 	*privateTxManager
@@ -2775,7 +2816,7 @@ type privateTransactionMgrForPackageTestingStruct struct {
 	t                *testing.T
 }
 
-func (p *privateTransactionMgrForPackageTestingStruct) PreCommitHandler(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
+func (p *privateTransactionMgrForPackageTestingStruct) PreCommitHandler(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) error {
 	return p.preCommitHandler(ctx, dbTX, blocks, transactions)
 }
 
@@ -2788,7 +2829,7 @@ func (p *privateTransactionMgrForPackageTestingStruct) NodeName() string {
 }
 
 func (p *privateTransactionMgrForPackageTestingStruct) SetBlockHeight(ctx context.Context, height int64) {
-	postCommitHandler, err := p.PreCommitHandler(
+	err := p.PreCommitHandler(
 		ctx,
 		nil,
 		[]*pldapi.IndexedBlock{
@@ -2799,12 +2840,10 @@ func (p *privateTransactionMgrForPackageTestingStruct) SetBlockHeight(ctx contex
 		nil,
 	)
 	assert.NoError(p.t, err)
-	postCommitHandler()
-
 }
 
-func (p *privateTransactionMgrForPackageTestingStruct) DB() *gorm.DB {
-	return p.privateTxManager.components.Persistence().DB()
+func (p *privateTransactionMgrForPackageTestingStruct) P() persistence.Persistence {
+	return p.privateTxManager.components.Persistence()
 }
 
 func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (privateTransactionMgrForPackageTesting, *dependencyMocks) {
@@ -2817,19 +2856,19 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{
-		preInitComponents:    componentmocks.NewPreInitComponents(t),
-		allComponents:        componentmocks.NewAllComponents(t),
-		domain:               componentmocks.NewDomain(t),
-		domainSmartContract:  componentmocks.NewDomainSmartContract(t),
-		domainContext:        componentmocks.NewDomainContext(t),
-		domainMgr:            componentmocks.NewDomainManager(t),
-		transportManager:     componentmocks.NewTransportManager(t),
-		stateStore:           componentmocks.NewStateManager(t),
-		keyManager:           componentmocks.NewKeyManager(t),
-		keyResolutionContext: componentmocks.NewKeyResolver(t),
-		identityResolver:     componentmocks.NewIdentityResolver(t),
-		txManager:            componentmocks.NewTXManager(t),
-		publicTxManager:      componentmocks.NewPublicTxManager(t),
+		preInitComponents:   componentmocks.NewPreInitComponents(t),
+		allComponents:       componentmocks.NewAllComponents(t),
+		domain:              componentmocks.NewDomain(t),
+		domainSmartContract: componentmocks.NewDomainSmartContract(t),
+		domainContext:       componentmocks.NewDomainContext(t),
+		domainMgr:           componentmocks.NewDomainManager(t),
+		transportManager:    componentmocks.NewTransportManager(t),
+		stateStore:          componentmocks.NewStateManager(t),
+		keyManager:          componentmocks.NewKeyManager(t),
+		keyResolver:         componentmocks.NewKeyResolver(t),
+		identityResolver:    componentmocks.NewIdentityResolver(t),
+		txManager:           componentmocks.NewTXManager(t),
+		publicTxManager:     componentmocks.NewPublicTxManager(t),
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -2843,11 +2882,7 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 	mocks.domainSmartContract.On("LockStates", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	mocks.domainMgr.On("GetDomainByName", mock.Anything, "domain1").Return(mocks.domain, nil).Maybe()
 	mocks.domain.On("Name").Return("domain1").Maybe()
-	mkrc := componentmocks.KeyResolverForDBTXLazyDB(t)
-	mkrc.On("KeyResolverLazyDB").Return(mocks.keyResolutionContext).Maybe()
-	mkrc.On("Commit").Return(nil).Maybe()
-	mkrc.On("Rollback").Return().Maybe()
-	mocks.keyManager.On("KeyResolverForDBTXLazyDB", mock.Anything).Return(mkrc).Maybe()
+	mocks.keyManager.On("KeyResolverForDBTXLazyDB", mock.Anything).Return(mocks.keyResolver).Maybe()
 
 	mocks.domainContext.On("Ctx").Return(ctx).Maybe()
 	mocks.domainContext.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()
@@ -2870,7 +2905,7 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 	mocks.allComponents.On("IdentityResolver").Return(mocks.identityResolver).Maybe()
 	preInitResult, err := e.PreInit(mocks.preInitComponents)
 	assert.NoError(t, err)
-	postCommitHandler, err := preInitResult.PreCommitHandler(
+	err = preInitResult.PreCommitHandler(
 		ctx,
 		nil,
 		[]*pldapi.IndexedBlock{
@@ -2881,7 +2916,6 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 		nil,
 	)
 	assert.NoError(t, err)
-	postCommitHandler()
 
 	err = e.PostInit(mocks.allComponents)
 	assert.NoError(t, err)
