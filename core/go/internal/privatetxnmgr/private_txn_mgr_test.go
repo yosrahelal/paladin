@@ -75,7 +75,7 @@ func mockWritePublicTxsOk(mocks *dependencyMocks) chan struct{} {
 				PublicTxOptions: tx.PublicTxOptions,
 			}
 		}
-		mwtx.Return(func() {}, res, nil)
+		mwtx.Return(res, nil)
 		if dispatched != nil {
 			close(dispatched)
 			dispatched = nil
@@ -201,6 +201,16 @@ func TestPrivateTxManagerInvalidTransactionEmptyAddress(t *testing.T) {
 	})
 	// no input domain should err
 	assert.Regexp(t, "PD011811", err)
+}
+
+func mockDCFlushWithWaiter(mocks *dependencyMocks) chan struct{} {
+	dcFlushed := make(chan struct{})
+	mocks.domainContext.On("Flush", mock.Anything).
+		Return(nil).
+		Run(func(args mock.Arguments) {
+			close(dcFlushed)
+		})
+	return dcFlushed
 }
 
 func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
@@ -338,10 +348,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	_ = mockWritePublicTxsOk(mocks)
 
-	dcFlushed := make(chan error, 1)
-	mocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
-		dcFlushed <- err
-	}, nil)
+	dcFlushed := mockDCFlushWithWaiter(mocks)
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
@@ -372,7 +379,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, testTransactionID.String(), testTimeout)
 	assert.Equal(t, "dispatched", status)
 
-	require.NoError(t, <-dcFlushed)
+	<-dcFlushed
 
 	privateTxManager.Stop()
 
@@ -520,10 +527,7 @@ func TestPrivateTxManagerSimplePreparedTransaction(t *testing.T) {
 
 	mocks.txManager.On("WritePreparedTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-	dcFlushed := make(chan error, 1)
-	mocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
-		dcFlushed <- err
-	}, nil)
+	dcFlushed := mockDCFlushWithWaiter(mocks)
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
@@ -554,7 +558,7 @@ func TestPrivateTxManagerSimplePreparedTransaction(t *testing.T) {
 	status := pollForStatus(ctx, t, "prepared", privateTxManager, domainAddressString, testTransactionID.String(), testTimeout)
 	assert.Equal(t, "prepared", status)
 
-	require.NoError(t, <-dcFlushed)
+	<-dcFlushed
 
 	privateTxManager.Stop()
 
@@ -747,10 +751,7 @@ func TestPrivateTxManagerMultipleSignature(t *testing.T) {
 
 	_ = mockWritePublicTxsOk(mocks)
 
-	dcFlushed := make(chan error, 1)
-	mocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
-		dcFlushed <- err
-	}, nil)
+	dcFlushed := mockDCFlushWithWaiter(mocks)
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
@@ -781,7 +782,7 @@ func TestPrivateTxManagerMultipleSignature(t *testing.T) {
 	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, testTransactionID.String(), testTimeout)
 	assert.Equal(t, "dispatched", status)
 
-	require.NoError(t, <-dcFlushed)
+	<-dcFlushed
 
 	privateTxManager.Stop()
 
@@ -937,10 +938,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 		Return([]*tktypes.EthAddress{signingAddr}, nil)
 
 	// Flush of domain context happens on the remote node (the notary)
-	dcFlushed := make(chan error, 1)
-	remoteEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
-		dcFlushed <- err
-	}, nil)
+	dcFlushed := mockDCFlushWithWaiter(remoteEngineMocks)
 
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
@@ -973,7 +971,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	status = pollForStatus(ctx, t, "dispatched", remoteEngine, domainAddressString, testTransactionID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	require.NoError(t, <-dcFlushed)
+	<-dcFlushed
 
 }
 
@@ -1133,10 +1131,7 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 	_ = mockWritePublicTxsOk(remoteEngineMocks)
 
 	// Flush of domain context happens on the remote node (the notary)
-	dcFlushed := make(chan error, 1)
-	remoteEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
-		dcFlushed <- err
-	}, nil)
+	dcFlushed := mockDCFlushWithWaiter(remoteEngineMocks)
 
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
@@ -1169,7 +1164,7 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 	status = pollForStatus(ctx, t, "dispatched", remoteEngine, domainAddressString, testTransactionID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	require.NoError(t, <-dcFlushed)
+	<-dcFlushed
 
 }
 
@@ -1284,16 +1279,13 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	bobEngineMocks.mockForEndorsement(t, *testTransactionID, &bob, []byte("bob-endorsement-bytes"), []byte("bob-signature-bytes"))
 	carolEngineMocks.mockForEndorsement(t, *testTransactionID, &carol, []byte("carol-endorsement-bytes"), []byte("carol-signature-bytes"))
 
-	dcFlushed := make(chan error, 1)
-
 	//Set up mocks on alice's engine that are needed for alice to be the submitter of the transaction
-	aliceEngineMocks.mockForSubmitter(t, testTransactionID, domainAddress,
+	dcFlushed := aliceEngineMocks.mockForSubmitter(t, testTransactionID, domainAddress,
 		map[string][]byte{ //expected endorsement signatures
 			alice.verifier: []byte("alice-signature-bytes"),
 			bob.verifier:   []byte("bob-signature-bytes"),
 			carol.verifier: []byte("carol-signature-bytes"),
 		},
-		dcFlushed,
 	)
 
 	err := aliceEngine.Start()
@@ -1324,7 +1316,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	require.NoError(t, <-dcFlushed)
+	<-dcFlushed
 }
 
 func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
@@ -1445,15 +1437,13 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 	bobEngineMocks.mockForEndorsement(t, *testTransactionID1, &bob, []byte("bob-endorsement-bytes1"), []byte("bob-signature-bytes1"))
 	carolEngineMocks.mockForEndorsement(t, *testTransactionID1, &carol, []byte("carol-endorsement-bytes1"), []byte("carol-signature-bytes1"))
 
-	dcFlushed := make(chan error, 1)
 	//Set up mocks on alice's engine that are needed for alice to be the submitter of the first transaction
-	aliceEngineMocks.mockForSubmitter(t, testTransactionID1, domainAddress,
+	_ = aliceEngineMocks.mockForSubmitter(t, testTransactionID1, domainAddress,
 		map[string][]byte{ //expected endorsement signatures
 			alice.verifier: []byte("alice-signature-bytes1"),
 			bob.verifier:   []byte("bob-signature-bytes1"),
 			carol.verifier: []byte("carol-signature-bytes1"),
 		},
-		dcFlushed,
 	)
 
 	err := aliceEngine.Start()
@@ -1517,13 +1507,12 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 	carolEngineMocks.mockForEndorsement(t, *testTransactionID2, &carol, []byte("carol-endorsement-bytes2"), []byte("carol-signature-bytes2"))
 
 	//Set up mocks on bob's engine that are needed for bob to be the submitter of the second transaction
-	bobEngineMocks.mockForSubmitter(t, testTransactionID2, domainAddress,
+	dcFlushed := bobEngineMocks.mockForSubmitter(t, testTransactionID2, domainAddress,
 		map[string][]byte{ //expected endorsement signatures
 			alice.verifier: []byte("alice-signature-bytes2"),
 			bob.verifier:   []byte("bob-signature-bytes2"),
 			carol.verifier: []byte("carol-signature-bytes2"),
 		},
-		dcFlushed,
 	)
 
 	aliceEngine.SetBlockHeight(ctx, 100)
@@ -1540,7 +1529,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 	status = pollForStatus(ctx, t, "dispatched", bobEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	require.NoError(t, <-dcFlushed)
+	<-dcFlushed
 }
 
 func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover(t *testing.T) {
@@ -1665,15 +1654,13 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 	bobEngineMocks.mockForEndorsement(t, *testTransactionID1, &bob, []byte("bob-endorsement-bytes1"), []byte("bob-signature-bytes1"))
 	carolEngineMocks.mockForEndorsement(t, *testTransactionID1, &carol, []byte("carol-endorsement-bytes1"), []byte("carol-signature-bytes1"))
 
-	dcFlushed := make(chan error, 1)
 	//Set up mocks on bobs's engine that are needed to be the submitter of the first transaction
-	bobEngineMocks.mockForSubmitter(t, testTransactionID1, domainAddress,
+	_ = bobEngineMocks.mockForSubmitter(t, testTransactionID1, domainAddress,
 		map[string][]byte{ //expected endorsement signatures
 			alice.verifier: []byte("alice-signature-bytes1"),
 			bob.verifier:   []byte("bob-signature-bytes1"),
 			carol.verifier: []byte("carol-signature-bytes1"),
 		},
-		dcFlushed,
 	)
 
 	err := aliceEngine.Start()
@@ -1757,13 +1744,12 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 	})
 
 	//Set up mocks on carol's engine that are needed to be the submitter of the second transaction
-	carolEngineMocks.mockForSubmitter(t, testTransactionID2, domainAddress,
+	dcFlushed := carolEngineMocks.mockForSubmitter(t, testTransactionID2, domainAddress,
 		map[string][]byte{ //expected endorsement signatures
 			alice.verifier: []byte("alice-signature-bytes2"),
 			bob.verifier:   []byte("bob-signature-bytes2"),
 			carol.verifier: []byte("carol-signature-bytes2"),
 		},
-		dcFlushed,
 	)
 
 	aliceEngine.SetBlockHeight(ctx, 200)
@@ -1781,7 +1767,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 	status = pollForStatus(ctx, t, "dispatched", carolEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	require.NoError(t, <-dcFlushed)
+	<-dcFlushed
 }
 
 func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
@@ -2081,10 +2067,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	})
 
 	// at this point we should get a flush of the states
-	dcFlushed := make(chan error, 1)
-	aliceEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
-		dcFlushed <- err
-	}, nil)
+	dcFlushed := mockDCFlushWithWaiter(aliceEngineMocks)
 
 	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID1.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
@@ -2092,7 +2075,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	status = pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	require.NoError(t, <-dcFlushed)
+	<-dcFlushed
 
 	//TODO assert that transaction 1 got dispatched before 2
 
@@ -2298,7 +2281,7 @@ func TestPrivateTxManagerDeployFailPrepare(t *testing.T) {
 				reverted <- args.Get(2).([]*components.ReceiptInput)
 			},
 		).
-		Return(func() {}, nil)
+		Return(nil)
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
@@ -2386,7 +2369,7 @@ func TestPrivateTxManagerFailSignerResolve(t *testing.T) {
 				reverted <- args.Get(2).([]*components.ReceiptInput)
 			},
 		).
-		Return(func() {}, nil)
+		Return(nil)
 
 	err = privateTxManager.Start()
 	require.NoError(t, err)
@@ -2463,7 +2446,7 @@ func TestPrivateTxManagerDeployFailNoInvokeOrDeploy(t *testing.T) {
 				reverted <- args.Get(2).([]*components.ReceiptInput)
 			},
 		).
-		Return(func() {}, nil)
+		Return(nil)
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
@@ -2661,6 +2644,7 @@ type dependencyMocks struct {
 	preInitComponents   *componentmocks.PreInitComponents
 	allComponents       *componentmocks.AllComponents
 	db                  *mockpersistence.SQLMockProvider
+	persistence         persistence.Persistence
 	domain              *componentmocks.Domain
 	domainSmartContract *componentmocks.DomainSmartContract
 	domainContext       *componentmocks.DomainContext
@@ -2683,7 +2667,7 @@ func (m *dependencyMocks) mockDomain(domainAddress *tktypes.EthAddress) {
 // Some of the tests were getting quite verbose and was difficult to see the wood for the trees so moved a lot of the boilerplate into these utility functions
 //   - some of these utility functions have potential to become complex so may need to think about tests for the utility functions themselves but for now, the complexity is low enough to not warrant it
 
-func (m *dependencyMocks) mockForSubmitter(t *testing.T, transactionID *uuid.UUID, domainAddress *tktypes.EthAddress, expectedEndorsements map[string][]byte /*map of verifier to endorsement signature*/, dcFlushed chan error) {
+func (m *dependencyMocks) mockForSubmitter(t *testing.T, transactionID *uuid.UUID, domainAddress *tktypes.EthAddress, expectedEndorsements map[string][]byte /*map of verifier to endorsement signature*/) chan struct{} {
 	signerName := "signer1"
 	signingAddr := tktypes.RandAddress()
 	m.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.MatchedBy(privateTransactionMatcher(*transactionID))).Return(nil).Run(
@@ -2724,9 +2708,8 @@ func (m *dependencyMocks) mockForSubmitter(t *testing.T, transactionID *uuid.UUI
 
 	_ = mockWritePublicTxsOk(m)
 
-	m.domainContext.On("Flush", mock.Anything).Return(func(err error) {
-		dcFlushed <- err
-	}, nil)
+	return mockDCFlushWithWaiter(m)
+
 }
 
 func mockNetwork(t *testing.T, transactionManagers []privateTransactionMgrForPackageTesting) {
@@ -2829,16 +2812,18 @@ func (p *privateTransactionMgrForPackageTestingStruct) NodeName() string {
 }
 
 func (p *privateTransactionMgrForPackageTestingStruct) SetBlockHeight(ctx context.Context, height int64) {
-	err := p.PreCommitHandler(
-		ctx,
-		nil,
-		[]*pldapi.IndexedBlock{
-			{
-				Number: height,
+	err := p.dependencyMocks.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return p.PreCommitHandler(
+			ctx,
+			dbTX,
+			[]*pldapi.IndexedBlock{
+				{
+					Number: height,
+				},
 			},
-		},
-		nil,
-	)
+			nil,
+		)
+	})
 	assert.NoError(p.t, err)
 }
 
@@ -2855,6 +2840,11 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 	})
 
 	ctx := context.Background()
+
+	p, persistenceCleanup, err := persistence.NewUnitTestPersistence(ctx, "privatetxmgr")
+	require.NoError(t, err)
+	t.Cleanup(persistenceCleanup)
+
 	mocks := &dependencyMocks{
 		preInitComponents:   componentmocks.NewPreInitComponents(t),
 		allComponents:       componentmocks.NewAllComponents(t),
@@ -2869,6 +2859,7 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 		identityResolver:    componentmocks.NewIdentityResolver(t),
 		txManager:           componentmocks.NewTXManager(t),
 		publicTxManager:     componentmocks.NewPublicTxManager(t),
+		persistence:         p,
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -2877,7 +2868,7 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("TxManager").Return(mocks.txManager).Maybe()
 	mocks.allComponents.On("PublicTxManager").Return(mocks.publicTxManager).Maybe()
-	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx, "privatetxmgr")).Maybe()
+	mocks.allComponents.On("Persistence").Return(mocks.persistence).Maybe()
 	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
 	mocks.domainSmartContract.On("LockStates", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	mocks.domainMgr.On("GetDomainByName", mock.Anything, "domain1").Return(mocks.domain, nil).Maybe()
@@ -2905,16 +2896,18 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 	mocks.allComponents.On("IdentityResolver").Return(mocks.identityResolver).Maybe()
 	preInitResult, err := e.PreInit(mocks.preInitComponents)
 	assert.NoError(t, err)
-	err = preInitResult.PreCommitHandler(
-		ctx,
-		nil,
-		[]*pldapi.IndexedBlock{
-			{
-				Number: 42,
+	err = mocks.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return preInitResult.PreCommitHandler(
+			ctx,
+			dbTX,
+			[]*pldapi.IndexedBlock{
+				{
+					Number: 42,
+				},
 			},
-		},
-		nil,
-	)
+			nil,
+		)
+	})
 	assert.NoError(t, err)
 
 	err = e.PostInit(mocks.allComponents)
