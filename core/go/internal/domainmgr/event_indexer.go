@@ -183,26 +183,24 @@ func (d *domain) batchEventsByAddress(ctx context.Context, dbTX persistence.DBTX
 	return batches, nil
 }
 
-func (d *domain) handleEventBatch(ctx context.Context, dbTX persistence.DBTX, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+func (d *domain) handleEventBatch(ctx context.Context, dbTX persistence.DBTX, batch *blockindexer.EventDeliveryBatch) error {
 
 	// First index any domain contract deployments
 	nonDeployEvents, txCompletions, err := d.dm.registrationIndexer(ctx, dbTX, batch)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Then divide remaining events by contract address and dispatch to the appropriate domain context
 	batchesByAddress, err := d.batchEventsByAddress(ctx, dbTX, batch.BatchID.String(), nonDeployEvents)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	eventBatchPostCommits := make([]func(), 0, len(batchesByAddress))
 	for addr, batch := range batchesByAddress {
-		pc, res, err := d.handleEventBatchForContract(ctx, dbTX, addr, batch)
+		res, err := d.handleEventBatchForContract(ctx, dbTX, addr, batch)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		eventBatchPostCommits = append(eventBatchPostCommits, pc)
 		for _, txCompletionEvent := range res.TransactionsComplete {
 			var txHash tktypes.Bytes32
 			txID, err := d.recoverTransactionID(ctx, txCompletionEvent.TransactionId)
@@ -210,7 +208,7 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX persistence.DBTX, ba
 				txHash, err = tktypes.ParseBytes32(txCompletionEvent.Location.TransactionHash)
 			}
 			if err != nil {
-				return nil, err
+				return err
 			}
 			log.L(ctx).Infof("Domain transaction completion: %s", txID)
 			completion := &components.TxCompletion{
@@ -233,7 +231,6 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX persistence.DBTX, ba
 		}
 	}
 
-	var finalizeTxPostCommit func()
 	if len(txCompletions) > 0 {
 		// Ensure we are sorted in block order, as the above processing extracted the array in two
 		// phases (contract deployments, then transactions) so the list will be out of order.
@@ -253,21 +250,16 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX persistence.DBTX, ba
 		// for ALL private transactions (not just those where we're the sender) as there
 		// might be in-memory coordination activities that need to re-process now these
 		// transactions have been finalized.
-		finalizeTxPostCommit, err = d.dm.txManager.FinalizeTransactions(ctx, dbTX, receipts)
+		err = d.dm.txManager.FinalizeTransactions(ctx, dbTX, receipts)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return func() {
+	dbTX.AddPostCommit(func(txCtx context.Context) {
 		d.dm.notifyTransactions(txCompletions)
-		if finalizeTxPostCommit != nil {
-			finalizeTxPostCommit()
-		}
-		for _, pc := range eventBatchPostCommits {
-			pc()
-		}
-	}, nil
+	})
+	return nil
 }
 
 func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*uuid.UUID, error) {
@@ -279,7 +271,7 @@ func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*
 	return &txUUID, nil
 }
 
-func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persistence.DBTX, addr tktypes.EthAddress, batch *pscEventBatch) (func(), *prototk.HandleEventBatchResponse, error) {
+func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persistence.DBTX, addr tktypes.EthAddress, batch *pscEventBatch) (*prototk.HandleEventBatchResponse, error) {
 
 	// We have a domain context for queries, but we never flush it to DB - as the only updates
 	// we allow in this function are those performed within our dbTX.
@@ -291,14 +283,14 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persisten
 	var res *prototk.HandleEventBatchResponse
 	res, err := d.api.HandleEventBatch(ctx, &batch.HandleEventBatchRequest)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	stateSpends := make([]*pldapi.StateSpendRecord, len(res.SpentStates))
 	for i, state := range res.SpentStates {
 		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		stateSpends[i] = &pldapi.StateSpendRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
 	}
@@ -307,7 +299,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persisten
 	for i, state := range res.ReadStates {
 		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		stateReads[i] = &pldapi.StateReadRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
 	}
@@ -316,7 +308,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persisten
 	for i, state := range res.ConfirmedStates {
 		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		stateConfirms[i] = &pldapi.StateConfirmRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
 	}
@@ -325,7 +317,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persisten
 	for i, state := range res.InfoStates {
 		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		stateInfoRecords[i] = &pldapi.StateInfoRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
 	}
@@ -336,16 +328,16 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persisten
 		if state.Id != nil {
 			id, err = tktypes.ParseHexBytes(ctx, *state.Id)
 			if err != nil {
-				return nil, nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, *state.Id)
+				return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, *state.Id)
 			}
 		}
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		schemaID, err := tktypes.ParseBytes32(state.SchemaId)
 		if err != nil {
-			return nil, nil, i18n.NewError(ctx, msgs.MsgDomainInvalidSchemaID, state.SchemaId)
+			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidSchemaID, state.SchemaId)
 		}
 		newStates = append(newStates, &components.StateUpsertOutsideContext{
 			ID:              id,
@@ -359,29 +351,21 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persisten
 	}
 
 	// Write any new states first
-	var writeStatePostCommit func()
 	if len(newStates) > 0 {
 		// These states are trusted as they come from the domain on our local node (no need to go back round VerifyStateHashes for customer hash functions)
-		writeStatePostCommit, _, err = d.dm.stateStore.WritePreVerifiedStates(ctx, dbTX, d.name, newStates)
+		_, err = d.dm.stateStore.WritePreVerifiedStates(ctx, dbTX, d.name, newStates)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
 	// Then any finalizations of those states
 	if len(stateSpends) > 0 || len(stateReads) > 0 || len(stateConfirms) > 0 || len(stateInfoRecords) > 0 {
 		if err := d.dm.stateStore.WriteStateFinalizations(ctx, dbTX, stateSpends, stateReads, stateConfirms, stateInfoRecords); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
-	return func() {
-		if writeStatePostCommit != nil {
-			writeStatePostCommit()
-		}
-		for _, postCommit := range c.postCommits {
-			postCommit()
-		}
-	}, res, err
+	return res, err
 }
 
 func (d *domain) prepareIndexRecord(ctx context.Context, txIDStr, stateIDStr string) (uuid.UUID, tktypes.HexBytes, error) {

@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -75,15 +76,18 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName
 	states := make([]*pldapi.State, len(withoutSalt))
 	for i, w := range withoutSalt {
 		withSalt := genWidget(t, schemaID, nil, w)
-		pc, newStates, err := ss.WritePreVerifiedStates(ctx, ss.p.NOTX(), domainName, []*components.StateUpsertOutsideContext{
-			{
-				ContractAddress: contractAddress,
-				SchemaID:        schemaID,
-				Data:            withSalt.Data,
-			},
+		var newStates []*pldapi.State
+		err := ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+			newStates, err = ss.WritePreVerifiedStates(ctx, dbTX, domainName, []*components.StateUpsertOutsideContext{
+				{
+					ContractAddress: contractAddress,
+					SchemaID:        schemaID,
+					Data:            withSalt.Data,
+				},
+			})
+			return err
 		})
 		require.NoError(t, err)
-		pc()
 		states[i] = newStates[0]
 		fmt.Printf("widget[%d]: %s\n", i, states[i].Data)
 	}

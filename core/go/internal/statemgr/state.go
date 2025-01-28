@@ -47,21 +47,21 @@ func (transactionStateRecord) TableName() string {
 	return "states"
 }
 
-func (ss *stateManager) WritePreVerifiedStates(ctx context.Context, dbTX persistence.DBTX, domainName string, states []*components.StateUpsertOutsideContext) (func(), []*pldapi.State, error) {
+func (ss *stateManager) WritePreVerifiedStates(ctx context.Context, dbTX persistence.DBTX, domainName string, states []*components.StateUpsertOutsideContext) ([]*pldapi.State, error) {
 
 	d, err := ss.domainManager.GetDomainByName(ctx, domainName)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	return ss.processInsertStates(ctx, dbTX, d, states)
 }
 
-func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX persistence.DBTX, domainName string, states []*components.StateUpsertOutsideContext) (func(), []*pldapi.State, error) {
+func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX persistence.DBTX, domainName string, states []*components.StateUpsertOutsideContext) ([]*pldapi.State, error) {
 
 	d, err := ss.domainManager.GetDomainByName(ctx, domainName)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if d.CustomHashFunction() {
@@ -76,7 +76,7 @@ func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX persistenc
 		ids, err := d.ValidateStateHashes(ctx, dStates)
 		if err != nil {
 			// Whole batch fails if any state in the batch is invalid
-			return nil, nil, err
+			return nil, err
 		}
 		for i, s := range states {
 			// The domain is responsible for generating any missing IDs
@@ -115,28 +115,29 @@ func (ss *stateManager) WriteNullifiersForReceivedStates(ctx context.Context, db
 	return err
 }
 
-func (ss *stateManager) processInsertStates(ctx context.Context, dbTX persistence.DBTX, d components.Domain, inStates []*components.StateUpsertOutsideContext) (postCommit func(), processedStates []*pldapi.State, err error) {
+func (ss *stateManager) processInsertStates(ctx context.Context, dbTX persistence.DBTX, d components.Domain, inStates []*components.StateUpsertOutsideContext) (processedStates []*pldapi.State, err error) {
 
 	processedStates = make([]*pldapi.State, len(inStates))
 	for i, inState := range inStates {
 		schema, err := ss.GetSchema(ctx, dbTX, d.Name(), inState.SchemaID, true)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		s, err := schema.ProcessState(ctx, inState.ContractAddress, inState.Data, inState.ID, d.CustomHashFunction())
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		processedStates[i] = s.State
 	}
 
 	// Write them directly
 	if err = ss.writeStates(ctx, dbTX, processedStates); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return ss.txManager.NotifyStatesDBChanged, processedStates, nil
+	dbTX.AddPostCommit(ss.txManager.NotifyStatesDBChanged)
+	return processedStates, nil
 }
 
 func (ss *stateManager) writeStates(ctx context.Context, dbTX persistence.DBTX, states []*pldapi.State) (err error) {

@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
@@ -56,17 +57,19 @@ func (ss *stateManager) rpcStoreState() rpcserver.RPCHandler {
 		data tktypes.RawJSON,
 	) (*pldapi.State, error) {
 		var state *pldapi.State
-		pc, newStates, err := ss.WriteReceivedStates(ctx, ss.p.NOTX(), domain, []*components.StateUpsertOutsideContext{
-			{
-				ContractAddress: contractAddress,
-				SchemaID:        schema,
-				Data:            data,
-			},
+		err := ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+			newStates, err := ss.WriteReceivedStates(ctx, dbTX, domain, []*components.StateUpsertOutsideContext{
+				{
+					ContractAddress: contractAddress,
+					SchemaID:        schema,
+					Data:            data,
+				},
+			})
+			if err == nil {
+				state = newStates[0]
+			}
+			return err
 		})
-		if err == nil {
-			pc()
-			state = newStates[0]
-		}
 		return state, err
 	})
 }

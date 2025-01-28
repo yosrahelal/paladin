@@ -106,7 +106,7 @@ func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDo
 	return d
 }
 
-func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (*prototk.InitDomainRequest, error) {
+func (d *domain) processDomainConfig(dbTX persistence.DBTX, confRes *prototk.ConfigureDomainResponse) (*prototk.InitDomainRequest, error) {
 	d.stateLock.Lock()
 	defer d.stateLock.Unlock()
 
@@ -156,11 +156,10 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 		}
 		stream.Sources = append(stream.Sources, blockindexer.EventStreamSource{ABI: eventsABI})
 
-		postCommit, _, err := d.dm.txManager.UpsertABI(d.ctx, d.dm.persistence.NOTX(), eventsABI)
+		_, err := d.dm.txManager.UpsertABI(d.ctx, dbTX, eventsABI)
 		if err != nil {
 			return nil, err
 		}
-		postCommit() // we didn't actually use a coordinated TX to call immediately
 	}
 
 	// We build a stream name in a way assured to result in a new stream if the ABI changes
@@ -204,7 +203,11 @@ func (d *domain) init() {
 		}
 
 		// Process the configuration, so we can move onto init
-		initReq, err := d.processDomainConfig(confRes)
+		var initReq *prototk.InitDomainRequest
+		err = d.dm.persistence.Transaction(d.ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+			initReq, err = d.processDomainConfig(dbTX, confRes)
+			return err
+		})
 		if err != nil {
 			return true, err
 		}
@@ -807,7 +810,7 @@ func (d *domain) SendTransaction(ctx context.Context, req *prototk.SendTransacti
 		return nil, err
 	}
 
-	postCommit, txIDs, err := d.dm.txManager.SendTransactions(ctx, c.dbTX, d.dm.keyManager.KeyResolverForDBTX(c.dbTX), &pldapi.TransactionInput{
+	txIDs, err := d.dm.txManager.SendTransactions(ctx, c.dbTX, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			Type: txType.Enum(),
 			From: req.Transaction.From,
@@ -819,7 +822,6 @@ func (d *domain) SendTransaction(ctx context.Context, req *prototk.SendTransacti
 	if err != nil {
 		return nil, err
 	}
-	c.addPostCommit(postCommit)
 	return &prototk.SendTransactionResponse{Id: txIDs[0].String()}, nil
 }
 

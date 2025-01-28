@@ -62,7 +62,7 @@ func TestEventIndexingWithDB(t *testing.T) {
 	// Index an event indicating deployment of a new smart contract instance
 	var batchTxs txCompletionsOrdered
 	var unprocessedEvents []*pldapi.EventWithData
-	err := dm.persistence.Transaction(ctx, func(dbTX persistence.DBTX) (err error) {
+	err := dm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
 		unprocessedEvents, batchTxs, err = dm.registrationIndexer(ctx, dbTX, &blockindexer.EventDeliveryBatch{
 			StreamID:   uuid.New(),
 			StreamName: "name_given_by_component_mgr",
@@ -132,7 +132,7 @@ func TestEventIndexingBadEvent(t *testing.T) {
 	})
 	defer done()
 
-	err := td.dm.persistence.Transaction(td.ctx, func(tx persistence.DBTX) error {
+	err := td.dm.persistence.Transaction(td.ctx, func(ctx context.Context, tx persistence.DBTX) error {
 		_, _, err := td.dm.registrationIndexer(td.ctx, tx, &blockindexer.EventDeliveryBatch{
 			StreamID:   uuid.New(),
 			StreamName: "name_given_by_component_mgr",
@@ -165,7 +165,7 @@ func TestEventIndexingInsertError(t *testing.T) {
 
 	contractAddr := tktypes.EthAddress(tktypes.RandBytes(20))
 	deployTX := uuid.New()
-	err := td.dm.persistence.Transaction(td.ctx, func(tx persistence.DBTX) error {
+	err := td.dm.persistence.Transaction(td.ctx, func(ctx context.Context, tx persistence.DBTX) error {
 		_, _, err := td.dm.registrationIndexer(td.ctx, tx, &blockindexer.EventDeliveryBatch{
 			StreamID:   uuid.New(),
 			StreamName: "name_given_by_component_mgr",
@@ -271,10 +271,8 @@ func TestHandleEventBatch(t *testing.T) {
 
 		mc.privateTxManager.On("PrivateTransactionConfirmed", mock.Anything, mock.Anything).Return()
 
-		mkrc := componentmocks.KeyResolverForDBTX(t)
 		mkr := componentmocks.NewKeyResolver(t)
-		mkrc.On("KeyResolver", mock.Anything).Return(mkr)
-		mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(mkrc)
+		mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(mkr)
 		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mkr, mock.Anything).Return(func() {
 			sendPostCommitCalled = true
 		}, []uuid.UUID{txID}, nil)
@@ -355,14 +353,15 @@ func TestHandleEventBatch(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	cb, err := d.handleEventBatch(ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events:  []*pldapi.EventWithData{event1, event2},
+	err = td.dm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return d.handleEventBatch(ctx, dbTX, &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events:  []*pldapi.EventWithData{event1, event2},
+		})
 	})
 	assert.NoError(t, err)
 
 	req := d.dm.privateTxWaiter.AddInflight(ctx, txID)
-	cb()
 	_, err = req.Wait()
 	assert.NoError(t, err)
 
@@ -379,22 +378,24 @@ func TestHandleEventBatchFinalizeFail(t *testing.T) {
 	})
 	defer done()
 
-	_, err := td.d.handleEventBatch(td.ctx, td.dm.persistence.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address: *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{
-					BlockNumber:      1000,
-					TransactionIndex: 20,
-					LogIndex:         30,
-					TransactionHash:  tktypes.MustParseBytes32(tktypes.RandHex(32)),
-					Signature:        eventSig_PaladinRegisterSmartContract_V0,
+	err := td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, td.dm.persistence.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address: *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{
+						BlockNumber:      1000,
+						TransactionIndex: 20,
+						LogIndex:         30,
+						TransactionHash:  tktypes.MustParseBytes32(tktypes.RandHex(32)),
+						Signature:        eventSig_PaladinRegisterSmartContract_V0,
+					},
+					SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
+					Data:              tktypes.RawJSON(`{"result": "success"}`),
 				},
-				SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
-				Data:              tktypes.RawJSON(`{"result": "success"}`),
 			},
-		},
+		})
 	})
 	assert.Regexp(t, "pop", err)
 
@@ -406,22 +407,24 @@ func TestHandleEventIgnoreUnknownDomain(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
 
-	_, err := td.d.handleEventBatch(td.ctx, td.dm.persistence.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address: *tktypes.RandAddress(),
-				IndexedEvent: &pldapi.IndexedEvent{
-					BlockNumber:      1000,
-					TransactionIndex: 20,
-					LogIndex:         30,
-					TransactionHash:  tktypes.MustParseBytes32(tktypes.RandHex(32)),
-					Signature:        eventSig_PaladinRegisterSmartContract_V0,
+	err := td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, td.dm.persistence.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address: *tktypes.RandAddress(),
+					IndexedEvent: &pldapi.IndexedEvent{
+						BlockNumber:      1000,
+						TransactionIndex: 20,
+						LogIndex:         30,
+						TransactionHash:  tktypes.MustParseBytes32(tktypes.RandHex(32)),
+						Signature:        eventSig_PaladinRegisterSmartContract_V0,
+					},
+					SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
+					Data:              tktypes.RawJSON(`{"result": "success"}`),
 				},
-				SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
-				Data:              tktypes.RawJSON(`{"result": "success"}`),
 			},
-		},
+		})
 	})
 	require.NoError(t, err)
 
@@ -439,14 +442,16 @@ func TestHandleEventBatchContractLookupFail(t *testing.T) {
 
 	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnError(fmt.Errorf("pop"))
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address: *contract1,
-				Data:    tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address: *contract1,
+					Data:    tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.EqualError(t, err, "pop")
 }
@@ -468,16 +473,18 @@ func TestHandleEventBatchRegistrationError(t *testing.T) {
 	registrationDataJSON, err := json.Marshal(registrationData)
 	require.NoError(t, err)
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:           *td.d.registryAddress,
-				IndexedEvent:      &pldapi.IndexedEvent{},
-				SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
-				Data:              registrationDataJSON,
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:           *td.d.registryAddress,
+					IndexedEvent:      &pldapi.IndexedEvent{},
+					SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
+					Data:              registrationDataJSON,
+				},
 			},
-		},
+		})
 	})
 	assert.EqualError(t, err, "pop")
 }
@@ -503,15 +510,17 @@ func TestHandleEventBatchDomainError(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.EqualError(t, err, "pop")
 }
@@ -545,15 +554,17 @@ func TestHandleEventBatchSpentBadTransactionID(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.ErrorContains(t, err, "PD020007")
 }
@@ -587,15 +598,17 @@ func TestHandleEventBatchReadBadTransactionID(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.ErrorContains(t, err, "PD020007")
 }
@@ -629,15 +642,17 @@ func TestHandleEventBatchConfirmBadTransactionID(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.ErrorContains(t, err, "PD020007")
 }
@@ -671,15 +686,17 @@ func TestHandleEventBatchInfoBadTransactionID(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.ErrorContains(t, err, "PD020007")
 }
@@ -712,15 +729,17 @@ func TestHandleEventBatchSpentBadSchemaID(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.ErrorContains(t, err, "PD011650")
 }
@@ -753,15 +772,17 @@ func TestHandleEventBatchReadBadSchemaID(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.ErrorContains(t, err, "PD011650")
 }
@@ -794,15 +815,17 @@ func TestHandleEventBatchConfirmBadSchemaID(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.ErrorContains(t, err, "PD011650")
 }
@@ -834,15 +857,17 @@ func TestHandleEventBatchNewBadTransactionID(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.ErrorContains(t, err, "PD020007")
 }
@@ -875,15 +900,17 @@ func TestHandleEventBatchNewBadSchemaID(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.ErrorContains(t, err, "PD011641")
 }
@@ -916,15 +943,17 @@ func TestHandleEventBatchNewBadStateID(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.ErrorContains(t, err, "PD011650")
 }
@@ -958,15 +987,17 @@ func TestHandleEventBatchBadTransactionID(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.ErrorContains(t, err, "PD020008")
 }
@@ -1005,15 +1036,17 @@ func TestHandleEventBatchMarkConfirmedFail(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.EqualError(t, err, "pop")
 }
@@ -1049,15 +1082,17 @@ func TestHandleEventBatchUpsertStateFail(t *testing.T) {
 		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
-	_, err = td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
-		BatchID: batchID,
-		Events: []*pldapi.EventWithData{
-			{
-				Address:      *td.d.registryAddress,
-				IndexedEvent: &pldapi.IndexedEvent{},
-				Data:         tktypes.RawJSON(`{"result": "success"}`),
+	err = td.dm.persistence.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return td.d.handleEventBatch(td.ctx, mp.P.NOTX(), &blockindexer.EventDeliveryBatch{
+			BatchID: batchID,
+			Events: []*pldapi.EventWithData{
+				{
+					Address:      *td.d.registryAddress,
+					IndexedEvent: &pldapi.IndexedEvent{},
+					Data:         tktypes.RawJSON(`{"result": "success"}`),
+				},
 			},
-		},
+		})
 	})
 	assert.EqualError(t, err, "pop")
 }

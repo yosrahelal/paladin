@@ -203,7 +203,7 @@ func (tm *txManager) StopReceiptListener(ctx context.Context, name string) error
 	return tm.setReceiptListenerStatus(ctx, name, false)
 }
 
-func (tm *txManager) NotifyStatesDBChanged() {
+func (tm *txManager) NotifyStatesDBChanged(ctx context.Context) {
 	tm.lastStateUpdateTime.Store(int64(tktypes.TimestampNow()))
 }
 

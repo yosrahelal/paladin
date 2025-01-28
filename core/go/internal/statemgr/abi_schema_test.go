@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -50,7 +51,7 @@ func mockDomain(t *testing.T, m *mockComponents, name string, customHashFunction
 }
 
 func mockStateCallback(m *mockComponents) {
-	m.txManager.On("NotifyStatesDBChanged").Return()
+	m.txManager.On("NotifyStatesDBChanged", mock.Anything).Return()
 }
 
 // This is an E2E test using the actual database, the flush-writer DB storage system, and the schema cache
@@ -127,27 +128,31 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	contractAddress := tktypes.RandAddress()
 
 	// Check it handles data
-	pc, states, err := ss.WriteReceivedStates(ctx, ss.p.NOTX(), "domain1", []*components.StateUpsertOutsideContext{
-		{
-			ID:       nil, // default hashing algo
-			SchemaID: schemaID,
-			Data: tktypes.RawJSON(`{
-				"field1": "0x0123456789012345678901234567890123456789",
-				"field2": "hello world",
-				"field3": 42,
-				"field4": true,
-				"field5": "0x687414C0B8B4182B823Aec5436965cf19b197386",
-				"field6": "-10203040506070809",
-				"field7": "0xfeedbeef",
-				"field8": 12345,
-				"field9": "things and stuff",
-				"cruft": "to remove"
-			}`),
-			ContractAddress: *contractAddress,
-		},
+	var states []*pldapi.State
+	err = ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		states, err = ss.WriteReceivedStates(ctx, dbTX, "domain1", []*components.StateUpsertOutsideContext{
+			{
+				ID:       nil, // default hashing algo
+				SchemaID: schemaID,
+				Data: tktypes.RawJSON(`{
+					"field1": "0x0123456789012345678901234567890123456789",
+					"field2": "hello world",
+					"field3": 42,
+					"field4": true,
+					"field5": "0x687414C0B8B4182B823Aec5436965cf19b197386",
+					"field6": "-10203040506070809",
+					"field7": "0xfeedbeef",
+					"field8": 12345,
+					"field9": "things and stuff",
+					"cruft": "to remove"
+				}`),
+				ContractAddress: *contractAddress,
+			},
+		})
+		return err
 	})
 	require.NoError(t, err)
-	pc()
+
 	state1 := states[0]
 	assert.Equal(t, []*pldapi.StateLabel{
 		// uint256 written as zero padded string
