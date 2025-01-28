@@ -74,12 +74,11 @@ type domain struct {
 }
 
 type inFlightDomainRequest struct {
-	d           *domain
-	id          string                   // each request gets a unique ID
-	dbTX        persistence.DBTX         // only if there's a DB transactions such as when called by block indexer
-	dCtx        components.DomainContext // might be short lived, or managed externally (by private TX manager)
-	readOnly    bool
-	postCommits []func()
+	d        *domain
+	id       string                   // each request gets a unique ID
+	dbTX     persistence.DBTX         // only if there's a DB transactions such as when called by block indexer
+	dCtx     components.DomainContext // might be short lived, or managed externally (by private TX manager)
+	readOnly bool
 }
 
 func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDomain components.DomainManagerToDomain) *domain {
@@ -123,7 +122,7 @@ func (d *domain) processDomainConfig(dbTX persistence.DBTX, confRes *prototk.Con
 	var schemas []components.Schema
 	if len(abiSchemas) > 0 {
 		var err error
-		schemas, err = d.dm.stateStore.EnsureABISchemas(d.ctx, d.dm.persistence.NOTX(), d.name, abiSchemas)
+		schemas, err = d.dm.stateStore.EnsureABISchemas(d.ctx, dbTX, d.name, abiSchemas)
 		if err != nil {
 			return nil, err
 		}
@@ -247,12 +246,6 @@ func (i *inFlightDomainRequest) close() {
 	i.d.inFlightLock.Lock()
 	defer i.d.inFlightLock.Unlock()
 	delete(i.d.inFlight, i.id)
-}
-
-func (i *inFlightDomainRequest) addPostCommit(pc func()) {
-	i.d.inFlightLock.Lock()
-	defer i.d.inFlightLock.Unlock()
-	i.postCommits = append(i.postCommits, pc)
 }
 
 func (d *domain) checkInFlight(ctx context.Context, stateQueryContext string, needWrite bool) (*inFlightDomainRequest, error) {
