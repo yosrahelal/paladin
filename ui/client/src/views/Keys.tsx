@@ -164,6 +164,7 @@ export const Keys: React.FC = () => {
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     setRowsPerPage(parseInt(event.target.value, 10));
+    setRefEntries([]);
     setPage(0);
   };
 
