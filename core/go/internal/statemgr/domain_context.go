@@ -536,7 +536,7 @@ func (dc *domainContext) Close() {
 	delete(dc.ss.domainContexts, dc.id)
 }
 
-func (dc *domainContext) Flush(dbTX persistence.DBTX) (postDBTx func(error), err error) {
+func (dc *domainContext) Flush(dbTX persistence.DBTX) error {
 	ctx := dc.Ctx()
 	log.L(ctx).Infof("Flushing context domain=%s", dc.domainName)
 
@@ -547,11 +547,11 @@ func (dc *domainContext) Flush(dbTX persistence.DBTX) (postDBTx func(error), err
 	if dc.flushing != nil {
 		if dc.flushing.flushResult != nil {
 			// we return the original error if the last flush error was not cleared
-			return nil, dc.flushing.flushResult
+			return dc.flushing.flushResult
 		}
 		// It is an error if we are called a second time in this function before the callback
 		// from the first call is completed/failed.
-		return nil, i18n.NewError(ctx, msgs.MsgStateFlushInProgress)
+		return i18n.NewError(ctx, msgs.MsgStateFlushInProgress)
 	}
 
 	// Sync check if there's already an error
@@ -562,7 +562,7 @@ func (dc *domainContext) Flush(dbTX persistence.DBTX) (postDBTx func(error), err
 	// If there's nothing to do, return a nil result
 	if dc.flushing == nil {
 		log.L(ctx).Debugf("nothing pending to flush in domain context")
-		return func(error) {}, nil
+		return nil
 	}
 
 	// Need to make sure we clean up after ourselves if we fail synchronously
@@ -574,22 +574,25 @@ func (dc *domainContext) Flush(dbTX persistence.DBTX) (postDBTx func(error), err
 	}()
 	syncFlushError = dc.flushing.exec(ctx, dbTX)
 	if syncFlushError != nil {
-		return nil, syncFlushError
+		return syncFlushError
 	}
 
 	// Return a callback to the owner of the DB Transaction, so they can tell us if the commit succeeded
-	return func(commitError error) {
-		dc.stateLock.Lock()
-		defer dc.stateLock.Unlock()
+	dbTX.AddFinalizer(dc.finalizer)
+	return nil
+}
 
-		if commitError != nil {
-			// The error sits on the context until a Reset() is called
-			dc.flushing.setError(commitError)
-		} else {
-			// We're ready for the next flush
-			dc.flushing = nil
-		}
-	}, nil
+func (dc *domainContext) finalizer(ctx context.Context, commitError error) {
+	dc.stateLock.Lock()
+	defer dc.stateLock.Unlock()
+
+	if dc.flushing != nil && commitError != nil {
+		// The error sits on the context until a Reset() is called
+		dc.flushing.setError(commitError)
+	} else {
+		// We're ready for the next flush
+		dc.flushing = nil
+	}
 }
 
 // MUST hold the lock to call this function

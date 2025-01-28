@@ -56,7 +56,7 @@ func (s *syncPoints) QueueTransactionFinalize(ctx context.Context, domain string
 
 }
 
-func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX persistence.DBTX, finalizeOperations []*finalizeOperation) (func(), error) {
+func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX persistence.DBTX, finalizeOperations []*finalizeOperation) error {
 
 	// We are only responsible for failures. Success receipts are written on the DB transaction of the event handler,
 	// so they are guaranteed to be written in sequence for each confirmed domain private transaction.
@@ -77,6 +77,6 @@ func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX persistenc
 	if len(failureReceipts) > 0 {
 		return s.txMgr.FinalizeTransactions(ctx, dbTX, failureReceipts)
 	}
-	return func() {}, nil
+	return nil
 
 }

@@ -95,9 +95,11 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName
 }
 
 func syncFlushContext(t *testing.T, dc components.DomainContext) {
-	postDBTx, err := dc.Flush(dc.(*domainContext).ss.p.NOTX())
+	ss := dc.(*domainContext).ss
+	err := ss.p.Transaction(dc.Ctx(), func(ctx context.Context, dbTX persistence.DBTX) error {
+		return dc.Flush(dbTX)
+	})
 	require.NoError(t, err)
-	postDBTx(nil)
 }
 
 func newTestDomainContext(t *testing.T, ctx context.Context, ss *stateManager, name string, customHashFunction bool) (tktypes.EthAddress, *domainContext) {

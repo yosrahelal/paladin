@@ -65,7 +65,7 @@ func (dso *syncPointOperation) WriteKey() string {
 
 type noResult struct{}
 
-func (s *syncPoints) runBatch(ctx context.Context, dbTX persistence.DBTX, values []*syncPointOperation) (func(error), []flushwriter.Result[*noResult], error) {
+func (s *syncPoints) runBatch(ctx context.Context, dbTX persistence.DBTX, values []*syncPointOperation) ([]flushwriter.Result[*noResult], error) {
 
 	finalizeOperations := make([]*finalizeOperation, 0, len(values))
 	dispatchOperations := make([]*dispatchOperation, 0, len(values))
@@ -85,41 +85,16 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX persistence.DBTX, values
 
 	// We flush all of the affected domain contexts first, as they might contain states we need to refer
 	// to in the DB transaction below using foreign key relationships
-	domainContextDBTXCallbacks := make([]func(err error), 0, len(domainContextsToFlush))
-	var pubTXCbs []func()
-	var finalizeTxCB func()
-	dbTXCallback := func(err error) {
-		for _, dcTXCallback := range domainContextDBTXCallbacks {
-			if dcTXCallback != nil {
-				dcTXCallback(err)
-			}
-		}
-		if err == nil {
-			for _, publicTXCallback := range pubTXCbs {
-				publicTXCallback()
-			}
-			if finalizeTxCB != nil {
-				finalizeTxCB()
-			}
-		}
-	}
 	// We must track if we're returning an error with a nil callback, and ensure that in those cases
 	// we call the dbTXCallback with the error for any contexts we've received back from a Flush() call
 	var err error
-	defer func() {
-		if err != nil {
-			dbTXCallback(err)
-		}
-	}()
 	log.L(ctx).Infof("SyncPoints flush-writer: domain=contexts=%d finalizeOperations=%d dispatchOperations=%d",
 		len(domainContextsToFlush), len(finalizeOperations), len(dispatchOperations))
 	for _, dc := range domainContextsToFlush {
-		var domainCB func(error)
-		domainCB, err = dc.Flush(dbTX) // err variable must not be re-allocated
+		err = dc.Flush(dbTX) // err variable must not be re-allocated
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		domainContextDBTXCallbacks = append(domainContextDBTXCallbacks, domainCB)
 	}
 
 	// If we have any finalizers, we need to call them now
@@ -127,18 +102,18 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX persistence.DBTX, values
 	// assumption at time of coding because WriteKey returns the contract address
 	// but probably should consider a less brittle way to codify this assertion
 	if err == nil && len(finalizeOperations) > 0 {
-		finalizeTxCB, err = s.writeFailureOperations(ctx, dbTX, finalizeOperations) // err variable must not be re-allocated
+		err = s.writeFailureOperations(ctx, dbTX, finalizeOperations) // err variable must not be re-allocated
 	}
 
 	if err == nil && len(dispatchOperations) > 0 {
-		pubTXCbs, err = s.writeDispatchOperations(ctx, dbTX, dispatchOperations) // err variable must not be re-allocated
+		err = s.writeDispatchOperations(ctx, dbTX, dispatchOperations) // err variable must not be re-allocated
 	}
 
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// We don't actually provide any result, so just build an array of nil results
-	return dbTXCallback, make([]flushwriter.Result[*noResult], len(values)), nil
+	return make([]flushwriter.Result[*noResult], len(values)), nil
 
 }

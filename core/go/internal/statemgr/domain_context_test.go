@@ -17,6 +17,7 @@
 package statemgr
 
 import (
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -117,20 +119,21 @@ func TestListDomainContexts(t *testing.T) {
 
 func TestStateFlushNoWork(t *testing.T) {
 
-	ctx, ss, _, _, done := newDBMockStateManager(t)
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()
 
 	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
 	defer dc.Close()
 
-	cb, err := dc.Flush(ss.p.NOTX())
+	mdb.ExpectBegin()
+	mdb.ExpectCommit()
+
+	err := ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return dc.Flush(dbTX)
+	})
 	require.NoError(t, err)
 
 	// There was nothing to flush, we we're flushed even before callback
-	require.Nil(t, dc.flushing)
-
-	// But the callback is non-nil
-	cb(nil)
 	require.Nil(t, dc.flushing)
 
 }
@@ -646,6 +649,7 @@ func TestDomainContextFlushErrorCapture(t *testing.T) {
 	defer done()
 
 	db.ExpectExec("INSERT.*schemas").WillReturnResult(driver.ResultNoRows)
+	db.ExpectBegin()
 	db.ExpectExec("INSERT").WillReturnError(fmt.Errorf("pop"))
 
 	schemas, err := ss.EnsureABISchemas(ctx, ss.p.NOTX(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
@@ -662,7 +666,9 @@ func TestDomainContextFlushErrorCapture(t *testing.T) {
 	require.NoError(t, err)
 
 	// Sync error
-	_, err = dc.Flush(ss.p.NOTX())
+	err = ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return dc.Flush(dbTX)
+	})
 	require.Regexp(t, "pop", err)
 
 	_, _, err = dc.FindAvailableStates(ss.p.NOTX(), schemas[0].ID(), nil)
@@ -692,7 +698,10 @@ func TestDomainContextFlushErrorCapture(t *testing.T) {
 	err = dc.AddStateLocks(&pldapi.StateLock{})
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
-	_, err = dc.Flush(ss.p.NOTX())
+	db.ExpectBegin()
+	err = ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return dc.Flush(dbTX)
+	})
 	assert.Regexp(t, "pop", err) // the original error as it's a flush
 
 	dc.Reset()
@@ -706,19 +715,21 @@ func TestDomainContextFlushErrorCapture(t *testing.T) {
 	_, err = dc.UpsertStates(ss.p.NOTX(), genWidget(t, schemas[0].ID(), &tx1, data1))
 	require.NoError(t, err)
 
+	db.ExpectBegin()
 	db.ExpectExec("INSERT.*states").WillReturnResult(driver.ResultNoRows)
 	db.ExpectExec("INSERT.*state_labels").WillReturnResult(driver.ResultNoRows)
-	postDBTx, err := dc.Flush(ss.p.NOTX())
+	db.ExpectCommit()
+	err = ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		err := dc.Flush(dbTX)
+		require.NoError(t, err)
+		err = dc.Flush(dbTX)
+		assert.Regexp(t, "PD010131", err) // cannot flush again until we call the callback
+		return nil
+	})
 	require.NoError(t, err)
 
-	_, err = dc.Flush(ss.p.NOTX())
-	assert.Regexp(t, "PD010131", err) // cannot flush again until we call the callback
-
-	// Mark an async error
-	postDBTx(fmt.Errorf("crackle"))
-
-	_, err = dc.Flush(ss.p.NOTX())
-	assert.Regexp(t, "crackle", err) // the original error as it's a flush
+	dc.flushing = dc.newPendingStateWrites()
+	dc.finalizer(ctx, fmt.Errorf("crackle"))
 
 	err = dc.AddStateLocks(&pldapi.StateLock{})
 	assert.Regexp(t, "PD010119.*crackle", err) // needs reset

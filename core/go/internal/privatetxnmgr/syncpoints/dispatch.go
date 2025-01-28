@@ -116,7 +116,7 @@ func (s *syncPoints) PersistDeployDispatchBatch(ctx context.Context, dispatchBat
 	return err
 }
 
-func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX persistence.DBTX, dispatchOperations []*dispatchOperation) (postCommits []func(), err error) {
+func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX persistence.DBTX, dispatchOperations []*dispatchOperation) (err error) {
 
 	// For each operation in the batch, we need to call the baseledger transaction manager to allocate its nonce
 	// which it can only guaranteed to be gapless and unique if it is done during the database transaction that inserts the dispatch record.
@@ -132,12 +132,11 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX persisten
 			}
 
 			// Call the public transaction manager persist to the database under the current transaction
-			pubTXCb, publicTxns, err := s.pubTxMgr.WriteNewTransactions(ctx, dbTX, dispatchSequenceOp.PublicTxs)
+			publicTxns, err := s.pubTxMgr.WriteNewTransactions(ctx, dbTX, dispatchSequenceOp.PublicTxs)
 			if err != nil {
 				log.L(ctx).Errorf("Error submitting public transactions: %s", err)
-				return nil, err
+				return err
 			}
-			postCommits = append(postCommits, pubTXCb)
 
 			//TODO this results in an `INSERT` for each dispatchSequence
 			//Would it be more efficient to pass an array for the whole flush?
@@ -153,7 +152,7 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX persisten
 
 			log.L(ctx).Debugf("Writing dispatch batch %d", len(dispatchSequenceOp.PrivateTransactionDispatches))
 
-			err = dbTX.
+			err = dbTX.DB().
 				Table("dispatches").
 				Clauses(clause.OnConflict{
 					Columns: []clause.Column{
@@ -168,29 +167,27 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX persisten
 
 			if err != nil {
 				log.L(ctx).Errorf("Error persisting dispatches: %s", err)
-				return nil, err
+				return err
 			}
 
 		}
 
 		if len(op.privateDispatches) > 0 {
-			txPostCommit, err := s.txMgr.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, op.privateDispatches)
+			err := s.txMgr.UpsertInternalPrivateTxsFinalizeIDs(ctx, dbTX, op.privateDispatches)
 			if err != nil {
 				log.L(ctx).Errorf("Error persisting private dispatches: %s", err)
-				return nil, err
+				return err
 			}
-			postCommits = append(postCommits, txPostCommit)
 		}
 
 		if len(op.localPreparedTxns) > 0 {
 			log.L(ctx).Debugf("Writing prepared transactions locally  %d", len(op.localPreparedTxns))
 
-			txPostCommit, err := s.txMgr.WritePreparedTransactions(ctx, dbTX, op.localPreparedTxns)
+			err := s.txMgr.WritePreparedTransactions(ctx, dbTX, op.localPreparedTxns)
 			if err != nil {
 				log.L(ctx).Errorf("Error persisting prepared transactions: %s", err)
-				return nil, err
+				return err
 			}
-			postCommits = append(postCommits, txPostCommit)
 		}
 
 		if len(op.preparedReliableMsgs) == 0 {
@@ -198,14 +195,13 @@ func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX persisten
 		} else {
 
 			log.L(ctx).Debugf("Writing %d reliable messages", len(op.preparedReliableMsgs))
-			msgPostCommit, err := s.transportMgr.SendReliable(ctx, dbTX, op.preparedReliableMsgs...)
+			err := s.transportMgr.SendReliable(ctx, dbTX, op.preparedReliableMsgs...)
 			if err != nil {
 				log.L(ctx).Errorf("Error persisting prepared reliable messages: %s", err)
-				return nil, err
+				return err
 			}
-			postCommits = append(postCommits, msgPostCommit)
 		}
 
 	}
-	return postCommits, nil
+	return nil
 }

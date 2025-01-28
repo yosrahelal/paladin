@@ -170,7 +170,7 @@ type DomainContext interface {
 	// of the database transaction.
 	//
 	// If an error is returned by this function, then the postDBTx callback will be nil
-	Flush(dbTX persistence.DBTX) (postDBTx func(error), err error)
+	Flush(dbTX persistence.DBTX) error
 
 	// Removes the domain context from the state manager, and prevents any further use
 	Close()
