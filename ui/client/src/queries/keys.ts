@@ -14,13 +14,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { constants } from "../components/config";
 import { IKeyEntry } from "../interfaces";
 import { generatePostReq, returnResponse } from "./common";
 import { RpcEndpoint, RpcMethods } from "./rpcMethods";
 import i18next from "i18next";
 
-export const fetchKeys = async (parent: string, sortBy: string, sortOrder: 'asc' | 'desc', pageParam?: IKeyEntry): Promise<IKeyEntry[]> => {
+export const fetchKeys = async (parent: string, limit: number, sortBy: string, sortOrder: 'asc' | 'desc', refEntry?: IKeyEntry): Promise<IKeyEntry[]> => {
   let requestPayload: any = {
     jsonrpc: "2.0",
     id: Date.now(),
@@ -33,14 +32,14 @@ export const fetchKeys = async (parent: string, sortBy: string, sortOrder: 'asc'
         }
       ],
       sort: [`${sortBy} ${sortOrder}`],
-      limit: constants.KEY_QUERY_LIMIT
+      limit
     }]
   };
 
-  if(pageParam !== undefined) {
+  if(refEntry !== undefined) {
     requestPayload.params[0][sortOrder === 'asc' ? 'greaterThan' : 'lessThan'] = [{
       field: sortBy,
-      value: pageParam[sortBy as 'path' | 'index']
+      value: refEntry[sortBy as 'path' | 'index']
     }];
   }
 
