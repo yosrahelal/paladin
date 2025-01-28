@@ -28,9 +28,12 @@ type singletonVal struct {
 	next  *singletonVal
 }
 
+// Wrapper around a database transaction context, which provides lifecycle functions beyond those of GORM.
 type DBTX interface {
-	// Access the Gorm DB object for the transaction
+	// Access the Gorm DB object for the DB/transaction
 	DB() *gorm.DB
+	// False means you cannot call pre-commit/post-commit, because this is just a NOTX() transaction. Used by code that wants to allow a mini-transaction to be created ad-hoc, but only when there's no transaction in flight.
+	FullTransaction() bool
 	// Functions to be run at the end of the transaction, before it has committed. An error from these will cause a rollback of the transaction itself
 	AddPreCommit(func(txCtx context.Context, tx DBTX) error)
 	// Only called after a transaction is successfully committed - useful for triggering other actions that are conditional on new data
@@ -80,6 +83,10 @@ func (t *transaction) Singleton(key any, new func(ctx context.Context) any) any 
 	return newValue
 }
 
+func (t *transaction) FullTransaction() bool {
+	return true
+}
+
 func newNOTX(gdb *gorm.DB) DBTX {
 	return &noTransaction{gdb: gdb}
 }
@@ -106,4 +113,8 @@ func (t *noTransaction) AddFinalizer(fn func(txCtx context.Context, err error)) 
 
 func (t *noTransaction) Singleton(key any, new func(txCtx context.Context) any) any {
 	panic("singleton components used outside of transaction context")
+}
+
+func (t *noTransaction) FullTransaction() bool {
+	return false
 }

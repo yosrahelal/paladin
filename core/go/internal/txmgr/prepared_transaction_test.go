@@ -103,15 +103,17 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 	txm.stateMgr = stateMgr
 	defer txm.stateMgr.Stop()
 
+	var testSchemaID tktypes.Bytes32
+	var parentTx *components.ValidatedTransaction
 	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 
 		schemas, err := txm.stateMgr.EnsureABISchemas(ctx, dbTX, "domain1", []*abi.Parameter{testStateSchema})
 		require.NoError(t, err)
 
-		testSchemaID := schemas[0].ID()
+		testSchemaID = schemas[0].ID()
 
 		// Create the parent TX
-		parentTx, err := txm.resolveNewTransaction(ctx, dbTX, &pldapi.TransactionInput{
+		parentTx, err = txm.resolveNewTransaction(ctx, dbTX, &pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
 				From:           "me",
 				IdempotencyKey: "parent_txn",
@@ -124,8 +126,11 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 		}, pldapi.SubmitModeAuto)
 		require.NoError(t, err)
 		_, err = txm.insertTransactions(ctx, dbTX, []*components.ValidatedTransaction{parentTx}, false)
-		require.NoError(t, err)
+		return err
+	})
+	require.NoError(t, err)
 
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		// Mimic some states that it produced
 		spent, spentIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 3)
 		read, readIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 2)

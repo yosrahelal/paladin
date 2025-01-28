@@ -41,6 +41,7 @@ func TestTransactionOk(t *testing.T) {
 	mdb.ExpectCommit()
 
 	err := p.Transaction(ctx, func(ctx context.Context, tx DBTX) error {
+		require.True(t, tx.FullTransaction())
 		err := tx.DB().Exec("INSERT INPUT a_table (col1) VALUES ('abc');").Error
 		require.NoError(t, err)
 		tx.AddPreCommit(func(ctx context.Context, preCommitTX DBTX) error {
@@ -183,6 +184,7 @@ func TestNOTXFailures(t *testing.T) {
 	p, _ := newMockGormPSQLPersistence(t)
 
 	require.NotNil(t, p.NOTX().DB())
+	require.False(t, p.NOTX().FullTransaction())
 
 	assert.Panics(t, func() {
 		p.NOTX().AddPreCommit(func(ctx context.Context, tx DBTX) error { return nil })

@@ -99,7 +99,7 @@ func newTestTransactionManagerWithWebSocketRPC(t *testing.T, init ...func(*pldco
 
 func mockResolveKeyOKThenFail(t *testing.T, mc *mockComponents, identifier string, senderAddr *tktypes.EthAddress) {
 	kr := mockKeyResolver(t, mc)
-	kr.On("ResolveKey", identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+	kr.On("ResolveKey", mock.Anything, identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 		Return(&pldapi.KeyMappingAndVerifier{Verifier: &pldapi.KeyVerifier{
 			Verifier: senderAddr.String(),
 		}}, nil)
@@ -107,7 +107,7 @@ func mockResolveKeyOKThenFail(t *testing.T, mc *mockComponents, identifier strin
 
 func mockResolveKey(t *testing.T, mc *mockComponents, identifier string, senderAddr *tktypes.EthAddress) {
 	kr := mockKeyResolver(t, mc)
-	kr.On("ResolveKey", identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+	kr.On("ResolveKey", mock.Anything, identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 		Return(&pldapi.KeyMappingAndVerifier{Verifier: &pldapi.KeyVerifier{
 			Verifier: senderAddr.String(),
 		}}, nil)
@@ -117,7 +117,7 @@ func mockSubmitPublicTxOk(t *testing.T, senderAddr *tktypes.EthAddress) func(tmc
 	return func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 		mockResolveKey(t, mc, "sender1", senderAddr)
 		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(func() {}, []*pldapi.PublicTx{
+		mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return([]*pldapi.PublicTx{
 			{LocalID: confutil.P(uint64(12345))},
 		}, nil)
 	}
@@ -591,7 +591,7 @@ func TestQueryPreparedTransactionsNotFound(t *testing.T) {
 
 func TestPrepareTransactions(t *testing.T) {
 
-	ctx, url, _, done := newTestTransactionManagerWithRPC(t, mockDomainContractResolve(t, "domain1"), mockKeyResolutionContextOk(t), func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t, mockDomainContractResolve(t, "domain1"), func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.MatchedBy(func(tx *components.ValidatedTransaction) bool {
 			return tx.Transaction.SubmitMode.V() == pldapi.SubmitModeExternal
 		})).Return(nil)

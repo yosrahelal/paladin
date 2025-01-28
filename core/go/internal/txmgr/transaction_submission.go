@@ -93,7 +93,16 @@ func (tm *txManager) resolveFunction(ctx context.Context, dbTX persistence.DBTX,
 			// (we need something to hash to an abiReference in all cases)
 			inputABI = abi.ABI{defaultConstructor}
 		}
-		pa, err = tm.UpsertABI(ctx, dbTX, inputABI)
+		// We support a NOTX transaction in this function, particularly for Call when the ABI is already written/cached.
+		// However, in the case we're about to write the ABI we need a TX for post commit handling - so take the hit here of a mini-TX
+		if !dbTX.FullTransaction() {
+			err = tm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+				pa, err = tm.UpsertABI(ctx, dbTX, inputABI)
+				return err
+			})
+		} else {
+			pa, err = tm.UpsertABI(ctx, dbTX, inputABI)
+		}
 	}
 	if err != nil || pa == nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrABIReferenceLookupFailed, inputABIRef)

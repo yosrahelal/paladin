@@ -73,6 +73,15 @@ func (tm *txManager) getABIByHash(ctx context.Context, dbTX persistence.DBTX, ha
 	return pa, nil
 }
 
+func (tm *txManager) storeABINewDBTX(ctx context.Context, a abi.ABI) (hash *tktypes.Bytes32, err error) {
+	err = tm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		hash, err = tm.storeABI(ctx, dbTX, a)
+		return err
+	})
+	return hash, err
+
+}
+
 func (tm *txManager) storeABI(ctx context.Context, dbTX persistence.DBTX, a abi.ABI) (*tktypes.Bytes32, error) {
 	pa, err := tm.UpsertABI(ctx, dbTX, a)
 	if err != nil {
