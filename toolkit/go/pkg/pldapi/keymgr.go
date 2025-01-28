@@ -61,5 +61,5 @@ type KeyQueryEntry struct {
 	Index       int64          `docstruct:"KeyListEntry" json:"index"`
 	Wallet      string         `docstruct:"KeyListEntry" json:"wallet"`
 	KeyHandle   string         `docstruct:"KeyListEntry" json:"keyHandle"`
-	Verifiers   []*KeyVerifier `gorm:"-"`
+	Verifiers   []*KeyVerifier `docstruct:"KeyListEntry" json:"verifiers" gorm:"-"`
 }
