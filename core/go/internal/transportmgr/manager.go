@@ -285,7 +285,7 @@ func (tm *transportManager) queueFireAndForget(ctx context.Context, nodeName str
 }
 
 // See docs in components package
-func (tm *transportManager) SendReliable(ctx context.Context, dbTX persistence.DBTX, msgs ...*components.ReliableMessage) (preCommit func(), err error) {
+func (tm *transportManager) SendReliable(ctx context.Context, dbTX persistence.DBTX, msgs ...*components.ReliableMessage) (err error) {
 
 	peers := make(map[string]*peer)
 	for _, msg := range msgs {
@@ -300,28 +300,29 @@ func (tm *transportManager) SendReliable(ctx context.Context, dbTX persistence.D
 		}
 
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		peers[p.Name] = p
 	}
 
 	if err == nil {
-		err = dbTX.
+		err = dbTX.DB().
 			WithContext(ctx).
 			Create(msgs).
 			Error
 	}
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return func() {
+	dbTX.AddPostCommit(func(ctx context.Context) {
 		for _, p := range peers {
 			p.notifyPersistedMsgAvailable()
 		}
-	}, nil
+	})
+	return nil
 
 }
 
@@ -330,7 +331,7 @@ func (tm *transportManager) writeAcks(ctx context.Context, dbTX persistence.DBTX
 		log.L(ctx).Infof("ack received for message %s", ack.MessageID)
 		ack.Time = tktypes.TimestampNow()
 	}
-	return dbTX.
+	return dbTX.DB().
 		WithContext(ctx).
 		Clauses(clause.OnConflict{DoNothing: true}).
 		Create(acks).
@@ -339,7 +340,7 @@ func (tm *transportManager) writeAcks(ctx context.Context, dbTX persistence.DBTX
 
 func (tm *transportManager) getReliableMessageByID(ctx context.Context, dbTX persistence.DBTX, id uuid.UUID) (*components.ReliableMessage, error) {
 	var rms []*components.ReliableMessage
-	err := dbTX.
+	err := dbTX.DB().
 		WithContext(ctx).
 		Order("sequence ASC").
 		Joins("Ack").

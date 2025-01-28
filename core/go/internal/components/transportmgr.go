@@ -151,7 +151,5 @@ type TransportManager interface {
 	//
 	// The message is persisted to the DB in the supplied transaction, then sent on the wire with indefinite retry
 	// including over node restart, until an ack is returned from the remote node.
-	//
-	// The pre-commit handler must be called after the DB transaction commits to trigger the delivery.
-	SendReliable(ctx context.Context, dbTX persistence.DBTX, msg ...*ReliableMessage) (preCommit func(), err error)
+	SendReliable(ctx context.Context, dbTX persistence.DBTX, msg ...*ReliableMessage) (err error)
 }
