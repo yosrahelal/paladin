@@ -170,7 +170,7 @@ func (d *domain) processDomainConfig(dbTX persistence.DBTX, confRes *prototk.Con
 	stream.Name = fmt.Sprintf("domain_%s_%s", d.name, streamHash)
 
 	// Create the event stream
-	d.eventStream, err = d.dm.blockIndexer.AddEventStream(d.ctx, &blockindexer.InternalEventStream{
+	d.eventStream, err = d.dm.blockIndexer.AddEventStream(d.ctx, dbTX, &blockindexer.InternalEventStream{
 		Definition: stream,
 		Handler:    d.handleEventBatch,
 	})

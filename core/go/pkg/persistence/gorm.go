@@ -171,9 +171,10 @@ func (gp *provider) Transaction(parentCtx context.Context, fn func(ctx context.C
 	tx := &transaction{txCtx: log.WithLogField(parentCtx, "dbtx", tktypes.ShortID())}
 	defer func() {
 		if !completed {
-			log.L(tx.txCtx).Errorf("Panic within database transaction: %s", debug.Stack())
+			panicData := recover()
+			log.L(tx.txCtx).Errorf("Panic within database transaction: %v\n%s", panicData, debug.Stack())
 			if err == nil {
-				err = i18n.NewError(tx.txCtx, msgs.MsgPersistenceErrorInDBTransaction, recover())
+				err = i18n.NewError(tx.txCtx, msgs.MsgPersistenceErrorInDBTransaction, panicData)
 			}
 		}
 		for _, fn := range tx.finalizers {

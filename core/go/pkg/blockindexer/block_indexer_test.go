@@ -1152,9 +1152,9 @@ func TestQueryNoLimit(t *testing.T) {
 }
 
 func TestAddEventStreamBadName(t *testing.T) {
-	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	ctx, bi, _, mp, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
-	_, err := bi.AddEventStream(ctx, &InternalEventStream{})
+	_, err := bi.AddEventStream(ctx, mp.P.NOTX(), &InternalEventStream{})
 	assert.Regexp(t, "PD020005", err)
 }

@@ -88,7 +88,7 @@ func (r *registry) init() {
 		})
 		if err == nil {
 			r.config = res.RegistryConfig
-			err = r.configureEventStream(r.ctx)
+			err = r.configureEventStream(r.ctx, r.rm.p.NOTX())
 		}
 		return true, err
 	})
@@ -103,7 +103,7 @@ func (r *registry) init() {
 	}
 }
 
-func (r *registry) configureEventStream(ctx context.Context) (err error) {
+func (r *registry) configureEventStream(ctx context.Context, dbTX persistence.DBTX) (err error) {
 
 	if len(r.config.EventSources) == 0 {
 		return nil
@@ -141,7 +141,7 @@ func (r *registry) configureEventStream(ctx context.Context) (err error) {
 	}
 	stream.Name = fmt.Sprintf("registry_%s_%s", r.name, streamHash)
 
-	r.eventStream, err = r.rm.blockIndexer.AddEventStream(ctx, &blockindexer.InternalEventStream{
+	r.eventStream, err = r.rm.blockIndexer.AddEventStream(ctx, dbTX, &blockindexer.InternalEventStream{
 		Definition: stream,
 		Handler:    r.handleEventBatch,
 	})

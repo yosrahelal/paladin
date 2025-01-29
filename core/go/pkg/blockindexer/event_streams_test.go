@@ -272,7 +272,7 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 			},
 		}},
 	}
-	_, err = bi.AddEventStream(ctx, &InternalEventStream{
+	_, err = bi.AddEventStream(ctx, bi.persistence.NOTX(), &InternalEventStream{
 		Definition: internalESConfig,
 		Handler:    handler,
 	})
@@ -296,6 +296,18 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 				}`, 1000+blockNumber, 2000+blockNumber, 3000+blockNumber, 4000+blockNumber, 5000+blockNumber,
 				blockNumber), string(e.Data))
 		}
+	}
+
+	// Wait for checkpoint
+	for {
+		es := bi.eventStreams[uuid.MustParse(esID)]
+		baseBlock, err := es.readDBCheckpoint()
+		require.NoError(t, err)
+		if baseBlock >= 14 {
+			break
+		}
+		require.False(t, t.Failed())
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	// Stop and restart

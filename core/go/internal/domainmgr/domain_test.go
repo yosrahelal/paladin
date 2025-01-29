@@ -197,7 +197,7 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 		},
 	}, extraSetup...)
 
-	mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 
 	tp := newTestPlugin(nil)
 	tp.Functions = &plugintk.DomainAPIFunctions{
@@ -398,7 +398,7 @@ func TestDomainInitStreamFail(t *testing.T) {
 		AbiStateSchemasJson: []string{},
 		AbiEventsJson:       fakeCoinEventsABI,
 	}, mockBegin, mockUpsertABIOk, func(mc *mockComponents) {
-		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 	assert.EqualError(t, *td.d.initError.Load(), "pop")

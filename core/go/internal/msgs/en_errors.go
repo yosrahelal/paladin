@@ -117,7 +117,7 @@ var (
 	MsgPersistenceInvalidDSNTemplate   = ffe("PD010205", "dsnParams were provided, but the DSN supplied is not a valid template")
 	MsgPersistenceDSNParamLoadFile     = ffe("PD010206", "Failed to load dsnParams[%s] from '%s'")
 	MsgPersistenceDSNTemplateFail      = ffe("PD010207", "Templated substitution into database connection DSN failed")
-	MsgPersistenceErrorInDBTransaction = ffe("PD010208", "An unhandled error occurred within the database transaction: %s")
+	MsgPersistenceErrorInDBTransaction = ffe("PD010208", "An unhandled error occurred within the database transaction: %v")
 
 	// Transaction Processor PD0103XX
 	MsgTransactionProcessorInvalidStage         = ffe("PD010300", "Invalid stage: %s")

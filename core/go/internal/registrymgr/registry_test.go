@@ -459,7 +459,7 @@ func TestRegistryWithEventStreams(t *testing.T) {
 		}
 		addr := tktypes.RandAddress()
 
-		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.MatchedBy(func(ies *blockindexer.InternalEventStream) bool {
+		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything, mock.MatchedBy(func(ies *blockindexer.InternalEventStream) bool {
 			require.Len(t, ies.Definition.Sources, 1)
 			assert.JSONEq(t, tktypes.JSONString(a).String(), tktypes.JSONString(ies.Definition.Sources[0].ABI).String())
 			assert.Equal(t, addr, ies.Definition.Sources[0].Address)
@@ -490,7 +490,7 @@ func TestConfigureEventStreamBadEventABI(t *testing.T) {
 			},
 		},
 	}
-	err := tp.r.configureEventStream(ctx)
+	err := tp.r.configureEventStream(ctx, tp.r.rm.p.NOTX())
 	assert.Regexp(t, "PD012102", err)
 
 }
@@ -506,7 +506,7 @@ func TestConfigureEventStreamBadEventContractAddr(t *testing.T) {
 			},
 		},
 	}
-	err := tp.r.configureEventStream(ctx)
+	err := tp.r.configureEventStream(ctx, tp.r.rm.p.NOTX())
 	assert.Regexp(t, "PD012102", err)
 
 }
@@ -522,7 +522,7 @@ func TestConfigureEventStreamBadEventABITypes(t *testing.T) {
 			},
 		},
 	}
-	err := tp.r.configureEventStream(ctx)
+	err := tp.r.configureEventStream(ctx, tp.r.rm.p.NOTX())
 	assert.Regexp(t, "FF22025", err)
 
 }

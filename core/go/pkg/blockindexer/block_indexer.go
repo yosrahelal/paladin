@@ -49,7 +49,7 @@ import (
 type BlockIndexer interface {
 	Start(...*InternalEventStream) error
 	Stop()
-	AddEventStream(ctx context.Context, stream *InternalEventStream) (*EventStream, error)
+	AddEventStream(ctx context.Context, dbTX persistence.DBTX, stream *InternalEventStream) (*EventStream, error)
 	GetIndexedBlockByNumber(ctx context.Context, number uint64) (*pldapi.IndexedBlock, error)
 	GetIndexedTransactionByHash(ctx context.Context, hash tktypes.Bytes32) (*pldapi.IndexedTransaction, error)
 	GetIndexedTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce uint64) (*pldapi.IndexedTransaction, error)
@@ -150,7 +150,7 @@ func (bi *blockIndexer) Start(internalStreams ...*InternalEventStream) error {
 	for _, ies := range internalStreams {
 		switch ies.Type {
 		case IESTypeEventStream:
-			if _, err := bi.upsertInternalEventStream(bi.parentCtxForReset, ies); err != nil {
+			if _, err := bi.upsertInternalEventStream(bi.parentCtxForReset, bi.persistence.NOTX(), ies); err != nil {
 				return err
 			}
 		case IESTypePreCommitHandler:
@@ -163,8 +163,8 @@ func (bi *blockIndexer) Start(internalStreams ...*InternalEventStream) error {
 	return nil
 }
 
-func (bi *blockIndexer) AddEventStream(ctx context.Context, stream *InternalEventStream) (*EventStream, error) {
-	es, err := bi.upsertInternalEventStream(ctx, stream)
+func (bi *blockIndexer) AddEventStream(ctx context.Context, dbTX persistence.DBTX, stream *InternalEventStream) (*EventStream, error) {
+	es, err := bi.upsertInternalEventStream(ctx, dbTX, stream)
 	if err != nil {
 		return nil, err
 	}
