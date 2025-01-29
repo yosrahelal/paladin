@@ -54,7 +54,7 @@ func TestResolveFunctionABIAndDef(t *testing.T) {
 	_, err := txm.sendTransactionNewDBTX(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			Type:         pldapi.TransactionTypePublic.Enum(),
-			ABIReference: confutil.P(tktypes.Bytes32(tktypes.RandBytes(32))),
+			ABIReference: confutil.P(tktypes.RandBytes32()),
 		},
 		ABI: abi.ABI{},
 	})

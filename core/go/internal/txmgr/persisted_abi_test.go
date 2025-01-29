@@ -36,7 +36,7 @@ func TestGetABIByHashError(t *testing.T) {
 		})
 	defer done()
 
-	_, err := txm.getABIByHash(ctx, txm.p.NOTX(), tktypes.Bytes32(tktypes.RandBytes(32)))
+	_, err := txm.getABIByHash(ctx, txm.p.NOTX(), tktypes.RandBytes32())
 	assert.Regexp(t, "pop", err)
 
 }
@@ -54,7 +54,7 @@ func TestGetABIByHashBadData(t *testing.T) {
 		})
 	defer done()
 
-	_, err := txm.getABIByHash(ctx, txm.p.NOTX(), tktypes.Bytes32(tktypes.RandBytes(32)))
+	_, err := txm.getABIByHash(ctx, txm.p.NOTX(), tktypes.RandBytes32())
 	assert.Regexp(t, "PD012217", err)
 
 }
@@ -72,7 +72,7 @@ func TestGetABIByCache(t *testing.T) {
 		})
 	defer done()
 
-	hash := tktypes.Bytes32(tktypes.RandBytes(32))
+	hash := tktypes.RandBytes32()
 
 	// 2nd time cached (only one DB mock)
 	for i := 0; i < 2; i++ {

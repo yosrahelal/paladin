@@ -274,7 +274,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 			InputStates: []*components.FullState{
 				{
 					ID:     tktypes.RandBytes(32),
-					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+					Schema: tktypes.RandBytes32(),
 					Data:   tktypes.JSONString("foo"),
 				},
 			},
@@ -322,8 +322,8 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
-				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
-				"outputs": []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"inputs":  []any{tktypes.RandBytes32()},
+				"outputs": []any{tktypes.RandBytes32()},
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
@@ -455,7 +455,7 @@ func TestPrivateTxManagerSimplePreparedTransaction(t *testing.T) {
 			InputStates: []*components.FullState{
 				{
 					ID:     tktypes.RandBytes(32),
-					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+					Schema: tktypes.RandBytes32(),
 					Data:   tktypes.JSONString("foo"),
 				},
 			},
@@ -503,8 +503,8 @@ func TestPrivateTxManagerSimplePreparedTransaction(t *testing.T) {
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
-				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
-				"outputs": []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"inputs":  []any{tktypes.RandBytes32()},
+				"outputs": []any{tktypes.RandBytes32()},
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
@@ -635,7 +635,7 @@ func TestPrivateTxManagerMultipleSignature(t *testing.T) {
 			InputStates: []*components.FullState{
 				{
 					ID:     tktypes.RandBytes(32),
-					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+					Schema: tktypes.RandBytes32(),
 					Data:   tktypes.JSONString("foo"),
 				},
 			},
@@ -725,8 +725,8 @@ func TestPrivateTxManagerMultipleSignature(t *testing.T) {
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
-				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
-				"outputs": []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"inputs":  []any{tktypes.RandBytes32()},
+				"outputs": []any{tktypes.RandBytes32()},
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
@@ -853,7 +853,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 			InputStates: []*components.FullState{
 				{
 					ID:     tktypes.RandBytes(32),
-					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+					Schema: tktypes.RandBytes32(),
 					Data:   tktypes.JSONString("foo"),
 				},
 			},
@@ -911,8 +911,8 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	remoteEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
-				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
-				"outputs": []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"inputs":  []any{tktypes.RandBytes32()},
+				"outputs": []any{tktypes.RandBytes32()},
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
@@ -1038,7 +1038,7 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 			InputStates: []*components.FullState{
 				{
 					ID:     tktypes.RandBytes(32),
-					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+					Schema: tktypes.RandBytes32(),
 					Data:   tktypes.JSONString("foo"),
 				},
 			},
@@ -1104,8 +1104,8 @@ func TestPrivateTxManagerRemoteNotaryEndorserRetry(t *testing.T) {
 	remoteEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
-				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
-				"outputs": []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"inputs":  []any{tktypes.RandBytes32()},
+				"outputs": []any{tktypes.RandBytes32()},
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
@@ -1235,7 +1235,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 			InputStates: []*components.FullState{
 				{
 					ID:     tktypes.RandBytes(32),
-					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+					Schema: tktypes.RandBytes32(),
 					Data:   tktypes.JSONString("foo"),
 				},
 			},
@@ -1394,7 +1394,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinator(t *testing.T) {
 			InputStates: []*components.FullState{
 				{
 					ID:     tktypes.RandBytes(32),
-					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+					Schema: tktypes.RandBytes32(),
 					Data:   tktypes.JSONString("foo"),
 				},
 			},
@@ -1611,7 +1611,7 @@ func TestPrivateTxManagerEndorsementGroupDynamicCoordinatorRangeBoundaryHandover
 			InputStates: []*components.FullState{
 				{
 					ID:     tktypes.RandBytes(32),
-					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+					Schema: tktypes.RandBytes32(),
 					Data:   tktypes.JSONString("foo"),
 				},
 			},
@@ -1828,7 +1828,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	states := []*components.FullState{
 		{
 			ID:     tktypes.RandBytes(32),
-			Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+			Schema: tktypes.RandBytes32(),
 			Data:   tktypes.JSONString("foo"),
 		},
 	}
@@ -1916,8 +1916,8 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	aliceEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
-				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
-				"outputs": []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"inputs":  []any{tktypes.RandBytes32()},
+				"outputs": []any{tktypes.RandBytes32()},
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
@@ -2673,8 +2673,8 @@ func (m *dependencyMocks) mockForSubmitter(t *testing.T, transactionID *uuid.UUI
 	m.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.MatchedBy(privateTransactionMatcher(*transactionID))).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
-				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
-				"outputs": []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"inputs":  []any{tktypes.RandBytes32()},
+				"outputs": []any{tktypes.RandBytes32()},
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)

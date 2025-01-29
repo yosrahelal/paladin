@@ -335,7 +335,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	// current transaction completed, replace with new transaction
 	expectedTopUpAmount2 := big.NewInt(50)
 	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", `Completed__tx_hash`}).
-		AddRow(*bm.sourceAddress, tktypes.Bytes32(tktypes.RandBytes(32))))
+		AddRow(*bm.sourceAddress, tktypes.RandBytes32()))
 
 	mockAutoFuelTransactionSubmit(m, bm, false)
 
@@ -358,7 +358,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	m.ethClient.On("GetBalance", mock.Anything, *bm.sourceAddress, "latest").Return(tktypes.Uint64ToUint256(50), nil).Once()
 
 	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", `Completed__tx_hash`}).
-		AddRow(*bm.sourceAddress, tktypes.Bytes32(tktypes.RandBytes(32))))
+		AddRow(*bm.sourceAddress, tktypes.RandBytes32()))
 	m.db.ExpectBegin()
 
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
