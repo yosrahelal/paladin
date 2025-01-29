@@ -484,7 +484,7 @@ Inputs:
 
 ## Notary logic
 
-The notary logic (implemented in the domain [Go library](../../domains/noto)) is responsible for validating and
+The notary logic (implemented in the domain [Go library](../../../domains/noto)) is responsible for validating and
 submitting all transactions to the base shared ledger.
 
 The notary will validate the following:
@@ -517,7 +517,7 @@ When a Noto contract is constructed with notary mode `basic`, the following nota
 ### Notary mode: hooks
 
 When a Noto contract is constructed with notary mode `hooks`, the address of a private Pente contract implementing
-[INotoHooks](../../solidity/contracts/private/interfaces/INotoHooks.sol) must be provided. This contract may be
+[INotoHooks](../../../solidity/contracts/private/interfaces/INotoHooks.sol) must be provided. This contract may be
 deployed into a privacy group only visible to the notary, or into a group that includes other parties for
 observability.
 
