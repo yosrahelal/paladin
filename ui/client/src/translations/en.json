@@ -80,6 +80,7 @@
 	"localTime": "Local Time",
 	"logIndex": "Log Index",
 	"lookup": "Lookup",
+	"manyN": "Many ({{n}})",
 	"messagesReceived": "Messages Received",
 	"messagesSent": "Messages Sent",
 	"name": "Name",
@@ -140,6 +141,7 @@
 	"type": "Type",
 	"value": "Value",
 	"verifier": "Verifier",
+	"verifiers": "Verifiers",
 	"verifierNotFound": "Verifier not found",
 	"viewDetails": "View Details",
 	"wallet": "Wallet"

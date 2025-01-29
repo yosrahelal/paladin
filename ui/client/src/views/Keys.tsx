@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Breadcrumbs, Button, Fade, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Breadcrumbs, Button, Chip, Fade, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { useEffect, useState } from "react";
@@ -22,13 +22,14 @@ import { fetchKeys } from "../queries/keys";
 import { Hash } from "../components/Hash";
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import { IKeyEntry } from "../interfaces";
+import { IKeyEntry, IVerifier } from "../interfaces";
 import { useSearchParams } from "react-router-dom";
 import { Captions, Signature } from "lucide-react";
 import { constants } from "../components/config";
 import SearchIcon from '@mui/icons-material/Search';
 import { ReverseKeyLookupDialog } from "../dialogs/ReverseKeyLookup";
 import RemoveIcon from '@mui/icons-material/Remove';
+import { VerifiersDialog } from "../dialogs/Verifiers";
 
 export const Keys: React.FC = () => {
 
@@ -58,6 +59,8 @@ export const Keys: React.FC = () => {
   const [reverseLookupDialogOpen, setReverseLookupDialogOpen] = useState(false);
   const [sortBy, setSortBy] = useState(getDefaultSortBy());
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(getDefaultSortOrder);
+  const [selectedVerifiers, setSelectedVerifiers] = useState<IVerifier[]>();
+  const [verifiersDialogOpen, setVerifiersDialogOpen] = useState(false);
 
   const { data: keys, error } = useQuery({
     queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, pathFilter],
@@ -176,7 +179,18 @@ export const Keys: React.FC = () => {
           hash={entries[0].verifier}
           hideTitle />
       } else if (entries.length > 1) {
-        // TODO: expand once there are more than 2
+        return (
+          <Button
+            variant="contained"
+            disableElevation
+            color="primary"
+            size="small"
+            sx={{ minWidth: '110px', paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400', whiteSpace: 'nowrap' }}
+            onClick={() => { setSelectedVerifiers(entries); setVerifiersDialogOpen(true) }}
+          >
+            {t('manyN', { n: entries.length })}
+          </Button>
+        );
       }
     }
     return <RemoveIcon color="disabled" />;
@@ -335,6 +349,12 @@ export const Keys: React.FC = () => {
         setParent={setParent}
         setPathFilter={setPathFilter}
       />
+      {selectedVerifiers &&
+        <VerifiersDialog
+          dialogOpen={verifiersDialogOpen}
+          setDialogOpen={setVerifiersDialogOpen}
+          verifiers={selectedVerifiers}
+        />}
     </>
   );
 }
