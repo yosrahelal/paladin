@@ -127,22 +127,10 @@ func TestFinalizeTransactionsInsertFail(t *testing.T) {
 
 }
 
-func mockKeyResolutionContextOk(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		_ = mockKeyResolver(t, mc)
-	}
-}
-
 func mockKeyResolver(t *testing.T, mc *mockComponents) *componentmocks.KeyResolver {
 	kr := componentmocks.NewKeyResolver(t)
 	mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(kr)
 	return kr
-}
-
-func mockKeyResolutionContextFail(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		_ = mockKeyResolver(t, mc)
-	}
 }
 
 func mockDomainContractResolve(t *testing.T, domainName string, contractAddrs ...tktypes.EthAddress) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {

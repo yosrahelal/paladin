@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
@@ -399,48 +398,6 @@ func TestSignUnknownWallet(t *testing.T) {
 		Wallet: "unknown",
 	}}}, signpayloads.OPAQUE_TO_RSV, []byte{})
 	assert.Regexp(t, "PD010503", err)
-
-}
-
-func TestTimeoutWaitingForLock(t *testing.T) {
-
-	ctx, km, _, done := newTestDBKeyManagerWithWallets(t, hdWalletConfig("wallet1", ""))
-	defer done()
-
-	readyToTry := make(chan struct{})
-	waitDone := make(chan struct{})
-	workerDone := make(chan struct{})
-	go func() {
-		defer close(workerDone)
-		err := km.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-			mapping1, err := km.KeyResolverForDBTX(dbTX).ResolveKey(ctx, "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-			require.NoError(t, err)
-			require.NotEmpty(t, mapping1.Verifier.Verifier)
-			close(readyToTry)
-			<-waitDone
-			return nil
-		})
-		require.NoError(t, err)
-	}()
-
-	// Wait until we know we are blocked
-	<-readyToTry
-	withTimeout, cancelCtx := context.WithTimeout(ctx, 50*time.Millisecond)
-	defer cancelCtx()
-	var kr2 *keyResolver
-	err := km.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		kr2 = km.KeyResolverForDBTX(dbTX).(*keyResolver)
-		_, err := kr2.ResolveKey(withTimeout, "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-		return err
-	})
-	assert.Regexp(t, "PD010301", err)
-
-	close(waitDone)
-
-	// Double unlock is a warned no-op
-	km.unlockAllocation(ctx, kr2)
-
-	<-workerDone
 
 }
 

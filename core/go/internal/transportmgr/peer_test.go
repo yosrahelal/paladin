@@ -97,12 +97,10 @@ func TestReliableMessageResendRealDB(t *testing.T) {
 				StateID:         tktypes.RandHex(32),
 			}
 
-			err := tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-				return tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
-					MessageType: components.RMTState.Enum(),
-					Node:        "node2",
-					Metadata:    tktypes.JSONString(sds[i]),
-				})
+			err := tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
+				MessageType: components.RMTState.Enum(),
+				Node:        "node2",
+				Metadata:    tktypes.JSONString(sds[i]),
 			})
 			require.NoError(t, err)
 		}
