@@ -17,21 +17,23 @@ package constants
 
 const (
 	// the base circuits support inputs and outputs up to size 2
-	CIRCUIT_ANON               = "anon"
-	CIRCUIT_ANON_ENC           = "anon_enc"
-	CIRCUIT_ANON_NULLIFIER     = "anon_nullifier"
-	CIRCUIT_DEPOSIT            = "check_hashes_value"
-	CIRCUIT_WITHDRAW           = "check_inputs_outputs_value"
-	CIRCUIT_WITHDRAW_NULLIFIER = "check_nullifiers_value"
-	CIRCUIT_LOCK               = "check_utxos_owner"
+	CIRCUIT_ANON                  = "anon"
+	CIRCUIT_ANON_ENC              = "anon_enc"
+	CIRCUIT_ANON_NULLIFIER        = "anon_nullifier_transfer"
+	CIRCUIT_ANON_NULLIFIER_LOCKED = "anon_nullifier_transferLocked"
+	CIRCUIT_DEPOSIT               = "check_hashes_value"
+	CIRCUIT_WITHDRAW              = "check_inputs_outputs_value"
+	CIRCUIT_WITHDRAW_NULLIFIER    = "check_nullifiers_value"
+	CIRCUIT_LOCK                  = "check_utxos_owner"
 
 	// the batch circuits support inputs and outputs from size 3 up to size 10
-	CIRCUIT_ANON_BATCH               = "anon_batch"
-	CIRCUIT_ANON_ENC_BATCH           = "anon_enc_batch"
-	CIRCUIT_ANON_NULLIFIER_BATCH     = "anon_nullifier_batch"
-	CIRCUIT_WITHDRAW_BATCH           = "check_inputs_outputs_value_batch"
-	CIRCUIT_WITHDRAW_NULLIFIER_BATCH = "check_nullifiers_value_batch"
-	CIRCUIT_LOCK_BATCH               = "check_utxos_owner_batch"
+	CIRCUIT_ANON_BATCH                  = "anon_batch"
+	CIRCUIT_ANON_ENC_BATCH              = "anon_enc_batch"
+	CIRCUIT_ANON_NULLIFIER_BATCH        = "anon_nullifier_transfer_batch"
+	CIRCUIT_ANON_NULLIFIER_LOCKED_BATCH = "anon_nullifier_transferLocked_batch"
+	CIRCUIT_WITHDRAW_BATCH              = "check_inputs_outputs_value_batch"
+	CIRCUIT_WITHDRAW_NULLIFIER_BATCH    = "check_nullifiers_value_batch"
+	CIRCUIT_LOCK_BATCH                  = "check_utxos_owner_batch"
 
 	TOKEN_ANON           = "Zeto_Anon"
 	TOKEN_ANON_ENC       = "Zeto_AnonEnc"

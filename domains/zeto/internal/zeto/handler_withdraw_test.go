@@ -80,7 +80,9 @@ func TestWithdrawAssemble(t *testing.T) {
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{
 			TokenName: "tokenContract1",
-			CircuitId: "circuit1",
+			Circuits: map[string]string{
+				"deposit": "circuit-deposit",
+			},
 		},
 	}
 	req := &prototk.AssembleTransactionRequest{
@@ -151,7 +153,7 @@ func TestWithdrawAssemble(t *testing.T) {
 	assert.Equal(t, "100", *res.AssembledTransaction.DomainData)
 
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
-	tx.DomainConfig.CircuitId = constants.CIRCUIT_ANON_NULLIFIER
+	tx.DomainConfig.Circuits["withdraw"] = "check_nullifiers_value"
 	called := 0
 	h.zeto.Callbacks = &domain.MockDomainCallbacks{
 		MockFindAvailableStates: func() (*prototk.FindAvailableStatesResponse, error) {
@@ -228,6 +230,9 @@ func TestWithdrawPrepare(t *testing.T) {
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{
 			TokenName: constants.TOKEN_ANON_ENC,
+			Circuits: map[string]string{
+				"deposit": "circuit-deposit",
+			},
 		},
 	}
 	amountStr := "100"
@@ -319,7 +324,7 @@ func TestWithdrawPrepare(t *testing.T) {
 	assert.Equal(t, "{\"amount\":\"100\",\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"inputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"output\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)
 
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
-	tx.DomainConfig.CircuitId = constants.CIRCUIT_ANON_NULLIFIER
+	tx.DomainConfig.Circuits["deposit"] = "circuit-deposit"
 	proofReq.PublicInputs = map[string]string{
 		"nullifiers": "0x1234567890,0x1234567890",
 		"root":       "0x1234567890",

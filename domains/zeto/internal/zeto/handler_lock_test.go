@@ -55,8 +55,10 @@ func TestLockValidateParams(t *testing.T) {
 				DomainContracts: types.DomainConfigContracts{
 					Implementations: []*types.DomainContract{
 						{
-							Name:      "Zeto_Anon",
-							CircuitId: "anon",
+							Name: "Zeto_Anon",
+							Circuits: map[string]string{
+								"deposit": "circuit-deposit",
+							},
 						},
 					},
 				},
@@ -65,7 +67,9 @@ func TestLockValidateParams(t *testing.T) {
 	}
 	config := &types.DomainInstanceConfig{
 		TokenName: "test",
-		CircuitId: "test",
+		Circuits: map[string]string{
+			"deposit": "circuit-deposit",
+		},
 	}
 	ctx := context.Background()
 	_, err := h.ValidateParams(ctx, config, "bad json")
@@ -147,7 +151,9 @@ func TestLockAssemble(t *testing.T) {
 
 	config := &types.DomainInstanceConfig{
 		TokenName: "test",
-		CircuitId: "test",
+		Circuits: map[string]string{
+			"deposit": "circuit-deposit",
+		},
 	}
 	bytes, err := getTransferABI(config.TokenName).EncodeCallDataValues(params)
 	require.NoError(t, err)
@@ -201,8 +207,10 @@ func TestLockPrepare(t *testing.T) {
 				DomainContracts: types.DomainConfigContracts{
 					Implementations: []*types.DomainContract{
 						{
-							Name:      "Zeto_Anon",
-							CircuitId: "anon",
+							Name: "Zeto_Anon",
+							Circuits: map[string]string{
+								"deposit": "circuit-deposit",
+							},
 						},
 					},
 				},

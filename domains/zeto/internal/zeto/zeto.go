@@ -197,12 +197,12 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorValidatePrepDeployParams, err)
 	}
-	circuitId, err := z.config.GetCircuitId(ctx, initParams.TokenName)
+	circuits, err := z.config.GetCircuits(ctx, initParams.TokenName)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFindCircuitId, err)
 	}
 	config := &types.DomainInstanceConfig{
-		CircuitId: circuitId,
+		Circuits:  circuits,
 		TokenName: initParams.TokenName,
 	}
 	configJSON, err := json.Marshal(config)

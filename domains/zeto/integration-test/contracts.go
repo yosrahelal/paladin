@@ -42,7 +42,7 @@ type ZetoDomainContracts struct {
 }
 
 type cloneableContract struct {
-	circuitId             string
+	circuits              map[string]string
 	verifier              string
 	batchVerifier         string
 	depositVerifier       string
@@ -95,7 +95,7 @@ func findCloneableContracts(config *domainConfig) map[string]cloneableContract {
 	for _, contract := range config.DomainContracts.Implementations {
 		if contract.Cloneable {
 			cloneableContracts[contract.Name] = cloneableContract{
-				circuitId:             contract.CircuitId,
+				circuits:              contract.Circuits,
 				verifier:              contract.Verifier,
 				batchVerifier:         contract.BatchVerifier,
 				depositVerifier:       contract.DepositVerifier,
@@ -208,23 +208,25 @@ func registerImpl(ctx context.Context, name string, domainContracts *ZetoDomainC
 	}
 	lockVerifierAddr, ok := domainContracts.deployedContracts[lockVerifierName]
 	if !ok {
-		return fmt.Errorf("lock verifier contract not found among the deployed contracts")
+		lockVerifierAddr = tktypes.MustEthAddress("0x0000000000000000000000000000000000000000")
 	}
 	batchLockVerifierAddr, ok := domainContracts.deployedContracts[batchLockVerifierName]
 	if !ok {
-		return fmt.Errorf("batch lock verifier contract not found among the deployed contracts")
+		batchLockVerifierAddr = tktypes.MustEthAddress("0x0000000000000000000000000000000000000000")
 	}
 	params := &setImplementationParams{
 		Name: name,
 		Implementation: implementationInfo{
-			Implementation:        implAddr.String(),
-			Verifier:              verifierAddr.String(),
-			BatchVerifier:         batchVerifierAddr.String(),
-			DepositVerifier:       depositVerifierAddr.String(),
-			WithdrawVerifier:      withdrawVerifierAddr.String(),
-			BatchWithdrawVerifier: batchWithdrawVerifierAddr.String(),
-			LockVerifier:          lockVerifierAddr.String(),
-			BatchLockVerifier:     batchLockVerifierAddr.String(),
+			Implementation: implAddr.String(),
+			Verifiers: verifiersInfo{
+				Verifier:              verifierAddr.String(),
+				BatchVerifier:         batchVerifierAddr.String(),
+				DepositVerifier:       depositVerifierAddr.String(),
+				WithdrawVerifier:      withdrawVerifierAddr.String(),
+				BatchWithdrawVerifier: batchWithdrawVerifierAddr.String(),
+				LockVerifier:          lockVerifierAddr.String(),
+				BatchLockVerifier:     batchLockVerifierAddr.String(),
+			},
 		},
 	}
 	_, err := tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{

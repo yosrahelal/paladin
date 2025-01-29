@@ -70,7 +70,15 @@ func TestConfigureDomain(t *testing.T) {
 
 func TestDecodeDomainConfig(t *testing.T) {
 	config := &types.DomainInstanceConfig{
-		CircuitId: "circuit-id",
+		Circuits: map[string]string{
+			"deposit":             "circuit-deposit",
+			"withdraw":            "circuit-withdraw",
+			"withdrawBatch":       "circuit-withdraw-batch",
+			"transfer":            "circuit-transfer",
+			"transferBatch":       "circuit-transfer-batch",
+			"transferLocked":      "circuit-transfer-locked",
+			"transferLockedBatch": "circuit-transfer-locked-batch",
+		},
 		TokenName: "token-name",
 	}
 	configJSON, err := json.Marshal(config)
@@ -135,8 +143,16 @@ func TestPrepareDeploy(t *testing.T) {
 		DomainContracts: types.DomainConfigContracts{
 			Implementations: []*types.DomainContract{
 				{
-					Name:      "testToken1",
-					CircuitId: "circuit1",
+					Name: "testToken1",
+					Circuits: map[string]string{
+						"deposit":             "circuit-deposit",
+						"withdraw":            "circuit-withdraw",
+						"withdrawBatch":       "circuit-withdraw-batch",
+						"transfer":            "circuit-transfer",
+						"transferBatch":       "circuit-transfer-batch",
+						"transferLocked":      "circuit-transfer-locked",
+						"transferLockedBatch": "circuit-transfer-locked-batch",
+					},
 				},
 			},
 		},
@@ -175,7 +191,15 @@ func TestInitContract(t *testing.T) {
 	require.False(t, res.Valid)
 
 	conf := types.DomainInstanceConfig{
-		CircuitId: "circuit1",
+		Circuits: map[string]string{
+			"deposit":             "circuit-deposit",
+			"withdraw":            "circuit-withdraw",
+			"withdrawBatch":       "circuit-withdraw-batch",
+			"transfer":            "circuit-transfer",
+			"transferBatch":       "circuit-transfer-batch",
+			"transferLocked":      "circuit-transfer-locked",
+			"transferLockedBatch": "circuit-transfer-locked-batch",
+		},
 		TokenName: "testToken1",
 	}
 	configJSON, _ := json.Marshal(conf)
@@ -186,7 +210,15 @@ func TestInitContract(t *testing.T) {
 	assert.NoError(t, err)
 	require.True(t, res.Valid)
 	require.JSONEq(t, `{
-		"circuitId": "circuit1",
+		"circuits": {
+			"deposit": "circuit-deposit",
+			"withdraw": "circuit-withdraw",
+			"withdrawBatch": "circuit-withdraw-batch",
+			"transfer": "circuit-transfer",
+			"transferBatch": "circuit-transfer-batch",
+			"transferLocked": "circuit-transfer-locked",
+			"transferLockedBatch": "circuit-transfer-locked-batch"
+		},
 		"tokenName": "testToken1"
 	}`, res.ContractConfig.ContractConfigJson)
 }
@@ -216,7 +248,9 @@ func TestInitTransaction(t *testing.T) {
 	assert.ErrorContains(t, err, "PD210008")
 
 	conf := types.DomainInstanceConfig{
-		CircuitId: "circuit1",
+		Circuits: map[string]string{
+			"deposit": "circuit-deposit",
+		},
 		TokenName: "testToken1",
 	}
 	configJSON, err := json.Marshal(conf)
@@ -293,7 +327,9 @@ func TestAssembleTransaction(t *testing.T) {
 
 	req.Transaction.FunctionSignature = "function mint(TransferParam[] memory mints) external { }; struct TransferParam { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
-		CircuitId: "circuit1",
+		Circuits: map[string]string{
+			"deposit": "circuit-deposit",
+		},
 		TokenName: "testToken1",
 	}
 	req.Transaction.ContractInfo.ContractConfigJson = tktypes.JSONString(conf).Pretty()
@@ -319,7 +355,9 @@ func TestEndorseTransaction(t *testing.T) {
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
 	req.Transaction.FunctionSignature = "function mint(TransferParam[] memory mints) external { }; struct TransferParam { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
-		CircuitId: "circuit1",
+		Circuits: map[string]string{
+			"deposit": "circuit-deposit",
+		},
 		TokenName: "testToken1",
 	}
 	req.Transaction.ContractInfo.ContractConfigJson = tktypes.JSONString(conf).Pretty()
@@ -334,8 +372,10 @@ func TestPrepareTransaction(t *testing.T) {
 		DomainContracts: types.DomainConfigContracts{
 			Implementations: []*types.DomainContract{
 				{
-					Name:      "testToken1",
-					CircuitId: "circuit1",
+					Name: "testToken1",
+					Circuits: map[string]string{
+						"deposit": "circuit-deposit",
+					},
 				},
 			},
 		},
@@ -360,7 +400,9 @@ func TestPrepareTransaction(t *testing.T) {
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
 	req.Transaction.FunctionSignature = "function mint(TransferParam[] memory mints) external { }; struct TransferParam { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
-		CircuitId: "circuit1",
+		Circuits: map[string]string{
+			"deposit": "circuit-deposit",
+		},
 		TokenName: "testToken1",
 	}
 	req.Transaction.ContractInfo.ContractConfigJson = tktypes.JSONString(conf).Pretty()

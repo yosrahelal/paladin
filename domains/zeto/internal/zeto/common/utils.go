@@ -25,6 +25,8 @@ func IsNullifiersCircuit(circuitId string) bool {
 		constants.CIRCUIT_ANON_NULLIFIER_BATCH,
 		constants.CIRCUIT_WITHDRAW_NULLIFIER,
 		constants.CIRCUIT_WITHDRAW_NULLIFIER_BATCH,
+		constants.CIRCUIT_ANON_NULLIFIER_LOCKED,
+		constants.CIRCUIT_ANON_NULLIFIER_LOCKED_BATCH,
 	}
 	for _, c := range nullifierCircuits {
 		if circuitId == c {

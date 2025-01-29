@@ -39,8 +39,18 @@ type DomainConfigContracts struct {
 }
 
 type DomainContract struct {
-	Name      string `yaml:"name"`
-	CircuitId string `yaml:"circuitId"`
+	Name     string            `yaml:"name"`
+	Circuits map[string]string `yaml:"circuits"`
+}
+
+type CircuitsMap struct {
+	Deposit             string `yaml:"deposit"`
+	Withdraw            string `yaml:"withdraw"`
+	WithdrawBatch       string `yaml:"withdrawBatch"`
+	Transfer            string `yaml:"transfer"`
+	TransferBatch       string `yaml:"transferBatch"`
+	TransferLocked      string `yaml:"transferLocked"`
+	TransferLockedBatch string `yaml:"transferLockedBatch"`
 }
 
 // func (d *DomainFactoryConfig) GetContractAbi(ctx context.Context, tokenName string) (abi.ABI, error) {
@@ -57,10 +67,19 @@ type DomainContract struct {
 // 	return nil, i18n.NewError(ctx, msgs.MsgContractNotFound, tokenName)
 // }
 
-func (d *DomainFactoryConfig) GetCircuitId(ctx context.Context, tokenName string) (string, error) {
+func (d *DomainFactoryConfig) GetCircuits(ctx context.Context, tokenName string) (map[string]string, error) {
 	for _, contract := range d.DomainContracts.Implementations {
 		if contract.Name == tokenName {
-			return contract.CircuitId, nil
+			return contract.Circuits, nil
+		}
+	}
+	return nil, i18n.NewError(ctx, msgs.MsgContractNotFound, tokenName)
+}
+
+func (d *DomainFactoryConfig) GetCircuitId(ctx context.Context, tokenName, method string) (string, error) {
+	for _, contract := range d.DomainContracts.Implementations {
+		if contract.Name == tokenName {
+			return contract.Circuits[method], nil
 		}
 	}
 	return "", i18n.NewError(ctx, msgs.MsgContractNotFound, tokenName)
@@ -72,15 +91,30 @@ func (d *DomainFactoryConfig) GetCircuitId(ctx context.Context, tokenName string
 // node to fully initialize the domain instance, based on only
 // on-chain information.
 type DomainInstanceConfig struct {
-	TokenName string `json:"tokenName"`
-	CircuitId string `json:"circuitId"`
+	TokenName string            `json:"tokenName"`
+	Circuits  map[string]string `json:"circuits"`
 }
 
 // DomainInstanceConfigABI is the ABI for the DomainInstanceConfig,
 // used to encode and decode the on-chain data for the domain config
 var DomainInstanceConfigABI = &abi.ParameterArray{
-	{Type: "string", Name: "tokenName"},
-	{Type: "string", Name: "circuitId"},
+	{
+		Type: "string",
+		Name: "tokenName",
+	},
+	{
+		Type: "tuple",
+		Name: "circuits",
+		Components: []*abi.Parameter{
+			{Type: "string", Name: "deposit"},
+			{Type: "string", Name: "withdraw"},
+			{Type: "string", Name: "withdrawBatch"},
+			{Type: "string", Name: "transfer"},
+			{Type: "string", Name: "transferBatch"},
+			{Type: "string", Name: "transferLocked"},
+			{Type: "string", Name: "transferLockedBatch"},
+		},
+	},
 }
 
 // marks the version of the Zeto transaction data schema

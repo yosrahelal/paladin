@@ -80,7 +80,9 @@ func TestDepositAssemble(t *testing.T) {
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{
 			TokenName: "tokenContract1",
-			CircuitId: "circuit1",
+			Circuits: map[string]string{
+				"deposit": "circuit-deposit",
+			},
 		},
 	}
 	req := &prototk.AssembleTransactionRequest{
