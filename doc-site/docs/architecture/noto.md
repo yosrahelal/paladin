@@ -49,13 +49,9 @@ Creates a new Noto token, with a new address on the base ledger.
 Inputs:
 
 * **notary** - lookup string for the identity that will serve as the notary for this token instance. May be located at this node or another node
-* **notaryMode** - choose the notary's mode of operation - must be "basic" or "hooks"
+* **notaryMode** - choose the notary's mode of operation - must be "basic" or "hooks" (see [Notary logic](#notary-logic) section below)
 * **implementation** - (optional) the name of a non-default Noto implementation that has previously been registered
-* **options.basic.restrictMint** - (optional - default true) only allow the notary to request mint
-* **options.basic.allowBurn** - (optional - default true) allow token owners to request burn
-* **options.basic.allowLock** - (optional - default true) allow token owners to lock tokens (for purposes such as preparing or delegating transfers)
-* **options.basic.restrictUnlock** - (optional - default true) only allow the lock creator to unlock tokens
-* **options.hooks** - (optional) specify a [Pente](../pente) private smart contract that will be called for each Noto transaction, to provide custom logic and policies
+* **options** - options specific to the chosen notary mode (see [Notary logic](#notary-logic) section below)
 
 ### mint
 
@@ -271,6 +267,65 @@ Inputs:
 * **outputs** - output states that will be created
 * **signature** - sender's signature (not verified on-chain, but can be verified by anyone with the private state data)
 * **data** - encoded Paladin and/or user data
+
+## Notary logic
+
+The notary logic (implemented in the domain [Go library](../../domains/noto)) is responsible for validating and
+submitting all transactions to the base shared ledger.
+
+The notary will validate the following:
+
+- **Request Authenticity:** Each request to the notary will be accompanied by an EIP-712 signature from the sender,
+  which is validated by the notary. This prevents any identity from impersonating another when submitting requests.
+- **State Validity:** Each request will be accompanied by a proposed set of input and output UTXO states assembled
+  by the sending node. The notary checks that these states would be a valid expression of the requested operation -
+  for example, a "transfer" must be accompanied by inputs owned only by the "from" address, outputs owned by the
+  "to" address matching the desired transfer amount, and optionally some remainder outputs owned by the "from" address.
+  Note the distinction here of states that _would be_ valid - as final validation of spent/unspent state IDs will
+  be provided by the base ledger.
+- **Conservation of Value:** For most operations (other than mint and burn), the notary will ensure that the sum
+  of the inputs and of the outputs is equal.
+
+The above constraints cannot be altered without changing the library code. However, many other aspects of the
+notary logic can be easily configured as described below.
+
+### Notary mode: basic
+
+When a Noto contract is constructed with notary mode `basic`, the following notary behaviors can be configured:
+
+| Option         | Default | Description |
+| -------------- | ------- | ----------- |
+| restrictMint   | true    | _True:_ only the notary may mint<br>_False:_ any party may mint |
+| allowBurn      | true    | _True:_ token owners may burn their tokens<br>_False:_ tokens cannot be burned |
+| allowLock      | true    | _True:_ token owners may lock tokens (for purposes such as preparing or delegating transfers)<br>_False:_ tokens cannot be locked (not recommended, as it restricts the ability to incorporate tokens into swaps and other workflows) |
+| restrictUnlock | true    | _True:_ only the creator of a lock may unlock it<br>_False:_ any party may unlock (not recommended, as it allows anyone to claim locked tokens)
+
+### Notary mode: hooks
+
+When a Noto contract is constructed with notary mode `hooks`, the address of a private Pente contract implementing
+[INotoHooks](../../solidity/contracts/private/interfaces/INotoHooks.sol) must be provided. This contract may be
+deployed into a privacy group only visible to the notary, or into a group that includes other parties for
+observability.
+
+The relevant hook will be invoked for each Noto operation, allowing the contract to determine if the operation is
+allowed, and to trigger any additional custom policies and side-effects. Hooks can even be used to track Noto token
+movements in an alternate manner, such as representing them as a private ERC-20 or other Ethereum token.
+
+Each hook should have one of two outcomes:
+
+- If the operation is allowed, the hook should emit `PenteExternalCall` with the prepared Noto transaction details,
+  to allow the Noto transaction to be confirmed.
+- If the operation is not allowed, the hook should revert.
+
+Failure to trigger one of these two outcomes will result in undefined behavior.
+
+The `msg.sender` for each hook transaction will always be the resolved notary address, but each hook will also
+receive a `sender` parameter representing the resolved and verified party that sent the request to the notary.
+
+!!! important
+    Note that none of the `basic` notary constraints described in the previous section will be active when hooks are
+    configured. It is the responsibility of the hooks to enforce policies, such as which senders are allowed to mint,
+    burn, etc.
 
 ## Transaction walkthrough
 
