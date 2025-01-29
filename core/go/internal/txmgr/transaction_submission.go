@@ -444,7 +444,11 @@ func (tm *txManager) processNewTransactions(ctx context.Context, dbTX persistenc
 	// Now we're ready to insert into the database
 	_, err = tm.insertTransactions(ctx, dbTX, txis, false /* all must succeed on this path - we map idempotency errors below */)
 	if err != nil {
-		return nil, tm.checkIdempotencyKeys(ctx, err, txs)
+		dbTX.AddPostRollback(func(txCtx context.Context, err error) error {
+			// OUTSIDE of the rolled back transaction
+			return tm.checkIdempotencyKeys(ctx, err, txs)
+		})
+		return nil, err
 	}
 
 	// Insert any public txns (validated above)

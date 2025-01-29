@@ -203,6 +203,12 @@ func (gp *provider) Transaction(parentCtx context.Context, fn func(ctx context.C
 		return innerErr
 	})
 
+	if err != nil {
+		for _, fn := range tx.postRollbacks {
+			err = fn(tx.txCtx, err)
+		}
+	}
+
 	completed = true
 	return err // important that this is the function var used in the defer processing
 

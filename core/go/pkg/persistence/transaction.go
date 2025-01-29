@@ -40,17 +40,20 @@ type DBTX interface {
 	AddPostCommit(func(txCtx context.Context))
 	// Called in all cases (including panic cases) AFTER the transaction commits, to release resources. An error indicates the transaction rolled back. Can be used as a post-commit too by checking err==nil.
 	AddFinalizer(func(txCtx context.Context, err error))
+	// This is for if after a rollback error (not panic), you wish to adjust the error returned based on performing new DB activity (as you cannot do any DB activity in the rolled back TXN)
+	AddPostRollback(func(txCtx context.Context, err error) error)
 	// Management of singleton component interfaces, using a value key (similar to contexts)
 	Singleton(key any, new func(txCtx context.Context) any) any
 }
 
 type transaction struct {
-	txCtx       context.Context
-	gdb         *gorm.DB
-	preCommits  []func(txCtx context.Context, tx DBTX) error
-	postCommits []func(txCtx context.Context)
-	finalizers  []func(txCtx context.Context, err error)
-	singletons  *singletonVal
+	txCtx         context.Context
+	gdb           *gorm.DB
+	preCommits    []func(txCtx context.Context, tx DBTX) error
+	postCommits   []func(txCtx context.Context)
+	finalizers    []func(txCtx context.Context, err error)
+	postRollbacks []func(txCtx context.Context, err error) error
+	singletons    *singletonVal
 }
 
 func (t *transaction) DB() *gorm.DB {
@@ -67,6 +70,10 @@ func (t *transaction) AddPostCommit(fn func(txCtx context.Context)) {
 
 func (t *transaction) AddFinalizer(fn func(txCtx context.Context, err error)) {
 	t.finalizers = append(t.finalizers, fn)
+}
+
+func (t *transaction) AddPostRollback(fn func(txCtx context.Context, err error) error) {
+	t.postRollbacks = append(t.postRollbacks, fn)
 }
 
 func (t *transaction) Singleton(key any, new func(ctx context.Context) any) any {
@@ -105,6 +112,10 @@ func (t *noTransaction) AddPreCommit(fn func(txCtx context.Context, tx DBTX) err
 
 func (t *noTransaction) AddPostCommit(fn func(txCtx context.Context)) {
 	panic("post-commit used outside of transaction context")
+}
+
+func (t *noTransaction) AddPostRollback(fn func(txCtx context.Context, err error) error) {
+	panic("post-rollback used outside of transaction context")
 }
 
 func (t *noTransaction) AddFinalizer(fn func(txCtx context.Context, err error)) {

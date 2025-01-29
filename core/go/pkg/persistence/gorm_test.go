@@ -72,6 +72,7 @@ func TestGormMigrationMissingDir(t *testing.T) {
 				DSN:           ":memory:",
 				AutoMigrate:   confutil.P(true),
 				MigrationsDir: tempFile,
+				DebugQueries:  true,
 			},
 		},
 	})

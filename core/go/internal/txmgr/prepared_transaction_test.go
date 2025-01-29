@@ -46,7 +46,7 @@ var testStateSchema = &abi.Parameter{
 	},
 }
 
-func writeStates(t *testing.T, txm *txManager, testSchemaID tktypes.Bytes32, fakeContractAddr tktypes.EthAddress, count int) ([]*pldapi.StateBase, []tktypes.HexBytes) {
+func writeStates(t *testing.T, txm *txManager, dbTX persistence.DBTX, testSchemaID tktypes.Bytes32, fakeContractAddr tktypes.EthAddress, count int) ([]*pldapi.StateBase, []tktypes.HexBytes) {
 	stateInputs := make([]*components.StateUpsertOutsideContext, count)
 	for i := range stateInputs {
 		stateInputs[i] = &components.StateUpsertOutsideContext{
@@ -59,11 +59,7 @@ func writeStates(t *testing.T, txm *txManager, testSchemaID tktypes.Bytes32, fak
 			}),
 		}
 	}
-	var written []*pldapi.State
-	err := txm.p.Transaction(context.Background(), func(ctx context.Context, dbTX persistence.DBTX) (err error) {
-		written, err = txm.stateMgr.WriteReceivedStates(context.Background(), dbTX, "domain1", stateInputs)
-		return err
-	})
+	written, err := txm.stateMgr.WriteReceivedStates(context.Background(), dbTX, "domain1", stateInputs)
 	require.NoError(t, err)
 
 	states := make([]*pldapi.StateBase, len(written))
@@ -136,10 +132,10 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 
 	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		// Mimic some states that it produced
-		spent, spentIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 3)
-		read, readIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 2)
-		confirm, confirmIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 5)
-		info, infoIDs := writeStates(t, txm, testSchemaID, contractAddressDomain1, 1)
+		spent, spentIDs := writeStates(t, txm, dbTX, testSchemaID, contractAddressDomain1, 3)
+		read, readIDs := writeStates(t, txm, dbTX, testSchemaID, contractAddressDomain1, 2)
+		confirm, confirmIDs := writeStates(t, txm, dbTX, testSchemaID, contractAddressDomain1, 5)
+		info, infoIDs := writeStates(t, txm, dbTX, testSchemaID, contractAddressDomain1, 1)
 
 		childFnABI := abi.ABI{{Type: abi.Function, Name: "doThing2"}}
 		ptInsert := &components.PreparedTransactionWithRefs{

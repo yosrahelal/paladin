@@ -77,6 +77,7 @@ func TestTransactionPreCommitErr(t *testing.T) {
 	preCommitCalled := false
 	finalizerCalled := false
 	postCommitCalled := false
+	postRollbackCalled := false
 
 	mdb.ExpectBegin()
 	mdb.ExpectExec("INSERT.*a_table").WillReturnResult(driver.ResultNoRows)
@@ -96,13 +97,18 @@ func TestTransactionPreCommitErr(t *testing.T) {
 		tx.AddPostCommit(func(ctx context.Context) {
 			postCommitCalled = true
 		})
+		tx.AddPostRollback(func(txCtx context.Context, err error) error {
+			postRollbackCalled = true
+			return fmt.Errorf("%s-popped", err)
+		})
 		return nil
 	})
-	require.Regexp(t, "pop", err)
+	require.Regexp(t, "pop-popped", err)
 
 	require.True(t, preCommitCalled)
 	require.True(t, finalizerCalled)
 	require.False(t, postCommitCalled) // post-commit should not be called
+	require.True(t, postRollbackCalled)
 
 	require.NoError(t, mdb.ExpectationsWereMet())
 }
@@ -115,6 +121,7 @@ func TestTransactionPanic(t *testing.T) {
 	preCommitCalled := false
 	finalizerCalled := false
 	postCommitCalled := false
+	postRollbackCalled := false
 
 	mdb.ExpectBegin()
 	mdb.ExpectRollback()
@@ -132,6 +139,10 @@ func TestTransactionPanic(t *testing.T) {
 			tx.AddPostCommit(func(ctx context.Context) {
 				postCommitCalled = true
 			})
+			tx.AddPostRollback(func(txCtx context.Context, err error) error {
+				postRollbackCalled = true
+				return err
+			})
 			panic("pop")
 		})
 		require.Regexp(t, "pop", err)
@@ -139,7 +150,8 @@ func TestTransactionPanic(t *testing.T) {
 
 	require.True(t, finalizerCalled)
 	require.False(t, preCommitCalled)
-	require.False(t, postCommitCalled) // post-commit should not be called
+	require.False(t, postCommitCalled)   // post-commit should not be called
+	require.False(t, postRollbackCalled) // not on panic
 
 	require.NoError(t, mdb.ExpectationsWereMet())
 }
@@ -191,6 +203,9 @@ func TestNOTXFailures(t *testing.T) {
 	})
 	assert.Panics(t, func() {
 		p.NOTX().AddPostCommit(func(ctx context.Context) {})
+	})
+	assert.Panics(t, func() {
+		p.NOTX().AddPostRollback(func(txCtx context.Context, err error) error { return nil })
 	})
 	assert.Panics(t, func() {
 		p.NOTX().AddFinalizer(func(ctx context.Context, err error) {})
