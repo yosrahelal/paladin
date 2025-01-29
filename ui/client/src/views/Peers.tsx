@@ -76,9 +76,7 @@ export const Nodes: React.FC = () => {
             sx={{ position: 'absolute', right: '46px', top: '23px', textTransform: 'none', borderRadius: '20px' }}
             onClick={() => setMyNodeDialogOpen(true)}
           >
-            <Box>
-              {transportNodeName}
-            </Box>
+            {transportNodeName}
           </Button>
           <Box
             sx={{

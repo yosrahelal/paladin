@@ -14,12 +14,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { IKeyEntry } from "../interfaces";
+import { IKeyEntry, IKeyMappingAndVerifier } from "../interfaces";
 import { generatePostReq, returnResponse } from "./common";
 import { RpcEndpoint, RpcMethods } from "./rpcMethods";
 import i18next from "i18next";
 
-export const fetchKeys = async (parent: string, limit: number, sortBy: string, sortOrder: 'asc' | 'desc', refEntry?: IKeyEntry): Promise<IKeyEntry[]> => {
+export const fetchKeys = async (parent: string, limit: number, sortBy: string, sortOrder: 'asc' | 'desc', pathFilter?: string, refEntry?: IKeyEntry): Promise<IKeyEntry[]> => {
   let requestPayload: any = {
     jsonrpc: "2.0",
     id: Date.now(),
@@ -43,10 +43,33 @@ export const fetchKeys = async (parent: string, limit: number, sortBy: string, s
     }];
   }
 
+  if(pathFilter !== undefined) {
+    requestPayload.params[0].eq.push({
+      field: 'path',
+      value: pathFilter
+    });
+  }
+
   return <Promise<IKeyEntry[]>>(
     returnResponse(
       () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
       i18next.t("errorFetchingKeys")
+    )
+  );
+};
+
+export const reverseKeyLookup = async (algorithm: string, verifierType: string, verifier: string): Promise<IKeyMappingAndVerifier> => {
+  const requestPayload = {
+    jsonrpc: "2.0",
+    id: Date.now(),
+    method: RpcMethods.keymgr_reverseKeyLookup,
+    params: [algorithm, verifierType, verifier]
+  };
+
+  return <Promise<IKeyMappingAndVerifier>>(
+    returnResponse(
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
+      i18next.t("errorFetchingReverseKeyLookup"), []
     )
   );
 };

@@ -16,8 +16,9 @@
 
 export const constants = {
   COLOR_MODE_STORAGE_KEY: 'color-mode',
-  KEY_SORT_BY_STORAGE_KEY: 'sort-by',
-  KEY_SORT_ORDER_STORAGE_KEY: 'sort-order',
+  KEYS_SORT_BY_STORAGE_KEY: 'keys-sort-by',
+  KEYS_SORT_ORDER_STORAGE_KEY: 'keys-sort-order',
+  KEYS_ROWS_PER_PAGE: 'keys-rows-per-page',
   EVENT_QUERY_LIMIT: 10,
   SUBMISSIONS_QUERY_LIMIT: 10,
   REGISTRY_ENTRIES_QUERY_LIMIT: 100,

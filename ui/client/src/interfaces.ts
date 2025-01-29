@@ -160,3 +160,18 @@ export interface IKeyEntry {
   wallet: string
   keyHandle: string
 }
+
+export interface IKeyMappingAndVerifier {
+  identifier: string
+  keyHandle: string
+  path: {
+    index: number
+    name: string
+  }[]
+  verifier: {
+    verifier: string
+    type: string
+    algorithm: string
+  },
+  wallet: string
+}
