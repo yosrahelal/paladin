@@ -238,7 +238,7 @@ func TestTransferAssemble(t *testing.T) {
 	assert.Len(t, res.AssembledTransaction.OutputStates, 2) // one for the receiver Alice, one for self as change
 
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
-	tx.DomainConfig.Circuits["deposit"] = "circuit-deposit"
+	tx.DomainConfig.Circuits["transfer"] = "anon_nullifier_transfer"
 	called := 0
 	testCallbacks.MockFindAvailableStates = func() (*prototk.FindAvailableStatesResponse, error) {
 		var dataJson string
@@ -381,7 +381,7 @@ func TestTransferPrepare(t *testing.T) {
 	assert.Equal(t, "{\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"ecdhPublicKey\":[\"\"],\"encryptedValues\":[\"0x1234567890\",\"0x1234567890\"],\"encryptionNonce\":\"0x1234567890\",\"inputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)
 
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
-	tx.DomainConfig.Circuits["deposit"] = "circuit-deposit"
+	tx.DomainConfig.Circuits["transfer"] = "anon_nullifier_transfer"
 	proofReq.PublicInputs["nullifiers"] = "0x1234567890,0x1234567890"
 	proofReq.PublicInputs["root"] = "0x1234567890"
 	payload, err = proto.Marshal(&proofReq)

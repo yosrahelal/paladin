@@ -43,7 +43,7 @@ var depositABI = &abi.Entry{
 	Inputs: abi.ParameterArray{
 		{Name: "amount", Type: "uint256"},
 		{Name: "outputs", Type: "uint256[]"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }

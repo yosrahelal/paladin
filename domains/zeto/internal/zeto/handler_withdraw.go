@@ -46,7 +46,7 @@ var withdrawABI = &abi.Entry{
 		{Name: "amount", Type: "uint256"},
 		{Name: "inputs", Type: "uint256[]"},
 		{Name: "output", Type: "uint256"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
@@ -59,7 +59,7 @@ var withdrawABI_nullifiers = &abi.Entry{
 		{Name: "nullifiers", Type: "uint256[]"},
 		{Name: "output", Type: "uint256"},
 		{Name: "root", Type: "uint256"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }

@@ -24,7 +24,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
-	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
@@ -38,19 +37,13 @@ type transferHandler struct {
 	zeto *Zeto
 }
 
-var proofComponents = abi.ParameterArray{
-	{Name: "pA", Type: "uint256[2]"},
-	{Name: "pB", Type: "uint256[2][2]"},
-	{Name: "pC", Type: "uint256[2]"},
-}
-
 var transferABI = &abi.Entry{
 	Type: abi.Function,
 	Name: "transfer",
 	Inputs: abi.ParameterArray{
 		{Name: "inputs", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
@@ -62,7 +55,7 @@ var transferABI_nullifiers = &abi.Entry{
 		{Name: "nullifiers", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
 		{Name: "root", Type: "uint256"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
@@ -76,7 +69,7 @@ var transferABI_withEncryption = &abi.Entry{
 		{Name: "encryptionNonce", Type: "uint256"},
 		{Name: "ecdhPublicKey", Type: "uint256[2]"},
 		{Name: "encryptedValues", Type: "uint256[]"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
@@ -91,7 +84,7 @@ var transferABI_withEncryption_nullifiers = &abi.Entry{
 		{Name: "encryptionNonce", Type: "uint256"},
 		{Name: "ecdhPublicKey", Type: "uint256[2]"},
 		{Name: "encryptedValues", Type: "uint256[]"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
@@ -170,7 +163,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := h.formatProvingRequest(ctx, inputCoins, outputCoins, tx.DomainConfig.Circuits["transfer"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
+	payloadBytes, err := formatTransferProvingRequest(ctx, h.zeto, inputCoins, outputCoins, tx.DomainConfig.Circuits["transfer"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
@@ -210,39 +203,13 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	}
 
 	inputSize := common.GetInputSize(len(req.InputStates))
-	inputs := make([]string, inputSize)
-	for i := 0; i < inputSize; i++ {
-		if i < len(req.InputStates) {
-			state := req.InputStates[i]
-			coin, err := h.zeto.makeCoin(state.StateDataJson)
-			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorParseInputStates, err)
-			}
-			hash, err := coin.Hash(ctx)
-			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
-			}
-			inputs[i] = hash.String()
-		} else {
-			inputs[i] = "0"
-		}
+	inputs, err := utxosFromInputStates(ctx, h.zeto, req.InputStates, inputSize)
+	if err != nil {
+		return nil, err
 	}
-	outputs := make([]string, inputSize)
-	for i := 0; i < inputSize; i++ {
-		if i < len(req.OutputStates) {
-			state := req.OutputStates[i]
-			coin, err := h.zeto.makeCoin(state.StateDataJson)
-			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorParseOutputStates, err)
-			}
-			hash, err := coin.Hash(ctx)
-			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorHashOutputState, err)
-			}
-			outputs[i] = hash.String()
-		} else {
-			outputs[i] = "0"
-		}
+	outputs, err := utxosFromOutputStates(ctx, h.zeto, req.OutputStates, inputSize)
+	if err != nil {
+		return nil, err
 	}
 
 	data, err := encodeTransactionData(ctx, req.Transaction)
@@ -281,77 +248,6 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 			ParamsJson:      string(paramsJSON),
 		},
 	}, nil
-}
-
-func (h *transferHandler) formatProvingRequest(ctx context.Context, inputCoins, outputCoins []*types.ZetoCoin, circuitId, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
-	inputSize := common.GetInputSize(len(inputCoins))
-	inputCommitments := make([]string, inputSize)
-	inputValueInts := make([]uint64, inputSize)
-	inputSalts := make([]string, inputSize)
-	inputOwner := inputCoins[0].Owner.String()
-	for i := 0; i < inputSize; i++ {
-		if i < len(inputCoins) {
-			coin := inputCoins[i]
-			hash, err := coin.Hash(ctx)
-			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
-			}
-			inputCommitments[i] = hash.Int().Text(16)
-			inputValueInts[i] = coin.Amount.Int().Uint64()
-			inputSalts[i] = coin.Salt.Int().Text(16)
-		} else {
-			inputCommitments[i] = "0"
-			inputSalts[i] = "0"
-		}
-	}
-
-	outputValueInts := make([]uint64, inputSize)
-	outputSalts := make([]string, inputSize)
-	outputOwners := make([]string, inputSize)
-	for i := 0; i < inputSize; i++ {
-		if i < len(outputCoins) {
-			coin := outputCoins[i]
-			outputValueInts[i] = coin.Amount.Int().Uint64()
-			outputSalts[i] = coin.Salt.Int().Text(16)
-			outputOwners[i] = coin.Owner.String()
-		} else {
-			outputSalts[i] = "0"
-		}
-	}
-
-	var extras []byte
-	if common.IsNullifiersCircuit(circuitId) {
-		proofs, extrasObj, err := generateMerkleProofs(ctx, h.zeto, tokenName, stateQueryContext, contractAddress, inputCoins)
-		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
-		}
-		for i := len(proofs); i < inputSize; i++ {
-			extrasObj.MerkleProofs = append(extrasObj.MerkleProofs, &smt.Empty_Proof)
-			extrasObj.Enabled = append(extrasObj.Enabled, false)
-		}
-		protoExtras, err := proto.Marshal(extrasObj)
-		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalExtraObj, err)
-		}
-		extras = protoExtras
-	}
-
-	payload := &corepb.ProvingRequest{
-		CircuitId: circuitId,
-		Common: &corepb.ProvingRequestCommon{
-			InputCommitments: inputCommitments,
-			InputValues:      inputValueInts,
-			InputSalts:       inputSalts,
-			InputOwner:       inputOwner,
-			OutputValues:     outputValueInts,
-			OutputSalts:      outputSalts,
-			OutputOwners:     outputOwners,
-		},
-	}
-	if extras != nil {
-		payload.Extras = extras
-	}
-	return proto.Marshal(payload)
 }
 
 func getTransferABI(tokenName string) *abi.Entry {

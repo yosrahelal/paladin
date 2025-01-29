@@ -53,8 +53,8 @@ type TransferParamEntry struct {
 }
 
 type LockParams struct {
+	Amount   *tktypes.HexUint256 `json:"amount"`
 	Delegate *tktypes.EthAddress `json:"delegate"`
-	Call     tktypes.HexBytes    `json:"call"`
 }
 
 type DepositParams struct {

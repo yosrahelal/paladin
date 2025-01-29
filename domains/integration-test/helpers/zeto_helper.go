@@ -71,10 +71,10 @@ func (n *ZetoHelper) Transfer(ctx context.Context, to string, amount uint64) *Do
 	}))
 }
 
-func (z *ZetoHelper) Lock(ctx context.Context, delegate *tktypes.EthAddress, call []byte) *DomainTransactionHelper {
+func (z *ZetoHelper) Lock(ctx context.Context, delegate *tktypes.EthAddress, amount int) *DomainTransactionHelper {
 	fn := types.ZetoABI.Functions()["lock"]
 	return NewDomainTransactionHelper(ctx, z.t, z.rpc, z.Address, fn, toJSON(z.t, &types.LockParams{
 		Delegate: delegate,
-		Call:     call,
+		Amount:   tktypes.Uint64ToUint256(uint64(amount)),
 	}))
 }

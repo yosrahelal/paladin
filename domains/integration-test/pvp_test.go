@@ -345,7 +345,7 @@ func TestNotoForZeto(t *testing.T) {
 	log.L(ctx).Infof("Prepare the transfers")
 	transferNoto := noto.Transfer(ctx, bob, 1).Prepare(alice)
 	transferZeto := zeto.Transfer(ctx, alice, 1).Prepare(bob)
-	zeto.Lock(ctx, tktypes.MustEthAddress(bobKey.Verifier.Verifier), transferZeto.EncodedCall).SignAndSend(bob).Wait()
+	zeto.Lock(ctx, tktypes.MustEthAddress(bobKey.Verifier.Verifier), 1).SignAndSend(bob).Wait()
 
 	// TODO: this should actually be a Pente state transition
 	log.L(ctx).Infof("Prepare the trade execute")
@@ -413,7 +413,7 @@ func TestNotoForZeto(t *testing.T) {
 		Data:     transferNotoParams.Data,
 		Delegate: transferAtom.Address,
 	}).SignAndSend(alice).Wait()
-	zeto.Lock(ctx, transferAtom.Address, transferZeto.EncodedCall).SignAndSend(bob).Wait()
+	zeto.Lock(ctx, transferAtom.Address, 1).SignAndSend(bob).Wait()
 
 	log.L(ctx).Infof("Execute the atomic operation")
 	sent = transferAtom.Execute(ctx).SignAndSend(alice).Wait(5 * time.Second)

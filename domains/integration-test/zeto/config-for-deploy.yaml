@@ -32,9 +32,14 @@ contracts:
       depositVerifier: Groth16Verifier_CheckHashesValue
       withdrawVerifier: Groth16Verifier_CheckInputsOutputsValue
       batchWithdrawVerifier: Groth16Verifier_CheckInputsOutputsValueBatch
-      lockVerifier: Groth16Verifier_CheckUtxosOwner
-      batchLockVerifier: Groth16Verifier_CheckUtxosOwnerBatch
-      circuitId: anon
+      circuits:
+        deposit: check_hashes_value
+        withdraw: check_inputs_outputs_value
+        withdrawBatch: check_inputs_outputs_value_batch
+        transfer: anon
+        transferBatch: anon_batch
+        transferLocked: anon
+        transferLockedBatch: anon_batch
       cloneable: true
       abiAndBytecode:
         path: ./helpers/abis/Zeto_Anon.json

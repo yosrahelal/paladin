@@ -24,31 +24,20 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"google.golang.org/protobuf/proto"
 )
 
 // due to the ZKP circuit needing to check if the amount is positive,
 // the maximum transfer amount is (2^100 - 1)
 // Reference: https://github.com/hyperledger-labs/zeto/blob/main/zkp/circuits/lib/check-positive.circom
 var MAX_TRANSFER_AMOUNT = big.NewInt(0).Exp(big.NewInt(2), big.NewInt(100), nil)
-
-func isNullifiersCircuit(circuitId string) bool {
-	return circuitId == constants.CIRCUIT_ANON_NULLIFIER || circuitId == constants.CIRCUIT_ANON_NULLIFIER_BATCH
-}
-
-func isNullifiersToken(tokenName string) bool {
-	return tokenName == constants.TOKEN_ANON_NULLIFIER
-}
-
-func isEncryptionToken(tokenName string) bool {
-	return tokenName == constants.TOKEN_ANON_ENC
-}
 
 // the Zeto implementations support two input/output sizes for the circuits: 2 and 10,
 // if the input or output size is larger than 2, then the batch circuit is used with
@@ -133,6 +122,39 @@ func loadBabyJubKey(payload []byte) (*babyjub.PublicKey, error) {
 	return keyCompressed.Decompress()
 }
 
+func utxosFromInputStates(ctx context.Context, zeto *Zeto, states []*prototk.EndorsableState, desiredSize int) ([]string, error) {
+	return _utxosFromStates(ctx, zeto, states, desiredSize, true)
+}
+
+func utxosFromOutputStates(ctx context.Context, zeto *Zeto, states []*prototk.EndorsableState, desiredSize int) ([]string, error) {
+	return _utxosFromStates(ctx, zeto, states, desiredSize, false)
+}
+
+func _utxosFromStates(ctx context.Context, zeto *Zeto, states []*prototk.EndorsableState, desiredSize int, isInputs bool) ([]string, error) {
+	utxos := make([]string, desiredSize)
+	for i := 0; i < desiredSize; i++ {
+		if i < len(states) {
+			msgTemplate := msgs.MsgErrorParseInputStates
+			if !isInputs {
+				msgTemplate = msgs.MsgErrorParseOutputStates
+			}
+			state := states[i]
+			coin, err := zeto.makeCoin(state.StateDataJson)
+			if err != nil {
+				return nil, i18n.NewError(ctx, msgTemplate, err)
+			}
+			hash, err := coin.Hash(ctx)
+			if err != nil {
+				return nil, i18n.NewError(ctx, msgTemplate, err)
+			}
+			utxos[i] = hash.String()
+		} else {
+			utxos[i] = "0"
+		}
+	}
+	return utxos, nil
+}
+
 func generateMerkleProofs(ctx context.Context, zeto *Zeto, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
 	smtName := smt.MerkleTreeName(tokenName, contractAddress)
 	storage := smt.NewStatesStorage(zeto.Callbacks, smtName, stateQueryContext, zeto.merkleTreeRootSchema.Id, zeto.merkleTreeNodeSchema.Id)
@@ -201,4 +223,78 @@ func generateMerkleProofs(ctx context.Context, zeto *Zeto, tokenName string, sta
 	}
 
 	return proofs, &extrasObj, nil
+}
+
+// formatTransferProvingRequest formats the proving request for a transfer transaction.
+// the same function is used for both the transfer and lock transactions because they
+// both require the same proof from the transfer circuit
+func formatTransferProvingRequest(ctx context.Context, zeto *Zeto, inputCoins, outputCoins []*types.ZetoCoin, circuitId, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
+	inputSize := common.GetInputSize(len(inputCoins))
+	inputCommitments := make([]string, inputSize)
+	inputValueInts := make([]uint64, inputSize)
+	inputSalts := make([]string, inputSize)
+	inputOwner := inputCoins[0].Owner.String()
+	for i := 0; i < inputSize; i++ {
+		if i < len(inputCoins) {
+			coin := inputCoins[i]
+			hash, err := coin.Hash(ctx)
+			if err != nil {
+				return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
+			}
+			inputCommitments[i] = hash.Int().Text(16)
+			inputValueInts[i] = coin.Amount.Int().Uint64()
+			inputSalts[i] = coin.Salt.Int().Text(16)
+		} else {
+			inputCommitments[i] = "0"
+			inputSalts[i] = "0"
+		}
+	}
+
+	outputValueInts := make([]uint64, inputSize)
+	outputSalts := make([]string, inputSize)
+	outputOwners := make([]string, inputSize)
+	for i := 0; i < inputSize; i++ {
+		if i < len(outputCoins) {
+			coin := outputCoins[i]
+			outputValueInts[i] = coin.Amount.Int().Uint64()
+			outputSalts[i] = coin.Salt.Int().Text(16)
+			outputOwners[i] = coin.Owner.String()
+		} else {
+			outputSalts[i] = "0"
+		}
+	}
+
+	var extras []byte
+	if common.IsNullifiersCircuit(circuitId) {
+		proofs, extrasObj, err := generateMerkleProofs(ctx, zeto, tokenName, stateQueryContext, contractAddress, inputCoins)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
+		}
+		for i := len(proofs); i < inputSize; i++ {
+			extrasObj.MerkleProofs = append(extrasObj.MerkleProofs, &smt.Empty_Proof)
+			extrasObj.Enabled = append(extrasObj.Enabled, false)
+		}
+		protoExtras, err := proto.Marshal(extrasObj)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalExtraObj, err)
+		}
+		extras = protoExtras
+	}
+
+	payload := &corepb.ProvingRequest{
+		CircuitId: circuitId,
+		Common: &corepb.ProvingRequestCommon{
+			InputCommitments: inputCommitments,
+			InputValues:      inputValueInts,
+			InputSalts:       inputSalts,
+			InputOwner:       inputOwner,
+			OutputValues:     outputValueInts,
+			OutputSalts:      outputSalts,
+			OutputOwners:     outputOwners,
+		},
+	}
+	if extras != nil {
+		payload.Extras = extras
+	}
+	return proto.Marshal(payload)
 }
