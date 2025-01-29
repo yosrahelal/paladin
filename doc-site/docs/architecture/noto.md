@@ -155,6 +155,114 @@ Inputs:
 * **data** - encoded Paladin and/or user data
 * **delegate** - address of the delegate party that will be able to execute this transaction once approved
 
+### lock
+
+Lock value from the sender and assign it a new lock ID. Available UTXO states will be selected for spending, and new locked UTXO states will be created.
+
+```json
+{
+    "name": "lock",
+    "type": "function",
+    "inputs": [
+        {"name": "amount", "type": "uint256"},
+        {"name": "data", "type": "bytes"}
+    ]
+}
+```
+
+Inputs:
+
+* **amount** - amount of value to lock
+* **data** - user/application data to include with the transaction (will be accessible from an "info" state in the state receipt)
+
+### unlock
+
+Unlock value that was previously locked, and send it to one or more recipients. Available UTXO states will be selected from the specified lock, and new unlocked UTXO states will be created for the recipients.
+
+```json
+{
+    "name": "unlock",
+    "type": "function",
+    "inputs": [
+        {"name": "lockId", "type": "bytes32"},
+        {"name": "from", "type": "string"},
+        {"name": "recipients", "type": "tuple[]", "components": [
+            {"name": "to", "type": "string"},
+            {"name": "amount", "type": "uint256"}
+        ]},
+        {"name": "data", "type": "bytes"}
+    ]
+}
+```
+
+Inputs:
+
+* **lockId** - the lock ID assigned when the value was locked (available from the domain receipt for the `lock` transaction)
+* **from** - the lookup string for the owner of the locked value
+* **recipients** - array of recipients to receive some of the value (the sum of the amounts must be less than or equal to the total locked amount)
+* **data** - user/application data to include with the transaction (will be accessible from an "info" state in the state receipt)
+
+### prepareUnlock
+
+Prepare to unlock value that was previously locked. This method is identical to `unlock` except that it will not actually perform the unlock - it will only check that the unlock is valid, and will record a hash of the prepared unlock operation against the lock.
+
+When used in combination with `delegateLock`, this can allow any base ledger address (including other smart contracts) to finalize and execute an unlock that was already approved by the notary.
+
+```json
+{
+    "name": "prepareUnlock",
+    "type": "function",
+    "inputs": [
+        {"name": "lockId", "type": "bytes32"},
+        {"name": "from", "type": "string"},
+        {"name": "recipients", "type": "tuple[]", "components": [
+            {"name": "to", "type": "string"},
+            {"name": "amount", "type": "uint256"}
+        ]},
+        {"name": "data", "type": "bytes"}
+    ]
+}
+```
+
+Inputs:
+
+* **lockId** - the lock ID assigned when the value was locked (available from the domain receipt)
+* **from** - the lookup string for the owner of the locked value
+* **recipients** - array of recipients to receive some of the value (the sum of the amounts must be less than or equal to the total locked amount)
+* **data** - user/application data to include with the transaction (will be accessible from an "info" state in the state receipt)
+
+### delegateLock
+
+Appoint another address as the delegate that can execute a prepared unlock operation.
+
+Once the lock has been delegated, the notary and the lock creator can no longer interact with the locked states, until the delegate invokes the public ABI to either 1) trigger the unlock _or_ 2) re-delegate the lock to a different address. Delegation can be cancelled if the current delegate re-delegates to the zero address.
+
+```json
+{
+    "name": "delegateLock",
+    "type": "function",
+    "inputs": [
+        {"name": "lockId", "type": "bytes32"},
+        {"name": "unlock", "type": "tuple", "components": [
+            {"name": "lockedInputs", "type": "bytes32[]"},
+            {"name": "lockedOutputs", "type": "bytes32[]"},
+            {"name": "outputs", "type": "bytes32[]"},
+            {"name": "signature", "type": "bytes"},
+            {"name": "data", "type": "bytes"}
+        ]},
+        {"name": "delegate", "type": "address"},
+        {"name": "data", "type": "bytes"}
+    ]
+}
+```
+
+Inputs:
+
+* **lockId** - the lock ID assigned when the value was locked (available from the domain receipt)
+* **unlock** - the parameters for the public `unlock` transaction that was prepared and is now being delegated (available from the domain receipt for the `prepareUnlock` transaction)
+* **delegate** - the address that will be allowed to trigger the prepared unlock
+* **data** - user/application data to include with the transaction (will be accessible from an "info" state in the state receipt)
+
 ## Public ABI
 
 The public ABI of Noto is implemented in Solidity by [Noto.sol](../../solidity/contracts/domains/noto/Noto.sol),
@@ -265,6 +373,112 @@ Inputs:
 
 * **inputs** - input states that will be spent
 * **outputs** - output states that will be created
+* **signature** - sender's signature (not verified on-chain, but can be verified by anyone with the private state data)
+* **data** - encoded Paladin and/or user data
+
+### lock
+
+Lock some UTXO states. Generally should not be called directly.
+
+May only be invoked by the notary address.
+
+```json
+{
+    "name": "lock",
+    "type": "function",
+    "inputs": [
+        {"name": "inputs", "type": "bytes32[]"},
+        {"name": "outputs", "type": "bytes32[]"},
+        {"name": "lockedOutputs", "type": "bytes32[]"},
+        {"name": "signature", "type": "bytes"},
+        {"name": "data", "type": "bytes"}
+    ]
+}
+```
+
+Inputs:
+
+* **inputs** - input states that will be spent
+* **outputs** - unlocked output states that will be created
+* **lockedOutputs** - locked output states that will be created
+* **signature** - sender's signature (not verified on-chain, but can be verified by anyone with the private state data)
+* **data** - encoded Paladin and/or user data
+
+### unlock
+
+Unlock some UTXO states. May be invoked by the notary in response to a private `unlock` transaction, but may also be called directly on the public ABI when an unlock operation has been prepared and delegated via `prepareUnlock` and `delegateLock`.
+
+```json
+{
+    "name": "unlock",
+    "type": "function",
+    "inputs": [
+        {"name": "lockedInputs", "type": "bytes32[]"},
+        {"name": "lockedOutputs", "type": "bytes32[]"},
+        {"name": "outputs", "type": "bytes32[]"},
+        {"name": "signature", "type": "bytes"},
+        {"name": "data", "type": "bytes"}
+    ]
+}
+```
+
+Inputs:
+
+* **lockedInputs** - locked input states that will be spent
+* **lockedOutputs** - locked output states that will be created
+* **outputs** - unlocked output states that will be created
+* **signature** - sender's signature (not verified on-chain, but can be verified by anyone with the private state data)
+* **data** - encoded Paladin and/or user data
+
+### prepareUnlock
+
+Record the hash of a prepared unlock operation. Generally should not be called directly.
+
+May only be invoked by the notary address.
+
+```json
+{
+    "name": "prepareUnlock",
+    "type": "function",
+    "inputs": [
+        {"name": "lockedInputs", "type": "bytes32[]"},
+        {"name": "unlockHash", "type": "bytes32"},
+        {"name": "signature", "type": "bytes"},
+        {"name": "data", "type": "bytes"}
+    ]
+}
+```
+
+Inputs:
+
+* **lockedInputs** - locked input states that will be spent
+* **unlockHash** - EIP-712 hash of the intended unlock, using type `Unlock(bytes32[] lockedInputs,bytes32[] lockedOutputs,bytes32[] outputs,bytes data)`
+* **signature** - sender's signature (not verified on-chain, but can be verified by anyone with the private state data)
+* **data** - encoded Paladin and/or user data
+
+### delegateLock
+
+Appoint another address as the delegate that can execute a prepared unlock operation.
+
+May be invoked by the notary in response to a private `delegateLock` transaction for a lock that is not yet delegated. May also be called directly on the public ABI by the current delegate, to re-delegate to a new address. Delegation can be cancelled if the current delegate re-delegates to the zero address.
+
+```json
+{
+    "name": "delegateLock",
+    "type": "function",
+    "inputs": [
+        {"name": "unlockHash", "type": "bytes32"},
+        {"name": "delegate", "type": "address"},
+        {"name": "signature", "type": "bytes"},
+        {"name": "data", "type": "bytes"}
+    ]
+}
+```
+
+Inputs:
+
+* **unlockHash** - EIP-712 hash of the prepared unlock, using type `Unlock(bytes32[] lockedInputs,bytes32[] lockedOutputs,bytes32[] outputs,bytes data)`
+* **delegate** - address of the delegate party that will be able to execute the unlock
 * **signature** - sender's signature (not verified on-chain, but can be verified by anyone with the private state data)
 * **data** - encoded Paladin and/or user data
 
