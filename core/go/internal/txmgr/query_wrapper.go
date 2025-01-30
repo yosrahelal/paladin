@@ -64,7 +64,7 @@ func checkLimitSet(ctx context.Context, jq *query.QueryJSON) error {
 	return nil
 }
 
-func (qw *queryWrapper[PT, T]) run(ctx context.Context, dbTX *gorm.DB) ([]*T, error) {
+func (qw *queryWrapper[PT, T]) run(ctx context.Context, dbTX persistence.DBTX) ([]*T, error) {
 	if err := checkLimitSet(ctx, qw.query); err != nil {
 		return nil, err
 	}
@@ -76,11 +76,11 @@ func (qw *queryWrapper[PT, T]) run(ctx context.Context, dbTX *gorm.DB) ([]*T, er
 	// Build the query
 	var dbResults []*PT
 	if dbTX == nil {
-		dbTX = qw.p.DB()
+		dbTX = qw.p.NOTX()
 	}
 	q := filters.BuildGORM(ctx,
 		qw.query,
-		dbTX.Table(qw.table).WithContext(ctx),
+		dbTX.DB().Table(qw.table).WithContext(ctx),
 		qw.filters)
 	if qw.finalize != nil {
 		q = qw.finalize(q)

@@ -24,10 +24,10 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -39,18 +39,11 @@ type resolvedDBPath struct {
 	parent    *resolvedDBPath
 }
 
-type keyResolutionContext struct {
-	ctx    context.Context
-	km     *keyManager
-	kr     *keyResolver
-	lazyTX bool
-	dbTX   *gorm.DB
-}
+type keyResolverDBTXKey struct{}
 
 type keyResolver struct {
-	ctx                 context.Context
 	km                  *keyManager
-	krc                 *keyResolutionContext
+	dbTX                persistence.DBTX
 	id                  string
 	l                   sync.Mutex
 	rootPath            *resolvedDBPath
@@ -61,116 +54,40 @@ type keyResolver struct {
 	done                chan struct{}
 }
 
-func (km *keyManager) NewKeyResolutionContext(ctx context.Context) components.KeyResolutionContext {
-	return &keyResolutionContext{
-		ctx: ctx,
-		km:  km,
-	}
+func (km *keyManager) KeyResolverForDBTX(dbTX persistence.DBTX) components.KeyResolver {
+	// We rely on there only being one key resolver in each DB transaction
+	iKrc := dbTX.Singleton(keyResolverDBTXKey{}, func(txCtx context.Context) any {
+		return km.newKeyResolver(dbTX, true)
+	})
+	return iKrc.(components.KeyResolver)
 }
 
-func (km *keyManager) NewKeyResolutionContextLazyDB(ctx context.Context) components.KeyResolutionContextLazyDB {
-	return &keyResolutionContext{
-		ctx:    ctx,
-		km:     km,
-		lazyTX: true,
-	}
-}
-
-func (krc *keyResolutionContext) Close(committed bool) {
-	if krc.kr != nil {
-		krc.kr.close(committed)
-	}
-}
-
-func (krc *keyResolutionContext) Commit() (err error) {
-	committed := false
-	defer func() {
-		if !committed {
-			krc.Rollback()
-		}
-	}()
-	if krc.dbTX != nil {
-		if krc.kr != nil {
-			err = krc.kr.preCommit()
-		}
-		if err == nil {
-			err = krc.dbTX.Commit().Error
-			committed = (err == nil)
-		}
-	}
-	if krc.kr != nil {
-		krc.kr.close(committed)
-	}
-	return err
-}
-
-func (krc *keyResolutionContext) Rollback() {
-	defer krc.Close(false)
-	if krc.dbTX != nil {
-		rbErr := krc.dbTX.Rollback().Error
-		if rbErr != nil {
-			log.L(krc.ctx).Warnf("failed to rollback after error: %s", rbErr)
-		}
-	}
-}
-
-func (krc *keyResolutionContext) KeyResolver(dbTX *gorm.DB) components.KeyResolver {
-	krc.dbTX = dbTX
-	if krc.kr == nil {
-		krc.kr = krc.km.newKeyResolver(krc)
-	}
-	return krc.kr
-}
-
-func (krc *keyResolutionContext) KeyResolverLazyDB() components.KeyResolver {
-	krc.lazyTX = true
-	if krc.kr == nil {
-		krc.kr = krc.km.newKeyResolver(krc)
-	}
-	return krc.kr
-}
-
-func (krc *keyResolutionContext) PreCommit() error {
-	if krc.kr == nil {
-		return nil
-	}
-	return krc.kr.preCommit()
-}
-
-func (krc *keyResolutionContext) getDBTX() (*gorm.DB, error) {
-	if krc.dbTX != nil {
-		return krc.dbTX, nil
-	}
-	if !krc.lazyTX {
-		return nil, i18n.NewError(krc.ctx, msgs.MsgKeyManagerMissingDatabaseTxn)
-	}
-	krc.dbTX = krc.km.p.DB().Begin()
-	return krc.dbTX, nil
-}
-
-func (km *keyManager) newKeyResolver(krc *keyResolutionContext) *keyResolver {
-	// nothing interesting happens until the first resolution
-	return &keyResolver{
-		ctx:           krc.ctx,
+func (km *keyManager) newKeyResolver(dbTX persistence.DBTX, registerCBs bool) components.KeyResolver {
+	kr := &keyResolver{
 		km:            km,
-		krc:           krc,
+		dbTX:          dbTX,
 		id:            tktypes.ShortID(),
 		rootPath:      &resolvedDBPath{},
 		resolvedPaths: make(map[string]*resolvedDBPath),
 		done:          make(chan struct{}),
 	}
+	if registerCBs {
+		dbTX.AddPreCommit(kr.preCommit)
+		dbTX.AddFinalizer(kr.finalizer)
+	}
+	return kr
 }
 
-func (kr *keyResolver) getOrCreateIdentifierPath(dbTX *gorm.DB, identifier string, allowCreate bool) (resolved *resolvedDBPath, err error) {
+func (kr *keyResolver) getOrCreateIdentifierPath(ctx context.Context, identifier string, allowCreate bool) (resolved *resolvedDBPath, err error) {
 
 	// We split it into segments by "." and create-or-update the index at each level
 	segments := append([]string{"" /* root path */}, strings.Split(identifier, ".")...)
 	parent := kr.rootPath
 	for _, segment := range segments {
 		if parent != kr.rootPath && len(segment) == 0 {
-			return nil, i18n.NewError(kr.ctx, msgs.MsgKeyManagerInvalidIdentifier, identifier)
+			return nil, i18n.NewError(ctx, msgs.MsgKeyManagerInvalidIdentifier, identifier)
 		}
-		resolved, err = kr.resolvePathSegment(dbTX, parent, segment, allowCreate)
+		resolved, err = kr.resolvePathSegment(ctx, parent, segment, allowCreate)
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +96,9 @@ func (kr *keyResolver) getOrCreateIdentifierPath(dbTX *gorm.DB, identifier strin
 	return resolved, nil
 }
 
-func (kr *keyResolver) resolvePathSegment(dbTX *gorm.DB, parent *resolvedDBPath, segment string, allowCreate bool) (*resolvedDBPath, error) {
+func (kr *keyResolver) resolvePathSegment(ctx context.Context, parent *resolvedDBPath, segment string, allowCreate bool) (*resolvedDBPath, error) {
+
+	db := kr.dbTX.DB()
 
 	path := segment
 	if parent.path != "" {
@@ -195,7 +114,7 @@ func (kr *keyResolver) resolvePathSegment(dbTX *gorm.DB, parent *resolvedDBPath,
 	for {
 		// Check for an existing entry in the DB
 		var pathList []*DBKeyPath
-		err := dbTX.WithContext(kr.ctx).
+		err := db.WithContext(ctx).
 			Where("path = ?", path).
 			Find(&pathList).Error
 		if err != nil {
@@ -207,7 +126,7 @@ func (kr *keyResolver) resolvePathSegment(dbTX *gorm.DB, parent *resolvedDBPath,
 			return resolved, nil
 		} else if !allowCreate {
 			// In reverse lookup we get called in read-only mode
-			return nil, i18n.NewError(kr.ctx, msgs.MsgKeyManagerIdentifierPathNotFound, path)
+			return nil, i18n.NewError(ctx, msgs.MsgKeyManagerIdentifierPathNotFound, path)
 		}
 
 		// Note: This is a single course grain lock on allocation, for the reasons described in TestE2ESigningHDWalletRealDB
@@ -216,7 +135,7 @@ func (kr *keyResolver) resolvePathSegment(dbTX *gorm.DB, parent *resolvedDBPath,
 		// - When we get to this point the lock we take is at the level of the tree that is the highest common root of all intents
 		// - We reject any attempt to allocate an identifier not in the intent list
 		if !kr.allocationLockTaken {
-			if err := kr.km.takeAllocationLock(kr); err != nil {
+			if err := kr.km.takeAllocationLock(ctx, kr); err != nil {
 				return nil, err // context cancelled while waiting
 			}
 			kr.allocationLockTaken = true
@@ -228,7 +147,7 @@ func (kr *keyResolver) resolvePathSegment(dbTX *gorm.DB, parent *resolvedDBPath,
 		nextIndex := int64(0)
 		if parent.nextIndex == nil {
 			// Get the highest index on the parent so far written to the DB
-			err = dbTX.WithContext(kr.ctx).
+			err = db.WithContext(ctx).
 				Where("parent = ?", parent.path).
 				Order(`"index" DESC`).
 				Limit(1).
@@ -250,8 +169,8 @@ func (kr *keyResolver) resolvePathSegment(dbTX *gorm.DB, parent *resolvedDBPath,
 		}
 
 		// We might get a conflict because we did a dirty read before we took the lock.
-		log.L(kr.ctx).Infof("allocating index %d on parent %s to key-path %s", nextIndex, parent.path, path)
-		result := dbTX.WithContext(kr.ctx).
+		log.L(ctx).Infof("allocating index %d on parent %s to key-path %s", nextIndex, parent.path, path)
+		result := db.WithContext(ctx).
 			Clauses(clause.OnConflict{DoNothing: true}).
 			Create(dbPath)
 		if result.Error != nil {
@@ -260,7 +179,7 @@ func (kr *keyResolver) resolvePathSegment(dbTX *gorm.DB, parent *resolvedDBPath,
 		if result.RowsAffected == 0 {
 			// note this is not an optimized path - lots of thread clashing to create the same
 			// key concurrently. Separate re-use of lots of keys is the more optimized path.
-			log.L(kr.ctx).Infof("re-checking with lock after losing optimistic race: %s", err)
+			log.L(ctx).Infof("re-checking with lock after losing optimistic race: %s", err)
 			parent.nextIndex = nil
 			continue
 		}
@@ -277,14 +196,14 @@ func (kr *keyResolver) resolvePathSegment(dbTX *gorm.DB, parent *resolvedDBPath,
 	}
 }
 
-func (kr *keyResolver) getStoredVerifier(dbTX *gorm.DB, identifier, algorithm, verifierType string) (*pldapi.KeyVerifier, error) {
+func (kr *keyResolver) getStoredVerifier(ctx context.Context, identifier, algorithm, verifierType string) (*pldapi.KeyVerifier, error) {
 	vKey := verifierForwardCacheKey(identifier, algorithm, verifierType)
 	verifier, _ := kr.km.verifierByIdentityCache.Get(vKey)
 	if verifier != nil {
 		return verifier, nil
 	}
 	var verifiers []*DBKeyVerifier
-	err := dbTX.WithContext(kr.ctx).
+	err := kr.dbTX.DB().WithContext(ctx).
 		Where(`"identifier" = ?`, identifier).
 		Where(`"algorithm" = ?`, algorithm).
 		Where(`"type" = ?`, verifierType).
@@ -306,17 +225,17 @@ func (kr *keyResolver) getStoredVerifier(dbTX *gorm.DB, identifier, algorithm, v
 	return verifier, nil
 }
 
-func (kr *keyResolver) ResolveKey(identifier, algorithm, verifierType string) (_ *pldapi.KeyMappingAndVerifier, err error) {
-	return kr.resolveKey(identifier, algorithm, verifierType, false /* allow creation */)
+func (kr *keyResolver) ResolveKey(ctx context.Context, identifier, algorithm, verifierType string) (_ *pldapi.KeyMappingAndVerifier, err error) {
+	return kr.resolveKey(ctx, identifier, algorithm, verifierType, false /* allow creation */)
 }
 
-func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, requireExistingMapping bool) (_ *pldapi.KeyMappingAndVerifier, err error) {
+func (kr *keyResolver) resolveKey(ctx context.Context, identifier, algorithm, verifierType string, requireExistingMapping bool) (_ *pldapi.KeyMappingAndVerifier, err error) {
 	kr.l.Lock()
 	defer kr.l.Unlock()
 
 	// Identifier must be a valid
-	if err := tktypes.ValidateSafeCharsStartEndAlphaNum(kr.ctx, identifier, tktypes.DefaultNameMaxLen, "identifier"); err != nil {
-		return nil, i18n.WrapError(kr.ctx, err, msgs.MsgKeyManagerInvalidIdentifier, identifier)
+	if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, identifier, tktypes.DefaultNameMaxLen, "identifier"); err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerInvalidIdentifier, identifier)
 	}
 
 	// Now check the mappings we've already generated in this context
@@ -333,19 +252,14 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 		mapping, _ = kr.km.identifierCache.Get(identifier)
 	}
 
-	var newMapping = false
+	var isNewMapping = false
 	var dbPath *resolvedDBPath
-	var dbTX *gorm.DB
+	db := kr.dbTX.DB()
 	if mapping == nil {
-		// We need a database transaction
-		if dbTX, err = kr.krc.getDBTX(); err != nil {
-			return nil, err
-		}
-
 		// We go look up the hierarchical path of this identifier, to see if it's existing or new.
 		// Lots of optimistic locking complexity inside this function to efficiently race threads to ensure one wins
 		// each index allocation race.
-		dbPath, err = kr.getOrCreateIdentifierPath(dbTX, identifier, !requireExistingMapping)
+		dbPath, err = kr.getOrCreateIdentifierPath(ctx, identifier, !requireExistingMapping)
 		if err != nil {
 			return nil, err
 		}
@@ -358,7 +272,7 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 		// know if the key has already been allocated (it's possible previously this entry was just a path even
 		// if it already existed) ... so do a query.
 		var mappings []*DBKeyMapping
-		err = dbTX.WithContext(kr.ctx).
+		err = db.WithContext(ctx).
 			Where(`"identifier" = ?`, identifier).
 			Limit(1).
 			Find(&mappings).
@@ -379,9 +293,9 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 			}
 		} else {
 			if requireExistingMapping {
-				return nil, i18n.NewError(kr.ctx, msgs.MsgKeyManagerExistingIdentifierNotFound)
+				return nil, i18n.NewError(ctx, msgs.MsgKeyManagerExistingIdentifierNotFound, identifier)
 			}
-			newMapping = true
+			isNewMapping = true
 			mapping = &pldapi.KeyMappingWithPath{
 				KeyMapping: &pldapi.KeyMapping{
 					Identifier: identifier,
@@ -391,10 +305,14 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 		}
 	}
 
+	return kr.resolveMapping(ctx, mapping, isNewMapping, identifier, algorithm, verifierType, requireExistingMapping)
+}
+
+func (kr *keyResolver) resolveMapping(ctx context.Context, mapping *pldapi.KeyMappingWithPath, isNewMapping bool, identifier, algorithm, verifierType string, requireExistingMapping bool) (_ *pldapi.KeyMappingAndVerifier, err error) {
 	var w *wallet
-	if newMapping {
+	if isNewMapping {
 		// Match it to a wallet (or fail)
-		w, err = kr.km.selectWallet(kr.ctx, identifier)
+		w, err = kr.km.selectWallet(ctx, identifier)
 		if err != nil {
 			return nil, err
 		}
@@ -402,7 +320,7 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 	} else {
 		// Get the wallet runtime that's already been bound - possible still to fail
 		// due to re-configuration of the node.
-		w, err = kr.km.getWalletByName(kr.ctx, mapping.Wallet)
+		w, err = kr.km.getWalletByName(ctx, mapping.Wallet)
 		if err != nil {
 			return nil, err
 		}
@@ -410,7 +328,7 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 		// Check if the verifier is being created in this context
 		for _, v := range kr.newVerifiers {
 			if v.KeyIdentifier == identifier && v.Algorithm == algorithm && v.Type == verifierType {
-				log.L(kr.ctx).Infof("Resolved key (created earlier in context): identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
+				log.L(ctx).Infof("Resolved key (created earlier in context): identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
 					identifier, algorithm, verifierType, mapping.KeyHandle, v.Verifier)
 				// We have everything we need - no need to bother the signing module
 				return &pldapi.KeyMappingAndVerifier{
@@ -421,16 +339,12 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 		}
 
 		// Check the DB for a verifier for this existing mapping.
-		var v *pldapi.KeyVerifier
-		dbTX, err := kr.krc.getDBTX()
-		if err == nil {
-			v, err = kr.getStoredVerifier(dbTX, identifier, algorithm, verifierType)
-		}
+		v, err := kr.getStoredVerifier(ctx, identifier, algorithm, verifierType)
 		if err != nil {
 			return nil, err
 		}
 		if v != nil {
-			log.L(kr.ctx).Infof("Resolved key (cached): identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
+			log.L(ctx).Infof("Resolved key (cached): identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
 				identifier, algorithm, verifierType, mapping.KeyHandle, v.Verifier)
 			// populate the reverse lookup cache
 			kr.km.verifierReverseCache.Set(verifierReverseCacheKey(v.Type, v.Algorithm, v.Verifier), &pldapi.KeyMappingAndVerifier{
@@ -448,18 +362,18 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 
 	// We shouldn't get here for an existing mapping
 	if requireExistingMapping {
-		return nil, i18n.NewError(kr.ctx, msgs.MsgKeyManagerExistingIdentifierNotFound)
+		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerExistingIdentifierNotFound, identifier)
 	}
 
 	// Ok - we are ready to talk to the wallet signing module to resolve the
 	// key handle and verifier.
-	result, err := w.resolveKeyAndVerifier(kr.ctx, mapping, algorithm, verifierType)
+	result, err := w.resolveKeyAndVerifier(ctx, mapping, algorithm, verifierType)
 	if err != nil {
 		return nil, err
 	}
 
 	// We have a verifier and possibly a new mapping to write in our pre-commit
-	if newMapping {
+	if isNewMapping {
 		kr.newMappings = append(kr.newMappings, result.KeyMappingWithPath)
 	}
 	// We add the verifier to our list to create here - but there is one small edge case where
@@ -471,7 +385,7 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 		KeyVerifier:   result.Verifier,
 	})
 
-	log.L(kr.ctx).Infof("Resolved key: identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
+	log.L(ctx).Infof("Resolved key: identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
 		identifier, algorithm, verifierType, result.KeyHandle, result.Verifier.Verifier)
 	return result, nil
 
@@ -485,16 +399,11 @@ func verifierReverseCacheKey(algorithm, verifierType, verifier string) string {
 	return fmt.Sprintf("%s|%s|%s", algorithm, verifierType, verifier)
 }
 
-func (kr *keyResolver) preCommit() (err error) {
+func (kr *keyResolver) preCommit(ctx context.Context, dbTX persistence.DBTX) (err error) {
 	kr.l.Lock()
 	defer kr.l.Unlock()
 
-	if kr.krc.lazyTX && kr.krc.dbTX == nil {
-		// nothing to do
-		return nil
-	}
-	dbTX, err := kr.krc.getDBTX()
-	if err == nil && len(kr.newMappings) > 0 {
+	if len(kr.newMappings) > 0 {
 		dbMappings := make([]*DBKeyMapping, len(kr.newMappings))
 		for i, m := range kr.newMappings {
 			dbMappings[i] = &DBKeyMapping{
@@ -505,7 +414,7 @@ func (kr *keyResolver) preCommit() (err error) {
 		}
 		// Note we have locking to prevent us having an ON CONFLICT here, and
 		// if one is added it needs careful understanding of why.
-		err = dbTX.WithContext(kr.ctx).Create(dbMappings).Error
+		err = dbTX.DB().WithContext(ctx).Create(dbMappings).Error
 	}
 	if err == nil && len(kr.newVerifiers) > 0 {
 		dbVerifiers := make([]*DBKeyVerifier, len(kr.newVerifiers))
@@ -517,8 +426,8 @@ func (kr *keyResolver) preCommit() (err error) {
 				Verifier:   v.Verifier,
 			}
 		}
-		err = dbTX.WithContext(kr.ctx).
-			Clauses(clause.OnConflict{DoNothing: true}). // explained where we add to krc.newVerifiers
+		err = dbTX.DB().WithContext(ctx).
+			Clauses(clause.OnConflict{DoNothing: true}). // explained where we add to kr.newVerifiers
 			Create(dbVerifiers).
 			Error
 	}
@@ -544,20 +453,20 @@ func (kr *keyResolver) postCommit() {
 	}
 }
 
-func (kr *keyResolver) close(committed bool) {
+func (kr *keyResolver) finalizer(ctx context.Context, err error) {
 	kr.l.Lock()
 	defer kr.l.Unlock()
 
-	if committed {
+	if err == nil {
 		kr.postCommit()
 	}
-	kr.cleanup()
+	kr.cleanup(ctx)
 }
 
-func (kr *keyResolver) cleanup() {
+func (kr *keyResolver) cleanup(ctx context.Context) {
 	if kr.done != nil {
 		if kr.allocationLockTaken {
-			kr.km.unlockAllocation(kr)
+			kr.km.unlockAllocation(ctx, kr)
 		}
 		// All other KRCs waiting on us will wake up and race to grab the lock on the parent context of their choosing
 		close(kr.done)
