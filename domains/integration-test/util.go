@@ -46,7 +46,8 @@ func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[
 	tb := testbed.NewTestBed()
 	url, conf, done, err := tb.StartForTest("./testbed.config.yaml", domains, hdWalletSeed)
 	assert.NoError(t, err)
-	rpc := rpcclient.WrapRestyClient(resty.New().SetBaseURL(url))
+	rc := resty.New().SetBaseURL(url)
+	rpc := rpcclient.WrapRestyClient(rc)
 	return done, conf, tb, rpc
 }
 
