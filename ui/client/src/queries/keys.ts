@@ -36,17 +36,17 @@ export const fetchKeys = async (parent: string, limit: number, sortBy: string, s
     }]
   };
 
-  if(refEntry !== undefined) {
+  if (refEntry !== undefined) {
     requestPayload.params[0][sortOrder === 'asc' ? 'greaterThan' : 'lessThan'] = [{
       field: sortBy,
       value: refEntry[sortBy as 'path' | 'index']
     }];
   }
 
-  if(pathFilter !== undefined) {
+  if (pathFilter !== undefined) {
     requestPayload.params[0].eq.push({
       field: 'path',
-      value: pathFilter
+      value: parent !== '' ? `${parent}.${pathFilter}` : pathFilter
     });
   }
 

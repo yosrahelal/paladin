@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -36,14 +36,14 @@ type Props = {
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
   setParent: Dispatch<SetStateAction<string>>
-  setPathFilter: Dispatch<SetStateAction<string | undefined>>
+  setFilter: Dispatch<SetStateAction<string | undefined>>
 }
 
 export const ReverseKeyLookupDialog: React.FC<Props> = ({
   dialogOpen,
   setDialogOpen,
   setParent,
-  setPathFilter
+  setFilter
 }) => {
 
   const [verifier, setVerifier] = useState('');
@@ -83,10 +83,13 @@ export const ReverseKeyLookupDialog: React.FC<Props> = ({
     refetch().then(result => {
       if (result.status === 'success') {
         const path = result.data.path.map(segment => segment.name).join('.');
-        if (path.includes('.')) {
-          setParent(path.substring(0, path.lastIndexOf('.')))
+        const index = path.lastIndexOf('.');
+        if(index !== -1) {
+          setParent(path.substring(0, index));
+          setFilter(path.substring(index + 1))
+        } else {
+          setFilter(path);
         }
-        setPathFilter(path);
         setDialogOpen(false);
       } else if (result.status === 'error') {
         setNotFound(true);

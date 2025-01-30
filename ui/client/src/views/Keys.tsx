@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Breadcrumbs, Button, Chip, Fade, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Breadcrumbs, Button, Fade, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { useEffect, useState } from "react";
@@ -51,7 +51,7 @@ export const Keys: React.FC = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [refEntries, setRefEntries] = useState<IKeyEntry[]>([]);
-  const [pathFilter, setPathFilter] = useState<string>();
+  const [filter, setFilter] = useState<string | undefined>(searchParams.get('filter') ?? undefined);
   const [page, setPage] = useState(0);
   const [count, setCount] = useState(-1);
   const [rowsPerPage, setRowsPerPage] = useState(getDefaultRowsPerPage());
@@ -63,8 +63,8 @@ export const Keys: React.FC = () => {
   const [verifiersDialogOpen, setVerifiersDialogOpen] = useState(false);
 
   const { data: keys, error } = useQuery({
-    queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, pathFilter],
-    queryFn: () => fetchKeys(parent, rowsPerPage, sortBy, sortOrder, pathFilter, refEntries[refEntries.length - 1])
+    queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filter],
+    queryFn: () => fetchKeys(parent, rowsPerPage, sortBy, sortOrder, filter, refEntries[refEntries.length - 1])
   });
 
   useEffect(() => {
@@ -88,12 +88,15 @@ export const Keys: React.FC = () => {
   }, [parent]);
 
   useEffect(() => {
-    if (parent === '') {
-      setSearchParams({});
-    } else {
-      setSearchParams({ path: parent });
+    let value: any = {};
+    if (parent !== '') {
+      value.path = parent;
     }
-  }, [parent, page]);
+    if (filter !== undefined) {
+      value.filter = filter;
+    }
+    setSearchParams(value);
+  }, [parent, page, filter]);
 
   if (error) {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
@@ -140,7 +143,7 @@ export const Keys: React.FC = () => {
           sx={{ textTransform: 'none' }}
           onClick={event => {
             event.preventDefault();
-            setPathFilter(undefined);
+            setFilter(undefined);
             setParent(target);
           }}>
           {segment === '' ? t('root') : segment}
@@ -148,12 +151,12 @@ export const Keys: React.FC = () => {
       )
     }
   }
-  if (pathFilter !== undefined) {
+  if (filter !== undefined) {
     breadcrumbContent.push(
       <Link underline="none"
-        key={pathFilter}
+        key={filter}
         sx={{ textTransform: 'none' }}>
-        {removeParentFromPath(pathFilter)}
+        {filter}
       </Link>);
   }
 
@@ -260,7 +263,7 @@ export const Keys: React.FC = () => {
             <Link underline="none"
               href=""
               sx={{ textTransform: 'none' }}
-              onClick={event => { event.preventDefault(); setPathFilter(undefined); setParent('') }}>
+              onClick={event => { event.preventDefault(); setFilter(undefined); setParent('') }}>
               {t('root')}
             </Link>
             {breadcrumbContent}
@@ -302,7 +305,7 @@ export const Keys: React.FC = () => {
                   <TableRow sx={{ height: '70px' }} key={`${key.path}${key.index}`}>
                     <TableCell>{key.hasChildren &&
                       <Tooltip arrow title={t('openFolder')}>
-                        <IconButton onClick={() => { setPathFilter(undefined); setParent(key.path) }}>
+                        <IconButton onClick={() => { setFilter(undefined); setParent(key.path) }}>
                           <FolderOpenIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
@@ -347,7 +350,7 @@ export const Keys: React.FC = () => {
         dialogOpen={reverseLookupDialogOpen}
         setDialogOpen={setReverseLookupDialogOpen}
         setParent={setParent}
-        setPathFilter={setPathFilter}
+        setFilter={setFilter}
       />
       {selectedVerifiers &&
         <VerifiersDialog
