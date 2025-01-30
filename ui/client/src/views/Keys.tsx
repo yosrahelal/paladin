@@ -62,6 +62,11 @@ export const Keys: React.FC = () => {
   const [selectedVerifiers, setSelectedVerifiers] = useState<IVerifier[]>();
   const [verifiersDialogOpen, setVerifiersDialogOpen] = useState(false);
 
+  useEffect(() => {
+    setFilter(searchParams.get('filter') ?? undefined);
+    setParent(searchParams.get('path') ?? '');
+  }, [searchParams]);
+
   const { data: keys, error } = useQuery({
     queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filter],
     queryFn: () => fetchKeys(parent, rowsPerPage, sortBy, sortOrder, filter, refEntries[refEntries.length - 1])
