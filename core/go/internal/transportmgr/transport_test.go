@@ -17,7 +17,6 @@ package transportmgr
 
 import (
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -27,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
@@ -510,19 +510,22 @@ func TestSendReliableOk(t *testing.T) {
 	ctx, tm, tp, done := newTestTransport(t, false,
 		mockGoodTransport,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-			mc.db.Mock.ExpectExec("INSERT.*reliable_msgs").WillReturnResult(driver.ResultNoRows)
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectQuery("INSERT.*reliable_msgs").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(12345))
+			mc.db.Mock.ExpectCommit()
 		},
 	)
 	defer done()
 
 	mockActivateDeactivateOk(tp)
-	pc, err := tm.SendReliable(ctx, tm.persistence.DB(), &components.ReliableMessage{
-		Node:        "node2",
-		MessageType: components.RMTState.Enum(),
-		Metadata:    []byte(`{"some":"data"}`),
+	err := tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
+			Node:        "node2",
+			MessageType: components.RMTState.Enum(),
+			Metadata:    []byte(`{"some":"data"}`),
+		})
 	})
 	require.NoError(t, err)
-	pc()
 
 }
 
@@ -530,16 +533,19 @@ func TestSendReliableFail(t *testing.T) {
 	ctx, tm, tp, done := newTestTransport(t, false,
 		mockGoodTransport,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
 			mc.db.Mock.ExpectExec("INSERT.*reliable_msgs").WillReturnError(fmt.Errorf("pop"))
 		},
 	)
 	defer done()
 
 	mockActivateDeactivateOk(tp)
-	_, err := tm.SendReliable(ctx, tm.persistence.DB(), &components.ReliableMessage{
-		Node:        "node2",
-		MessageType: components.RMTState.Enum(),
-		Metadata:    []byte(`{"some":"data"}`),
+	err := tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
+			Node:        "node2",
+			MessageType: components.RMTState.Enum(),
+			Metadata:    []byte(`{"some":"data"}`),
+		})
 	})
 	require.Regexp(t, "pop", err)
 

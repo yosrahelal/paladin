@@ -33,8 +33,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
-	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/keymanager"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -46,7 +45,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 //go:embed abis/SIMDomain.json
@@ -807,8 +805,8 @@ func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
 
 	// In this test we deploy the factory in-line
 	var txIDs []uuid.UUID
-	err = keymanager.DBTransactionWithKRC(ctx, tb.Components().Persistence(), tb.Components().KeyManager(), func(dbTX *gorm.DB, kr components.KeyResolver) (postCommit func(), err error) {
-		postCommit, txIDs, err = tb.Components().TxManager().SendTransactions(ctx, dbTX, kr, &pldapi.TransactionInput{
+	err = tb.Components().Persistence().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		txIDs, err = tb.Components().TxManager().SendTransactions(ctx, dbTX, &pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
 				Type: pldapi.TransactionTypePublic.Enum(),
 				From: "domain1_admin",
@@ -816,7 +814,7 @@ func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
 			ABI:      simDomainABI,
 			Bytecode: simDomainBytecode,
 		})
-		return postCommit, err
+		return err
 	})
 	require.NoError(t, err)
 	txID := txIDs[0]

@@ -27,6 +27,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -318,7 +319,7 @@ func (p *peer) reliableMessageScan(checkNew bool) error {
 		}
 
 		// Process the page - building and sending the proto messages
-		if err = p.processReliableMsgPage(page); err != nil {
+		if err = p.processReliableMsgPage(p.tm.persistence.NOTX(), page); err != nil {
 			// Errors returned are retryable - for data errors the function
 			// must record those as acks with an error.
 			return err
@@ -356,7 +357,7 @@ func (p *peer) reliableMessageScan(checkNew bool) error {
 	return nil
 }
 
-func (p *peer) processReliableMsgPage(page []*components.ReliableMessage) (err error) {
+func (p *peer) processReliableMsgPage(dbTX persistence.DBTX, page []*components.ReliableMessage) (err error) {
 
 	type paladinMsgWithSeq struct {
 		*prototk.PaladinMsg
@@ -380,7 +381,7 @@ func (p *peer) processReliableMsgPage(page []*components.ReliableMessage) (err e
 		var errorAck error
 		switch rm.MessageType.V() {
 		case components.RMTState:
-			msg, errorAck, err = p.tm.buildStateDistributionMsg(p.ctx, p.tm.persistence.DB(), rm)
+			msg, errorAck, err = p.tm.buildStateDistributionMsg(p.ctx, dbTX, rm)
 		case components.RMTReceipt:
 			// TODO: Implement for receipt distribution
 			fallthrough

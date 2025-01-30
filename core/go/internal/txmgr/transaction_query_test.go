@@ -102,7 +102,7 @@ func TestResolveABIReferencesAndCacheFail(t *testing.T) {
 		})
 	defer done()
 
-	_, err := txm.resolveABIReferencesAndCache(ctx, txm.p.DB(), []*components.ResolvedTransaction{
+	_, err := txm.resolveABIReferencesAndCache(ctx, txm.p.NOTX(), []*components.ResolvedTransaction{
 		{Transaction: &pldapi.Transaction{
 			TransactionBase: pldapi.TransactionBase{
 				ABIReference: confutil.P((tktypes.Bytes32)(tktypes.RandBytes(32))),
@@ -123,7 +123,7 @@ func TestResolveABIReferencesAndCacheBadFunc(t *testing.T) {
 		})
 	defer done()
 
-	_, err := txm.resolveABIReferencesAndCache(ctx, txm.p.DB(), []*components.ResolvedTransaction{
+	_, err := txm.resolveABIReferencesAndCache(ctx, txm.p.NOTX(), []*components.ResolvedTransaction{
 		{Transaction: &pldapi.Transaction{
 			ID: confutil.P(uuid.New()),
 			TransactionBase: pldapi.TransactionBase{
