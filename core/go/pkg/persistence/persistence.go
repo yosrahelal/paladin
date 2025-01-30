@@ -31,8 +31,13 @@ type Persistence interface {
 	DB() *gorm.DB
 	Close()
 
+	// We provide our own transaction wrapper with extra functions over gORM
+	Transaction(ctx context.Context, fn func(ctx context.Context, dbTX DBTX) error) (err error)
+	// Wrapper that provides a pseudo-transaction that will fail if any pre-commit/post-commit handlers are used
+	NOTX() DBTX
+
 	// DB specific implementation function
-	TakeNamedLock(ctx context.Context, dbTX *gorm.DB, lockName string) error
+	TakeNamedLock(ctx context.Context, dbTX DBTX, lockName string) error
 }
 
 const (

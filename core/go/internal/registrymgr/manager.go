@@ -182,7 +182,7 @@ func (rm *registryManager) GetNodeTransports(ctx context.Context, node string) (
 		tl := rm.registryTransportLookups[regName]
 		if tl != nil {
 			regLookupsChecked++
-			regTransports, err := tl.getNodeTransports(ctx, rm.p.DB() /* no TX needed */, r, node)
+			regTransports, err := tl.getNodeTransports(ctx, rm.p.NOTX() /* no TX needed */, r, node)
 			if err != nil {
 				return nil, err
 			}

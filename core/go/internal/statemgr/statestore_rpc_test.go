@@ -75,7 +75,7 @@ func TestRPC(t *testing.T) {
 	assert.NoError(t, err)
 	schema, err := newABISchema(ctx, "domain1", &abiParam)
 	assert.NoError(t, err)
-	err = ss.persistSchemas(ctx, ss.p.DB(), []*pldapi.Schema{schema.Schema})
+	err = ss.persistSchemas(ctx, ss.p.NOTX(), []*pldapi.Schema{schema.Schema})
 	assert.NoError(t, err)
 
 	var schemas []*pldapi.Schema
@@ -128,7 +128,7 @@ func TestRPC(t *testing.T) {
 
 	// Write some nullifiers and query them back
 	nullifier1 := tktypes.HexBytes(tktypes.RandHex(32))
-	err = ss.WriteNullifiersForReceivedStates(ctx, ss.p.DB(), "domain1", []*components.NullifierUpsert{
+	err = ss.WriteNullifiersForReceivedStates(ctx, ss.p.NOTX(), "domain1", []*components.NullifierUpsert{
 		{
 			ID:    nullifier1,
 			State: state.ID,

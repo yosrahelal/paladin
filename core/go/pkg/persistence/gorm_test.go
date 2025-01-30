@@ -22,11 +22,27 @@ import (
 	"path"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	gormPostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
+
+func newMockGormPSQLPersistence(t *testing.T) (Persistence, sqlmock.Sqlmock) {
+	db, mdb, _ := sqlmock.New()
+
+	gdb, err := gorm.Open(gormPostgres.New(gormPostgres.Config{Conn: db}), &gorm.Config{})
+	require.NoError(t, err)
+
+	return &provider{
+		p:    &postgresProvider{},
+		gdb:  gdb,
+		conf: &pldconf.SQLDBConfig{},
+	}, mdb
+}
 
 func TestGormInitFail(t *testing.T) {
 
@@ -56,6 +72,7 @@ func TestGormMigrationMissingDir(t *testing.T) {
 				DSN:           ":memory:",
 				AutoMigrate:   confutil.P(true),
 				MigrationsDir: tempFile,
+				DebugQueries:  true,
 			},
 		},
 	})

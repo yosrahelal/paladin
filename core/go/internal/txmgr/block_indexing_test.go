@@ -16,7 +16,7 @@
 package txmgr
 
 import (
-	"database/sql/driver"
+	"context"
 	"fmt"
 	"testing"
 
@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -65,7 +66,7 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 	require.NoError(t, err)
 
 	txi := newTestConfirm(revertData)
-	var txID *uuid.UUID
+	var txID uuid.UUID
 
 	ctx, txm, done := newTestTransactionManager(t, true,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
@@ -73,7 +74,6 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 
 			mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(
-				func() {},
 				[]*pldapi.PublicTx{
 					{LocalID: confutil.P(uint64(42))},
 				},
@@ -85,7 +85,7 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 				mut.Return([]*components.PublicTxMatch{
 					{
 						PaladinTXReference: components.PaladinTXReference{
-							TransactionID:   *txID, // Transaction ID resolved by this point
+							TransactionID:   txID, // Transaction ID resolved by this point
 							TransactionType: pldapi.TransactionTypePublic.Enum(),
 						},
 						IndexedTransactionNotify: txi,
@@ -94,32 +94,33 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 			})
 
 			mc.publicTxMgr.On("NotifyConfirmPersisted", mock.Anything, mock.MatchedBy(func(matches []*components.PublicTxMatch) bool {
-				return len(matches) == 1 && matches[0].TransactionID == *txID
+				return len(matches) == 1 && matches[0].TransactionID == txID
 			}))
 		})
 	defer done()
 
-	postCommit, abiRef, err := txm.storeABI(ctx, txm.p.DB(), testABI)
-	require.NoError(t, err)
-	postCommit()
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		abiRef, err := txm.storeABI(ctx, dbTX, testABI)
+		require.NoError(t, err)
 
-	txID, err = txm.sendTransactionNewDBTX(ctx, &pldapi.TransactionInput{
-		TransactionBase: pldapi.TransactionBase{
-			Type:         pldapi.TransactionTypePublic.Enum(),
-			ABIReference: abiRef,
-			From:         "sender1",
-			To:           tktypes.MustEthAddress(tktypes.RandHex(20)),
-		},
+		txIDs, err := txm.SendTransactions(ctx, dbTX, &pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type:         pldapi.TransactionTypePublic.Enum(),
+				ABIReference: abiRef,
+				From:         "sender1",
+				To:           tktypes.MustEthAddress(tktypes.RandHex(20)),
+			},
+		})
+		require.NoError(t, err)
+		txID = txIDs[0]
+
+		return txm.blockIndexerPreCommit(ctx, dbTX, []*pldapi.IndexedBlock{},
+			[]*blockindexer.IndexedTransactionNotify{txi})
 	})
 	require.NoError(t, err)
 
-	postCommit, err = txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
-		[]*blockindexer.IndexedTransactionNotify{txi})
-	require.NoError(t, err)
-	postCommit()
-
 	// Check we can query the receipt
-	receipt, err := txm.GetTransactionReceiptByID(ctx, *txID)
+	receipt, err := txm.GetTransactionReceiptByID(ctx, txID)
 	require.NoError(t, err)
 	assert.False(t, receipt.Success)
 	assert.Equal(t, `PD012216: Transaction reverted ErrorNum("12345")`, receipt.FailureMessage)
@@ -154,7 +155,9 @@ func TestPublicConfirmMatch(t *testing.T) {
 					},
 				}, nil)
 
-			mc.db.ExpectExec("INSERT.*transaction_receipts").WillReturnResult(driver.ResultNoRows)
+			mc.db.ExpectBegin()
+			mc.db.ExpectQuery("INSERT.*transaction_receipts").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(12345))
+			mc.db.ExpectCommit()
 
 			mc.publicTxMgr.On("NotifyConfirmPersisted", mock.Anything, mock.MatchedBy(func(matches []*components.PublicTxMatch) bool {
 				return len(matches) == 1 && matches[0].TransactionID == txID
@@ -162,10 +165,11 @@ func TestPublicConfirmMatch(t *testing.T) {
 		})
 	defer done()
 
-	postCommit, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
-		[]*blockindexer.IndexedTransactionNotify{txi})
+	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		return txm.blockIndexerPreCommit(ctx, dbTX, []*pldapi.IndexedBlock{},
+			[]*blockindexer.IndexedTransactionNotify{txi})
+	})
 	require.NoError(t, err)
-	postCommit()
 }
 
 func TestPrivateConfirmMatchPrivateFailures(t *testing.T) {
@@ -204,10 +208,12 @@ func TestPrivateConfirmMatchPrivateFailures(t *testing.T) {
 					},
 				}, nil)
 
+			mc.db.ExpectBegin()
+			mc.db.ExpectCommit()
 			mc.privateTxMgr.On("NotifyFailedPublicTx", mock.Anything, mock.Anything, mock.MatchedBy(func(matches []*components.PublicTxMatch) bool {
 				return len(matches) == 1 &&
 					matches[0].TransactionID == txID2
-			})).Return(func() {}, nil)
+			})).Return(nil)
 
 			mc.publicTxMgr.On("NotifyConfirmPersisted", mock.Anything, mock.MatchedBy(func(matches []*components.PublicTxMatch) bool {
 				return len(matches) == 2 &&
@@ -217,10 +223,11 @@ func TestPrivateConfirmMatchPrivateFailures(t *testing.T) {
 		})
 	defer done()
 
-	postCommit, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
-		[]*blockindexer.IndexedTransactionNotify{txiOk1, txiFail2})
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		return txm.blockIndexerPreCommit(ctx, dbTX, []*pldapi.IndexedBlock{},
+			[]*blockindexer.IndexedTransactionNotify{txiOk1, txiFail2})
+	})
 	require.NoError(t, err)
-	postCommit()
 }
 
 func TestNoConfirmMatch(t *testing.T) {
@@ -230,15 +237,18 @@ func TestNoConfirmMatch(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectBegin()
 			mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 				Return(nil, nil)
+			mc.db.ExpectCommit()
 		})
 	defer done()
 
-	postCommit, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
-		[]*blockindexer.IndexedTransactionNotify{txi})
+	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		return txm.blockIndexerPreCommit(ctx, dbTX, []*pldapi.IndexedBlock{},
+			[]*blockindexer.IndexedTransactionNotify{txi})
+	})
 	require.NoError(t, err)
-	postCommit()
 }
 
 func TestConfirmMatchFAil(t *testing.T) {
@@ -248,13 +258,16 @@ func TestConfirmMatchFAil(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectBegin()
 			mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 				Return(nil, fmt.Errorf("pop"))
 		})
 	defer done()
 
-	_, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
-		[]*blockindexer.IndexedTransactionNotify{txi})
+	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		return txm.blockIndexerPreCommit(ctx, dbTX, []*pldapi.IndexedBlock{},
+			[]*blockindexer.IndexedTransactionNotify{txi})
+	})
 	assert.Regexp(t, "pop", err)
 }
 
@@ -266,6 +279,7 @@ func TestPrivateConfirmError(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectBegin()
 			mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 				Return([]*components.PublicTxMatch{
 					{
@@ -276,12 +290,14 @@ func TestPrivateConfirmError(t *testing.T) {
 						IndexedTransactionNotify: txi,
 					},
 				}, nil)
-			mc.privateTxMgr.On("NotifyFailedPublicTx", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+			mc.privateTxMgr.On("NotifyFailedPublicTx", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
 		})
 	defer done()
 
-	_, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
-		[]*blockindexer.IndexedTransactionNotify{txi})
+	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		return txm.blockIndexerPreCommit(ctx, dbTX, []*pldapi.IndexedBlock{},
+			[]*blockindexer.IndexedTransactionNotify{txi})
+	})
 	assert.Regexp(t, "pop", err)
 }
 
@@ -304,11 +320,14 @@ func TestConfirmInsertError(t *testing.T) {
 					},
 				}, nil)
 
-			mc.db.ExpectExec("INSERT.*transaction_receipts").WillReturnError(fmt.Errorf("pop"))
+			mc.db.ExpectBegin()
+			mc.db.ExpectQuery("INSERT.*transaction_receipts").WillReturnError(fmt.Errorf("pop"))
 		})
 	defer done()
 
-	_, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*pldapi.IndexedBlock{},
-		[]*blockindexer.IndexedTransactionNotify{txi})
+	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		return txm.blockIndexerPreCommit(ctx, dbTX, []*pldapi.IndexedBlock{},
+			[]*blockindexer.IndexedTransactionNotify{txi})
+	})
 	assert.Regexp(t, "pop", err)
 }

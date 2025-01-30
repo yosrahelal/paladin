@@ -36,7 +36,7 @@ func TestGetABIByHashError(t *testing.T) {
 		})
 	defer done()
 
-	_, err := txm.getABIByHash(ctx, txm.p.DB(), tktypes.RandBytes32())
+	_, err := txm.getABIByHash(ctx, txm.p.NOTX(), tktypes.RandBytes32())
 	assert.Regexp(t, "pop", err)
 
 }
@@ -54,7 +54,7 @@ func TestGetABIByHashBadData(t *testing.T) {
 		})
 	defer done()
 
-	_, err := txm.getABIByHash(ctx, txm.p.DB(), tktypes.RandBytes32())
+	_, err := txm.getABIByHash(ctx, txm.p.NOTX(), tktypes.RandBytes32())
 	assert.Regexp(t, "PD012217", err)
 
 }
@@ -76,7 +76,7 @@ func TestGetABIByCache(t *testing.T) {
 
 	// 2nd time cached (only one DB mock)
 	for i := 0; i < 2; i++ {
-		pa, err := txm.getABIByHash(ctx, txm.p.DB(), hash)
+		pa, err := txm.getABIByHash(ctx, txm.p.NOTX(), hash)
 		assert.NoError(t, err)
 		assert.Equal(t, hash, pa.Hash)
 		assert.Equal(t, abi.ABI{}, pa.ABI)
@@ -91,7 +91,7 @@ func TestUpsertABIBadData(t *testing.T) {
 	)
 	defer done()
 
-	_, _, err := txm.UpsertABI(ctx, txm.p.DB(), abi.ABI{{Inputs: abi.ParameterArray{{Type: "wrong"}}}})
+	_, err := txm.UpsertABI(ctx, txm.p.NOTX(), abi.ABI{{Inputs: abi.ParameterArray{{Type: "wrong"}}}})
 	assert.Regexp(t, "PD012201", err)
 
 }
@@ -105,7 +105,7 @@ func TestUpsertABIFail(t *testing.T) {
 		})
 	defer done()
 
-	_, _, err := txm.storeABI(ctx, txm.p.DB(), abi.ABI{{Type: abi.Function, Name: "get"}})
+	_, err := txm.storeABI(ctx, txm.p.NOTX(), abi.ABI{{Type: abi.Function, Name: "get"}})
 	assert.Regexp(t, "pop", err)
 
 }
