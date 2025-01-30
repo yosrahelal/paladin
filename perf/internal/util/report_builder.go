@@ -33,7 +33,7 @@ func (r *Report) GenerateHTML() error {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Firefly: Performance Report</title>
+        <title>Paladin: Performance Report</title>
         <style>
             html,
             body {
@@ -156,8 +156,6 @@ func (r *Report) GenerateHTML() error {
     <body>
         <section class="main">
             <aside class="sidebar">
-                <img class="sidebar-logo" src="https://www.hyperledger.org/hubfs/hyperledger-firefly_color.png"
-                    loading="lazy" alt="Firefly" height="40" class="header-brand-image">
                 <ul class="sidebar-list">
                     <li class="sidebar-list-item">
                         <a class="sidebar-list-item-link" href="#test-configuration">
@@ -172,7 +170,7 @@ func (r *Report) GenerateHTML() error {
                 </ul>
             </aside>
             <main class="content">
-                <h1>Firefly Performance Report</h1>
+                <h1>Paladin Performance Report</h1>
                 <p>Version: v0.1.0</p>
                 <p>Test instance name: {{.TestInstanceName}}</p>
                 <section id="test-configuration">

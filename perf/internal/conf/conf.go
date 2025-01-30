@@ -42,44 +42,44 @@ type RunnerConfig struct {
 }
 
 type PerformanceTestConfig struct {
-	LogLevel   string                   `yaml:"logLevel" json:"logLevel"`
-	Instances  []InstanceConfig         `json:"instances" yaml:"instances"`
-	WSConfig   pldconf.WSClientConfig   `json:"wsConfig,omitempty" yaml:"wsConfig,omitempty"`
-	HTTPConfig pldconf.HTTPClientConfig `json:"httpConfig,omitempty" yaml:"httpConfig,omitempty"`
-	Daemon     bool                     `json:"daemon,omitempty" yaml:"daemon,omitempty"`
-	Nodes      []NodeConfig             `yaml:"nodes" json:"nodes"`
-	LogEvents  bool                     `json:"logEvents,omitempty" yaml:"logEvents,omitempty"`
+	LogLevel   string                   `json:"logLevel"`
+	Instances  []InstanceConfig         `json:"instances"`
+	WSConfig   pldconf.WSClientConfig   `json:"wsConfig,omitempty"`
+	HTTPConfig pldconf.HTTPClientConfig `json:"httpConfig,omitempty"`
+	Daemon     bool                     `json:"daemon,omitempty"`
+	Nodes      []NodeConfig             `json:"nodes"`
+	LogEvents  bool                     `json:"logEvents,omitempty"`
 }
 
 type InstanceConfig struct {
-	Name                    string           `yaml:"name" json:"name"`
-	Tests                   []TestCaseConfig `yaml:"tests" json:"tests"`
-	Length                  time.Duration    `yaml:"length" json:"length"`
-	NodeIndex               int              `json:"nodeIndex" yaml:"nodeIndex"`
-	SigningKey              string           `json:"signingKey,omitempty" yaml:"signingKey,omitempty"`
-	ContractOptions         ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
-	MaxTimePerAction        time.Duration    `json:"maxTimePerAction,omitempty" yaml:"maxTimePerAction,omitempty"`
-	MaxActions              int64            `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
-	RampLength              time.Duration    `json:"rampLength,omitempty" yaml:"rampLength,omitempty"`
-	NoWaitSubmission        bool             `json:"noWaitSubmission" yaml:"noWaitSubmission"`
-	MaxSubmissionsPerSecond int              `json:"maxSubmissionsPerSecond" yaml:"maxSubmissionsPerSecond"`
-	DelinquentAction        string           `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
+	Name                    string           `json:"name"`
+	Tests                   []TestCaseConfig `json:"tests"`
+	Length                  time.Duration    `json:"length"`
+	NodeIndex               int              `json:"nodeIndex"`
+	SigningKey              string           `json:"signingKey,omitempty"`
+	ContractOptions         ContractOptions  `json:"contractOptions,omitempty"`
+	MaxTimePerAction        time.Duration    `json:"maxTimePerAction,omitempty"`
+	MaxActions              int64            `json:"maxActions,omitempty"`
+	RampLength              time.Duration    `json:"rampLength,omitempty"`
+	NoWaitSubmission        bool             `json:"noWaitSubmission"`
+	MaxSubmissionsPerSecond int              `json:"maxSubmissionsPerSecond"`
+	DelinquentAction        string           `json:"delinquentAction,omitempty"`
 }
 
 type TestCaseConfig struct {
-	Name           fftypes.FFEnum `json:"name" yaml:"name"`
-	Workers        int            `json:"workers" yaml:"workers"`
-	ActionsPerLoop int            `json:"actionsPerLoop" yaml:"actionsPerLoop"`
+	Name           fftypes.FFEnum `json:"name"`
+	Workers        int            `json:"workers"`
+	ActionsPerLoop int            `json:"actionsPerLoop"`
 }
 
 type NodeConfig struct {
-	Name         string `json:"name" yaml:"name"`
-	HTTPEndpoint string `json:"httpEndpoint" yaml:"httpEndpoint"`
-	WSEndpoint   string `json:"wsEndpoint" yaml:"wsEndpoint"`
+	Name         string `json:"name"`
+	HTTPEndpoint string `json:"httpEndpoint"`
+	WSEndpoint   string `json:"wsEndpoint"`
 }
 
 type ContractOptions struct {
-	Address string `json:"address" yaml:"address"`
+	Address string `json:"address"`
 }
 
 var (
