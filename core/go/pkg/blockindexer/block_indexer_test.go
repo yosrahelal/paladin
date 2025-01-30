@@ -516,8 +516,12 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
-	ch, err := bi.GetConfirmedBlockHeight(ctx)
-	require.NoError(t, err)
+	var ch tktypes.HexUint64
+	for ch < 9 {
+		time.Sleep(10 * time.Millisecond)
+		ch, err = bi.GetConfirmedBlockHeight(ctx)
+		require.NoError(t, err)
+	}
 	assert.Equal(t, tktypes.HexUint64(9), ch)
 }
 
