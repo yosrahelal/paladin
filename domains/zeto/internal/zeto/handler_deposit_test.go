@@ -80,8 +80,8 @@ func TestDepositAssemble(t *testing.T) {
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{
 			TokenName: "tokenContract1",
-			Circuits: map[string]string{
-				"deposit": "circuit-deposit",
+			Circuits: &zetosignerapi.Circuits{
+				"deposit": &zetosignerapi.Circuit{Name: "circuit-deposit"},
 			},
 		},
 	}

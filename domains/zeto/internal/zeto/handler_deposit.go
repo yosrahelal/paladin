@@ -23,7 +23,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
@@ -88,7 +87,7 @@ func (h *depositHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
 
-	payloadBytes, err := h.formatProvingRequest(ctx, outputCoins)
+	payloadBytes, err := h.formatProvingRequest(ctx, outputCoins, (*tx.DomainConfig.Circuits)["deposit"])
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
@@ -177,7 +176,7 @@ func (h *depositHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 	}, nil
 }
 
-func (h *depositHandler) formatProvingRequest(ctx context.Context, outputCoins []*types.ZetoCoin) ([]byte, error) {
+func (h *depositHandler) formatProvingRequest(ctx context.Context, outputCoins []*types.ZetoCoin, circuit *zetosignerapi.Circuit) ([]byte, error) {
 	outputSize := common.GetInputSize(len(outputCoins))
 	outputCommitments := make([]string, outputSize)
 	outputValueInts := make([]uint64, outputSize)
@@ -196,7 +195,7 @@ func (h *depositHandler) formatProvingRequest(ctx context.Context, outputCoins [
 	}
 
 	payload := &corepb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_DEPOSIT,
+		Circuit: circuit.ToProto(),
 		Common: &corepb.ProvingRequestCommon{
 			OutputCommitments: outputCommitments,
 			OutputValues:      outputValueInts,

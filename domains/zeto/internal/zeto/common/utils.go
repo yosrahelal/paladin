@@ -19,43 +19,6 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 )
 
-func IsNullifiersCircuit(circuitId string) bool {
-	nullifierCircuits := []string{
-		constants.CIRCUIT_ANON_NULLIFIER,
-		constants.CIRCUIT_ANON_NULLIFIER_BATCH,
-		constants.CIRCUIT_WITHDRAW_NULLIFIER,
-		constants.CIRCUIT_WITHDRAW_NULLIFIER_BATCH,
-		constants.CIRCUIT_ANON_NULLIFIER_LOCKED,
-		constants.CIRCUIT_ANON_NULLIFIER_LOCKED_BATCH,
-	}
-	for _, c := range nullifierCircuits {
-		if circuitId == c {
-			return true
-		}
-	}
-	return false
-}
-
-func IsEncryptionCircuit(circuitId string) bool {
-	encryptionCircuits := []string{
-		constants.CIRCUIT_ANON_ENC,
-		constants.CIRCUIT_ANON_ENC_BATCH,
-	}
-	for _, c := range encryptionCircuits {
-		if circuitId == c {
-			return true
-		}
-	}
-	return false
-}
-
-func IsBatchCircuit(sizeOfEndorsableStates int) bool {
-	if sizeOfEndorsableStates <= 2 {
-		return false
-	}
-	return true
-}
-
 func IsNullifiersToken(tokenName string) bool {
 	return tokenName == constants.TOKEN_ANON_NULLIFIER
 }

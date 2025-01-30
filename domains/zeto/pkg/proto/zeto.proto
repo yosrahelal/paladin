@@ -18,8 +18,15 @@ syntax = "proto3";
 package io.kaleido.paladin.kata.zeto;
 option go_package = "pkg/proto";
 
+message Circuit {
+  string name = 1;
+  string type = 2;
+  bool usesNullifiers = 3;
+  bool usesEncryption = 4;
+}
+
 message ProvingRequest {
-  string circuitId = 1;
+  Circuit circuit = 1;
   ProvingRequestCommon common = 2;
   bytes extras = 3;
 }

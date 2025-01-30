@@ -25,7 +25,6 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
@@ -113,7 +112,7 @@ func (h *withdrawHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := h.formatProvingRequest(ctx, inputCoins, outputCoin, tx.DomainConfig.Circuits["withdraw"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
+	payloadBytes, err := h.formatProvingRequest(ctx, inputCoins, outputCoin, (*tx.DomainConfig.Circuits)["withdraw"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
@@ -219,7 +218,7 @@ func (h *withdrawHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	}, nil
 }
 
-func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins []*types.ZetoCoin, outputCoin *types.ZetoCoin, circuitId, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
+func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins []*types.ZetoCoin, outputCoin *types.ZetoCoin, circuit *zetosignerapi.Circuit, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
 	inputSize := common.GetInputSize(len(inputCoins))
 	inputCommitments := make([]string, inputSize)
 	inputValueInts := make([]uint64, inputSize)
@@ -251,7 +250,7 @@ func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins [
 	outputOwner := outputCoin.Owner.String()
 
 	var extras []byte
-	if common.IsNullifiersCircuit(circuitId) {
+	if circuit.UsesNullifiers {
 		proofs, extrasObj, err := generateMerkleProofs(ctx, h.zeto, tokenName, stateQueryContext, contractAddress, inputCoins)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
@@ -268,7 +267,7 @@ func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins [
 	}
 
 	payload := &corepb.ProvingRequest{
-		CircuitId: getCircuitId(tokenName),
+		Circuit: circuit.ToProto(),
 		Common: &corepb.ProvingRequestCommon{
 			InputCommitments:  inputCommitments,
 			InputValues:       inputValueInts,
@@ -286,16 +285,6 @@ func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins [
 	}
 
 	return proto.Marshal(payload)
-}
-
-func getCircuitId(tokenName string) string {
-	isNullifier := common.IsNullifiersToken(tokenName)
-
-	if isNullifier {
-		return constants.CIRCUIT_WITHDRAW_NULLIFIER
-	} else {
-		return constants.CIRCUIT_WITHDRAW
-	}
 }
 
 func getWithdrawABI(tokenName string) *abi.Entry {

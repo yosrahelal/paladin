@@ -26,7 +26,6 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	protoz "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
@@ -70,14 +69,11 @@ func TestConfigureDomain(t *testing.T) {
 
 func TestDecodeDomainConfig(t *testing.T) {
 	config := &types.DomainInstanceConfig{
-		Circuits: map[string]string{
-			"deposit":             "circuit-deposit",
-			"withdraw":            "circuit-withdraw",
-			"withdrawBatch":       "circuit-withdraw-batch",
-			"transfer":            "circuit-transfer",
-			"transferBatch":       "circuit-transfer-batch",
-			"transferLocked":      "circuit-transfer-locked",
-			"transferLockedBatch": "circuit-transfer-locked-batch",
+		Circuits: &zetosignerapi.Circuits{
+			"deposit":        &zetosignerapi.Circuit{Name: "circuit-deposit"},
+			"withdraw":       &zetosignerapi.Circuit{Name: "circuit-withdraw"},
+			"transfer":       &zetosignerapi.Circuit{Name: "circuit-transfer"},
+			"transferLocked": &zetosignerapi.Circuit{Name: "circuit-transfer-locked"},
 		},
 		TokenName: "token-name",
 	}
@@ -144,14 +140,11 @@ func TestPrepareDeploy(t *testing.T) {
 			Implementations: []*types.DomainContract{
 				{
 					Name: "testToken1",
-					Circuits: map[string]string{
-						"deposit":             "circuit-deposit",
-						"withdraw":            "circuit-withdraw",
-						"withdrawBatch":       "circuit-withdraw-batch",
-						"transfer":            "circuit-transfer",
-						"transferBatch":       "circuit-transfer-batch",
-						"transferLocked":      "circuit-transfer-locked",
-						"transferLockedBatch": "circuit-transfer-locked-batch",
+					Circuits: &zetosignerapi.Circuits{
+						"deposit":        &zetosignerapi.Circuit{Name: "circuit-deposit"},
+						"withdraw":       &zetosignerapi.Circuit{Name: "circuit-withdraw"},
+						"transfer":       &zetosignerapi.Circuit{Name: "circuit-transfer"},
+						"transferLocked": &zetosignerapi.Circuit{Name: "circuit-transfer-locked"},
 					},
 				},
 			},
@@ -191,14 +184,11 @@ func TestInitContract(t *testing.T) {
 	require.False(t, res.Valid)
 
 	conf := types.DomainInstanceConfig{
-		Circuits: map[string]string{
-			"deposit":             "circuit-deposit",
-			"withdraw":            "circuit-withdraw",
-			"withdrawBatch":       "circuit-withdraw-batch",
-			"transfer":            "circuit-transfer",
-			"transferBatch":       "circuit-transfer-batch",
-			"transferLocked":      "circuit-transfer-locked",
-			"transferLockedBatch": "circuit-transfer-locked-batch",
+		Circuits: &zetosignerapi.Circuits{
+			"deposit":        &zetosignerapi.Circuit{Name: "circuit-deposit"},
+			"withdraw":       &zetosignerapi.Circuit{Name: "circuit-withdraw"},
+			"transfer":       &zetosignerapi.Circuit{Name: "circuit-transfer"},
+			"transferLocked": &zetosignerapi.Circuit{Name: "circuit-transfer-locked"},
 		},
 		TokenName: "testToken1",
 	}
@@ -211,13 +201,10 @@ func TestInitContract(t *testing.T) {
 	require.True(t, res.Valid)
 	require.JSONEq(t, `{
 		"circuits": {
-			"deposit": "circuit-deposit",
-			"withdraw": "circuit-withdraw",
-			"withdrawBatch": "circuit-withdraw-batch",
-			"transfer": "circuit-transfer",
-			"transferBatch": "circuit-transfer-batch",
-			"transferLocked": "circuit-transfer-locked",
-			"transferLockedBatch": "circuit-transfer-locked-batch"
+			"deposit": { "name": "circuit-deposit", "type": "", "usesEncryption": false, "usesNullifiers": false },
+			"withdraw": { "name": "circuit-withdraw", "type": "", "usesEncryption": false, "usesNullifiers": false },
+			"transfer": { "name": "circuit-transfer", "type": "", "usesEncryption": false, "usesNullifiers": false },
+			"transferLocked": { "name": "circuit-transfer-locked", "type": "", "usesEncryption": false, "usesNullifiers": false }
 		},
 		"tokenName": "testToken1"
 	}`, res.ContractConfig.ContractConfigJson)
@@ -248,8 +235,8 @@ func TestInitTransaction(t *testing.T) {
 	assert.ErrorContains(t, err, "PD210008")
 
 	conf := types.DomainInstanceConfig{
-		Circuits: map[string]string{
-			"deposit": "circuit-deposit",
+		Circuits: &zetosignerapi.Circuits{
+			"deposit": &zetosignerapi.Circuit{Name: "circuit-deposit"},
 		},
 		TokenName: "testToken1",
 	}
@@ -327,8 +314,8 @@ func TestAssembleTransaction(t *testing.T) {
 
 	req.Transaction.FunctionSignature = "function mint(TransferParam[] memory mints) external { }; struct TransferParam { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
-		Circuits: map[string]string{
-			"deposit": "circuit-deposit",
+		Circuits: &zetosignerapi.Circuits{
+			"deposit": &zetosignerapi.Circuit{Name: "circuit-deposit"},
 		},
 		TokenName: "testToken1",
 	}
@@ -355,8 +342,8 @@ func TestEndorseTransaction(t *testing.T) {
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
 	req.Transaction.FunctionSignature = "function mint(TransferParam[] memory mints) external { }; struct TransferParam { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
-		Circuits: map[string]string{
-			"deposit": "circuit-deposit",
+		Circuits: &zetosignerapi.Circuits{
+			"deposit": &zetosignerapi.Circuit{Name: "circuit-deposit"},
 		},
 		TokenName: "testToken1",
 	}
@@ -373,8 +360,8 @@ func TestPrepareTransaction(t *testing.T) {
 			Implementations: []*types.DomainContract{
 				{
 					Name: "testToken1",
-					Circuits: map[string]string{
-						"deposit": "circuit-deposit",
+					Circuits: &zetosignerapi.Circuits{
+						"deposit": &zetosignerapi.Circuit{Name: "circuit-deposit"},
 					},
 				},
 			},
@@ -400,8 +387,8 @@ func TestPrepareTransaction(t *testing.T) {
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
 	req.Transaction.FunctionSignature = "function mint(TransferParam[] memory mints) external { }; struct TransferParam { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
-		Circuits: map[string]string{
-			"deposit": "circuit-deposit",
+		Circuits: &zetosignerapi.Circuits{
+			"deposit": &zetosignerapi.Circuit{Name: "circuit-deposit"},
 		},
 		TokenName: "testToken1",
 	}
@@ -602,7 +589,12 @@ func TestSign(t *testing.T) {
 	bobPubKey := zetosigner.EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	provingReq := protoz.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON,
+		Circuit: &protoz.Circuit{
+			Name:           "anon",
+			Type:           "transfer",
+			UsesNullifiers: false,
+			UsesEncryption: false,
+		},
 		Common: &protoz.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,

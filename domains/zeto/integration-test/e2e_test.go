@@ -99,13 +99,13 @@ func (s *zetoDomainTestSuite) TestZeto_AnonBatch() {
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true, false)
 }
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false, false)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false, false)
+}
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
+}
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false, true)

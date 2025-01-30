@@ -29,6 +29,7 @@ import (
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
@@ -228,7 +229,7 @@ func generateMerkleProofs(ctx context.Context, zeto *Zeto, tokenName string, sta
 // formatTransferProvingRequest formats the proving request for a transfer transaction.
 // the same function is used for both the transfer and lock transactions because they
 // both require the same proof from the transfer circuit
-func formatTransferProvingRequest(ctx context.Context, zeto *Zeto, inputCoins, outputCoins []*types.ZetoCoin, circuitId, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
+func formatTransferProvingRequest(ctx context.Context, zeto *Zeto, inputCoins, outputCoins []*types.ZetoCoin, circuit *zetosignerapi.Circuit, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
 	inputSize := common.GetInputSize(len(inputCoins))
 	inputCommitments := make([]string, inputSize)
 	inputValueInts := make([]uint64, inputSize)
@@ -265,7 +266,7 @@ func formatTransferProvingRequest(ctx context.Context, zeto *Zeto, inputCoins, o
 	}
 
 	var extras []byte
-	if common.IsNullifiersCircuit(circuitId) {
+	if circuit.UsesNullifiers {
 		proofs, extrasObj, err := generateMerkleProofs(ctx, zeto, tokenName, stateQueryContext, contractAddress, inputCoins)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
@@ -282,7 +283,7 @@ func formatTransferProvingRequest(ctx context.Context, zeto *Zeto, inputCoins, o
 	}
 
 	payload := &corepb.ProvingRequest{
-		CircuitId: circuitId,
+		Circuit: circuit.ToProto(),
 		Common: &corepb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,

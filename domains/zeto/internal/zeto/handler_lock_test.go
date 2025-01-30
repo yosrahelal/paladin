@@ -56,8 +56,8 @@ func TestLockValidateParams(t *testing.T) {
 					Implementations: []*types.DomainContract{
 						{
 							Name: "Zeto_Anon",
-							Circuits: map[string]string{
-								"deposit": "circuit-deposit",
+							Circuits: &zetosignerapi.Circuits{
+								"deposit": &zetosignerapi.Circuit{Name: "circuit-deposit"},
 							},
 						},
 					},
@@ -67,8 +67,8 @@ func TestLockValidateParams(t *testing.T) {
 	}
 	config := &types.DomainInstanceConfig{
 		TokenName: "test",
-		Circuits: map[string]string{
-			"deposit": "circuit-deposit",
+		Circuits: &zetosignerapi.Circuits{
+			"deposit": &zetosignerapi.Circuit{Name: "circuit-deposit"},
 		},
 	}
 	ctx := context.Background()
@@ -141,8 +141,9 @@ func TestLockAssemble(t *testing.T) {
 
 	config := &types.DomainInstanceConfig{
 		TokenName: "test",
-		Circuits: map[string]string{
-			"deposit": "circuit-deposit",
+		Circuits: &zetosignerapi.Circuits{
+			"deposit":  &zetosignerapi.Circuit{Name: "circuit-deposit"},
+			"transfer": &zetosignerapi.Circuit{Name: "circuit-transfer"},
 		},
 	}
 
@@ -217,8 +218,8 @@ func TestLockPrepare(t *testing.T) {
 					Implementations: []*types.DomainContract{
 						{
 							Name: "Zeto_Anon",
-							Circuits: map[string]string{
-								"deposit": "circuit-deposit",
+							Circuits: &zetosignerapi.Circuits{
+								"deposit": &zetosignerapi.Circuit{Name: "circuit-deposit"},
 							},
 						},
 					},

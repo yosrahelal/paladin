@@ -20,7 +20,6 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
-	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"google.golang.org/protobuf/proto"
 )
@@ -32,22 +31,22 @@ func decodeProvingRequest(ctx context.Context, payload []byte) (*pb.ProvingReque
 	if err != nil {
 		return nil, nil, err
 	}
-	if common.IsEncryptionCircuit(inputs.CircuitId) {
+	if inputs.Circuit.UsesEncryption {
 		encExtras := pb.ProvingRequestExtras_Encryption{
 			EncryptionNonce: "",
 		}
 		if len(inputs.Extras) > 0 {
 			err := proto.Unmarshal(inputs.Extras, &encExtras)
 			if err != nil {
-				return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalProvingReqExtras, inputs.CircuitId, err)
+				return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalProvingReqExtras, inputs.Circuit.Name, err)
 			}
 		}
 		return &inputs, &encExtras, nil
-	} else if common.IsNullifiersCircuit(inputs.CircuitId) {
+	} else if inputs.Circuit.UsesNullifiers {
 		var nullifierExtras pb.ProvingRequestExtras_Nullifiers
 		err := proto.Unmarshal(inputs.Extras, &nullifierExtras)
 		if err != nil {
-			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalProvingReqExtras, inputs.CircuitId, err)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalProvingReqExtras, inputs.Circuit.Name, err)
 		}
 		return &inputs, &nullifierExtras, nil
 	}

@@ -139,8 +139,8 @@ func (h *lockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
 	allOutputCoins := slices.Concat(outputCoins, lockedOutputCoins)
-	circuitId := tx.DomainConfig.Circuits["transfer"] // use the transfer circuit for locking proofs
-	payloadBytes, err := formatTransferProvingRequest(ctx, h.zeto, inputCoins, allOutputCoins, circuitId, tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
+	circuit := (*tx.DomainConfig.Circuits)["transfer"] // use the transfer circuit for locking proofs
+	payloadBytes, err := formatTransferProvingRequest(ctx, h.zeto, inputCoins, allOutputCoins, circuit, tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}

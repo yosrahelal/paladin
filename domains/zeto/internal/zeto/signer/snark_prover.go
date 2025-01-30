@@ -31,7 +31,6 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
@@ -113,18 +112,19 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		return nil, err
 	}
 	// Perform proof generation
-	if inputs.CircuitId == "" {
+	if inputs.Circuit.Name == "" {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorMissingCircuitID)
 	}
 	if err := validateInputs(ctx, inputs.Common); err != nil {
 		return nil, err
 	}
 
-	circuitId := getCircuitId(inputs)
+	circuit := getCircuit(inputs)
 
 	// obtain a slot for the proof generation for this specific circuit
 	// check whether this is a controlling channel
 	sp.circuitsWorkerIndexChanRWLock.RLock()
+	circuitId := circuit.Name
 	ccChan, chanelFound := sp.circuitsWorkerIndexChan[circuitId]
 	sp.circuitsWorkerIndexChanRWLock.RUnlock()
 	if !chanelFound {
@@ -156,15 +156,15 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 	// Perform proof generation
 	// Read lock to check the cache
 	sp.proverCacheRWLock.RLock()
-	circuit, _ := sp.circuitsCache.Get(workerID)
+	witnessCalculator, _ := sp.circuitsCache.Get(workerID)
 	provingKey, _ := sp.provingKeysCache.Get(workerID)
 	sp.proverCacheRWLock.RUnlock() // release the lock, happy path, 1 lock is good enough
-	if circuit == nil || provingKey == nil {
+	if witnessCalculator == nil || provingKey == nil {
 		sp.proverCacheRWLock.Lock()
 		// obtain the W&R lock and check again
-		circuit, _ = sp.circuitsCache.Get(workerID)
+		witnessCalculator, _ = sp.circuitsCache.Get(workerID)
 		provingKey, _ = sp.provingKeysCache.Get(workerID)
-		if circuit == nil || provingKey == nil {
+		if witnessCalculator == nil || provingKey == nil {
 			// the generated WASM instance can only generate one proof at a time, circuitsWorkerIndexChan is used to ensure only 1 proof request
 			// is served per WASM instance at any given time
 			c, p, err := sp.circuitLoader(ctx, circuitId, sp.zkpProverConfig)
@@ -173,12 +173,13 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 			}
 			sp.circuitsCache.Set(workerID, c)
 			sp.provingKeysCache.Set(workerID, p)
-			circuit = c
+			witnessCalculator = c
 			provingKey = p
 		}
 		sp.proverCacheRWLock.Unlock()
 	}
-	wtns, err := calculateWitness(ctx, circuitId, inputs.Common, extras, keyEntry, circuit)
+
+	wtns, err := calculateWitness(ctx, circuit, inputs.Common, extras, keyEntry, witnessCalculator)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +189,7 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		return nil, err
 	}
 
-	proofBytes, err := serializeProofResponse(circuitId, proof)
+	proofBytes, err := serializeProofResponse(circuit, proof)
 	if err != nil {
 		return nil, err
 	}
@@ -196,12 +197,14 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 	return proofBytes, nil
 }
 
-func getCircuitId(inputs *pb.ProvingRequest) string {
-	circuitId := inputs.CircuitId
+func getCircuit(inputs *pb.ProvingRequest) *zetosignerapi.Circuit {
+	circuitId := inputs.Circuit.Name
 	if len(inputs.Common.InputCommitments) > 2 {
-		circuitId += "_batch"
+		circuitId = getBatchCircuit(circuitId)
 	}
-	return circuitId
+	ret := zetosignerapi.NewCircuitFromProto(inputs.Circuit)
+	ret.Name = circuitId
+	return ret
 }
 
 func validateInputs(ctx context.Context, inputs *pb.ProvingRequestCommon) error {
@@ -214,7 +217,7 @@ func validateInputs(ctx context.Context, inputs *pb.ProvingRequestCommon) error 
 	return nil
 }
 
-func serializeProofResponse(circuitId string, proof *types.ZKProof) ([]byte, error) {
+func serializeProofResponse(circuit *zetosignerapi.Circuit, proof *types.ZKProof) ([]byte, error) {
 	snark := pb.SnarkProof{}
 	snark.A = proof.Proof.A
 	snark.B = make([]*pb.B_Item, 0, len(proof.Proof.B))
@@ -226,27 +229,36 @@ func serializeProofResponse(circuitId string, proof *types.ZKProof) ([]byte, err
 	snark.C = proof.Proof.C
 
 	publicInputs := make(map[string]string)
-	switch circuitId {
-	case constants.CIRCUIT_ANON_ENC:
-		publicInputs["ecdhPublicKey"] = strings.Join(proof.PubSignals[0:2], ",")
-		publicInputs["encryptedValues"] = strings.Join(proof.PubSignals[2:10], ",")
-		publicInputs["encryptionNonce"] = proof.PubSignals[14]
-	case constants.CIRCUIT_ANON_ENC_BATCH:
-		publicInputs["ecdhPublicKey"] = strings.Join(proof.PubSignals[0:2], ",")
-		publicInputs["encryptedValues"] = strings.Join(proof.PubSignals[2:42], ",")
-		publicInputs["encryptionNonce"] = proof.PubSignals[62]
-	case constants.CIRCUIT_ANON_NULLIFIER:
-		publicInputs["nullifiers"] = strings.Join(proof.PubSignals[:2], ",")
-		publicInputs["root"] = proof.PubSignals[2]
-	case constants.CIRCUIT_ANON_NULLIFIER_BATCH:
-		publicInputs["nullifiers"] = strings.Join(proof.PubSignals[:10], ",")
-		publicInputs["root"] = proof.PubSignals[10]
-	case constants.CIRCUIT_WITHDRAW_NULLIFIER:
-		publicInputs["nullifiers"] = strings.Join(proof.PubSignals[1:3], ",")
-		publicInputs["root"] = proof.PubSignals[3]
-	case constants.CIRCUIT_WITHDRAW_NULLIFIER_BATCH:
-		publicInputs["nullifiers"] = strings.Join(proof.PubSignals[1:11], ",")
-		publicInputs["root"] = proof.PubSignals[11]
+	if circuit.Type == zetosignerapi.Transfer {
+		if circuit.UsesEncryption {
+			if !IsBatchCircuit(circuit.Name) {
+				publicInputs["ecdhPublicKey"] = strings.Join(proof.PubSignals[0:2], ",")
+				publicInputs["encryptedValues"] = strings.Join(proof.PubSignals[2:10], ",")
+				publicInputs["encryptionNonce"] = proof.PubSignals[14]
+			} else {
+				publicInputs["ecdhPublicKey"] = strings.Join(proof.PubSignals[0:2], ",")
+				publicInputs["encryptedValues"] = strings.Join(proof.PubSignals[2:42], ",")
+				publicInputs["encryptionNonce"] = proof.PubSignals[62]
+			}
+		} else if circuit.UsesNullifiers {
+			if !IsBatchCircuit(circuit.Name) {
+				publicInputs["nullifiers"] = strings.Join(proof.PubSignals[0:2], ",")
+				publicInputs["root"] = proof.PubSignals[2]
+			} else {
+				publicInputs["nullifiers"] = strings.Join(proof.PubSignals[0:10], ",")
+				publicInputs["root"] = proof.PubSignals[10]
+			}
+		}
+	} else if circuit.Type == zetosignerapi.Withdraw {
+		if circuit.UsesNullifiers {
+			if !IsBatchCircuit(circuit.Name) {
+				publicInputs["nullifiers"] = strings.Join(proof.PubSignals[1:3], ",")
+				publicInputs["root"] = proof.PubSignals[3]
+			} else {
+				publicInputs["nullifiers"] = strings.Join(proof.PubSignals[1:11], ",")
+				publicInputs["root"] = proof.PubSignals[11]
+			}
+		}
 	}
 
 	res := pb.ProvingResponse{
@@ -257,40 +269,43 @@ func serializeProofResponse(circuitId string, proof *types.ZKProof) ([]byte, err
 	return proto.Marshal(&res)
 }
 
-func calculateWitness(ctx context.Context, circuitId string, commonInputs *pb.ProvingRequestCommon, extras interface{}, keyEntry *core.KeyEntry, circuit witness.Calculator) ([]byte, error) {
+func calculateWitness(ctx context.Context, circuit *zetosignerapi.Circuit, commonInputs *pb.ProvingRequestCommon, extras interface{}, keyEntry *core.KeyEntry, witnessCalculator witness.Calculator) ([]byte, error) {
 	inputs, err := buildCircuitInputs(ctx, commonInputs)
 	if err != nil {
 		return nil, err
 	}
 
 	var witnessInputs map[string]any
-	switch circuitId {
-	case constants.CIRCUIT_ANON, constants.CIRCUIT_ANON_BATCH:
-		witnessInputs = assembleInputs_anon(inputs, keyEntry)
-	case constants.CIRCUIT_ANON_ENC, constants.CIRCUIT_ANON_ENC_BATCH:
-		witnessInputs, err = assembleInputs_anon_enc(ctx, inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
-		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
-		}
-	case constants.CIRCUIT_ANON_NULLIFIER, constants.CIRCUIT_ANON_NULLIFIER_BATCH:
-		witnessInputs, err = assembleInputs_anon_nullifier(ctx, inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
-		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
-		}
-	case constants.CIRCUIT_DEPOSIT:
+	switch circuit.Type {
+	case zetosignerapi.Deposit:
 		witnessInputs = assembleInputs_deposit(inputs)
-	case constants.CIRCUIT_WITHDRAW, constants.CIRCUIT_WITHDRAW_BATCH:
-		witnessInputs = assembleInputs_withdraw(inputs, keyEntry)
-	case constants.CIRCUIT_WITHDRAW_NULLIFIER, constants.CIRCUIT_WITHDRAW_NULLIFIER_BATCH:
-		witnessInputs, err = assembleInputs_withdraw_nullifier(ctx, inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
-		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
+	case zetosignerapi.Withdraw:
+		if circuit.UsesNullifiers {
+			witnessInputs, err = assembleInputs_withdraw_nullifier(ctx, inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
+			if err != nil {
+				return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
+			}
+		} else {
+			witnessInputs = assembleInputs_withdraw(inputs, keyEntry)
 		}
-	case constants.CIRCUIT_LOCK, constants.CIRCUIT_LOCK_BATCH:
-		witnessInputs = assembleInputs_lock(inputs, keyEntry)
+	case zetosignerapi.Transfer:
+		if circuit.UsesNullifiers {
+			witnessInputs, err = assembleInputs_anon_nullifier(ctx, inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
+			if err != nil {
+				return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
+			}
+		} else if circuit.UsesEncryption {
+			witnessInputs, err = assembleInputs_anon_enc(ctx, inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
+			if err != nil {
+				return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
+			}
+		} else {
+			witnessInputs = assembleInputs_anon(inputs, keyEntry)
+		}
 	}
+	// witnessInputs = assembleInputs_lock(inputs, keyEntry)
 
-	wtns, err := circuit.CalculateWTNSBin(witnessInputs, true)
+	wtns, err := witnessCalculator.CalculateWTNSBin(witnessInputs, true)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorCalcWitness, err)
 	}

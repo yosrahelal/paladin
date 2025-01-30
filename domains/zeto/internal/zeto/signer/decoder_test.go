@@ -19,7 +19,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/stretchr/testify/assert"
@@ -29,9 +28,13 @@ import (
 
 func TestDecodeProvingRequest_AnonEnc(t *testing.T) {
 	common := pb.ProvingRequestCommon{}
+	circuit := pb.Circuit{
+		Name:           "anon_enc",
+		UsesEncryption: true,
+	}
 	req := &pb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON_ENC,
-		Common:    &common,
+		Circuit: &circuit,
+		Common:  &common,
 	}
 	bytes, err := proto.Marshal(req)
 	require.NoError(t, err)
@@ -56,9 +59,13 @@ func TestDecodeProvingRequest_AnonEnc(t *testing.T) {
 
 func TestDecodeProvingRequest_AnonNullifier(t *testing.T) {
 	common := pb.ProvingRequestCommon{}
+	circuit := pb.Circuit{
+		Name:           "anon_nullifier",
+		UsesNullifiers: true,
+	}
 	req := &pb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON_NULLIFIER,
-		Common:    &common,
+		Circuit: &circuit,
+		Common:  &common,
 	}
 	encExtras := &pb.ProvingRequestExtras_Nullifiers{
 		Root: "123456",
@@ -91,10 +98,14 @@ func TestDecodeProvingRequest_AnonNullifier(t *testing.T) {
 
 func TestDecodeProvingRequest_Fail(t *testing.T) {
 	common := pb.ProvingRequestCommon{}
+	circuit := pb.Circuit{
+		Name:           "anon_enc",
+		UsesEncryption: true,
+	}
 	req := &pb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON_ENC,
-		Common:    &common,
-		Extras:    []byte("invalid"),
+		Circuit: &circuit,
+		Common:  &common,
+		Extras:  []byte("invalid"),
 	}
 	bytes, err := proto.Marshal(req)
 	require.NoError(t, err)
@@ -106,7 +117,11 @@ func TestDecodeProvingRequest_Fail(t *testing.T) {
 	_, _, err = decodeProvingRequest(ctx, signReq.Payload)
 	assert.ErrorContains(t, err, "PD210076: Failed to unmarshal proving request extras for circuit anon_enc")
 
-	req.CircuitId = constants.CIRCUIT_ANON_NULLIFIER
+	circuit = pb.Circuit{
+		Name:           "anon_nullifier",
+		UsesNullifiers: true,
+	}
+	req.Circuit = &circuit
 	bytes, err = proto.Marshal(req)
 	assert.NoError(t, err)
 

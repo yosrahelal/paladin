@@ -29,7 +29,6 @@ import (
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/stretchr/testify/assert"
@@ -71,7 +70,12 @@ func TestSnarkProve(t *testing.T) {
 	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON,
+		Circuit: &pb.Circuit{
+			Name:           "anon",
+			Type:           string(zetosignerapi.Transfer),
+			UsesNullifiers: false,
+			UsesEncryption: false,
+		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,
@@ -158,7 +162,12 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON,
+		Circuit: &pb.Circuit{
+			Name:           "anon",
+			Type:           string(zetosignerapi.Transfer),
+			UsesNullifiers: false,
+			UsesEncryption: false,
+		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,
@@ -232,6 +241,11 @@ func TestSnarkProveErrorCircuit(t *testing.T) {
 
 	// leave the circuit ID empty
 	req := pb.ProvingRequest{
+		Circuit: &pb.Circuit{
+			Type:           string(zetosignerapi.Withdraw),
+			UsesNullifiers: false,
+			UsesEncryption: false,
+		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
 			InputValues:      []uint64{30, 40},
@@ -260,7 +274,12 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	alice := NewTestKeypair()
 
 	req := pb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON,
+		Circuit: &pb.Circuit{
+			Name:           "anon",
+			Type:           string(zetosignerapi.Transfer),
+			UsesNullifiers: false,
+			UsesEncryption: false,
+		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
 			InputValues:      []uint64{30, 40},
@@ -308,7 +327,12 @@ func TestSnarkProveErrorLoadcircuits(t *testing.T) {
 	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON,
+		Circuit: &pb.Circuit{
+			Name:           "anon",
+			Type:           string(zetosignerapi.Transfer),
+			UsesNullifiers: false,
+			UsesEncryption: false,
+		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,
@@ -354,7 +378,12 @@ func TestSnarkProveErrorGenerateProof(t *testing.T) {
 	outputValueInts := []uint64{outputValues[0].Uint64(), outputValues[1].Uint64()}
 
 	req := pb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON,
+		Circuit: &pb.Circuit{
+			Name:           "anon",
+			Type:           string(zetosignerapi.Transfer),
+			UsesNullifiers: false,
+			UsesEncryption: false,
+		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,
@@ -404,7 +433,12 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON,
+		Circuit: &pb.Circuit{
+			Name:           "anon",
+			Type:           string(zetosignerapi.Transfer),
+			UsesNullifiers: false,
+			UsesEncryption: false,
+		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
 			InputValues:      inputValueInts,
@@ -421,7 +455,12 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 	assert.ErrorContains(t, err, "PD210084: Failed to parse input commitment")
 
 	req = pb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON,
+		Circuit: &pb.Circuit{
+			Name:           "anon",
+			Type:           string(zetosignerapi.Transfer),
+			UsesNullifiers: false,
+			UsesEncryption: false,
+		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,
@@ -479,11 +518,23 @@ func TestSerializeProofResponse(t *testing.T) {
 		},
 		PubSignals: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"},
 	}
-	bytes, err := serializeProofResponse(constants.CIRCUIT_ANON_ENC, &snark)
+	circuit := &zetosignerapi.Circuit{
+		Name:           "anon_enc",
+		Type:           zetosignerapi.Transfer,
+		UsesNullifiers: false,
+		UsesEncryption: true,
+	}
+	bytes, err := serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
 	assert.Equal(t, 118, len(bytes))
 
-	bytes, err = serializeProofResponse(constants.CIRCUIT_ANON_NULLIFIER, &snark)
+	circuit = &zetosignerapi.Circuit{
+		Name:           "anon_nullifier",
+		Type:           zetosignerapi.Transfer,
+		UsesNullifiers: true,
+		UsesEncryption: false,
+	}
+	bytes, err = serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
 	assert.Equal(t, 66, len(bytes))
 
@@ -492,16 +543,34 @@ func TestSerializeProofResponse(t *testing.T) {
 		"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
 		"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
 		"1", "2", "3"}
-	bytes, err = serializeProofResponse(constants.CIRCUIT_ANON_ENC_BATCH, &snark)
+	circuit = &zetosignerapi.Circuit{
+		Name:           "anon_enc_batch",
+		Type:           zetosignerapi.Transfer,
+		UsesNullifiers: false,
+		UsesEncryption: true,
+	}
+	bytes, err = serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
 	assert.Equal(t, 202, len(bytes))
 
 	snark.PubSignals = []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"}
-	bytes, err = serializeProofResponse(constants.CIRCUIT_ANON_NULLIFIER_BATCH, &snark)
+	circuit = &zetosignerapi.Circuit{
+		Name:           "anon_nullifier_batch",
+		Type:           zetosignerapi.Transfer,
+		UsesNullifiers: true,
+		UsesEncryption: false,
+	}
+	bytes, err = serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
 	assert.Equal(t, 84, len(bytes))
 
-	bytes, err = serializeProofResponse(constants.CIRCUIT_WITHDRAW_NULLIFIER, &snark)
+	circuit = &zetosignerapi.Circuit{
+		Name:           "withdraw_nullifier",
+		Type:           zetosignerapi.Withdraw,
+		UsesNullifiers: true,
+		UsesEncryption: false,
+	}
+	bytes, err = serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
 	assert.Equal(t, 66, len(bytes))
 
@@ -510,7 +579,13 @@ func TestSerializeProofResponse(t *testing.T) {
 		"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
 		"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
 		"1", "2", "3"}
-	bytes, err = serializeProofResponse(constants.CIRCUIT_WITHDRAW_NULLIFIER_BATCH, &snark)
+	circuit = &zetosignerapi.Circuit{
+		Name:           "withdraw_nullifier_batch",
+		Type:           zetosignerapi.Withdraw,
+		UsesNullifiers: true,
+		UsesEncryption: false,
+	}
+	bytes, err = serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
 	assert.Equal(t, 85, len(bytes))
 }
@@ -549,17 +624,22 @@ func TestZKPProverInvalidAlgos(t *testing.T) {
 
 func TestGetCircuitId(t *testing.T) {
 	inputs := &pb.ProvingRequest{
-		CircuitId: constants.CIRCUIT_ANON_ENC,
+		Circuit: &pb.Circuit{
+			Name:           "anon_enc",
+			Type:           string(zetosignerapi.Transfer),
+			UsesNullifiers: true,
+			UsesEncryption: false,
+		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
 		},
 	}
-	circuitId := getCircuitId(inputs)
-	assert.Equal(t, constants.CIRCUIT_ANON_ENC, circuitId)
+	circuit := getCircuit(inputs)
+	assert.Equal(t, "anon_enc", circuit.Name)
 
 	inputs.Common.InputCommitments = []string{"input1", "input2", "input3"}
-	circuitId = getCircuitId(inputs)
-	assert.Equal(t, constants.CIRCUIT_ANON_ENC_BATCH, circuitId)
+	circuit = getCircuit(inputs)
+	assert.Equal(t, "anon_enc_batch", circuit.Name)
 }
 
 func TestCalculateWitness(t *testing.T) {
@@ -576,7 +656,13 @@ func TestCalculateWitness(t *testing.T) {
 		OutputOwners:     []string{"7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025", "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"},
 	}
 	ctx := context.Background()
-	_, err := calculateWitness(ctx, constants.CIRCUIT_ANON_ENC, inputs, extras1, nil, nil)
+	circuit := &zetosignerapi.Circuit{
+		Name:           "anon_enc",
+		Type:           zetosignerapi.Transfer,
+		UsesNullifiers: false,
+		UsesEncryption: true,
+	}
+	_, err := calculateWitness(ctx, circuit, inputs, extras1, nil, nil)
 	assert.EqualError(t, err, "PD210099: failed to assemble private inputs for witness calculation. PD210077: Failed to parse encryption nonce")
 
 	extras2 := &pb.ProvingRequestExtras_Nullifiers{
@@ -596,7 +682,13 @@ func TestCalculateWitness(t *testing.T) {
 	keyEntry := &core.KeyEntry{
 		PrivateKeyForZkp: privKey,
 	}
-	_, err = calculateWitness(ctx, constants.CIRCUIT_ANON_NULLIFIER, inputs, extras2, keyEntry, nil)
+	circuit = &zetosignerapi.Circuit{
+		Name:           "anon_nullifier",
+		Type:           zetosignerapi.Transfer,
+		UsesNullifiers: true,
+		UsesEncryption: false,
+	}
+	_, err = calculateWitness(ctx, circuit, inputs, extras2, keyEntry, nil)
 	assert.EqualError(t, err, "PD210099: failed to assemble private inputs for witness calculation. PD210079: Failed to calculate nullifier. inputs values not inside Finite Field")
 
 	inputs = &pb.ProvingRequestCommon{
@@ -604,8 +696,14 @@ func TestCalculateWitness(t *testing.T) {
 		OutputSalts:  []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
 		OutputOwners: []string{"7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025", "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"},
 	}
-	circuit, _ := loadTestCircuit(t)
-	_, err = calculateWitness(ctx, constants.CIRCUIT_DEPOSIT, inputs, nil, keyEntry, circuit)
+	witnessCalculator, _ := loadTestCircuit(t)
+	circuit = &zetosignerapi.Circuit{
+		Name:           "deposit",
+		Type:           zetosignerapi.Deposit,
+		UsesNullifiers: false,
+		UsesEncryption: false,
+	}
+	_, err = calculateWitness(ctx, circuit, inputs, nil, keyEntry, witnessCalculator)
 	assert.ErrorContains(t, err, "PD210100: failed to calculate the witness")
 
 	inputs = &pb.ProvingRequestCommon{
@@ -617,9 +715,21 @@ func TestCalculateWitness(t *testing.T) {
 		OutputSalts:      []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
 		OutputOwners:     []string{"7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025", "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"},
 	}
-	_, err = calculateWitness(ctx, constants.CIRCUIT_WITHDRAW, inputs, nil, keyEntry, circuit)
+	circuit = &zetosignerapi.Circuit{
+		Name:           "withdraw",
+		Type:           zetosignerapi.Withdraw,
+		UsesNullifiers: false,
+		UsesEncryption: false,
+	}
+	_, err = calculateWitness(ctx, circuit, inputs, nil, keyEntry, witnessCalculator)
 	assert.ErrorContains(t, err, "PD210100: failed to calculate the witness")
 
-	_, err = calculateWitness(ctx, constants.CIRCUIT_WITHDRAW_NULLIFIER, inputs, extras2, keyEntry, circuit)
+	circuit = &zetosignerapi.Circuit{
+		Name:           "withdraw_nullifier",
+		Type:           zetosignerapi.Withdraw,
+		UsesNullifiers: true,
+		UsesEncryption: false,
+	}
+	_, err = calculateWitness(ctx, circuit, inputs, extras2, keyEntry, witnessCalculator)
 	assert.EqualError(t, err, "PD210099: failed to assemble private inputs for witness calculation. PD210079: Failed to calculate nullifier. inputs values not inside Finite Field")
 }
