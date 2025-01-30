@@ -17,7 +17,6 @@ package publictxmgr
 
 import (
 	"context"
-	"database/sql/driver"
 	"errors"
 	"fmt"
 	"math/big"
@@ -272,7 +271,9 @@ func expectFuelingEqual(t *testing.T, fuelingTx *pldapi.PublicTx, amountToTransf
 
 func mockAutoFuelTransactionSubmit(m *mocksAndTestControl, bm *BalanceManagerWithInMemoryTracking, uncachedBalance bool) {
 	// Then insert of the auto-fueling transaction
-	m.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
+	m.db.ExpectBegin()
+	m.db.ExpectQuery("INSERT.*public_txns").WillReturnRows(m.db.NewRows([]string{"pub_txn_id"}).AddRow(12345))
+	m.db.ExpectCommit()
 
 	if uncachedBalance {
 		// Mock the sufficient balance on the auto-fueling source address, and the nonce assignment
@@ -334,7 +335,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	// current transaction completed, replace with new transaction
 	expectedTopUpAmount2 := big.NewInt(50)
 	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", `Completed__tx_hash`}).
-		AddRow(*bm.sourceAddress, tktypes.Bytes32(tktypes.RandBytes(32))))
+		AddRow(*bm.sourceAddress, tktypes.RandBytes32()))
 
 	mockAutoFuelTransactionSubmit(m, bm, false)
 
@@ -357,7 +358,8 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	m.ethClient.On("GetBalance", mock.Anything, *bm.sourceAddress, "latest").Return(tktypes.Uint64ToUint256(50), nil).Once()
 
 	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", `Completed__tx_hash`}).
-		AddRow(*bm.sourceAddress, tktypes.Bytes32(tktypes.RandBytes(32))))
+		AddRow(*bm.sourceAddress, tktypes.RandBytes32()))
+	m.db.ExpectBegin()
 
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
 		Return(ethclient.EstimateGasResult{}, fmt.Errorf("pop")).Once()

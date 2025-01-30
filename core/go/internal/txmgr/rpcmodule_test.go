@@ -29,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -97,8 +98,8 @@ func newTestTransactionManagerWithWebSocketRPC(t *testing.T, init ...func(*pldco
 }
 
 func mockResolveKeyOKThenFail(t *testing.T, mc *mockComponents, identifier string, senderAddr *tktypes.EthAddress) {
-	kr := mockKeyResolverForFail(t, mc)
-	kr.On("ResolveKey", identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+	kr := mockKeyResolver(t, mc)
+	kr.On("ResolveKey", mock.Anything, identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 		Return(&pldapi.KeyMappingAndVerifier{Verifier: &pldapi.KeyVerifier{
 			Verifier: senderAddr.String(),
 		}}, nil)
@@ -106,7 +107,7 @@ func mockResolveKeyOKThenFail(t *testing.T, mc *mockComponents, identifier strin
 
 func mockResolveKey(t *testing.T, mc *mockComponents, identifier string, senderAddr *tktypes.EthAddress) {
 	kr := mockKeyResolver(t, mc)
-	kr.On("ResolveKey", identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+	kr.On("ResolveKey", mock.Anything, identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 		Return(&pldapi.KeyMappingAndVerifier{Verifier: &pldapi.KeyVerifier{
 			Verifier: senderAddr.String(),
 		}}, nil)
@@ -116,7 +117,7 @@ func mockSubmitPublicTxOk(t *testing.T, senderAddr *tktypes.EthAddress) func(tmc
 	return func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 		mockResolveKey(t, mc, "sender1", senderAddr)
 		mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(func() {}, []*pldapi.PublicTx{
+		mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return([]*pldapi.PublicTx{
 			{LocalID: confutil.P(uint64(12345))},
 		}, nil)
 	}
@@ -236,7 +237,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 
 	// Null on not found is the consistent ethereum pattern
 	var abiNotFound *pldapi.StoredABI
-	err = rpcClient.CallRPC(ctx, &abiNotFound, "ptx_getStoredABI", tktypes.Bytes32(tktypes.RandBytes(32)))
+	err = rpcClient.CallRPC(ctx, &abiNotFound, "ptx_getStoredABI", tktypes.RandBytes32())
 	require.NoError(t, err)
 	assert.Nil(t, abiNotFound)
 
@@ -277,21 +278,22 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.Nil(t, txNotFound)
 
 	// Finalize the deploy as a success
-	txHash1 := tktypes.Bytes32(tktypes.RandBytes(32))
+	txHash1 := tktypes.RandBytes32()
 	blockNumber1 := int64(12345)
-	postCommit, err := tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
-		{
-			TransactionID: tx1ID,
-			ReceiptType:   components.RT_Success,
-			OnChain: tktypes.OnChainLocation{
-				Type:            tktypes.OnChainTransaction,
-				TransactionHash: txHash1,
-				BlockNumber:     blockNumber1,
+	err = tmr.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return tmr.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				TransactionID: tx1ID,
+				ReceiptType:   components.RT_Success,
+				OnChain: tktypes.OnChainLocation{
+					Type:            tktypes.OnChainTransaction,
+					TransactionHash: txHash1,
+					BlockNumber:     blockNumber1,
+				},
 			},
-		},
+		})
 	})
 	require.NoError(t, err)
-	postCommit()
 
 	// We should get that back with full
 	var txWithReceipt *pldapi.TransactionFull
@@ -315,24 +317,25 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.Len(t, pendingTransactions, 1)
 
 	// Finalize the invoke as a revert with an encoded error
-	txHash2 := tktypes.Bytes32(tktypes.RandBytes(32))
+	txHash2 := tktypes.RandBytes32()
 	blockNumber2 := int64(12345)
 	revertData, err := sampleABI.Errors()["BadValue"].EncodeCallDataValuesCtx(ctx, []any{12345})
 	require.NoError(t, err)
-	postCommit, err = tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
-		{
-			TransactionID: tx2ID,
-			ReceiptType:   components.RT_FailedOnChainWithRevertData,
-			OnChain: tktypes.OnChainLocation{
-				Type:            tktypes.OnChainTransaction,
-				TransactionHash: txHash2,
-				BlockNumber:     blockNumber2,
+	err = tmr.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return tmr.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				TransactionID: tx2ID,
+				ReceiptType:   components.RT_FailedOnChainWithRevertData,
+				OnChain: tktypes.OnChainLocation{
+					Type:            tktypes.OnChainTransaction,
+					TransactionHash: txHash2,
+					BlockNumber:     blockNumber2,
+				},
+				RevertData: revertData,
 			},
-			RevertData: revertData,
-		},
+		})
 	})
 	require.NoError(t, err)
-	postCommit()
 
 	var de *pldapi.ABIDecodedData
 	err = rpcClient.CallRPC(ctx, &de, "ptx_decodeError", tktypes.HexBytes(revertData), tktypes.DefaultJSONFormatOptions)
@@ -474,7 +477,7 @@ func TestPublicTransactionPassthroughQueries(t *testing.T) {
 	require.Regexp(t, "pop", err)
 
 	// Query by hash
-	txHash := tktypes.Bytes32(tktypes.RandBytes(32))
+	txHash := tktypes.RandBytes32()
 	mockGetByHash = func(hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error) {
 		assert.Equal(t, txHash, hash)
 		return tx, nil
@@ -588,7 +591,7 @@ func TestQueryPreparedTransactionsNotFound(t *testing.T) {
 
 func TestPrepareTransactions(t *testing.T) {
 
-	ctx, url, _, done := newTestTransactionManagerWithRPC(t, mockDomainContractResolve(t, "domain1"), mockKeyResolutionContextOk(t), func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t, mockDomainContractResolve(t, "domain1"), func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything, mock.MatchedBy(func(tx *components.ValidatedTransaction) bool {
 			return tx.Transaction.SubmitMode.V() == pldapi.SubmitModeExternal
 		})).Return(nil)

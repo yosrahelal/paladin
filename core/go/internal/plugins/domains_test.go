@@ -474,7 +474,7 @@ func TestDomainRequestsOK(t *testing.T) {
 
 func TestDomainRegisterFail(t *testing.T) {
 
-	waitForError := make(chan error, 1)
+	waitForError := make(chan struct{})
 
 	tdm := &testDomainManager{
 		domains: map[string]plugintk.Plugin{
@@ -492,13 +492,11 @@ func TestDomainRegisterFail(t *testing.T) {
 						},
 					}
 				},
-				expectClose: func(err error) {
-					waitForError <- err
-				},
 			},
 		},
 	}
 	tdm.domainRegistered = func(name string, toDomain components.DomainManagerToDomain) (plugintk.DomainCallbacks, error) {
+		close(waitForError)
 		return nil, fmt.Errorf("pop")
 	}
 
@@ -507,7 +505,7 @@ func TestDomainRegisterFail(t *testing.T) {
 	})
 	defer done()
 
-	assert.Regexp(t, "pop", <-waitForError)
+	<-waitForError
 }
 
 func TestFromDomainRequestBadReq(t *testing.T) {

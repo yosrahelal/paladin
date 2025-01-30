@@ -26,7 +26,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"gorm.io/gorm"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -197,7 +197,7 @@ func (dc *domainContract) fullyQualifyAssemblyIdentities(res *prototk.AssembleTr
 	}
 }
 
-func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction, localTx *components.ResolvedTransaction) error {
+func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, readTX persistence.DBTX, tx *components.PrivateTransaction, localTx *components.ResolvedTransaction) error {
 	if tx.PreAssembly == nil || localTx.Transaction == nil || localTx.Transaction.ID == nil || *localTx.Transaction.ID != tx.ID {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompleteAssembleTransaction)
 	}
@@ -270,7 +270,7 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 }
 
 // Happens only on the sequencing node
-func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) (err error) {
+func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, readTX persistence.DBTX, tx *components.PrivateTransaction) (err error) {
 	if tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil || tx.PostAssembly == nil {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompleteWritePotentialStates)
 	}
@@ -291,7 +291,7 @@ func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, re
 
 }
 
-func (dc *domainContract) upsertPotentialStates(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction, potentialStates []*prototk.NewState, isOutput bool) (writtenStates []*components.FullState, err error) {
+func (dc *domainContract) upsertPotentialStates(dCtx components.DomainContext, readTX persistence.DBTX, tx *components.PrivateTransaction, potentialStates []*prototk.NewState, isOutput bool) (writtenStates []*components.FullState, err error) {
 	newStatesToWrite := make([]*components.StateUpsert, len(potentialStates))
 	domain := dc.d
 	for i, s := range potentialStates {
@@ -344,7 +344,7 @@ func (dc *domainContract) upsertPotentialStates(dCtx components.DomainContext, r
 
 // Happens on all nodes that are aware of the transaction and want to mask input states from other
 // transactions being assembled on the same node.
-func (dc *domainContract) LockStates(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) error {
+func (dc *domainContract) LockStates(dCtx components.DomainContext, readTX persistence.DBTX, tx *components.PrivateTransaction) error {
 	if tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
 		tx.PostAssembly == nil || tx.PostAssembly.InputStates == nil || tx.PostAssembly.OutputStates == nil {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompleteLockStates)
@@ -430,7 +430,7 @@ func (dc *domainContract) LockStates(dCtx components.DomainContext, readTX *gorm
 }
 
 // Endorse is a little special, because it returns a payload rather than updating the transaction.
-func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, readTX *gorm.DB, req *components.PrivateTransactionEndorseRequest) (*components.EndorsementResult, error) {
+func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, readTX persistence.DBTX, req *components.PrivateTransactionEndorseRequest) (*components.EndorsementResult, error) {
 
 	if req == nil ||
 		req.TransactionSpecification == nil ||
@@ -485,7 +485,7 @@ func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, read
 	}, nil
 }
 
-func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) error {
+func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, readTX persistence.DBTX, tx *components.PrivateTransaction) error {
 	if tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
 		tx.PostAssembly == nil || tx.Signer == "" {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompletePrepareTransaction)
@@ -593,7 +593,7 @@ func (dc *domainContract) InitCall(ctx context.Context, callTx *components.Resol
 
 }
 
-func (dc *domainContract) ExecCall(dCtx components.DomainContext, readTX *gorm.DB, callTx *components.ResolvedTransaction, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error) {
+func (dc *domainContract) ExecCall(dCtx components.DomainContext, readTX persistence.DBTX, callTx *components.ResolvedTransaction, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error) {
 
 	txSpec, err := dc.buildTransactionSpecification(dCtx.Ctx(), callTx, prototk.TransactionSpecification_CALL)
 	if err != nil {
@@ -645,7 +645,7 @@ func (dc *domainContract) allAttestations(tx *components.PrivateTransaction) []*
 	return attestations
 }
 
-func (dc *domainContract) loadStatesFromContext(dCtx components.DomainContext, readTX *gorm.DB, refs []*prototk.StateRef) ([]*components.FullState, error) {
+func (dc *domainContract) loadStatesFromContext(dCtx components.DomainContext, readTX persistence.DBTX, refs []*prototk.StateRef) ([]*components.FullState, error) {
 	rawIDsBySchema := make(map[tktypes.Bytes32][]tktypes.RawJSON)
 	stateIDs := make([]tktypes.HexBytes, len(refs))
 	for i, s := range refs {

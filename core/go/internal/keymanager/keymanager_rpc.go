@@ -67,6 +67,6 @@ func (km *keyManager) rpcReverseKeyLookup() rpcserver.RPCHandler {
 		verifierType string,
 		verifier string,
 	) (*pldapi.KeyMappingAndVerifier, error) {
-		return km.ReverseKeyLookup(ctx, km.p.DB(), algorithm, verifierType, verifier)
+		return km.ReverseKeyLookup(ctx, km.p.NOTX(), algorithm, verifierType, verifier)
 	})
 }

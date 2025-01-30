@@ -30,6 +30,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -42,7 +43,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func TestRunSimpleStorageEthTransaction(t *testing.T) {
@@ -58,8 +58,8 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	require.NoError(t, err)
 
 	eventStreamEvents := make(chan *pldapi.EventWithData, 2 /* all the events we exepct */)
-	_, err = cm.BlockIndexer().AddEventStream(ctx, &blockindexer.InternalEventStream{
-		Handler: func(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+	_, err = cm.BlockIndexer().AddEventStream(ctx, cm.Persistence().NOTX(), &blockindexer.InternalEventStream{
+		Handler: func(ctx context.Context, tx persistence.DBTX, batch *blockindexer.EventDeliveryBatch) error {
 			// With SQLite we cannot hang in here with a DB TX - as there's only one per process.
 			for _, e := range batch.Events {
 				select {
@@ -68,7 +68,7 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 					assert.Fail(t, "more than expected number of events received")
 				}
 			}
-			return nil, nil
+			return nil
 		},
 		Definition: &blockindexer.EventStream{
 			Name: "unittest",

@@ -109,7 +109,7 @@ func TestGetTransactionStatesUnavailable(t *testing.T) {
 	stateID3 := tktypes.HexBytes(tktypes.RandBytes(32))
 	stateID4 := tktypes.HexBytes(tktypes.RandBytes(32))
 
-	err := ss.WriteStateFinalizations(ctx, ss.p.DB(),
+	err := ss.WriteStateFinalizations(ctx, ss.p.NOTX(),
 		[]*pldapi.StateSpendRecord{
 			{DomainName: "domain1", State: stateID1, Transaction: txID},
 		},
@@ -124,7 +124,7 @@ func TestGetTransactionStatesUnavailable(t *testing.T) {
 		})
 	require.NoError(t, err)
 
-	txStates, err := ss.GetTransactionStates(ctx, ss.p.DB(), txID)
+	txStates, err := ss.GetTransactionStates(ctx, ss.p.NOTX(), txID)
 	require.NoError(t, err)
 	require.Empty(t, txStates.Spent)
 	require.Empty(t, txStates.Read)
@@ -142,6 +142,6 @@ func TestGetTransactionStatesFail(t *testing.T) {
 
 	db.ExpectQuery("SELECT.*states").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := ss.GetTransactionStates(ctx, ss.p.DB(), uuid.New())
+	_, err := ss.GetTransactionStates(ctx, ss.p.NOTX(), uuid.New())
 	assert.Regexp(t, "pop", err)
 }
