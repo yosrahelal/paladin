@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
@@ -246,7 +247,7 @@ func (km *keyManager) QueryKeys(ctx context.Context, dbTX *gorm.DB, jq *query.Qu
 	q.Select(`DISTINCT key_mappings.identifier IS NOT NULL AS "is_key",` +
 		`k.p IS NOT NULL AS "has_children",` +
 		`key_paths.parent AS "parent",` +
-		`key_paths.index AS "index",` +
+		`key_paths."index" AS "index",` +
 		`key_paths.path AS "path",` +
 		`key_mappings.wallet AS "wallet",` +
 		`key_mappings.key_handle AS "key_handle"`,
