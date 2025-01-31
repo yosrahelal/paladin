@@ -59,7 +59,6 @@ var (
 	MsgStateWrongOwner             = ffe("PD200018", "State '%s' is not owned by '%s'")
 	MsgUnrecognizedEndorsement     = ffe("PD200019", "Unrecognized endorsement request: %s")
 	MsgDuplicateStateInList        = ffe("PD200020", "Duplicate state in list %s[%d] (%s)")
-	MsgUnknownEvent                = ffe("PD200021", "Unknown event: %s")
 	MsgNotImplemented              = ffe("PD200022", "Not implemented")
 	MsgInvalidDelegate             = ffe("PD200023", "Invalid delegate: %s")
 	MsgNoDomainReceipt             = ffe("PD200024", "Not implemented. See state receipt for coin transfers")
