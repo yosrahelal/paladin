@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {INoto} from "../interfaces/INoto.sol";
+import {INotoErrors} from "../interfaces/INotoErrors.sol";
 
 /**
  * @title A sample on-chain implementation of a Confidential UTXO (C-UTXO) pattern,
@@ -23,29 +24,11 @@ import {INoto} from "../interfaces/INoto.sol";
  *         This allows coordination of DVP with other smart contracts, which could
  *         be using any model programmable via EVM (not just C-UTXO)
  */
-contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
+contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     address _notary;
     mapping(bytes32 => bool) private _unspent;
     mapping(bytes32 => address) private _approvals;
     mapping(bytes32 => LockDetail) private _locks;
-
-    error NotoInvalidInput(bytes32 id);
-    error NotoInvalidOutput(bytes32 id);
-    error NotoNotNotary(address sender);
-    error NotoInvalidDelegate(bytes32 txhash, address delegate, address sender);
-
-    error NotoLockNotFound(bytes32 lockId);
-    error NotoInvalidLockState(bytes32 lockId);
-    error NotoInvalidLockDelegate(
-        bytes32 lockId,
-        address delegate,
-        address sender
-    );
-    error NotoInvalidUnlockHash(
-        bytes32 lockId,
-        bytes32 expected,
-        bytes32 actual
-    );
 
     struct LockDetail {
         uint256 stateCount;
