@@ -52,7 +52,7 @@ var KeyEntryFilters filters.FieldSet = filters.FieldMap{
 	"isKey":       filters.BooleanField("isKey"),
 	"hasChildren": filters.BooleanField("hasChildren"),
 	"parent":      filters.StringField("parent"),
-	"index":       filters.Int64Field("`index`"),
+	"index":       filters.Int64Field(`"index"`),
 	"path":        filters.StringField("path"),
 	"wallet":      filters.StringField("wallet"),
 	"keyHandle":   filters.StringField("keyHandle"),
