@@ -26,7 +26,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Header } from "./components/Header";
 import { ApplicationContextProvider } from "./contexts/ApplicationContext";
 import { darkThemeOptions, lightThemeOptions } from "./themes/default";
-import { Indexer } from "./views/indexerView";
+import { Indexer } from "./views/Indexer";
 import { Registries } from "./views/Registries";
 import { Submissions } from "./views/Submissions";
 import { useEffect, useMemo, useState } from "react";
