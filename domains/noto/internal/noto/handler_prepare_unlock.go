@@ -144,7 +144,7 @@ func (h *prepareUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.P
 		return nil, err
 	}
 	return &TransactionWrapper{
-		functionABI: h.noto.contractABI.Functions()["prepareUnlock"],
+		functionABI: interfaceBuild.ABI.Functions()["prepareUnlock"],
 		paramsJSON:  paramsJSON,
 	}, nil
 }
@@ -182,7 +182,7 @@ func (h *prepareUnlockHandler) hookInvoke(ctx context.Context, tx *types.ParsedT
 
 	transactionType, functionABI, paramsJSON, err := h.noto.wrapHookTransaction(
 		tx.DomainConfig,
-		h.noto.hooksABI.Functions()["onPrepareUnlock"],
+		hooksBuild.ABI.Functions()["onPrepareUnlock"],
 		params,
 	)
 	if err != nil {
