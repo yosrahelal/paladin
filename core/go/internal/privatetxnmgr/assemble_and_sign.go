@@ -117,8 +117,7 @@ func (s *Sequencer) assembleAndSign(ctx context.Context, transactionID uuid.UUID
 	/*
 	 * Assemble
 	 */
-	readTX := s.components.Persistence().DB()
-	err = s.domainAPI.AssembleTransaction(domainContext, readTX, transaction, localTx)
+	err = s.domainAPI.AssembleTransaction(domainContext, s.components.Persistence().NOTX(), transaction, localTx)
 	if err != nil {
 		log.L(ctx).Errorf("assembleAndSign: Error assembling transaction: %s", err)
 		return nil, err

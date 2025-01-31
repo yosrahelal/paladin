@@ -197,7 +197,7 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 		},
 	}, extraSetup...)
 
-	mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 
 	tp := newTestPlugin(nil)
 	tp.Functions = &plugintk.DomainAPIFunctions{
@@ -221,13 +221,13 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 	addr := *tktypes.RandAddress()
 	if realDB {
 		dCtx := dm.stateStore.NewDomainContext(ctx, tp.d, addr)
-		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), dCtx, true /* readonly unless modified by test */)
+		c = tp.d.newInFlightDomainRequest(dm.persistence.NOTX(), dCtx, true /* readonly unless modified by test */)
 	} else {
 		mdc = componentmocks.NewDomainContext(t)
 		mdc.On("Ctx").Return(ctx).Maybe()
 		mdc.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()
 		mdc.On("Close").Return()
-		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), mdc, true /* readonly unless modified by test */)
+		c = tp.d.newInFlightDomainRequest(dm.persistence.NOTX(), mdc, true /* readonly unless modified by test */)
 		mc.stateStore.On("NewDomainContext", mock.Anything, tp.d, mock.Anything, mock.Anything).Return(mdc).Maybe()
 	}
 
@@ -267,7 +267,9 @@ func goodDomainConf() *prototk.DomainConfig {
 
 func mockSchemas(schemas ...components.Schema) func(mc *mockComponents) {
 	return func(mc *mockComponents) {
+		mc.db.ExpectBegin()
 		mc.stateStore.On("EnsureABISchemas", mock.Anything, mock.Anything, "test1", mock.Anything).Return(schemas, nil)
+		mc.db.ExpectCommit()
 	}
 }
 
@@ -285,8 +287,9 @@ func TestDomainInitStates(t *testing.T) {
 	assert.True(t, td.d.Initialized())
 
 }
+
 func mockUpsertABIOk(mc *mockComponents) {
-	mc.txManager.On("UpsertABI", mock.Anything, mock.Anything, mock.Anything).Return(func() {}, &pldapi.StoredABI{
+	mc.txManager.On("UpsertABI", mock.Anything, mock.Anything, mock.Anything).Return(&pldapi.StoredABI{
 		Hash: tktypes.RandBytes32(),
 	}, nil)
 }
@@ -332,12 +335,16 @@ func TestDoubleRegisterReplaces(t *testing.T) {
 
 }
 
+func mockBegin(mc *mockComponents) {
+	mc.db.ExpectBegin()
+}
+
 func TestDomainInitBadSchemas(t *testing.T) {
 	td, done := newTestDomain(t, false, &prototk.DomainConfig{
 		AbiStateSchemasJson: []string{
 			`!!! Wrong`,
 		},
-	})
+	}, mockBegin)
 	defer done()
 	assert.Regexp(t, "PD011602", *td.d.initError.Load())
 	assert.False(t, td.tp.initialized.Load())
@@ -347,7 +354,7 @@ func TestDomainInitBadEventsJSON(t *testing.T) {
 	td, done := newTestDomain(t, false, &prototk.DomainConfig{
 		AbiStateSchemasJson: []string{},
 		AbiEventsJson:       `!!! Wrong`,
-	})
+	}, mockBegin)
 	defer done()
 	assert.Regexp(t, "PD011642", *td.d.initError.Load())
 	assert.False(t, td.tp.initialized.Load())
@@ -363,7 +370,7 @@ func TestDomainInitBadEventsABI(t *testing.T) {
 				"inputs": [{"type": "verywrong"}]
 			}
 		]`,
-	}, mockUpsertABIOk)
+	}, mockBegin, mockUpsertABIOk)
 	defer done()
 	assert.Regexp(t, "FF22025", *td.d.initError.Load())
 	assert.False(t, td.tp.initialized.Load())
@@ -379,8 +386,8 @@ func TestDomainInitUpsertEventsABIFail(t *testing.T) {
 				"inputs": [{"type": "verywrong"}]
 			}
 		]`,
-	}, func(mc *mockComponents) {
-		mc.txManager.On("UpsertABI", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
+	}, mockBegin, func(mc *mockComponents) {
+		mc.txManager.On("UpsertABI", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 	assert.Regexp(t, "pop", *td.d.initError.Load())
@@ -391,8 +398,8 @@ func TestDomainInitStreamFail(t *testing.T) {
 	td, done := newTestDomain(t, false, &prototk.DomainConfig{
 		AbiStateSchemasJson: []string{},
 		AbiEventsJson:       fakeCoinEventsABI,
-	}, mockUpsertABIOk, func(mc *mockComponents) {
-		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+	}, mockBegin, mockUpsertABIOk, func(mc *mockComponents) {
+		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 	assert.EqualError(t, *td.d.initError.Load(), "pop")
@@ -404,7 +411,7 @@ func TestDomainInitFactorySchemaStoreFail(t *testing.T) {
 		AbiStateSchemasJson: []string{
 			fakeCoinStateSchema,
 		},
-	}, func(mc *mockComponents) {
+	}, mockBegin, func(mc *mockComponents) {
 		mc.stateStore.On("EnsureABISchemas", mock.Anything, mock.Anything, "test1", mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
@@ -491,9 +498,7 @@ func TestDomainFindAvailableStatesBadQStateQueryContext(t *testing.T) {
 }
 
 func TestDomainFindAvailableStatesFail(t *testing.T) {
-	td, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
-		mc.stateStore.On("EnsureABISchemas", mock.Anything, mock.Anything, "test1", mock.Anything).Return([]components.Schema{}, nil)
-	})
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
 
 	schemaID := tktypes.RandBytes32()

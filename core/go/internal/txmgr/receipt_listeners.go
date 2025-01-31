@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -202,7 +203,7 @@ func (tm *txManager) StopReceiptListener(ctx context.Context, name string) error
 	return tm.setReceiptListenerStatus(ctx, name, false)
 }
 
-func (tm *txManager) NotifyStatesDBChanged() {
+func (tm *txManager) NotifyStatesDBChanged(ctx context.Context) {
 	tm.lastStateUpdateTime.Store(int64(tktypes.TimestampNow()))
 }
 
@@ -258,7 +259,7 @@ func (tm *txManager) DeleteReceiptListener(ctx context.Context, name string) err
 	return nil
 }
 
-func (tm *txManager) QueryReceiptListeners(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.TransactionReceiptListener, error) {
+func (tm *txManager) QueryReceiptListeners(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.TransactionReceiptListener, error) {
 	qw := &queryWrapper[persistedReceiptListener, pldapi.TransactionReceiptListener]{
 		p:           tm.p,
 		table:       "receipt_listeners",
@@ -373,9 +374,7 @@ func (tm *txManager) validateListenerSpec(ctx context.Context, spec *pldapi.Tran
 // Build parts of the matching that can be pre-filtered efficiently in the DB.
 //
 // IMPORTANT: Make sure to also update checkMatch() when adding filter dimensions
-func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.TransactionReceiptListener, dbTX *gorm.DB) (*gorm.DB, error) {
-	q := dbTX
-
+func (tm *txManager) buildListenerDBQuery(ctx context.Context, spec *pldapi.TransactionReceiptListener, q *gorm.DB) (*gorm.DB, error) {
 	// Filter based on the type and/or domain
 	if spec.Filters.Type == nil {
 		if spec.Filters.Domain != "" {
@@ -684,9 +683,9 @@ func (l *receiptListener) deliverBatch(b *receiptDeliveryBatch) error {
 }
 
 func (l *receiptListener) updateCheckpoint(batch *receiptDeliveryBatch, newSequence uint64) error {
-	return l.tm.p.DB().Transaction(func(dbTX *gorm.DB) error {
-		err := dbTX.
-			WithContext(l.ctx).
+	return l.tm.p.Transaction(l.ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		err := dbTX.DB().
+			WithContext(ctx).
 			Clauses(clause.OnConflict{
 				Columns: []clause.Column{
 					{Name: "listener"},
@@ -703,8 +702,8 @@ func (l *receiptListener) updateCheckpoint(batch *receiptDeliveryBatch, newSeque
 			}).
 			Error
 		if err == nil && len(batch.Gaps) > 0 {
-			err = dbTX.
-				WithContext(l.ctx).
+			err = dbTX.DB().
+				WithContext(ctx).
 				Clauses(clause.OnConflict{
 					DoNothing: true,
 				}).

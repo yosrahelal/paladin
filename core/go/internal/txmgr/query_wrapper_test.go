@@ -44,7 +44,7 @@ func TestQueryWrapperLimitRequired(t *testing.T) {
 	)
 	defer done()
 
-	_, err := testQueryWrapper(txm, query.NewQueryBuilder().Query()).run(ctx, txm.p.DB())
+	_, err := testQueryWrapper(txm, query.NewQueryBuilder().Query()).run(ctx, txm.p.NOTX())
 	assert.Regexp(t, "PD012200", err)
 }
 
@@ -60,7 +60,7 @@ func TestQueryWrapperMapFail(t *testing.T) {
 	qw.mapResult = func(pt *persistedTransaction) (*pldapi.Transaction, error) {
 		return nil, fmt.Errorf("pop")
 	}
-	_, err := qw.run(ctx, txm.p.DB())
+	_, err := qw.run(ctx, txm.p.NOTX())
 	assert.Regexp(t, "pop", err)
 }
 
