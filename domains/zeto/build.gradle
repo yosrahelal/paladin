@@ -76,8 +76,7 @@ dependencies {
 
 task downloadZetoProver() {
     def outname = "zeto-wasm-${zetoVersion}.tar.gz"
-    // def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
-    def url = "file:///Users/jimzhang/Documents/zkp/releases/${outname}"
+    def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
     doFirst {
         mkdir(f.parent)
@@ -88,8 +87,7 @@ task downloadZetoProver() {
 
 task downloadZetoTestProvingKeys() {
     def outname = "zeto-test-proving-keys-${zetoVersion}.tar.gz"
-    // def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
-    def url = "file:///Users/jimzhang/Documents/zkp/releases/${outname}"
+    def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
     doFirst {
         mkdir(f.parent)
@@ -100,8 +98,7 @@ task downloadZetoTestProvingKeys() {
 
 task downloadZetoCompiledContracts() {
     def outname = "zeto-contracts-${zetoVersion}.tar.gz"
-    // def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
-    def url = "file:///Users/jimzhang/Documents/zkp/releases/${outname}"
+    def url = "https://github.com/${zetoHost}/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
     doFirst {
         mkdir(f.parent)
