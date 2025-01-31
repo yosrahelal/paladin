@@ -21,6 +21,7 @@ import (
 	"database/sql"
 	"html/template"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -30,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 	"gorm.io/gorm"
 	// Import migrate file source
@@ -47,7 +49,7 @@ type SQLDBProvider interface {
 	DBName() string
 	Open(uri string) gorm.Dialector
 	GetMigrationDriver(*sql.DB) (migratedb.Driver, error)
-	TakeNamedLock(ctx context.Context, dbTX *gorm.DB, lockName string) error
+	TakeNamedLock(ctx context.Context, dbTX DBTX, lockName string) error
 }
 
 func NewSQLProvider(ctx context.Context, p SQLDBProvider, conf *pldconf.SQLDBConfig, defs *pldconf.SQLDBConfig) (_ Persistence, err error) {
@@ -158,6 +160,60 @@ func (gp *provider) Close() {
 	log.L(context.Background()).Infof("DB closed (err=%v)", err)
 }
 
-func (gp *provider) TakeNamedLock(ctx context.Context, dbTX *gorm.DB, lockName string) error {
+func (gp *provider) TakeNamedLock(ctx context.Context, dbTX DBTX, lockName string) error {
 	return gp.p.TakeNamedLock(ctx, dbTX, lockName)
+}
+
+// Run a transaction with preCommit, postCommit and finalizer support to propagate between components in a simple and consistent way.
+func (gp *provider) Transaction(parentCtx context.Context, fn func(ctx context.Context, tx DBTX) error) (err error) {
+
+	completed := false
+	tx := &transaction{txCtx: log.WithLogField(parentCtx, "dbtx", tktypes.ShortID())}
+	defer func() {
+		if !completed {
+			panicData := recover()
+			log.L(tx.txCtx).Errorf("Panic within database transaction: %v\n%s", panicData, debug.Stack())
+			if err == nil {
+				err = i18n.NewError(tx.txCtx, msgs.MsgPersistenceErrorInDBTransaction, panicData)
+			}
+		}
+		for _, fn := range tx.finalizers {
+			// Finalizers are called with success or failure
+			fn(tx.txCtx, err)
+		}
+		if err == nil {
+			for _, fn := range tx.postCommits {
+				fn(tx.txCtx)
+			}
+		}
+		if !completed {
+			panic(err) // having logged this, we continue to panic rather than switching to normal error handling
+		}
+	}()
+
+	// Run the database transaction itself
+	err = gp.gdb.Transaction(func(gormTX *gorm.DB) error {
+		tx.gdb = gormTX.WithContext(tx.txCtx)
+		innerErr := fn(tx.txCtx, tx)
+		for _, fn := range tx.preCommits {
+			if innerErr == nil {
+				innerErr = fn(tx.txCtx, tx)
+			}
+		}
+		return innerErr
+	})
+
+	if err != nil {
+		for _, fn := range tx.postRollbacks {
+			err = fn(tx.txCtx, err)
+		}
+	}
+
+	completed = true
+	return err // important that this is the function var used in the defer processing
+
+}
+
+func (gp *provider) NOTX() DBTX {
+	return newNOTX(gp.gdb)
 }

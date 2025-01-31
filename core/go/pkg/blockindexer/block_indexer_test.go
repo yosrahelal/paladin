@@ -41,7 +41,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 var testEventABIJSON = ([]byte)(`[
@@ -307,8 +306,9 @@ func checkIndexedBlockEqual(t *testing.T, expected *BlockInfoJSONRPC, indexed *p
 }
 
 func addBlockPostCommit(bi *blockIndexer, postCommit func([]*pldapi.IndexedBlock)) {
-	bi.preCommitHandlers = append(bi.preCommitHandlers, func(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
-		return func() { postCommit(blocks) }, nil
+	bi.preCommitHandlers = append(bi.preCommitHandlers, func(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*IndexedTransactionNotify) error {
+		dbTX.AddPostCommit(func(txCtx context.Context) { postCommit(blocks) })
+		return nil
 	})
 }
 
@@ -516,8 +516,12 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
-	ch, err := bi.GetConfirmedBlockHeight(ctx)
-	require.NoError(t, err)
+	var ch tktypes.HexUint64
+	for ch < 9 {
+		time.Sleep(10 * time.Millisecond)
+		ch, err = bi.GetConfirmedBlockHeight(ctx)
+		require.NoError(t, err)
+	}
 	assert.Equal(t, tktypes.HexUint64(9), ch)
 }
 
@@ -1152,9 +1156,9 @@ func TestQueryNoLimit(t *testing.T) {
 }
 
 func TestAddEventStreamBadName(t *testing.T) {
-	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	ctx, bi, _, mp, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
-	_, err := bi.AddEventStream(ctx, &InternalEventStream{})
+	_, err := bi.AddEventStream(ctx, mp.P.NOTX(), &InternalEventStream{})
 	assert.Regexp(t, "PD020005", err)
 }

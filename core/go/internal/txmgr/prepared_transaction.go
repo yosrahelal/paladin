@@ -22,11 +22,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -71,11 +71,10 @@ var preparedTransactionFilters = filters.FieldMap{
 	"created": filters.TimestampField("created"),
 }
 
-func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.DB, prepared []*components.PreparedTransactionWithRefs) (postCommit func(), err error) {
+func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX persistence.DBTX, prepared []*components.PreparedTransactionWithRefs) error {
 
 	var preparedTxInserts []*preparedTransaction
 	var preparedTxStateInserts []*preparedTransactionState
-	var postCommits []func()
 	for _, p := range prepared {
 		dbPreparedTx := &preparedTransaction{
 			ID:       p.ID,
@@ -84,7 +83,7 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 			Metadata: p.Metadata,
 		}
 		// We do the work for the ABI validation etc. before we insert the TX
-		txPostCommit, resolved, err := tm.resolveNewTransaction(ctx, dbTX, &p.Transaction, pldapi.SubmitModePrepare)
+		resolved, err := tm.resolveNewTransaction(ctx, dbTX, &p.Transaction, pldapi.SubmitModePrepare)
 		if err == nil {
 			p.Transaction.ABI = nil // move to the reference
 			p.Transaction.ABIReference = resolved.Function.ABIReference
@@ -92,9 +91,8 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 			dbPreparedTx.Transaction, err = json.Marshal(p.Transaction)
 		}
 		if err != nil {
-			return nil, err
+			return err
 		}
-		postCommits = append(postCommits, txPostCommit)
 		preparedTxInserts = append(preparedTxInserts, dbPreparedTx)
 		for i, stateID := range p.StateRefs.Spent {
 			preparedTxStateInserts = append(preparedTxStateInserts, &preparedTransactionState{
@@ -136,30 +134,27 @@ func (tm *txManager) WritePreparedTransactions(ctx context.Context, dbTX *gorm.D
 			p.Transaction.Type, p.ID, len(p.StateRefs.Spent), len(p.StateRefs.Read), len(p.StateRefs.Confirmed), len(p.StateRefs.Info))
 	}
 
+	var err error
 	if len(preparedTxInserts) > 0 {
-		err = dbTX.WithContext(ctx).
+		err = dbTX.DB().WithContext(ctx).
 			Clauses(clause.OnConflict{DoNothing: true /* immutable */}).
 			Create(preparedTxInserts).
 			Error
 	}
 
 	if err == nil && len(preparedTxStateInserts) > 0 {
-		err = dbTX.WithContext(ctx).
+		err = dbTX.DB().WithContext(ctx).
 			Omit("State").
 			Clauses(clause.OnConflict{DoNothing: true /* immutable */}).
 			Create(preparedTxStateInserts).
 			Error
 	}
 
-	return func() {
-		for _, pc := range postCommits {
-			pc()
-		}
-	}, err
+	return err
 
 }
 
-func (tm *txManager) QueryPreparedTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.PreparedTransaction, error) {
+func (tm *txManager) QueryPreparedTransactions(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PreparedTransaction, error) {
 	bpts, err := tm.queryPreparedTransactionsBase(ctx, dbTX, jq)
 	if err != nil {
 		return nil, err
@@ -167,7 +162,7 @@ func (tm *txManager) QueryPreparedTransactions(ctx context.Context, dbTX *gorm.D
 	return tm.enrichPreparedTransactionsFull(ctx, dbTX, bpts)
 }
 
-func (tm *txManager) QueryPreparedTransactionsWithRefs(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*components.PreparedTransactionWithRefs, error) {
+func (tm *txManager) QueryPreparedTransactionsWithRefs(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*components.PreparedTransactionWithRefs, error) {
 	bpts, err := tm.queryPreparedTransactionsBase(ctx, dbTX, jq)
 	if err != nil {
 		return nil, err
@@ -175,7 +170,7 @@ func (tm *txManager) QueryPreparedTransactionsWithRefs(ctx context.Context, dbTX
 	return tm.enrichPreparedTransactionsRefs(ctx, dbTX, bpts)
 }
 
-func (tm *txManager) queryPreparedTransactionsBase(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.PreparedTransactionBase, error) {
+func (tm *txManager) queryPreparedTransactionsBase(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PreparedTransactionBase, error) {
 	qw := &queryWrapper[preparedTransaction, pldapi.PreparedTransactionBase]{
 		p:           tm.p,
 		table:       "prepared_txns",
@@ -195,7 +190,7 @@ func (tm *txManager) queryPreparedTransactionsBase(ctx context.Context, dbTX *go
 	return qw.run(ctx, dbTX)
 }
 
-func (tm *txManager) enrichPreparedTransactionsFull(ctx context.Context, dbTX *gorm.DB, basePTs []*pldapi.PreparedTransactionBase) ([]*pldapi.PreparedTransaction, error) {
+func (tm *txManager) enrichPreparedTransactionsFull(ctx context.Context, dbTX persistence.DBTX, basePTs []*pldapi.PreparedTransactionBase) ([]*pldapi.PreparedTransaction, error) {
 	preparedTransactions := make([]*pldapi.PreparedTransaction, len(basePTs))
 	for i, bpt := range basePTs {
 		preparedTransactions[i] = &pldapi.PreparedTransaction{
@@ -208,7 +203,7 @@ func (tm *txManager) enrichPreparedTransactionsFull(ctx context.Context, dbTX *g
 			transactionIDs[i] = pt.ID
 		}
 		var preparedStates []*preparedTransactionState
-		err := dbTX.WithContext(ctx).
+		err := dbTX.DB().WithContext(ctx).
 			Where(`"transaction" IN (?)`, transactionIDs).
 			Order(`"transaction"`).
 			Order(`"type"`).
@@ -240,7 +235,7 @@ func (tm *txManager) enrichPreparedTransactionsFull(ctx context.Context, dbTX *g
 	return preparedTransactions, nil
 }
 
-func (tm *txManager) enrichPreparedTransactionsRefs(ctx context.Context, dbTX *gorm.DB, basePTs []*pldapi.PreparedTransactionBase) ([]*components.PreparedTransactionWithRefs, error) {
+func (tm *txManager) enrichPreparedTransactionsRefs(ctx context.Context, dbTX persistence.DBTX, basePTs []*pldapi.PreparedTransactionBase) ([]*components.PreparedTransactionWithRefs, error) {
 	preparedTransactions := make([]*components.PreparedTransactionWithRefs, len(basePTs))
 	for i, bpt := range basePTs {
 		preparedTransactions[i] = &components.PreparedTransactionWithRefs{
@@ -253,7 +248,7 @@ func (tm *txManager) enrichPreparedTransactionsRefs(ctx context.Context, dbTX *g
 			transactionIDs[i] = pt.ID
 		}
 		var preparedStates []*preparedTransactionState
-		err := dbTX.WithContext(ctx).
+		err := dbTX.DB().WithContext(ctx).
 			Where(`"transaction" IN (?)`, transactionIDs).
 			Order(`"transaction"`).
 			Order(`"type"`).
@@ -284,7 +279,7 @@ func (tm *txManager) enrichPreparedTransactionsRefs(ctx context.Context, dbTX *g
 	return preparedTransactions, nil
 }
 
-func (tm *txManager) GetPreparedTransactionByID(ctx context.Context, dbTX *gorm.DB, id uuid.UUID) (*pldapi.PreparedTransaction, error) {
+func (tm *txManager) GetPreparedTransactionByID(ctx context.Context, dbTX persistence.DBTX, id uuid.UUID) (*pldapi.PreparedTransaction, error) {
 	pts, err := tm.QueryPreparedTransactions(ctx, dbTX, query.NewQueryBuilder().Limit(1).Equal("id", id).Query())
 	if len(pts) == 0 || err != nil {
 		return nil, err
@@ -292,7 +287,7 @@ func (tm *txManager) GetPreparedTransactionByID(ctx context.Context, dbTX *gorm.
 	return pts[0], nil
 }
 
-func (tm *txManager) GetPreparedTransactionWithRefsByID(ctx context.Context, dbTX *gorm.DB, id uuid.UUID) (*components.PreparedTransactionWithRefs, error) {
+func (tm *txManager) GetPreparedTransactionWithRefsByID(ctx context.Context, dbTX persistence.DBTX, id uuid.UUID) (*components.PreparedTransactionWithRefs, error) {
 	pts, err := tm.QueryPreparedTransactionsWithRefs(ctx, dbTX, query.NewQueryBuilder().Limit(1).Equal("id", id).Query())
 	if len(pts) == 0 || err != nil {
 		return nil, err
