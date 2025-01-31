@@ -153,7 +153,7 @@ func (tf *transactionFlow) PrepareTransaction(ctx context.Context, defaultSigner
 		tf.transaction.Signer = defaultSigner
 	}
 
-	readTX := tf.components.Persistence().DB() // no DB transaction required here
+	readTX := tf.components.Persistence().NOTX() // no DB transaction required here
 	prepError := tf.domainAPI.PrepareTransaction(tf.domainContext, readTX, tf.transaction)
 	if prepError != nil {
 		log.L(ctx).Errorf("Error preparing transaction: %s", prepError)

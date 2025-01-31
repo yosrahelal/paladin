@@ -33,8 +33,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"golang.org/x/crypto/sha3"
-	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -74,13 +74,11 @@ type domain struct {
 }
 
 type inFlightDomainRequest struct {
-	d           *domain
-	id          string                          // each request gets a unique ID
-	dbTX        *gorm.DB                        // only if there's a DB transactions such as when called by block indexer
-	dCtx        components.DomainContext        // might be short lived, or managed externally (by private TX manager)
-	krc         components.KeyResolutionContext // created on first use
-	readOnly    bool
-	postCommits []func()
+	d        *domain
+	id       string                   // each request gets a unique ID
+	dbTX     persistence.DBTX         // only if there's a DB transactions such as when called by block indexer
+	dCtx     components.DomainContext // might be short lived, or managed externally (by private TX manager)
+	readOnly bool
 }
 
 func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDomain components.DomainManagerToDomain) *domain {
@@ -107,7 +105,7 @@ func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDo
 	return d
 }
 
-func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (*prototk.InitDomainRequest, error) {
+func (d *domain) processDomainConfig(dbTX persistence.DBTX, confRes *prototk.ConfigureDomainResponse) (*prototk.InitDomainRequest, error) {
 	d.stateLock.Lock()
 	defer d.stateLock.Unlock()
 
@@ -124,7 +122,7 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	var schemas []components.Schema
 	if len(abiSchemas) > 0 {
 		var err error
-		schemas, err = d.dm.stateStore.EnsureABISchemas(d.ctx, d.dm.persistence.DB(), d.name, abiSchemas)
+		schemas, err = d.dm.stateStore.EnsureABISchemas(d.ctx, dbTX, d.name, abiSchemas)
 		if err != nil {
 			return nil, err
 		}
@@ -157,11 +155,10 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 		}
 		stream.Sources = append(stream.Sources, blockindexer.EventStreamSource{ABI: eventsABI})
 
-		postCommit, _, err := d.dm.txManager.UpsertABI(d.ctx, d.dm.persistence.DB(), eventsABI)
+		_, err := d.dm.txManager.UpsertABI(d.ctx, dbTX, eventsABI)
 		if err != nil {
 			return nil, err
 		}
-		postCommit() // we didn't actually use a coordinated TX to call immediately
 	}
 
 	// We build a stream name in a way assured to result in a new stream if the ABI changes
@@ -173,7 +170,7 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	stream.Name = fmt.Sprintf("domain_%s_%s", d.name, streamHash)
 
 	// Create the event stream
-	d.eventStream, err = d.dm.blockIndexer.AddEventStream(d.ctx, &blockindexer.InternalEventStream{
+	d.eventStream, err = d.dm.blockIndexer.AddEventStream(d.ctx, dbTX, &blockindexer.InternalEventStream{
 		Definition: stream,
 		Handler:    d.handleEventBatch,
 	})
@@ -205,7 +202,11 @@ func (d *domain) init() {
 		}
 
 		// Process the configuration, so we can move onto init
-		initReq, err := d.processDomainConfig(confRes)
+		var initReq *prototk.InitDomainRequest
+		err = d.dm.persistence.Transaction(d.ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+			initReq, err = d.processDomainConfig(dbTX, confRes)
+			return err
+		})
 		if err != nil {
 			return true, err
 		}
@@ -227,7 +228,7 @@ func (d *domain) init() {
 	}
 }
 
-func (d *domain) newInFlightDomainRequest(dbTX *gorm.DB, dc components.DomainContext, readOnly bool) *inFlightDomainRequest {
+func (d *domain) newInFlightDomainRequest(dbTX persistence.DBTX, dc components.DomainContext, readOnly bool) *inFlightDomainRequest {
 	c := &inFlightDomainRequest{
 		d:        d,
 		dCtx:     dc,
@@ -245,21 +246,6 @@ func (i *inFlightDomainRequest) close() {
 	i.d.inFlightLock.Lock()
 	defer i.d.inFlightLock.Unlock()
 	delete(i.d.inFlight, i.id)
-}
-
-func (i *inFlightDomainRequest) keyResolver() components.KeyResolver {
-	i.d.inFlightLock.Lock()
-	defer i.d.inFlightLock.Unlock()
-	if i.krc == nil {
-		i.krc = i.d.dm.keyManager.NewKeyResolutionContext(i.dCtx.Ctx())
-	}
-	return i.krc.KeyResolver(i.dbTX)
-}
-
-func (i *inFlightDomainRequest) addPostCommit(pc func()) {
-	i.d.inFlightLock.Lock()
-	defer i.d.inFlightLock.Unlock()
-	i.postCommits = append(i.postCommits, pc)
 }
 
 func (d *domain) checkInFlight(ctx context.Context, stateQueryContext string, needWrite bool) (*inFlightDomainRequest, error) {
@@ -761,7 +747,7 @@ func (d *domain) ValidateStateHashes(ctx context.Context, states []*components.F
 	return hexIDs, nil
 }
 
-func (d *domain) GetDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID) (tktypes.RawJSON, error) {
+func (d *domain) GetDomainReceipt(ctx context.Context, dbTX persistence.DBTX, txID uuid.UUID) (tktypes.RawJSON, error) {
 
 	// Load up the currently available set of states
 	txStates, err := d.dm.stateStore.GetTransactionStates(ctx, dbTX, txID)
@@ -772,7 +758,7 @@ func (d *domain) GetDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.
 	return d.BuildDomainReceipt(ctx, dbTX, txID, txStates)
 }
 
-func (d *domain) BuildDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID, txStates *pldapi.TransactionStates) (tktypes.RawJSON, error) {
+func (d *domain) BuildDomainReceipt(ctx context.Context, dbTX persistence.DBTX, txID uuid.UUID, txStates *pldapi.TransactionStates) (tktypes.RawJSON, error) {
 	if txStates.None {
 		// We know nothing about this transaction yet
 		return nil, i18n.NewError(ctx, msgs.MsgDomainDomainReceiptNotAvailable, txID)
@@ -817,7 +803,7 @@ func (d *domain) SendTransaction(ctx context.Context, req *prototk.SendTransacti
 		return nil, err
 	}
 
-	postCommit, txIDs, err := d.dm.txManager.SendTransactions(ctx, c.dbTX, c.keyResolver(), &pldapi.TransactionInput{
+	txIDs, err := d.dm.txManager.SendTransactions(ctx, c.dbTX, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			Type: txType.Enum(),
 			From: req.Transaction.From,
@@ -829,7 +815,6 @@ func (d *domain) SendTransaction(ctx context.Context, req *prototk.SendTransacti
 	if err != nil {
 		return nil, err
 	}
-	c.addPostCommit(postCommit)
 	return &prototk.SendTransactionResponse{Id: txIDs[0].String()}, nil
 }
 

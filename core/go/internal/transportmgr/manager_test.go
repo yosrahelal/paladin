@@ -196,7 +196,7 @@ func TestSendReliableBadMsg(t *testing.T) {
 	ctx, tm, _, done := newTestTransport(t, false)
 	defer done()
 
-	_, err := tm.SendReliable(ctx, tm.persistence.DB(), &components.ReliableMessage{
+	err := tm.SendReliable(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
 		MessageType: components.RMTReceipt.Enum(),
 	})
 	assert.Regexp(t, "PD012015", err)

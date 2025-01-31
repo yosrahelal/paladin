@@ -151,6 +151,7 @@ func (h *lockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 			InputStates:  inputStates,
 			OutputStates: outputStates,
 			InfoStates:   lockedOutputStates, // making use of the InfoStates field to store the locked outputs
+			ReadStates:   inputStates,
 		},
 		AttestationPlan: []*prototk.AttestationRequest{
 			{

@@ -66,7 +66,7 @@ func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transaction
 		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 	}
 	// Invoke the domain
-	endorseRes, err := e.psc.EndorseTransaction(e.dCtx, e.p.DB(), &components.PrivateTransactionEndorseRequest{
+	endorseRes, err := e.psc.EndorseTransaction(e.dCtx, e.p.NOTX(), &components.PrivateTransactionEndorseRequest{
 		TransactionSpecification: transactionSpecification,
 		Verifiers:                verifiers,
 		Signatures:               signatures,

@@ -194,7 +194,7 @@ func NewSequencer(
 
 	//TODO consolidate the initialization of the endorsement gatherer and the assemble coordinator.  Both need the same domain context - but maybe the assemble coordinator should provide the domain context to the endorsement gatherer on a per request basis
 	//
-	domainSmartContract, err := allComponents.DomainManager().GetSmartContractByAddress(ctx, allComponents.Persistence().DB(), contractAddress)
+	domainSmartContract, err := allComponents.DomainManager().GetSmartContractByAddress(ctx, allComponents.Persistence().NOTX(), contractAddress)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to get domain smart contract for contract address %s: %s", contractAddress, err)
 

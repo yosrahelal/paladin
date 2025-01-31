@@ -16,6 +16,7 @@
 package txmgr
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync/atomic"
@@ -25,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -128,9 +130,10 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	}
 
 	// Send first 3
-	postCommit, err := txm.FinalizeTransactions(ctx, txm.p.DB(), txs[0:3])
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, txs[0:3])
+	})
 	require.NoError(t, err)
-	postCommit()
 
 	subIDStr := <-subIDChan
 	_, err = uuid.Parse(subIDStr)
@@ -142,9 +145,10 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	}
 
 	// Send rest
-	postCommit, err = txm.FinalizeTransactions(ctx, txm.p.DB(), txs[3:])
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, txs[3:])
+	})
 	require.NoError(t, err)
-	postCommit()
 
 	for i := 3; i < len(txs); i++ {
 		require.Equal(t, txs[i].TransactionID, (<-receipts).ID)
@@ -238,15 +242,16 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 		}
 	}()
 
-	postCommit, err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
-		{
-			ReceiptType:   components.RT_Success,
-			TransactionID: uuid.New(),
-			OnChain:       randOnChain(tktypes.RandAddress()),
-		},
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				ReceiptType:   components.RT_Success,
+				TransactionID: uuid.New(),
+				OnChain:       randOnChain(tktypes.RandAddress()),
+			},
+		})
 	})
 	require.NoError(t, err)
-	postCommit()
 
 	subIDStr := <-subIDChan
 	_, err = uuid.Parse(subIDStr)
