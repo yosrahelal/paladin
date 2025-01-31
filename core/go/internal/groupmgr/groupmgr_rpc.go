@@ -35,6 +35,6 @@ func (gm *groupManager) initRPC() {
 
 func (gm *groupManager) rpcQueryGroups() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
-		return gm.QueryGroups(ctx, gm.persistence.DB(), &jq)
+		return gm.QueryGroups(ctx, gm.persistence.NOTX(), &jq)
 	})
 }

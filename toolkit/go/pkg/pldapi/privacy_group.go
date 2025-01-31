@@ -24,7 +24,7 @@ type PrivacyGroup struct {
 	ID              tktypes.HexBytes  `docstruct:"PrivacyGroup" json:"id"`
 	Domain          string            `docstruct:"PrivacyGroup" json:"domain"`
 	Created         tktypes.Timestamp `docstruct:"PrivacyGroup" json:"created"`
-	SchemaReference tktypes.HexBytes  `docstruct:"PrivacyGroup" json:"schemaReference"`
+	Schema          tktypes.HexBytes  `docstruct:"PrivacyGroup" json:"schema"`
 	SchemaSignature string            `docstruct:"PrivacyGroup" json:"schemaSignature"`
 	Originator      string            `docstruct:"PrivacyGroup" json:"originator"`
 	Properties      tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"properties"`
@@ -32,9 +32,9 @@ type PrivacyGroup struct {
 }
 
 type PrivacyGroupInput struct {
-	Domain          string          `docstruct:"PrivacyGroup" json:"domain"`
-	Schema          *Schema         `docstruct:"PrivacyGroup" json:"schema,omitempty"`
-	SchemaReference tktypes.Bytes32 `docstruct:"PrivacyGroup" json:"schemaReference,omitempty"`
-	Properties      tktypes.RawJSON `docstruct:"PrivacyGroup" json:"properties"`
-	Members         []string        `docstruct:"PrivacyGroup" json:"members"`
+	Domain           string           `docstruct:"PrivacyGroup" json:"domain"`
+	SchemaDefinition tktypes.RawJSON  `docstruct:"PrivacyGroup" json:"schemaDefinition,omitempty"`
+	Schema           *tktypes.Bytes32 `docstruct:"PrivacyGroup" json:"schema,omitempty"`
+	Properties       tktypes.RawJSON  `docstruct:"PrivacyGroup" json:"properties"`
+	Members          []string         `docstruct:"PrivacyGroup" json:"members"`
 }

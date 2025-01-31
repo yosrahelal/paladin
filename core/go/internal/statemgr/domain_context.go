@@ -336,7 +336,7 @@ func (dc *domainContext) upsertStates(dbTX persistence.DBTX, holdingLock bool, s
 	withValues := make([]*components.StateWithLabels, len(stateUpserts))
 	toMakeAvailable := make([]*components.StateWithLabels, 0, len(stateUpserts))
 	for i, ns := range stateUpserts {
-		schema, err := dc.ss.GetSchema(dc, dbTX, dc.domainName, ns.Schema, true)
+		schema, err := dc.ss.getSchemaByID(dc, dbTX, dc.domainName, ns.Schema, true)
 		if err != nil {
 			return nil, err
 		}

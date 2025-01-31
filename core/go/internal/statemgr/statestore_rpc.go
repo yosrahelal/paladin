@@ -34,6 +34,7 @@ func (ss *stateManager) RPCModule() *rpcserver.RPCModule {
 func (ss *stateManager) initRPC() {
 	ss.rpcModule = rpcserver.NewRPCModule("pstate").
 		Add("pstate_listSchemas", ss.rpcListSchema()).
+		Add("pstate_getSchemaById", ss.rpcGetSchemaByID()).
 		Add("pstate_storeState", ss.rpcStoreState()).
 		Add("pstate_queryStates", ss.rpcQueryStates()).
 		Add("pstate_queryContractStates", ss.rpcQueryContractStates()).
@@ -117,5 +118,14 @@ func (ss *stateManager) rpcQueryContractNullifiers() rpcserver.RPCHandler {
 		status pldapi.StateStatusQualifier,
 	) ([]*pldapi.State, error) {
 		return ss.FindContractNullifiers(ctx, ss.p.NOTX(), domain, contractAddress, schema, &query, status)
+	})
+}
+
+func (ss *stateManager) rpcGetSchemaByID() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		domain string,
+		schemaID tktypes.Bytes32,
+	) (*pldapi.Schema, error) {
+		return ss.GetSchemaByID(ctx, ss.p.NOTX(), domain, schemaID, false /* null on not found */)
 	})
 }

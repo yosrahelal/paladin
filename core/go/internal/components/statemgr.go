@@ -42,6 +42,9 @@ type StateManager interface {
 	// Ensure ABI schemas upserts all the specified schemas, using the given DB transaction
 	EnsureABISchemas(ctx context.Context, dbTX persistence.DBTX, domainName string, defs []*abi.Parameter) ([]Schema, error)
 
+	// Get an individual schema by ID
+	GetSchemaByID(ctx context.Context, dbTX persistence.DBTX, domainName string, schemaID tktypes.Bytes32, failNotFound bool) (*pldapi.Schema, error)
+
 	// State finalizations are written on the DB context of the block indexer, by the domain manager.
 	WriteStateFinalizations(ctx context.Context, dbTX persistence.DBTX, spends []*pldapi.StateSpendRecord, reads []*pldapi.StateReadRecord, confirms []*pldapi.StateConfirmRecord, infoRecords []*pldapi.StateInfoRecord) (err error)
 

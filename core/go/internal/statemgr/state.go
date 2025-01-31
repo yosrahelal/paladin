@@ -119,7 +119,7 @@ func (ss *stateManager) processInsertStates(ctx context.Context, dbTX persistenc
 
 	processedStates = make([]*pldapi.State, len(inStates))
 	for i, inState := range inStates {
-		schema, err := ss.GetSchema(ctx, dbTX, d.Name(), inState.SchemaID, true)
+		schema, err := ss.getSchemaByID(ctx, dbTX, d.Name(), inState.SchemaID, true)
 		if err != nil {
 			return nil, err
 		}
@@ -362,7 +362,7 @@ func (ss *stateManager) findStatesCommon(
 		jq.Sort = []string{".created"}
 	}
 
-	schema, err = ss.GetSchema(ctx, dbTX, domainName, schemaID, true)
+	schema, err = ss.getSchemaByID(ctx, dbTX, domainName, schemaID, true)
 	if err != nil {
 		return nil, nil, err
 	}

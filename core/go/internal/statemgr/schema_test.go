@@ -33,7 +33,7 @@ func TestGetSchemaNotFoundNil(t *testing.T) {
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows([]string{}))
 
-	s, err := ss.GetSchema(ctx, ss.p.NOTX(), "domain1", tktypes.Bytes32Keccak(([]byte)("test")), false)
+	s, err := ss.GetSchemaByID(ctx, ss.p.NOTX(), "domain1", tktypes.Bytes32Keccak(([]byte)("test")), false)
 	require.NoError(t, err)
 	assert.Nil(t, s)
 }
@@ -44,7 +44,7 @@ func TestGetSchemaNotFoundError(t *testing.T) {
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows([]string{}))
 
-	_, err := ss.GetSchema(ctx, ss.p.NOTX(), "domain1", tktypes.Bytes32Keccak(([]byte)("test")), true)
+	_, err := ss.GetSchemaByID(ctx, ss.p.NOTX(), "domain1", tktypes.Bytes32Keccak(([]byte)("test")), true)
 	assert.Regexp(t, "PD010106", err)
 }
 

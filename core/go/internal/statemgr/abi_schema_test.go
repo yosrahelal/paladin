@@ -196,7 +196,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	schemaID = as.ID()
 
 	getValidate := func() {
-		as1, err := ss.GetSchema(ctx, ss.p.NOTX(), as.Persisted().DomainName, schemaID, true)
+		as1, err := ss.getSchemaByID(ctx, ss.p.NOTX(), as.Persisted().DomainName, schemaID, true)
 		require.NoError(t, err)
 		assert.NotNil(t, as1)
 		as1Sig, err := as1.(*abiSchema).FullSignature(ctx)
@@ -289,7 +289,7 @@ func TestGetSchemaInvalidJSON(t *testing.T) {
 		[]string{"type", "content"},
 	).AddRow(pldapi.SchemaTypeABI, "!!! { bad json"))
 
-	_, err := ss.GetSchema(ctx, ss.p.NOTX(), "domain1", tktypes.Bytes32Keccak(([]byte)("test")), true)
+	_, err := ss.GetSchemaByID(ctx, ss.p.NOTX(), "domain1", tktypes.Bytes32Keccak(([]byte)("test")), true)
 	assert.Regexp(t, "PD010113", err)
 }
 
