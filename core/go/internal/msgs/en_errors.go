@@ -27,16 +27,18 @@ import (
 
 const paladinCoreGoPrefix = "PD01"
 
-var registered sync.Once
-var ffe = func(key, translation string, statusHint ...int) i18n.ErrorMessageKey {
-	registered.Do(func() {
-		i18n.RegisterPrefix(paladinCoreGoPrefix, "Paladin Transaction Manager")
-	})
-	if !strings.HasPrefix(key, paladinCoreGoPrefix) {
-		panic(fmt.Errorf("must have prefix '%s': %s", paladinCoreGoPrefix, key))
+var (
+	registered sync.Once
+	ffe        = func(key, translation string, statusHint ...int) i18n.ErrorMessageKey {
+		registered.Do(func() {
+			i18n.RegisterPrefix(paladinCoreGoPrefix, "Paladin Transaction Manager")
+		})
+		if !strings.HasPrefix(key, paladinCoreGoPrefix) {
+			panic(fmt.Errorf("must have prefix '%s': %s", paladinCoreGoPrefix, key))
+		}
+		return i18n.FFE(language.AmericanEnglish, key, translation, statusHint...)
 	}
-	return i18n.FFE(language.AmericanEnglish, key, translation, statusHint...)
-}
+)
 
 var (
 	// Components PD0100XX
@@ -349,8 +351,8 @@ var (
 	MsgErrorMissingSignerID            = ffe("PD011928", "Signer Identifier must be provided")
 	MsgInvalidTransactionType          = ffe("PD011929", "Transaction type invalid")
 	MsgMissingConfirmedTransaction     = ffe("PD011930", "Transaction %s with nonce smaller than the recorded confirmed nonce does not have an indexed transaction.")
-	MsgPublicTxHistoryInfo             = ffe("PD011931", "PubTx[INFO] from=%s nonce=%s subStatus=%s action=%s info=%s")
-	MsgPublicTxHistoryError            = ffe("PD011932", "PubTx[ERROR] from=%s nonce=%s subStatus=%s action=%s error=%s")
+	MsgPublicTxHistoryInfo             = ffe("PD011931", "PubTx[INFO] from=%s nonce=%d subStatus=%s action=%s info=%s")
+	MsgPublicTxHistoryError            = ffe("PD011932", "PubTx[ERROR] from=%s nonce=%d subStatus=%s action=%s error=%s")
 	MsgPublicBatchCompleted            = ffe("PD011933", "Batch already completed")
 	MsgInvalidAutoFuelSource           = ffe("PD011934", "Invalid auto-fueling source '%s'")
 	MsgInvalidStateMissingTXHash       = ffe("PD011935", "Invalid state - missing transaction hash from previous sign stage")
