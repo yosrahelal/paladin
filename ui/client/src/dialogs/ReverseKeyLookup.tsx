@@ -31,6 +31,7 @@ import { useQuery } from '@tanstack/react-query';
 import { t } from 'i18next';
 import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import { reverseKeyLookup } from '../queries/keys';
+import { constants } from '../components/config';
 
 type Props = {
   dialogOpen: boolean
@@ -75,8 +76,8 @@ export const ReverseKeyLookupDialog: React.FC<Props> = ({
   }, [dialogOpen]);
 
   useEffect(() => {
-    setType(isEthereum ? 'eth_address' : otherType);
-    setAlgorithm(isEthereum ? 'ecdsa:secp256k1' : otherAlgorithm);
+    setType(isEthereum ? constants.KEY_ETHEREUM_TYPE : otherType);
+    setAlgorithm(isEthereum ? constants.KEY_ETHEREUM_ALGORITHM : otherAlgorithm);
   }, [isEthereum, otherType, otherAlgorithm]);
 
   const handleSubmit = () => {
