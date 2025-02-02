@@ -444,6 +444,5 @@ var (
 	MsgStateDistributorNullifierFail     = ffe("PD012401", "Failed to generate nullifier for state %s")
 
 	// Privacy group manager PD0125XX
-	MsgPGroupsBadABISchemaDef  = ffe("PD012500", "Invalid ABI parameter definition supplied in schemaDefinition")
-	MsgPGroupsNoSchemaSupplied = ffe("PD012501", "Must supply a schema reference, or a schemaDefinition ABI definition for the properties of the group")
+	// MsgPGroupsBadABISchemaDef = ffe("PD012500", "Invalid ABI parameter definition supplied in schemaDefinition")
 )

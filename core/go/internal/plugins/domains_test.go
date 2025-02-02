@@ -244,6 +244,12 @@ func TestDomainRequestsOK(t *testing.T) {
 				ReceiptJson: `{"receipt":"data"}`,
 			}, nil
 		},
+		InitPrivacyGroup: func(ctx context.Context, ipgr *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
+			assert.Equal(t, `{"some":"props"}`, ipgr.PropertiesJson)
+			return &prototk.InitPrivacyGroupResponse{
+				GenesisStateJson: `{"full":"props"}`,
+			}, nil
+		},
 	}
 
 	tdm := &testDomainManager{
@@ -426,6 +432,12 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, `{"receipt":"data"}`, brr.ReceiptJson)
+
+	ipgr, err := domainAPI.InitPrivacyGroup(ctx, &prototk.InitPrivacyGroupRequest{
+		PropertiesJson: `{"some":"props"}`,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, `{"full":"props"}`, ipgr.GenesisStateJson)
 
 	callbacks := <-waitForCallbacks
 

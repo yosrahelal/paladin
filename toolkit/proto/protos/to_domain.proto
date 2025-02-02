@@ -228,6 +228,17 @@ message ValidateStateHashesResponse {
   repeated string state_ids = 1; // the validates ids in the same order as the states supplied (if any states were invalid, return an error instead)
 }
 
+message InitPrivacyGroupRequest {
+  repeated string property_abi_params = 1; // Array of ABI parameters that specify how to decode the input properties
+  string properties_json = 2; // The JSON to decode the input properties against
+  repeated string members = 3; // Array of members for the privacy group
+}
+
+message InitPrivacyGroupResponse {
+  string genesis_state_json = 1; // The full definition of the group, encoding the properties, the members, and any needed configuration for all members
+  string genesis_abi_state_schema_json = 2; // The ABI definition that must be distributed alongside the state to decode and index it in the state store
+}
+
 message DomainConfig {
   bool custom_hash_function = 1; // If true then the ValidateStateHashes function must be implemeted, and all states must come with a pre-caclculated ID
   repeated string abi_state_schemas_json = 2; // A list of Schema definitions (in ABI parameter format) the domain requires for all state types it interacts with
@@ -241,7 +252,7 @@ message ContractInfo {
 }
 
 message ContractConfig {
-  string contract_config_json = 1; // Arbitray JSON configuration parsed by the domain itself - opaque to Paladin beyond being valid JSON. Passed back on all transaction calls
+  string contract_config_json = 1; // Arbitrary JSON configuration parsed by the domain itself - opaque to Paladin beyond being valid JSON. Passed back on all transaction calls
   
   enum CoordinatorSelection {
       COORDINATOR_STATIC = 0; // The coordinator is fixed for the smart contract by the configuration

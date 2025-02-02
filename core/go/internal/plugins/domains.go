@@ -369,3 +369,18 @@ func (br *domainBridge) BuildReceipt(ctx context.Context, req *prototk.BuildRece
 	)
 	return
 }
+
+func (br *domainBridge) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGroupRequest) (res *prototk.InitPrivacyGroupResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_InitPrivacyGroup{InitPrivacyGroup: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_InitPrivacyGroupRes); ok {
+				res = r.InitPrivacyGroupRes
+			}
+			return res != nil
+		},
+	)
+	return
+}

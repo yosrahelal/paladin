@@ -27,14 +27,12 @@ type PrivacyGroup struct {
 	Schema          tktypes.HexBytes  `docstruct:"PrivacyGroup" json:"schema"`
 	SchemaSignature string            `docstruct:"PrivacyGroup" json:"schemaSignature"`
 	Originator      string            `docstruct:"PrivacyGroup" json:"originator"`
-	Properties      tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"properties"`
 	Members         []string          `docstruct:"PrivacyGroup" json:"members"`
+	Properties      tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"properties"`
 }
 
 type PrivacyGroupInput struct {
-	Domain           string           `docstruct:"PrivacyGroup" json:"domain"`
-	SchemaDefinition tktypes.RawJSON  `docstruct:"PrivacyGroup" json:"schemaDefinition,omitempty"`
-	Schema           *tktypes.Bytes32 `docstruct:"PrivacyGroup" json:"schema,omitempty"`
-	Properties       tktypes.RawJSON  `docstruct:"PrivacyGroup" json:"properties"`
-	Members          []string         `docstruct:"PrivacyGroup" json:"members"`
+	Domain     string          `docstruct:"PrivacyGroup" json:"domain"`
+	Members    []string        `docstruct:"PrivacyGroup" json:"members"`
+	Properties tktypes.RawJSON `docstruct:"PrivacyGroup" json:"properties"`
 }

@@ -64,6 +64,8 @@ type Domain interface {
 
 	GetDomainReceipt(ctx context.Context, dbTX persistence.DBTX, txID uuid.UUID) (tktypes.RawJSON, error)
 	BuildDomainReceipt(ctx context.Context, dbTX persistence.DBTX, txID uuid.UUID, txStates *pldapi.TransactionStates) (tktypes.RawJSON, error)
+
+	GetPrivacyGroupConfig(ctx context.Context) (*DomainPrivacyGroupConfig, error)
 }
 
 // External interface for other components to call against a private smart contract
@@ -81,6 +83,10 @@ type DomainSmartContract interface {
 
 	InitCall(ctx context.Context, tx *ResolvedTransaction) ([]*prototk.ResolveVerifierRequest, error)
 	ExecCall(dCtx DomainContext, readTX persistence.DBTX, tx *ResolvedTransaction, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
+}
+
+type DomainPrivacyGroupConfig struct {
+	DefaultSchemaABI *abi.Parameter
 }
 
 type EndorsementResult struct {

@@ -74,14 +74,14 @@ func (gm *groupManager) Stop() {
 	gm.cancelCtx()
 }
 
-func (gm *groupManager) getSchema(ctx context.Context, dbTX persistence.DBTX, spec *pldapi.PrivacyGroupInput) (schema *pldapi.Schema, err error) {
+func (gm *groupManager) getSchema(ctx context.Context, dbTX persistence.DBTX, pgDomain *pgEnabledDomain, spec *pldapi.PrivacyGroupInput) (schema *pldapi.Schema, err error) {
 	if spec.Schema != nil {
-		return gm.stateManager.GetSchemaByID(ctx, dbTX, spec.Domain, *spec.Schema, true)
+		return gm.stateManager.GetSchemaByID(ctx, dbTX, spec.Domain, *spec.Schema, true /* fail if not found */)
 	} else if spec.SchemaDefinition != nil {
 		var abiDef abi.Parameter
 		err := json.Unmarshal(spec.SchemaDefinition, &abiDef)
 		if err != nil {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgPGroupsNoSchemaSupplied)
+			return nil, i18n.WrapError(ctx, err, msgs.MsgPGroupsBadABISchemaDef)
 		}
 		schemas, err := gm.stateManager.EnsureABISchemas(ctx, dbTX, spec.Domain, []*abi.Parameter{&abiDef})
 		if err != nil {
@@ -89,10 +89,20 @@ func (gm *groupManager) getSchema(ctx context.Context, dbTX persistence.DBTX, sp
 		}
 		return schemas[0].Persisted(), nil
 	}
-	return nil, i18n.NewError(ctx, msgs.MsgGasPriceError)
+	return pgDomain.conf.DefaultSchemaABI, nil
 }
 
 func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, spec *pldapi.PrivacyGroupInput) (id tktypes.HexBytes, err error) {
+
+	domain, err := gm.domainManager.GetDomainByName(ctx, spec.Domain)
+	if err != nil {
+		return nil, err
+	}
+
+	schema, err := gm.getSchema(ctx, dbTX, domain, spec)
+	if err != nil {
+		return nil, err
+	}
 
 	return nil, nil
 }
