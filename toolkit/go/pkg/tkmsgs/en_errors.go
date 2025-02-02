@@ -51,6 +51,10 @@ var (
 	MsgTypesUnknownJSONFormatOptions         = ffe("PD020015", "JSON formatting option unknown %s=%s")
 	MsgTypesInvalidStateQualifier            = ffe("PD020016", "Status must be one of 'available','confirmed','unconfirmed','spent','locked','all' or the UUID of a transaction")
 	MsgTypesPrivateIdentityReqFullyQualified = ffe("PD020017", "Locator string %s must be fully qualified with a node name")
+	MsgTypesInvalidJSONObjectForABIInference = ffe("PD020018", "Failed to parse JSON while inferring ABI types of properties")
+	MsgTypesTypeInferenceNotSupportedForX    = ffe("PD020019", "ABI type inference not supported for '%s' property of type %T")
+	MsgTypesNumberTypeInferenceRequiresInt   = ffe("PD020020", "ABI type inference only support integer JSON numbers. Property '%s' has non-integer value '%s'")
+	MsgTypesCannotInferTypeOfEmptyArray      = ffe("PD020021", "ABI type inference cannot determine type of empty array '%s'")
 
 	// Inflight PD0201XX
 	MsgInflightRequestCancelled = ffe("PD020100", "Request cancelled after %s")

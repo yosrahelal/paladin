@@ -17,6 +17,7 @@
 package pldapi
 
 import (
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -28,11 +29,12 @@ type PrivacyGroup struct {
 	SchemaSignature string            `docstruct:"PrivacyGroup" json:"schemaSignature"`
 	Originator      string            `docstruct:"PrivacyGroup" json:"originator"`
 	Members         []string          `docstruct:"PrivacyGroup" json:"members"`
-	Properties      tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"properties"`
+	Genesis         tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"genesis"` // full genesis state
 }
 
 type PrivacyGroupInput struct {
-	Domain     string          `docstruct:"PrivacyGroup" json:"domain"`
-	Members    []string        `docstruct:"PrivacyGroup" json:"members"`
-	Properties tktypes.RawJSON `docstruct:"PrivacyGroup" json:"properties"`
+	Domain        string             `docstruct:"PrivacyGroup" json:"domain"`
+	Members       []string           `docstruct:"PrivacyGroup" json:"members"`
+	Properties    tktypes.RawJSON    `docstruct:"PrivacyGroup" json:"properties"`              // properties that inform genesis state
+	PropertiesABI abi.ParameterArray `docstruct:"PrivacyGroup" json:"propertiesABI,omitempty"` // without this the property types will be inferred
 }

@@ -83,6 +83,8 @@ type DomainSmartContract interface {
 
 	InitCall(ctx context.Context, tx *ResolvedTransaction) ([]*prototk.ResolveVerifierRequest, error)
 	ExecCall(dCtx DomainContext, readTX persistence.DBTX, tx *ResolvedTransaction, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
+
+	InitPrivacyGroup(ctx context.Context, pgInput *pldapi.PrivacyGroupInput) (*pldapi.PrivacyGroup, error)
 }
 
 type DomainPrivacyGroupConfig struct {
