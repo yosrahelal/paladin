@@ -20,6 +20,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
@@ -129,9 +130,17 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 		return nil, i18n.NewError(ctx, msgs.MsgErrorParseDomainConfig, err)
 	}
 
+	for _, contract := range config.DomainContracts.Implementations {
+		contract.Circuits.Init()
+	}
+
 	z.name = req.Name
 	z.config = &config
 	z.chainID = req.ChainId
+
+	for _, impl := range config.DomainContracts.Implementations {
+		fmt.Printf("====> Zeto domain contracts configured: name=%s, circuits=%+v\n", impl.Name, impl.Circuits)
+	}
 
 	schemas, err := getStateSchemas(ctx)
 	if err != nil {
@@ -209,6 +218,7 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("====> Zeto domain instance config: tokenName=%s, circuits=%+v\n", config.TokenName, config.Circuits)
 	encoded, err := types.DomainInstanceConfigABI.EncodeABIDataJSONCtx(ctx, configJSON)
 	if err != nil {
 		return nil, err
@@ -249,7 +259,7 @@ func (z *Zeto) InitContract(ctx context.Context, req *prototk.InitContractReques
 		// This on-chain contract has invalid configuration - not an error in our process
 		return &prototk.InitContractResponse{Valid: false}, nil
 	}
-
+	fmt.Printf("====> Zeto contract config: name=%s, curcuits=%+v\n", domainConfig.TokenName, domainConfig.Circuits)
 	return &prototk.InitContractResponse{
 		Valid: true,
 		ContractConfig: &prototk.ContractConfig{
