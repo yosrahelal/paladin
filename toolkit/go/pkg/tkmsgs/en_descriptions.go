@@ -17,7 +17,7 @@
 package tkmsgs
 
 import (
-	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"golang.org/x/text/language"
 )
 

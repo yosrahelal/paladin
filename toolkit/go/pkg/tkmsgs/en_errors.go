@@ -17,17 +17,11 @@
 package tkmsgs
 
 import (
-	"sync"
-
-	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"golang.org/x/text/language"
 )
 
-var registered sync.Once
 var ffe = func(key, translation string, statusHint ...int) i18n.ErrorMessageKey {
-	registered.Do(func() {
-		i18n.RegisterPrefix("PD02", "Paladin Toolkit")
-	})
 	return i18n.FFE(language.AmericanEnglish, key, translation, statusHint...)
 }
 
@@ -51,6 +45,8 @@ var (
 	MsgTypesUnknownJSONFormatOptions         = ffe("PD020015", "JSON formatting option unknown %s=%s")
 	MsgTypesInvalidStateQualifier            = ffe("PD020016", "Status must be one of 'available','confirmed','unconfirmed','spent','locked','all' or the UUID of a transaction")
 	MsgTypesPrivateIdentityReqFullyQualified = ffe("PD020017", "Locator string %s must be fully qualified with a node name")
+	MsgTypesRestoreFailed                    = ffe("PD020018", "Failed to restore type '%T' into '%T'")
+	MsgTypesTimeParseFail                    = ffe("PD020019", "Cannot parse time as RFC3339, Unix, or UnixNano: '%s'", 400)
 
 	// Inflight PD0201XX
 	MsgInflightRequestCancelled = ffe("PD020100", "Request cancelled after %s")
