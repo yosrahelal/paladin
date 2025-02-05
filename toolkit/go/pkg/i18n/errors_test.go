@@ -33,26 +33,26 @@ func TestNewError(t *testing.T) {
 func TestNewErrorTruncate(t *testing.T) {
 	err := NewError(context.Background(), TestError3, "field", strings.Repeat("x", 3000))
 	assert.Error(t, err)
-	var ffe FFError
+	var ffe PDError
 	assert.Implements(t, &ffe, err)
-	assert.Equal(t, 400, interface{}(err).(FFError).HTTPStatus())
-	assert.Equal(t, TestError3, interface{}(err).(FFError).MessageKey())
+	assert.Equal(t, 400, interface{}(err).(PDError).HTTPStatus())
+	assert.Equal(t, TestError3, interface{}(err).(PDError).MessageKey())
 }
 
 func TestWrapError(t *testing.T) {
 	err := WrapError(context.Background(), fmt.Errorf("some error"), TestError1)
 	assert.Error(t, err)
-	var ffe FFError
+	var ffe PDError
 	assert.Implements(t, &ffe, err)
-	assert.Equal(t, 500, interface{}(err).(FFError).HTTPStatus())
-	assert.Equal(t, TestError1, interface{}(err).(FFError).MessageKey())
-	stackString := interface{}(err).(FFError).StackTrace()
+	assert.Equal(t, 500, interface{}(err).(PDError).HTTPStatus())
+	assert.Equal(t, TestError1, interface{}(err).(PDError).MessageKey())
+	stackString := interface{}(err).(PDError).StackTrace()
 	fmt.Printf(stackString)
 	assert.NotEmpty(t, stackString)
 }
 
 func TestSafeStackFail(t *testing.T) {
-	stackString := (&ffError{}).StackTrace()
+	stackString := (&pdError{}).StackTrace()
 	assert.Empty(t, stackString)
 }
 

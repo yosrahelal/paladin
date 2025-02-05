@@ -32,7 +32,7 @@ func truncate(s string, limit int) string {
 	return s
 }
 
-type FFError interface {
+type PDError interface {
 	error
 	MessageKey() ErrorMessageKey
 	HTTPStatus() int
@@ -43,21 +43,21 @@ type stackTracer interface {
 	StackTrace() errors.StackTrace
 }
 
-type ffError struct {
+type pdError struct {
 	error
 	msgKey ErrorMessageKey
 	status int
 }
 
-func (ffe *ffError) MessageKey() ErrorMessageKey {
+func (ffe *pdError) MessageKey() ErrorMessageKey {
 	return ffe.msgKey
 }
 
-func (ffe *ffError) HTTPStatus() int {
+func (ffe *pdError) HTTPStatus() int {
 	return ffe.status
 }
 
-func (ffe *ffError) StackTrace() string {
+func (ffe *pdError) StackTrace() string {
 	if st, ok := interface{}(ffe.error).(stackTracer); ok {
 		buff := new(strings.Builder)
 		for _, frame := range st.StackTrace() {
@@ -68,12 +68,12 @@ func (ffe *ffError) StackTrace() string {
 	return ""
 }
 
-func ffWrap(err error, msgKey ErrorMessageKey) error {
+func pdWrap(err error, msgKey ErrorMessageKey) error {
 	status, ok := statusHints[string(msgKey)]
 	if !ok {
 		status = http.StatusInternalServerError
 	}
-	return &ffError{
+	return &pdError{
 		error:  err,
 		msgKey: msgKey,
 		status: status,
@@ -82,7 +82,7 @@ func ffWrap(err error, msgKey ErrorMessageKey) error {
 
 // NewError creates a new error
 func NewError(ctx context.Context, msg ErrorMessageKey, inserts ...interface{}) error {
-	return ffWrap(errors.New(truncate(ExpandWithCode(ctx, MessageKey(msg), inserts...), 2048)), msg)
+	return pdWrap(errors.New(truncate(ExpandWithCode(ctx, MessageKey(msg), inserts...), 2048)), msg)
 }
 
 // WrapError wraps an error
@@ -90,5 +90,5 @@ func WrapError(ctx context.Context, err error, msg ErrorMessageKey, inserts ...i
 	if err == nil {
 		return NewError(ctx, msg, inserts...)
 	}
-	return ffWrap(errors.Wrap(err, truncate(ExpandWithCode(ctx, MessageKey(msg), inserts...), 2048)), msg)
+	return pdWrap(errors.Wrap(err, truncate(ExpandWithCode(ctx, MessageKey(msg), inserts...), 2048)), msg)
 }

@@ -25,13 +25,13 @@ import (
 )
 
 var (
-	TestError1  = FFE(language.AmericanEnglish, "PD02001", "Test error 1: %s")
-	TestError2  = FFE(language.AmericanEnglish, "PD02002", "Test error 2: %s")
-	TestError3  = FFE(language.AmericanEnglish, "PD02003", "Test error 3", 400)
-	TestConfig1 = FFC(language.AmericanEnglish, "config.something.1", "Test config field 1", "some type")
+	TestError1  = PDE(language.AmericanEnglish, "PD02001", "Test error 1: %s")
+	TestError2  = PDE(language.AmericanEnglish, "PD02002", "Test error 2: %s")
+	TestError3  = PDE(language.AmericanEnglish, "PD02003", "Test error 3", 400)
+	TestConfig1 = PDC(language.AmericanEnglish, "config.something.1", "Test config field 1", "some type")
 
-	TestError1Lang2  = FFE(language.Spanish, "PD02001", "Error de prueba 1: %s")
-	TestConfig1Lang2 = FFC(language.Spanish, "config.something.1", "campo de configuración de prueba", "some type")
+	TestError1Lang2  = PDE(language.Spanish, "PD02001", "Error de prueba 1: %s")
+	TestConfig1Lang2 = PDC(language.Spanish, "config.something.1", "campo de configuración de prueba", "some type")
 )
 
 func TestExpand(t *testing.T) {
@@ -91,15 +91,15 @@ func TestGetStatusHint(t *testing.T) {
 }
 
 func TestDuplicateKey(t *testing.T) {
-	FFM(language.AmericanEnglish, "FF109999", "test1")
+	PDM(language.AmericanEnglish, "FF109999", "test1")
 	assert.Panics(t, func() {
-		FFM(language.AmericanEnglish, "FF109999", "test2")
+		PDM(language.AmericanEnglish, "FF109999", "test2")
 	})
 }
 
 func TestInvalidPrefixKey(t *testing.T) {
 	assert.Panics(t, func() {
-		FFE(language.AmericanEnglish, "ABCD1234", "test1")
+		PDE(language.AmericanEnglish, "ABCD1234", "test1")
 	})
 }
 
@@ -122,15 +122,15 @@ func TestGetFieldType(t *testing.T) {
 }
 
 func TestDuplicateConfigKey(t *testing.T) {
-	FFC(language.AmericanEnglish, "config.test.2", "test2 description", "type")
+	PDC(language.AmericanEnglish, "config.test.2", "test2 description", "type")
 	assert.Panics(t, func() {
-		FFC(language.AmericanEnglish, "config.test.2", "test2 dupe", "dupe type")
+		PDC(language.AmericanEnglish, "config.test.2", "test2 dupe", "dupe type")
 	})
 }
 
 func TestRegisterPrefixOK(t *testing.T) {
 	RegisterPrefix("AB12", "my microservice")
-	msgMyMessage := FFE(language.AmericanEnglish, "AB1200000", "Something went pop")
+	msgMyMessage := PDE(language.AmericanEnglish, "AB1200000", "Something went pop")
 	err := NewError(context.Background(), msgMyMessage)
 	assert.Regexp(t, "AB1200000", err)
 }

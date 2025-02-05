@@ -92,8 +92,8 @@ func RegisterPrefix(prefix, description string) {
 	registeredPrefixes[prefix] = description
 }
 
-// FFE is the translation helper to register an error message
-func FFE(language language.Tag, key, translation string, statusHint ...int) ErrorMessageKey {
+// PDE is the translation helper to register an error message
+func PDE(language language.Tag, key, translation string, statusHint ...int) ErrorMessageKey {
 	validPrefix := false
 	for rp := range registeredPrefixes {
 		if strings.HasPrefix(key, rp) {
@@ -104,15 +104,15 @@ func FFE(language language.Tag, key, translation string, statusHint ...int) Erro
 	if !validPrefix {
 		panic(fmt.Sprintf("Message ID %s does not use one of the registered prefixes in the common utility package", key))
 	}
-	msgID := FFM(language, key, translation)
+	msgID := PDM(language, key, translation)
 	if len(statusHint) > 0 {
 		statusHints[key] = statusHint[0]
 	}
 	return ErrorMessageKey(msgID)
 }
 
-// FFM is the translation helper to define a new message (not used in translation files)
-func FFM(language language.Tag, key, translation string) MessageKey {
+// PDM is the translation helper to define a new message (not used in translation files)
+func PDM(language language.Tag, key, translation string) MessageKey {
 	if checkKeyExists(language, key) {
 		panic(fmt.Sprintf("Message ID %s re-used", key))
 	}
@@ -122,7 +122,7 @@ func FFM(language language.Tag, key, translation string) MessageKey {
 }
 
 // FFC is the translation helper to define a configuration key description and type
-func FFC(language language.Tag, key, translation, fieldType string) ConfigMessageKey {
+func PDC(language language.Tag, key, translation, fieldType string) ConfigMessageKey {
 	if checkKeyExists(language, key) {
 		panic(fmt.Sprintf("Config ID %s re-used", key))
 	}
