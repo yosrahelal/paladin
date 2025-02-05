@@ -17,7 +17,6 @@ package zeto
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
@@ -282,7 +281,6 @@ func formatTransferProvingRequest(ctx context.Context, zeto *Zeto, inputCoins, o
 		}
 		extras = protoExtras
 	}
-	fmt.Printf("=====> circuit proto: %+v\n", circuit.ToProto())
 	payload := &corepb.ProvingRequest{
 		Circuit: circuit.ToProto(),
 		Common: &corepb.ProvingRequestCommon{

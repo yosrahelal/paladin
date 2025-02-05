@@ -418,6 +418,7 @@ task cleanCluster(type: Exec) {
 
 task clean {
     dependsOn cleanCluster
+    delete 'test/e2e/abis'
 }
 
 // The 'e2e' task runs the whole flow

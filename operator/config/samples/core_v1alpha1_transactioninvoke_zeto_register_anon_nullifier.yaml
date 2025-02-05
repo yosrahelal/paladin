@@ -25,11 +25,11 @@ spec:
       "implementation": {
         "implementation":        "{{ index .status.resolvedContractAddresses "zeto-impl-anon-nullifier" }}",
         "verifiers": {
+          "verifier":              "{{ index .status.resolvedContractAddresses "zeto-g16-anon-nullifier-transfer" }}",
           "depositVerifier":       "{{ index .status.resolvedContractAddresses "zeto-g16-deposit" }}",
           "withdrawVerifier":      "{{ index .status.resolvedContractAddresses "zeto-g16-withdraw-nullifier" }}",
-          "batchWithdrawVerifier": "{{ index .status.resolvedContractAddresses "zeto-g16-withdraw-nullifier-batch" }}",
-          "verifier":              "{{ index .status.resolvedContractAddresses "zeto-g16-anon-nullifier-transfer" }}",
           "batchVerifier":         "{{ index .status.resolvedContractAddresses "zeto-g16-anon-nullifier-transfer-batch" }}",
+          "batchWithdrawVerifier": "{{ index .status.resolvedContractAddresses "zeto-g16-withdraw-nullifier-batch" }}",
           "lockVerifier":          "0x0000000000000000000000000000000000000000",
           "batchLockVerifier":     "0x0000000000000000000000000000000000000000"
         }
@@ -57,6 +57,11 @@ spec:
                 "components": [
                   {
                     "internalType": "address",
+                    "name": "verifier",
+                    "type": "address"
+                  },
+                  {
+                    "internalType": "address",
                     "name": "depositVerifier",
                     "type": "address"
                   },
@@ -67,17 +72,12 @@ spec:
                   },
                   {
                     "internalType": "address",
-                    "name": "batchWithdrawVerifier",
-                    "type": "address"
-                  },
-                  {
-                    "internalType": "address",
-                    "name": "verifier",
-                    "type": "address"
-                  },
-                  {
-                    "internalType": "address",
                     "name": "batchVerifier",
+                    "type": "address"
+                  },
+                  {
+                    "internalType": "address",
+                    "name": "batchWithdrawVerifier",
                     "type": "address"
                   },
                   {

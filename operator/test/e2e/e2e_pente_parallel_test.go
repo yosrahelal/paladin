@@ -42,7 +42,7 @@ import (
 
 var _ = Describe("pente - parallelism on a single contract", Ordered, func() {
 	BeforeAll(func() {
-		Skip("for now")
+		// Skip("for now")
 	})
 
 	AfterAll(func() {

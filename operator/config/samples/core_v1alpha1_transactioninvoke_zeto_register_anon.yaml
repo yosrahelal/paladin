@@ -25,11 +25,11 @@ spec:
       "implementation": {
         "implementation":        "{{ index .status.resolvedContractAddresses "zeto-impl-anon" }}",
         "verifiers": {
+          "verifier":              "{{ index .status.resolvedContractAddresses "zeto-g16-anon" }}",
           "depositVerifier":       "{{ index .status.resolvedContractAddresses "zeto-g16-deposit" }}",
           "withdrawVerifier":      "{{ index .status.resolvedContractAddresses "zeto-g16-withdraw" }}",
-          "batchWithdrawVerifier": "{{ index .status.resolvedContractAddresses "zeto-g16-withdraw-batch" }}",
-          "verifier":              "{{ index .status.resolvedContractAddresses "zeto-g16-anon" }}",
           "batchVerifier":         "{{ index .status.resolvedContractAddresses "zeto-g16-anon-batch" }}",
+          "batchWithdrawVerifier": "{{ index .status.resolvedContractAddresses "zeto-g16-withdraw-batch" }}",
           "lockVerifier":          "0x0000000000000000000000000000000000000000",
           "batchLockVerifier":     "0x0000000000000000000000000000000000000000"
         }
@@ -57,6 +57,11 @@ spec:
                 "components": [
                   {
                     "internalType": "address",
+                    "name": "verifier",
+                    "type": "address"
+                  },
+                  {
+                    "internalType": "address",
                     "name": "depositVerifier",
                     "type": "address"
                   },
@@ -67,17 +72,12 @@ spec:
                   },
                   {
                     "internalType": "address",
-                    "name": "batchWithdrawVerifier",
-                    "type": "address"
-                  },
-                  {
-                    "internalType": "address",
-                    "name": "verifier",
-                    "type": "address"
-                  },
-                  {
-                    "internalType": "address",
                     "name": "batchVerifier",
+                    "type": "address"
+                  },
+                  {
+                    "internalType": "address",
+                    "name": "batchWithdrawVerifier",
                     "type": "address"
                   },
                   {
