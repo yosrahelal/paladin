@@ -1,3 +1,4 @@
+import { NotoUnlockPublicParams } from "../domains/noto";
 import { IStateBase } from "./states";
 import { ethers } from "ethers";
 
@@ -101,7 +102,8 @@ export interface INotoDomainReceipt {
   lockInfo?: {
     lockId: string;
     delegate?: string;
-    unlock?: string;
+    unlockParams?: NotoUnlockPublicParams;
+    unlockCall?: string;
   };
   data?: string;
 }
