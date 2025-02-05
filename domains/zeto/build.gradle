@@ -300,7 +300,7 @@ task assemble {
 }
 
 dependencies {
-    goSource files(goFiles, copySolidity, copyPkgSolidity)
+    goSource files(goFiles, copySolidity, copyPkgSolidity, copySolidityForTest)
     zetoArtifacts files(extractZetoArtifacts)
     poseidonArtifacts files(generatePoseidonArtifacts)
 }
