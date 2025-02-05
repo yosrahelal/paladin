@@ -92,6 +92,7 @@ type UnlockParams struct {
 
 type DelegateLockParams struct {
 	LockID   tktypes.Bytes32     `json:"lockId"`
+	Unlock   *UnlockPublicParams `json:"unlock"`
 	Delegate *tktypes.EthAddress `json:"delegate"`
 	Data     tktypes.HexBytes    `json:"data"`
 }
@@ -99,6 +100,14 @@ type DelegateLockParams struct {
 type UnlockRecipient struct {
 	To     string              `json:"to"`
 	Amount *tktypes.HexUint256 `json:"amount"`
+}
+
+type UnlockPublicParams struct {
+	LockedInputs  []string         `json:"lockedInputs"`
+	LockedOutputs []string         `json:"lockedOutputs"`
+	Outputs       []string         `json:"outputs"`
+	Signature     tktypes.HexBytes `json:"signature"`
+	Data          tktypes.HexBytes `json:"data"`
 }
 
 type ApproveExtraParams struct {
