@@ -508,15 +508,19 @@ func (n *Noto) encodeUnlock(ctx context.Context, contract *ethtypes.Address0xHex
 	})
 }
 
-func (n *Noto) encodeUnlockMasked(ctx context.Context, contract *ethtypes.Address0xHex, lockedInputs, lockedOutputs, outputs []*prototk.EndorsableState, data tktypes.HexBytes) (ethtypes.HexBytes0xPrefix, error) {
+func (n *Noto) unlockHashFromStates(ctx context.Context, contract *ethtypes.Address0xHex, lockedInputs, lockedOutputs, outputs []*prototk.EndorsableState, data tktypes.HexBytes) (ethtypes.HexBytes0xPrefix, error) {
+	return n.unlockHashFromIDs(ctx, contract, endorsableStateIDs(lockedInputs), endorsableStateIDs(lockedOutputs), endorsableStateIDs(outputs), data)
+}
+
+func (n *Noto) unlockHashFromIDs(ctx context.Context, contract *ethtypes.Address0xHex, lockedInputs, lockedOutputs, outputs []string, data tktypes.HexBytes) (ethtypes.HexBytes0xPrefix, error) {
 	return eip712.EncodeTypedDataV4(ctx, &eip712.TypedData{
 		Types:       NotoUnlockMaskedTypeSet,
 		PrimaryType: "Unlock",
 		Domain:      n.eip712Domain(contract),
 		Message: map[string]any{
-			"lockedInputs":  stringToAny(endorsableStateIDs(lockedInputs)),
-			"lockedOutputs": stringToAny(endorsableStateIDs(lockedOutputs)),
-			"outputs":       stringToAny(endorsableStateIDs(outputs)),
+			"lockedInputs":  stringToAny(lockedInputs),
+			"lockedOutputs": stringToAny(lockedOutputs),
+			"outputs":       stringToAny(outputs),
 			"data":          data,
 		},
 	})

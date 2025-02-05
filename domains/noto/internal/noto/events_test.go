@@ -128,7 +128,6 @@ func TestHandleEventBatch_NotoLock(t *testing.T) {
 	output := tktypes.RandBytes32()
 	lockedOutput := tktypes.RandBytes32()
 	event := &NotoLock_Event{
-		LockID:        tktypes.RandBytes32(),
 		Inputs:        []tktypes.Bytes32{input},
 		Outputs:       []tktypes.Bytes32{output},
 		LockedOutputs: []tktypes.Bytes32{lockedOutput},
@@ -221,7 +220,6 @@ func TestHandleEventBatch_NotoUnlock(t *testing.T) {
 	output := tktypes.RandBytes32()
 	lockedOutput := tktypes.RandBytes32()
 	event := &NotoUnlock_Event{
-		LockID:        tktypes.RandBytes32(),
 		LockedInputs:  []tktypes.Bytes32{lockedInput},
 		LockedOutputs: []tktypes.Bytes32{lockedOutput},
 		Outputs:       []tktypes.Bytes32{output},

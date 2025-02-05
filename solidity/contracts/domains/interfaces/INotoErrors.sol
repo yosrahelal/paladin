@@ -14,19 +14,7 @@ interface INotoErrors {
 
     error NotoInvalidDelegate(bytes32 txhash, address delegate, address sender);
 
-    error NotoLockNotFound(bytes32 lockId);
+    error NotoInvalidUnlockHash(bytes32 expected, bytes32 actual);
 
-    error NotoInvalidLockState(bytes32 lockId);
-
-    error NotoInvalidLockDelegate(
-        bytes32 lockId,
-        address delegate,
-        address sender
-    );
-
-    error NotoInvalidUnlockHash(
-        bytes32 lockId,
-        bytes32 expected,
-        bytes32 actual
-    );
+    error NotoAlreadyPrepared(bytes32 unlockHash);
 }
