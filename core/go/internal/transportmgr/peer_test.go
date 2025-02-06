@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -36,7 +37,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func mockGetStateRetryThenOk(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
@@ -88,8 +88,7 @@ func TestReliableMessageResendRealDB(t *testing.T) {
 	}
 
 	sds := make([]*components.StateDistribution, 2)
-	postCommits := make([]func(), 0)
-	_ = tm.persistence.DB().Transaction(func(dbTX *gorm.DB) error {
+	_ = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		for i := 0; i < len(sds); i++ {
 			sds[i] = &components.StateDistribution{
 				Domain:          "domain1",
@@ -98,19 +97,15 @@ func TestReliableMessageResendRealDB(t *testing.T) {
 				StateID:         tktypes.RandHex(32),
 			}
 
-			postCommit, err := tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
+			err := tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
 				MessageType: components.RMTState.Enum(),
 				Node:        "node2",
 				Metadata:    tktypes.JSONString(sds[i]),
 			})
 			require.NoError(t, err)
-			postCommits = append(postCommits, postCommit)
 		}
 		return nil
 	})
-	for _, pc := range postCommits {
-		pc()
-	}
 
 	// Check we get the two messages twice, with the send retry kicking in
 	for i := 0; i < 2; i++ {
@@ -180,13 +175,14 @@ func TestReliableMessageSendSendQuiesceRealDB(t *testing.T) {
 			StateID:         tktypes.RandHex(32),
 		}
 
-		postCommit, err := tm.SendReliable(ctx, tm.persistence.DB(), &components.ReliableMessage{
-			MessageType: components.RMTState.Enum(),
-			Node:        "node2",
-			Metadata:    tktypes.JSONString(sd),
+		err := tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+			return tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
+				MessageType: components.RMTState.Enum(),
+				Node:        "node2",
+				Metadata:    tktypes.JSONString(sd),
+			})
 		})
 		require.NoError(t, err)
-		postCommit()
 
 		msg := <-sentMessages
 		var receivedSD components.StateDistributionWithData
@@ -243,9 +239,10 @@ func TestSendBadReliableMessageMarkedFailRealDB(t *testing.T) {
 		MessageType: components.RMTState.Enum(),
 		Node:        "node2",
 	}
-	postCommit, err := tm.SendReliable(ctx, tm.persistence.DB(), rm)
+	err := tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return tm.SendReliable(ctx, dbTX, rm)
+	})
 	require.NoError(t, err)
-	postCommit()
 
 	// Second with missing state
 	rm2 := &components.ReliableMessage{
@@ -258,22 +255,23 @@ func TestSendBadReliableMessageMarkedFailRealDB(t *testing.T) {
 			StateID:         tktypes.RandHex(32),
 		}),
 	}
-	postCommit, err = tm.SendReliable(ctx, tm.persistence.DB(), rm2)
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return tm.SendReliable(ctx, dbTX, rm2)
+	})
 	require.NoError(t, err)
-	postCommit()
 
 	// Wait for nack
 	var rmWithAck *components.ReliableMessage
 	for (rmWithAck == nil || rmWithAck.Ack == nil) && !t.Failed() {
 		time.Sleep(10 * time.Millisecond)
-		rmWithAck, err = tm.getReliableMessageByID(ctx, tm.persistence.DB(), rm.ID)
+		rmWithAck, err = tm.getReliableMessageByID(ctx, tm.persistence.NOTX(), rm.ID)
 		require.NoError(t, err)
 	}
 	require.NotNil(t, rmWithAck.Ack)
 	require.Regexp(t, "PD012016", rmWithAck.Ack.Error)
 
 	// Second nack
-	rmWithAck, err = tm.getReliableMessageByID(ctx, tm.persistence.DB(), rm2.ID)
+	rmWithAck, err = tm.getReliableMessageByID(ctx, tm.persistence.NOTX(), rm2.ID)
 	require.NoError(t, err)
 	require.NotNil(t, rmWithAck.Ack)
 	require.Regexp(t, "PD012014", rmWithAck.Ack.Error)
@@ -399,7 +397,7 @@ func TestGetReliableMessageByIDFail(t *testing.T) {
 	})
 	defer done()
 
-	_, err := tm.getReliableMessageByID(ctx, tm.persistence.DB(), uuid.New())
+	_, err := tm.getReliableMessageByID(ctx, tm.persistence.NOTX(), uuid.New())
 	require.Regexp(t, "pop", err)
 
 }
@@ -432,7 +430,7 @@ func TestProcessReliableMsgPageIgnoreBeforeHWM(t *testing.T) {
 		lastDrainHWM: confutil.P(uint64(100)),
 	}
 
-	err := p.processReliableMsgPage([]*components.ReliableMessage{
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*components.ReliableMessage{
 		{
 			ID:       uuid.New(),
 			Sequence: 50,
@@ -455,7 +453,7 @@ func TestProcessReliableMsgPageIgnoreUnsupported(t *testing.T) {
 		tm:  tm,
 	}
 
-	err := p.processReliableMsgPage([]*components.ReliableMessage{
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*components.ReliableMessage{
 		{
 			ID:          uuid.New(),
 			Sequence:    50,
@@ -498,7 +496,7 @@ func TestProcessReliableMsgPageInsertFail(t *testing.T) {
 		Created:     tktypes.TimestampNow(),
 	}
 
-	err := p.processReliableMsgPage([]*components.ReliableMessage{rm})
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*components.ReliableMessage{rm})
 	require.Regexp(t, "PD020302", err)
 
 }

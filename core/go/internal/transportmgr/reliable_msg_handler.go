@@ -20,14 +20,14 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"gorm.io/gorm"
 )
 
 const (
@@ -60,7 +60,7 @@ type stateAndAck struct {
 	ack   *ackInfo
 }
 
-func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX *gorm.DB, values []*reliableMsgOp) (func(error), []flushwriter.Result[*noResult], error) {
+func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX persistence.DBTX, values []*reliableMsgOp) ([]flushwriter.Result[*noResult], error) {
 
 	var acksToWrite []*components.ReliableMessageAck
 	var acksToSend []*ackInfo
@@ -68,24 +68,13 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX *go
 	nullifierUpserts := make(map[string][]*components.NullifierUpsert)
 	var preparedTxnToAdd []*components.PreparedTransactionWithRefs
 	var txReceiptsToFinalize []*components.ReceiptInput
-	var writePreparedTxPostCommit func()
-	var krc components.KeyResolutionContext
 
-	cleanup := func(err error) {
-		if krc != nil {
-			krc.Close(err == nil)
+	dbTX.AddPostCommit(func(ctx context.Context) {
+		// We've committed the database work ok - send the acks/nacks to the other side
+		for _, a := range acksToSend {
+			_ = tm.queueFireAndForget(ctx, a.node, buildAck(a.id, a.Error))
 		}
-		if err == nil {
-
-			// We've committed the database work ok - send the acks/nacks to the other side
-			for _, a := range acksToSend {
-				_ = tm.queueFireAndForget(ctx, a.node, buildAck(a.id, a.Error))
-			}
-			if writePreparedTxPostCommit != nil {
-				writePreparedTxPostCommit()
-			}
-		}
-	}
+	})
 
 	// The batch can contain different kinds of message that all need persistence activity
 	for _, v := range values {
@@ -95,11 +84,8 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX *go
 			sd, stateToAdd, err := parseStateDistribution(ctx, v.msg.MessageID, v.msg.Payload)
 			if err == nil && sd.NullifierAlgorithm != nil && sd.NullifierVerifierType != nil && sd.NullifierPayloadType != nil {
 				// We need to build any nullifiers that are required, before we dispatch to persistence
-				if krc == nil {
-					krc = tm.keyManager.NewKeyResolutionContext(ctx)
-				}
 				var nullifier *components.NullifierUpsert
-				nullifier, err = tm.privateTxManager.BuildNullifier(ctx, krc.KeyResolver(dbTX), sd)
+				nullifier, err = tm.privateTxManager.BuildNullifier(ctx, tm.keyManager.KeyResolverForDBTX(dbTX), sd)
 				if err == nil {
 					nullifierUpserts[sd.Domain] = append(nullifierUpserts[sd.Domain], nullifier)
 				}
@@ -184,9 +170,9 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX *go
 			ackQuery[i] = a.MessageID
 		}
 		var matchedMsgs []*components.ReliableMessage
-		err := dbTX.WithContext(ctx).Select("id").Find(&matchedMsgs).Error
+		err := dbTX.DB().WithContext(ctx).Select("id").Find(&matchedMsgs).Error
 		if err != nil {
-			return cleanup, nil, err
+			return nil, err
 		}
 		validatedAcks := make([]*components.ReliableMessageAck, 0, len(acksToWrite))
 		for _, a := range acksToWrite {
@@ -200,42 +186,35 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX *go
 		if len(validatedAcks) > 0 {
 			// Now we're actually ready to insert them
 			if err := tm.writeAcks(ctx, dbTX, acksToWrite...); err != nil {
-				return cleanup, nil, err
+				return nil, err
 			}
 		}
 	}
 
 	// Insert the transaction receipts
 	if len(txReceiptsToFinalize) > 0 {
-		if err := tm.txManager.FinalizeTransactions(ctx, dbTX, txReceiptsToFinalize); err != nil {
-			return cleanup, nil, err
+		err := tm.txManager.FinalizeTransactions(ctx, dbTX, txReceiptsToFinalize)
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	// Insert the prepared transactions, capturing any post-commit
 	if len(preparedTxnToAdd) > 0 {
-		var err error
-		if writePreparedTxPostCommit, err = tm.txManager.WritePreparedTransactions(ctx, dbTX, preparedTxnToAdd); err != nil {
-			return cleanup, nil, err
+		if err := tm.txManager.WritePreparedTransactions(ctx, dbTX, preparedTxnToAdd); err != nil {
+			return nil, err
 		}
 	}
 
 	// Write any nullifiers we generated
 	for domain, nullifiers := range nullifierUpserts {
 		if err := tm.stateManager.WriteNullifiersForReceivedStates(ctx, dbTX, domain, nullifiers); err != nil {
-			return cleanup, nil, err
-		}
-	}
-
-	// Ensure we close out the key resolution context if we started one
-	if krc != nil {
-		if err := krc.PreCommit(); err != nil {
-			return cleanup, nil, err
+			return nil, err
 		}
 	}
 
 	// We use a post-commit handler to send back any acks to the other side that are required
-	return cleanup, make([]flushwriter.Result[*noResult], len(values)), nil
+	return make([]flushwriter.Result[*noResult], len(values)), nil
 
 }
 
@@ -277,7 +256,7 @@ func (tm *transportManager) parseReceivedAckNack(ctx context.Context, msg *compo
 	return ackNackToWrite
 }
 
-func (tm *transportManager) buildStateDistributionMsg(ctx context.Context, dbTX *gorm.DB, rm *components.ReliableMessage) (*prototk.PaladinMsg, error, error) {
+func (tm *transportManager) buildStateDistributionMsg(ctx context.Context, dbTX persistence.DBTX, rm *components.ReliableMessage) (*prototk.PaladinMsg, error, error) {
 
 	// Validate the message first (not retryable)
 	sd, parsed, parseErr := parseStateDistribution(ctx, rm.ID, rm.Metadata)

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
@@ -14,6 +13,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,7 +44,7 @@ func (s *nonFungibleTestSuiteHelper) testZeto(t *testing.T, tokenName string, is
 			TokenName: tokenName,
 		})
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr.RPCError())
 	}
 
 	log.L(ctx).Infof("Zeto instance deployed to %s", zetoAddress)
@@ -162,7 +162,7 @@ func (s *nonFungibleTestSuiteHelper) mint(ctx context.Context, zetoAddress tktyp
 		ABI: types.ZetoNonFungibleABI,
 	}, true)
 	if rpcerr != nil {
-		return nil, rpcerr.Error()
+		return nil, rpcerr.RPCError()
 	}
 	return invokeResult, nil
 }
@@ -192,11 +192,11 @@ func (s *nonFungibleTestSuiteHelper) transfer(ctx context.Context, zetoAddress t
 		ABI: types.ZetoNonFungibleABI,
 	}, true)
 	if rpcerr != nil {
-		return nil, rpcerr.Error()
+		return nil, rpcerr.RPCError()
 	}
 	return &invokeResult, nil
 }
-func findAvailableTokens(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON, useNullifiers bool, owner *tktypes.Bytes32) []*types.ZetoNFTState {
+func findAvailableTokens(t *testing.T, ctx context.Context, rpc rpcclient.Client, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON, useNullifiers bool, owner *tktypes.Bytes32) []*types.ZetoNFTState {
 	if jq == nil {
 		jq = query.NewQueryBuilder().
 			Limit(100).
@@ -214,7 +214,7 @@ func findAvailableTokens(t *testing.T, ctx context.Context, rpc rpcbackend.Backe
 		jq,
 		"available")
 	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+		require.NoError(t, rpcerr.RPCError())
 	}
 
 	// Filter out the tokens that are not owned by the owner

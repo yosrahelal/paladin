@@ -20,9 +20,9 @@ import (
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/utxo"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 )
 
 type commonWitnessInputs struct {

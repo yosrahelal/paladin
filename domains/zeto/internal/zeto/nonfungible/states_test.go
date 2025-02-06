@@ -13,7 +13,6 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,6 +46,16 @@ func (dc *testDomainCallbacks) RecoverSigner(ctx context.Context, req *pb.Recove
 }
 
 func (dc *testDomainCallbacks) DecodeData(ctx context.Context, req *pb.DecodeDataRequest) (*pb.DecodeDataResponse, error) {
+	return nil, nil
+}
+func (dc *testDomainCallbacks) GetStatesByID(ctx context.Context, req *pb.GetStatesByIDRequest) (*pb.GetStatesByIDResponse, error) {
+	return nil, nil
+}
+func (dc *testDomainCallbacks) LocalNodeName(context.Context, *pb.LocalNodeNameRequest) (*pb.LocalNodeNameResponse, error) {
+	return nil, nil
+}
+
+func (dc *testDomainCallbacks) SendTransaction(ctx context.Context, tx *pb.SendTransactionRequest) (*pb.SendTransactionResponse, error) {
 	return nil, nil
 }
 

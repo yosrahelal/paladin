@@ -19,11 +19,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -75,13 +75,12 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				})
 			case preparedTransaction.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPrivateTransaction && !hasPublicTransaction:
 				log.L(ctx).Infof("Result of transaction %s is a chained private transaction", preparedTransaction.ID)
-				preparePostCommit, validatedPrivateTx, err := s.components.TxManager().PrepareInternalPrivateTransaction(ctx, s.components.Persistence().DB(), preparedTransaction.PreparedPrivateTransaction, pldapi.SubmitModeAuto)
+				validatedPrivateTx, err := s.components.TxManager().PrepareInternalPrivateTransaction(ctx, s.components.Persistence().NOTX(), preparedTransaction.PreparedPrivateTransaction, pldapi.SubmitModeAuto)
 				if err != nil {
 					log.L(ctx).Errorf("Error preparing transaction %s: %s", preparedTransaction.ID, err)
 					// TODO: this is just an error situation for one transaction - this function is a batch function
 					return err
 				}
-				preparePostCommit() // we didn't use a coordinated TX to call immediately
 				dispatchBatch.PrivateDispatches = append(dispatchBatch.PrivateDispatches, validatedPrivateTx)
 			case preparedTransaction.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION && (hasPublicTransaction || hasPrivateTransaction):
 				log.L(ctx).Infof("Result of transaction %s is a prepared transaction public=%t private=%t", preparedTransaction.ID, hasPublicTransaction, hasPrivateTransaction)
@@ -152,7 +151,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				}
 				publicTXs[i].Data = tktypes.HexBytes(data)
 
-				err = publicTransactionEngine.ValidateTransaction(ctx, s.components.Persistence().DB(), publicTXs[i])
+				err = publicTransactionEngine.ValidateTransaction(ctx, s.components.Persistence().NOTX(), publicTXs[i])
 				if err != nil {
 					return i18n.WrapError(ctx, err, msgs.MsgPrivTxMgrPublicTxFail)
 				}
@@ -191,7 +190,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 
 	// We also need to trigger ourselves for any private TX we chained
 	for _, tx := range dispatchBatch.PrivateDispatches {
-		if err := s.privateTxManager.HandleNewTx(ctx, s.components.Persistence().DB(), tx); err != nil {
+		if err := s.privateTxManager.HandleNewTx(ctx, s.components.Persistence().NOTX(), tx); err != nil {
 			log.L(ctx).Errorf("Sequencer failed to notify private TX manager for chained transaction")
 		}
 	}

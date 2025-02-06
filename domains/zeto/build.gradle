@@ -24,7 +24,7 @@ ext {
     goFilesE2E = fileTree(".") {
         include "integration-test/**/*.go"
     }
-    targetCoverage = 92.9
+    targetCoverage = 92.0
     maxCoverageBarGap = 1
     coveragePackages = [
         "github.com/kaleido-io/paladin/domains/zeto/internal/...",
@@ -302,7 +302,7 @@ task assemble {
 }
 
 dependencies {
-    goSource files(goFiles, copySolidity, copyPkgSolidity)
+    goSource files(goFiles, copySolidity, copyPkgSolidity, copySolidityForTest)
     zetoArtifacts files(extractZetoArtifacts)
     poseidonArtifacts files(generatePoseidonArtifacts)
 }

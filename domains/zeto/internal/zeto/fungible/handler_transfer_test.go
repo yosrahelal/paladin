@@ -25,7 +25,8 @@ import (
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -114,7 +115,7 @@ func TestTransferInit(t *testing.T) {
 				Amount: tktypes.MustParseHexUint256("0x0a"),
 			},
 		},
-		Transaction: &prototk.TransactionSpecification{
+		Transaction: &pb.TransactionSpecification{
 			From: "Bob",
 		},
 	}
@@ -130,20 +131,20 @@ func TestTransferInit(t *testing.T) {
 func TestTransferAssemble(t *testing.T) {
 	h := transferHandler{
 		name: "test1",
-		coinSchema: &prototk.StateSchema{
+		coinSchema: &pb.StateSchema{
 			Id: "coin",
 		},
-		merkleTreeRootSchema: &prototk.StateSchema{
+		merkleTreeRootSchema: &pb.StateSchema{
 			Id: "merkle_tree_root",
 		},
-		merkleTreeNodeSchema: &prototk.StateSchema{
+		merkleTreeNodeSchema: &pb.StateSchema{
 			Id: "merkle_tree_node",
 		},
 	}
 	ctx := context.Background()
-	txSpec := &prototk.TransactionSpecification{
+	txSpec := &pb.TransactionSpecification{
 		From: "Bob",
-		ContractInfo: &prototk.ContractInfo{
+		ContractInfo: &pb.ContractInfo{
 			ContractAddress: "0x1234567890123456789012345678901234567890",
 		},
 	}
@@ -160,8 +161,8 @@ func TestTransferAssemble(t *testing.T) {
 			CircuitId: "circuit1",
 		},
 	}
-	req := &prototk.AssembleTransactionRequest{
-		ResolvedVerifiers: []*prototk.ResolvedVerifier{
+	req := &pb.AssembleTransactionRequest{
+		ResolvedVerifiers: []*pb.ResolvedVerifier{
 			{
 				Lookup:       "Alice",
 				Verifier:     "0x1234567890123456789012345678901234567890",
@@ -174,14 +175,14 @@ func TestTransferAssemble(t *testing.T) {
 	_, err := h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210036: Failed to resolve verifier: Bob")
 
-	req.ResolvedVerifiers = append(req.ResolvedVerifiers, &prototk.ResolvedVerifier{
+	req.ResolvedVerifiers = append(req.ResolvedVerifiers, &pb.ResolvedVerifier{
 		Lookup:       "Bob",
 		Verifier:     "0x1234567890123456789012345678901234567890",
 		Algorithm:    h.getAlgoZetoSnarkBJJ(),
 		VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 	})
-	testCallbacks := &testDomainCallbacks{
-		returnFunc: func() (*prototk.FindAvailableStatesResponse, error) {
+	testCallbacks := &domain.MockDomainCallbacks{
+		MockFindAvailableStates: func() (*pb.FindAvailableStatesResponse, error) {
 			return nil, errors.New("test error")
 		},
 	}
@@ -190,11 +191,11 @@ func TestTransferAssemble(t *testing.T) {
 	assert.EqualError(t, err, "PD210039: Failed to prepare transaction inputs. PD210032: Failed to query the state store for available coins. test error")
 
 	calls := 0
-	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
+	testCallbacks.MockFindAvailableStates = func() (*pb.FindAvailableStatesResponse, error) {
 		defer func() { calls++ }()
 		if calls == 0 {
-			return &prototk.FindAvailableStatesResponse{
-				States: []*prototk.StoredState{
+			return &pb.FindAvailableStatesResponse{
+				States: []*pb.StoredState{
 					{
 						DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}",
 					},
@@ -217,9 +218,9 @@ func TestTransferAssemble(t *testing.T) {
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210039: Failed to prepare transaction inputs. PD210032: Failed to query the state store for available coins. test error")
 
-	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
-		return &prototk.FindAvailableStatesResponse{
-			States: []*prototk.StoredState{
+	testCallbacks.MockFindAvailableStates = func() (*pb.FindAvailableStatesResponse, error) {
+		return &pb.FindAvailableStatesResponse{
+			States: []*pb.StoredState{
 				{
 					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}",
 				},
@@ -246,9 +247,9 @@ func TestTransferAssemble(t *testing.T) {
 	assert.Equal(t, "0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025", coin2.Owner.String())
 	assert.Equal(t, "0x06", coin2.Amount.String())
 
-	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
-		return &prototk.FindAvailableStatesResponse{
-			States: []*prototk.StoredState{
+	testCallbacks.MockFindAvailableStates = func() (*pb.FindAvailableStatesResponse, error) {
+		return &pb.FindAvailableStatesResponse{
+			States: []*pb.StoredState{
 				{
 					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x04\"}",
 				},
@@ -269,7 +270,7 @@ func TestTransferAssemble(t *testing.T) {
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
 	tx.DomainConfig.CircuitId = constants.CIRCUIT_ANON_NULLIFIER
 	called := 0
-	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
+	testCallbacks.MockFindAvailableStates = func() (*pb.FindAvailableStatesResponse, error) {
 		var dataJson string
 		if called == 0 {
 			dataJson = "{\"salt\":\"0x13de02d64a5736a56b2d35d2a83dd60397ba70aae6f8347629f0960d4fee5d58\",\"owner\":\"0xc1d218cf8993f940e75eabd3fee23dadc4e89cd1de479f03a61e91727959281b\",\"amount\":\"0x0a\"}"
@@ -279,8 +280,8 @@ func TestTransferAssemble(t *testing.T) {
 			dataJson = "{\"index\":\"0x3801702a0a958207c485bbf0137ff64327bdf16ad9a5acdb4d5ab1469b87e326\",\"leftChild\":\"0x0000000000000000000000000000000000000000000000000000000000000000\",\"refKey\":\"0x89ea7fc1e5e9722566083823f288a45d6dc7ef30b68094f006530dfe9f5cf90f\",\"rightChild\":\"0x0000000000000000000000000000000000000000000000000000000000000000\",\"type\":\"0x02\"}"
 		}
 		called++
-		return &prototk.FindAvailableStatesResponse{
-			States: []*prototk.StoredState{
+		return &pb.FindAvailableStatesResponse{
+			States: []*pb.StoredState{
 				{
 					DataJson: dataJson,
 				},
@@ -298,7 +299,7 @@ func TestTransferEndorse(t *testing.T) {
 	h := transferHandler{}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{}
-	req := &prototk.EndorseTransactionRequest{}
+	req := &pb.EndorseTransactionRequest{}
 	res, err := h.Endorse(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Nil(t, res)
@@ -308,7 +309,7 @@ func TestTransferPrepare(t *testing.T) {
 	h := transferHandler{
 		name: "test1",
 	}
-	txSpec := &prototk.TransactionSpecification{
+	txSpec := &pb.TransactionSpecification{
 		TransactionId: "bad hex",
 		From:          "Bob",
 	}
@@ -324,14 +325,14 @@ func TestTransferPrepare(t *testing.T) {
 			TokenName: constants.TOKEN_ANON_ENC,
 		},
 	}
-	req := &prototk.PrepareTransactionRequest{
-		InputStates: []*prototk.EndorsableState{
+	req := &pb.PrepareTransactionRequest{
+		InputStates: []*pb.EndorsableState{
 			{
 				SchemaId:      "coin",
 				StateDataJson: "bad json",
 			},
 		},
-		OutputStates: []*prototk.EndorsableState{
+		OutputStates: []*pb.EndorsableState{
 			{
 				SchemaId:      "coin",
 				StateDataJson: "bad json",
@@ -344,10 +345,10 @@ func TestTransferPrepare(t *testing.T) {
 	assert.EqualError(t, err, "PD210043: Did not find 'sender' attestation")
 
 	at := zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK
-	req.AttestationResult = []*prototk.AttestationResult{
+	req.AttestationResult = []*pb.AttestationResult{
 		{
 			Name:            "sender",
-			AttestationType: prototk.AttestationType_ENDORSE,
+			AttestationType: pb.AttestationType_ENDORSE,
 			PayloadType:     &at,
 			Payload:         []byte("bad payload"),
 		},
@@ -406,21 +407,21 @@ func TestTransferPrepare(t *testing.T) {
 }
 
 func TestGenerateMerkleProofs(t *testing.T) {
-	testCallbacks := &testDomainCallbacks{
-		returnFunc: func() (*prototk.FindAvailableStatesResponse, error) {
+	testCallbacks := &domain.MockDomainCallbacks{
+		MockFindAvailableStates: func() (*pb.FindAvailableStatesResponse, error) {
 			return nil, errors.New("test error")
 		},
 	}
 	h := transferHandler{
 		name:      "test1",
 		callbacks: testCallbacks,
-		coinSchema: &prototk.StateSchema{
+		coinSchema: &pb.StateSchema{
 			Id: "coin",
 		},
-		merkleTreeRootSchema: &prototk.StateSchema{
+		merkleTreeRootSchema: &pb.StateSchema{
 			Id: "merkle_tree_root",
 		},
-		merkleTreeNodeSchema: &prototk.StateSchema{
+		merkleTreeNodeSchema: &pb.StateSchema{
 			Id: "merkle_tree_node",
 		},
 	}
@@ -438,9 +439,9 @@ func TestGenerateMerkleProofs(t *testing.T) {
 	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.merkleTreeRootSchema, h.merkleTreeNodeSchema, constants.TOKEN_ANON, queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "PD210019: Failed to create Merkle tree for smt_Zeto_Anon_0x1234567890123456789012345678901234567890: PD210065: Failed to find available states for the merkle tree. test error")
 
-	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
-		return &prototk.FindAvailableStatesResponse{
-			States: []*prototk.StoredState{
+	testCallbacks.MockFindAvailableStates = func() (*pb.FindAvailableStatesResponse, error) {
+		return &pb.FindAvailableStatesResponse{
+			States: []*pb.StoredState{
 				{
 					DataJson: "{\"rootIndex\":\"0x28025a624a1e83687e84451d04190f081d79d470f9d50a7059508476be02d401\"}",
 				},
@@ -456,38 +457,38 @@ func TestGenerateMerkleProofs(t *testing.T) {
 
 	inputCoins[0].Salt = tktypes.MustParseHexUint256("0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec")
 	calls := 0
-	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
+	testCallbacks.MockFindAvailableStates = func() (*pb.FindAvailableStatesResponse, error) {
 		defer func() { calls++ }()
 		if calls == 0 {
-			return &prototk.FindAvailableStatesResponse{
-				States: []*prototk.StoredState{
+			return &pb.FindAvailableStatesResponse{
+				States: []*pb.StoredState{
 					{
 						DataJson: "{\"rootIndex\":\"0x28025a624a1e83687e84451d04190f081d79d470f9d50a7059508476be02d401\"}",
 					},
 				},
 			}, nil
 		} else {
-			return &prototk.FindAvailableStatesResponse{
-				States: []*prototk.StoredState{},
+			return &pb.FindAvailableStatesResponse{
+				States: []*pb.StoredState{},
 			}, nil
 		}
 	}
 	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.merkleTreeRootSchema, h.merkleTreeNodeSchema, constants.TOKEN_ANON, queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "PD210055: Failed to query the smt DB for leaf node (ref=789c99b9a2196addb3ac11567135877e8b86bc9b5f7725808a79757fd36b2a2a). key not found")
 
-	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
+	testCallbacks.MockFindAvailableStates = func() (*pb.FindAvailableStatesResponse, error) {
 		defer func() { calls++ }()
 		if calls == 0 {
-			return &prototk.FindAvailableStatesResponse{
-				States: []*prototk.StoredState{
+			return &pb.FindAvailableStatesResponse{
+				States: []*pb.StoredState{
 					{
 						DataJson: "{\"rootIndex\":\"0x28025a624a1e83687e84451d04190f081d79d470f9d50a7059508476be02d401\"}",
 					},
 				},
 			}, nil
 		} else {
-			return &prototk.FindAvailableStatesResponse{
-				States: []*prototk.StoredState{
+			return &pb.FindAvailableStatesResponse{
+				States: []*pb.StoredState{
 					{
 						DataJson: "{\"index\":\"0x3801702a0a958207c485bbf0137ff64327bdf16ad9a5acdb4d5ab1469b87e326\",\"leftChild\":\"0x0000000000000000000000000000000000000000000000000000000000000000\",\"refKey\":\"0x89ea7fc1e5e9722566083823f288a45d6dc7ef30b68094f006530dfe9f5cf90f\",\"rightChild\":\"0x0000000000000000000000000000000000000000000000000000000000000000\",\"type\":\"0x02\"}",
 					},
@@ -498,19 +499,19 @@ func TestGenerateMerkleProofs(t *testing.T) {
 	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.merkleTreeRootSchema, h.merkleTreeNodeSchema, constants.TOKEN_ANON, queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "PD210057: Coin (ref=789c99b9a2196addb3ac11567135877e8b86bc9b5f7725808a79757fd36b2a2a) found in the merkle tree but the persisted hash 26e3879b46b15a4ddbaca5d96af1bd2743f67f13f0bb85c40782950a2a700138 (index=3801702a0a958207c485bbf0137ff64327bdf16ad9a5acdb4d5ab1469b87e326) did not match the expected hash 0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f (index=5f5d5e50a650a20986d496e6645ea31770758d924796f0dfc5ac2ad234b03e30)")
 
-	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
+	testCallbacks.MockFindAvailableStates = func() (*pb.FindAvailableStatesResponse, error) {
 		defer func() { calls++ }()
 		if calls == 0 {
-			return &prototk.FindAvailableStatesResponse{
-				States: []*prototk.StoredState{
+			return &pb.FindAvailableStatesResponse{
+				States: []*pb.StoredState{
 					{
 						DataJson: "{\"rootIndex\":\"0x789c99b9a2196addb3ac11567135877e8b86bc9b5f7725808a79757fd36b2a2a\"}",
 					},
 				},
 			}, nil
 		} else {
-			return &prototk.FindAvailableStatesResponse{
-				States: []*prototk.StoredState{
+			return &pb.FindAvailableStatesResponse{
+				States: []*pb.StoredState{
 					{
 						DataJson: "{\"index\":\"0x5f5d5e50a650a20986d496e6645ea31770758d924796f0dfc5ac2ad234b03e30\",\"leftChild\":\"0x0000000000000000000000000000000000000000000000000000000000000000\",\"refKey\":\"0x789c99b9a2196addb3ac11567135877e8b86bc9b5f7725808a79757fd36b2a2a\",\"rightChild\":\"0x0000000000000000000000000000000000000000000000000000000000000000\",\"type\":\"0x02\"}",
 					},
@@ -532,21 +533,33 @@ func TestNonFungibleTransferEndorse(t *testing.T) {
 	assert.Nil(t, res)
 }
 
+var _ plugintk.DomainCallbacks = &testDomainCallbacks{}
+
 type testDomainCallbacks struct {
-	returnFunc func() (*prototk.FindAvailableStatesResponse, error)
+	returnFunc func() (*pb.FindAvailableStatesResponse, error)
 }
 
-func (dc *testDomainCallbacks) FindAvailableStates(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
+func (dc *testDomainCallbacks) FindAvailableStates(ctx context.Context, req *pb.FindAvailableStatesRequest) (*pb.FindAvailableStatesResponse, error) {
 	return dc.returnFunc()
 }
 
-func (dc *testDomainCallbacks) EncodeData(ctx context.Context, req *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error) {
+func (dc *testDomainCallbacks) EncodeData(ctx context.Context, req *pb.EncodeDataRequest) (*pb.EncodeDataResponse, error) {
 	return nil, nil
 }
-func (dc *testDomainCallbacks) RecoverSigner(ctx context.Context, req *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error) {
+func (dc *testDomainCallbacks) RecoverSigner(ctx context.Context, req *pb.RecoverSignerRequest) (*pb.RecoverSignerResponse, error) {
 	return nil, nil
 }
 
-func (dc *testDomainCallbacks) DecodeData(context.Context, *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
+func (dc *testDomainCallbacks) DecodeData(context.Context, *pb.DecodeDataRequest) (*pb.DecodeDataResponse, error) {
+	return nil, nil
+}
+func (dc *testDomainCallbacks) GetStatesByID(ctx context.Context, req *pb.GetStatesByIDRequest) (*pb.GetStatesByIDResponse, error) {
+	return nil, nil
+}
+func (dc *testDomainCallbacks) LocalNodeName(context.Context, *pb.LocalNodeNameRequest) (*pb.LocalNodeNameResponse, error) {
+	return nil, nil
+}
+
+func (dc *testDomainCallbacks) SendTransaction(ctx context.Context, tx *pb.SendTransactionRequest) (*pb.SendTransactionResponse, error) {
 	return nil, nil
 }

@@ -91,7 +91,6 @@ func TestDepositAssemble(t *testing.T) {
 		Algorithm:    h.getAlgoZetoSnarkBJJ(),
 		VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 	})
-
 	_, err = h.Assemble(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210040: Failed to prepare transaction outputs. PD210037: Failed load owner public key")
 

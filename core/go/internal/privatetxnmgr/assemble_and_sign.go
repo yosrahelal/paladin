@@ -20,9 +20,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -117,8 +117,7 @@ func (s *Sequencer) assembleAndSign(ctx context.Context, transactionID uuid.UUID
 	/*
 	 * Assemble
 	 */
-	readTX := s.components.Persistence().DB()
-	err = s.domainAPI.AssembleTransaction(domainContext, readTX, transaction, localTx)
+	err = s.domainAPI.AssembleTransaction(domainContext, s.components.Persistence().NOTX(), transaction, localTx)
 	if err != nil {
 		log.L(ctx).Errorf("assembleAndSign: Error assembling transaction: %s", err)
 		return nil, err
