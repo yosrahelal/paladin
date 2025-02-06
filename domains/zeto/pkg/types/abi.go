@@ -52,6 +52,12 @@ type TransferParamEntry struct {
 	Amount *tktypes.HexUint256 `json:"amount"`
 }
 
+type TransferLockedParams struct {
+	LockedInputs []*tktypes.HexUint256 `json:"lockedInputs"`
+	Delegate     string                `json:"delegate"`
+	Transfers    []*TransferParamEntry `json:"transfers"`
+}
+
 type LockParams struct {
 	Amount   *tktypes.HexUint256 `json:"amount"`
 	Delegate *tktypes.EthAddress `json:"delegate"`

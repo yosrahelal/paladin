@@ -103,7 +103,7 @@ func (h *lockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 	}
 
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	inputCoins, inputStates, _, remainder, err := h.zeto.buildInputsForExpectedTotal(ctx, useNullifiers, req.StateQueryContext, resolvedSender.Verifier, params.Amount.Int())
+	inputCoins, inputStates, _, remainder, err := h.zeto.buildInputsForExpectedTotal(ctx, useNullifiers, req.StateQueryContext, resolvedSender.Verifier, params.Amount.Int(), false)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxInputs, err)
 	}
@@ -129,7 +129,7 @@ func (h *lockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 			Amount: params.Amount,
 		},
 	}
-	lockedOutputCoins, lockedOutputStates, err := h.zeto.prepareOutputsForTransfer(ctx, useNullifiers, lockedOutputEntries, req.ResolvedVerifiers)
+	lockedOutputCoins, lockedOutputStates, err := h.zeto.prepareOutputsForTransfer(ctx, useNullifiers, lockedOutputEntries, req.ResolvedVerifiers, true)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
@@ -190,10 +190,13 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 	if err != nil {
 		return nil, err
 	}
+	outputs = trimZetoUtxos(outputs)
+
 	lockedOutputs, err := utxosFromOutputStates(ctx, h.zeto, req.InfoStates, inputSize)
 	if err != nil {
 		return nil, err
 	}
+	lockedOutputs = trimZetoUtxos(lockedOutputs)
 
 	data, err := encodeTransactionData(ctx, req.Transaction)
 	if err != nil {
@@ -204,9 +207,10 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		"outputs":       outputs,
 		"lockedOutputs": lockedOutputs,
 		"proof":         encodeProof(proofRes.Proof),
+		"delegate":      tx.Params.(*types.LockParams).Delegate.String(),
 		"data":          data,
 	}
-	transferFunction := getTransferABI(tx.DomainConfig.TokenName)
+	transferFunction := getLockABI(tx.DomainConfig.TokenName)
 	if common.IsNullifiersToken(tx.DomainConfig.TokenName) {
 		delete(params, "inputs")
 		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
@@ -229,33 +233,10 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 	}, nil
 }
 
-// func (h *lockHandler) loadCoins(ctx context.Context, ids []any, stateQueryContext string) ([]*types.ZetoCoin, error) {
-// 	inputIDs := make([]any, 0, len(ids))
-// 	for _, input := range ids {
-// 		parsed, err := tktypes.ParseHexUint256(ctx, input.(string))
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		if !parsed.NilOrZero() {
-// 			inputIDs = append(inputIDs, parsed)
-// 		}
-// 	}
-
-// 	queryBuilder := query.NewQueryBuilder().In(".id", inputIDs)
-// 	inputStates, err := h.zeto.findAvailableStates(ctx, false, stateQueryContext, queryBuilder.Query().String())
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	if len(inputStates) != len(inputIDs) {
-// 		return nil, i18n.NewError(ctx, msgs.MsgErrorParseInputStates)
-// 	}
-
-// 	inputCoins := make([]*types.ZetoCoin, len(inputStates))
-// 	for i, state := range inputStates {
-// 		err := json.Unmarshal([]byte(state.DataJson), &inputCoins[i])
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 	}
-// 	return inputCoins, nil
-// }
+func getLockABI(tokenName string) *abi.Entry {
+	transferFunction := lockABI
+	if common.IsNullifiersToken(tokenName) {
+		transferFunction = lockABI_nullifiers
+	}
+	return transferFunction
+}

@@ -131,6 +131,9 @@ func (z *Zeto) handleLockedEvent(ctx context.Context, ev *prototk.OnChainEvent, 
 			TransactionId: txID.String(),
 			Location:      ev.Location,
 		})
+		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, lock.Inputs)...)
+		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, lock.Outputs)...)
+		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, lock.LockedOutputs)...)
 	} else {
 		log.L(ctx).Errorf("Failed to unmarshal lock event: %s", err)
 	}

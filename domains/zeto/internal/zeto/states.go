@@ -95,21 +95,22 @@ func (z *Zeto) makeNewState(ctx context.Context, useNullifiers bool, coin *types
 	return newState, nil
 }
 
-func (z *Zeto) prepareInputsForTransfer(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, params []*types.TransferParamEntry) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
+func (z *Zeto) prepareInputsForTransfer(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, params []*types.TransferParamEntry, locked ...bool) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
 	expectedTotal := big.NewInt(0)
 	for _, param := range params {
 		expectedTotal = expectedTotal.Add(expectedTotal, param.Amount.Int())
 	}
 
-	return z.buildInputsForExpectedTotal(ctx, useNullifiers, stateQueryContext, senderKey, expectedTotal)
+	isLocked := len(locked) > 0 && locked[0]
+	return z.buildInputsForExpectedTotal(ctx, useNullifiers, stateQueryContext, senderKey, expectedTotal, isLocked)
 }
 
 func (z *Zeto) prepareInputsForWithdraw(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, amount *tktypes.HexUint256) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
 	expectedTotal := amount.Int()
-	return z.buildInputsForExpectedTotal(ctx, useNullifiers, stateQueryContext, senderKey, expectedTotal)
+	return z.buildInputsForExpectedTotal(ctx, useNullifiers, stateQueryContext, senderKey, expectedTotal, false)
 }
 
-func (z *Zeto) buildInputsForExpectedTotal(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, expectedTotal *big.Int) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
+func (z *Zeto) buildInputsForExpectedTotal(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, expectedTotal *big.Int, locked bool) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
@@ -118,7 +119,8 @@ func (z *Zeto) buildInputsForExpectedTotal(ctx context.Context, useNullifiers bo
 		queryBuilder := query.NewQueryBuilder().
 			Limit(10).
 			Sort(".created").
-			Equal("owner", senderKey)
+			Equal("owner", senderKey).
+			Equal("locked", false)
 
 		if lastStateTimestamp > 0 {
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)
@@ -153,9 +155,10 @@ func (z *Zeto) buildInputsForExpectedTotal(ctx context.Context, useNullifiers bo
 	}
 }
 
-func (z *Zeto) prepareOutputsForTransfer(ctx context.Context, useNullifiers bool, params []*types.TransferParamEntry, resolvedVerifiers []*pb.ResolvedVerifier) ([]*types.ZetoCoin, []*pb.NewState, error) {
+func (z *Zeto) prepareOutputsForTransfer(ctx context.Context, useNullifiers bool, params []*types.TransferParamEntry, resolvedVerifiers []*pb.ResolvedVerifier, locked ...bool) ([]*types.ZetoCoin, []*pb.NewState, error) {
 	var coins []*types.ZetoCoin
 	var newStates []*pb.NewState
+	isLocked := len(locked) > 0 && locked[0]
 	for _, param := range params {
 		resolvedRecipient := domain.FindVerifier(param.To, z.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, resolvedVerifiers)
 		if resolvedRecipient == nil {
@@ -172,6 +175,7 @@ func (z *Zeto) prepareOutputsForTransfer(ctx context.Context, useNullifiers bool
 			Salt:   (*tktypes.HexUint256)(salt),
 			Owner:  tktypes.MustParseHexBytes(compressedKeyStr),
 			Amount: param.Amount,
+			Locked: isLocked,
 		}
 
 		newState, err := z.makeNewState(ctx, useNullifiers, newCoin, param.To)

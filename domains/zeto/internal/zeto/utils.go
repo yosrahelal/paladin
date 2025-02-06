@@ -298,3 +298,13 @@ func formatTransferProvingRequest(ctx context.Context, zeto *Zeto, inputCoins, o
 	}
 	return proto.Marshal(payload)
 }
+
+func trimZetoUtxos(utxos []string) []string {
+	var trimmed []string
+	for _, utxo := range utxos {
+		if utxo != "0" {
+			trimmed = append(trimmed, utxo)
+		}
+	}
+	return trimmed
+}

@@ -38,6 +38,7 @@ type ZetoCoin struct {
 	Salt   *tktypes.HexUint256 `json:"salt"`
 	Owner  tktypes.HexBytes    `json:"owner"`
 	Amount *tktypes.HexUint256 `json:"amount"`
+	Locked bool                `json:"locked"`
 	hash   *tktypes.HexUint256
 }
 
@@ -67,6 +68,7 @@ var ZetoCoinABI = &abi.Parameter{
 	Components: abi.ParameterArray{
 		{Name: "salt", Type: "uint256"},
 		{Name: "owner", Type: "bytes32", Indexed: true},
-		{Name: "amount", Type: "uint256", Indexed: true},
+		{Name: "amount", Type: "uint256"},
+		{Name: "locked", Type: "bool", Indexed: true},
 	},
 }

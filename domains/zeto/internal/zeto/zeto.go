@@ -87,10 +87,12 @@ type WithdrawEvent struct {
 }
 
 type LockedEvent struct {
-	UTXOs     []tktypes.HexUint256 `json:"utxos"`
-	Delegate  tktypes.EthAddress   `json:"delegate"`
-	Submitter tktypes.EthAddress   `json:"submitter"`
-	Data      tktypes.HexBytes     `json:"data"`
+	Inputs        []tktypes.HexUint256 `json:"inputs"`
+	Outputs       []tktypes.HexUint256 `json:"outputs"`
+	LockedOutputs []tktypes.HexUint256 `json:"lockedOutputs"`
+	Delegate      tktypes.EthAddress   `json:"delegate"`
+	Submitter     tktypes.EthAddress   `json:"submitter"`
+	Data          tktypes.HexBytes     `json:"data"`
 }
 
 var factoryDeployABI = &abi.Entry{
@@ -302,6 +304,8 @@ func (z *Zeto) GetHandler(method string) types.DomainHandler {
 		return &mintHandler{zeto: z}
 	case "transfer":
 		return &transferHandler{zeto: z}
+	case "transferLocked":
+		return &transferLockedHandler{zeto: z}
 	case "lock":
 		return &lockHandler{zeto: z}
 	case "deposit":

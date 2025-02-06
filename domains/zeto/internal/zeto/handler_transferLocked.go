@@ -18,6 +18,7 @@ package zeto
 import (
 	"context"
 	"encoding/json"
+	"math/big"
 	"strings"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -27,20 +28,23 @@ import (
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"google.golang.org/protobuf/proto"
 )
 
-type transferHandler struct {
+type transferLockedHandler struct {
 	zeto *Zeto
 }
 
-var transferABI = &abi.Entry{
+var transferLockedABI = &abi.Entry{
 	Type: abi.Function,
-	Name: "transfer",
+	Name: "transferLocked",
 	Inputs: abi.ParameterArray{
 		{Name: "inputs", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
@@ -49,9 +53,9 @@ var transferABI = &abi.Entry{
 	},
 }
 
-var transferABI_nullifiers = &abi.Entry{
+var transferLockedABI_nullifiers = &abi.Entry{
 	Type: abi.Function,
-	Name: "transfer",
+	Name: "transferLocked",
 	Inputs: abi.ParameterArray{
 		{Name: "nullifiers", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
@@ -61,35 +65,21 @@ var transferABI_nullifiers = &abi.Entry{
 	},
 }
 
-var transferABI_withEncryption = &abi.Entry{
-	Type: abi.Function,
-	Name: "transfer",
-	Inputs: abi.ParameterArray{
-		{Name: "inputs", Type: "uint256[]"},
-		{Name: "outputs", Type: "uint256[]"},
-		{Name: "encryptionNonce", Type: "uint256"},
-		{Name: "ecdhPublicKey", Type: "uint256[2]"},
-		{Name: "encryptedValues", Type: "uint256[]"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
-		{Name: "data", Type: "bytes"},
-	},
-}
-
-func (h *transferHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
-	var transferParams types.TransferParams
+func (h *transferLockedHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
+	var transferParams types.TransferLockedParams
 	if err := json.Unmarshal([]byte(params), &transferParams); err != nil {
 		return nil, err
 	}
 
-	if err := validateTransferParams(ctx, transferParams.Transfers); err != nil {
+	if err := validateTransferLockedParams(ctx, transferParams); err != nil {
 		return nil, err
 	}
 
-	return transferParams.Transfers, nil
+	return &transferParams, nil
 }
 
-func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
-	params := tx.Params.([]*types.TransferParamEntry)
+func (h *transferLockedHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
+	params := tx.Params.(*types.TransferLockedParams)
 
 	res := &pb.InitTransactionResponse{
 		RequiredVerifiers: []*pb.ResolveVerifierRequest{
@@ -98,11 +88,16 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
 				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
+			{
+				Lookup:       params.Delegate,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
 		},
 	}
-	for _, param := range params {
+	for _, transfer := range params.Transfers {
 		res.RequiredVerifiers = append(res.RequiredVerifiers, &pb.ResolveVerifierRequest{
-			Lookup:       param.To,
+			Lookup:       transfer.To,
 			Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
 			VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 		})
@@ -111,8 +106,8 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 	return res, nil
 }
 
-func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
-	params := tx.Params.([]*types.TransferParamEntry)
+func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
+	params := tx.Params.(*types.TransferLockedParams)
 
 	resolvedSender := domain.FindVerifier(tx.Transaction.From, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
 	if resolvedSender == nil {
@@ -120,14 +115,29 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	}
 
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	inputCoins, inputStates, _, remainder, err := h.zeto.prepareInputsForTransfer(ctx, useNullifiers, req.StateQueryContext, resolvedSender.Verifier, params)
+	inputCoins, inputStates, err := h.loadCoins(ctx, params.LockedInputs, req.StateQueryContext)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxInputs, err)
 	}
-	outputCoins, outputStates, err := h.zeto.prepareOutputsForTransfer(ctx, useNullifiers, params, req.ResolvedVerifiers)
+
+	// verify that the specified inputs have at least the amount to support te transfers
+	inputTotal := big.NewInt(0)
+	for _, coin := range inputCoins {
+		inputTotal = inputTotal.Add(inputTotal, coin.Amount.Int())
+	}
+	transferTotal := big.NewInt(0)
+	for _, param := range params.Transfers {
+		transferTotal = transferTotal.Add(transferTotal, param.Amount.Int())
+	}
+	if inputTotal.Cmp(transferTotal) < 0 {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorInsufficientInputAmount, inputTotal.Text(10), transferTotal.Text(10))
+	}
+
+	outputCoins, outputStates, err := h.zeto.prepareOutputsForTransfer(ctx, useNullifiers, params.Transfers, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
+	remainder := big.NewInt(0).Sub(inputTotal, transferTotal)
 	if remainder.Sign() > 0 {
 		// add the remainder as an output to the sender themselves
 		remainderHex := tktypes.HexUint256(*remainder)
@@ -149,7 +159,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := formatTransferProvingRequest(ctx, h.zeto, inputCoins, outputCoins, (*tx.DomainConfig.Circuits)["transfer"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
+	payloadBytes, err := formatTransferProvingRequest(ctx, h.zeto, inputCoins, outputCoins, (*tx.DomainConfig.Circuits)["transferLocked"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
@@ -174,11 +184,11 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	}, nil
 }
 
-func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
+func (h *transferLockedHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
 	return nil, nil
 }
 
-func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
+func (h *transferLockedHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
 	var proofRes corepb.ProvingResponse
 	result := domain.FindAttestation("sender", req.AttestationResult)
 	if result == nil {
@@ -208,12 +218,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		"proof":   encodeProof(proofRes.Proof),
 		"data":    data,
 	}
-	transferFunction := getTransferABI(tx.DomainConfig.TokenName)
-	if common.IsEncryptionToken(tx.DomainConfig.TokenName) {
-		params["ecdhPublicKey"] = strings.Split(proofRes.PublicInputs["ecdhPublicKey"], ",")
-		params["encryptionNonce"] = proofRes.PublicInputs["encryptionNonce"]
-		params["encryptedValues"] = strings.Split(proofRes.PublicInputs["encryptedValues"], ",")
-	}
+	transferFunction := getTransferLockedABI(tx.DomainConfig.TokenName)
 	if common.IsNullifiersToken(tx.DomainConfig.TokenName) {
 		delete(params, "inputs")
 		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
@@ -243,12 +248,60 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	}, nil
 }
 
-func getTransferABI(tokenName string) *abi.Entry {
-	transferFunction := transferABI
-	if common.IsEncryptionToken(tokenName) {
-		transferFunction = transferABI_withEncryption
-	} else if common.IsNullifiersToken(tokenName) {
-		transferFunction = transferABI_nullifiers
+func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*tktypes.HexUint256, stateQueryContext string) ([]*types.ZetoCoin, []*pb.StateRef, error) {
+	inputIDs := make([]any, 0, len(ids))
+	for _, input := range ids {
+		if !input.NilOrZero() {
+			inputIDs = append(inputIDs, input.String())
+		}
+	}
+
+	queryBuilder := query.NewQueryBuilder().In(".id", inputIDs).Equal("locked", true)
+	inputStates, err := h.zeto.findAvailableStates(ctx, false, stateQueryContext, queryBuilder.Query().String())
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(inputStates) != len(inputIDs) {
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorParseInputStates, len(inputIDs), len(inputStates))
+	}
+
+	inputCoins := make([]*types.ZetoCoin, len(inputStates))
+	stateRefs := make([]*pb.StateRef, 0, len(inputStates))
+	for i, state := range inputStates {
+		err := json.Unmarshal([]byte(state.DataJson), &inputCoins[i])
+		if err != nil {
+			return nil, nil, err
+		}
+		if inputCoins[i].Locked == false {
+			hash, err := inputCoins[i].Hash(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorInputNotLocked, hash)
+		}
+		stateRefs = append(stateRefs, &pb.StateRef{
+			SchemaId: state.SchemaId,
+			Id:       state.Id,
+		})
+
+	}
+	return inputCoins, stateRefs, nil
+}
+
+func validateTransferLockedParams(ctx context.Context, params types.TransferLockedParams) error {
+	if params.Delegate == "" {
+		return i18n.NewError(ctx, msgs.MsgErrorMissingLockDelegate)
+	}
+	if params.LockedInputs == nil || len(params.LockedInputs) == 0 {
+		return i18n.NewError(ctx, msgs.MsgErrorMissingLockInputs)
+	}
+	return nil
+}
+
+func getTransferLockedABI(tokenName string) *abi.Entry {
+	transferFunction := transferLockedABI
+	if common.IsNullifiersToken(tokenName) {
+		transferFunction = transferLockedABI_nullifiers
 	}
 	return transferFunction
 }
