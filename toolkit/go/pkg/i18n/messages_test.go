@@ -27,7 +27,7 @@ import (
 var (
 	TestError1  = PDE(language.AmericanEnglish, "PD02001", "Test error 1: %s")
 	TestError2  = PDE(language.AmericanEnglish, "PD02002", "Test error 2: %s")
-	TestError3  = PDE(language.AmericanEnglish, "PD02003", "Test error 3", 400)
+	TestError3  = PDE(language.AmericanEnglish, "PD02003", "Test error 3: %s", 400)
 	TestConfig1 = PDC(language.AmericanEnglish, "config.something.1", "Test config field 1", "some type")
 
 	TestError1Lang2  = PDE(language.Spanish, "PD02001", "Error de prueba 1: %s")
