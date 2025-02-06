@@ -157,8 +157,7 @@ func TestPrepareOutputsForTransfer(t *testing.T) {
 					Lookup:       "recipient1",
 					Algorithm:    getAlgoZetoSnarkBJJ("test"),
 					VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
-					// Provide a valid verifier string by encoding a known public key.
-					Verifier: zetosigner.EncodeBabyJubJubPublicKey(mockPubKey()),
+					Verifier:     zetosigner.EncodeBabyJubJubPublicKey(mockPubKey()),
 				},
 			},
 			stateSchema: &pb.StateSchema{
@@ -208,8 +207,7 @@ func TestPrepareOutputsForTransfer(t *testing.T) {
 					Lookup:       "recipient1",
 					Algorithm:    getAlgoZetoSnarkBJJ("test"),
 					VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
-					// Provide an invalid verifier string that will cause LoadBabyJubKey to fail.
-					Verifier: "bad",
+					Verifier:     "bad",
 				},
 			},
 			stateSchema: &pb.StateSchema{Id: "schema1"},
@@ -451,6 +449,55 @@ func TestFindAvailableStates(t *testing.T) {
 			} else {
 				require.NoError(t, err, "unexpected error from findAvailableStates")
 				assert.Equal(t, tc.expectedStates, states, "returned states mismatch")
+			}
+		})
+	}
+}
+func TestZetoNFToken_UnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		name        string
+		jsonData    string
+		expectError bool
+		expected    *types.ZetoNFToken
+	}{
+		{
+			name:        "valid JSON",
+			jsonData:    `{"salt": "123", "uri": "https://example.com", "owner": "0xabcdef", "tokenID": "456"}`,
+			expectError: false,
+			expected: &types.ZetoNFToken{
+				Salt:    (*tktypes.HexUint256)(big.NewInt(123)),
+				URI:     "https://example.com",
+				Owner:   tktypes.MustParseHexBytes("0xabcdef"),
+				TokenID: (*tktypes.HexUint256)(big.NewInt(456)),
+			},
+		},
+		{
+			name:        "invalid JSON",
+			jsonData:    `{"salt": "123", "uri": "https://example.com", "owner": "0xabcdef", "tokenID": }`,
+			expectError: true,
+		},
+		{
+			name:        "missing fields",
+			jsonData:    `{"salt": "123", "uri": "https://example.com"}`,
+			expectError: false,
+			expected: &types.ZetoNFToken{
+				Salt:    (*tktypes.HexUint256)(big.NewInt(123)),
+				URI:     "https://example.com",
+				Owner:   nil,
+				TokenID: nil,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var token types.ZetoNFToken
+			err := json.Unmarshal([]byte(tc.jsonData), &token)
+			if tc.expectError {
+				require.Error(t, err, "expected an error for test case %q", tc.name)
+			} else {
+				require.NoError(t, err, "unexpected error for test case %q", tc.name)
+				assert.Equal(t, tc.expected, &token, "token mismatch for test case %q", tc.name)
 			}
 		})
 	}

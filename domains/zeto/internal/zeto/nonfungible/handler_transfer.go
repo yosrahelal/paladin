@@ -18,7 +18,6 @@ package nonfungible
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -123,13 +122,6 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 
 func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
 	params := tx.Params.([]*types.NonFungibleTransferParamEntry)
-	bb, _ := json.Marshal(tx)
-	bbb := string(bb)
-	fmt.Println(bbb)
-
-	aa, _ := json.Marshal(req)
-	aaa := string(aa)
-	fmt.Println(aaa)
 
 	resolvedSender := findVerifierFunc(tx.Transaction.From, h.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
 	if resolvedSender == nil {
@@ -325,9 +317,6 @@ func validateTransferParams(ctx context.Context, params []*types.NonFungibleTran
 		}
 		if param.TokenID.NilOrZero() {
 			return i18n.NewError(ctx, msgs.MsgNoParamTokenID, i)
-		}
-		if param.URI == "" {
-			return i18n.NewError(ctx, msgs.MsgNoParamURI, i)
 		}
 	}
 	return nil

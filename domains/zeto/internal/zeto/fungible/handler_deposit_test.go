@@ -192,3 +192,15 @@ func TestDepositPrepare(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "{\"amount\":\"100\",\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)
 }
+func TestNewDepositHandler(t *testing.T) {
+	name := "testHandler"
+	coinSchema := &prototk.StateSchema{
+		Id: "coinSchema",
+	}
+
+	handler := NewDepositHandler(name, coinSchema)
+
+	assert.NotNil(t, handler)
+	assert.Equal(t, name, handler.name)
+	assert.Equal(t, coinSchema, handler.coinSchema)
+}

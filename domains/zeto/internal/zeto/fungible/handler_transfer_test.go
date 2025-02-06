@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
@@ -519,6 +520,16 @@ func TestGenerateMerkleProofs(t *testing.T) {
 	}
 	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.merkleTreeRootSchema, h.merkleTreeNodeSchema, constants.TOKEN_ANON, queryContext, addr, inputCoins)
 	assert.NoError(t, err)
+}
+
+func TestNonFungibleTransferEndorse(t *testing.T) {
+	h := transferHandler{}
+	ctx := context.Background()
+	tx := &types.ParsedTransaction{}
+	req := &pb.EndorseTransactionRequest{}
+	res, err := h.Endorse(ctx, tx, req)
+	assert.NoError(t, err)
+	assert.Nil(t, res)
 }
 
 type testDomainCallbacks struct {

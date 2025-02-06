@@ -313,3 +313,18 @@ func TestWithdrawPrepare(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "{\"amount\":\"100\",\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"nullifiers\":[\"0x1234567890\",\"0x1234567890\"],\"output\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]},\"root\":\"0x1234567890\"}", res.Transaction.ParamsJson)
 }
+func TestNewWithdrawHandler(t *testing.T) {
+	name := "testHandler"
+	callbacks := &testDomainCallbacks{}
+	coinSchema := &prototk.StateSchema{Id: "coin"}
+	merkleTreeRootSchema := &prototk.StateSchema{Id: "merkle_tree_root"}
+	merkleTreeNodeSchema := &prototk.StateSchema{Id: "merkle_tree_node"}
+
+	handler := NewWithdrawHandler(name, callbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema)
+
+	assert.Equal(t, name, handler.name)
+	assert.Equal(t, callbacks, handler.callbacks)
+	assert.Equal(t, coinSchema, handler.coinSchema)
+	assert.Equal(t, merkleTreeRootSchema, handler.merkleTreeRootSchema)
+	assert.Equal(t, merkleTreeNodeSchema, handler.merkleTreeNodeSchema)
+}

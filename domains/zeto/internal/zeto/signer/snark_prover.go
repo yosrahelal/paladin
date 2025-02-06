@@ -210,7 +210,6 @@ func getCircuitId(inputs *pb.ProvingRequest) string {
 	return circuitId
 }
 
-// TODO: move this to the fungible/nonfungible package
 func validateInputsFungible(ctx context.Context, inputs *pb.ProvingRequestCommon) error {
 	if len(inputs.InputCommitments) != len(inputs.InputValues) || len(inputs.InputCommitments) != len(inputs.InputSalts) {
 		return i18n.NewError(ctx, msgs.MsgErrorInputsDiffLength)
@@ -221,7 +220,6 @@ func validateInputsFungible(ctx context.Context, inputs *pb.ProvingRequestCommon
 	return nil
 }
 
-// TODO: move this to the fungible/nonfungible package
 func validateInputsNonFungible(ctx context.Context, inputs *pb.ProvingRequestCommon) error {
 	if len(inputs.InputCommitments) != len(inputs.InputSalts) {
 		return i18n.NewError(ctx, msgs.MsgErrorInputsDiffLength)

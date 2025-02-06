@@ -154,4 +154,6 @@ var (
 	MsgErrorNoTokensForTransfer            = ffe("PD210113", "Error no tokens to transfer")
 	MsgNoParamTokenID                      = ffe("PD210114", "Parameter 'tokenID' is required (index=%d)")
 	MsgNoParamURI                          = ffe("PD210115", "Parameter 'uri' is required (index=%d)")
+	MsgParamTokenIDNotEmpty                = ffe("PD210116", "Parameter 'tokenID' is not empty (index=%d)")
+	MsgErrorParseFieldModulus              = ffe("PD210117", "Failed to parse field modulus.")
 )

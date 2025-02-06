@@ -33,7 +33,7 @@ func cryptoRand256() (*big.Int, error) {
 	// The BN254 field modulus.
 	fieldModulus, ok := new(big.Int).SetString(modulu, 10)
 	if !ok {
-		return nil, fmt.Errorf("failed to parse field modulus") // TODO: i18n
+		return nil, fmt.Errorf("failed to parse field modulus")
 	}
 
 	// Generate a random number in [0, fieldModulus).

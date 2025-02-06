@@ -38,16 +38,6 @@ import (
 // Reference: https://github.com/hyperledger-labs/zeto/blob/main/zkp/circuits/lib/check-positive.circom
 var MAX_TRANSFER_AMOUNT = big.NewInt(0).Exp(big.NewInt(2), big.NewInt(100), nil)
 
-// the Zeto implementations support two input/output sizes for the circuits: 2 and 10,
-// if the input or output size is larger than 2, then the batch circuit is used with
-// input/output size 10
-func getInputSize(sizeOfEndorsableStates int) int {
-	if sizeOfEndorsableStates <= 2 {
-		return 2
-	}
-	return 10
-}
-
 func validateTransferParams(ctx context.Context, params []*types.FungibleTransferParamEntry) error {
 	if len(params) == 0 {
 		return i18n.NewError(ctx, msgs.MsgNoTransferParams)

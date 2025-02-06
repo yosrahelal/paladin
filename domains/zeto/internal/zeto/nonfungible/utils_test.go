@@ -32,3 +32,18 @@ func TestCryptoRand256(t *testing.T) {
 			tokenValue.String(), fieldModulus.String(), i)
 	}
 }
+
+var (
+	orgEncodeTransactionDataFunc = encodeTransactionDataFunc
+	orgEncodeProofFunc           = encodeProofFunc
+	orgFindVerifierFunc          = findVerifierFunc
+	orgFindAttestationFunc       = findAttestationFunc
+)
+
+func defaultHelpers() {
+	// Set the functions to the public functions for testing.
+	encodeTransactionDataFunc = orgEncodeTransactionDataFunc
+	encodeProofFunc = orgEncodeProofFunc
+	findVerifierFunc = orgFindVerifierFunc
+	findAttestationFunc = orgFindAttestationFunc
+}

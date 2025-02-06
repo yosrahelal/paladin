@@ -22,6 +22,7 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
+	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -162,4 +163,82 @@ func TestAssembleInputsWithdrawNullifier(t *testing.T) {
 	assert.Equal(t, "123", privateInputs["root"].(*big.Int).Text(16))
 	assert.Len(t, privateInputs["nullifiers"], 1)
 	assert.NotEqual(t, "0", privateInputs["nullifiers"].([]*big.Int)[0].Text(10))
+}
+
+func stringToBigInt(s string) *big.Int {
+	b, ok := new(big.Int).SetString(s, 0)
+	if !ok {
+		panic("failed to parse big int")
+	}
+	return b
+}
+func TestAssembleInputsNfanon(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name              string
+		tokenData         *pb.ProvingRequestExtras_NonFungible
+		inputs            *commonWitnessInputs
+		keyEntry          *core.KeyEntry
+		expectPanic       bool
+		expectedTokenIds  []*big.Int
+		expectedTokenUris []*big.Int
+	}{
+		{
+			name: "valid inputs",
+			tokenData: &pb.ProvingRequestExtras_NonFungible{
+				TokenIds:  []string{"123", "456"},
+				TokenUris: []string{"https://example.com/token1", "https://example.com/token2"},
+			},
+			inputs: &commonWitnessInputs{
+				inputCommitments:      []*big.Int{big.NewInt(111), big.NewInt(222)},
+				inputSalts:            []*big.Int{big.NewInt(333), big.NewInt(444)},
+				outputCommitments:     []*big.Int{big.NewInt(555), big.NewInt(666)},
+				outputSalts:           []*big.Int{big.NewInt(777), big.NewInt(888)},
+				outputOwnerPublicKeys: [][]*big.Int{{big.NewInt(999)}, {big.NewInt(1000)}},
+			},
+			keyEntry: &core.KeyEntry{
+				PrivateKeyForZkp: big.NewInt(123456789),
+			},
+			expectPanic:      false,
+			expectedTokenIds: []*big.Int{big.NewInt(123), big.NewInt(456)},
+			expectedTokenUris: []*big.Int{
+				stringToBigInt("14455460490104603491124622723151775837877685541973746714630575789598395934360"),
+				stringToBigInt("11395611018372790147992465234761043052205215291404899162760011061660939049226")},
+		},
+		{
+			name: "invalid token ID",
+			tokenData: &pb.ProvingRequestExtras_NonFungible{
+				TokenIds:  []string{"invalid"},
+				TokenUris: []string{"https://example.com/token"},
+			},
+			inputs:      &commonWitnessInputs{},
+			keyEntry:    &core.KeyEntry{},
+			expectPanic: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Override hashing function
+			if tc.expectPanic {
+				assert.Panics(t, func() {
+					assembleInputs_nfanon(ctx, tc.inputs, tc.tokenData, tc.keyEntry)
+				}, "expected panic for test case %q", tc.name)
+			} else {
+				// Run function
+				result := assembleInputs_nfanon(ctx, tc.inputs, tc.tokenData, tc.keyEntry)
+
+				// Assertions
+				assert.Equal(t, tc.expectedTokenIds, result["tokenIds"], "tokenIds mismatch")
+				assert.Equal(t, tc.expectedTokenUris, result["tokenUris"], "tokenUris mismatch")
+				assert.Equal(t, tc.inputs.inputCommitments, result["inputCommitments"], "inputCommitments mismatch")
+				assert.Equal(t, tc.inputs.inputSalts, result["inputSalts"], "inputSalts mismatch")
+				assert.Equal(t, tc.inputs.outputCommitments, result["outputCommitments"], "outputCommitments mismatch")
+				assert.Equal(t, tc.inputs.outputSalts, result["outputSalts"], "outputSalts mismatch")
+				assert.Equal(t, tc.inputs.outputOwnerPublicKeys, result["outputOwnerPublicKeys"], "outputOwnerPublicKeys mismatch")
+				assert.Equal(t, tc.keyEntry.PrivateKeyForZkp, result["inputOwnerPrivateKey"], "inputOwnerPrivateKey mismatch")
+			}
+		})
+	}
 }

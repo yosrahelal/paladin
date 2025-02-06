@@ -57,13 +57,30 @@ func (h *mintHandler) ValidateParams(ctx context.Context, config *types.DomainIn
 		return nil, err
 	}
 
-	if err := validateTransferParams(ctx, mintParams.Mints); err != nil {
+	if err := validateMintParams(ctx, mintParams.Mints); err != nil {
 		return nil, err
 	}
 
 	return mintParams.Mints, nil
 }
 
+func validateMintParams(ctx context.Context, params []*types.NonFungibleTransferParamEntry) error {
+	if len(params) == 0 {
+		return i18n.NewError(ctx, msgs.MsgNoTransferParams)
+	}
+	for i, param := range params {
+		if param.To == "" {
+			return i18n.NewError(ctx, msgs.MsgNoParamTo, i)
+		}
+		if !param.TokenID.NilOrZero() { // token should be empty
+			return i18n.NewError(ctx, msgs.MsgNoParamTokenID, i)
+		}
+		if param.URI == "" {
+			return i18n.NewError(ctx, msgs.MsgNoParamURI, i)
+		}
+	}
+	return nil
+}
 func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
 	params := tx.Params.([]*types.NonFungibleTransferParamEntry)
 
@@ -104,6 +121,7 @@ func (h *mintHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, 
 }
 
 func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
+
 	outputs := make([]string, len(req.OutputStates))
 	for i, state := range req.OutputStates {
 		token, err := makeNFToken(state.StateDataJson)
@@ -117,7 +135,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		outputs[i] = hash.String()
 	}
 
-	data, err := common.EncodeTransactionData(ctx, req.Transaction, types.ZetoTransactionData_V0)
+	data, err := encodeTransactionDataFunc(ctx, req.Transaction, types.ZetoTransactionData_V0)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}

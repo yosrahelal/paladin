@@ -12,6 +12,7 @@ import (
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -197,18 +198,6 @@ func TestValidateTransferParams(t *testing.T) {
 			},
 			expectErr:   true,
 			errContains: "PD210114",
-		},
-		{
-			name: "empty URI",
-			params: []*types.NonFungibleTransferParamEntry{
-				{
-					To:      "recipient",
-					URI:     "",
-					TokenID: (*tktypes.HexUint256)(big.NewInt(456)),
-				},
-			},
-			expectErr:   true,
-			errContains: "PD210115",
 		},
 	}
 
@@ -443,6 +432,7 @@ func dummyEncodeProof(proof *corepb.SnarkProof) map[string]interface{} {
 
 func TestPrepare(t *testing.T) {
 	ctx := context.Background()
+	defer defaultHelpers()
 
 	validOwnerStr := tktypes.MustParseHexBytes(zetosigner.EncodeBabyJubJubPublicKey(mockPubKey())).String()
 	validStateJSON := fmt.Sprintf(`{
@@ -619,255 +609,364 @@ func TestPrepare(t *testing.T) {
 	}
 }
 
-// ---
-// For testing, we override helper functions via the transferHandlerHelpers interface.
-// These helpers are overridable in the handler.
-
-// func dummyFindVerifier(from, algo, verifierType string, resolvers []*pb.ResolvedVerifier) *pb.ResolvedVerifier {
-// 	// For testing, always return a dummy resolved verifier if at least one is provided.
-// 	if len(resolvers) > 0 {
-// 		return &pb.ResolvedVerifier{Verifier: "dummyVerifier"}
-// 	}
-// 	return nil
-// }
-
-func dummyGetAlgoZetoSnarkBJJ() string {
-	return "domain:test:snark:babyjubjub"
+func dummyFindVerifier(from string, _ string, _ string, _ []*pb.ResolvedVerifier) *pb.ResolvedVerifier {
+	if from == "" {
+		return nil
+	}
+	return &pb.ResolvedVerifier{
+		Verifier:     "0x9db52aad8d7fa393ab89fa85b57e69651d2b9e3490cf1743f7c7df503f6e4984",
+		VerifierType: "iden3_pubkey_babyjubjub_compressed_0x",
+		Lookup:       fmt.Sprintf("%s@node1", from),
+		Algorithm:    "domain:zeto_c6dcf5778e528940:snark:babyjubjub",
+	}
 }
 
-func dummyFormatProvingRequest(ctx context.Context, input, output []*types.ZetoNFToken, circuitId, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
-	// Return a dummy payload; for instance, "dummyPayload" in hex format.
-	// (For demonstration, we return a fixed string.)
-	return []byte("dummyPayload"), nil
-}
-
-// ---
-// Dummy input state JSON used by prepareState (which is called inside processTokens).
-
-// ---
 // TestAssemble tests the Assemble method of transferHandler.
-// func TestAssemble(t *testing.T) {
-// 	ctx := context.Background()
+func TestAssemble(t *testing.T) {
+	ctx := context.Background()
+	defer defaultHelpers()
 
-// 	var validStateJSON = func() string {
-// 		ownerStr := tktypes.MustParseHexBytes(zetosigner.EncodeBabyJubJubPublicKey(mockPubKey())).String()
-// 		return fmt.Sprintf(`{
-// 			"salt": "123",
-// 			"uri": "https://example.com",
-// 			"owner": "%s",
-// 			"tokenID": "456"
-// 		}`, ownerStr)
-// 	}()
+	findVerifierFunc = dummyFindVerifier
+	req := &pb.AssembleTransactionRequest{
+		Transaction: &pb.TransactionSpecification{
+			ContractInfo: &pb.ContractInfo{ContractAddress: "0x04823d1549e948188633bf537e1762b2c43bfb53"},
+		},
+	}
 
-// 	// Prepare a dummy PrepareTransactionRequest.
-// 	req := &pb.AssembleTransactionRequest{
-// 		ResolvedVerifiers: []*pb.ResolvedVerifier{
-// 			// Dummy value; our overridden findVerifier will use this.
-// 			{Verifier: "dummyVerifier"},
-// 		},
-// 		StateQueryContext: "dummyQueryContext",
-// 		Transaction: &pb.TransactionSpecification{
-// 			// Provide a valid contract address in ContractInfo.
-// 			ContractInfo: &pb.ContractInfo{ContractAddress: "0xABC"},
-// 			From:         "0xSender",
-// 		},
-// 	}
+	domainConfig := &types.DomainInstanceConfig{
+		TokenName: constants.TOKEN_NF_ANON,
+		CircuitId: constants.CIRCUIT_NF_ANON,
+	}
 
-// 	// Prepare a slice of transfer parameters.
-// 	// These are used inside processTokens via tx.Params.
-// 	params := []*types.NonFungibleTransferParamEntry{
-// 		{
-// 			To:      "recipient1",
-// 			URI:     "dummy", // initial value; will be updated by prepareInputsForTransfer
-// 			TokenID: (*tktypes.HexUint256)(big.NewInt(456)),
-// 		},
-// 	}
+	retStates := []*pb.StoredState{
+		{
+			Id:       "state1",
+			SchemaId: "schema1",
+			DataJson: `{"owner":"0x2ed27cebd83a8e05a76fde8f5fbe47fcdf82561dbbcda5e6247f612e8ee59b16","salt":"18555011917455081896159178727281079825727310023017875145998739683254216175481","tokenID":"123","uri":"https://example.com"}`,
+		},
+	}
 
-// 	// Prepare a dummy parsed transaction.
-// 	tx := &types.ParsedTransaction{
-// 		Transaction: &pb.TransactionSpecification{
-// 			From: "0xSender",
-// 		},
-// 		DomainConfig: &types.DomainInstanceConfig{
-// 			TokenName: "nonfungible", // non-nullifier scenario; change to a nullifier token (e.g. "anon_nullifier") to test that branch
-// 			CircuitId: "circuit123",
-// 		},
-// 		Params: params,
-// 	}
+	params := []*types.NonFungibleTransferParamEntry{
+		{
+			To:      "receiver", // empty to field, this should cause an error.
+			TokenID: (*tktypes.HexUint256)(big.NewInt(123)),
+		},
+	}
 
-// 	// We'll create a table with two cases:
-// 	// 1. Success: valid attestation is found.
-// 	// 2. Failure: findVerifier returns nil (missing attestation).
-// 	tests := []struct {
-// 		name string
-// 		tx   *types.ParsedTransaction
-// 		req  *pb.AssembleTransactionRequest
-// 		// Overridden helper for findVerifier: if nil, then the handler returns an error.
-// 		findVerifierFunc func(string, string, string, []*pb.ResolvedVerifier) *pb.ResolvedVerifier
-// 		expectErr        bool
-// 		errContains      string
-// 		nullifiers       bool // if true, then the token is considered a nullifier token.
-// 	}{
-// 		{
-// 			name:             "success non-nullifier",
-// 			tx:               tx,
-// 			req:              req,
-// 			findVerifierFunc: domain.FindVerifier,
-// 			expectErr:        false,
-// 			nullifiers:       false,
-// 		},
-// 		{
-// 			name: "failure: missing sender attestation",
-// 			tx:   tx,
-// 			req: func() *pb.PrepareTransactionRequest {
-// 				// Provide an empty resolved verifiers list so that findVerifier returns nil.
-// 				newReq := *req
-// 				newReq.ResolvedVerifiers = []*pb.ResolvedVerifier{}
-// 				return &newReq
-// 			}(),
-// 			findVerifierFunc: domain.FindVerifier,
-// 			expectErr:        true,
-// 			errContains:      "MsgErrorResolveVerifier",
-// 		},
-// 	}
+	tx := &types.ParsedTransaction{
+		Transaction: &pb.TransactionSpecification{
+			From:         "sender",
+			ContractInfo: &pb.ContractInfo{ContractAddress: "0x04823d1549e948188633bf537e1762b2c43bfb53"},
+		},
+	}
 
-// 	// Instantiate a transferHandler and override its helper functions.
-// 	handler := &transferHandler{
-// 		callbacks: nil, // not used directly in Assemble
-// 		nftSchema: &pb.StateSchema{Id: "schema1"},
-// 		name:      "handlerTest",
-// 		transferHandlerHelpers: transferHandlerHelpers{
-// 			encodeTransactionData: dummyEncodeTxData, // not used in Assemble, but may be used in formatProvingRequest indirectly
-// 			encodeProof:           dummyEncodeProof,
-// 			findVerifier:          domain.FindVerifier,
-// 			findAttestation:       dummyFindAttestationSuccess,
-// 		},
-// 	}
+	tests := []struct {
+		name         string
+		tx           *types.ParsedTransaction
+		req          *pb.AssembleTransactionRequest
+		domainConfig *types.DomainInstanceConfig
+		params       []*types.NonFungibleTransferParamEntry
+		callbacks    plugintk.DomainCallbacks
+		expectErr    bool
+		errContains  string
+		nullifiers   bool // if true, then the token is considered a nullifier token.
+	}{
+		{
+			name:         "success non-nullifier",
+			tx:           tx,
+			req:          req,
+			expectErr:    false,
+			nullifiers:   false,
+			domainConfig: domainConfig,
+			params:       params,
+			callbacks: &testDomainCallbacksT{
+				retStates: retStates,
+			},
+		},
+		{
+			name: "verifier not found",
+			tx: &types.ParsedTransaction{
+				Transaction: &pb.TransactionSpecification{
+					From: "", // empty from field, this should cause an error.
+				},
+			},
+			req:         req,
+			expectErr:   true,
+			errContains: "PD210036",
+			nullifiers:  false,
+			params:      []*types.NonFungibleTransferParamEntry{},
+		},
+		{
+			name: "error prepare inputs",
+			tx:   tx,
+			callbacks: &testDomainCallbacksT{
+				retErr: fmt.Errorf("states not found"),
+			},
+			domainConfig: domainConfig,
+			params:       params,
+			req:          req,
+			expectErr:    true,
+			errContains:  "PD210039",
+			nullifiers:   false,
+		},
+		{
+			name: "error prepare outputs",
+			tx:   tx,
+			callbacks: &testDomainCallbacksT{
+				retStates: retStates,
+			},
+			domainConfig: domainConfig,
+			params: []*types.NonFungibleTransferParamEntry{
+				{
+					To:      "", // empty to field, this should cause an error.
+					TokenID: (*tktypes.HexUint256)(big.NewInt(123)),
+				},
+			},
+			req:         req,
+			expectErr:   true,
+			errContains: "PD210040",
+			nullifiers:  false,
+		},
+		{
+			name: "error parsing eth address",
+			tx:   tx,
+			callbacks: &testDomainCallbacksT{
+				retStates: retStates,
+			},
+			domainConfig: domainConfig,
+			params:       params,
+			req: &pb.AssembleTransactionRequest{
+				Transaction: &pb.TransactionSpecification{
+					ContractInfo: &pb.ContractInfo{ContractAddress: "invalid"},
+				},
+			},
+			expectErr:   true,
+			errContains: "PD210017",
+			nullifiers:  false,
+		},
+	}
 
-// 	// We also need to ensure that the functions prepareInputsForTransfer and prepareOutputsForTransfer
-// 	// (which are called inside Assemble) succeed. For this test, we assume they work correctly;
-// 	// they will use the input and output EndorsableStates provided in req.
+	// Instantiate a transferHandler and override its helper functions.
+	handler := &transferHandler{
+		callbacks: nil,
+		nftSchema: &pb.StateSchema{Id: "schema1"},
+		name:      "transfer",
+	}
 
-// 	for _, tc := range tests {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			// Set tx.Params for this test case.
-// 			tx.Params = params
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 
-// 			resp, err := handler.Assemble(ctx, tx, tc.req)
-// 			if tc.expectErr {
-// 				require.Error(t, err, "expected error in test case %q", tc.name)
-// 				assert.Contains(t, err.Error(), tc.errContains, "error message should contain %q", tc.errContains)
-// 			} else {
-// 				require.NoError(t, err, "unexpected error in test case %q", tc.name)
-// 				require.NotNil(t, resp, "response should not be nil")
-// 				// Verify the assembled transaction.
-// 				assert.NotEmpty(t, resp.Transaction.FunctionAbiJson, "FunctionAbiJson should not be empty")
-// 				assert.NotEmpty(t, resp.Transaction.ParamsJson, "ParamsJson should not be empty")
-// 				// Unmarshal the parameters JSON.
-// 				var paramsMap map[string]interface{}
-// 				err = json.Unmarshal([]byte(resp.Transaction.ParamsJson), &paramsMap)
-// 				require.NoError(t, err, "failed to unmarshal ParamsJson")
-// 				// For non-nullifier tokens, we expect the "input" key to be present.
-// 				_, inputExists := paramsMap["input"]
-// 				if tc.nullifiers {
-// 					assert.False(t, inputExists, "input key should be removed for nullifier tokens")
-// 					_, nullifierExists := paramsMap["nullifier"]
-// 					assert.True(t, nullifierExists, "nullifier key should be present for nullifier tokens")
-// 					_, rootExists := paramsMap["root"]
-// 					assert.True(t, rootExists, "root key should be present for nullifier tokens")
-// 				} else {
-// 					assert.True(t, inputExists, "input key should be present for non-nullifier tokens")
-// 				}
-// 				// Verify that the encoded transaction data is set (dummyEncodeTxData returns "txdata", but
-// 				// the function calls common.EncodeTransactionData in formatProvingRequest; our override returns "dummyPayload").
-// 				assert.Equal(t, "dummyPayload", string(resp.AttestationPlan[0].Payload), "attestation payload mismatch")
-// 				// Verify attestation plan.
-// 				attReq := resp.AttestationPlan[0]
-// 				assert.Equal(t, "sender", attReq.Name, "attestation name mismatch")
-// 				assert.Equal(t, dummyGetTransferABI(""), attReq.Algorithm, "attestation algorithm mismatch")
-// 				assert.Equal(t, zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, attReq.VerifierType, "attestation verifier type mismatch")
-// 				assert.Equal(t, zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK, attReq.PayloadType, "attestation payload type mismatch")
-// 				// Check that the party matches the sender.
-// 				assert.Equal(t, tx.Transaction.From, attReq.Parties[0], "attestation party mismatch")
-// 			}
-// 		})
-// 	}
-// }
+			handler.callbacks = tc.callbacks
+			tc.tx.Params = tc.params
+			tc.tx.DomainConfig = tc.domainConfig
 
-// func TestValidateParams(t *testing.T) {
-// 	ctx := context.Background()
-// 	h := &transferHandler{}
-// 	tests := []struct {
-// 		name        string
-// 		params      []*types.NonFungibleTransferParams
-// 		expectErr   bool
-// 		errContains string
-// 	}{
-// 		{
-// 			name: "valid parameter",
-// 			params: []*types.NonFungibleTransferParams{
-// 				{
-// 					Transfers: []*types.NonFungibleTransferParamEntry{
-// 						{
-// 							To:      "recipient",
-// 							URI:     "https://example.com",
-// 							TokenID: (*tktypes.HexUint256)(big.NewInt(456)),
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectErr: false,
-// 		},
-// 		{
-// 			name:        "no parameters provided",
-// 			params:      []*types.NonFungibleTransferParams{},
-// 			expectErr:   true,
-// 			errContains: "PD210024",
-// 		},
-// 		{
-// 			name: "empty To field",
-// 			params: []*types.NonFungibleTransferParams{
-// 				{
-// 					Transfers: []*types.NonFungibleTransferParamEntry{
-// 						{
-// 							To:      "",
-// 							URI:     "https://example.com",
-// 							TokenID: (*tktypes.HexUint256)(big.NewInt(456)),
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectErr:   true,
-// 			errContains: "PD210025",
-// 		},
-// 		{
-// 			name: "nil TokenID",
-// 			params: []*types.NonFungibleTransferParams{
-// 				{
-// 					Transfers: []*types.NonFungibleTransferParamEntry{
-// 						{
-// 							To:      "recipient",
-// 							URI:     "https://example.com",
-// 							TokenID: nil,
-// 						},
-// 					},
-// 				},
-// 			},
-// 			expectErr:   true,
-// 			errContains: "PD210114",
-// 		},
-// 	}
+			resp, err := handler.Assemble(ctx, tc.tx, tc.req)
+			if tc.expectErr {
+				require.Error(t, err, "expected error in test case %q", tc.name)
+				assert.Contains(t, err.Error(), tc.errContains, "error message should contain %q", tc.errContains)
+			} else {
+				require.NoError(t, err, "unexpected error in test case %q", tc.name)
+				require.NotNil(t, resp, "response should not be nil")
 
-// 	for _, tc := range tests {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			p, _ := json.Marshal(tc.params)
-// 			_, err := h.ValidateParams(ctx, nil, string(p))
-// 			if tc.expectErr {
-// 				require.Error(t, err, "expected an error for test case %q", tc.name)
-// 				assert.Contains(t, err.Error(), tc.errContains, "error message should contain %q", tc.errContains)
-// 			} else {
-// 				require.NoError(t, err, "unexpected error for test case %q", tc.name)
-// 			}
-// 		})
-// 	}
-// }
+				// test resp.AssembledTransaction
+				assert.Equal(t, 1, len(resp.AssembledTransaction.InputStates))
+				assert.Equal(t, 1, len(resp.AssembledTransaction.OutputStates))
+
+				// test resp.AttestationPlan
+				require.Equal(t, 1, len(resp.AttestationPlan), "expected one attestation request")
+				a := resp.AttestationPlan[0]
+				assert.Equal(t, "sender", a.Name, "attestation name mismatch")
+				assert.Equal(t, "domain:transfer:snark:babyjubjub", a.Algorithm, "attestation algorithm mismatch")
+				assert.Equal(t, zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, a.VerifierType, "attestation verifier type mismatch")
+				assert.Equal(t, zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK, a.PayloadType, "attestation payload type mismatch")
+				assert.Equal(t, tc.tx.Transaction.From, a.Parties[0], "attestation party mismatch")
+				assert.NotEmpty(t, a.Payload, "attestation payload should not be empty")
+			}
+		})
+	}
+}
+
+func TestValidateParams(t *testing.T) {
+	ctx := context.Background()
+	// Create a dummy DomainInstanceConfig. (The function doesn't use config, but it must be provided.)
+	config := &types.DomainInstanceConfig{}
+
+	// Prepare table test cases.
+	tests := []struct {
+		name          string
+		inputJSON     string
+		expectErr     bool
+		errContains   string
+		expectedCount int
+	}{
+		{
+			name: "valid parameters",
+			inputJSON: `{
+				"transfers": [
+					{
+						"to": "recipient1",
+						"uri": "https://example.com",
+						"tokenID": "123"
+					}
+				]
+			}`,
+			expectErr:     false,
+			expectedCount: 1,
+		},
+		{
+			name: "empty transfers",
+			inputJSON: `{
+				"transfers": []
+			}`,
+			expectErr:   true,
+			errContains: "PD210024",
+		},
+		{
+			name: "missing to field",
+			inputJSON: `{
+				"transfers": [
+					{
+						"to": "",
+						"uri": "https://example.com",
+						"tokenID": "123"
+					}
+				]
+			}`,
+			expectErr:   true,
+			errContains: "PD210025",
+		},
+		{
+			name: "zero tokenID",
+			inputJSON: `{
+				"transfers": [
+					{
+						"to": "recipient1",
+						"uri": "https://example.com",
+						"tokenID": "0"
+					}
+				]
+			}`,
+			expectErr:   true,
+			errContains: "PD210114",
+		},
+	}
+
+	// Create a dummy transferHandler (in the same package, so we can access unexported methods).
+	handler := &transferHandler{}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Call ValidateParams.
+			result, err := handler.ValidateParams(ctx, config, tc.inputJSON)
+			if tc.expectErr {
+				require.Error(t, err, "expected error for test case %q", tc.name)
+				assert.Contains(t, err.Error(), tc.errContains, "error message should contain %q", tc.errContains)
+			} else {
+				require.NoError(t, err, "unexpected error for test case %q", tc.name)
+				transfers, ok := result.([]*types.NonFungibleTransferParamEntry)
+				require.True(t, ok, "result type mismatch")
+				assert.Equal(t, tc.expectedCount, len(transfers), "unexpected number of transfer entries")
+
+				if len(transfers) > 0 {
+					assert.Equal(t, "recipient1", transfers[0].To)
+					assert.Equal(t, "https://example.com", transfers[0].URI)
+					// Compare tokenID as a string (converted from big.Int).
+					expectedTokenID := big.NewInt(123).String()
+					assert.Equal(t, expectedTokenID, transfers[0].TokenID.Int().String())
+				}
+			}
+		})
+	}
+}
+
+// Dummy transfer parameters for testing.
+func newTransferParam(to string, tokenIDValue int64, uri string) *types.NonFungibleTransferParamEntry {
+	return &types.NonFungibleTransferParamEntry{
+		To:      to,
+		URI:     uri,
+		TokenID: (*tktypes.HexUint256)(big.NewInt(tokenIDValue)),
+	}
+}
+
+// TestInit tests the Init method.
+func TestInit(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a dummy parsed transaction.
+	tx := &types.ParsedTransaction{
+		Transaction: &pb.TransactionSpecification{
+			From: "sender",
+		},
+	}
+
+	// Create a dummy InitTransactionRequest.
+	req := &pb.InitTransactionRequest{}
+
+	// Override getAlgoZetoSnarkBJJ to return a fixed value.
+	dummyAlgo := "domain::snark:babyjubjub"
+	handler := &transferHandler{}
+
+	tests := []struct {
+		name              string
+		params            []*types.NonFungibleTransferParamEntry
+		expectedVerifiers int // expected total number of required verifiers
+	}{
+		{
+			name:              "no transfer params",
+			params:            []*types.NonFungibleTransferParamEntry{},
+			expectedVerifiers: 1, // Only the sender is added.
+		},
+		{
+			name: "one transfer param",
+			params: []*types.NonFungibleTransferParamEntry{
+				newTransferParam("recipient1", 123, "https://example.com"),
+			},
+			expectedVerifiers: 2, // Sender + one recipient.
+		},
+		{
+			name: "multiple transfer params",
+			params: []*types.NonFungibleTransferParamEntry{
+				newTransferParam("recipient1", 123, "https://example.com"),
+				newTransferParam("recipient2", 456, "https://example.org"),
+			},
+			expectedVerifiers: 3, // Sender + two recipients.
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tx.Params = tc.params
+
+			resp, err := handler.Init(ctx, tx, req)
+			require.NoError(t, err, "unexpected error in test case %q", tc.name)
+			require.NotNil(t, resp, "response should not be nil")
+
+			// Verify the number of required verifiers.
+			rv := resp.RequiredVerifiers
+			require.Len(t, rv, tc.expectedVerifiers, "unexpected number of required verifiers")
+			if tc.expectedVerifiers > 0 {
+				// The first required verifier should come from the sender.
+				assert.Equal(t, "sender", rv[0].Lookup, "sender verifier lookup mismatch")
+				assert.Equal(t, dummyAlgo, rv[0].Algorithm, "sender algorithm mismatch")
+				assert.Equal(t, zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, rv[0].VerifierType, "sender verifier type mismatch")
+			}
+			// Verify that each transfer parameter has generated a verifier.
+			for i, param := range tc.params {
+				// The i-th transfer param results in the (i+1)-th entry.
+				verifier := rv[i+1]
+				assert.Equal(t, param.To, verifier.Lookup, "transfer param lookup mismatch at index %d", i)
+				assert.Equal(t, dummyAlgo, verifier.Algorithm, "transfer param algorithm mismatch at index %d", i)
+				assert.Equal(t, zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, verifier.VerifierType, "transfer param verifier type mismatch at index %d", i)
+			}
+		})
+	}
+}
+func TestNonFungibleTransferEndorse(t *testing.T) {
+	h := transferHandler{}
+	ctx := context.Background()
+	tx := &types.ParsedTransaction{}
+	req := &pb.EndorseTransactionRequest{}
+	res, err := h.Endorse(ctx, tx, req)
+	assert.NoError(t, err)
+	assert.Nil(t, res)
+}

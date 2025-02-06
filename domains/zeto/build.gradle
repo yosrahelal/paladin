@@ -265,13 +265,11 @@ task unitTests(type: Exec, dependsOn: [
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task checkCoverage(dependsOn: [unitTests]) {
+task checkCoverage(type: GoCheckCoverage, dependsOn: [unitTests]) {
+    coverageFile('coverage.txt')
+    target = targetCoverage
+    maxGap = maxCoverageBarGap
 }
-// task checkCoverage(type: GoCheckCoverage, dependsOn: [unitTests]) {
-//     coverageFile('coverage.txt')
-//     target = targetCoverage
-//     maxGap = maxCoverageBarGap
-// }
 
 task test {
     finalizedBy checkCoverage

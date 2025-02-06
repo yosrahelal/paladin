@@ -562,64 +562,342 @@ func TestGetCircuitId(t *testing.T) {
 	assert.Equal(t, constants.CIRCUIT_ANON_ENC_BATCH, circuitId)
 }
 
-func TestCalculateWitness(t *testing.T) {
-	extras1 := &pb.ProvingRequestExtras_Encryption{
-		EncryptionNonce: "bad number",
-	}
-	inputs := &pb.ProvingRequestCommon{
-		InputCommitments: []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
-		InputValues:      []uint64{10, 20},
-		InputSalts:       []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
-		InputOwner:       "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025",
-		OutputValues:     []uint64{30, 0},
-		OutputSalts:      []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
-		OutputOwners:     []string{"7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025", "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"},
-	}
+func TestValidateInputsNonFungible(t *testing.T) {
 	ctx := context.Background()
-	_, err := calculateWitness(ctx, constants.CIRCUIT_ANON_ENC, inputs, extras1, nil, nil)
-	assert.EqualError(t, err, "PD210099: failed to assemble private inputs for witness calculation. PD210077: Failed to parse encryption nonce")
 
-	extras2 := &pb.ProvingRequestExtras_Nullifiers{
-		Root: "123456",
-		MerkleProofs: []*pb.MerkleProof{
-			{
-				Nodes: []string{"1", "2", "3"},
-			},
-			{
-				Nodes: []string{"0", "0", "0"},
-			},
-		},
-		Enabled: []bool{true, false},
+	// Test case where input commitments and salts have different lengths
+	inputs1 := &pb.ProvingRequestCommon{
+		InputCommitments: []string{"input1", "input2"},
+		InputSalts:       []string{"salt1"},
 	}
+	err := validateInputsNonFungible(ctx, inputs1)
+	assert.ErrorContains(t, err, "input commitments, values, and salts must have the same length")
+
+	// Test case where input commitments and salts have the same lengths
+	inputs2 := &pb.ProvingRequestCommon{
+		InputCommitments: []string{"input1", "input2"},
+		InputSalts:       []string{"salt1", "salt2"},
+	}
+	err = validateInputsNonFungible(ctx, inputs2)
+	assert.NoError(t, err)
+}
+
+func TestCalculateWitnesssss(t *testing.T) {
+	ctx := context.Background()
 	privKey, ok := new(big.Int).SetString("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16)
 	require.True(t, ok)
 	keyEntry := &core.KeyEntry{
 		PrivateKeyForZkp: privKey,
 	}
-	_, err = calculateWitness(ctx, constants.CIRCUIT_ANON_NULLIFIER, inputs, extras2, keyEntry, nil)
-	assert.EqualError(t, err, "PD210099: failed to assemble private inputs for witness calculation. PD210079: Failed to calculate nullifier. inputs values not inside Finite Field")
 
-	inputs = &pb.ProvingRequestCommon{
-		OutputValues: []uint64{30, 0},
-		OutputSalts:  []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
-		OutputOwners: []string{"7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025", "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"},
+	tests := []struct {
+		name        string
+		circuit     string
+		inputs      *pb.ProvingRequestCommon
+		extras      interface{}
+		keyEntry    *core.KeyEntry
+		expectErr   bool
+		errContains string
+		loadCircuit bool
+	}{
+		{
+			name:    "Invalid encryption nonce",
+			circuit: constants.CIRCUIT_ANON_ENC,
+			inputs: &pb.ProvingRequestCommon{
+				InputCommitments: []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
+				InputValues:      []uint64{10, 20},
+				InputSalts:       []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
+				InputOwner:       "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025",
+				OutputValues:     []uint64{30, 0},
+				OutputSalts:      []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
+				OutputOwners:     []string{"7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025", "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"},
+			},
+			extras: &pb.ProvingRequestExtras_Encryption{
+				EncryptionNonce: "bad number",
+			},
+			expectErr:   true,
+			errContains: "PD210077: Failed to parse encryption nonce",
+		},
+		{
+			name:    "Invalid nullifier calculation",
+			circuit: constants.CIRCUIT_ANON_NULLIFIER,
+			inputs: &pb.ProvingRequestCommon{
+				InputCommitments: []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
+				InputValues:      []uint64{10, 20},
+				InputSalts:       []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
+				InputOwner:       "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025",
+				OutputValues:     []uint64{30, 0},
+				OutputSalts:      []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
+				OutputOwners:     []string{"7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025", "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"},
+			},
+			extras: &pb.ProvingRequestExtras_Nullifiers{
+				Root: "123456",
+				MerkleProofs: []*pb.MerkleProof{
+					{Nodes: []string{"1", "2", "3"}},
+					{Nodes: []string{"0", "0", "0"}},
+				},
+				Enabled: []bool{true, false},
+			},
+			keyEntry:    keyEntry,
+			expectErr:   true,
+			errContains: "PD210079: Failed to calculate nullifier. inputs values not inside Finite Field",
+		},
+		{
+			name:        "Failed witness calculation",
+			circuit:     constants.CIRCUIT_DEPOSIT,
+			inputs:      &pb.ProvingRequestCommon{},
+			keyEntry:    keyEntry,
+			loadCircuit: true,
+			expectErr:   true,
+			errContains: "PD210100: failed to calculate the witness",
+		},
+		{
+			name:    "Withdraw failure",
+			circuit: constants.CIRCUIT_WITHDRAW,
+			inputs: &pb.ProvingRequestCommon{
+				InputCommitments: []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
+				InputValues:      []uint64{10, 20},
+				InputSalts:       []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
+				InputOwner:       "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025",
+				OutputValues:     []uint64{30, 0},
+				OutputSalts:      []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
+				OutputOwners:     []string{"7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025", "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"},
+			},
+			keyEntry:    keyEntry,
+			loadCircuit: true,
+			expectErr:   true,
+			errContains: "PD210100: failed to calculate the witness",
+		},
 	}
-	circuit, _ := loadTestCircuit(t)
-	_, err = calculateWitness(ctx, constants.CIRCUIT_DEPOSIT, inputs, nil, keyEntry, circuit)
-	assert.ErrorContains(t, err, "PD210100: failed to calculate the witness")
 
-	inputs = &pb.ProvingRequestCommon{
-		InputCommitments: []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
-		InputValues:      []uint64{10, 20},
-		InputSalts:       []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
-		InputOwner:       "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025",
-		OutputValues:     []uint64{30, 0},
-		OutputSalts:      []string{"1234567890123456789012345678901234567890123456789012345678901234", "1234567890123456789012345678901234567890123456789012345678901234"},
-		OutputOwners:     []string{"7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025", "7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"},
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var circuit witness.Calculator
+			if tc.loadCircuit {
+				circuit, _ = loadTestCircuit(t)
+			}
+
+			_, err := calculateWitness(ctx, tc.circuit, tc.inputs, tc.extras, tc.keyEntry, circuit)
+
+			if tc.expectErr {
+				require.Error(t, err, "expected error in test case %q", tc.name)
+				assert.Contains(t, err.Error(), tc.errContains, "error message should contain %q", tc.errContains)
+			} else {
+				require.NoError(t, err, "unexpected error in test case %q", tc.name)
+			}
+		})
 	}
-	_, err = calculateWitness(ctx, constants.CIRCUIT_WITHDRAW, inputs, nil, keyEntry, circuit)
-	assert.ErrorContains(t, err, "PD210100: failed to calculate the witness")
+}
 
-	_, err = calculateWitness(ctx, constants.CIRCUIT_WITHDRAW_NULLIFIER, inputs, extras2, keyEntry, circuit)
-	assert.EqualError(t, err, "PD210099: failed to assemble private inputs for witness calculation. PD210079: Failed to calculate nullifier. inputs values not inside Finite Field")
+func TestBuildInputs(t *testing.T) {
+	ctx := context.Background()
+
+	alice := NewTestKeypair()
+	sender := alice.PublicKey.Compress().String()
+	bob := NewTestKeypair()
+	receiver := bob.PublicKey.Compress().String()
+
+	tests := []struct {
+		name         string
+		circuitId    string
+		commonInputs *pb.ProvingRequestCommon
+		expectErr    bool
+		errContains  string
+		validateFunc func(*testing.T, *commonWitnessInputs)
+	}{
+		{
+			name:      "Successful Non-Fungible Circuit",
+			circuitId: constants.CIRCUIT_NF_ANON,
+			commonInputs: &pb.ProvingRequestCommon{
+				InputCommitments:  []string{"1", "2"},
+				InputSalts:        []string{"3", "4"},
+				OutputCommitments: []string{"10", "20"},
+				OutputSalts:       []string{"5", "6"},
+				OutputOwners:      []string{sender, receiver},
+			},
+			expectErr: false,
+			validateFunc: func(t *testing.T, inputs *commonWitnessInputs) {
+				assert.Equal(t, 2, len(inputs.outputOwnerPublicKeys))
+				assert.Equal(t, alice.PublicKey.X.Text(10), inputs.outputOwnerPublicKeys[0][0].Text(10))
+				assert.Equal(t, alice.PublicKey.Y.Text(10), inputs.outputOwnerPublicKeys[0][1].Text(10))
+				assert.Equal(t, bob.PublicKey.X.Text(10), inputs.outputOwnerPublicKeys[1][0].Text(10))
+				assert.Equal(t, bob.PublicKey.Y.Text(10), inputs.outputOwnerPublicKeys[1][1].Text(10))
+			},
+		},
+		{
+			name:      "Successful Fungible Circuit",
+			circuitId: constants.CIRCUIT_DEPOSIT,
+			commonInputs: &pb.ProvingRequestCommon{
+				InputCommitments: []string{"1", "2"},
+				InputValues:      []uint64{10, 20},
+				InputSalts:       []string{"3", "4"},
+				OutputValues:     []uint64{30, 0},
+				OutputSalts:      []string{"5", "0"},
+				OutputOwners:     []string{sender, receiver},
+			},
+			expectErr: false,
+			validateFunc: func(t *testing.T, inputs *commonWitnessInputs) {
+				assert.Equal(t, 2, len(inputs.outputOwnerPublicKeys))
+				assert.Equal(t, "0", inputs.outputOwnerPublicKeys[1][0].Text(10))
+				assert.Equal(t, "0", inputs.outputOwnerPublicKeys[1][1].Text(10))
+			},
+		},
+		{
+			name:      "Invalid Non-Fungible Input Commitment",
+			circuitId: constants.CIRCUIT_NF_ANON,
+			commonInputs: &pb.ProvingRequestCommon{
+				InputCommitments:  []string{"XYZ", "2"}, // Invalid hex
+				InputSalts:        []string{"3", "4"},
+				OutputCommitments: []string{"10", "20"},
+				OutputSalts:       []string{"5", "6"},
+				OutputOwners:      []string{sender, receiver},
+			},
+			expectErr:   true,
+			errContains: "PD210084: Failed to parse input commitment",
+		},
+		{
+			name:      "Invalid Fungible Output Salt",
+			circuitId: constants.CIRCUIT_DEPOSIT,
+			commonInputs: &pb.ProvingRequestCommon{
+				InputCommitments: []string{"1", "2"},
+				InputValues:      []uint64{10, 20},
+				InputSalts:       []string{"3", "4"},
+				OutputValues:     []uint64{30, 0},
+				OutputSalts:      []string{"XYZ", "6"}, // Invalid hex
+				OutputOwners:     []string{sender, receiver},
+			},
+			expectErr:   true,
+			errContains: "PD210083: Failed to parse output salt",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			inputs, err := buildInputs(ctx, tc.circuitId, tc.commonInputs, nil)
+
+			if tc.expectErr {
+				require.Error(t, err, "expected error in test case %q", tc.name)
+				assert.Contains(t, err.Error(), tc.errContains, "error message should contain %q", tc.errContains)
+			} else {
+				require.NoError(t, err, "unexpected error in test case %q", tc.name)
+				require.NotNil(t, inputs, "expected non-nil circuit inputs")
+				if tc.validateFunc != nil {
+					tc.validateFunc(t, inputs)
+				}
+			}
+		})
+	}
+}
+func TestAssembleWitnessInputs(t *testing.T) {
+	ctx := context.Background()
+	privKey, ok := new(big.Int).SetString("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16)
+	require.True(t, ok)
+	keyEntry := &core.KeyEntry{
+		PrivateKeyForZkp: privKey,
+	}
+
+	tests := []struct {
+		name        string
+		circuitId   string
+		inputs      *commonWitnessInputs
+		extras      interface{}
+		expectErr   bool
+		errContains string
+	}{
+		{
+			name:      "Valid anon circuit",
+			circuitId: constants.CIRCUIT_ANON,
+			inputs:    &commonWitnessInputs{},
+			extras:    nil,
+			expectErr: false,
+		},
+		{
+			name:      "Valid non-fungible circuit",
+			circuitId: constants.CIRCUIT_NF_ANON,
+			inputs:    &commonWitnessInputs{},
+			extras:    &pb.ProvingRequestExtras_NonFungible{},
+			expectErr: false,
+		},
+		{
+			name:        "Invalid non-fungible circuit extras type",
+			circuitId:   constants.CIRCUIT_NF_ANON,
+			inputs:      &commonWitnessInputs{},
+			extras:      &pb.ProvingRequestExtras_Encryption{},
+			expectErr:   true,
+			errContains: "unexpected extras type for non-fungible circuit",
+		},
+		{
+			name:      "Valid encryption circuit",
+			circuitId: constants.CIRCUIT_ANON_ENC,
+			inputs:    &commonWitnessInputs{},
+			extras:    &pb.ProvingRequestExtras_Encryption{},
+			expectErr: false,
+		},
+		{
+			name:        "Invalid encryption circuit extras type",
+			circuitId:   constants.CIRCUIT_ANON_ENC,
+			inputs:      &commonWitnessInputs{},
+			extras:      &pb.ProvingRequestExtras_NonFungible{},
+			expectErr:   true,
+			errContains: "unexpected extras type for encryption circuit",
+		},
+		{
+			name:        "Invalid anon nullifier circuit extras type",
+			circuitId:   constants.CIRCUIT_ANON_NULLIFIER,
+			inputs:      &commonWitnessInputs{},
+			extras:      &pb.ProvingRequestExtras_Encryption{},
+			expectErr:   true,
+			errContains: "unexpected extras type for anon nullifier circuit",
+		},
+		{
+			name:      "Valid deposit circuit",
+			circuitId: constants.CIRCUIT_DEPOSIT,
+			inputs:    &commonWitnessInputs{},
+			extras:    nil,
+			expectErr: false,
+		},
+		{
+			name:      "Valid withdraw circuit",
+			circuitId: constants.CIRCUIT_WITHDRAW,
+			inputs:    &commonWitnessInputs{},
+			extras:    nil,
+			expectErr: false,
+		},
+		{
+			name:        "Invalid withdraw nullifier circuit extras type",
+			circuitId:   constants.CIRCUIT_WITHDRAW_NULLIFIER,
+			inputs:      &commonWitnessInputs{},
+			extras:      &pb.ProvingRequestExtras_Encryption{},
+			expectErr:   true,
+			errContains: "unexpected extras type for withdraw nullifier circuit",
+		},
+		{
+			name:      "Valid lock circuit",
+			circuitId: constants.CIRCUIT_LOCK,
+			inputs:    &commonWitnessInputs{},
+			extras:    nil,
+			expectErr: false,
+		},
+		{
+			name:        "Unsupported circuit id",
+			circuitId:   "unsupported_circuit",
+			inputs:      &commonWitnessInputs{},
+			extras:      nil,
+			expectErr:   true,
+			errContains: "unsupported circuit id",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := assembleWitnessInputs(ctx, tc.circuitId, tc.inputs, tc.extras, keyEntry)
+
+			if tc.expectErr {
+				require.Error(t, err, "expected error in test case %q", tc.name)
+				assert.Contains(t, err.Error(), tc.errContains, "error message should contain %q", tc.errContains)
+			} else {
+				require.NoError(t, err, "unexpected error in test case %q", tc.name)
+			}
+		})
+	}
 }
