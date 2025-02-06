@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
@@ -32,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
@@ -45,6 +47,9 @@ import (
 
 //go:embed abis/SampleERC20.json
 var erc20ABI []byte
+
+//go:embed abis/Zeto_Anon.json
+var zetoAnonAbi []byte
 
 var (
 	controllerName = "controller"
@@ -259,10 +264,11 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	log.L(ctx).Info("*************************************")
 	log.L(ctx).Infof("Lock some UTXOs")
 	log.L(ctx).Info("*************************************")
-	var recipient1EthAddr string
-	rpcerr = s.rpc.CallRPC(ctx, &recipient1EthAddr, "ptx_resolveVerifier", recipient1Name, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	var recipient1EthAddrStr string
+	rpcerr = s.rpc.CallRPC(ctx, &recipient1EthAddrStr, "ptx_resolveVerifier", recipient1Name, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.Nil(t, rpcerr)
-	_, err = s.lock(ctx, zetoAddress, controllerName, 1, tktypes.MustEthAddress(recipient1EthAddr))
+	recipient1EthAddr := tktypes.MustEthAddress(recipient1EthAddrStr)
+	_, err = s.lock(ctx, zetoAddress, controllerName, 1, recipient1EthAddr)
 	require.NoError(t, err)
 
 	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken, true)
@@ -277,6 +283,19 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	result, err := s.PrepareTransferLocked(ctx, &zetoAddress, hash, recipient1Name, controllerName, recipient2Name, 1)
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	build, err := getZetoAnonSpec()
+	require.NoError(t, err)
+	_, err = s.tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type:     pldapi.TransactionTypePublic.Enum(),
+			From:     recipient1Name,
+			To:       &zetoAddress,
+			Function: "transferLocked",
+			Data:     result.PreparedTransaction.Data,
+		},
+		ABI: build.ABI,
+	})
+	require.NoError(t, err)
 }
 
 func (s *zetoDomainTestSuite) setupContractsAbi(t *testing.T, ctx context.Context, tokenName string) {
@@ -551,6 +570,11 @@ func getERC20Spec() (*solutils.SolidityBuild, error) {
 	return build, nil
 }
 
+func getZetoAnonSpec() (*solutils.SolidityBuild, error) {
+	build := solutils.MustLoadBuild(zetoAnonAbi)
+	return build, nil
+}
+
 func deployERC20(ctx context.Context, rpc rpcclient.Client, controllerAddr string) (*tktypes.EthAddress, error) {
 	build, err := getERC20Spec()
 	if err != nil {
@@ -563,5 +587,8 @@ func deployERC20(ctx context.Context, rpc rpcclient.Client, controllerAddr strin
 		return nil, rpcerr
 	}
 	return tktypes.MustEthAddress(addr), nil
+}
 
+func functionBuilder(ctx context.Context, pld pldclient.PaladinClient, abi abi.ABI, functionName string) pldclient.TxBuilder {
+	return pld.ForABI(ctx, abi).Function(functionName)
 }
