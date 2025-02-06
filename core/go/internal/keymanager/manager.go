@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024 Kaleido, Inc.
+ * Copyright © 2025 Kaleido, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -21,14 +21,17 @@ import (
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -233,4 +236,57 @@ func (km *keyManager) ReverseKeyLookup(ctx context.Context, dbTX persistence.DBT
 	}
 	km.verifierReverseCache.Set(vKey, mapping)
 	return mapping, nil
+}
+
+func (km *keyManager) QueryKeys(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) (keyList []*pldapi.KeyQueryEntry, err error) {
+
+	q := filters.BuildGORM(ctx, jq,
+		dbTX.WithContext(ctx).
+			Table("key_paths"), KeyEntryFilters)
+
+	q.Select(`DISTINCT key_mappings.identifier IS NOT NULL AS "is_key",` +
+		`k.p IS NOT NULL AS "has_children",` +
+		`key_paths.parent AS "parent",` +
+		`key_paths."index" AS "index",` +
+		`key_paths.path AS "path",` +
+		`key_mappings.wallet AS "wallet",` +
+		`key_mappings.key_handle AS "key_handle"`,
+	)
+
+	q.Joins("LEFT OUTER JOIN key_mappings ON key_paths.path = key_mappings.identifier")
+	q.Joins(`LEFT OUTER JOIN (SELECT parent AS "p" from key_paths AS p) AS k ON key_paths.path = k.p`)
+	q.Where("key_paths.path != ''")
+
+	err = q.Find(&keyList).Error
+	if err != nil {
+		return nil, err
+	}
+
+	var ids []string
+	for _, k := range keyList {
+		ids = append(ids, k.Path)
+	}
+
+	var verifiers []*DBKeyVerifier
+
+	err = dbTX.Table("key_verifiers").
+		Where("identifier IN ?", ids).
+		Scan(&verifiers).Error
+	if err != nil {
+		return nil, err
+	}
+
+	for _, k := range keyList {
+		for _, v := range verifiers {
+			if k.Path == v.Identifier {
+				k.Verifiers = append(k.Verifiers, &pldapi.KeyVerifier{
+					Verifier:  v.Verifier,
+					Type:      v.Type,
+					Algorithm: v.Algorithm,
+				})
+			}
+		}
+	}
+
+	return keyList, nil
 }
