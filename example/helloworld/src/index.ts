@@ -17,12 +17,11 @@ async function main(): Promise<boolean> {
   // STEP 1: Deploy the HelloWorld contract
   logger.log("STEP 1: Deploying the HelloWorld contract...");
   const deploymentTxID = await paladin.sendTransaction({
-    type: TransactionType.PUBLIC,       // Deploy publicly
-    abi: helloWorldJson.abi,            // ABI of the HelloWorld contract
-    bytecode: helloWorldJson.bytecode,  // Compiled bytecode
-    function: "",                       // No constructor arguments in this example
-    from: owner.lookup,                 // Account signing and endorsing the transaction
-    data: {},                           // No additional data
+    type: TransactionType.PUBLIC,
+    abi: helloWorldJson.abi,
+    bytecode: helloWorldJson.bytecode,
+    from: owner.lookup,
+    data: {},
   });
 
   // Wait for the deployment receipt
@@ -38,13 +37,13 @@ async function main(): Promise<boolean> {
   const name = "Blocky McChainface"; // Example name for the greeting
 
   const sayHelloTxID = await paladin.sendTransaction({
-    type: TransactionType.PUBLIC,          // Public transaction
-    abi: helloWorldJson.abi,               // ABI of the HelloWorld contract
-    function: "sayHello",                  // Name of the function to call
-    from: owner.lookup,                    // Account signing and endorsing the transaction
-    to: deploymentReceipt.contractAddress, // Deployed contract address
-    data: {                                // Function arguments
-      name: name,                          // Name of the person to greet
+    type: TransactionType.PUBLIC,
+    abi: helloWorldJson.abi,
+    function: "sayHello",
+    from: owner.lookup,
+    to: deploymentReceipt.contractAddress,
+    data: {
+      name: name,
     },
   });
 
@@ -64,9 +63,9 @@ async function main(): Promise<boolean> {
   // STEP 3: Retrieve and verify the emitted event
   logger.log("STEP 3: Retrieving and verifying emitted events...");
   const events = await paladin.decodeTransactionEvents(
-    functionReceipt.transactionHash,  // Transaction hash
-    helloWorldJson.abi,               // ABI of the contract
-    "pretty=true",                    // encoding format
+    functionReceipt.transactionHash,
+    helloWorldJson.abi,
+    "pretty=true",
   );
 
   // Extract the event message and validate its content

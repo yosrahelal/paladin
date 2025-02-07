@@ -31,24 +31,34 @@ These are pre-compiled and provided in the `helloWorldJson` object.
 
 ---
 
+To address the PR comment and clarify the differences between **contract deployment** and **function invocation**, here’s a revised version of the tutorial with an explicit callout:
+
+---
+
 ### Step 1: Deploy the Contract
 
 ```typescript
 const deploymentTxID = await paladin.sendTransaction({
-  type: TransactionType.PUBLIC,       // Deploy publicly
-  abi: helloWorldJson.abi,            // ABI of the HelloWorld contract
-  bytecode: helloWorldJson.bytecode,  // Compiled bytecode
-  function: "",                       // No constructor arguments
-  from: owner.lookup,                 // Account signing the transaction
-  data: {},                           // No additional data
+  type: TransactionType.PUBLIC,
+  abi: helloWorldJson.abi,
+  bytecode: helloWorldJson.bytecode,
+  from: owner.lookup,
+  data: {},
 });
 ```
 
-- **What happens**:
-  - The `sendTransaction` method sends a deployment transaction to the Paladin network.
-  - The function returns a `deploymentTxID` that uniquely identifies the transaction.
+#### Key Differences (vs. calling a contract function)
+- **Deployment requires `bytecode`**, as it is creating a new contract on the blockchain.
+- **No `to` address is specified**, since a contract does not yet exist at this stage.
+- **No specific function is called**, since this is an initial deployment.
 
-### Step 2: Confirm the Deployment
+#### What happens:
+- The `sendTransaction` method sends a deployment transaction to the blockchain via Paladin.
+- The function returns a `deploymentTxID` that uniquely identifies the transaction.
+
+---
+
+### Step 2: Confirm the Deployment  
 
 ```typescript
 const deploymentReceipt = await paladin.pollForReceipt(deploymentTxID, 10000, true);
@@ -59,16 +69,16 @@ if (!deploymentReceipt?.contractAddress) {
 logger.log("Contract deployed successfully at address:", deploymentReceipt.contractAddress);
 ```
 
-- **What happens**:
-  - We use `pollForReceipt` to wait for the deployment transaction to be confirmed.
-  - If successful, the receipt includes the new `contractAddress`.
+#### What happens:
+- We use `pollForReceipt` to wait for the deployment transaction to be confirmed.
+- If successful, the receipt includes the new `contractAddress`, which we will use in the next step.
 
 ---
 
-### Step 3: Call the `sayHello` Function
+### **Step 3: Call the `sayHello` Function**  
 
 ```typescript
-const name = "Blocky McChainface"; // Example name for the greeting
+const name = "Paladin User"; // Example name for the greeting
 
 const sayHelloTxID = await paladin.sendTransaction({
   type: TransactionType.PUBLIC,
@@ -80,9 +90,14 @@ const sayHelloTxID = await paladin.sendTransaction({
 });
 ```
 
-- **What happens**:
-  - The `sendTransaction` method sends a transaction to call the `sayHello` function of the deployed contract.
-  - The `data` object includes the function arguments—in this case, the `name` of the person being greeted.
+#### **Key Differences (vs. contract deployment)**
+- **Function calls require a `to` address**, since the contract already exists.
+- **No `bytecode` is needed**, as we are invoking an existing contract, not creating one.
+- **A specific function (`sayHello`) is provided**, along with its arguments in `data`.
+
+#### **What happens:**
+- The `sendTransaction` method sends a transaction to call the `sayHello` function of the deployed contract.
+- The `data` object includes the function arguments—in this case, the `name` of the person being greeted.
 
 ---
 

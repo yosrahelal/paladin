@@ -101,20 +101,24 @@ Authorized group members can retrieve the stored value.
 ```typescript
 logger.log("Node1 retrieving the stored value...");
 const retrievedValueNode1 = await privateStorage.call(verifierNode1, "retrieve", []);
-logger.log("Node1 retrieved the value successfully:", retrievedValueNode1["0"]);
+logger.log("Node1 retrieved the value successfully:", retrievedValueNode1["value"]);
 
 logger.log("Node2 retrieving the stored value...");
 const retrievedValueNode2 = await privateStorage
   .using(paladinNode2)
   .call(verifierNode2, "retrieve", []);
-logger.log("Node2 retrieved the value successfully:", retrievedValueNode2["0"]);
+logger.log("Node2 retrieved the value successfully:", retrievedValueNode2["value"]);
 ```
 
 ---
 
 ## Step 4: Verify Privacy by Testing Unauthorized Access
 
-When an outsider (Node3) tries to access the private contract, the attempt should fail.
+In a **privacy group**, all **inputs and outputs of transactions remain private** among group members. This means that **Node3 (an outsider) cannot reconstruct the contract’s current state** because it was never included in the private state updates.  
+
+Unlike traditional access control mechanisms where permissions are enforced at the contract level, **Paladin’s privacy groups ensure that only the designated members receive and share the necessary state information**. As a result, **Node3 does not have access to any past transactions or stored values, preventing it from reconstructing the contract state**.  
+
+### Testing Unauthorized Access
 
 ```typescript
 try {
@@ -123,11 +127,16 @@ try {
   logger.error("Node3 (outsider) should not have access to the private Storage contract!");
   return false;
 } catch (error) {
-  logger.info("Node3 (outsider) cannot retrieve data. Access denied.");
+  logger.info("Node3 (outsider) cannot retrieve data because it was never included in the private state updates.");
 }
 ```
 
----
+### Why Privacy Groups Work
+- **Private State Isolation** – Transactions within a privacy group are only visible to its members.  
+- **No Global State Sharing** – Outsiders (e.g., Node3) never receive the transaction history, making it impossible for them to infer contract data.  
+- **Selective State Distribution** – Only group members can access and verify the shared state.  
+
+By design, **Node3 does not just “lack permission” to call the contract—it lacks any knowledge of its state, history, or data, making unauthorized access fundamentally impossible**.  
 
 ## Conclusion
 

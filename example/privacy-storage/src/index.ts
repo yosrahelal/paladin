@@ -24,8 +24,8 @@ async function main(): Promise<boolean> {
   const penteFactory = new PenteFactory(paladinNode1, "pente");
   const memberPrivacyGroup = await penteFactory.newPrivacyGroup(verifierNode1, {
     group: {
-      salt: newGroupSalt(), // Generate a new salt for the group
-      members: [verifierNode1, verifierNode2], // Add members to the group
+      salt: newGroupSalt(),
+      members: [verifierNode1, verifierNode2],
     },
     evmVersion: "shanghai",
     endorsementType: "group_scoped_identities",
@@ -37,9 +37,9 @@ async function main(): Promise<boolean> {
   // Step 2: Deploy a smart contract within the privacy group
   logger.log("Deploying a smart contract to the privacy group...");
   const contractAddress = await memberPrivacyGroup.deploy(
-    storageJson.abi, // ABI of the contract
-    storageJson.bytecode, // Bytecode of the contract
-    verifierNode1 // Deploying as Node1
+    storageJson.abi,
+    storageJson.bytecode,
+    verifierNode1
   );
 
   if (!contractAddress) {
@@ -60,14 +60,14 @@ async function main(): Promise<boolean> {
   // Retrieve the value as Node1
   logger.log("Node1 retrieving the value from the contract...");
   const retrievedValueNode1 = await privateStorageContract.call(verifierNode1, "retrieve", []);
-  logger.log("Node1 retrieved the value successfully:", retrievedValueNode1["0"]);
+  logger.log("Node1 retrieved the value successfully:", retrievedValueNode1["value"]);
 
   // Retrieve the value as Node2
   logger.log("Node2 retrieving the value from the contract...");
   const retrievedValueNode2 = await privateStorageContract
     .using(paladinNode2)
     .call(verifierNode2, "retrieve", []);
-  logger.log("Node2 retrieved the value successfully:", retrievedValueNode2["0"]);
+  logger.log("Node2 retrieved the value successfully:", retrievedValueNode2["value"]);
 
   // Attempt to retrieve the value as Node3 (outsider)
   try {

@@ -19,8 +19,8 @@ async function main(): Promise<boolean> {
   logger.log("Step 1: Deploying a Noto cash token...");
   const notoFactory = new NotoFactory(paladinClientNode1, "noto");
   const cashToken = await notoFactory.newNoto(verifierNode1, {
-    notary: verifierNode1,          // The notary for this token
-    restrictMinting: true,          // Restrict minting to the notary only
+    notary: verifierNode1,
+    notaryMode: "basic"
   });
   if (!cashToken) {
     logger.error("Failed to deploy the Noto cash token!");
@@ -31,9 +31,9 @@ async function main(): Promise<boolean> {
   // Step 2: Mint cash tokens
   logger.log("Step 2: Minting 2000 units of cash to Node1...");
   const mintReceipt = await cashToken.mint(verifierNode1, {
-    to: verifierNode1,              // Mint cash to Node1
-    amount: 2000,                   // Amount to mint
-    data: "0x",                     // Optional additional data
+    to: verifierNode1,
+    amount: 2000,
+    data: "0x",
   });
   if (!mintReceipt) {
     logger.error("Failed to mint cash tokens!");
@@ -44,9 +44,9 @@ async function main(): Promise<boolean> {
   // Step 3: Transfer cash to Node2
   logger.log("Step 3: Transferring 1000 units of cash from Node1 to Node2...");
   const transferToNode2 = await cashToken.transfer(verifierNode1, {
-    to: verifierNode2,              // Transfer to Node2
-    amount: 1000,                   // Amount to transfer
-    data: "0x",                     // Optional additional data
+    to: verifierNode2,
+    amount: 1000,
+    data: "0x",
   });
   if (!transferToNode2) {
     logger.error("Failed to transfer cash to Node2!");
@@ -57,9 +57,9 @@ async function main(): Promise<boolean> {
   // Step 4: Transfer cash to Node3 from Node2
   logger.log("Step 4: Transferring 800 units of cash from Node2 to Node3...");
   const transferToNode3 = await cashToken.using(paladinClientNode2).transfer(verifierNode2, {
-    to: verifierNode3,              // Transfer to Node3
-    amount: 800,                   // Amount to transfer
-    data: "0x",                     // Optional additional data
+    to: verifierNode3,
+    amount: 800,
+    data: "0x",
   });
   if (!transferToNode3) {
     logger.error("Failed to transfer cash to Node3!");

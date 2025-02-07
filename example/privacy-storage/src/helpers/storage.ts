@@ -5,10 +5,6 @@ import PaladinClient, {
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import storage from "../abis/Storage.json";
 
-// export interface AddStorageParams {
-//   addr: string;
-// }
-
 export const newPrivateStorage = async (
   pente: PentePrivacyGroup,
   from: PaladinVerifier,
@@ -20,7 +16,6 @@ export const newPrivateStorage = async (
   );
   return address ? new PrivateStorage(pente, address) : undefined;
 };
-
 
 export class PrivateStorage extends PentePrivateContract<{}> {
   constructor(

@@ -1,62 +1,77 @@
 # Notarized Tokens
 
-In this tutorial, you’ll learn how to create and manage a basic token using the **Notarized Tokens (noto)** domain. Unlike the private storage example, these tokens can be transferred between nodes publicly, demonstrating how assets (e.g., “cash”) can be issued and tracked on the blockchain using Paladin.
+In this tutorial, you’ll learn how to create and manage **Notarized Tokens (Noto)** within Paladin. Unlike simple private storage, **Notarized Tokens allow secure, private exchanges while maintaining verifiability**.
+
+## Why Use Notarized Tokens?
+
+- **Privacy-Preserving Transfers** – Transactions remain private, visible only to relevant parties.
+- **Notary-Controlled Oversight** – A designated **notary** approves and submits every transaction, ensuring compliance and control.
+- **Selective Disclosure** – Owners can prove token ownership by selectively revealing transaction details when needed.
+
+This tutorial will guide you through issuing, transferring, and verifying tokens using Paladin’s notarization model.
+
+---
 
 ## Prerequisites
 
-Make sure you have:
+Before starting, ensure you have:
 
 1. Completed the [Private Storage Tutorial](./private-storage.md).
-2. A **running Paladin network** with at least three nodes (Node1, Node2, Node3).
+2. A **running Paladin network** with at least three nodes (**Node1, Node2, and Node3**).
 
 ---
 
 ## Overview
 
-This tutorial will guide you through:
+This tutorial will cover:
 
-1. **Deploying a Noto Token**: Use the `NotoFactory` to create a “cash token” with a specific notary.
-2. **Minting Tokens**: Issue tokens to a particular node’s account.
-3. **Transferring Tokens**: Send tokens between different nodes to simulate basic payments.
+1. **Deploying a Noto Token** – Creating a “cash token” with a designated notary.
+2. **Minting Tokens** – Issuing new tokens into circulation.
+3. **Transferring Tokens** – Simulating payments by moving tokens between nodes.
 
-You can find the complete example code in the [Paladin example repository](https://github.com/LF-Decentralized-Trust-labs/paladin/tree/main/example/notarized-tokens).
+💡 **The complete example code is available in the [Paladin example repository](https://github.com/LF-Decentralized-Trust-labs/paladin/tree/main/example/notarized-tokens).**
 
 ---
 
 ## Step 1: Deploy a Noto Token
 
-First, create a **Noto Factory** instance and deploy a new token. In this scenario, Node1 will act as both the notary (the entity allowed to mint tokens) and the initial recipient of the minted cash.
+First, create a **Noto Factory** instance and deploy a new token. **Node1** will act as the **notary**, responsible for approving and submitting all transactions related to this token. Additionally, **Node1 will be the initial recipient of the minted tokens**.
 
 ```typescript
 logger.log("Step 1: Deploying a Noto cash token...");
 const notoFactory = new NotoFactory(paladinClientNode1, "noto");
 const cashToken = await notoFactory.newNoto(verifierNode1, {
-  notary: verifierNode1,          // The notary for this token
-  restrictMinting: true,          // Restrict minting to the notary only
+notary: verifierNode1,// The notary overseeing ALL token transactions
+notaryMode: "basic",// The notary mode
 });
 if (!cashToken) {
-  logger.error("Failed to deploy the Noto cash token!");
-  return false;
+logger.error("Failed to deploy the Noto cash token!");
+return false;
 }
 logger.log("Noto cash token deployed successfully!");
 ```
 
-**Key Points**:
-- **`notary`**: Specifies which verifier (account) can mint new tokens.
-- **`restrictMinting`**: If `true`, only the `notary` can mint additional tokens.
+### Why the Notary Role Matters
+The **notary** is more than just a minting authority—it plays a fundamental role in the **Noto token model**:
+
+- **Approves and submits all token transactions** to the network.
+- **Maintains full visibility** over all token movements.
+- **Ensures transaction integrity and compliance** with predefined rules.
+
+By designating a notary, every transaction must be verified and approved, ensuring controlled and auditable token transfers.
 
 ---
 
 ## Step 2: Mint Tokens
 
-Now that the token contract exists, **mint** an initial supply of tokens to Node1. This step simulates creating new “cash” in the system.
+With the token contract deployed, let’s **mint** an initial supply of tokens for Node1. This simulates creating new “cash” in the system.
 
 ```typescript
 logger.log("Step 2: Minting 2000 units of cash to Node1...");
 const mintReceipt = await cashToken.mint(verifierNode1, {
-  to: verifierNode1,              // Mint cash to Node1
-  amount: 2000,                   // Amount to mint
-  data: "0x",                     // Additional data (optional)
+  to: verifierNode1,
+  amount: 2000,
+  data: "0x",
 });
 if (!mintReceipt) {
   logger.error("Failed to mint cash tokens!");
@@ -65,22 +80,32 @@ if (!mintReceipt) {
 logger.log("Successfully minted 2000 units of cash to Node1!");
 ```
 
-**Key Points**:
-- **`amount`**: Number of tokens to create.
-- **`data`**: Can include extra metadata or encoding, if needed.
+### What Happens Here?
+
+1. **Node1 submits a minting request** to the notary.
+2. **The notary reviews and approves** the request.
+3. **Tokens are minted and assigned** to the recipient.
+4. **The `data` field is recorded** in the transaction receipt for auditability.
+
+### Key Parameters
+- **`amount`** – Number of tokens to create.
+- **`to`** – Recipient of the newly minted tokens.
+- **`data`** – (Optional) Can include metadata or extra information about the transaction.
+
+💡 **The data field is stored in the transaction receipt, making it useful for audits or tracking purposes.**
 
 ---
 
 ## Step 3: Transfer Tokens to Node2
 
-With tokens minted on Node1, you can **transfer** some of them to Node2. This step demonstrates a simple token transfer, much like sending money to another account.
+Now that Node1 has tokens, let’s **transfer some to Node2**. This works similarly to a bank transfer.
 
 ```typescript
 logger.log("Step 3: Transferring 1000 units of cash from Node1 to Node2...");
 const transferToNode2 = await cashToken.transfer(verifierNode1, {
-  to: verifierNode2,              // Transfer to Node2
-  amount: 1000,                   // Amount to transfer
-  data: "0x",                     // Optional additional data
+  to: verifierNode2,
+  amount: 1000,
+  data: "0x",
 });
 if (!transferToNode2) {
   logger.error("Failed to transfer cash to Node2!");
@@ -93,14 +118,14 @@ logger.log("Successfully transferred 1000 units of cash to Node2!");
 
 ## Step 4: Transfer Tokens to Node3
 
-Now let’s see how Node2 can pass tokens to Node3. This step involves calling `.using(paladinClientNode2)` so that **Node2** signs the transaction rather than Node1.
+Now let’s see how **Node2** transfers tokens to **Node3**. Since Node2 is initiating the transaction, we call `.using(paladinClientNode2)` to ensure **Node2 signs the transaction instead of Node1**.
 
 ```typescript
 logger.log("Step 4: Transferring 800 units of cash from Node2 to Node3...");
 const transferToNode3 = await cashToken.using(paladinClientNode2).transfer(verifierNode2, {
-  to: verifierNode3,              // Transfer to Node3
-  amount: 800,                    // Amount to transfer
-  data: "0x",                     // Optional additional data
+  to: verifierNode3,
+  amount: 800,
+  data: "0x",
 });
 if (!transferToNode3) {
   logger.error("Failed to transfer cash to Node3!");
@@ -109,27 +134,32 @@ if (!transferToNode3) {
 logger.log("Successfully transferred 800 units of cash to Node3!");
 ```
 
-**Key Points**:
-- **`.using(paladinClientNode2)`** ensures the transaction is signed by Node2.
-- If Node2 does not have sufficient tokens (e.g., tries to transfer 1200 while only having 1000), the transfer should fail and return an error.
+### Transaction Privacy in Paladin
+
+Unlike traditional blockchains, **Paladin’s notarized token model ensures that not all participants see every transaction**:
+
+- **The notary has full visibility** over all token transfers.
+- **Node2 and Node3 only see transactions they were involved in.**
+- **Other nodes have no visibility into the transfer.**
+
 
 ---
 
 ## Conclusion
 
-Congratulations! You’ve successfully:
+Congratulations! You have successfully:
 
-1. **Deployed a Noto token** to represent cash within the Paladin network.  
-2. **Minted tokens** from a designated notary account.  
-3. **Transferred tokens** between different nodes, demonstrating how digital assets move across participants.  
+1. **Deployed a Noto token** to represent cash within the Paladin network.
+2. **Minted tokens** under a notary’s supervision.
+3. **Transferred tokens** between nodes while maintaining privacy and control.
 
-At this point, you have a basic grasp of how to issue and manage tokens using the Noto domain.
+At this point, you understand how to issue, manage, and transfer notarized tokens within Paladin.
 
 ---
 
 ## Next Steps
 
-Now that you’ve explored how to create, mint, and transfer tokens using the Noto domain, you’re ready to delve into Zeto, Paladin’s zero-knowledge domain for more advanced privacy features. In the next tutorial, you’ll learn how to build a cash payment solution—for example, a wholesale CBDC or a commercial bank money rail—while leveraging powerful privacy techniques such as private minting and selective disclosure.
+Now that you’ve explored **Notarized Tokens**, you’re ready to delve into **Zeto**, Paladin’s **zero-knowledge domain** for enhanced privacy. In the next tutorial, you’ll learn how to build **a privacy-preserving cash payment system** using advanced techniques such as **private minting and selective disclosure**.
 
 [Continue to the Zero-Knowledge Proof Tutorial →](./zkp-cbdc.md)
 
