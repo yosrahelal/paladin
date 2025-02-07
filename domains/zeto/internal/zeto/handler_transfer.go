@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
@@ -29,6 +28,8 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
@@ -275,10 +276,17 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		return nil, err
 	}
 
+	var signer *string
+	if req.Transaction.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION {
+		// All "prepare" transactions must have an explicit "from" signer
+		signer = &req.Transaction.From
+	}
+
 	return &pb.PrepareTransactionResponse{
 		Transaction: &pb.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
+			RequiredSigner:  signer,
 		},
 	}, nil
 }

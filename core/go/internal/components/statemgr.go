@@ -21,10 +21,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"gorm.io/gorm"
 )
 
 type StateManager interface {
@@ -40,26 +40,26 @@ type StateManager interface {
 	GetDomainContext(ctx context.Context, id uuid.UUID) DomainContext
 
 	// Ensure ABI schemas upserts all the specified schemas, using the given DB transaction
-	EnsureABISchemas(ctx context.Context, dbTX *gorm.DB, domainName string, defs []*abi.Parameter) ([]Schema, error)
+	EnsureABISchemas(ctx context.Context, dbTX persistence.DBTX, domainName string, defs []*abi.Parameter) ([]Schema, error)
 
 	// State finalizations are written on the DB context of the block indexer, by the domain manager.
-	WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*pldapi.StateSpendRecord, reads []*pldapi.StateReadRecord, confirms []*pldapi.StateConfirmRecord, infoRecords []*pldapi.StateInfoRecord) (err error)
+	WriteStateFinalizations(ctx context.Context, dbTX persistence.DBTX, spends []*pldapi.StateSpendRecord, reads []*pldapi.StateReadRecord, confirms []*pldapi.StateConfirmRecord, infoRecords []*pldapi.StateInfoRecord) (err error)
 
 	// MUST NOT be called for states received over a network from another node.
 	// Writes a batch of states that have been pre-verified BY THIS NODE so can bypass domain hash verification.
-	WritePreVerifiedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*StateUpsertOutsideContext) ([]*pldapi.State, error)
+	WritePreVerifiedStates(ctx context.Context, dbTX persistence.DBTX, domainName string, states []*StateUpsertOutsideContext) ([]*pldapi.State, error)
 
 	// Write a batch of states that have been received over the network. ID hash calculation will be validated by the domain as prior to storage
-	WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*StateUpsertOutsideContext) ([]*pldapi.State, error)
+	WriteReceivedStates(ctx context.Context, dbTX persistence.DBTX, domainName string, states []*StateUpsertOutsideContext) ([]*pldapi.State, error)
 
 	// Write a batch of nullifiers that correspond to states just received
-	WriteNullifiersForReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, nullifiers []*NullifierUpsert) error
+	WriteNullifiersForReceivedStates(ctx context.Context, dbTX persistence.DBTX, domainName string, nullifiers []*NullifierUpsert) error
 
 	// GetState returns a state by ID, with optional labels
-	GetState(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*pldapi.State, error)
+	GetState(ctx context.Context, dbTX persistence.DBTX, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*pldapi.State, error)
 
 	// Get all states created, read or spent by a confirmed transaction
-	GetTransactionStates(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID) (*pldapi.TransactionStates, error)
+	GetTransactionStates(ctx context.Context, dbTX persistence.DBTX, txID uuid.UUID) (*pldapi.TransactionStates, error)
 }
 
 type DomainContextInfo struct {
@@ -94,7 +94,13 @@ type DomainContext interface {
 	//    be on the same transaction where those states are locked.
 	//
 	// The dbTX is passed in to allow re-use of a connection during read operations.
-	FindAvailableStates(dbTX *gorm.DB, schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*pldapi.State, error)
+	FindAvailableStates(dbTX persistence.DBTX, schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*pldapi.State, error)
+
+	// GetStatesByID retrieves a set of states by ID - regardless of whether they are:
+	// - Written to the DB or not (or just pending in the domain context)
+	// - Confirmed or not
+	// - Spent or not
+	GetStatesByID(dbTX persistence.DBTX, schemaID tktypes.Bytes32, ids []string) (Schema, []*pldapi.State, error)
 
 	// Return a snapshot of all currently known state locks
 	ExportSnapshot() ([]byte, error)
@@ -106,7 +112,7 @@ type DomainContext interface {
 	// nullifiers to record spending.
 	//
 	// The dbTX is passed in to allow re-use of a connection during read operations.
-	FindAvailableNullifiers(dbTX *gorm.DB, schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*pldapi.State, error)
+	FindAvailableNullifiers(dbTX persistence.DBTX, schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*pldapi.State, error)
 
 	// AddStateLocks updates the in-memory state of the domain context, to record a set of locks
 	// that affect queries on available states and nullifiers.
@@ -126,7 +132,7 @@ type DomainContext interface {
 	//
 	// States will be written to the DB on the next flush (the associated lock is not)
 	// The dbTX is passed in to allow re-use of a connection during read operations.
-	UpsertStates(dbTX *gorm.DB, states ...*StateUpsert) (s []*pldapi.State, err error)
+	UpsertStates(dbTX persistence.DBTX, states ...*StateUpsert) (s []*pldapi.State, err error)
 
 	// UpsertNullifiers creates nullifier records associated with states.
 	// Nullifiers are an alternate state identifier (separate from the state ID) that can be used
@@ -164,7 +170,7 @@ type DomainContext interface {
 	// of the database transaction.
 	//
 	// If an error is returned by this function, then the postDBTx callback will be nil
-	Flush(dbTX *gorm.DB) (postDBTx func(error), err error)
+	Flush(dbTX persistence.DBTX) error
 
 	// Removes the domain context from the state manager, and prevents any further use
 	Close()

@@ -68,13 +68,14 @@ func TestRPC(t *testing.T) {
 	defer done()
 
 	_ = mockDomain(t, m, "domain1", false)
+	mockStateCallback(m)
 
 	var abiParam abi.Parameter
 	err := json.Unmarshal([]byte(widgetABI), &abiParam)
 	assert.NoError(t, err)
 	schema, err := newABISchema(ctx, "domain1", &abiParam)
 	assert.NoError(t, err)
-	err = ss.persistSchemas(ctx, ss.p.DB(), []*pldapi.Schema{schema.Schema})
+	err = ss.persistSchemas(ctx, ss.p.NOTX(), []*pldapi.Schema{schema.Schema})
 	assert.NoError(t, err)
 
 	var schemas []*pldapi.Schema
@@ -96,7 +97,7 @@ func TestRPC(t *testing.T) {
 	jsonTestLog(t, "pstate_storeState", state)
 	assert.Nil(t, rpcErr)
 	if rpcErr != nil {
-		assert.NoError(t, rpcErr.RPCError().Error())
+		assert.NoError(t, rpcErr)
 	}
 	assert.Equal(t, schemas[0].ID, state.Schema)
 	assert.Equal(t, "domain1", state.DomainName)
@@ -127,7 +128,7 @@ func TestRPC(t *testing.T) {
 
 	// Write some nullifiers and query them back
 	nullifier1 := tktypes.HexBytes(tktypes.RandHex(32))
-	err = ss.WriteNullifiersForReceivedStates(ctx, ss.p.DB(), "domain1", []*components.NullifierUpsert{
+	err = ss.WriteNullifiersForReceivedStates(ctx, ss.p.NOTX(), "domain1", []*components.NullifierUpsert{
 		{
 			ID:    nullifier1,
 			State: state.ID,

@@ -18,9 +18,10 @@ package privatetxnmgr
 import (
 	"context"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -38,7 +39,7 @@ func (p *privateTxManager) BuildNullifier(ctx context.Context, kr components.Key
 
 	// Call the signing engine to build the nullifier
 	var nulliferBytes []byte
-	mapping, err := kr.ResolveKey(identifier, *s.NullifierAlgorithm, *s.NullifierVerifierType)
+	mapping, err := kr.ResolveKey(ctx, identifier, *s.NullifierAlgorithm, *s.NullifierVerifierType)
 	if err == nil {
 		nulliferBytes, err = p.components.KeyManager().Sign(ctx, mapping, *s.NullifierPayloadType, s.StateData.Bytes())
 	}
@@ -51,34 +52,17 @@ func (p *privateTxManager) BuildNullifier(ctx context.Context, kr components.Key
 	}, nil
 }
 
-func (p *privateTxManager) withKeyResolutionContext(ctx context.Context, fn func(krc components.KeyResolutionContextLazyDB) error) (err error) {
-
-	// Unlikely we'll be resolving any new identities on this path - if we do, we'll start a new DB transaction
-	// Note: This requires we're not on an existing DB TX coming into this function
-	krc := p.components.KeyManager().NewKeyResolutionContextLazyDB(ctx)
-	defer func() {
-		if err == nil {
-			err = krc.Commit()
-		} else {
-			krc.Rollback()
-		}
-	}()
-
-	err = fn(krc)
-	return err // note we require err to be set before return
-}
-
 func (p *privateTxManager) BuildNullifiers(ctx context.Context, stateDistributions []*components.StateDistributionWithData) (nullifiers []*components.NullifierUpsert, err error) {
 
 	nullifiers = []*components.NullifierUpsert{}
-	err = p.withKeyResolutionContext(ctx, func(krc components.KeyResolutionContextLazyDB) error {
+	err = p.components.Persistence().Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		for _, s := range stateDistributions {
 			if s.NullifierAlgorithm == nil || s.NullifierVerifierType == nil || s.NullifierPayloadType == nil {
 				log.L(ctx).Debugf("No nullifier required for state %s on node %s", s.StateID, p.nodeName)
 				continue
 			}
 
-			nullifier, err := p.BuildNullifier(ctx, krc.KeyResolverLazyDB(), s)
+			nullifier, err := p.BuildNullifier(ctx, p.components.KeyManager().KeyResolverForDBTX(dbTX), s)
 			if err != nil {
 				return err
 			}

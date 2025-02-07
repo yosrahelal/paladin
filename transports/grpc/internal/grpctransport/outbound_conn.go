@@ -20,7 +20,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/transports/grpc/internal/msgs"
 	"github.com/kaleido-io/paladin/transports/grpc/pkg/proto"
