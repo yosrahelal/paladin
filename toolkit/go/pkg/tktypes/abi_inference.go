@@ -46,11 +46,12 @@ import (
 func ABIInferenceFromJSON(ctx context.Context, inputData RawJSON) (abi.ParameterArray, error) {
 
 	var rootMap map[string]any
-	dec := json.NewDecoder(bytes.NewReader(inputData))
-	dec.UseNumber()
-	err := dec.Decode(&rootMap)
-	if err != nil {
-		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesInvalidJSONObjectForABIInference)
+	if inputData != nil {
+		dec := json.NewDecoder(bytes.NewReader(inputData))
+		dec.UseNumber()
+		if err := dec.Decode(&rootMap); err != nil {
+			return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesInvalidJSONObjectForABIInference)
+		}
 	}
 	if len(rootMap) == 0 {
 		return abi.ParameterArray{}, nil // Nil or empty input object case
@@ -58,6 +59,7 @@ func ABIInferenceFromJSON(ctx context.Context, inputData RawJSON) (abi.Parameter
 	return recurseInferParams(ctx, rootMap, true /* top level simple types marked indexed */)
 }
 
+// Sorting map keys allows consistent ordering of ABI parameters, when the same set of input data is used
 func sortedMapKeys(m map[string]any) []string {
 	sortedKeys := make([]string, 0, len(m))
 	for k := range m {
@@ -91,7 +93,7 @@ func recurseInferParams(ctx context.Context, in map[string]any, indexed bool) (a
 		case bool:
 			params = append(params, &abi.Parameter{
 				Name:    k,
-				Type:    "boolean",
+				Type:    "bool",
 				Indexed: indexed,
 			})
 		case []any:

@@ -21,12 +21,13 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestABIInference(t *testing.T) {
 
-	p, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{
+	inputJSON := RawJSON(`{
 		"000_string": "bla",
 	  	"100_number": 42000000000000000000000,
 	  	"200_boolean": false,
@@ -44,7 +45,9 @@ func TestABIInference(t *testing.T) {
 		"600_multiDimArray": [
 		  [ 100, 200 ]
 		]
-	}`))
+	}`)
+
+	p, err := ABIInferenceFromJSON(context.Background(), inputJSON)
 	require.NoError(t, err)
 	require.Equal(t, abi.ParameterArray{
 		{
@@ -59,7 +62,7 @@ func TestABIInference(t *testing.T) {
 		},
 		{
 			Name:    "200_boolean",
-			Type:    "boolean",
+			Type:    "bool",
 			Indexed: true,
 		},
 		{
@@ -109,5 +112,64 @@ func TestABIInference(t *testing.T) {
 			Type: "int256[][]",
 		},
 	}, p)
+
+	// Now the parameter set we've got should parse the data we supply successfully
+	cv, err := p.ParseJSON(inputJSON)
+	require.NoError(t, err)
+
+	formattedJSON, err := abi.NewSerializer().SetIntSerializer(abi.JSONNumberIntSerializer).SerializeJSON(cv)
+	require.NoError(t, err)
+	assert.JSONEq(t, inputJSON.Pretty(), string(formattedJSON))
+
+}
+
+func TestABIInferenceBadJSON(t *testing.T) {
+
+	_, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{! wrong`))
+	assert.Regexp(t, "PD020018", err)
+
+}
+
+func TestABIInferenceNil(t *testing.T) {
+
+	p, err := ABIInferenceFromJSON(context.Background(), nil)
+	assert.NoError(t, err)
+	assert.Empty(t, p)
+
+}
+
+func TestABIInferenceEmpty(t *testing.T) {
+
+	p, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{}`))
+	assert.NoError(t, err)
+	assert.Empty(t, p)
+
+}
+
+func TestABIInferenceNonInt(t *testing.T) {
+
+	_, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{"nonInt": 1.2}`))
+	assert.Regexp(t, "PD020020", err)
+
+}
+
+func TestABIInferenceEmptyArray(t *testing.T) {
+
+	_, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{"emptyArray": []}`))
+	assert.Regexp(t, "PD020021", err)
+
+}
+
+func TestABIInferenceNestedArrayIssue(t *testing.T) {
+
+	_, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{"nestedArrayIssue": [[1.2]]}`))
+	assert.Regexp(t, `PD020020.*nestedArrayIssue\[\]\[\]`, err)
+
+}
+
+func TestABIInferenceNestedObjectNullError(t *testing.T) {
+
+	_, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{"nested": { "isNull": null }}`))
+	assert.Regexp(t, `PD020019.*isNull`, err)
 
 }
