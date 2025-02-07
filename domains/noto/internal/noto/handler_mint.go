@@ -19,11 +19,11 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -197,7 +197,7 @@ func (h *mintHandler) baseLedgerInvoke(ctx context.Context, req *prototk.Prepare
 	}
 	return &TransactionWrapper{
 		transactionType: prototk.PreparedTransaction_PUBLIC,
-		functionABI:     h.noto.contractABI.Functions()["mint"],
+		functionABI:     interfaceBuild.ABI.Functions()["mint"],
 		paramsJSON:      paramsJSON,
 	}, nil
 }
@@ -231,7 +231,7 @@ func (h *mintHandler) hookInvoke(ctx context.Context, tx *types.ParsedTransactio
 
 	transactionType, functionABI, paramsJSON, err := h.noto.wrapHookTransaction(
 		tx.DomainConfig,
-		h.noto.hooksABI.Functions()["onMint"],
+		hooksBuild.ABI.Functions()["onMint"],
 		params,
 	)
 	if err != nil {
@@ -247,6 +247,11 @@ func (h *mintHandler) hookInvoke(ctx context.Context, tx *types.ParsedTransactio
 }
 
 func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
+	endorsement := domain.FindAttestation("notary", req.AttestationResult)
+	if endorsement == nil || endorsement.Verifier.Lookup != tx.DomainConfig.NotaryLookup {
+		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "notary")
+	}
+
 	baseTransaction, err := h.baseLedgerInvoke(ctx, req)
 	if err != nil {
 		return nil, err

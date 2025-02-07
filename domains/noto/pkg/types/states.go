@@ -39,9 +39,10 @@ type ReceiptStates struct {
 }
 
 type ReceiptLockInfo struct {
-	LockID   tktypes.Bytes32     `json:"lockId"`
-	Delegate *tktypes.EthAddress `json:"delegate,omitempty"` // only set for delegateLock
-	Unlock   tktypes.HexBytes    `json:"unlock,omitempty"`   // only set for prepareUnlock
+	LockID       tktypes.Bytes32     `json:"lockId"`
+	Delegate     *tktypes.EthAddress `json:"delegate,omitempty"`     // only set for delegateLock
+	UnlockParams *UnlockPublicParams `json:"unlockParams,omitempty"` // only set for prepareUnlock
+	UnlockCall   tktypes.HexBytes    `json:"unlockCall,omitempty"`   // only set for prepareUnlock
 }
 
 type ReceiptState struct {
@@ -69,6 +70,7 @@ type NotoCoin struct {
 }
 
 var NotoCoinABI = &abi.Parameter{
+	Name:         "NotoCoin",
 	Type:         "tuple",
 	InternalType: "struct NotoCoin",
 	Components: abi.ParameterArray{
@@ -76,6 +78,13 @@ var NotoCoinABI = &abi.Parameter{
 		{Name: "owner", Type: "string", Indexed: true},
 		{Name: "amount", Type: "uint256", Indexed: true},
 	},
+}
+
+type NotoLockedCoinState struct {
+	ID              tktypes.Bytes32    `json:"id"`
+	Created         tktypes.Timestamp  `json:"created"`
+	ContractAddress tktypes.EthAddress `json:"contractAddress"`
+	Data            NotoLockedCoin     `json:"data"`
 }
 
 type NotoLockedCoin struct {
@@ -86,6 +95,7 @@ type NotoLockedCoin struct {
 }
 
 var NotoLockedCoinABI = &abi.Parameter{
+	Name:         "NotoLockedCoin",
 	Type:         "tuple",
 	InternalType: "struct NotoLockedCoin",
 	Components: abi.ParameterArray{
@@ -104,6 +114,7 @@ type NotoLockInfo struct {
 }
 
 var NotoLockInfoABI = &abi.Parameter{
+	Name:         "NotoLockInfo",
 	Type:         "tuple",
 	InternalType: "struct NotoLockInfo",
 	Components: abi.ParameterArray{
@@ -120,6 +131,7 @@ type TransactionData struct {
 }
 
 var TransactionDataABI = &abi.Parameter{
+	Name:         "TransactionData",
 	Type:         "tuple",
 	InternalType: "struct TransactionData",
 	Components: abi.ParameterArray{

@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {INoto} from "../interfaces/INoto.sol";
+import {INotoErrors} from "../interfaces/INotoErrors.sol";
 
 /**
  * @title A sample on-chain implementation of a Confidential UTXO (C-UTXO) pattern,
@@ -23,36 +24,14 @@ import {INoto} from "../interfaces/INoto.sol";
  *         This allows coordination of DVP with other smart contracts, which could
  *         be using any model programmable via EVM (not just C-UTXO)
  */
-contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
+contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     address _notary;
     mapping(bytes32 => bool) private _unspent;
     mapping(bytes32 => address) private _approvals;
-    mapping(bytes32 => LockDetail) private _locks;
 
-    error NotoInvalidInput(bytes32 id);
-    error NotoInvalidOutput(bytes32 id);
-    error NotoNotNotary(address sender);
-    error NotoInvalidDelegate(bytes32 txhash, address delegate, address sender);
-
-    error NotoLockNotFound(bytes32 lockId);
-    error NotoInvalidLockState(bytes32 lockId);
-    error NotoInvalidLockDelegate(
-        bytes32 lockId,
-        address delegate,
-        address sender
-    );
-    error NotoInvalidUnlockHash(
-        bytes32 lockId,
-        bytes32 expected,
-        bytes32 actual
-    );
-
-    struct LockDetail {
-        uint256 stateCount;
-        mapping(bytes32 => bool) states;
-        bytes32 unlockHash;
-        address delegate;
-    }
+    mapping(bytes32 => bool) private _locked;
+    mapping(bytes32 => bytes32) private _unlockHashes; // state ID => unlock hash
+    mapping(bytes32 => address) private _unlockDelegates; // unlock hash => delegate
 
     // Config follows the convention of a 4 byte type selector, followed by ABI encoded bytes
     bytes4 public constant NotoConfigID_V0 = 0x00010000;
@@ -83,11 +62,14 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
         _;
     }
 
-    function requireLockDelegate(bytes32 lockId, address addr) internal view {
-        if (addr != _locks[lockId].delegate) {
-            revert NotoInvalidLockDelegate(
-                lockId,
-                _locks[lockId].delegate,
+    function requireLockDelegate(
+        bytes32 unlockHash,
+        address addr
+    ) internal view {
+        if (addr != _unlockDelegates[unlockHash]) {
+            revert NotoInvalidDelegate(
+                unlockHash,
+                _unlockDelegates[unlockHash],
                 addr
             );
         }
@@ -139,15 +121,11 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
 
     /**
      * @dev query whether a TXO is currently locked
-     * @param lockId the lock identifier
      * @param id the UTXO identifier
      * @return locked true or false depending on whether the identifier is locked
      */
-    function isLocked(
-        bytes32 lockId,
-        bytes32 id
-    ) public view returns (bool locked) {
-        return _locks[lockId].states[id];
+    function isLocked(bytes32 id) public view returns (bool locked) {
+        return _locked[id];
     }
 
     /**
@@ -224,7 +202,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      */
     function _processOutputs(bytes32[] memory outputs) internal {
         for (uint256 i = 0; i < outputs.length; ++i) {
-            if (_unspent[outputs[i]]) {
+            if (_unspent[outputs[i]] || _locked[outputs[i]]) {
                 revert NotoInvalidOutput(outputs[i]);
             }
             _unspent[outputs[i]] = true;
@@ -321,7 +299,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     /**
      * @dev Lock some value so it cannot be spent until it is unlocked.
      *
-     * @param lockId the unique identifier for this lock
      * @param inputs array of zero or more outputs of a previous function call against this
      *      contract that have not yet been spent, and the signer is authorized to spend
      * @param outputs array of zero or more new outputs to generate, for future transactions to spend
@@ -332,7 +309,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      * Emits a {NotoLock} event.
      */
     function lock(
-        bytes32 lockId,
         bytes32[] calldata inputs,
         bytes32[] calldata outputs,
         bytes32[] calldata lockedOutputs,
@@ -341,8 +317,8 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     ) public virtual override onlyNotary {
         _processInputs(inputs);
         _processOutputs(outputs);
-        _processLockedOutputs(lockId, lockedOutputs);
-        emit NotoLock(lockId, inputs, outputs, lockedOutputs, signature, data);
+        _processLockedOutputs(lockedOutputs);
+        emit NotoLock(inputs, outputs, lockedOutputs, signature, data);
     }
 
     /**
@@ -350,7 +326,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      *      May be triggered by the notary (if lock is undelegated) or by the current lock delegate.
      *      If triggered by the lock delegate, only a prepared unlock operation may be triggered.
      *
-     * @param lockId the unique identifier for the lock
      * @param lockedInputs array of zero or more locked outputs of a previous function call
      * @param lockedOutputs array of zero or more locked outputs to generate, which will be tied to the lock ID
      * @param outputs array of zero or more new unlocked outputs to generate, for future transactions to spend
@@ -360,49 +335,49 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      * Emits a {NotoUnlock} event.
      */
     function unlock(
-        bytes32 lockId,
         bytes32[] calldata lockedInputs,
         bytes32[] calldata lockedOutputs,
         bytes32[] calldata outputs,
         bytes calldata signature,
         bytes calldata data
     ) external virtual override {
-        LockDetail storage lock_ = _locks[lockId];
-        if (lock_.stateCount == 0) {
-            revert NotoLockNotFound(lockId);
+        bytes32 expectedHash;
+        if (lockedInputs.length > 0) {
+            expectedHash = _unlockHashes[lockedInputs[0]];
+            delete _unlockHashes[lockedInputs[0]];
+        }
+        for (uint256 i = 1; i < lockedInputs.length; ++i) {
+            if (_unlockHashes[lockedInputs[i]] != expectedHash) {
+                revert NotoInvalidInput(lockedInputs[i]);
+            }
+            delete _unlockHashes[lockedInputs[i]];
         }
 
-        if (lock_.delegate == address(0)) {
+        address delegate = _unlockDelegates[expectedHash];
+        if (delegate == address(0)) {
             requireNotary(msg.sender);
         } else {
-            requireLockDelegate(lockId, msg.sender);
+            requireLockDelegate(expectedHash, msg.sender);
+            delete _unlockDelegates[expectedHash];
 
-            if (lock_.unlockHash != 0) {
-                bytes32 unlockHash = _buildUnlockHash(
+            if (expectedHash != 0) {
+                bytes32 actualHash = _buildUnlockHash(
                     lockedInputs,
                     lockedOutputs,
                     outputs,
                     data
                 );
-                if (lock_.unlockHash != unlockHash) {
-                    revert NotoInvalidUnlockHash(
-                        lockId,
-                        lock_.unlockHash,
-                        unlockHash
-                    );
+                if (actualHash != expectedHash) {
+                    revert NotoInvalidUnlockHash(expectedHash, actualHash);
                 }
             }
         }
 
-        delete lock_.delegate;
-        delete lock_.unlockHash;
-
-        _processLockedInputs(lockId, lockedInputs);
-        _processLockedOutputs(lockId, lockedOutputs);
+        _processLockedInputs(lockedInputs);
+        _processLockedOutputs(lockedOutputs);
         _processOutputs(outputs);
 
         emit NotoUnlock(
-            lockId,
             msg.sender,
             lockedInputs,
             lockedOutputs,
@@ -416,7 +391,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      * @dev Prepare an unlock operation that can be triggered later.
      *      May only be triggered by the notary, and only if the lock is not delegated.
      *
-     * @param lockId the unique identifier for the lock
      * @param lockedInputs array of zero or more locked outputs of a previous function call
      * @param unlockHash pre-calculated EIP-712 hash of the prepared unlock transaction
      * @param signature a signature over the original request to the notary (opaque to the blockchain)
@@ -425,30 +399,19 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      * Emits a {NotoUnlockPrepared} event.
      */
     function prepareUnlock(
-        bytes32 lockId,
         bytes32[] calldata lockedInputs,
         bytes32 unlockHash,
         bytes calldata signature,
         bytes calldata data
     ) external virtual override onlyNotary {
-        LockDetail storage lock_ = _locks[lockId];
-        if (lock_.stateCount == 0) {
-            revert NotoLockNotFound(lockId);
+        if (_unlockDelegates[unlockHash] != address(0)) {
+            revert NotoAlreadyPrepared(unlockHash);
         }
-        if (lock_.delegate != address(0)) {
-            revert NotoInvalidLockState(lockId);
+        _checkLockedInputs(lockedInputs);
+        for (uint256 i = 0; i < lockedInputs.length; ++i) {
+            _unlockHashes[lockedInputs[i]] = unlockHash;
         }
-
-        _checkLockedInputs(lockId, lockedInputs);
-        lock_.unlockHash = unlockHash;
-
-        emit NotoUnlockPrepared(
-            lockId,
-            lockedInputs,
-            unlockHash,
-            signature,
-            data
-        );
+        emit NotoUnlockPrepared(lockedInputs, unlockHash, signature, data);
     }
 
     /**
@@ -456,7 +419,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      *      May be triggered by the notary (if lock is undelegated) or by the current lock delegate.
      *      May only be triggered after an unlock operation has been prepared.
      *
-     * @param lockId the unique identifier for the lock
      * @param delegate the address that is authorized to perform the unlock
      * @param signature a signature over the original request to the notary (opaque to the blockchain)
      * @param data any additional transaction data (opaque to the blockchain)
@@ -464,40 +426,27 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      * Emits a {NotoLockDelegated} event.
      */
     function delegateLock(
-        bytes32 lockId,
+        bytes32 unlockHash,
         address delegate,
         bytes calldata signature,
         bytes calldata data
     ) external virtual {
-        LockDetail storage lock_ = _locks[lockId];
-        if (lock_.stateCount == 0) {
-            revert NotoLockNotFound(lockId);
-        }
-        if (lock_.unlockHash == 0) {
-            revert NotoInvalidLockState(lockId);
-        }
-
-        if (lock_.delegate == address(0)) {
+        address currentDelegate = _unlockDelegates[unlockHash];
+        if (currentDelegate == address(0)) {
             requireNotary(msg.sender);
         } else {
-            requireLockDelegate(lockId, msg.sender);
+            requireLockDelegate(unlockHash, msg.sender);
         }
-
-        lock_.delegate = delegate;
-
-        emit NotoLockDelegated(lockId, delegate, signature, data);
+        _unlockDelegates[unlockHash] = delegate;
+        emit NotoLockDelegated(unlockHash, delegate, signature, data);
     }
 
     /**
      * @dev Check the inputs are all locked
      */
-    function _checkLockedInputs(
-        bytes32 id,
-        bytes32[] calldata inputs
-    ) internal view {
-        LockDetail storage lock_ = _locks[id];
+    function _checkLockedInputs(bytes32[] calldata inputs) internal view {
         for (uint256 i = 0; i < inputs.length; ++i) {
-            if (lock_.states[inputs[i]] == false) {
+            if (!_locked[inputs[i]]) {
                 revert NotoInvalidInput(inputs[i]);
             }
         }
@@ -506,34 +455,24 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     /**
      * @dev Check the inputs are all locked, and remove them
      */
-    function _processLockedInputs(
-        bytes32 id,
-        bytes32[] calldata inputs
-    ) internal {
-        LockDetail storage lock_ = _locks[id];
+    function _processLockedInputs(bytes32[] calldata inputs) internal {
         for (uint256 i = 0; i < inputs.length; ++i) {
-            if (!lock_.states[inputs[i]]) {
+            if (!_locked[inputs[i]]) {
                 revert NotoInvalidInput(inputs[i]);
             }
-            delete lock_.states[inputs[i]];
-            lock_.stateCount--;
+            delete _locked[inputs[i]];
         }
     }
 
     /**
      * @dev Check the outputs are all new, and mark them as locked
      */
-    function _processLockedOutputs(
-        bytes32 id,
-        bytes32[] calldata outputs
-    ) internal {
-        LockDetail storage lock_ = _locks[id];
+    function _processLockedOutputs(bytes32[] calldata outputs) internal {
         for (uint256 i = 0; i < outputs.length; ++i) {
-            if (lock_.states[outputs[i]]) {
+            if (_locked[outputs[i]] || _unspent[outputs[i]]) {
                 revert NotoInvalidOutput(outputs[i]);
             }
-            lock_.states[outputs[i]] = true;
-            lock_.stateCount++;
+            _locked[outputs[i]] = true;
         }
     }
 }

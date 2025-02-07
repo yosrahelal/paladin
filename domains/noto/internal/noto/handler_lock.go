@@ -20,11 +20,11 @@ import (
 	"encoding/json"
 	"math/big"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -198,21 +198,9 @@ func (h *lockHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, 
 	}, nil
 }
 
-func (h *lockHandler) baseLedgerInvoke(ctx context.Context, lockID tktypes.Bytes32, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*TransactionWrapper, error) {
-	inputs := make([]string, len(req.InputStates))
-	for i, state := range req.InputStates {
-		inputs[i] = state.Id
-	}
-
-	lockedOutput, err := tktypes.ParseBytes32Ctx(ctx, req.OutputStates[0].Id)
-	if err != nil {
-		return nil, err
-	}
-
-	remainderOutputs := make([]string, len(req.OutputStates)-1)
-	for i, state := range req.OutputStates[1:] {
-		remainderOutputs[i] = state.Id
-	}
+func (h *lockHandler) baseLedgerInvoke(ctx context.Context, req *prototk.PrepareTransactionRequest) (*TransactionWrapper, error) {
+	inputs := req.InputStates
+	outputs, lockedOutputs := h.noto.splitStates(req.OutputStates)
 
 	// Include the signature from the sender
 	// This is not verified on the base ledger, but can be verified by anyone with the unmasked state data
@@ -226,10 +214,9 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, lockID tktypes.Bytes
 		return nil, err
 	}
 	params := &NotoLockParams{
-		LockID:        lockID,
-		Inputs:        inputs,
-		Outputs:       remainderOutputs,
-		LockedOutputs: []string{lockedOutput.String()},
+		Inputs:        endorsableStateIDs(inputs),
+		Outputs:       endorsableStateIDs(outputs),
+		LockedOutputs: endorsableStateIDs(lockedOutputs),
 		Signature:     lockSignature.Payload,
 		Data:          data,
 	}
@@ -238,7 +225,7 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, lockID tktypes.Bytes
 		return nil, err
 	}
 	return &TransactionWrapper{
-		functionABI: h.noto.contractABI.Functions()["lock"],
+		functionABI: interfaceBuild.ABI.Functions()["lock"],
 		paramsJSON:  paramsJSON,
 	}, nil
 }
@@ -269,7 +256,7 @@ func (h *lockHandler) hookInvoke(ctx context.Context, lockID tktypes.Bytes32, tx
 
 	transactionType, functionABI, paramsJSON, err := h.noto.wrapHookTransaction(
 		tx.DomainConfig,
-		h.noto.hooksABI.Functions()["onLock"],
+		hooksBuild.ABI.Functions()["onLock"],
 		params,
 	)
 	if err != nil {
@@ -302,7 +289,12 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		return nil, err
 	}
 
-	baseTransaction, err := h.baseLedgerInvoke(ctx, lockID, tx, req)
+	endorsement := domain.FindAttestation("notary", req.AttestationResult)
+	if endorsement == nil || endorsement.Verifier.Lookup != tx.DomainConfig.NotaryLookup {
+		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "notary")
+	}
+
+	baseTransaction, err := h.baseLedgerInvoke(ctx, req)
 	if err != nil {
 		return nil, err
 	}

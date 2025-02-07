@@ -20,11 +20,11 @@ import (
 	"encoding/json"
 	"math/big"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -117,35 +117,29 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		outputStates.states = append(outputStates.states, returnedStates.states...)
 	}
 
-	var attestation []*prototk.AttestationRequest
-	switch tx.DomainConfig.Variant {
-	case types.NotoVariantDefault:
-		encodedTransfer, err := h.noto.encodeTransferUnmasked(ctx, tx.ContractAddress, inputStates.coins, outputStates.coins)
-		if err != nil {
-			return nil, err
-		}
-		attestation = []*prototk.AttestationRequest{
-			// Sender confirms the initial request with a signature
-			{
-				Name:            "sender",
-				AttestationType: prototk.AttestationType_SIGN,
-				Algorithm:       algorithms.ECDSA_SECP256K1,
-				VerifierType:    verifiers.ETH_ADDRESS,
-				Payload:         encodedTransfer,
-				PayloadType:     signpayloads.OPAQUE_TO_RSV,
-				Parties:         []string{req.Transaction.From},
-			},
-			// Notary will endorse the assembled transaction (by submitting to the ledger)
-			{
-				Name:            "notary",
-				AttestationType: prototk.AttestationType_ENDORSE,
-				Algorithm:       algorithms.ECDSA_SECP256K1,
-				VerifierType:    verifiers.ETH_ADDRESS,
-				Parties:         []string{notary},
-			},
-		}
-	default:
-		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
+	encodedTransfer, err := h.noto.encodeTransferUnmasked(ctx, tx.ContractAddress, inputStates.coins, outputStates.coins)
+	if err != nil {
+		return nil, err
+	}
+	attestation := []*prototk.AttestationRequest{
+		// Sender confirms the initial request with a signature
+		{
+			Name:            "sender",
+			AttestationType: prototk.AttestationType_SIGN,
+			Algorithm:       algorithms.ECDSA_SECP256K1,
+			VerifierType:    verifiers.ETH_ADDRESS,
+			Payload:         encodedTransfer,
+			PayloadType:     signpayloads.OPAQUE_TO_RSV,
+			Parties:         []string{req.Transaction.From},
+		},
+		// Notary will endorse the assembled transaction (by submitting to the ledger)
+		{
+			Name:            "notary",
+			AttestationType: prototk.AttestationType_ENDORSE,
+			Algorithm:       algorithms.ECDSA_SECP256K1,
+			VerifierType:    verifiers.ETH_ADDRESS,
+			Parties:         []string{notary},
+		},
 	}
 
 	return &prototk.AssembleTransactionResponse{
@@ -177,40 +171,25 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 		return nil, err
 	}
 
-	switch tx.DomainConfig.Variant {
-	case types.NotoVariantDefault:
-		if req.EndorsementRequest.Name == "notary" {
-			// Notary checks the signature from the sender, then submits the transaction
-			encodedTransfer, err := h.noto.encodeTransferUnmasked(ctx, tx.ContractAddress, inputs.coins, outputs.coins)
-			if err != nil {
-				return nil, err
-			}
-			if err := h.noto.validateSignature(ctx, "sender", req.Signatures, encodedTransfer); err != nil {
-				return nil, err
-			}
-			return &prototk.EndorseTransactionResponse{
-				EndorsementResult: prototk.EndorseTransactionResponse_ENDORSER_SUBMIT,
-			}, nil
-		}
-	default:
-		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
+	// Notary checks the signature from the sender, then submits the transaction
+	encodedTransfer, err := h.noto.encodeTransferUnmasked(ctx, tx.ContractAddress, inputs.coins, outputs.coins)
+	if err != nil {
+		return nil, err
 	}
-
-	return nil, i18n.NewError(ctx, msgs.MsgUnrecognizedEndorsement, req.EndorsementRequest.Name)
+	if err := h.noto.validateSignature(ctx, "sender", req.Signatures, encodedTransfer); err != nil {
+		return nil, err
+	}
+	return &prototk.EndorseTransactionResponse{
+		EndorsementResult: prototk.EndorseTransactionResponse_ENDORSER_SUBMIT,
+	}, nil
 }
 
-func (h *transferHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, withApproval bool) (*TransactionWrapper, error) {
-	var signature *prototk.AttestationResult
-	switch tx.DomainConfig.Variant {
-	case types.NotoVariantDefault:
-		// Include the signature from the sender
-		// This is not verified on the base ledger, but can be verified by anyone with the unmasked state data
-		signature = domain.FindAttestation("sender", req.AttestationResult)
-		if signature == nil {
-			return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
-		}
-	default:
-		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
+func (h *transferHandler) baseLedgerInvoke(ctx context.Context, req *prototk.PrepareTransactionRequest, withApproval bool) (*TransactionWrapper, error) {
+	// Include the signature from the sender
+	// This is not verified on the base ledger, but can be verified by anyone with the unmasked state data
+	signature := domain.FindAttestation("sender", req.AttestationResult)
+	if signature == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 	}
 
 	data, err := h.noto.encodeTransactionData(ctx, req.Transaction, req.InfoStates)
@@ -232,7 +211,7 @@ func (h *transferHandler) baseLedgerInvoke(ctx context.Context, tx *types.Parsed
 		fn = "transferWithApproval"
 	}
 	return &TransactionWrapper{
-		functionABI: h.noto.contractABI.Functions()[fn],
+		functionABI: interfaceBuild.ABI.Functions()[fn],
 		paramsJSON:  paramsJSON,
 	}, nil
 }
@@ -267,7 +246,7 @@ func (h *transferHandler) hookInvoke(ctx context.Context, tx *types.ParsedTransa
 
 	transactionType, functionABI, paramsJSON, err := h.noto.wrapHookTransaction(
 		tx.DomainConfig,
-		h.noto.hooksABI.Functions()["onTransfer"],
+		hooksBuild.ABI.Functions()["onTransfer"],
 		params,
 	)
 	if err != nil {
@@ -305,8 +284,11 @@ func (h *transferHandler) makeDomainData(ctx context.Context, withApprovalTX *Tr
 }
 
 func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
-	var err error
-	var baseTransaction *TransactionWrapper
+	endorsement := domain.FindAttestation("notary", req.AttestationResult)
+	if endorsement == nil || endorsement.Verifier.Lookup != tx.DomainConfig.NotaryLookup {
+		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "notary")
+	}
+
 	var withApprovalTransaction *TransactionWrapper
 	var hookTransaction *TransactionWrapper
 	var withApprovalHookTransaction *TransactionWrapper
@@ -315,12 +297,12 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	// If preparing a transaction for later use, return metadata allowing it to be delegated to an approved party
 	prepareApprovals := req.Transaction.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION
 
-	baseTransaction, err = h.baseLedgerInvoke(ctx, tx, req, false)
+	baseTransaction, err := h.baseLedgerInvoke(ctx, req, false)
 	if err != nil {
 		return nil, err
 	}
 	if prepareApprovals {
-		withApprovalTransaction, err = h.baseLedgerInvoke(ctx, tx, req, true)
+		withApprovalTransaction, err = h.baseLedgerInvoke(ctx, req, true)
 		if err != nil {
 			return nil, err
 		}
