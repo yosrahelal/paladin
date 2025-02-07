@@ -32,7 +32,6 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -46,8 +45,6 @@ import (
 )
 
 var _ plugintk.DomainAPI = &Zeto{}
-
-var _ zeto.Zeto = &Zeto{}
 
 type Zeto struct {
 	Callbacks plugintk.DomainCallbacks
@@ -322,7 +319,7 @@ func (z *Zeto) GetHandler(method, tokenName string) types.DomainHandler {
 	case "transfer":
 		return fungible.NewTransferHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
 	case "lock":
-		return fungible.NewLockHandler(z.name, z.coinSchema)
+		return fungible.NewLockHandler(z.name, z.Callbacks, z.coinSchema)
 	case "deposit":
 		return fungible.NewDepositHandler(z.name, z.coinSchema)
 	case "withdraw":

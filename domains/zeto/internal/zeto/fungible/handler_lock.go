@@ -62,10 +62,11 @@ var lockStatesABI = &abi.Entry{
 	},
 }
 
-func NewLockHandler(name string, coinSchema *pb.StateSchema) *lockHandler {
+func NewLockHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema *pb.StateSchema) *lockHandler {
 	return &lockHandler{
 		name:       name,
 		coinSchema: coinSchema,
+		callbacks:  callbacks,
 	}
 }
 

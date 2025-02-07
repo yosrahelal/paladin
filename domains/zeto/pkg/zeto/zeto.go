@@ -16,9 +16,12 @@
 package zeto
 
 import (
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 )
+
+var _ Zeto = &zeto.Zeto{}
 
 type Zeto interface {
 	plugintk.DomainAPI
@@ -26,4 +29,8 @@ type Zeto interface {
 	Name() string
 	CoinSchemaID() string
 	NFTSchemaID() string
+}
+
+func New(callbacks plugintk.DomainCallbacks) Zeto {
+	return zeto.New(callbacks)
 }

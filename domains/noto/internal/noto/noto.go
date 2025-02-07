@@ -551,7 +551,7 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 	}
 
 	abi := types.NotoABI.Functions()[functionABI.Name]
-	handler := n.GetHandler(functionABI.Name)
+	handler := n.GetHandler(functionABI.Name, "")
 	if abi == nil || handler == nil {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, functionABI.Name)
 	}

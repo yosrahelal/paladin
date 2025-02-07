@@ -20,8 +20,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/kaleido-io/paladin/domains/zeto"
-	pkgzeto "github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
@@ -89,7 +88,7 @@ func newNotoDomain(t *testing.T, config *nototypes.DomainConfig) (chan noto.Noto
 }
 
 func newZetoDomain(t *testing.T, config *zetotypes.DomainFactoryConfig, factoryAddress *tktypes.EthAddress) (chan zeto.Zeto, *testbed.TestbedDomain) {
-	waitForDomain := make(chan pkgzeto.Zeto, 1)
+	waitForDomain := make(chan zeto.Zeto, 1)
 	tbd := &testbed.TestbedDomain{
 		Config: mapConfig(t, config),
 		Plugin: plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
