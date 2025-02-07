@@ -25,7 +25,7 @@ export const darkThemeOptions: ThemeOptions = {
       dark: '#6D6D6D'
     },
     secondary: {
-      main: '#20dfdf',
+      main: '#bbbbbb',
     },
     background: {
       default: 'black',
