@@ -1,10 +1,10 @@
 CREATE TABLE privacy_groups (
-  "id"                        TEXT            NOT NULL,
   "domain"                    TEXT            NOT NULL,
+  "id"                        TEXT            NOT NULL,
   "created"                   BIGINT          NOT NULL,
   "schema_id"                 TEXT            NOT NULL,
   "schema_signature"          TEXT            NOT NULL,
-  "originator"                TEXT            NOT NULL,
+  "genesis_state_id"           TEXT            NOT NULL,
   PRIMARY KEY ( "domain", "id" )
 );
 CREATE INDEX privacy_groups_created ON privacy_groups ("created");

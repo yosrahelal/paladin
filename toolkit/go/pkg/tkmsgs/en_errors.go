@@ -45,10 +45,12 @@ var (
 	MsgTypesUnknownJSONFormatOptions         = pde("PD020015", "JSON formatting option unknown %s=%s")
 	MsgTypesInvalidStateQualifier            = pde("PD020016", "Status must be one of 'available','confirmed','unconfirmed','spent','locked','all' or the UUID of a transaction")
 	MsgTypesPrivateIdentityReqFullyQualified = pde("PD020017", "Locator string %s must be fully qualified with a node name")
-	MsgTypesInvalidJSONObjectForABIInference = pde("PD020018", "Failed to parse JSON while inferring ABI types of properties")
-	MsgTypesTypeInferenceNotSupportedForX    = pde("PD020019", "ABI type inference not supported for '%s' property of type %T")
-	MsgTypesNumberTypeInferenceRequiresInt   = pde("PD020020", "ABI type inference only support integer JSON numbers. Property '%s' has non-integer value '%s'")
-	MsgTypesCannotInferTypeOfEmptyArray      = pde("PD020021", "ABI type inference cannot determine type of empty array '%s'")
+	MsgTypesRestoreFailed                    = pde("PD020018", "Failed to restore type '%T' into '%T'")
+	MsgTypesTimeParseFail                    = pde("PD020019", "Cannot parse time as RFC3339, Unix, or UnixNano: '%s'", 400)
+	MsgTypesInvalidJSONObjectForABIInference = pde("PD020020", "Failed to parse JSON while inferring ABI types of properties")
+	MsgTypesTypeInferenceNotSupportedForX    = pde("PD020021", "ABI type inference not supported for '%s' property of type %T")
+	MsgTypesNumberTypeInferenceRequiresInt   = pde("PD020022", "ABI type inference only support integer JSON numbers. Property '%s' has non-integer value '%s'")
+	MsgTypesCannotInferTypeOfEmptyArray      = pde("PD020023", "ABI type inference cannot determine type of empty array '%s'")
 
 	// Inflight PD0201XX
 	MsgInflightRequestCancelled = pde("PD020100", "Request cancelled after %s")

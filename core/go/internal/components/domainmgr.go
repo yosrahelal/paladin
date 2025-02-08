@@ -55,6 +55,10 @@ type Domain interface {
 	Configuration() *prototk.DomainConfig
 	CustomHashFunction() bool
 
+	// Specific to domains that support privacy groups (domain should return error if it does not).
+	// Validates the input properties, and turns it into the full genesis configuration for a group
+	InitPrivacyGroup(ctx context.Context, pgInput *pldapi.PrivacyGroupInput) (genesis tktypes.RawJSON, schema *abi.Parameter, err error)
+
 	InitDeploy(ctx context.Context, tx *PrivateContractDeploy) error
 	PrepareDeploy(ctx context.Context, tx *PrivateContractDeploy) error
 
@@ -64,8 +68,6 @@ type Domain interface {
 
 	GetDomainReceipt(ctx context.Context, dbTX persistence.DBTX, txID uuid.UUID) (tktypes.RawJSON, error)
 	BuildDomainReceipt(ctx context.Context, dbTX persistence.DBTX, txID uuid.UUID, txStates *pldapi.TransactionStates) (tktypes.RawJSON, error)
-
-	GetPrivacyGroupConfig(ctx context.Context) (*DomainPrivacyGroupConfig, error)
 }
 
 // External interface for other components to call against a private smart contract
@@ -83,8 +85,6 @@ type DomainSmartContract interface {
 
 	InitCall(ctx context.Context, tx *ResolvedTransaction) ([]*prototk.ResolveVerifierRequest, error)
 	ExecCall(dCtx DomainContext, readTX persistence.DBTX, tx *ResolvedTransaction, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
-
-	InitPrivacyGroup(ctx context.Context, pgInput *pldapi.PrivacyGroupInput) (*pldapi.PrivacyGroup, error)
 }
 
 type DomainPrivacyGroupConfig struct {

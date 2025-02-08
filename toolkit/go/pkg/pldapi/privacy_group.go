@@ -22,14 +22,13 @@ import (
 )
 
 type PrivacyGroup struct {
-	ID              tktypes.HexBytes  `docstruct:"PrivacyGroup" json:"id"`
-	Domain          string            `docstruct:"PrivacyGroup" json:"domain"`
-	Created         tktypes.Timestamp `docstruct:"PrivacyGroup" json:"created"`
-	Schema          tktypes.HexBytes  `docstruct:"PrivacyGroup" json:"schema"`
-	SchemaSignature string            `docstruct:"PrivacyGroup" json:"schemaSignature"`
-	Originator      string            `docstruct:"PrivacyGroup" json:"originator"`
-	Members         []string          `docstruct:"PrivacyGroup" json:"members"`
-	Genesis         tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"genesis"` // full genesis state
+	ID               tktypes.HexBytes  `docstruct:"PrivacyGroup" json:"id"`
+	Domain           string            `docstruct:"PrivacyGroup" json:"domain"`
+	Created          tktypes.Timestamp `docstruct:"PrivacyGroup" json:"created"`
+	Members          []string          `docstruct:"PrivacyGroup" json:"members"`
+	Genesis          tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"genesis"` // full genesis state
+	GenesisSchema    tktypes.Bytes32   `docstruct:"PrivacyGroup" json:"genesisSchema"`
+	GenesisSignature string            `docstruct:"PrivacyGroup" json:"genesisSignature"`
 }
 
 type PrivacyGroupInput struct {

@@ -444,5 +444,6 @@ var (
 	MsgStateDistributorNullifierFail     = pde("PD012401", "Failed to generate nullifier for state %s")
 
 	// Privacy group manager PD0125XX
-	// MsgPGroupsBadABISchemaDef = ffe("PD012500", "Invalid ABI parameter definition supplied in schemaDefinition")
+	MsgPGroupsDataDoesNotMatchSchema = pde("PD012500", "Supplied properties could not be parsed against the ABI schema (schema generated=%t)")
+	MsgPGroupsNoMembers              = pde("PD012501", "The privacy group must have at least one member")
 )
