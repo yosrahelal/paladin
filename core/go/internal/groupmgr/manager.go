@@ -120,6 +120,9 @@ func (gm *groupManager) validateProperties(ctx context.Context, spec *pldapi.Pri
 	// Now we do standardized formatting of the properties back again into the data we pass to the domain.
 	// This validates that edge cases are handled (such as mixed arrays in the input properties, which are not supported with ABI inference).
 	// It also standardizes the structure of the data format that is passed to the domain code, prior to the full state ABI/data being stored.
+	if spec.Properties == nil {
+		spec.Properties = tktypes.RawJSON(`{}`)
+	}
 	cv, err := spec.PropertiesABI.ParseJSONCtx(ctx, spec.Properties)
 	if err == nil {
 		spec.Properties, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, cv)
@@ -132,27 +135,30 @@ func (gm *groupManager) validateProperties(ctx context.Context, spec *pldapi.Pri
 
 }
 
-func (gm *groupManager) validateMembers(ctx context.Context, members []string) (err error) {
+func (gm *groupManager) validateMembers(ctx context.Context, members []string) (remoteMembers map[string][]string, err error) {
 	localNode := gm.transportManager.LocalNodeName()
-	validatedNodes := make(map[string]bool)
+	remoteMembers = make(map[string][]string)
 	if len(members) == 0 {
-		return i18n.NewError(ctx, msgs.MsgPGroupsNoMembers)
+		return nil, i18n.NewError(ctx, msgs.MsgPGroupsNoMembers)
 	}
 	for _, m := range members {
 		_, node, err := tktypes.PrivateIdentityLocator(m).Validate(ctx, "", false)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		// Validate we know about a registered transport for the node (for all non-local nodes)
-		if node != localNode && !validatedNodes[node] {
-			_, err := gm.registryManager.GetNodeTransports(ctx, node)
-			if err != nil {
-				return err
+		if node != localNode {
+			membersForNode := remoteMembers[node]
+			if membersForNode == nil {
+				_, err := gm.registryManager.GetNodeTransports(ctx, node)
+				if err != nil {
+					return nil, err
+				}
 			}
-			validatedNodes[node] = true
+			remoteMembers[node] = append(membersForNode, m)
 		}
 	}
-	return nil
+	return remoteMembers, nil
 }
 
 func (gm *groupManager) insertGroup(ctx context.Context, dbTX persistence.DBTX, pg *persistedGroup, members []string) error {
@@ -181,7 +187,8 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 	}
 
 	// Validate the members
-	if err := gm.validateMembers(ctx, spec.Members); err != nil {
+	remoteMembers, err := gm.validateMembers(ctx, spec.Members)
+	if err != nil {
 		return nil, err
 	}
 
@@ -229,6 +236,28 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 	}, spec.Members)
 	if err != nil {
 		return nil, err
+	}
+
+	// We also need to create a reliable send the state to all the remote members
+	msgs := make([]*components.ReliableMessage, 0, len(remoteMembers))
+	for node, members := range remoteMembers {
+		for _, identity := range members {
+			msgs = append(msgs, &components.ReliableMessage{
+				Node:        node,
+				MessageType: components.RMTState.Enum(),
+				Metadata: tktypes.JSONString(&components.StateDistribution{
+					IdentityLocator: identity,
+					Domain:          spec.Domain,
+					StateID:         id.String(),
+					SchemaID:        genesisSchema.String(),
+				}),
+			})
+		}
+	}
+	if len(msgs) > 0 {
+		if err := gm.transportManager.SendReliable(ctx, dbTX, msgs...); err != nil {
+			return nil, err
+		}
 	}
 
 	return id, nil

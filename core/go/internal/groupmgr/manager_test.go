@@ -17,6 +17,9 @@ package groupmgr
 
 import (
 	"context"
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -88,7 +91,7 @@ func newMockComponents(t *testing.T, realDB bool) *mockComponents {
 		mc.c.On("StateManager").Return(mc.stateManager).Maybe()
 	}
 
-	mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(mc.domain, nil)
+	mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(mc.domain, nil).Maybe()
 	mc.domain.On("CustomHashFunction").Return(false).Maybe()
 	mc.domain.On("Name").Return("domain1").Maybe()
 	mc.txManager.On("NotifyStatesDBChanged", mock.Anything).Return().Maybe()
@@ -132,6 +135,8 @@ func TestPrivacyGroupLifecycleRealDB(t *testing.T) {
 	ctx, gm, _, done := newTestGroupManager(t, true, &pldconf.GroupManagerConfig{}, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").
 			Return([]*components.RegistryNodeTransportEntry{ /* contents not checked */ }, nil)
+
+		// Validate the init gets the correct data
 		ipg := mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything)
 		ipg.Run(func(args mock.Arguments) {
 			spec := args[1].(*pldapi.PrivacyGroupInput)
@@ -140,9 +145,9 @@ func TestPrivacyGroupLifecycleRealDB(t *testing.T) {
 			require.Len(t, spec.Members, 2)
 			ipg.Return(
 				tktypes.RawJSON(`{
-					"name": "secret things",
-					"version": 200
-				}`),
+						"name": "secret things",
+						"version": 200
+					}`),
 				&abi.Parameter{
 					Name:         "TestPrivacyGroup",
 					Type:         "tuple",
@@ -155,6 +160,18 @@ func TestPrivacyGroupLifecycleRealDB(t *testing.T) {
 				},
 				nil,
 			)
+		})
+
+		// Validate the state send gets the correct data
+		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+			msg := args[2].(*components.ReliableMessage)
+			require.Equal(t, components.RMTState, msg.MessageType.V())
+			var sd *components.StateDistribution
+			err := json.Unmarshal(msg.Metadata, &sd)
+			require.NoError(t, err)
+			require.Equal(t, "domain1", sd.Domain)
+			require.Empty(t, sd.ContractAddress)
+			require.Equal(t, "you@node2", sd.IdentityLocator)
 		})
 	})
 	defer done()
@@ -172,4 +189,278 @@ func TestPrivacyGroupLifecycleRealDB(t *testing.T) {
 		return err
 	})
 	require.NoError(t, err)
+}
+
+func mockBeginRollback(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+	mc.db.Mock.ExpectBegin()
+	mc.db.Mock.ExpectRollback()
+}
+
+func TestPrivacyGroupInvalidABI(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me@node1", "you@node2"},
+			Properties: tktypes.RawJSON(`{
+			  "name": null
+			}`),
+		})
+		return err
+	})
+	require.Regexp(t, "PD020021", err)
+}
+
+func TestPrivacyGroupMixedArrayFailParseAfterInfer(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me@node1", "you@node2"},
+			Properties: tktypes.RawJSON(`{
+			  "name": ["abc", [ "nested" ]]
+			}`),
+		})
+		return err
+	})
+	require.Regexp(t, "PD012500", err)
+}
+
+func TestPrivacyGroupNoMembers(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain: "domain1",
+		})
+		return err
+	})
+	require.Regexp(t, "PD012501", err)
+}
+
+func TestPrivacyGroupNonQualfiedMembers(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me", "you"},
+		})
+		return err
+	})
+	require.Regexp(t, "PD020017", err)
+}
+
+func TestPrivacyGroupNoTransportsForNode(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").
+			Return(nil, fmt.Errorf("nope"))
+	})
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me@node1", "you@node2"},
+		})
+		return err
+	})
+	require.Regexp(t, "nope", err)
+}
+
+func TestPrivacyGroupInvalidDomain(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
+
+		mc.domainManager.On("GetDomainByName", mock.Anything, "domain2").Return(nil, fmt.Errorf("nope"))
+	})
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain2",
+			Members: []string{"me@node1", "you@node2"},
+		})
+		return err
+	})
+	require.Regexp(t, "nope", err)
+}
+
+func TestPrivacyGroupDomainInitFail(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
+		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
+	})
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me@node1", "you@node2"},
+		})
+		return err
+	})
+	require.Regexp(t, "pop", err)
+}
+
+func TestPrivacyGroupDomainInitGenerateBadSchema(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
+		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).
+			Return(tktypes.RawJSON(`{}`), &abi.Parameter{}, nil)
+		mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
+			Return(nil, fmt.Errorf("pop"))
+	})
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me@node1", "you@node2"},
+		})
+		return err
+	})
+	require.Regexp(t, "pop", err)
+}
+
+func TestPrivacyGroupWriteStateFail(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
+		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).
+			Return(tktypes.RawJSON(`{}`), &abi.Parameter{}, nil)
+		ms := componentmocks.NewSchema(t)
+		ms.On("ID").Return(tktypes.RandBytes32())
+		mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
+			Return([]components.Schema{ms}, nil)
+		mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
+			Return(nil, fmt.Errorf("pop"))
+	})
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me@node1", "you@node2"},
+		})
+		return err
+	})
+	require.Regexp(t, "pop", err)
+}
+
+func mockReadyToInsertGroup(t *testing.T) func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+	return func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
+		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).
+			Return(tktypes.RawJSON(`{}`), &abi.Parameter{
+				Type:         "tuple",
+				Name:         "TestGroup",
+				InternalType: "struct TestGroup;",
+				Components:   abi.ParameterArray{},
+			}, nil)
+		ms := componentmocks.NewSchema(t)
+		ms.On("ID").Return(tktypes.RandBytes32())
+		ms.On("Signature").Return("")
+		mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
+			Return([]components.Schema{ms}, nil)
+		mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
+			Return([]*pldapi.State{
+				{StateBase: pldapi.StateBase{
+					ID: tktypes.RandBytes(32),
+				}},
+			}, nil)
+	}
+}
+
+func TestPrivacyGroupWriteGroupFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockReadyToInsertGroup(t),
+		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectExec("INSERT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
+			mc.db.Mock.ExpectRollback()
+		})
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me@node1", "you@node2"},
+		})
+		return err
+	})
+	require.Regexp(t, "pop", err)
+
+	require.NoError(t, mc.db.Mock.ExpectationsWereMet())
+
+}
+
+func TestPrivacyGroupMembersWriteFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockReadyToInsertGroup(t),
+		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectExec("INSERT.*privacy_groups").WillReturnResult(driver.ResultNoRows)
+			mc.db.Mock.ExpectExec("INSERT.*privacy_group_members").WillReturnError(fmt.Errorf("pop"))
+			mc.db.Mock.ExpectRollback()
+		})
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me@node1", "you@node2"},
+		})
+		return err
+	})
+	require.Regexp(t, "pop", err)
+
+	require.NoError(t, mc.db.Mock.ExpectationsWereMet())
+}
+
+func mockInsertPrivacyGroupOK(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+	mc.db.Mock.ExpectBegin()
+	mc.db.Mock.ExpectExec("INSERT.*privacy_groups").WillReturnResult(driver.ResultNoRows)
+	mc.db.Mock.ExpectExec("INSERT.*privacy_group_members").WillReturnResult(driver.ResultNoRows)
+	mc.db.Mock.ExpectRollback()
+}
+
+func TestPrivacyGroupSendReliableFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockReadyToInsertGroup(t),
+		mockInsertPrivacyGroupOK,
+		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+			mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.Anything).
+				Return(fmt.Errorf("pop"))
+		},
+	)
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me@node1", "you@node2"},
+		})
+		return err
+	})
+	require.Regexp(t, "pop", err)
+
+	require.NoError(t, mc.db.Mock.ExpectationsWereMet())
 }

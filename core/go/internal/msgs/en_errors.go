@@ -120,6 +120,7 @@ var (
 	MsgPersistenceDSNParamLoadFile     = pde("PD010206", "Failed to load dsnParams[%s] from '%s'")
 	MsgPersistenceDSNTemplateFail      = pde("PD010207", "Templated substitution into database connection DSN failed")
 	MsgPersistenceErrorInDBTransaction = pde("PD010208", "An unhandled error occurred within the database transaction: %v")
+	MsgPersistenceQueryLimitRequired   = pde("PD010209", "limit is required on all queries")
 
 	// Transaction Processor PD0103XX
 	MsgTransactionProcessorInvalidStage         = pde("PD010300", "Invalid stage: %s")
@@ -392,7 +393,6 @@ var (
 	MsgRegistryDollarPrefixReserved    = pde("PD012109", "Name '%s' is invalid. Dollar ('$') prefix is allowed only for reserved properties, and then is required (pluginReserved=%t)")
 
 	// TxMgr module PD0122XX
-	MsgTxMgrQueryLimitRequired           = pde("PD012200", "limit is required on all queries")
 	MsgTxMgrInvalidABI                   = pde("PD012201", "ABI is invalid")
 	MsgTxMgrABIAndDefinition             = pde("PD012202", "Must supply one of an abi or an abiReference")
 	MsgTxMgrABIReferenceLookupFailed     = pde("PD012203", "Failed to resolve abiReference %s")
@@ -444,6 +444,6 @@ var (
 	MsgStateDistributorNullifierFail     = pde("PD012401", "Failed to generate nullifier for state %s")
 
 	// Privacy group manager PD0125XX
-	MsgPGroupsDataDoesNotMatchSchema = pde("PD012500", "Supplied properties could not be parsed against the ABI schema (schema generated=%t)")
+	MsgPGroupsDataDoesNotMatchSchema = pde("PD012500", "Supplied properties could not be parsed against the ABI schema (generated=%t)")
 	MsgPGroupsNoMembers              = pde("PD012501", "The privacy group must have at least one member")
 )
