@@ -265,16 +265,16 @@ func (tm *transportManager) buildStateDistributionMsg(ctx context.Context, dbTX 
 	}
 
 	// Get the state - distinguishing between not found, vs. a retryable error
-	state, err := tm.stateManager.GetState(ctx, dbTX, sd.Domain, parsed.ContractAddress, parsed.ID, false, false)
+	states, err := tm.stateManager.GetStatesByID(ctx, dbTX, sd.Domain, &parsed.ContractAddress, []tktypes.HexBytes{parsed.ID}, false, false)
 	if err != nil {
 		return nil, nil, err
 	}
-	if state == nil {
+	if len(states) != 1 {
 		return nil,
 			i18n.NewError(ctx, msgs.MsgTransportStateNotAvailableLocally, sd.Domain, parsed.ContractAddress, parsed.ID),
 			nil
 	}
-	sd.StateData = state.Data
+	sd.StateData = states[0].Data
 
 	return &prototk.PaladinMsg{
 		MessageId:   rm.ID.String(),

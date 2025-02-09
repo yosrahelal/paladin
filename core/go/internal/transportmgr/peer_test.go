@@ -40,20 +40,23 @@ import (
 )
 
 func mockGetStateRetryThenOk(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-	mc.stateManager.On("GetState", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
+	mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
 		Return(nil, fmt.Errorf("pop")).Once()
 	mockGetStateOk(mc, conf)
 }
 
 func mockGetStateOk(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-	mGS := mc.stateManager.On("GetState", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false)
+	mGS := mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false)
 	mGS.Run(func(args mock.Arguments) {
-		mGS.Return(&pldapi.State{
-			StateBase: pldapi.StateBase{
-				DomainName:      args[2].(string),
-				ContractAddress: args[3].(tktypes.EthAddress),
-				ID:              args[4].(tktypes.HexBytes),
-				Data:            []byte(fmt.Sprintf(`{"dataFor": "%s"}`, args[4].(tktypes.HexBytes).HexString())),
+		id := (args[4].([]tktypes.HexBytes))[0]
+		mGS.Return([]*pldapi.State{
+			{
+				StateBase: pldapi.StateBase{
+					DomainName:      args[2].(string),
+					ContractAddress: args[3].(*tktypes.EthAddress),
+					ID:              id,
+					Data:            []byte(fmt.Sprintf(`{"dataFor": "%s"}`, id.HexString())),
+				},
 			},
 		}, nil)
 	})
@@ -219,7 +222,7 @@ func TestSendBadReliableMessageMarkedFailRealDB(t *testing.T) {
 		mockGoodTransport,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
 			// missing state
-			mc.stateManager.On("GetState", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
+			mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
 				Return(nil, nil).Once()
 		},
 	)
