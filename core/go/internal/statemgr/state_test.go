@@ -90,7 +90,8 @@ func TestGetStateMissing(t *testing.T) {
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.GetState(ctx, ss.p.NOTX(), "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("state1")).Bytes(), true, false)
+	stateID := tktypes.Bytes32Keccak(([]byte)("state1")).Bytes()
+	_, err := ss.GetStatesByID(ctx, ss.p.NOTX(), "domain1", contractAddress, []tktypes.HexBytes{stateID}, true, false)
 	assert.Regexp(t, "PD010112", err)
 }
 

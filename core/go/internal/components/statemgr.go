@@ -58,8 +58,8 @@ type StateManager interface {
 	// Write a batch of nullifiers that correspond to states just received
 	WriteNullifiersForReceivedStates(ctx context.Context, dbTX persistence.DBTX, domainName string, nullifiers []*NullifierUpsert) error
 
-	// GetState returns a state by ID, with optional labels
-	GetState(ctx context.Context, dbTX persistence.DBTX, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*pldapi.State, error)
+	// GetState returns state by ID, with optional labels
+	GetStatesByID(ctx context.Context, dbTX persistence.DBTX, domainName string, contractAddress *tktypes.EthAddress, stateIDs []tktypes.HexBytes, failNotFound, withLabels bool) ([]*pldapi.State, error)
 
 	// Get all states created, read or spent by a confirmed transaction
 	GetTransactionStates(ctx context.Context, dbTX persistence.DBTX, txID uuid.UUID) (*pldapi.TransactionStates, error)

@@ -21,6 +21,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
@@ -30,6 +31,14 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
+
+var groupDBOnlyFilters = filters.FieldMap{
+	"id":               filters.UUIDField("id"),
+	"created":          filters.TimestampField("created"),
+	"domain":           filters.StringField("domain"),
+	"genesisSchema":    filters.StringField("schema_id"),
+	"genesisSignature": filters.StringField("schema_signature"),
+}
 
 type groupManager struct {
 	bgCtx     context.Context
@@ -60,6 +69,7 @@ func (pg persistedGroup) TableName() string {
 type persistedGroupMember struct {
 	Group    tktypes.HexBytes `gorm:"column:group;primaryKey"`
 	Domain   string           `gorm:"column:domain;primaryKey"`
+	Index    int              `gorm:"column:idx;primaryKey"`
 	Identity string           `gorm:"column:identity"`
 }
 
@@ -169,6 +179,7 @@ func (gm *groupManager) insertGroup(ctx context.Context, dbTX persistence.DBTX, 
 			pgms[i] = &persistedGroupMember{
 				Domain:   pg.Domain,
 				Group:    pg.ID,
+				Index:    i,
 				Identity: identity,
 			}
 		}
@@ -263,7 +274,92 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 	return id, nil
 }
 
+func (gm *groupManager) enrichMembers(ctx context.Context, dbTX persistence.DBTX, pgs []*pldapi.PrivacyGroup) error {
+	groupIDs := make([]tktypes.HexBytes, len(pgs))
+	for i, pg := range pgs {
+		groupIDs[i] = pg.ID
+	}
+	var dbMembers []*persistedGroupMember
+	err := dbTX.DB().WithContext(ctx).
+		Where(`"group" IN ( ? )`, groupIDs).
+		Order("domain").
+		Order(`"group"`).
+		Order("idx").
+		Find(&dbMembers).
+		Error
+	if err != nil {
+		return err
+	}
+
+	for _, dbMember := range dbMembers {
+		for _, pg := range pgs {
+			if pg.Domain == dbMember.Domain && pg.ID.Equals(dbMember.Group) {
+				pg.Members = append(pg.Members, dbMember.Identity)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (gm *groupManager) enrichGenesisData(ctx context.Context, dbTX persistence.DBTX, pgs []*pldapi.PrivacyGroup) error {
+
+	groupIDsByDomain := make(map[string]map[tktypes.Bytes32][]tktypes.HexBytes, len(pgs))
+	for _, pg := range pgs {
+		forDomain := groupIDsByDomain[pg.Domain]
+		if forDomain == nil {
+			forDomain = make(map[tktypes.Bytes32][]tktypes.HexBytes)
+			groupIDsByDomain[pg.Domain] = forDomain
+		}
+		forDomain[pg.GenesisSchema] = append(forDomain[pg.GenesisSchema], pg.ID)
+	}
+
+	for domainName, forDomain := range groupIDsByDomain {
+		for _, schemaIDs := range forDomain {
+			states, err := gm.stateManager.GetStatesByID(ctx, dbTX, domainName, nil, schemaIDs, false, false)
+			if err != nil {
+				return err
+			}
+			for _, s := range states {
+				for _, pg := range pgs {
+					if pg.Domain == domainName && pg.GenesisSchema.Equals(&s.Schema) && pg.ID.Equals(s.ID) {
+						pg.Genesis = s.Data
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+
+}
+
+// This function queries the groups only using what's in the DB, without allowing properties of the group to be used to do the query
 func (gm *groupManager) QueryGroups(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
-	// TODO: implement
-	return nil, nil
+	qw := &filters.QueryWrapper[persistedGroup, pldapi.PrivacyGroup]{
+		P:           gm.persistence,
+		DefaultSort: "-created",
+		Filters:     groupDBOnlyFilters,
+		Query:       jq,
+		MapResult: func(dbPG *persistedGroup) (*pldapi.PrivacyGroup, error) {
+			return &pldapi.PrivacyGroup{
+				ID:               dbPG.ID,
+				Domain:           dbPG.Domain,
+				Created:          dbPG.Created,
+				GenesisSchema:    dbPG.SchemaID,
+				GenesisSignature: dbPG.SchemaSignature,
+			}, nil
+		},
+	}
+	pgs, err := qw.Run(ctx, dbTX)
+	if err == nil {
+		err = gm.enrichMembers(ctx, dbTX, pgs)
+	}
+	if err == nil {
+		err = gm.enrichGenesisData(ctx, dbTX, pgs)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return pgs, nil
 }

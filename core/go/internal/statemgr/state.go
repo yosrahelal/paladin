@@ -183,7 +183,7 @@ func (ss *stateManager) writeStates(ctx context.Context, dbTX persistence.DBTX, 
 	return err
 }
 
-func (ss *stateManager) GetState(ctx context.Context, dbTX persistence.DBTX, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*pldapi.State, error) {
+func (ss *stateManager) GetStatesByID(ctx context.Context, dbTX persistence.DBTX, domainName string, contractAddress *tktypes.EthAddress, stateIDs []tktypes.HexBytes, failNotFound, withLabels bool) ([]*pldapi.State, error) {
 	q := dbTX.DB().Table("states")
 	if withLabels {
 		q = q.Preload("Labels").Preload("Int64Labels")
@@ -192,14 +192,14 @@ func (ss *stateManager) GetState(ctx context.Context, dbTX persistence.DBTX, dom
 	err := q.
 		Where("domain_name = ?", domainName).
 		Where("contract_address = ?", contractAddress).
-		Where("id = ?", stateID).
+		Where("id IN ( ? )", stateIDs).
 		Limit(1).
 		Find(&states).
 		Error
-	if err == nil && len(states) == 0 && failNotFound {
-		return nil, i18n.NewError(ctx, msgs.MsgStateNotFound, stateID)
+	if err == nil && len(states) != len(stateIDs) && failNotFound {
+		return nil, i18n.NewError(ctx, msgs.MsgStateNotFound, stateIDs)
 	}
-	return states[0], err
+	return states, err
 }
 
 // Built in fields all start with "." as that prevents them

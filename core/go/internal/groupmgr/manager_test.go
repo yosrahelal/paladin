@@ -30,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/sirupsen/logrus"
 
@@ -176,19 +177,31 @@ func TestPrivacyGroupLifecycleRealDB(t *testing.T) {
 	})
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		id, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+	var groupID tktypes.HexBytes
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		groupID, err = gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me@node1", "you@node2"},
 			Properties: tktypes.RawJSON(`{
 			  "name": "secret things"
 			}`),
 		})
-		require.NoError(t, err)
-		require.NotNil(t, id)
 		return err
 	})
 	require.NoError(t, err)
+	require.NotNil(t, groupID)
+
+	// Query it back - should be the only one
+	groups, err := gm.QueryGroups(ctx, gm.persistence.NOTX(), query.NewQueryBuilder().Limit(1).Query())
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+	require.Equal(t, "domain1", groups[0].Domain)
+	require.Equal(t, groupID, groups[0].ID)
+	require.JSONEq(t, `{
+		"name": "secret things",
+		"version": 200
+	}`, string(groups[0].Genesis)) // enriched from state store
+	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members) // enriched from members table
 }
 
 func mockBeginRollback(mc *mockComponents, conf *pldconf.GroupManagerConfig) {

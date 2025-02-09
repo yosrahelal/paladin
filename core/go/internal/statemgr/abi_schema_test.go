@@ -215,9 +215,9 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	getValidate()
 
 	// Get the state back too
-	state1a, err := ss.GetState(ctx, ss.p.NOTX(), as.Persisted().DomainName, *contractAddress, state1.ID, true, true)
+	statesQuery, err := ss.GetStatesByID(ctx, ss.p.NOTX(), as.Persisted().DomainName, contractAddress, []tktypes.HexBytes{state1.ID}, true, true)
 	require.NoError(t, err)
-	assert.Equal(t, state1, state1a)
+	assert.Equal(t, state1, statesQuery[0])
 
 	// Do a query on just one state, based on all the label fields
 	var query *query.QueryJSON
