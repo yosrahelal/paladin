@@ -252,7 +252,7 @@ func TestQueryPreparedTransactionFailNoLimit(t *testing.T) {
 	defer done()
 
 	_, err := txm.QueryPreparedTransactions(ctx, txm.p.NOTX(), query.NewQueryBuilder().Query())
-	assert.Regexp(t, "PD010209", err)
+	assert.Regexp(t, "PD010721", err)
 
 }
 
@@ -264,7 +264,7 @@ func TestQueryPreparedTransactionWithRefsFailNoLimit(t *testing.T) {
 	defer done()
 
 	_, err := txm.QueryPreparedTransactionsWithRefs(ctx, txm.p.NOTX(), query.NewQueryBuilder().Query())
-	assert.Regexp(t, "PD010209", err)
+	assert.Regexp(t, "PD010721", err)
 
 }
 

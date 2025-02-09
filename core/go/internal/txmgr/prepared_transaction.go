@@ -171,7 +171,7 @@ func (tm *txManager) QueryPreparedTransactionsWithRefs(ctx context.Context, dbTX
 }
 
 func (tm *txManager) queryPreparedTransactionsBase(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PreparedTransactionBase, error) {
-	qw := &persistence.QueryWrapper[preparedTransaction, pldapi.PreparedTransactionBase]{
+	qw := &filters.QueryWrapper[preparedTransaction, pldapi.PreparedTransactionBase]{
 		P:           tm.p,
 		Table:       "prepared_txns",
 		DefaultSort: "-created",

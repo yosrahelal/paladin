@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package persistence
+package filters
 
 import (
 	"context"
@@ -24,17 +24,17 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-var testFilters = filters.FieldMap{
-	"id":      filters.UUIDField("id"),
-	"created": filters.TimestampField("created"),
-	"name":    filters.StringField("name"),
+var testFilters = FieldMap{
+	"id":      UUIDField("id"),
+	"created": TimestampField("created"),
+	"name":    StringField("name"),
 }
 
 type testQueryObject struct {
@@ -55,24 +55,26 @@ func (tq testQueryObject) TableName() string {
 }
 
 func TestQueryWrapperLimitRequired(t *testing.T) {
-	p, _ := newMockGormPSQLPersistence(t)
+	p, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
 
 	qw := &QueryWrapper[testQueryObject, testOutputObject]{
-		P:           p,
+		P:           p.P,
 		DefaultSort: "-created",
 		Filters:     testFilters,
 		Query:       query.NewQueryBuilder().Query(),
 	}
 
-	_, err := qw.Run(context.Background(), nil)
-	assert.Regexp(t, "PD010209", err)
+	_, err = qw.Run(context.Background(), nil)
+	assert.Regexp(t, "PD010721", err)
 }
 
 func TestQueryWrapperMapFail(t *testing.T) {
-	p, mdb := newMockGormPSQLPersistence(t)
+	p, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
 
 	qw := &QueryWrapper[testQueryObject, testOutputObject]{
-		P:           p,
+		P:           p.P,
 		DefaultSort: "-created",
 		Filters:     testFilters,
 		Query:       query.NewQueryBuilder().Limit(1).Query(),
@@ -81,20 +83,21 @@ func TestQueryWrapperMapFail(t *testing.T) {
 		return nil, fmt.Errorf("pop")
 	}
 
-	mdb.ExpectQuery("SELECT.*test_object").WillReturnRows(
+	p.Mock.ExpectQuery("SELECT.*test_object").WillReturnRows(
 		sqlmock.NewRows([]string{"id", "created", "name"}).
 			AddRow(uuid.New(), tktypes.TimestampNow(), "sally"),
 	)
 
-	_, err := qw.Run(context.Background(), nil)
+	_, err = qw.Run(context.Background(), nil)
 	assert.Regexp(t, "pop", err)
 }
 
 func TestQueryWrapperFinalizeOK(t *testing.T) {
-	p, mdb := newMockGormPSQLPersistence(t)
+	p, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
 
 	qw := &QueryWrapper[testQueryObject, testOutputObject]{
-		P:           p,
+		P:           p.P,
 		DefaultSort: "-created",
 		Filters:     testFilters,
 		Query:       query.NewQueryBuilder().Limit(1).Query(),
@@ -111,7 +114,7 @@ func TestQueryWrapperFinalizeOK(t *testing.T) {
 		}, nil
 	}
 
-	mdb.ExpectQuery("SELECT.*test_object_1.*LEFT JOIN.*test_object_1").WillReturnRows(
+	p.Mock.ExpectQuery("SELECT.*test_object_1.*LEFT JOIN.*test_object_1").WillReturnRows(
 		sqlmock.NewRows([]string{"id", "created", "name"}).
 			AddRow(uuid.New(), tktypes.TimestampNow(), "sally"),
 	)
@@ -123,18 +126,19 @@ func TestQueryWrapperFinalizeOK(t *testing.T) {
 }
 
 func TestQueryWrapperQueryFail(t *testing.T) {
-	p, mdb := newMockGormPSQLPersistence(t)
+	p, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
 
 	qw := &QueryWrapper[testQueryObject, testOutputObject]{
-		P:           p,
+		P:           p.P,
 		DefaultSort: "-created",
 		Filters:     testFilters,
 		Query:       query.NewQueryBuilder().Limit(1).Query(),
 	}
 
-	mdb.ExpectQuery("SELECT.*test_object").WillReturnError(fmt.Errorf("pop"))
+	p.Mock.ExpectQuery("SELECT.*test_object").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := qw.Run(context.Background(), nil)
+	_, err = qw.Run(context.Background(), nil)
 	assert.Regexp(t, "pop", err)
 
 }

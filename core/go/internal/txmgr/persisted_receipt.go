@@ -322,7 +322,7 @@ func (tm *txManager) DecodeEvent(ctx context.Context, dbTX persistence.DBTX, top
 }
 
 func (tm *txManager) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.TransactionReceipt, error) {
-	qw := &persistence.QueryWrapper[transactionReceipt, pldapi.TransactionReceipt]{
+	qw := &filters.QueryWrapper[transactionReceipt, pldapi.TransactionReceipt]{
 		P:           tm.p,
 		Table:       "transaction_receipts",
 		DefaultSort: "-sequence",

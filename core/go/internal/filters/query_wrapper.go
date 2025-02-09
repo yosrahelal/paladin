@@ -13,23 +13,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package persistence
+package filters
 
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"gorm.io/gorm"
 )
 
 type QueryWrapper[PT, T any] struct {
-	P           Persistence
+	P           persistence.Persistence
 	Table       string
 	DefaultSort string
-	Filters     filters.FieldMap
+	Filters     FieldMap
 	Query       *query.QueryJSON
 	Finalize    func(db *gorm.DB) *gorm.DB
 	MapResult   func(*PT) (*T, error)
@@ -37,12 +37,12 @@ type QueryWrapper[PT, T any] struct {
 
 func CheckLimitSet(ctx context.Context, jq *query.QueryJSON) error {
 	if jq.Limit == nil || *jq.Limit <= 0 {
-		return i18n.NewError(ctx, msgs.MsgPersistenceQueryLimitRequired)
+		return i18n.NewError(ctx, msgs.MsgFiltersQueryLimitRequired)
 	}
 	return nil
 }
 
-func (qw *QueryWrapper[PT, T]) Run(ctx context.Context, dbTX DBTX) ([]*T, error) {
+func (qw *QueryWrapper[PT, T]) Run(ctx context.Context, dbTX persistence.DBTX) ([]*T, error) {
 	if err := CheckLimitSet(ctx, qw.Query); err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (qw *QueryWrapper[PT, T]) Run(ctx context.Context, dbTX DBTX) ([]*T, error)
 	if qw.Table != "" {
 		q = q.Table(qw.Table)
 	}
-	q = filters.BuildGORM(ctx, qw.Query, q, qw.Filters)
+	q = BuildGORM(ctx, qw.Query, q, qw.Filters)
 	if qw.Finalize != nil {
 		q = qw.Finalize(q)
 	}

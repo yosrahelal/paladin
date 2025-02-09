@@ -87,7 +87,7 @@ func (tm *txManager) mapPersistedTXResolved(pt *persistedTransaction) *component
 }
 
 func (tm *txManager) QueryTransactions(ctx context.Context, jq *query.QueryJSON, dbTX persistence.DBTX, pending bool) ([]*pldapi.Transaction, error) {
-	qw := &persistence.QueryWrapper[persistedTransaction, pldapi.Transaction]{
+	qw := &filters.QueryWrapper[persistedTransaction, pldapi.Transaction]{
 		P:           tm.p,
 		Table:       "transactions",
 		DefaultSort: "-created",
@@ -112,7 +112,7 @@ func (tm *txManager) QueryTransactionsFull(ctx context.Context, jq *query.QueryJ
 }
 
 func (tm *txManager) QueryTransactionsResolved(ctx context.Context, jq *query.QueryJSON, dbTX persistence.DBTX, pending bool) ([]*components.ResolvedTransaction, error) {
-	qw := &persistence.QueryWrapper[persistedTransaction, components.ResolvedTransaction]{
+	qw := &filters.QueryWrapper[persistedTransaction, components.ResolvedTransaction]{
 		P:           tm.p,
 		Table:       "transactions",
 		DefaultSort: "-created",
@@ -140,7 +140,7 @@ func (tm *txManager) QueryTransactionsResolved(ctx context.Context, jq *query.Qu
 }
 
 func (tm *txManager) QueryTransactionsFullTx(ctx context.Context, jq *query.QueryJSON, dbTX persistence.DBTX, pending bool) ([]*pldapi.TransactionFull, error) {
-	qw := &persistence.QueryWrapper[persistedTransaction, pldapi.TransactionFull]{
+	qw := &filters.QueryWrapper[persistedTransaction, pldapi.TransactionFull]{
 		P:           tm.p,
 		Table:       "transactions",
 		DefaultSort: "-created",
@@ -272,7 +272,7 @@ func (tm *txManager) GetTransactionDependencies(ctx context.Context, id uuid.UUI
 }
 
 func (tm *txManager) queryPublicTransactions(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error) {
-	if err := persistence.CheckLimitSet(ctx, jq); err != nil {
+	if err := filters.CheckLimitSet(ctx, jq); err != nil {
 		return nil, err
 	}
 	return tm.publicTxMgr.QueryPublicTxWithBindings(ctx, tm.p.NOTX(), jq)

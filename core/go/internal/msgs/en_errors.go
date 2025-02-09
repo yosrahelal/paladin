@@ -120,7 +120,6 @@ var (
 	MsgPersistenceDSNParamLoadFile     = pde("PD010206", "Failed to load dsnParams[%s] from '%s'")
 	MsgPersistenceDSNTemplateFail      = pde("PD010207", "Templated substitution into database connection DSN failed")
 	MsgPersistenceErrorInDBTransaction = pde("PD010208", "An unhandled error occurred within the database transaction: %v")
-	MsgPersistenceQueryLimitRequired   = pde("PD010209", "limit is required on all queries")
 
 	// Transaction Processor PD0103XX
 	MsgTransactionProcessorInvalidStage         = pde("PD010300", "Invalid stage: %s")
@@ -180,6 +179,7 @@ var (
 	MsgFiltersMissingSortField            = pde("PD010718", "Must specify at least one sort field")
 	MsgFiltersValueInvalidHexBytes32      = pde("PD010719", "Failed to parse value as 32 byte hex string (parsedBytes=%d)")
 	MsgFiltersValueInvalidUUID            = pde("PD010720", "Failed to parse value as UUID: %v")
+	MsgFiltersQueryLimitRequired          = pde("PD010721", "limit is required on all queries")
 
 	// Plugin controller PD0112XX
 	MsgPluginLoaderUUIDError   = pde("PD011200", "Plugin loader UUID incorrect")

@@ -155,7 +155,7 @@ func (tm *txManager) UpsertABI(ctx context.Context, dbTX persistence.DBTX, a abi
 }
 
 func (tm *txManager) queryABIs(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.StoredABI, error) {
-	qw := &persistence.QueryWrapper[PersistedABI, pldapi.StoredABI]{
+	qw := &filters.QueryWrapper[PersistedABI, pldapi.StoredABI]{
 		P:           tm.p,
 		Table:       "abis",
 		DefaultSort: "-created",

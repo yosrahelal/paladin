@@ -260,7 +260,7 @@ func (tm *txManager) DeleteReceiptListener(ctx context.Context, name string) err
 }
 
 func (tm *txManager) QueryReceiptListeners(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.TransactionReceiptListener, error) {
-	qw := &persistence.QueryWrapper[persistedReceiptListener, pldapi.TransactionReceiptListener]{
+	qw := &filters.QueryWrapper[persistedReceiptListener, pldapi.TransactionReceiptListener]{
 		P:           tm.p,
 		Table:       "receipt_listeners",
 		DefaultSort: "-created",
