@@ -26,7 +26,7 @@ type PrivacyGroup struct {
 	Domain           string            `docstruct:"PrivacyGroup" json:"domain"`
 	Created          tktypes.Timestamp `docstruct:"PrivacyGroup" json:"created"`
 	Members          []string          `docstruct:"PrivacyGroup" json:"members"`
-	Genesis          tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"genesis"` // full genesis state
+	Genesis          tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"genesis,omitempty"` // full genesis state
 	GenesisSchema    tktypes.Bytes32   `docstruct:"PrivacyGroup" json:"genesisSchema"`
 	GenesisSignature string            `docstruct:"PrivacyGroup" json:"genesisSignature"`
 }

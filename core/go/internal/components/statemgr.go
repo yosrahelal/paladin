@@ -189,7 +189,7 @@ type StateUpsert struct {
 type StateUpsertOutsideContext struct {
 	ID              tktypes.HexBytes
 	SchemaID        tktypes.Bytes32
-	ContractAddress tktypes.EthAddress
+	ContractAddress *tktypes.EthAddress
 	Data            tktypes.RawJSON
 }
 
@@ -213,6 +213,6 @@ type Schema interface {
 	ID() tktypes.Bytes32
 	Signature() string
 	Persisted() *pldapi.Schema
-	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes, customHash bool) (*StateWithLabels, error)
+	ProcessState(ctx context.Context, contractAddress *tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes, customHash bool) (*StateWithLabels, error)
 	RecoverLabels(ctx context.Context, s *pldapi.State) (*StateWithLabels, error)
 }

@@ -38,6 +38,31 @@ func TestGetSchemaNotFoundNil(t *testing.T) {
 	assert.Nil(t, s)
 }
 
+func TestGetSchemaNotOK(t *testing.T) {
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
+	defer done()
+
+	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows([]string{
+		"id",
+		"type",
+		"domain",
+		"definition",
+	}).AddRow(
+		tktypes.RandBytes32(),
+		pldapi.SchemaTypeABI.Enum(),
+		"domain1",
+		`{
+		  "type": "tuple",
+		  "internalType": "struct MyType;",
+		  "components": []
+		}`,
+	))
+
+	s, err := ss.GetSchemaByID(ctx, ss.p.NOTX(), "domain1", tktypes.Bytes32Keccak(([]byte)("test")), false)
+	require.NoError(t, err)
+	assert.NotNil(t, s)
+}
+
 func TestGetSchemaNotFoundError(t *testing.T) {
 	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()

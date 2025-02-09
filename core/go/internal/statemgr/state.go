@@ -189,11 +189,13 @@ func (ss *stateManager) GetStatesByID(ctx context.Context, dbTX persistence.DBTX
 		q = q.Preload("Labels").Preload("Int64Labels")
 	}
 	var states []*pldapi.State
-	err := q.
+	q = q.
 		Where("domain_name = ?", domainName).
-		Where("contract_address = ?", contractAddress).
-		Where("id IN ( ? )", stateIDs).
-		Limit(1).
+		Where("id IN ( ? )", stateIDs)
+	if contractAddress != nil {
+		q = q.Where("contract_address = ?", contractAddress)
+	}
+	err := q.
 		Find(&states).
 		Error
 	if err == nil && len(states) != len(stateIDs) && failNotFound {
@@ -241,8 +243,8 @@ func (ss *stateManager) labelSetFor(schema components.Schema) *trackingLabelSet 
 	return &tls
 }
 
-func (ss *stateManager) FindContractStates(ctx context.Context, dbTX persistence.DBTX, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (s []*pldapi.State, err error) {
-	_, s, err = ss.findStates(ctx, dbTX, domainName, &contractAddress, schemaID, query, status)
+func (ss *stateManager) FindContractStates(ctx context.Context, dbTX persistence.DBTX, domainName string, contractAddress *tktypes.EthAddress, schemaID tktypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (s []*pldapi.State, err error) {
+	_, s, err = ss.findStates(ctx, dbTX, domainName, contractAddress, schemaID, query, status)
 	return s, err
 }
 

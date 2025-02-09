@@ -45,7 +45,7 @@ func TestPersistStateMissingSchema(t *testing.T) {
 
 	upserts := []*components.StateUpsertOutsideContext{
 		{
-			ContractAddress: *tktypes.RandAddress(),
+			ContractAddress: tktypes.RandAddress(),
 			SchemaID:        tktypes.Bytes32Keccak(([]byte)("test")),
 		},
 	}
@@ -71,7 +71,7 @@ func TestPersistStateInvalidState(t *testing.T) {
 
 	upserts := []*components.StateUpsertOutsideContext{
 		{
-			ContractAddress: *tktypes.RandAddress(),
+			ContractAddress: tktypes.RandAddress(),
 			SchemaID:        schemaID,
 		},
 	}
@@ -89,9 +89,8 @@ func TestGetStateMissing(t *testing.T) {
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
-	contractAddress := tktypes.RandAddress()
 	stateID := tktypes.Bytes32Keccak(([]byte)("state1")).Bytes()
-	_, err := ss.GetStatesByID(ctx, ss.p.NOTX(), "domain1", contractAddress, []tktypes.HexBytes{stateID}, true, false)
+	_, err := ss.GetStatesByID(ctx, ss.p.NOTX(), "domain1", nil, []tktypes.HexBytes{stateID}, true, false)
 	assert.Regexp(t, "PD010112", err)
 }
 
@@ -102,7 +101,7 @@ func TestFindStatesMissingSchema(t *testing.T) {
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("schema1")), &query.QueryJSON{}, "all")
+	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", contractAddress, tktypes.Bytes32Keccak(([]byte)("schema1")), &query.QueryJSON{}, "all")
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -117,7 +116,7 @@ func TestFindStatesBadQuery(t *testing.T) {
 	})
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
+	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				Equal: []*query.OpSingleVal{
@@ -144,7 +143,7 @@ func TestFindStatesFail(t *testing.T) {
 	db.ExpectQuery("SELECT.*created").WillReturnError(fmt.Errorf("pop"))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
+	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				GreaterThan: []*query.OpSingleVal{
@@ -165,7 +164,7 @@ func TestFindStatesUnknownContext(t *testing.T) {
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
+	_, err := ss.FindContractStates(ctx, ss.p.NOTX(), "domain1", contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				GreaterThan: []*query.OpSingleVal{

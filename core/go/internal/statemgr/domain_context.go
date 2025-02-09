@@ -341,7 +341,7 @@ func (dc *domainContext) upsertStates(dbTX persistence.DBTX, holdingLock bool, s
 			return nil, err
 		}
 
-		vs, err := schema.ProcessState(dc, dc.contractAddress, ns.Data, ns.ID, dc.customHashFunction)
+		vs, err := schema.ProcessState(dc, &dc.contractAddress, ns.Data, ns.ID, dc.customHashFunction)
 		if err != nil {
 			return nil, err
 		}

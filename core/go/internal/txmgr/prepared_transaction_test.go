@@ -51,7 +51,7 @@ func writeStates(t *testing.T, txm *txManager, dbTX persistence.DBTX, testSchema
 	for i := range stateInputs {
 		stateInputs[i] = &components.StateUpsertOutsideContext{
 			SchemaID:        tktypes.Bytes32(testSchemaID),
-			ContractAddress: fakeContractAddr,
+			ContractAddress: &fakeContractAddr,
 			Data: tktypes.JSONString(map[string]any{
 				"salt":   tktypes.RandHex(32),
 				"owner":  tktypes.RandAddress(),

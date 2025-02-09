@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -197,9 +198,10 @@ func TestPrivacyGroupLifecycleRealDB(t *testing.T) {
 	require.Len(t, groups, 1)
 	require.Equal(t, "domain1", groups[0].Domain)
 	require.Equal(t, groupID, groups[0].ID)
+	require.NotNil(t, groups[0].Genesis)
 	require.JSONEq(t, `{
 		"name": "secret things",
-		"version": 200
+		"version": "200"
 	}`, string(groups[0].Genesis)) // enriched from state store
 	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members) // enriched from members table
 }
@@ -476,4 +478,54 @@ func TestPrivacyGroupSendReliableFail(t *testing.T) {
 	require.Regexp(t, "pop", err)
 
 	require.NoError(t, mc.db.Mock.ExpectationsWereMet())
+}
+
+func TestQueryGroupsFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := gm.QueryGroups(ctx, gm.persistence.NOTX(), query.NewQueryBuilder().Limit(1).Query())
+	require.Regexp(t, "pop", err)
+}
+
+func TestQueryGroupsEnrichMembersFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{
+		"domain",
+		"id",
+	}).AddRow(
+		"domain1",
+		tktypes.RandBytes(32),
+	))
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_group_members").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := gm.QueryGroups(ctx, gm.persistence.NOTX(), query.NewQueryBuilder().Limit(1).Query())
+	require.Regexp(t, "pop", err)
+}
+
+func TestQueryGroupsEnrichGenesisFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{
+		"domain",
+		"id",
+	}).AddRow(
+		"domain1",
+		tktypes.RandBytes(32),
+	))
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_group_members").WillReturnRows(sqlmock.NewRows([]string{}))
+
+	mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, "domain1", (*tktypes.EthAddress)(nil), mock.Anything, false, false).
+		Return(nil, fmt.Errorf("pop"))
+
+	_, err := gm.QueryGroups(ctx, gm.persistence.NOTX(), query.NewQueryBuilder().Limit(1).Query())
+	require.Regexp(t, "pop", err)
 }
