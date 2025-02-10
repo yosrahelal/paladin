@@ -26,12 +26,14 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestPersistStateMissingSchema(t *testing.T) {
@@ -316,5 +318,36 @@ func TestFindNullifiersUnknownContext(t *testing.T) {
 		},
 	}, pldapi.StateStatusQualifier(uuid.NewString()))
 	assert.Regexp(t, "PD010123", err)
+
+}
+
+func TestFindStatesWithAdvancedDBQueryModifier(t *testing.T) {
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
+	defer done()
+
+	mockGetSchemaOK(mdb)
+	mdb.ExpectQuery(`SELECT.*FROM "states".*LEFT JOIN "another_table".*"j"."state_id" IS NOT NULL`).
+		WillReturnError(fmt.Errorf("called"))
+
+	_, err := ss.FindStates(ctx, ss.p.NOTX(), "domain1", tktypes.RandBytes32(), query.NewQueryBuilder().Query(), &components.StateQueryOptions{
+		QueryModifier: func(db persistence.DBTX, query *gorm.DB) *gorm.DB {
+			return query.
+				Joins(`LEFT JOIN "another_table" AS "j" WHERE "j"."state_id" = "states"."id"`).
+				Where(`"j"."state_id" IS NOT NULL`)
+		},
+	})
+	assert.Regexp(t, "called", err)
+
+}
+
+func TestFindStatesWithNilOptions(t *testing.T) {
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
+	defer done()
+
+	mockGetSchemaOK(mdb)
+	mdb.ExpectQuery(`SELECT.*FROM`).WillReturnError(fmt.Errorf("called"))
+
+	_, err := ss.FindStates(ctx, ss.p.NOTX(), "domain1", tktypes.RandBytes32(), query.NewQueryBuilder().Query(), nil)
+	assert.Regexp(t, "called", err)
 
 }

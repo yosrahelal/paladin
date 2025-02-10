@@ -24,6 +24,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -33,7 +34,7 @@ import (
 )
 
 var groupDBOnlyFilters = filters.FieldMap{
-	"id":               filters.UUIDField("id"),
+	"id":               filters.HexBytesField("id"),
 	"created":          filters.TimestampField("created"),
 	"domain":           filters.StringField("domain"),
 	"genesisSchema":    filters.StringField("schema_id"),
@@ -295,6 +296,7 @@ func (gm *groupManager) enrichMembers(ctx context.Context, dbTX persistence.DBTX
 		for _, pg := range pgs {
 			if pg.Domain == dbMember.Domain && pg.ID.Equals(dbMember.Group) {
 				pg.Members = append(pg.Members, dbMember.Identity)
+				break
 			}
 		}
 	}
@@ -324,6 +326,7 @@ func (gm *groupManager) enrichGenesisData(ctx context.Context, dbTX persistence.
 				for _, pg := range pgs {
 					if pg.Domain == domainName && pg.GenesisSchema.Equals(&s.Schema) && pg.ID.Equals(s.ID) {
 						pg.Genesis = s.Data
+						break
 					}
 				}
 			}
@@ -334,6 +337,24 @@ func (gm *groupManager) enrichGenesisData(ctx context.Context, dbTX persistence.
 
 }
 
+func (dbPG *persistedGroup) mapToAPI() *pldapi.PrivacyGroup {
+	return &pldapi.PrivacyGroup{
+		ID:               dbPG.ID,
+		Domain:           dbPG.Domain,
+		Created:          dbPG.Created,
+		GenesisSchema:    dbPG.SchemaID,
+		GenesisSignature: dbPG.SchemaSignature,
+	}
+}
+
+func (gm *groupManager) GetGroupByID(ctx context.Context, dbTX persistence.DBTX, domainName string, id tktypes.HexBytes) (*pldapi.PrivacyGroup, error) {
+	groups, err := gm.QueryGroups(ctx, dbTX, query.NewQueryBuilder().Equal("id", id).Limit(1).Query())
+	if err != nil || len(groups) < 1 {
+		return nil, err
+	}
+	return groups[0], nil
+}
+
 // This function queries the groups only using what's in the DB, without allowing properties of the group to be used to do the query
 func (gm *groupManager) QueryGroups(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
 	qw := &filters.QueryWrapper[persistedGroup, pldapi.PrivacyGroup]{
@@ -342,13 +363,7 @@ func (gm *groupManager) QueryGroups(ctx context.Context, dbTX persistence.DBTX, 
 		Filters:     groupDBOnlyFilters,
 		Query:       jq,
 		MapResult: func(dbPG *persistedGroup) (*pldapi.PrivacyGroup, error) {
-			return &pldapi.PrivacyGroup{
-				ID:               dbPG.ID,
-				Domain:           dbPG.Domain,
-				Created:          dbPG.Created,
-				GenesisSchema:    dbPG.SchemaID,
-				GenesisSignature: dbPG.SchemaSignature,
-			}, nil
+			return dbPG.mapToAPI(), nil
 		},
 	}
 	pgs, err := qw.Run(ctx, dbTX)
@@ -360,6 +375,62 @@ func (gm *groupManager) QueryGroups(ctx context.Context, dbTX persistence.DBTX, 
 	}
 	if err != nil {
 		return nil, err
+	}
+	return pgs, nil
+}
+
+// This function queries groups using their properties. Because that requires a schema to know the valid properties that can be queried
+// and their types (numeric, string, etc.), it's necessary to provide a reference to the domain and schema. This means that the query
+// will be constrained to that particular schema.
+func (gm *groupManager) QueryGroupsByProperties(ctx context.Context, dbTX persistence.DBTX, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
+
+	// Query states, using a JOIN to sub-select only those with a corresponding entry in the privacy group table
+	states, err := gm.stateManager.FindStates(ctx, dbTX, domainName, schemaID, jq, &components.StateQueryOptions{
+		StatusQualifier: pldapi.StateStatusAll,
+		QueryModifier: func(db persistence.DBTX, q *gorm.DB) *gorm.DB {
+			return q.
+				Joins(`LEFT JOIN "privacy_groups" AS "pg" ON "pg"."domain" = "states"."domain_name" AND "pg"."id" = "states"."id"`).
+				Where(`"pg"."id" IS NOT NULL`)
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(states) == 0 {
+		return []*pldapi.PrivacyGroup{}, nil
+	}
+
+	// Now query the privacy groups using this list of IDs in the page
+	stateIDs := make([]tktypes.HexBytes, len(states))
+	for i, s := range states {
+		stateIDs[i] = s.ID
+	}
+	var dbPGs []*persistedGroup
+	err = dbTX.DB().WithContext(ctx).
+		Where("id IN (?)", stateIDs).
+		Find(&dbPGs).
+		Error
+	if err != nil {
+		return nil, err
+	}
+
+	// Map them all
+	pgs := make([]*pldapi.PrivacyGroup, len(dbPGs))
+	for i, dbPG := range dbPGs {
+		pgs[i] = dbPG.mapToAPI()
+	}
+	// Members mapped the same as a DB-first query
+	if err = gm.enrichMembers(ctx, dbTX, pgs); err != nil {
+		return nil, err
+	}
+	// ... but for states we already have them in hand to map across
+	for _, s := range states {
+		for _, pg := range pgs {
+			if pg.ID.Equals(s.ID) {
+				pg.Genesis = s.Data
+				break
+			}
+		}
 	}
 	return pgs, nil
 }

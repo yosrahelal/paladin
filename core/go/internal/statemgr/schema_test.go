@@ -38,10 +38,7 @@ func TestGetSchemaNotFoundNil(t *testing.T) {
 	assert.Nil(t, s)
 }
 
-func TestGetSchemaNotOK(t *testing.T) {
-	ctx, ss, mdb, _, done := newDBMockStateManager(t)
-	defer done()
-
+func mockGetSchemaOK(mdb sqlmock.Sqlmock) {
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows([]string{
 		"id",
 		"type",
@@ -57,6 +54,13 @@ func TestGetSchemaNotOK(t *testing.T) {
 		  "components": []
 		}`,
 	))
+}
+
+func TestGetSchemaK(t *testing.T) {
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
+	defer done()
+
+	mockGetSchemaOK(mdb)
 
 	s, err := ss.GetSchemaByID(ctx, ss.p.NOTX(), "domain1", tktypes.Bytes32Keccak(([]byte)("test")), false)
 	require.NoError(t, err)

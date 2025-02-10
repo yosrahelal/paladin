@@ -266,7 +266,9 @@ func (dc *domainContext) GetStatesByID(dbTX persistence.DBTX, schemaID tktypes.B
 		idsAny[i] = id
 	}
 	query := query.NewQueryBuilder().In(".id", idsAny).Sort(".created").Query()
-	schema, matches, err := dc.ss.findStates(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, pldapi.StateStatusAll)
+	schema, matches, err := dc.ss.findStates(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, &components.StateQueryOptions{
+		StatusQualifier: pldapi.StateStatusAll,
+	})
 	if err == nil {
 		var memMatches []*components.StateWithLabels
 		memMatches, err = dc.mergeUnFlushed(schema, matches, query, false /* locked states are fine */, false /* nullifiers not required */)
@@ -289,7 +291,10 @@ func (dc *domainContext) FindAvailableStates(dbTX persistence.DBTX, schemaID tkt
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findStates(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, pldapi.StateStatusAvailable, spending...)
+	schema, states, err := dc.ss.findStates(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, &components.StateQueryOptions{
+		StatusQualifier: pldapi.StateStatusAvailable,
+		ExcludedIDs:     spending,
+	})
 	if err != nil {
 		return nil, nil, err
 	}

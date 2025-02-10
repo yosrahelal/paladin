@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"gorm.io/gorm"
 )
 
 type StateManager interface {
@@ -58,11 +59,20 @@ type StateManager interface {
 	// Write a batch of nullifiers that correspond to states just received
 	WriteNullifiersForReceivedStates(ctx context.Context, dbTX persistence.DBTX, domainName string, nullifiers []*NullifierUpsert) error
 
+	// Find states from outside of a domain context (noting you can reference a domain context by ID)
+	FindStates(ctx context.Context, dbTX persistence.DBTX, domainName string, schemaID tktypes.Bytes32, query *query.QueryJSON, extQueryOptions *StateQueryOptions) (s []*pldapi.State, err error)
+
 	// GetState returns state by ID, with optional labels
 	GetStatesByID(ctx context.Context, dbTX persistence.DBTX, domainName string, contractAddress *tktypes.EthAddress, stateIDs []tktypes.HexBytes, failNotFound, withLabels bool) ([]*pldapi.State, error)
 
 	// Get all states created, read or spent by a confirmed transaction
 	GetTransactionStates(ctx context.Context, dbTX persistence.DBTX, txID uuid.UUID) (*pldapi.TransactionStates, error)
+}
+
+type StateQueryOptions struct {
+	StatusQualifier pldapi.StateStatusQualifier
+	ExcludedIDs     []tktypes.HexBytes
+	QueryModifier   func(db persistence.DBTX, query *gorm.DB) *gorm.DB
 }
 
 type DomainContextInfo struct {

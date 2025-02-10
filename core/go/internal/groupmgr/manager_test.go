@@ -134,6 +134,10 @@ func newTestGroupManager(t *testing.T, realDB bool, conf *pldconf.GroupManagerCo
 }
 
 func TestPrivacyGroupLifecycleRealDB(t *testing.T) {
+	mergedGenesis := `{
+		"name": "secret things",
+		"version": "200"
+	}`
 	ctx, gm, _, done := newTestGroupManager(t, true, &pldconf.GroupManagerConfig{}, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").
 			Return([]*components.RegistryNodeTransportEntry{ /* contents not checked */ }, nil)
@@ -146,18 +150,16 @@ func TestPrivacyGroupLifecycleRealDB(t *testing.T) {
 			require.JSONEq(t, `{"name": "secret things"}`, spec.Properties.Pretty())
 			require.Len(t, spec.Members, 2)
 			ipg.Return(
-				tktypes.RawJSON(`{
-						"name": "secret things",
-						"version": 200
-					}`),
+				tktypes.RawJSON(mergedGenesis),
 				&abi.Parameter{
 					Name:         "TestPrivacyGroup",
 					Type:         "tuple",
 					InternalType: "struct TestPrivacyGroup;",
 					Indexed:      true,
 					Components: append(spec.PropertiesABI, &abi.Parameter{
-						Name: "version",
-						Type: "uint256",
+						Name:    "version",
+						Type:    "uint256",
+						Indexed: true,
 					}),
 				},
 				nil,
@@ -193,17 +195,31 @@ func TestPrivacyGroupLifecycleRealDB(t *testing.T) {
 	require.NotNil(t, groupID)
 
 	// Query it back - should be the only one
-	groups, err := gm.QueryGroups(ctx, gm.persistence.NOTX(), query.NewQueryBuilder().Limit(1).Query())
+	groups, err := gm.QueryGroups(ctx, gm.persistence.NOTX(), query.NewQueryBuilder().Equal("domain", "domain1").Limit(1).Query())
 	require.NoError(t, err)
 	require.Len(t, groups, 1)
 	require.Equal(t, "domain1", groups[0].Domain)
 	require.Equal(t, groupID, groups[0].ID)
 	require.NotNil(t, groups[0].Genesis)
-	require.JSONEq(t, `{
-		"name": "secret things",
-		"version": "200"
-	}`, string(groups[0].Genesis)) // enriched from state store
+	require.JSONEq(t, mergedGenesis, string(groups[0].Genesis))            // enriched from state store
 	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members) // enriched from members table
+
+	// Get it directly by ID
+	group, err := gm.GetGroupByID(ctx, gm.persistence.NOTX(), "domain1", groupID)
+	require.NoError(t, err)
+	require.NotNil(t, group)
+
+	// Search for it by name
+	groups, err = gm.QueryGroupsByProperties(ctx, gm.persistence.NOTX(), "domain1", group.GenesisSchema,
+		query.NewQueryBuilder().Equal("name", "secret things").Equal("version", 200).Limit(1).Query())
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+	require.Equal(t, "domain1", groups[0].Domain)
+	require.Equal(t, groupID, groups[0].ID)
+	require.NotNil(t, groups[0].Genesis)
+	require.JSONEq(t, mergedGenesis, string(groups[0].Genesis))
+	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members)
+
 }
 
 func mockBeginRollback(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
@@ -528,4 +544,97 @@ func TestQueryGroupsEnrichGenesisFail(t *testing.T) {
 
 	_, err := gm.QueryGroups(ctx, gm.persistence.NOTX(), query.NewQueryBuilder().Limit(1).Query())
 	require.Regexp(t, "pop", err)
+}
+
+func TestQueryGroupsByPropertiesFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	schemaID := tktypes.RandBytes32()
+	dbTX := gm.persistence.NOTX()
+	mc.stateManager.On("FindStates", mock.Anything, dbTX, "domain1", schemaID, mock.Anything, mock.Anything).
+		Return(nil, fmt.Errorf("pop"))
+
+	_, err := gm.QueryGroupsByProperties(ctx, dbTX, "domain1", schemaID, query.NewQueryBuilder().Limit(1).Query())
+	require.Regexp(t, "pop", err)
+}
+
+func TestQueryGroupsByPropertiesNoResults(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	schemaID := tktypes.RandBytes32()
+	dbTX := gm.persistence.NOTX()
+	mc.stateManager.On("FindStates", mock.Anything, dbTX, "domain1", schemaID, mock.Anything, mock.Anything).
+		Return([]*pldapi.State{}, nil)
+
+	groups, err := gm.QueryGroupsByProperties(ctx, dbTX, "domain1", schemaID, query.NewQueryBuilder().Limit(1).Query())
+	require.NoError(t, err)
+	require.NotNil(t, groups)
+	require.Empty(t, groups)
+}
+
+func TestQueryGroupsByPropertiesQueryFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	schemaID := tktypes.RandBytes32()
+	dbTX := gm.persistence.NOTX()
+	mc.stateManager.On("FindStates", mock.Anything, dbTX, "domain1", schemaID, mock.Anything, mock.Anything).
+		Return([]*pldapi.State{
+			{
+				StateBase: pldapi.StateBase{
+					ID: tktypes.RandBytes(32),
+				},
+			},
+		}, nil)
+
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := gm.QueryGroupsByProperties(ctx, dbTX, "domain1", schemaID, query.NewQueryBuilder().Limit(1).Query())
+	assert.Regexp(t, "pop", err)
+}
+
+func TestQueryGroupsByPropertiesMembersFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	schemaID := tktypes.RandBytes32()
+	dbTX := gm.persistence.NOTX()
+	stateID := tktypes.RandBytes(32)
+	mc.stateManager.On("FindStates", mock.Anything, dbTX, "domain1", schemaID, mock.Anything, mock.Anything).
+		Return([]*pldapi.State{
+			{
+				StateBase: pldapi.StateBase{
+					ID: stateID,
+				},
+			},
+		}, nil)
+
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{
+		"domain",
+		"id",
+	}).AddRow(
+		"domain1",
+		stateID,
+	))
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_group_members").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := gm.QueryGroupsByProperties(ctx, dbTX, "domain1", schemaID, query.NewQueryBuilder().Limit(1).Query())
+	assert.Regexp(t, "pop", err)
+}
+
+func TestGetGroupsByIDFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := gm.GetGroupByID(ctx, gm.persistence.NOTX(), "domain1", tktypes.RandBytes(32))
+	assert.Regexp(t, "pop", err)
 }

@@ -82,7 +82,7 @@ func (ss *stateManager) rpcQueryStates() rpcserver.RPCHandler {
 		query query.QueryJSON,
 		status pldapi.StateStatusQualifier,
 	) ([]*pldapi.State, error) {
-		return ss.FindStates(ctx, ss.p.NOTX(), domain, schema, &query, status)
+		return ss.FindStates(ctx, ss.p.NOTX(), domain, schema, &query, &components.StateQueryOptions{StatusQualifier: status})
 	})
 }
 

@@ -28,5 +28,7 @@ type GroupManager interface {
 	ManagerLifecycle
 
 	CreateGroup(ctx context.Context, dbTX persistence.DBTX, spec *pldapi.PrivacyGroupInput) (id tktypes.HexBytes, err error)
+	GetGroupByID(ctx context.Context, dbTX persistence.DBTX, domainName string, id tktypes.HexBytes) (*pldapi.PrivacyGroup, error)
 	QueryGroups(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error)
+	QueryGroupsByProperties(ctx context.Context, dbTX persistence.DBTX, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error)
 }
