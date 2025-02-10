@@ -153,4 +153,6 @@ var (
 	MsgErrorNoLockedInputs                = pde("PD210114", "No locked inputs found")
 	MsgErrorParseInfoStates               = pde("PD210115", "Failed to parse info states. %s")
 	MsgErrorDecodeDelegateExtras          = pde("PD210116", "Failed to decode delegate in extras. %s")
+	MsgErrorMissingLockDelegate           = pde("PD210117", "lock delegate is required")
+	MsgFailedToQueryStatesById            = pde("PD210118", "Failed to query states by IDs. Wanted: %d, Found: %d")
 )

@@ -73,6 +73,9 @@ func (h *transferLockedHandler) ValidateParams(ctx context.Context, config *type
 	if err := validateTransferLockedParams(ctx, transferParams); err != nil {
 		return nil, err
 	}
+	if err := validateTransferParams(ctx, transferParams.Transfers); err != nil {
+		return nil, err
+	}
 
 	return &transferParams, nil
 }
@@ -280,7 +283,7 @@ func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*tktypes.He
 		return nil, nil, err
 	}
 	if len(inputStates) != len(inputIDs) {
-		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorParseInputStates, len(inputIDs), len(inputStates))
+		return nil, nil, i18n.NewError(ctx, msgs.MsgFailedToQueryStatesById, len(inputIDs), len(inputStates))
 	}
 
 	inputCoins := make([]*types.ZetoCoin, len(inputStates))
@@ -309,6 +312,9 @@ func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*tktypes.He
 func validateTransferLockedParams(ctx context.Context, params types.TransferLockedParams) error {
 	if params.LockedInputs == nil || len(params.LockedInputs) == 0 {
 		return i18n.NewError(ctx, msgs.MsgErrorMissingLockInputs)
+	}
+	if params.Delegate == "" {
+		return i18n.NewError(ctx, msgs.MsgErrorMissingLockDelegate)
 	}
 	return nil
 }
