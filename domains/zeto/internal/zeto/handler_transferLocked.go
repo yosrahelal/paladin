@@ -30,7 +30,6 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -88,12 +87,19 @@ func (h *transferLockedHandler) Init(ctx context.Context, tx *types.ParsedTransa
 				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
 				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
-			{
+		},
+	}
+	if params.Delegate != "" {
+		// the delegate can be an address, or a resolvable name
+		_, err := tktypes.ParseEthAddress(params.Delegate)
+		if err != nil {
+			// delegate is not an eth address, so we need to resolve it
+			res.RequiredVerifiers = append(res.RequiredVerifiers, &pb.ResolveVerifierRequest{
 				Lookup:       params.Delegate,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
-			},
-		},
+			})
+		}
 	}
 	for _, transfer := range params.Transfers {
 		res.RequiredVerifiers = append(res.RequiredVerifiers, &pb.ResolveVerifierRequest{
@@ -113,9 +119,22 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 	if resolvedSender == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, tx.Transaction.From)
 	}
+	var delegateAddr string
+	if params.Delegate != "" {
+		_, err := tktypes.ParseEthAddress(params.Delegate)
+		if err != nil {
+			resolvedDelegate := domain.FindVerifier(params.Delegate, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
+			if resolvedDelegate == nil {
+				return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, tx.Transaction.From)
+			}
+			delegateAddr = resolvedDelegate.Verifier
+		} else {
+			delegateAddr = params.Delegate
+		}
+	}
 
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	inputCoins, inputStates, err := h.loadCoins(ctx, params.LockedInputs, req.StateQueryContext)
+	inputCoins, inputStates, err := h.loadCoins(ctx, params.LockedInputs, useNullifiers, req.StateQueryContext)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxInputs, err)
 	}
@@ -159,7 +178,7 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := formatTransferProvingRequest(ctx, h.zeto, inputCoins, outputCoins, (*tx.DomainConfig.Circuits)["transferLocked"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
+	payloadBytes, err := formatTransferProvingRequest(ctx, h.zeto, inputCoins, outputCoins, (*tx.DomainConfig.Circuits)["transferLocked"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress, delegateAddr)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
@@ -233,22 +252,21 @@ func (h *transferLockedHandler) Prepare(ctx context.Context, tx *types.ParsedTra
 		return nil, err
 	}
 
-	var signer *string
-	if req.Transaction.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION {
-		// All "prepare" transactions must have an explicit "from" signer
-		signer = &req.Transaction.From
+	signer := tx.Params.(*types.TransferLockedParams).Delegate
+	if signer == "" {
+		signer = req.Transaction.From
 	}
 
 	return &pb.PrepareTransactionResponse{
 		Transaction: &pb.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
-			RequiredSigner:  signer,
+			RequiredSigner:  &signer,
 		},
 	}, nil
 }
 
-func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*tktypes.HexUint256, stateQueryContext string) ([]*types.ZetoCoin, []*pb.StateRef, error) {
+func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*tktypes.HexUint256, useNullifiers bool, stateQueryContext string) ([]*types.ZetoCoin, []*pb.StateRef, error) {
 	inputIDs := make([]any, 0, len(ids))
 	for _, input := range ids {
 		if !input.NilOrZero() {
@@ -256,8 +274,8 @@ func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*tktypes.He
 		}
 	}
 
-	queryBuilder := query.NewQueryBuilder().In(".id", inputIDs).Equal("locked", true)
-	inputStates, err := h.zeto.findAvailableStates(ctx, false, stateQueryContext, queryBuilder.Query().String())
+	queryBuilder := query.NewQueryBuilder().In(".id", inputIDs)
+	inputStates, err := h.zeto.findAvailableStates(ctx, useNullifiers, stateQueryContext, queryBuilder.Query().String())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -289,9 +307,6 @@ func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*tktypes.He
 }
 
 func validateTransferLockedParams(ctx context.Context, params types.TransferLockedParams) error {
-	if params.Delegate == "" {
-		return i18n.NewError(ctx, msgs.MsgErrorMissingLockDelegate)
-	}
 	if params.LockedInputs == nil || len(params.LockedInputs) == 0 {
 		return i18n.NewError(ctx, msgs.MsgErrorMissingLockInputs)
 	}

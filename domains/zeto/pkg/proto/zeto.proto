@@ -50,6 +50,7 @@ message ProvingRequestExtras_Nullifiers {
   string root = 1;
   repeated MerkleProof merkleProofs = 2;
   repeated bool enabled = 3;
+  string delegate = 4;
 }
 
 message MerkleProof {

@@ -52,6 +52,7 @@ type Zeto struct {
 	coinSchema               *prototk.StateSchema
 	merkleTreeRootSchema     *prototk.StateSchema
 	merkleTreeNodeSchema     *prototk.StateSchema
+	lockedInfoSchema         *prototk.StateSchema
 	mintSignature            string
 	transferSignature        string
 	transferWithEncSignature string
@@ -93,6 +94,12 @@ type LockedEvent struct {
 	Delegate      tktypes.EthAddress   `json:"delegate"`
 	Submitter     tktypes.EthAddress   `json:"submitter"`
 	Data          tktypes.HexBytes     `json:"data"`
+}
+
+type merkleTreeSpec struct {
+	name    string
+	storage smt.StatesStorage
+	tree    core.SparseMerkleTree
 }
 
 var factoryDeployABI = &abi.Entry{
@@ -139,7 +146,7 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	z.config = &config
 	z.chainID = req.ChainId
 
-	schemas, err := getStateSchemas(ctx)
+	schemas, err := getStateSchemas()
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorConfigZetoDomain, err)
 	}
@@ -178,6 +185,7 @@ func (z *Zeto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (
 	z.coinSchema = req.AbiStateSchemas[0]
 	z.merkleTreeRootSchema = req.AbiStateSchemas[1]
 	z.merkleTreeNodeSchema = req.AbiStateSchemas[2]
+	z.lockedInfoSchema = req.AbiStateSchemas[3]
 
 	return &prototk.InitDomainResponse{}, nil
 }
@@ -410,30 +418,33 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 
 	var res prototk.HandleEventBatchResponse
 	var errors []string
-	var smtName string
-	var storage smt.StatesStorage
-	var tree core.SparseMerkleTree
+	var smtForStates *merkleTreeSpec
+	var smtForLockedStates *merkleTreeSpec
 	if common.IsNullifiersToken(domainConfig.TokenName) {
-		smtName = smt.MerkleTreeName(domainConfig.TokenName, contractAddress)
-		storage = smt.NewStatesStorage(z.Callbacks, smtName, req.StateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
-		tree, err = smt.NewSmt(storage)
+		smtName := smt.MerkleTreeName(domainConfig.TokenName, contractAddress)
+		smtForStates, err = z.newSmtTreeSpec(ctx, smtName, req.StateQueryContext)
 		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
+			return nil, err
+		}
+		smtName = smt.MerkleTreeNameForLockedStates(domainConfig.TokenName, contractAddress)
+		smtForLockedStates, err = z.newSmtTreeSpec(ctx, smtName, req.StateQueryContext)
+		if err != nil {
+			return nil, err
 		}
 	}
 	for _, ev := range req.Events {
 		var err error
 		switch ev.SoliditySignature {
 		case z.mintSignature:
-			err = z.handleMintEvent(ctx, tree, storage, ev, domainConfig.TokenName, &res)
+			err = z.handleMintEvent(ctx, smtForStates, ev, domainConfig.TokenName, &res)
 		case z.transferSignature:
-			err = z.handleTransferEvent(ctx, tree, storage, ev, domainConfig.TokenName, &res)
+			err = z.handleTransferEvent(ctx, smtForStates, ev, domainConfig.TokenName, &res)
 		case z.transferWithEncSignature:
-			err = z.handleTransferWithEncryptionEvent(ctx, tree, storage, ev, domainConfig.TokenName, &res)
+			err = z.handleTransferWithEncryptionEvent(ctx, smtForStates, ev, domainConfig.TokenName, &res)
 		case z.withdrawSignature:
-			err = z.handleWithdrawEvent(ctx, tree, storage, ev, domainConfig.TokenName, &res)
+			err = z.handleWithdrawEvent(ctx, smtForStates, ev, domainConfig.TokenName, &res)
 		case z.lockSignature:
-			err = z.handleLockedEvent(ctx, ev, &res)
+			err = z.handleLockedEvent(ctx, smtForStates, smtForLockedStates, ev, domainConfig.TokenName, &res)
 		}
 		if err != nil {
 			errors = append(errors, err.Error())
@@ -443,12 +454,19 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		return &res, i18n.NewError(ctx, msgs.MsgErrorHandleEvents, formatErrors(errors))
 	}
 	if common.IsNullifiersToken(domainConfig.TokenName) {
-		newStatesForSMT, err := storage.GetNewStates()
+		newStatesForSMT, err := smtForStates.storage.GetNewStates()
 		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtName, err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtForStates.name, err)
 		}
 		if len(newStatesForSMT) > 0 {
 			res.NewStates = append(res.NewStates, newStatesForSMT...)
+		}
+		newStatesForSMTForLocked, err := smtForLockedStates.storage.GetNewStates()
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtForLockedStates.name, err)
+		}
+		if len(newStatesForSMTForLocked) > 0 {
+			res.NewStates = append(res.NewStates, newStatesForSMTForLocked...)
 		}
 	}
 	return &res, nil
@@ -547,4 +565,17 @@ func (z *Zeto) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (*pro
 func (z *Zeto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
 	// TODO: Event logs for transfers would be great for Noto
 	return nil, i18n.NewError(ctx, msgs.MsgNoDomainReceipt)
+}
+
+func (z *Zeto) newSmtTreeSpec(ctx context.Context, smtName string, stateQueryContext string) (*merkleTreeSpec, error) {
+	smtForStates := &merkleTreeSpec{
+		name:    smtName,
+		storage: smt.NewStatesStorage(z.Callbacks, smtName, stateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id),
+	}
+	tree, err := smt.NewSmt(smtForStates.storage)
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
+	}
+	smtForStates.tree = tree
+	return smtForStates, nil
 }

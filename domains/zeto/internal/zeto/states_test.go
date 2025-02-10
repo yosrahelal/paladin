@@ -28,9 +28,9 @@ import (
 )
 
 func TestGetStateSchemas(t *testing.T) {
-	schemas, err := getStateSchemas(context.Background())
+	schemas, err := getStateSchemas()
 	assert.NoError(t, err)
-	assert.Len(t, schemas, 3)
+	assert.Len(t, schemas, 4)
 }
 
 func TestPrepareInputs(t *testing.T) {

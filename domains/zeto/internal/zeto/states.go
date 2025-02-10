@@ -37,27 +37,13 @@ import (
 var MAX_INPUT_COUNT = 10
 var MAX_OUTPUT_COUNT = 10
 
-func getStateSchemas(ctx context.Context) ([]string, error) {
-	var schemas []string
-	coinJSON, err := json.Marshal(types.ZetoCoinABI)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalZetoCoinSchemaAbi, err)
-	}
-	schemas = append(schemas, string(coinJSON))
+func getStateSchemas() ([]string, error) {
+	coinJSON, _ := json.Marshal(types.ZetoCoinABI)
+	smtRootJSON, _ := json.Marshal(smt.MerkleTreeRootABI)
+	smtNodeJSON, _ := json.Marshal(smt.MerkleTreeNodeABI)
+	lockInfoJSON, _ := json.Marshal(types.ZetoLockInfoABI)
 
-	smtRootJSON, err := json.Marshal(smt.MerkleTreeRootABI)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalMerkleTreeRootSchemaAbi, err)
-	}
-	schemas = append(schemas, string(smtRootJSON))
-
-	smtNodeJSON, err := json.Marshal(smt.MerkleTreeNodeABI)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalMerkleTreeNodeSchemaAbi, err)
-	}
-	schemas = append(schemas, string(smtNodeJSON))
-
-	return schemas, nil
+	return []string{string(coinJSON), string(smtRootJSON), string(smtNodeJSON), string(lockInfoJSON)}, nil
 }
 
 func (n *Zeto) makeCoin(stateData string) (*types.ZetoCoin, error) {
@@ -120,7 +106,7 @@ func (z *Zeto) buildInputsForExpectedTotal(ctx context.Context, useNullifiers bo
 			Limit(10).
 			Sort(".created").
 			Equal("owner", senderKey).
-			Equal("locked", false)
+			Equal("locked", locked)
 
 		if lastStateTimestamp > 0 {
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)

@@ -251,7 +251,7 @@ func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins [
 
 	var extras []byte
 	if circuit.UsesNullifiers {
-		proofs, extrasObj, err := generateMerkleProofs(ctx, h.zeto, tokenName, stateQueryContext, contractAddress, inputCoins)
+		proofs, extrasObj, err := generateMerkleProofs(ctx, h.zeto, tokenName, stateQueryContext, contractAddress, inputCoins, false)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
 		}

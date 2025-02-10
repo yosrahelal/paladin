@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/rand"
 	"math/big"
+	"strings"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
@@ -78,7 +79,7 @@ func assembleInputs_anon_enc(ctx context.Context, inputs *commonWitnessInputs, e
 }
 
 func assembleInputs_anon_nullifier(ctx context.Context, inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) (map[string]any, error) {
-	nullifiers, root, proofs, enabled, err := prepareInputsForNullifiers(ctx, inputs, extras, keyEntry)
+	nullifiers, root, proofs, enabled, delegate, err := prepareInputsForNullifiers(ctx, inputs, extras, keyEntry)
 	if err != nil {
 		return nil, err
 	}
@@ -96,6 +97,9 @@ func assembleInputs_anon_nullifier(ctx context.Context, inputs *commonWitnessInp
 		"outputValues":          inputs.outputValues,
 		"outputSalts":           inputs.outputSalts,
 		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
+	}
+	if delegate != nil {
+		witnessInputs["lockDelegate"] = delegate
 	}
 	return witnessInputs, nil
 }
@@ -125,7 +129,7 @@ func assembleInputs_withdraw(inputs *commonWitnessInputs, keyEntry *core.KeyEntr
 }
 
 func assembleInputs_withdraw_nullifier(ctx context.Context, inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) (map[string]interface{}, error) {
-	nullifiers, root, proofs, enabled, err := prepareInputsForNullifiers(ctx, inputs, extras, keyEntry)
+	nullifiers, root, proofs, enabled, _, err := prepareInputsForNullifiers(ctx, inputs, extras, keyEntry)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +161,7 @@ func assembleInputs_lock(inputs *commonWitnessInputs, keyEntry *core.KeyEntry) m
 	return witnessInputs
 }
 
-func prepareInputsForNullifiers(ctx context.Context, inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) ([]*big.Int, *big.Int, [][]*big.Int, []*big.Int, error) {
+func prepareInputsForNullifiers(ctx context.Context, inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) ([]*big.Int, *big.Int, [][]*big.Int, []*big.Int, *big.Int, error) {
 	// calculate the nullifiers for the input UTXOs
 	nullifiers := make([]*big.Int, len(inputs.inputCommitments))
 	for i := 0; i < len(inputs.inputCommitments); i++ {
@@ -168,13 +172,13 @@ func prepareInputsForNullifiers(ctx context.Context, inputs *commonWitnessInputs
 		}
 		nullifier, err := CalculateNullifier(inputs.inputValues[i], inputs.inputSalts[i], keyEntry.PrivateKeyForZkp)
 		if err != nil {
-			return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorCalcNullifier, err)
+			return nil, nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorCalcNullifier, err)
 		}
 		nullifiers[i] = nullifier
 	}
 	root, ok := new(big.Int).SetString(extras.Root, 16)
 	if !ok {
-		return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeRootExtras)
+		return nil, nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeRootExtras)
 	}
 	var proofs [][]*big.Int
 	for _, proof := range extras.MerkleProofs {
@@ -182,7 +186,7 @@ func prepareInputsForNullifiers(ctx context.Context, inputs *commonWitnessInputs
 		for _, node := range proof.Nodes {
 			n, ok := new(big.Int).SetString(node, 16)
 			if !ok {
-				return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeMTPNodeExtras)
+				return nil, nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeMTPNodeExtras)
 			}
 			mp = append(mp, n)
 		}
@@ -196,6 +200,13 @@ func prepareInputsForNullifiers(ctx context.Context, inputs *commonWitnessInputs
 			enabled[i] = big.NewInt(0)
 		}
 	}
+	var delegate *big.Int
+	if extras.Delegate != "" {
+		delegate, ok = new(big.Int).SetString(strings.TrimPrefix(extras.Delegate, "0x"), 16)
+		if !ok {
+			return nil, nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeDelegateExtras, extras.Delegate)
+		}
+	}
 
-	return nullifiers, root, proofs, enabled, nil
+	return nullifiers, root, proofs, enabled, delegate, nil
 }

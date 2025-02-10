@@ -73,7 +73,7 @@ func TestLockValidateParams(t *testing.T) {
 	}
 	ctx := context.Background()
 	_, err := h.ValidateParams(ctx, config, "bad json")
-	assert.EqualError(t, err, "PD210059: Failed to unmarshal lockProof parameters. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210059: Failed to unmarshal lock parameters. invalid character 'b' looking for beginning of value")
 
 	config.TokenName = "Zeto_Anon"
 	_, err = h.ValidateParams(ctx, config, "{\"delegate\":\"0x1234567890123456789012345678901234567890\"}")

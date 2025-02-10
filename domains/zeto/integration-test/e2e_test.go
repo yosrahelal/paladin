@@ -55,6 +55,7 @@ var (
 	controllerName = "controller"
 	recipient1Name = "recipient1"
 	recipient2Name = "recipient2"
+	recipient3Name = "recipient3"
 )
 
 func TestZetoDomainTestSuite(t *testing.T) {
@@ -100,25 +101,25 @@ func (s *zetoDomainTestSuite) TestZeto_Anon() {
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON, false, false)
 }
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonBatch() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true, false)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonBatch() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true, false)
+}
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false, false)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false, false)
+}
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true, false)
+}
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false, true)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false, true)
+}
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true, true)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true, true)
+}
 
 func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, useBatch bool, isNullifiersToken bool) {
 	ctx := context.Background()
@@ -261,34 +262,76 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	_, err = s.withdraw(ctx, zetoAddress, controllerName, 100)
 	require.NoError(t, err)
 
+	if tokenName != constants.TOKEN_ANON {
+		return
+	}
+
 	log.L(ctx).Info("*************************************")
-	log.L(ctx).Infof("Lock some UTXOs")
+	log.L(ctx).Infof("Lock some UTXOs and delegate the lock to recipient1")
 	log.L(ctx).Info("*************************************")
+	// the delegate being recipient1 is just for testing purposes, in a real scenario the delegate would be
+	// a smart contract (such as playing the role of a trade orchestrator or escrow)
 	var recipient1EthAddrStr string
 	rpcerr = s.rpc.CallRPC(ctx, &recipient1EthAddrStr, "ptx_resolveVerifier", recipient1Name, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.Nil(t, rpcerr)
 	recipient1EthAddr := tktypes.MustEthAddress(recipient1EthAddrStr)
 	_, err = s.lock(ctx, zetoAddress, controllerName, 1, recipient1EthAddr)
 	require.NoError(t, err)
-
-	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken, true)
-	require.Len(t, coins, 1)
-	hash, _ := coins[0].Data.Hash(ctx)
-	log.L(ctx).Info("*************************************")
-	log.L(ctx).Infof("Transfer locked UTXO %s", hash.String())
-	log.L(ctx).Info("*************************************")
-	// the owner of the locked UTXO is the recipient1, who needs to generate the proof for the transfer
-	// the delegate being recipient1 is just for testing purposes, in a real scenario the delegate would be
-	// a smart contract (such as playing the role of a trade orchestrator or escrow)
-	result, err := s.PrepareTransferLocked(ctx, &zetoAddress, hash, recipient1Name, controllerName, recipient2Name, 1)
+	_, err = s.lock(ctx, zetoAddress, controllerName, 1, recipient1EthAddr)
 	require.NoError(t, err)
-	require.NotNil(t, result)
+
+	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken, true /* locked */)
+	require.Len(t, coins, 2)
+	locked1, _ := coins[0].Data.Hash(ctx)
+	locked2, _ := coins[1].Data.Hash(ctx)
+
+	// for now unlock only works properly for the ANON token
+	log.L(ctx).Info("*************************************")
+	log.L(ctx).Infof("Recipient1 unlocks one of the locked UTXOs %s", locked2.String())
+	log.L(ctx).Info("*************************************")
+	// unlocking by calling transferlocked()
+	_, err = s.TransferLocked(ctx, &zetoAddress, locked2, recipient1Name, controllerName, controllerName, 1)
+	require.NoError(t, err)
+
+	log.L(ctx).Info("*************************************")
+	log.L(ctx).Infof("Recipient1 delegates the lock to recipient2")
+	log.L(ctx).Info("*************************************")
+	var recipient2EthAddrStr string
+	rpcerr = s.rpc.CallRPC(ctx, &recipient2EthAddrStr, "ptx_resolveVerifier", recipient2Name, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	require.Nil(t, rpcerr)
+	txInput := map[string]any{
+		"utxos":    []string{locked1.String()},
+		"delegate": recipient2EthAddrStr,
+		"data":     "0x",
+	}
+	txInputJson, err := json.Marshal(txInput)
+	require.NoError(t, err)
+	// submit a public transaction to delegate the lock
 	build, err := getZetoAnonSpec()
 	require.NoError(t, err)
 	_, err = s.tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			From:     recipient1Name,
+			To:       &zetoAddress,
+			Function: "delegateLock",
+			Data:     txInputJson,
+		},
+		ABI: build.ABI,
+	})
+	require.NoError(t, err)
+
+	log.L(ctx).Info("*************************************")
+	log.L(ctx).Infof("Transfer locked UTXO %s to recipient3", locked1.String())
+	log.L(ctx).Info("*************************************")
+	// the owner of the locked UTXO is the controller, who needs to generate the proof for the transfer.
+	result, err := s.PrepareTransferLocked(ctx, &zetoAddress, locked1, recipient2Name, controllerName, recipient3Name, 1)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	_, err = s.tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type:     pldapi.TransactionTypePublic.Enum(),
+			From:     recipient2Name,
 			To:       &zetoAddress,
 			Function: "transferLocked",
 			Data:     result.PreparedTransaction.Data,
@@ -482,6 +525,36 @@ func (s *zetoDomainTestSuite) lock(ctx context.Context, zetoAddress tktypes.EthA
 		return nil, rpcerr
 	}
 	return &invokeResult, nil
+}
+
+func (s *zetoDomainTestSuite) TransferLocked(ctx context.Context, zetoAddress *tktypes.EthAddress, lockedInput *tktypes.HexUint256, delegate, sender, receiver string, amount int) (*testbed.TransactionResult, error) {
+	params := &types.TransferLockedParams{
+		LockedInputs: []*tktypes.HexUint256{lockedInput},
+		Delegate:     delegate,
+		Transfers: []*types.TransferParamEntry{
+			{
+				To:     receiver,
+				Amount: tktypes.Uint64ToUint256(uint64(amount)),
+			},
+		},
+	}
+	paramsJson, _ := json.Marshal(params)
+	tx := &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			To:       zetoAddress,
+			From:     sender,
+			Function: "transferLocked",
+			Data:     paramsJson,
+		},
+		ABI: types.ZetoABI,
+	}
+
+	var result testbed.TransactionResult
+	rpcerr := s.rpc.CallRPC(ctx, &result, "testbed_invoke", tx, true)
+	if rpcerr != nil {
+		return nil, rpcerr
+	}
+	return &result, nil
 }
 
 func (s *zetoDomainTestSuite) PrepareTransferLocked(ctx context.Context, zetoAddress *tktypes.EthAddress, lockedInput *tktypes.HexUint256, delegate, sender, receiver string, amount int) (*testbed.TransactionResult, error) {

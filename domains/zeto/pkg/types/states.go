@@ -72,3 +72,11 @@ var ZetoCoinABI = &abi.Parameter{
 		{Name: "locked", Type: "bool", Indexed: true},
 	},
 }
+
+var ZetoLockInfoABI = &abi.Parameter{
+	Type:         "tuple",
+	InternalType: "struct ZetoLockInfo",
+	Components: abi.ParameterArray{
+		{Name: "size", Type: "uint64"},
+	},
+}

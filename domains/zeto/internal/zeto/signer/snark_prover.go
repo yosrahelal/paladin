@@ -303,7 +303,14 @@ func calculateWitness(ctx context.Context, circuit *zetosignerapi.Circuit, commo
 			witnessInputs = assembleInputs_anon(inputs, keyEntry)
 		}
 	case zetosignerapi.TransferLocked:
-		witnessInputs = assembleInputs_anon(inputs, keyEntry)
+		if circuit.UsesNullifiers {
+			witnessInputs, err = assembleInputs_anon_nullifier(ctx, inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
+			if err != nil {
+				return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
+			}
+		} else {
+			witnessInputs = assembleInputs_anon(inputs, keyEntry)
+		}
 	}
 	// witnessInputs = assembleInputs_lock(inputs, keyEntry)
 

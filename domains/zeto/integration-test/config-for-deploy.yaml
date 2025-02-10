@@ -17,14 +17,6 @@ contracts:
     - name: Groth16Verifier_WithdrawBatch
       abiAndBytecode:
         path: ./abis/Groth16Verifier_WithdrawBatch.json
-    # for the withdraw transaction with nullifiers
-    - name: Groth16Verifier_WithdrawNullifier
-      abiAndBytecode:
-        path: ./abis/Groth16Verifier_WithdrawNullifier.json
-    # for the withdraw transaction with batch inputs and nullifiers
-    - name: Groth16Verifier_WithdrawNullifierBatch
-      abiAndBytecode:
-        path: ./abis/Groth16Verifier_WithdrawNullifierBatch.json
     # for the Zeto_Anon token
     - name: Groth16Verifier_Anon
       abiAndBytecode:
@@ -89,6 +81,12 @@ contracts:
     - name: SmtLib
       abiAndBytecode:
         path: ./abis/SmtLib.json
+    - name: Groth16Verifier_WithdrawNullifier
+      abiAndBytecode:
+        path: ./abis/Groth16Verifier_WithdrawNullifier.json
+    - name: Groth16Verifier_WithdrawNullifierBatch
+      abiAndBytecode:
+        path: ./abis/Groth16Verifier_WithdrawNullifierBatch.json
     - name: Groth16Verifier_AnonNullifierTransfer
       abiAndBytecode:
         path: ./abis/Groth16Verifier_AnonNullifierTransfer.json

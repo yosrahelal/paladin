@@ -156,8 +156,11 @@ func _utxosFromStates(ctx context.Context, zeto *Zeto, states []*prototk.Endorsa
 	return utxos, nil
 }
 
-func generateMerkleProofs(ctx context.Context, zeto *Zeto, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
+func generateMerkleProofs(ctx context.Context, zeto *Zeto, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, inputCoins []*types.ZetoCoin, locked bool) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
 	smtName := smt.MerkleTreeName(tokenName, contractAddress)
+	if locked {
+		smtName = smt.MerkleTreeNameForLockedStates(tokenName, contractAddress)
+	}
 	storage := smt.NewStatesStorage(zeto.Callbacks, smtName, stateQueryContext, zeto.merkleTreeRootSchema.Id, zeto.merkleTreeNodeSchema.Id)
 	mt, err := smt.NewSmt(storage)
 	if err != nil {
@@ -229,7 +232,7 @@ func generateMerkleProofs(ctx context.Context, zeto *Zeto, tokenName string, sta
 // formatTransferProvingRequest formats the proving request for a transfer transaction.
 // the same function is used for both the transfer and lock transactions because they
 // both require the same proof from the transfer circuit
-func formatTransferProvingRequest(ctx context.Context, zeto *Zeto, inputCoins, outputCoins []*types.ZetoCoin, circuit *zetosignerapi.Circuit, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
+func formatTransferProvingRequest(ctx context.Context, zeto *Zeto, inputCoins, outputCoins []*types.ZetoCoin, circuit *zetosignerapi.Circuit, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress, delegate ...string) ([]byte, error) {
 	inputSize := common.GetInputSize(len(inputCoins))
 	inputCommitments := make([]string, inputSize)
 	inputValueInts := make([]uint64, inputSize)
@@ -267,13 +270,17 @@ func formatTransferProvingRequest(ctx context.Context, zeto *Zeto, inputCoins, o
 
 	var extras []byte
 	if circuit.UsesNullifiers {
-		proofs, extrasObj, err := generateMerkleProofs(ctx, zeto, tokenName, stateQueryContext, contractAddress, inputCoins)
+		forLockedStates := len(delegate) > 0
+		proofs, extrasObj, err := generateMerkleProofs(ctx, zeto, tokenName, stateQueryContext, contractAddress, inputCoins, forLockedStates)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
 		}
 		for i := len(proofs); i < inputSize; i++ {
 			extrasObj.MerkleProofs = append(extrasObj.MerkleProofs, &smt.Empty_Proof)
 			extrasObj.Enabled = append(extrasObj.Enabled, false)
+		}
+		if len(delegate) > 0 {
+			extrasObj.Delegate = delegate[0]
 		}
 		protoExtras, err := proto.Marshal(extrasObj)
 		if err != nil {
@@ -299,7 +306,7 @@ func formatTransferProvingRequest(ctx context.Context, zeto *Zeto, inputCoins, o
 	return proto.Marshal(payload)
 }
 
-func trimZetoUtxos(utxos []string) []string {
+func trimZeroUtxos(utxos []string) []string {
 	var trimmed []string
 	for _, utxo := range utxos {
 		if utxo != "0" {
