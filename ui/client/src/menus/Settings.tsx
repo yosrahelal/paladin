@@ -89,7 +89,7 @@ export const SettingsMenu: React.FC<Props> = ({
             <Box sx={{ padding: '8px 12px 8px 20px', display: 'flex', alignItems: 'center' }}>
               <Typography sx={{ minWidth: '150px', whiteSpace: 'nowrap', marginRight: '8px' }}>{t('contractAbis')}</Typography>
               <Button
-                sx={{ minHeight: '40px', minWidth: '87px', textTransform: 'none' }}
+                sx={{ minHeight: '40px', minWidth: '87px' }}
                 variant="outlined"
                 onClick={() => { setAnchorEl(null); setAbiUploadDialogOpen(true) }}
               >{t('upload')}</Button>

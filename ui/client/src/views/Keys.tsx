@@ -145,7 +145,6 @@ export const Keys: React.FC = () => {
         <Link underline="none"
           key={segment}
           href=""
-          sx={{ textTransform: 'none' }}
           onClick={event => {
             event.preventDefault();
             setFilter(undefined);
@@ -159,8 +158,7 @@ export const Keys: React.FC = () => {
   if (filter !== undefined) {
     breadcrumbContent.push(
       <Link underline="none"
-        key={filter}
-        sx={{ textTransform: 'none' }}>
+        key={filter}>
         {filter}
       </Link>);
   }
@@ -193,7 +191,7 @@ export const Keys: React.FC = () => {
             disableElevation
             color="primary"
             size="small"
-            sx={{ minWidth: '110px', paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400', whiteSpace: 'nowrap' }}
+            sx={{ minWidth: '110px', paddingTop: 0, paddingBottom: 0, fontWeight: '400', whiteSpace: 'nowrap' }}
             onClick={() => { setSelectedVerifiers(entries); setVerifiersDialogOpen(true) }}
           >
             {t('manyN', { n: entries.length })}
@@ -257,7 +255,7 @@ export const Keys: React.FC = () => {
             size="large"
             variant="outlined"
             startIcon={<SearchIcon />}
-            sx={{ position: 'absolute', right: '46px', top: '23px', textTransform: 'none', borderRadius: '20px' }}
+            sx={{ position: 'absolute', right: '46px', top: '23px', borderRadius: '20px' }}
             onClick={() => setReverseLookupDialogOpen(true)}
           >
             {t('reverseLookup')}
@@ -267,7 +265,6 @@ export const Keys: React.FC = () => {
             sx={{ marginLeft: '10px', marginBottom: '10px' }}>
             <Link underline="none"
               href=""
-              sx={{ textTransform: 'none' }}
               onClick={event => { event.preventDefault(); setFilter(undefined); setParent('') }}>
               {t('root')}
             </Link>

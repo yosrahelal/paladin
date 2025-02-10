@@ -77,11 +77,11 @@ export const Header: React.FC = () => {
                 <Tabs
                   TabIndicatorProps={{ style: { height: '4px' } }}
                   value={tab} onChange={(_event, value) => handleNavigation(value)} centered>
-                  <Tab sx={{ textTransform: 'none' }} label={t('indexer')} />
-                  <Tab sx={{ textTransform: 'none' }} label={t('submissions')} />
-                  <Tab sx={{ textTransform: 'none' }} label={t('peers')} />
-                  <Tab sx={{ textTransform: 'none' }} label={t('keys')} />
-                  <Tab sx={{ textTransform: 'none' }} label={t('registry')} />
+                  <Tab label={t('indexer')} />
+                  <Tab label={t('submissions')} />
+                  <Tab label={t('peers')} />
+                  <Tab label={t('keys')} />
+                  <Tab label={t('registry')} />
                 </Tabs>
               </Grid2>
               <Grid2 size={{ xs: 12, sm: 12, md: 3 }}>
@@ -89,7 +89,7 @@ export const Header: React.FC = () => {
                   sx={{ padding: lessThanMedium ? '20px' : undefined }}>
                   {refreshRequired &&
                     <Grid2>
-                      <Button size="small" startIcon={<RefreshIcon />} variant="outlined" sx={{ textTransform: 'none', borderRadius: '20px' }}
+                      <Button size="small" startIcon={<RefreshIcon />} variant="outlined" sx={{ borderRadius: '20px' }}
                         onClick={() => refresh()}>
                         {t('newData')}
                       </Button>

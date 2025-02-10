@@ -58,8 +58,8 @@ export const Submissions: React.FC = () => {
       >
         <Box sx={{ marginBottom: '20px', textAlign: 'right' }}>
           <ToggleButtonGroup exclusive onChange={(_event, value) => setTab(value)} value={tab}>
-            <ToggleButton color="primary" value="all" sx={{ textTransform: 'none', width: '130px', height: '45px' }}>{t('all')}</ToggleButton>
-            <ToggleButton color="primary" value="pending" sx={{ textTransform: 'none', width: '130px', height: '45px' }}>{t('pending')}</ToggleButton>
+            <ToggleButton color="primary" value="all" sx={{ width: '130px', height: '45px' }}>{t('all')}</ToggleButton>
+            <ToggleButton color="primary" value="pending" sx={{ width: '130px', height: '45px' }}>{t('pending')}</ToggleButton>
           </ToggleButtonGroup>
         </Box>
         <Box

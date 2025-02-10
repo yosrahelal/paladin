@@ -111,9 +111,9 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
         </Box>
         <Box sx={{ padding: '10px'}}>
         <Box sx={{ display: 'flex', justifyContent: 'right' }}>
-          <Button size="small" startIcon={<VisibilityIcon />} sx={{ marginRight: '40px', textTransform: 'none', fontWeight: '400' }}
+          <Button size="small" startIcon={<VisibilityIcon />} sx={{ marginRight: '40px', fontWeight: '400' }}
             onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
-          <Button sx={{ textTransform: 'none', fontWeight: '400', minWidth: '140px' }} size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          <Button sx={{ fontWeight: '400', minWidth: '140px' }} size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
             onClick={() => setIsExpanded(!isExpanded)}>
             {t(isExpanded ? 'hideProperties' : 'showProperties')}
           </Button>

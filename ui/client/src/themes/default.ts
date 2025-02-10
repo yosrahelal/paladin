@@ -32,6 +32,29 @@ export const darkThemeOptions: ThemeOptions = {
       paper: '#1E242B',
     }
   },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none'
+        }
+      }
+    },
+    MuiTab: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none'
+        }
+      }
+    },
+    MuiToggleButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none'
+        }
+      }
+    }
+  }
 };
 
 export const lightThemeOptions: ThemeOptions = {

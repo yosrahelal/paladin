@@ -90,12 +90,12 @@ export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
             </Grid2>
             <Grid2 container spacing={3} size="grow" justifyContent="end">
               <Grid2>
-                <Button size="small" startIcon={<VisibilityIcon />} sx={{ minWidth: '120px', textTransform: 'none', fontWeight: '400' }}
+                <Button size="small" startIcon={<VisibilityIcon />} sx={{ minWidth: '120px', fontWeight: '400' }}
                   onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
               </Grid2>
               <Grid2>
                 <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                  onClick={() => setIsExpanded(!isExpanded)} sx={{ minWidth: '140px', textTransform: 'none', fontWeight: '400' }}>
+                  onClick={() => setIsExpanded(!isExpanded)} sx={{ minWidth: '140px', fontWeight: '400' }}>
                   {t(isExpanded ? 'hideProperties' : 'showProperties')}
                 </Button>
               </Grid2>

@@ -68,7 +68,7 @@ export const Event: React.FC<Props> = ({ event }) => {
         </Box>
         <Box sx={{ display: 'flex', padding: '10px', justifyContent: 'end' }}>
           <EllapsedTime timestamp={event.block.timestamp} />
-          <Button sx={{ marginLeft: '20px', textTransform: 'none', fontWeight: '400' }} size="small" startIcon={<VisibilityIcon />}
+          <Button sx={{ marginLeft: '20px', fontWeight: '400' }} size="small" startIcon={<VisibilityIcon />}
             onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
         </Box>
       </Box>

@@ -73,7 +73,7 @@ export const Nodes: React.FC = () => {
             size="large"
             variant="outlined"
             startIcon={<LocationOnOutlinedIcon />}
-            sx={{ position: 'absolute', right: '46px', top: '23px', textTransform: 'none', borderRadius: '20px' }}
+            sx={{ position: 'absolute', right: '46px', top: '23px', borderRadius: '20px' }}
             onClick={() => setMyNodeDialogOpen(true)}
           >
             {transportNodeName}
