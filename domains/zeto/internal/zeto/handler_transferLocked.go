@@ -255,16 +255,11 @@ func (h *transferLockedHandler) Prepare(ctx context.Context, tx *types.ParsedTra
 		return nil, err
 	}
 
-	signer := tx.Params.(*types.TransferLockedParams).Delegate
-	if signer == "" {
-		signer = req.Transaction.From
-	}
-
 	return &pb.PrepareTransactionResponse{
 		Transaction: &pb.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
-			RequiredSigner:  &signer,
+			RequiredSigner:  &tx.Params.(*types.TransferLockedParams).Delegate,
 		},
 	}, nil
 }
@@ -291,7 +286,7 @@ func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*tktypes.He
 	for i, state := range inputStates {
 		err := json.Unmarshal([]byte(state.DataJson), &inputCoins[i])
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalStateData, err)
 		}
 		if inputCoins[i].Locked == false {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorInputNotLocked, state.Id)

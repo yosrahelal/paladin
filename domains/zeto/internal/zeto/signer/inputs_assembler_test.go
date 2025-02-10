@@ -87,7 +87,8 @@ func TestAssembleInputsAnonNullifier_fail(t *testing.T) {
 				Nodes: []string{"0", "0", "0"},
 			},
 		},
-		Enabled: []bool{true, false},
+		Enabled:  []bool{true, false},
+		Delegate: "0x1234567890123456789012345678901234567890",
 	}
 	key := core.KeyEntry{}
 	ctx := context.Background()
@@ -96,6 +97,7 @@ func TestAssembleInputsAnonNullifier_fail(t *testing.T) {
 	assert.Equal(t, "123456", privateInputs["root"].(*big.Int).Text(16))
 	assert.Equal(t, "1", privateInputs["enabled"].([]*big.Int)[0].Text(10))
 	assert.Equal(t, "0", privateInputs["enabled"].([]*big.Int)[1].Text(10))
+	assert.Equal(t, "1234567890123456789012345678901234567890", privateInputs["lockDelegate"].(*big.Int).Text(16))
 
 	extras.Root = "bad number"
 	_, err = assembleInputs_anon_nullifier(ctx, &inputs, &extras, &key)
@@ -162,4 +164,18 @@ func TestAssembleInputsWithdrawNullifier(t *testing.T) {
 	assert.Equal(t, "123", privateInputs["root"].(*big.Int).Text(16))
 	assert.Len(t, privateInputs["nullifiers"], 1)
 	assert.NotEqual(t, "0", privateInputs["nullifiers"].([]*big.Int)[0].Text(10))
+}
+
+func TestAssembleInputsLock(t *testing.T) {
+	inputs := commonWitnessInputs{
+		inputCommitments: []*big.Int{big.NewInt(100)},
+		inputValues:      []*big.Int{big.NewInt(100)},
+		inputSalts:       []*big.Int{big.NewInt(200)},
+	}
+	_, _, zkpKey := newKeypair()
+	key := core.KeyEntry{
+		PrivateKeyForZkp: zkpKey,
+	}
+	result := assembleInputs_lock(&inputs, &key)
+	assert.Equal(t, "100", result["commitments"].([]*big.Int)[0].Text(10))
 }

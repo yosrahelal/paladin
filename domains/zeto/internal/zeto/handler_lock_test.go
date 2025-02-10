@@ -267,14 +267,19 @@ func TestLockPrepare(t *testing.T) {
 		Transaction: &prototk.TransactionSpecification{
 			TransactionId: "bad hex",
 		},
+		InputStates: []*prototk.EndorsableState{
+			{
+				StateDataJson: "bad json",
+			},
+		},
 		InfoStates: []*prototk.EndorsableState{
 			{
-				StateDataJson: "{\"size\":\"1\"}",
+				StateDataJson: "bad json",
 			},
 		},
 		OutputStates: []*prototk.EndorsableState{
 			{
-				StateDataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}",
+				StateDataJson: "bad json",
 			},
 		},
 	}
@@ -287,6 +292,18 @@ func TestLockPrepare(t *testing.T) {
 		PayloadType:     &at,
 		Payload:         payload,
 	})
+	_, err = h.Prepare(ctx, tx, req)
+	assert.ErrorContains(t, err, "PD210045: Failed to parse input states.")
+
+	req.InputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}"
+	_, err = h.Prepare(ctx, tx, req)
+	assert.ErrorContains(t, err, "PD210115: Failed to parse info states.")
+
+	req.InfoStates[0].StateDataJson = "{\"size\":\"1\"}"
+	_, err = h.Prepare(ctx, tx, req)
+	assert.ErrorContains(t, err, "PD210047: Failed to parse output states.")
+
+	req.OutputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}"
 	_, err = h.Prepare(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id.")
 
@@ -302,7 +319,6 @@ func TestLockPrepare(t *testing.T) {
 	req.AttestationResult[0].Payload = payload
 	_, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "", req.Transaction.FunctionAbiJson)
 
 	tx.DomainConfig.TokenName = "Zeto_AnonNullifier"
 	_, err = h.Prepare(ctx, tx, req)
