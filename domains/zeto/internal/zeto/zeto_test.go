@@ -105,6 +105,9 @@ func TestInitDomain(t *testing.T) {
 			{
 				Id: "schema3",
 			},
+			{
+				Id: "schema4",
+			},
 		},
 	}
 	res, err := z.InitDomain(context.Background(), req)

@@ -28,10 +28,7 @@ interface INotoPrivate {
         address delegate
     ) external;
 
-    function lock(
-        uint256 amount,
-        bytes calldata data
-    ) external;
+    function lock(uint256 amount, bytes calldata data) external;
 
     function unlock(
         bytes32 lockId,
@@ -49,6 +46,7 @@ interface INotoPrivate {
 
     function delegateLock(
         bytes32 lockId,
+        UnlockPublicParams calldata unlock,
         address delegate,
         bytes calldata data
     ) external;
@@ -64,5 +62,13 @@ interface INotoPrivate {
     struct UnlockRecipient {
         string to;
         uint256 amount;
+    }
+
+    struct UnlockPublicParams {
+        bytes32[] lockedInputs;
+        bytes32[] lockedOutputs;
+        bytes32[] outputs;
+        bytes signature;
+        bytes data;
     }
 }

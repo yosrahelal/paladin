@@ -381,9 +381,10 @@ func (s *notoTestSuite) TestNotoLock() {
 	}, true)
 	require.NoError(t, rpcerr)
 
-	lockID, err := extractLockID(notoDomain, &invokeResult)
+	lockInfo, err := extractLockInfo(notoDomain, &invokeResult)
 	require.NoError(t, err)
-	require.NotEmpty(t, lockID)
+	require.NotNil(t, lockInfo)
+	require.NotEmpty(t, lockInfo.LockID)
 
 	lockedCoins := findAvailableCoins[types.NotoLockedCoinState](t, ctx, rpc, notoDomain.Name(), notoDomain.LockedCoinSchemaID(), noto.Address, nil)
 	require.Len(t, lockedCoins, 1)
@@ -425,7 +426,7 @@ func (s *notoTestSuite) TestNotoLock() {
 			To:       noto.Address,
 			Function: "prepareUnlock",
 			Data: toJSON(t, &types.UnlockParams{
-				LockID: lockID,
+				LockID: lockInfo.LockID,
 				From:   recipient1Name,
 				Recipients: []*types.UnlockRecipient{{
 					To:     recipient2Name,
@@ -437,7 +438,9 @@ func (s *notoTestSuite) TestNotoLock() {
 		ABI: types.NotoABI,
 	}, true)
 	require.NoError(t, rpcerr)
-	_, _, unlockParams, _, _ := buildUnlock(ctx, notoDomain, noto.ABI, lockID, &invokeResult)
+
+	_, _, unlockParams, _, err := buildUnlock(ctx, notoDomain, noto.ABI, &invokeResult)
+	require.NoError(t, err)
 
 	log.L(ctx).Infof("Delegate lock to recipient2")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &pldapi.TransactionInput{
@@ -446,7 +449,8 @@ func (s *notoTestSuite) TestNotoLock() {
 			To:       noto.Address,
 			Function: "delegateLock",
 			Data: toJSON(t, &types.DelegateLockParams{
-				LockID:   lockID,
+				LockID:   lockInfo.LockID,
+				Unlock:   unlockParams,
 				Delegate: tktypes.MustEthAddress(recipient2Key.Verifier.Verifier),
 			}),
 		},

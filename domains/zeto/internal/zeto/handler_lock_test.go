@@ -134,6 +134,9 @@ func TestLockAssemble(t *testing.T) {
 			coinSchema: &prototk.StateSchema{
 				Id: "coin",
 			},
+			lockedInfoSchema: &prototk.StateSchema{
+				Id: "locked",
+			},
 			Callbacks: testCallbacks,
 		},
 	}
@@ -263,6 +266,16 @@ func TestLockPrepare(t *testing.T) {
 	req := &prototk.PrepareTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
 			TransactionId: "bad hex",
+		},
+		InfoStates: []*prototk.EndorsableState{
+			{
+				StateDataJson: "{\"size\":\"1\"}",
+			},
+		},
+		OutputStates: []*prototk.EndorsableState{
+			{
+				StateDataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}",
+			},
 		},
 	}
 	_, err := h.Prepare(ctx, tx, req)
