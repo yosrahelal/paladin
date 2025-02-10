@@ -128,7 +128,7 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		if err != nil {
 			resolvedDelegate := domain.FindVerifier(params.Delegate, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
 			if resolvedDelegate == nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, tx.Transaction.From)
+				return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, params.Delegate)
 			}
 			delegateAddr = resolvedDelegate.Verifier
 		} else {
