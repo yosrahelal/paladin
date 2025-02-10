@@ -170,7 +170,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	rpcerr = s.rpc.CallRPC(ctx, &controllerAddr, "ptx_resolveVerifier", controllerName, zetosignerapi.AlgoDomainZetoSnarkBJJ(s.domainName), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X)
 	require.Nil(t, rpcerr)
 
-	coins := findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
+	coins := findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, isNullifiersToken)
 	require.Len(t, coins, 2)
 	assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64())
 	assert.Equal(t, controllerAddr.String(), coins[0].Data.Owner.String())
@@ -210,7 +210,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	}
 
 	// check that we now only have one unspent coin, of value 5
-	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
+	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, isNullifiersToken)
 	// one for the controller from the successful transaction as change (value=5)
 	// one for the recipient (value=25)
 	expectedCoins := 2
@@ -253,7 +253,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	require.NoError(t, err)
 
 	expectedCoins += 2 // the deposit call produces 2 output UTXOs for the receiver
-	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken)
+	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, isNullifiersToken)
 	require.Len(t, coins, expectedCoins)
 
 	log.L(ctx).Info("*************************************")
@@ -280,7 +280,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	_, err = s.lock(ctx, zetoAddress, controllerName, 1, recipient1EthAddr)
 	require.NoError(t, err)
 
-	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil, isNullifiersToken, true /* locked */)
+	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, isNullifiersToken, true /* locked */)
 	require.Len(t, coins, 2)
 	locked1, _ := coins[0].Data.Hash(ctx)
 	locked2, _ := coins[1].Data.Hash(ctx)
@@ -587,11 +587,9 @@ func (s *zetoDomainTestSuite) PrepareTransferLocked(ctx context.Context, zetoAdd
 	return &result, nil
 }
 
-func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcclient.Client, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON, useNullifiers bool, locked ...bool) []*types.ZetoCoinState {
+func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcclient.Client, zeto zeto.Zeto, address tktypes.EthAddress, useNullifiers bool, locked ...bool) []*types.ZetoCoinState {
 	isLocked := len(locked) > 0 && locked[0]
-	if jq == nil {
-		jq = query.NewQueryBuilder().Limit(100).Equal("locked", isLocked).Query()
-	}
+	jq := query.NewQueryBuilder().Limit(100).Equal("locked", isLocked).Query()
 	methodName := "pstate_queryContractStates"
 	if useNullifiers {
 		methodName = "pstate_queryContractNullifiers"
