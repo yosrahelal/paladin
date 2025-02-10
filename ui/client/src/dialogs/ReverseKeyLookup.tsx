@@ -28,10 +28,10 @@ import {
   TextField
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { t } from 'i18next';
 import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import { reverseKeyLookup } from '../queries/keys';
 import { constants } from '../components/config';
+import { useTranslation } from 'react-i18next';
 
 type Props = {
   dialogOpen: boolean
@@ -54,6 +54,7 @@ export const ReverseKeyLookupDialog: React.FC<Props> = ({
   const [otherAlgorithm, setOtherAlgorithm] = useState('');
   const [algorithm, setAlgorithm] = useState('');
   const [notFound, setNotFound] = useState(false);
+  const { t } = useTranslation();
 
   const { refetch } = useQuery({
     queryKey: ["reverseKeyLookup"],
@@ -122,9 +123,6 @@ export const ReverseKeyLookupDialog: React.FC<Props> = ({
           <Box sx={{ marginTop: '5px' }}>
             <TextField
               autoFocus
-              slotProps={{
-                inputLabel: { shrink: true },
-              }}
               autoComplete="off"
               fullWidth
               label={t('address')}
@@ -141,9 +139,6 @@ export const ReverseKeyLookupDialog: React.FC<Props> = ({
             </RadioGroup>
             <Box sx={{ marginTop: '15px', marginLeft: '30px' }}>
               <TextField
-                slotProps={{
-                  inputLabel: { shrink: true },
-                }}
                 autoComplete="off"
                 fullWidth
                 disabled={isEthereum}
@@ -153,9 +148,6 @@ export const ReverseKeyLookupDialog: React.FC<Props> = ({
               </TextField>
               <TextField
                 sx={{ marginTop: '20px' }}
-                slotProps={{
-                  inputLabel: { shrink: true },
-                }}
                 autoComplete="off"
                 fullWidth
                 disabled={isEthereum}

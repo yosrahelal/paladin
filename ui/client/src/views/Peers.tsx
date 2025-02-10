@@ -22,15 +22,16 @@ import { Alert, Box, Button, Fade, Typography, useTheme } from "@mui/material";
 import { getAltModeScrollBarStyle } from "../themes/default";
 import { TransportPeer } from "../components/TransportPeer";
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { t } from "i18next";
 import { fetchTransportNodeName, fetchTransportPeers } from "../queries/transport";
 import { MyNodeDialog } from "../dialogs/MyNode";
+import { useTranslation } from "react-i18next";
 
 export const Nodes: React.FC = () => {
 
   const { lastBlockWithTransactions, autoRefreshEnabled } = useContext(ApplicationContext);
   const theme = useTheme();
   const [MyNodeDialogOpen, setMyNodeDialogOpen] = useState(false);
+  const { t } = useTranslation();
 
   const { data: transportNodeName, error: errorFetchingTransportNodeName, isFetching: isFetchingTransportNodeName } = useQuery({
     queryKey: ["transportNodeName"],

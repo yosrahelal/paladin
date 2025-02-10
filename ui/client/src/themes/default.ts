@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -18,6 +18,15 @@ import { PaletteMode, ThemeOptions } from '@mui/material';
 
 const commonThemeOptions: ThemeOptions = {
   components: {
+    MuiTextField: {
+      defaultProps: {
+        slotProps: {
+          inputLabel: {
+            shrink: true
+          }
+        }
+      }
+    },
     MuiButton: {
       styleOverrides: {
         root: {

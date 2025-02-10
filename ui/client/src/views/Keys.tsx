@@ -14,9 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Breadcrumbs, Button, Fade, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Breadcrumbs, Button, Fade, Grid2, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { t } from "i18next";
 import { useEffect, useState } from "react";
 import { fetchKeys } from "../queries/keys";
 import { Hash } from "../components/Hash";
@@ -30,6 +29,9 @@ import SearchIcon from '@mui/icons-material/Search';
 import { ReverseKeyLookupDialog } from "../dialogs/ReverseKeyLookup";
 import RemoveIcon from '@mui/icons-material/Remove';
 import { VerifiersDialog } from "../dialogs/Verifiers";
+import { AddFilterDialog } from "../dialogs/AddFilter";
+import FilterAltOutlinedIcon from '@mui/icons-material/FilterAltOutlined';
+import { useTranslation } from "react-i18next";
 
 export const Keys: React.FC = () => {
 
@@ -61,6 +63,8 @@ export const Keys: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(getDefaultSortOrder);
   const [selectedVerifiers, setSelectedVerifiers] = useState<IVerifier[]>();
   const [verifiersDialogOpen, setVerifiersDialogOpen] = useState(false);
+  const [addFilterDialogOpen, setAddFilterDialogOpen] = useState(true);
+  const { t } = useTranslation();
 
   useEffect(() => {
     setFilter(searchParams.get('filter') ?? undefined);
@@ -245,21 +249,40 @@ export const Keys: React.FC = () => {
             maxWidth: "1300px",
             marginLeft: "auto",
             marginRight: "auto",
-            position: 'relative'
           }}
         >
-          <Typography align="center" variant="h5" sx={{ marginBottom: '20px' }}>
-            {t("localKeys")}
-          </Typography>
-          <Button
-            size="large"
-            variant="outlined"
-            startIcon={<SearchIcon />}
-            sx={{ position: 'absolute', right: '46px', top: '23px', borderRadius: '20px' }}
-            onClick={() => setReverseLookupDialogOpen(true)}
-          >
-            {t('reverseLookup')}
-          </Button>
+          <Grid2 container alignItems="center" spacing={2}>
+            <Grid2 sx={{ display: { xs: 'none', sm: 'none', md: 'block' } }} size={{ md: 4 }} />
+            <Grid2 size={{ xs: 12, md: 4 }}>
+              <Typography align="center" variant="h5">
+                {t("localKeys")}
+              </Typography>
+            </Grid2>
+            <Grid2 size={{ xs: 12, md: 4 }} container justifyContent={{ xs: 'center', sm: 'center', md: 'right' }}>
+              <Grid2>
+                <Button
+                  size="large"
+                  variant="outlined"
+                  startIcon={<SearchIcon />}
+                  sx={{ borderRadius: '20px' }}
+                  onClick={() => setReverseLookupDialogOpen(true)}
+                >
+                  {t('reverseLookup')}
+                </Button>
+              </Grid2>
+              <Grid2>
+                <Button
+                  size="large"
+                  variant="outlined"
+                  startIcon={<FilterAltOutlinedIcon />}
+                  sx={{ borderRadius: '20px' }}
+                  onClick={() => setAddFilterDialogOpen(true)}
+                >
+                  {t('filter')}
+                </Button>
+              </Grid2>
+            </Grid2>
+          </Grid2>
           <Breadcrumbs
             separator={<NavigateNextIcon fontSize="small" />}
             sx={{ marginLeft: '10px', marginBottom: '10px' }}>
@@ -360,6 +383,27 @@ export const Keys: React.FC = () => {
           setDialogOpen={setVerifiersDialogOpen}
           verifiers={selectedVerifiers}
         />}
+      <AddFilterDialog
+      filterFields={[
+        {
+          label: t('name'),
+          name: 'name',
+          type: 'string'
+        },
+        {
+          label: t('index'),
+          name: 'index',
+          type: 'number'
+        },
+        {
+          label: t('isKey'),
+          name: 'isKey',
+          type: 'boolean'
+        }
+      ]}
+        dialogOpen={addFilterDialogOpen}
+        setDialogOpen={setAddFilterDialogOpen}
+      />
     </>
   );
 }

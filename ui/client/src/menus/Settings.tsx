@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -15,7 +15,6 @@
 // limitations under the License.
 
 import { Box, Button, Grid2, Menu, ToggleButton, ToggleButtonGroup, Typography, useTheme } from "@mui/material";
-import { t } from "i18next";
 import { useContext, useState } from "react";
 import { ApplicationContext } from "../contexts/ApplicationContext";
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -23,6 +22,7 @@ import PauseIcon from '@mui/icons-material/Pause';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { ABIUploadDialog } from "../dialogs/ABIUpload";
+import { useTranslation } from "react-i18next";
 
 export type Props = {
   anchorEl: HTMLElement | null;
@@ -38,6 +38,7 @@ export const SettingsMenu: React.FC<Props> = ({
   const [abiUploadDialogOpen, setAbiUploadDialogOpen] = useState(false);
 
   const theme = useTheme();
+  const { t } = useTranslation();
 
   const handleAutoRefreshChange = (value: 'play' | 'pause' | null) => {
     switch (value) {

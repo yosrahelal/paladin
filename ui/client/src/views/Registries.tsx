@@ -16,17 +16,18 @@
 
 import { Alert, Box, Fade, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { t } from "i18next";
 import { useContext } from "react";
 import { Registry } from "../components/Registry";
 import { ApplicationContext } from "../contexts/ApplicationContext";
 import { fetchRegistries } from "../queries/registry";
 import { getAltModeScrollBarStyle } from "../themes/default";
+import { useTranslation } from "react-i18next";
 
 export const Registries: React.FC = () => {
 
   const { lastBlockWithTransactions, autoRefreshEnabled } = useContext(ApplicationContext);
   const theme = useTheme();
+  const { t } = useTranslation();
 
   const { data: registries, error, isFetching } = useQuery({
     queryKey: ["registries", autoRefreshEnabled, lastBlockWithTransactions],

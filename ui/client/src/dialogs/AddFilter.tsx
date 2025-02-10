@@ -1,0 +1,209 @@
+// Copyright © 2025 Kaleido, Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
+  FormLabel,
+  Grid2,
+  MenuItem,
+  Radio,
+  RadioGroup,
+  TextField
+} from '@mui/material';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { IFilterField } from '../interfaces';
+
+type Props = {
+  filterFields: IFilterField[]
+  dialogOpen: boolean
+  setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
+}
+
+export const AddFilterDialog: React.FC<Props> = ({
+  filterFields,
+  dialogOpen,
+  setDialogOpen
+}) => {
+
+  const [selectedFilterField, setSelectedFilterField] = useState<IFilterField>();
+  const [operators, setOperators] = useState<JSX.Element[]>([]);
+  const [selectedOperator, setSelectedOperator] = useState<string>();
+  const [value, setValue] = useState('');
+  const [booleanValue, setBooleanValue] = useState(true);
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    if (!dialogOpen) {
+      setTimeout(() => {
+        setSelectedFilterField(undefined);
+        setSelectedOperator(undefined);
+        setValue('');
+        setBooleanValue(true);
+      }, 200);
+    }
+  }, [dialogOpen]);
+
+  useEffect(() => {
+    if (selectedFilterField !== undefined) {
+      let availableOperators: JSX.Element[] = [
+        <MenuItem key="equal" value="equal">{t('equal')}</MenuItem>
+      ];
+      if (selectedFilterField.type !== 'boolean') {
+        availableOperators = [
+          ...availableOperators,
+          <MenuItem key="notEqual" value="notEqual">{t('notEqual')}</MenuItem>,
+          <MenuItem key="greaterThan" value="greaterThan">{t('greaterThan')}</MenuItem>,
+          <MenuItem key="greaterThanOrEqual" value="greaterThanOrEqual">{t('greaterThanOrEqual')}</MenuItem>,
+          <MenuItem key="lessThan" value="lessThan">{t('lessThan')}</MenuItem>,
+          <MenuItem key="lessThanOrEqual" value="lessThanOrEqual">{t('lessThanOrEqual')}</MenuItem>]
+        if (selectedFilterField?.type === 'string') {
+          availableOperators = [
+            ...availableOperators,
+            <MenuItem key="contains" value="contains">{t('contains')}</MenuItem>,
+            <MenuItem key="startsWith" value="startsWith">{t('startsWith')}</MenuItem>,
+            <MenuItem key="endsWith" value="endsWith">{t('endsWith')}</MenuItem>,
+            <MenuItem key="doesNotContain" value="doesNotContain">{t('doesNotContain')}</MenuItem>,
+            <MenuItem key="doesNotStartWith" value="doesNotStartWith">{t('doesNotStartWith')}</MenuItem>,
+            <MenuItem key="doesNotEndWith" value="doesNotEndWith">{t('doesNotEndWith')}</MenuItem>];
+        }
+      }
+      if (!availableOperators.some(operator => operator.key === selectedOperator)) {
+        setSelectedOperator('equal');
+      }
+      if (selectedFilterField.type === 'number' && isNaN(Number(value))) {
+        setValue('');
+      }
+      setOperators(availableOperators);
+    }
+  }, [selectedFilterField]);
+
+  const handleSubmit = () => {
+    
+  };
+
+  const canSubmit = selectedFilterField !== undefined
+    && selectedOperator !== undefined
+    && (selectedFilterField.type === 'boolean' || value.length > 0);
+
+  return (
+    <Dialog
+      open={dialogOpen}
+      onClose={() => setDialogOpen(false)}
+      fullWidth
+      maxWidth="md"
+    >
+      <form onSubmit={(event) => {
+        event.preventDefault();
+        handleSubmit();
+      }}>
+        <DialogTitle sx={{ textAlign: 'center' }}>
+          {t('addFilter')}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ marginTop: '5px' }}>
+            <Grid2 container spacing={2} alignItems="center">
+              <Grid2 size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  label={t('field')}
+                  autoComplete="off"
+                  fullWidth
+                  value={selectedFilterField?.name ?? ''}
+                  onChange={event => {
+                    setSelectedFilterField(filterFields.find(filterField => filterField.name === event.target.value))
+                  }}
+                  select
+                >
+                  {filterFields.map(filterField =>
+                    <MenuItem key={filterField.name} value={filterField.name}>{filterField.label}</MenuItem>
+                  )}
+                </TextField>
+              </Grid2>
+              <Grid2 size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  label={t('operator')}
+                  autoComplete="off"
+                  fullWidth
+                  value={selectedOperator ?? ''}
+                  onChange={event => setSelectedOperator(event.target.value)}
+                  select
+                  disabled={selectedFilterField === undefined}
+                >
+                  {operators}
+                </TextField>
+              </Grid2>
+              <Grid2 size={{ xs: 12, sm: 4 }}>
+                {selectedFilterField?.type === 'boolean' ?
+                  <Box sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '15px',
+                    justifyContent: 'center'
+                  }}>
+                    <FormLabel>{t('valueColon')}</FormLabel>
+                    <RadioGroup
+                      row
+                      value={booleanValue}
+                      onChange={event => setBooleanValue(event.target.value === 'true')}>
+                      <FormControlLabel value="true" control={<Radio />} label={t('true')} />
+                      <FormControlLabel value="false" control={<Radio />} label={t('false')} />
+                    </RadioGroup>
+                  </Box>
+                  :
+                  <TextField
+                    type={selectedFilterField?.type === 'number' ? 'number' : 'text'}
+                    label={t('value')}
+                    autoComplete="off"
+                    fullWidth
+                    disabled={selectedFilterField === undefined}
+                    value={value}
+                    onChange={event => setValue(event.target.value)}
+                  />}
+              </Grid2>
+            </Grid2>
+          </Box>
+
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'center', paddingBottom: '20px' }}>
+          <Button
+            sx={{ minWidth: '100px' }}
+            size="large"
+            variant="contained"
+            disableElevation
+            disabled={!canSubmit}
+            type="submit">
+            {t('add')}
+          </Button>
+          <Button
+            sx={{ minWidth: '100px' }}
+            size="large"
+            variant="outlined"
+            disableElevation
+            onClick={() => setDialogOpen(false)}
+          >
+            {t('cancel')}
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
+  );
+};
