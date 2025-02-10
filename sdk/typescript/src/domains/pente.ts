@@ -196,14 +196,6 @@ export class PentePrivacyGroup {
       this.options
     );
   }
-
-  // deploy a contract
-  // async deploy<ConstructorParams>(
-  //   abi: ReadonlyArray<ethers.JsonFragment>,
-  //   bytecode: string,
-  //   from: PaladinVerifier,
-  //   inputs?: ConstructorParams
-  // ) {
   
   async deploy(params: PenteDeploy) {
 
