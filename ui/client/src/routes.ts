@@ -18,5 +18,6 @@ export const AppRoutes = {
   Indexer: '/ui/indexer',
   Submissions: '/ui/submissions',
   Peers: '/ui/peers',
+  Keys: '/ui/keys',
   Registry: '/ui/registry'
 }
