@@ -16,22 +16,7 @@
 
 import { PaletteMode, ThemeOptions } from '@mui/material';
 
-export const darkThemeOptions: ThemeOptions = {
-
-  palette: {
-    mode: 'dark',
-    primary: {
-      main: '#20dfdf',
-      dark: '#6D6D6D'
-    },
-    secondary: {
-      main: '#bbbbbb',
-    },
-    background: {
-      default: 'black',
-      paper: '#1E242B',
-    }
-  },
+const commonThemeOptions: ThemeOptions = {
   components: {
     MuiButton: {
       styleOverrides: {
@@ -57,7 +42,26 @@ export const darkThemeOptions: ThemeOptions = {
   }
 };
 
+export const darkThemeOptions: ThemeOptions = {
+  ...commonThemeOptions,
+  palette: {
+    mode: 'dark',
+    primary: {
+      main: '#20dfdf',
+      dark: '#6D6D6D'
+    },
+    secondary: {
+      main: '#bbbbbb',
+    },
+    background: {
+      default: 'black',
+      paper: '#1E242B',
+    }
+  }
+};
+
 export const lightThemeOptions: ThemeOptions = {
+  ...commonThemeOptions,
   palette: {
     mode: 'light',
     primary: {
