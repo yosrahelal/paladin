@@ -17,14 +17,22 @@ package groupmgr
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,5 +62,94 @@ func newTestRPCServer(t *testing.T, ctx context.Context, gm *groupManager) (rpcc
 	c := rpcclient.WrapRestyClient(resty.New().SetBaseURL(fmt.Sprintf("http://%s", s.HTTPAddr())))
 
 	return c, s.Stop
+
+}
+
+func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
+	mergedGenesis := `{
+		"name": "secret things",
+		"version": "200"
+	}`
+	ctx, gm, _, done := newTestGroupManager(t, true, &pldconf.GroupManagerConfig{}, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").
+			Return([]*components.RegistryNodeTransportEntry{ /* contents not checked */ }, nil)
+
+		// Validate the init gets the correct data
+		ipg := mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything)
+		ipg.Run(func(args mock.Arguments) {
+			spec := args[1].(*pldapi.PrivacyGroupInput)
+			require.Equal(t, "domain1", spec.Domain)
+			require.JSONEq(t, `{"name": "secret things"}`, spec.Properties.Pretty())
+			require.Len(t, spec.Members, 2)
+			ipg.Return(
+				tktypes.RawJSON(mergedGenesis),
+				&abi.Parameter{
+					Name:         "TestPrivacyGroup",
+					Type:         "tuple",
+					InternalType: "struct TestPrivacyGroup;",
+					Indexed:      true,
+					Components: append(spec.PropertiesABI, &abi.Parameter{
+						Name:    "version",
+						Type:    "uint256",
+						Indexed: true,
+					}),
+				},
+				nil,
+			)
+		})
+
+		// Validate the state send gets the correct data
+		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+			msg := args[2].(*components.ReliableMessage)
+			require.Equal(t, components.RMTState, msg.MessageType.V())
+			var sd *components.StateDistribution
+			err := json.Unmarshal(msg.Metadata, &sd)
+			require.NoError(t, err)
+			require.Equal(t, "domain1", sd.Domain)
+			require.Empty(t, sd.ContractAddress)
+			require.Equal(t, "you@node2", sd.IdentityLocator)
+		})
+	})
+	defer done()
+
+	var groupID tktypes.HexBytes
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		groupID, err = gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me@node1", "you@node2"},
+			Properties: tktypes.RawJSON(`{
+			  "name": "secret things"
+			}`),
+		})
+		return err
+	})
+	require.NoError(t, err)
+	require.NotNil(t, groupID)
+
+	// Query it back - should be the only one
+	groups, err := gm.QueryGroups(ctx, gm.persistence.NOTX(), query.NewQueryBuilder().Equal("domain", "domain1").Limit(1).Query())
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+	require.Equal(t, "domain1", groups[0].Domain)
+	require.Equal(t, groupID, groups[0].ID)
+	require.NotNil(t, groups[0].Genesis)
+	require.JSONEq(t, mergedGenesis, string(groups[0].Genesis))            // enriched from state store
+	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members) // enriched from members table
+
+	// Get it directly by ID
+	group, err := gm.GetGroupByID(ctx, gm.persistence.NOTX(), "domain1", groupID)
+	require.NoError(t, err)
+	require.NotNil(t, group)
+
+	// Search for it by name
+	groups, err = gm.QueryGroupsByProperties(ctx, gm.persistence.NOTX(), "domain1", group.GenesisSchema,
+		query.NewQueryBuilder().Equal("name", "secret things").Equal("version", 200).Limit(1).Query())
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+	require.Equal(t, "domain1", groups[0].Domain)
+	require.Equal(t, groupID, groups[0].ID)
+	require.NotNil(t, groups[0].Genesis)
+	require.JSONEq(t, mergedGenesis, string(groups[0].Genesis))
+	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members)
 
 }

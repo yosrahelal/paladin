@@ -19,9 +19,11 @@ package groupmgr
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func (gm *groupManager) RPCModule() *rpcserver.RPCModule {
@@ -30,11 +32,36 @@ func (gm *groupManager) RPCModule() *rpcserver.RPCModule {
 
 func (gm *groupManager) initRPC() {
 	gm.rpcModule = rpcserver.NewRPCModule("pgroup").
-		Add("pgroup_queryGroups", gm.rpcQueryGroups())
+		Add("pgroup_createGroup", gm.rpcCreateGroup()).
+		Add("pgroup_getGroupById", gm.rpcGetGroupByID()).
+		Add("pgroup_queryGroups", gm.rpcQueryGroups()).
+		Add("pgroup_queryGroupsByProperties", gm.rpcQueryGroupsByProperties())
+}
+
+func (gm *groupManager) rpcCreateGroup() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context, spec pldapi.PrivacyGroupInput) (id tktypes.HexBytes, err error) {
+		err = gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+			id, err = gm.CreateGroup(ctx, dbTX, &spec)
+			return err
+		})
+		return id, err
+	})
+}
+
+func (gm *groupManager) rpcGetGroupByID() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context, domainName string, id tktypes.HexBytes) (*pldapi.PrivacyGroup, error) {
+		return gm.GetGroupByID(ctx, gm.persistence.NOTX(), domainName, id)
+	})
 }
 
 func (gm *groupManager) rpcQueryGroups() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
 		return gm.QueryGroups(ctx, gm.persistence.NOTX(), &jq)
+	})
+}
+
+func (gm *groupManager) rpcQueryGroupsByProperties() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod3(func(ctx context.Context, domainName string, schemaID tktypes.Bytes32, jq query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
+		return gm.QueryGroupsByProperties(ctx, gm.persistence.NOTX(), domainName, schemaID, &jq)
 	})
 }
