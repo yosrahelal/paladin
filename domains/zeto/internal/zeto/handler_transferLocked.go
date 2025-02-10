@@ -294,11 +294,7 @@ func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*tktypes.He
 			return nil, nil, err
 		}
 		if inputCoins[i].Locked == false {
-			hash, err := inputCoins[i].Hash(ctx)
-			if err != nil {
-				return nil, nil, err
-			}
-			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorInputNotLocked, hash)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorInputNotLocked, state.Id)
 		}
 		stateRefs = append(stateRefs, &pb.StateRef{
 			SchemaId: state.SchemaId,

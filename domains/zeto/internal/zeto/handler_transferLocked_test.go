@@ -287,6 +287,11 @@ func TestTransferLockedAssemble(t *testing.T) {
 	res, err = h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Len(t, res.AssembledTransaction.OutputStates, 2)
+
+	tx.Params.(*types.TransferLockedParams).Delegate = "0x1234567890123456789012345678901234567890"
+	called = 0
+	res, err = h.Assemble(ctx, tx, req)
+	assert.NoError(t, err)
 }
 
 func TestTransferLockedEndorse(t *testing.T) {
