@@ -1,6 +1,6 @@
 # Private Storage Contract
 
-In this tutorial, you'll learn how to deploy and interact with a **private storage contract** using Paladin's privacy groups. Unlike the public storage example, here only authorized members of a privacy group can interact with the contract, ensuring secure and private data handling.
+In this tutorial, you'll learn how to deploy and interact with a **private storage contract** using **Paladin’s privacy groups**. Unlike the **public storage contract**, where data is visible to everyone, **private storage ensures that only authorized members** of a privacy group can interact with the contract.
 
 ---
 
@@ -9,39 +9,36 @@ In this tutorial, you'll learn how to deploy and interact with a **private stora
 Before starting, make sure you have:
 
 1. Completed the [Public Storage Tutorial](./public-storage.md) and are familiar with:
-   - Deploying and interacting with contracts.
-   - Using Paladin SDK for blockchain transactions.
-2. A running Paladin network with multiple nodes (at least 3 for this tutorial).
+   - Deploying and interacting with smart contracts.
+   - Using the Paladin SDK for blockchain transactions.
+2. A **running Paladin network** with at least **three nodes** (Node1, Node2, Node3).
 
 ---
 
 ## Overview
 
-The `PrivateStorage` tutorial demonstrates how to:
+This tutorial will guide you through:
 
-1. Create a **privacy group** with selected members.
-2. Deploy a **private Storage contract** within the group.
-3. Interact with the contract securely within the group.
-4. Test privacy by attempting access from a non-member node.
+1. **Creating a privacy group** – Define a **private transaction group** that includes selected members.
+2. **Deploying a private contract** – Deploy a **Storage** contract that only privacy group members can interact with.
+3. **Interacting with the contract** – Members will **store and retrieve values** securely.
+4. **Testing unauthorized access** – A non-member (Node3) will attempt to retrieve data, demonstrating **privacy enforcement**.
 
-The example code can be found in the [Paladin example repository](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/example/private-storage).
-
-The Solidity contract remains the same as in the [Public Storage Tutorial](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/solidity/contracts/tutorial/Storage.sol). However, the interaction is scoped to the privacy group.
+The **full example** code is available in the [Paladin example repository](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/example/private-storage).
 
 ---
 
 ## Step 1: Create a Privacy Group
 
-To enable private interactions, start by creating a privacy group with selected members.
+To **restrict contract access** to specific members, you first need to create a **privacy group**.
 
 ```typescript
-// Create a privacy group with Node1 and Node2
 logger.log("Creating a privacy group for Node1 and Node2...");
 const penteFactory = new PenteFactory(paladinNode1, "pente");
 const memberPrivacyGroup = await penteFactory.newPrivacyGroup(verifierNode1, {
   group: {
     salt: newGroupSalt(), // Generate a unique salt for the group
-    members: [verifierNode1, verifierNode2], // Include Node1 and Node2 as members
+    members: [verifierNode1, verifierNode2], // Only Node1 & Node2 are members
   },
   evmVersion: "shanghai",
   endorsementType: "group_scoped_identities",
@@ -55,19 +52,24 @@ if (!checkDeploy(memberPrivacyGroup)) {
 logger.log("Privacy group created successfully!");
 ```
 
+#### Key Points:  
+1.  The **privacy group** consists of **Node1 and Node2**.  
+2. Transactions within this group will **only be visible** to these members.  
+3. **Node3 is excluded**, meaning it **won’t have access** to private transactions.  
+
 ---
 
 ## Step 2: Deploy the Contract in the Privacy Group
 
-Deploy the `Storage` contract within the created privacy group.
+Now that the **privacy group** is established, **deploy** the `Storage` contract inside this group.
 
 ```typescript
 logger.log("Deploying a private Storage contract...");
-const contractAddress = await memberPrivacyGroup.deploy(
-  storageJson.abi, // ABI of the Storage contract
-  storageJson.bytecode, // Bytecode of the Storage contract
-  verifierNode1 // Deploying as Node1
-);
+const contractAddress = await memberPrivacyGroup.deploy({
+  abi: storageJson.abi,
+  bytecode: storageJson.bytecode,
+  from: verifierNode1.lookup
+});
 
 if (!contractAddress) {
   logger.error("Failed to deploy the private Storage contract.");
@@ -76,37 +78,56 @@ if (!contractAddress) {
 logger.log(`Private Storage contract deployed! Address: ${contractAddress}`);
 ```
 
+#### Key Points  
+
+1. The contract is deployed **inside the privacy group**, meaning **only group members** can interact with it.  
+2. **Transactions involving this contract are private** and only visible to **Node1 & Node2**.  
+
 ---
 
 ## Step 3: Store and Retrieve Values as Group Members
 
-### Store a Value
+### Storing a Value
 
-Group members can store values securely in the private contract.
+Now that the contract is deployed, **Node1** can store a value.
 
 ```typescript
 const privateStorage = new PrivateStorage(memberPrivacyGroup, contractAddress);
 
-logger.log("Storing value (125) in the private Storage contract...");
-const storeTx = await privateStorage.invoke(verifierNode1, "store", { num: 125 });
+const valueToStore = 125; // Example value to store
+logger.log(`Storing a value "${valueToStore}" in the contract...`);
+const storeTx = await privateStorageContract.sendTransaction({
+  from: verifierNode1.lookup,
+  function: "store",
+  data: { num: valueToStore }
+});
 logger.log("Value stored successfully! Transaction hash:", storeTx?.transactionHash);
 ```
 
 ---
 
-### Retrieve the Value as a Member
+### Retrieving the Stored Value
 
-Authorized group members can retrieve the stored value.
+Group members **Node1 & Node2** can now retrieve the stored value.
 
 ```typescript
-logger.log("Node1 retrieving the stored value...");
-const retrievedValueNode1 = await privateStorage.call(verifierNode1, "retrieve", []);
+// Retrieve the value as Node1
+logger.log("Node1 retrieving the value from the contract...");
+const retrievedValueNode1 = await privateStorageContract.call({
+    from: verifierNode1.lookup,
+    function: "retrieve"
+  }
+);
 logger.log("Node1 retrieved the value successfully:", retrievedValueNode1["value"]);
 
-logger.log("Node2 retrieving the stored value...");
-const retrievedValueNode2 = await privateStorage
+// Retrieve the value as Node2
+logger.log("Node2 retrieving the value from the contract...");
+const retrievedValueNode2 = await privateStorageContract
   .using(paladinNode2)
-  .call(verifierNode2, "retrieve", []);
+  .call({
+    from: verifierNode2.lookup,
+    function: "retrieve",
+  });
 logger.log("Node2 retrieved the value successfully:", retrievedValueNode2["value"]);
 ```
 
@@ -114,20 +135,23 @@ logger.log("Node2 retrieved the value successfully:", retrievedValueNode2["value
 
 ## Step 4: Verify Privacy by Testing Unauthorized Access
 
-In a **privacy group**, all **inputs and outputs of transactions remain private** among group members. This means that **Node3 (an outsider) cannot reconstruct the contract’s current state** because it was never included in the private state updates.  
+Now, let’s test if **Node3 (an outsider)** can access the stored data.  
 
-Unlike traditional access control mechanisms where permissions are enforced at the contract level, **Paladin’s privacy groups ensure that only the designated members receive and share the necessary state information**. As a result, **Node3 does not have access to any past transactions or stored values, preventing it from reconstructing the contract state**.  
+### **What should happen?**  
 
-### Testing Unauthorized Access
+Node3 should NOT be able to retrieve the stored value because it wasn’t part of the privacy group.  
 
 ```typescript
 try {
   logger.log("Node3 (outsider) attempting to retrieve the value...");
-  await privateStorage.using(paladinNode3).call(verifierNode3, "retrieve", []);
+     await privateStorageContract.using(paladinNode3).call({
+      from: verifierNode3.lookup,
+      function: "retrieve",
+  });
   logger.error("Node3 (outsider) should not have access to the private Storage contract!");
   return false;
 } catch (error) {
-  logger.info("Node3 (outsider) cannot retrieve data because it was never included in the private state updates.");
+  logger.info("Expected error - Node3 (outsider) cannot retrieve the data. Access denied.");
 }
 ```
 

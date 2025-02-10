@@ -9,11 +9,11 @@ export const newPrivateStorage = async (
   pente: PentePrivacyGroup,
   from: PaladinVerifier,
 ) => {
-  const address = await pente.deploy(
-    storage.abi,
-    storage.bytecode,
-    from,
-  );
+  const address = await pente.deploy({
+    abi: storage.abi,
+    bytecode: storage.bytecode,
+    from: from.lookup,
+  });
   return address ? new PrivateStorage(pente, address) : undefined;
 };
 
