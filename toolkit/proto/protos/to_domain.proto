@@ -229,8 +229,8 @@ message ValidateStateHashesResponse {
 }
 
 message InitPrivacyGroupRequest {
-  repeated string property_abi_params = 1; // Array of ABI parameters that specify how to decode the input properties
-  string properties_json = 2; // The JSON to decode the input properties against
+  string properties_json = 1; // The JSON encoded properties that conform to the properties schema provided
+  string properties_abi_json = 2; // ABI parameter array that specifies the user-supplied properties that go into the creation of the group
   repeated string members = 3; // Array of members for the privacy group
 }
 

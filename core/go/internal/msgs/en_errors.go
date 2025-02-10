@@ -284,6 +284,7 @@ var (
 	MsgDomainInvalidFromAddress               = pde("PD011661", "Invalid from identity in transaction")
 	MsgDomainInvalidCoordinatorSelection      = pde("PD011662", "Invalid coordinator selection of '%s' configured. valid options are: COORDINATOR_SENDER, COORDINATOR_STATIC, COORDINATOR_ENDORSER")
 	MsgDomainWriteActionNotPossibleInContext  = pde("PD011663", "Requested write action is not possible in this domain context")
+	MsgDomainInvalidPGroupGenesisABI          = pde("PD011664", "Domain generated an invalid privacy group genesis ABI parameter schema")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = pde("PD011700", "Unknown run mode '%s'")

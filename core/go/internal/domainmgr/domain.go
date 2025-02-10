@@ -840,3 +840,25 @@ func (d *domain) GetStatesByID(ctx context.Context, req *prototk.GetStatesByIDRe
 		States: toProtoStates(states),
 	}, err
 }
+
+func (d *domain) InitPrivacyGroup(ctx context.Context, pgInput *pldapi.PrivacyGroupInput) (genesis tktypes.RawJSON, schema *abi.Parameter, err error) {
+
+	// This one is a straight forward pass-through to the domain - the Privacy Group manager does the
+	// hard work in validating the data returned against the genesis ABI spec returned.
+	res, err := d.api.InitPrivacyGroup(ctx, &prototk.InitPrivacyGroupRequest{
+		PropertiesJson:    pgInput.Properties.String(),
+		PropertiesAbiJson: tktypes.JSONString(pgInput.PropertiesABI).String(),
+		Members:           pgInput.Members,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var abiSchema abi.Parameter
+	if err := json.Unmarshal([]byte(res.GenesisAbiStateSchemaJson), &abiSchema); err != nil {
+		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidPGroupGenesisABI)
+	}
+
+	return tktypes.RawJSON(res.GenesisStateJson), &abiSchema, err
+
+}
