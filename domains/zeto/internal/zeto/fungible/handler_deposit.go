@@ -38,14 +38,15 @@ import (
 var _ types.DomainHandler = &depositHandler{}
 
 type depositHandler struct {
-	// callbacks  plugintk.DomainCallbacks
-	name       string
+	baseHandler
 	coinSchema *pb.StateSchema
 }
 
 func NewDepositHandler(name string, coinSchema *pb.StateSchema) *depositHandler {
 	return &depositHandler{
-		name:       name,
+		baseHandler: baseHandler{
+			name: name,
+		},
 		coinSchema: coinSchema,
 	}
 }
@@ -56,7 +57,7 @@ var depositABI = &abi.Entry{
 	Inputs: abi.ParameterArray{
 		{Name: "amount", Type: "uint256"},
 		{Name: "outputs", Type: "uint256[]"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
@@ -167,10 +168,6 @@ func (h *depositHandler) Endorse(ctx context.Context, tx *types.ParsedTransactio
 	return nil, nil
 }
 
-func (h *depositHandler) getAlgoZetoSnarkBJJ() string {
-	return zetosignerapi.AlgoDomainZetoSnarkBJJ(h.name)
-}
-
 func (h *depositHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
 	var proofRes corepb.ProvingResponse
 	result := domain.FindAttestation("sender", req.AttestationResult)
@@ -248,13 +245,19 @@ func (h *depositHandler) formatProvingRequest(ctx context.Context, outputCoins [
 		outputOwners[i] = coin.Owner.String()
 	}
 
+	tokenSecrets, err := marshalTokenSecrets([]uint64{}, outputValueInts)
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalValuesFungible, err)
+	}
+
 	payload := &corepb.ProvingRequest{
 		CircuitId: constants.CIRCUIT_DEPOSIT,
 		Common: &corepb.ProvingRequestCommon{
 			OutputCommitments: outputCommitments,
-			OutputValues:      outputValueInts,
 			OutputSalts:       outputSalts,
 			OutputOwners:      outputOwners,
+			TokenSecrets:      tokenSecrets,
+			TokenType:         corepb.TokenType_fungible,
 		},
 	}
 	return proto.Marshal(payload)

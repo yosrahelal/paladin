@@ -17,7 +17,9 @@ package common
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"slices"
 
@@ -31,6 +33,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
+
+const modulu = "21888242871839275222246405745257275088548364400416034343698204186575808495617"
 
 func IsNullifiersCircuit(circuitId string) bool {
 	return IsFungibleNullifiersCircuit(circuitId) || IsNonFungibleNullifiersCircuit(circuitId)
@@ -135,4 +139,20 @@ func EncodeProof(proof *corepb.SnarkProof) map[string]interface{} {
 		},
 		"pC": []string{proof.C[0], proof.C[1]},
 	}
+}
+
+// Generate a random 256-bit integer
+func CryptoRand256() (*big.Int, error) {
+	// The BN254 field modulus.
+	fieldModulus, ok := new(big.Int).SetString(modulu, 10)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse field modulus")
+	}
+
+	// Generate a random number in [0, fieldModulus).
+	tokenValue, err := rand.Int(rand.Reader, fieldModulus)
+	if err != nil {
+		return nil, err
+	}
+	return tokenValue, nil
 }

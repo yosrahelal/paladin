@@ -610,17 +610,23 @@ func TestSign(t *testing.T) {
 
 	alicePubKey := zetosigner.EncodeBabyJubJubPublicKey(alice.PublicKey)
 	bobPubKey := zetosigner.EncodeBabyJubJubPublicKey(bob.PublicKey)
+	s := protoz.TokenSecrets_Fungible{
+		InputValues:  inputValueInts,
+		OutputValues: outputValueInts,
+	}
+	bytes, err = json.Marshal(&s)
+	require.NoError(t, err)
 
 	provingReq := protoz.ProvingRequest{
 		CircuitId: constants.CIRCUIT_ANON,
 		Common: &protoz.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
-			InputValues:      inputValueInts,
 			InputSalts:       inputSalts,
 			InputOwner:       "alice/key0",
-			OutputValues:     outputValueInts,
 			OutputSalts:      []string{crypto.NewSalt().Text(16), crypto.NewSalt().Text(16)},
 			OutputOwners:     []string{bobPubKey, alicePubKey},
+			TokenType:        protoz.TokenType_fungible,
+			TokenSecrets:     bytes,
 		},
 	}
 	payload, err := proto.Marshal(&provingReq)
@@ -632,7 +638,7 @@ func TestSign(t *testing.T) {
 		Payload:     payload,
 	}
 	res, err := z.Sign(context.Background(), req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Len(t, res.Payload, 36)
 
 	// Test with nullifiers

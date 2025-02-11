@@ -216,7 +216,9 @@ func TestValidateTransferParams(t *testing.T) {
 
 func TestGetAlgoZetoSnarkBJJ_transferHandler(t *testing.T) {
 	h := &transferHandler{
-		name: "transfer",
+		baseHandler: baseHandler{
+			name: "transfer",
+		},
 	}
 	assert.Equal(t, "domain:transfer:snark:babyjubjub", h.getAlgoZetoSnarkBJJ())
 }
@@ -302,17 +304,18 @@ func TestFormatProvingRequest(t *testing.T) {
 			assert.Equal(t, tc.expectedCircuitId, req.CircuitId, "CircuitId mismatch")
 			require.NotNil(t, req.Common, "Common must not be nil")
 			assert.Equal(t, tc.expectedInputOwner, req.Common.InputOwner, "InputOwner mismatch")
-			require.NotNil(t, req.Extras, "Extras should be set")
 
+			assert.Equal(t, corepb.TokenType_nunFungible, req.Common.TokenType, "TokenType mismatch")
 			// Check corepb.ProvingRequestExtras_NonFungible
-			var extras corepb.ProvingRequestExtras_NonFungible
-			err = proto.Unmarshal(req.Extras, &extras)
-			require.NoError(t, err, "failed to unmarshal Extras")
 
-			require.Len(t, extras.TokenIds, 1, "expected one tokenId in extras")
-			require.Len(t, extras.TokenUris, 1, "expected one tokenUri in extras")
-			assert.Equal(t, tc.inputTokens[0].TokenID.String(), extras.TokenIds[0], "TokenId mismatch in extras")
-			assert.Equal(t, tc.inputTokens[0].URI, extras.TokenUris[0], "TokenUri mismatch in extras")
+			var tokenSecrets corepb.TokenSecrets_NonFungible
+			err = json.Unmarshal(req.Common.TokenSecrets, &tokenSecrets)
+			require.NoError(t, err, "failed to unmarshal tokenSecrets")
+
+			require.Len(t, tokenSecrets.TokenIds, 1, "expected one tokenId in extras")
+			require.Len(t, tokenSecrets.TokenUris, 1, "expected one tokenUri in extras")
+			assert.Equal(t, tc.inputTokens[0].TokenID.String(), tokenSecrets.TokenIds[0], "TokenId mismatch in extras")
+			assert.Equal(t, tc.inputTokens[0].URI, tokenSecrets.TokenUris[0], "TokenUri mismatch in extras")
 		})
 	}
 }
@@ -750,7 +753,9 @@ func TestAssemble(t *testing.T) {
 	handler := &transferHandler{
 		callbacks: nil,
 		nftSchema: &pb.StateSchema{Id: "schema1"},
-		name:      "transfer",
+		baseHandler: baseHandler{
+			name: "transfer",
+		},
 	}
 
 	for _, tc := range tests {

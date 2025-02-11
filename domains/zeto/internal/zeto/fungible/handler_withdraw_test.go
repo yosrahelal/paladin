@@ -34,7 +34,9 @@ func TestWithdrawValidateParams(t *testing.T) {
 
 func TestWithdrawInit(t *testing.T) {
 	h := withdrawHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
@@ -53,7 +55,9 @@ func TestWithdrawInit(t *testing.T) {
 
 func TestWithdrawAssemble(t *testing.T) {
 	h := withdrawHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 		coinSchema: &prototk.StateSchema{
 			Id: "coin",
 		},
@@ -210,7 +214,9 @@ func TestWithdrawEndorse(t *testing.T) {
 
 func TestWithdrawPrepare(t *testing.T) {
 	h := withdrawHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	txSpec := &prototk.TransactionSpecification{
 		TransactionId: "bad hex",

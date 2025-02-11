@@ -61,7 +61,9 @@ func TestMintValidateParams(t *testing.T) {
 
 func TestMintInit(t *testing.T) {
 	h := mintHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
@@ -83,7 +85,9 @@ func TestMintInit(t *testing.T) {
 
 func TestMintAssemble(t *testing.T) {
 	h := mintHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 		coinSchema: &prototk.StateSchema{
 			Id: "coin",
 		},
@@ -149,7 +153,9 @@ func TestMintEndorse(t *testing.T) {
 
 func TestMintPrepare(t *testing.T) {
 	h := mintHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	txSpec := &prototk.TransactionSpecification{
 		TransactionId: "bad hex",

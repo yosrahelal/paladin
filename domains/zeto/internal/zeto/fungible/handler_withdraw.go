@@ -43,7 +43,7 @@ import (
 var _ types.DomainHandler = &withdrawHandler{}
 
 type withdrawHandler struct {
-	name                 string
+	baseHandler
 	callbacks            plugintk.DomainCallbacks
 	coinSchema           *pb.StateSchema
 	merkleTreeRootSchema *prototk.StateSchema
@@ -57,7 +57,7 @@ var withdrawABI = &abi.Entry{
 		{Name: "amount", Type: "uint256"},
 		{Name: "inputs", Type: "uint256[]"},
 		{Name: "output", Type: "uint256"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
@@ -70,14 +70,16 @@ var withdrawABI_nullifiers = &abi.Entry{
 		{Name: "nullifiers", Type: "uint256[]"},
 		{Name: "output", Type: "uint256"},
 		{Name: "root", Type: "uint256"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
 
 func NewWithdrawHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema *pb.StateSchema) *withdrawHandler {
 	return &withdrawHandler{
-		name:                 name,
+		baseHandler: baseHandler{
+			name: name,
+		},
 		callbacks:            callbacks,
 		coinSchema:           coinSchema,
 		merkleTreeRootSchema: merkleTreeRootSchema,
@@ -313,17 +315,23 @@ func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins [
 		extras = protoExtras
 	}
 
+	tokenSecrets, err := marshalTokenSecrets(inputValueInts, []uint64{outputValueInt})
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalValuesFungible, err)
+	}
+
+	// marshalValues
 	payload := &corepb.ProvingRequest{
 		CircuitId: getCircuitId(tokenName),
 		Common: &corepb.ProvingRequestCommon{
 			InputCommitments:  inputCommitments,
-			InputValues:       inputValueInts,
 			InputSalts:        inputSalts,
 			InputOwner:        inputOwner,
 			OutputCommitments: []string{outputCommitment},
-			OutputValues:      []uint64{outputValueInt},
 			OutputSalts:       []string{outputSalt},
 			OutputOwners:      []string{outputOwner},
+			TokenSecrets:      tokenSecrets,
+			TokenType:         corepb.TokenType_fungible,
 		},
 	}
 
@@ -332,10 +340,6 @@ func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins [
 	}
 
 	return proto.Marshal(payload)
-}
-
-func (h *withdrawHandler) getAlgoZetoSnarkBJJ() string {
-	return zetosignerapi.AlgoDomainZetoSnarkBJJ(h.name)
 }
 
 func getCircuitId(tokenName string) string {

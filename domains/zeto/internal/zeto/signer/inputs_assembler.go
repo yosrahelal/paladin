@@ -23,59 +23,70 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/key"
-	"github.com/hyperledger-labs/zeto/go-sdk/pkg/utxo"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 )
 
-func assembleInputs_anon(inputs *commonWitnessInputs, keyEntry *core.KeyEntry) map[string]interface{} {
-	return map[string]interface{}{
-		"inputCommitments":      inputs.inputCommitments,
-		"inputValues":           inputs.inputValues,
-		"inputSalts":            inputs.inputSalts,
-		"inputOwnerPrivateKey":  keyEntry.PrivateKeyForZkp,
-		"outputCommitments":     inputs.outputCommitments,
-		"outputValues":          inputs.outputValues,
-		"outputSalts":           inputs.outputSalts,
-		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
-	}
-}
-func assembleInputs_nfanon(ctx context.Context, inputs *commonWitnessInputs, tokenData *pb.ProvingRequestExtras_NonFungible, keyEntry *core.KeyEntry) map[string]interface{} {
-	tokenIds := make([]*big.Int, len(tokenData.TokenIds))
-	for i, id := range tokenData.TokenIds {
-		t, k := new(big.Int).SetString(id, 0)
-		if !k {
-			panic(i18n.NewError(ctx, msgs.MsgErrorTokenIDToString, id))
-		}
-		tokenIds[i] = t
-	}
+func (inputs *commonWitnessInputs) assemble(keyEntry *core.KeyEntry) map[string]interface{} {
+	m := map[string]interface{}{}
 
-	tokenUris := make([]*big.Int, len(tokenData.TokenUris))
-	for i := range tokenData.TokenUris {
-		uri, err := utxo.HashTokenUri(tokenData.TokenUris[i])
-		if err != nil {
-			panic(i18n.NewError(ctx, msgs.MsgErrorHashState, err))
-		}
-		tokenUris[i] = uri
+	if len(inputs.inputCommitments) != 0 {
+		m["inputCommitments"] = inputs.inputCommitments
 	}
-
-	return map[string]interface{}{
-		"tokenIds":              tokenIds,
-		"tokenUris":             tokenUris,
-		"inputCommitments":      inputs.inputCommitments,
-		"inputSalts":            inputs.inputSalts,
-		"outputCommitments":     inputs.outputCommitments,
-		"outputSalts":           inputs.outputSalts,
-		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
-		"inputOwnerPrivateKey":  keyEntry.PrivateKeyForZkp, //
+	if len(inputs.inputSalts) != 0 {
+		m["inputSalts"] = inputs.inputSalts
 	}
+	if keyEntry.PrivateKeyForZkp.Cmp(big.NewInt(0)) != 0 {
+		m["inputOwnerPrivateKey"] = keyEntry.PrivateKeyForZkp
+	}
+	if len(inputs.outputCommitments) != 0 {
+		m["outputCommitments"] = inputs.outputCommitments
+	}
+	if len(inputs.outputSalts) != 0 {
+		m["outputSalts"] = inputs.outputSalts
+	}
+	if len(inputs.outputOwnerPublicKeys) != 0 {
+		m["outputOwnerPublicKeys"] = inputs.outputOwnerPublicKeys
+	}
+	return m
 }
 
-func assembleInputs_anon_enc(ctx context.Context, inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Encryption, keyEntry *core.KeyEntry) (map[string]any, error) {
+func (inputs *fungibleWitnessInputs) assemble(ctx context.Context, keyEntry *core.KeyEntry) (map[string]interface{}, error) {
+	m := inputs.commonWitnessInputs.assemble(keyEntry)
+	if len(inputs.inputValues) != 0 {
+		m["inputValues"] = inputs.inputValues
+	}
+	if len(inputs.outputValues) != 0 {
+		m["outputValues"] = inputs.outputValues
+	}
+	return m, nil
+}
+
+func (inputs *depositWitnessInputs) assemble(ctx context.Context, keyEntry *core.KeyEntry) (map[string]interface{}, error) {
+	m, err := inputs.fungibleWitnessInputs.assemble(ctx, keyEntry)
+	if err != nil {
+		return nil, err
+	}
+	delete(m, "inputOwnerPrivateKey")
+	return m, nil
+}
+
+func (inputs *nonFungibleWitnessInputs) assemble(ctx context.Context, keyEntry *core.KeyEntry) (map[string]interface{}, error) {
+	m := inputs.commonWitnessInputs.assemble(keyEntry)
+	if inputs.tokenIDs != nil {
+		m["tokenIds"] = inputs.tokenIDs
+	}
+	if inputs.tokenURIs != nil {
+		m["tokenUris"] = inputs.tokenURIs
+	}
+	return m, nil
+}
+
+func (inputs *fungibleEncWitnessInputs) assemble(ctx context.Context, keyEntry *core.KeyEntry) (map[string]interface{}, error) {
 	var nonce *big.Int
-	if extras != nil && extras.EncryptionNonce != "" {
-		n, ok := new(big.Int).SetString(extras.EncryptionNonce, 10)
+	if inputs.enc != nil && inputs.enc.EncryptionNonce != "" {
+		n, ok := new(big.Int).SetString(inputs.enc.EncryptionNonce, 10)
 		if !ok {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorParseEncNonce)
 		}
@@ -92,102 +103,37 @@ func assembleInputs_anon_enc(ctx context.Context, inputs *commonWitnessInputs, e
 	}
 	ephemeralKey := key.NewKeyEntryFromPrivateKeyBytes([32]byte(randomBytes))
 
-	witnessInputs := map[string]interface{}{
-		"inputCommitments":      inputs.inputCommitments,
-		"inputValues":           inputs.inputValues,
-		"inputSalts":            inputs.inputSalts,
-		"inputOwnerPrivateKey":  keyEntry.PrivateKeyForZkp,
-		"outputCommitments":     inputs.outputCommitments,
-		"outputValues":          inputs.outputValues,
-		"outputSalts":           inputs.outputSalts,
-		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
-		"encryptionNonce":       nonce,
-		"ecdhPrivateKey":        ephemeralKey.PrivateKeyForZkp,
-	}
-	return witnessInputs, nil
-}
-
-func assembleInputs_anon_nullifier(ctx context.Context, inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) (map[string]any, error) {
-	nullifiers, root, proofs, enabled, err := prepareInputsForNullifiers(ctx, inputs, extras, keyEntry)
+	m, err := inputs.fungibleWitnessInputs.assemble(ctx, keyEntry)
 	if err != nil {
 		return nil, err
 	}
 
-	witnessInputs := map[string]interface{}{
-		"nullifiers":            nullifiers,
-		"root":                  root,
-		"merkleProof":           proofs,
-		"enabled":               enabled,
-		"inputCommitments":      inputs.inputCommitments,
-		"inputValues":           inputs.inputValues,
-		"inputSalts":            inputs.inputSalts,
-		"inputOwnerPrivateKey":  keyEntry.PrivateKeyForZkp,
-		"outputCommitments":     inputs.outputCommitments,
-		"outputValues":          inputs.outputValues,
-		"outputSalts":           inputs.outputSalts,
-		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
-	}
-	return witnessInputs, nil
+	m["encryptionNonce"] = nonce
+	m["ecdhPrivateKey"] = ephemeralKey.PrivateKeyForZkp
+
+	return m, nil
 }
 
-func assembleInputs_deposit(inputs *commonWitnessInputs) map[string]interface{} {
-	witnessInputs := map[string]interface{}{
-		"outputCommitments":     inputs.outputCommitments,
-		"outputValues":          inputs.outputValues,
-		"outputSalts":           inputs.outputSalts,
-		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
-	}
-	return witnessInputs
-}
-
-func assembleInputs_withdraw(inputs *commonWitnessInputs, keyEntry *core.KeyEntry) map[string]interface{} {
-	witnessInputs := map[string]interface{}{
-		"inputCommitments":      inputs.inputCommitments,
-		"inputValues":           inputs.inputValues,
-		"inputSalts":            inputs.inputSalts,
-		"inputOwnerPrivateKey":  keyEntry.PrivateKeyForZkp,
-		"outputCommitments":     inputs.outputCommitments,
-		"outputValues":          inputs.outputValues,
-		"outputSalts":           inputs.outputSalts,
-		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
-	}
-	return witnessInputs
-}
-
-func assembleInputs_withdraw_nullifier(ctx context.Context, inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) (map[string]interface{}, error) {
-	nullifiers, root, proofs, enabled, err := prepareInputsForNullifiers(ctx, inputs, extras, keyEntry)
+func (inputs *fungibleNullifierWitnessInputs) assemble(ctx context.Context, keyEntry *core.KeyEntry) (map[string]interface{}, error) {
+	nullifiers, root, proofs, enabled, err := inputs.prepareInputsForNullifiers(ctx, inputs.nul, keyEntry)
 	if err != nil {
 		return nil, err
 	}
 
-	witnessInputs := map[string]interface{}{
-		"nullifiers":            nullifiers,
-		"root":                  root,
-		"merkleProof":           proofs,
-		"enabled":               enabled,
-		"inputCommitments":      inputs.inputCommitments,
-		"inputValues":           inputs.inputValues,
-		"inputSalts":            inputs.inputSalts,
-		"inputOwnerPrivateKey":  keyEntry.PrivateKeyForZkp,
-		"outputCommitments":     inputs.outputCommitments,
-		"outputValues":          inputs.outputValues,
-		"outputSalts":           inputs.outputSalts,
-		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
+	m, err := inputs.fungibleWitnessInputs.assemble(ctx, keyEntry)
+	if err != nil {
+		return nil, err
 	}
-	return witnessInputs, nil
+	m["nullifiers"] = nullifiers
+	m["root"] = root
+	m["merkleProof"] = proofs
+	m["enabled"] = enabled
+
+	return m, nil
 }
 
-func assembleInputs_lock(inputs *commonWitnessInputs, keyEntry *core.KeyEntry) map[string]interface{} {
-	witnessInputs := map[string]interface{}{
-		"commitments":     inputs.inputCommitments,
-		"values":          inputs.inputValues,
-		"salts":           inputs.inputSalts,
-		"ownerPrivateKey": keyEntry.PrivateKeyForZkp,
-	}
-	return witnessInputs
-}
+func (inputs *fungibleNullifierWitnessInputs) prepareInputsForNullifiers(ctx context.Context, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) ([]*big.Int, *big.Int, [][]*big.Int, []*big.Int, error) {
 
-func prepareInputsForNullifiers(ctx context.Context, inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) ([]*big.Int, *big.Int, [][]*big.Int, []*big.Int, error) {
 	// calculate the nullifiers for the input UTXOs
 	nullifiers := make([]*big.Int, len(inputs.inputCommitments))
 	for i := 0; i < len(inputs.inputCommitments); i++ {

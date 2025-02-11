@@ -44,21 +44,14 @@ func decodeProvingRequest(ctx context.Context, payload []byte) (*pb.ProvingReque
 			}
 		}
 		return &inputs, &encExtras, nil
-	} else if common.IsNonFungibleCircuit(inputs.CircuitId) { // first check if it is a non-fungible circuit
-		if common.IsNonFungibleNullifiersCircuit(inputs.CircuitId) {
-			nullifierExtras := pb.ProvingRequestExtras_Nullifiers{}
-			err := proto.Unmarshal(inputs.Extras, &nullifierExtras)
-			if err != nil {
-				return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalProvingReqExtras, inputs.CircuitId, err)
-			}
-			return &inputs, &nullifierExtras, nil
-		}
-		var tokenExtras pb.ProvingRequestExtras_NonFungible
-		err := proto.Unmarshal(inputs.Extras, &tokenExtras)
+	} else if common.IsNonFungibleNullifiersCircuit(inputs.CircuitId) {
+		nullifierExtras := pb.ProvingRequestExtras_Nullifiers{}
+		err := proto.Unmarshal(inputs.Extras, &nullifierExtras)
 		if err != nil {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalProvingReqExtras, inputs.CircuitId, err)
 		}
-		return &inputs, &tokenExtras, nil
+		return &inputs, &nullifierExtras, nil
+
 	} else if common.IsFungibleNullifiersCircuit(inputs.CircuitId) { // check if it is a nullifier circuit only after checking non-fungible circuit (to avoid parsing non-fungible + nullifier circuit)
 		var nullifierExtras pb.ProvingRequestExtras_Nullifiers
 		err := proto.Unmarshal(inputs.Extras, &nullifierExtras)

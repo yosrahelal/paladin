@@ -32,7 +32,9 @@ func TestDepositValidateParams(t *testing.T) {
 
 func TestDepositInit(t *testing.T) {
 	h := depositHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
@@ -51,7 +53,9 @@ func TestDepositInit(t *testing.T) {
 
 func TestDepositAssemble(t *testing.T) {
 	h := depositHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 		coinSchema: &prototk.StateSchema{
 			Id: "coin",
 		},
@@ -112,7 +116,9 @@ func TestDepositEndorse(t *testing.T) {
 
 func TestDepositPrepare(t *testing.T) {
 	h := depositHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	txSpec := &prototk.TransactionSpecification{
 		TransactionId: "bad hex",

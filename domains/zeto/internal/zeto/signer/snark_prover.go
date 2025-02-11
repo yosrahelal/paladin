@@ -30,7 +30,6 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
-	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
@@ -43,6 +42,7 @@ import (
 var defaultSnarkProverConfig = zetosignerapi.SnarkProverConfig{
 	MaxProverPerCircuit: confutil.P(10),
 }
+var getWitnessInputs func(circuitId string, extras interface{}) (witnessInputs, error) = newWitnessInputs
 
 // snarkProver encapsulates the logic for generating SNARK proofs
 type snarkProver struct {
@@ -119,15 +119,6 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 	}
 	circuitId := getCircuitId(inputs)
 
-	if common.IsNonFungibleCircuit(circuitId) {
-		if err := validateInputsNonFungible(ctx, inputs.Common); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := validateInputsFungible(ctx, inputs.Common); err != nil {
-			return nil, err
-		}
-	}
 	// obtain a slot for the proof generation for this specific circuit
 	// check whether this is a controlling channel
 	sp.circuitsWorkerIndexChanRWLock.RLock()
@@ -210,23 +201,6 @@ func getCircuitId(inputs *pb.ProvingRequest) string {
 	return circuitId
 }
 
-func validateInputsFungible(ctx context.Context, inputs *pb.ProvingRequestCommon) error {
-	if len(inputs.InputCommitments) != len(inputs.InputValues) || len(inputs.InputCommitments) != len(inputs.InputSalts) {
-		return i18n.NewError(ctx, msgs.MsgErrorInputsDiffLength)
-	}
-	if len(inputs.OutputValues) != len(inputs.OutputOwners) {
-		return i18n.NewError(ctx, msgs.MsgErrorOutputsDiffLength)
-	}
-	return nil
-}
-
-func validateInputsNonFungible(ctx context.Context, inputs *pb.ProvingRequestCommon) error {
-	if len(inputs.InputCommitments) != len(inputs.InputSalts) {
-		return i18n.NewError(ctx, msgs.MsgErrorInputsDiffLength)
-	}
-	return nil
-}
-
 func serializeProofResponse(circuitId string, proof *types.ZKProof) ([]byte, error) {
 	snark := pb.SnarkProof{}
 	snark.A = proof.Proof.A
@@ -271,14 +245,24 @@ func serializeProofResponse(circuitId string, proof *types.ZKProof) ([]byte, err
 }
 
 func calculateWitness(ctx context.Context, circuitId string, commonInputs *pb.ProvingRequestCommon, extras interface{}, keyEntry *core.KeyEntry, circuit witness.Calculator) ([]byte, error) {
-	// Build the common witness inputs
-	inputs, err := buildInputs(ctx, circuitId, commonInputs, extras)
+
+	inputs, err := getWitnessInputs(circuitId, extras)
 	if err != nil {
 		return nil, err
 	}
 
+	// Validate the inputs
+	if err := inputs.validate(ctx, commonInputs); err != nil {
+		return nil, err
+	}
+
+	// Build the common witness inputs
+	if err := inputs.build(ctx, commonInputs); err != nil {
+		return nil, err
+	}
+
 	// Assemble the circuit-specific witness inputs
-	witnessInputs, err := assembleWitnessInputs(ctx, circuitId, inputs, extras, keyEntry)
+	witnessInputs, err := inputs.assemble(ctx, keyEntry)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
 	}
@@ -292,54 +276,29 @@ func calculateWitness(ctx context.Context, circuitId string, commonInputs *pb.Pr
 	return wtns, nil
 }
 
-func buildInputs(ctx context.Context, circuitId string, commonInputs *pb.ProvingRequestCommon, extras interface{}) (*commonWitnessInputs, error) {
+func newWitnessInputs(circuitId string, extras interface{}) (witnessInputs, error) {
 	switch circuitId {
-	case constants.CIRCUIT_NF_ANON, constants.CIRCUIT_NF_ANON_NULLIFIER:
-		return buildCircuitInputsNonFungible(ctx, commonInputs)
-	default:
-		return buildCircuitInputs(ctx, commonInputs)
-	}
-}
-
-func assembleWitnessInputs(ctx context.Context, circuitId string, inputs *commonWitnessInputs, extras interface{}, keyEntry *core.KeyEntry) (map[string]any, error) {
-	switch circuitId {
-	case constants.CIRCUIT_ANON, constants.CIRCUIT_ANON_BATCH:
-		return assembleInputs_anon(inputs, keyEntry), nil
-
 	case constants.CIRCUIT_NF_ANON:
-		nfExtras, ok := extras.(*pb.ProvingRequestExtras_NonFungible)
-		if !ok {
-			return nil, fmt.Errorf("unexpected extras type for non-fungible circuit")
-		}
-		return assembleInputs_nfanon(ctx, inputs, nfExtras, keyEntry), nil
-	// case constants.CIRCUIT_NF_ANON_NULLIFIER:
-	// 	   return assembleInputs_nfanon_nullifier(inputs, extras.(*pb.ProvingRequestExtras_NonFungible_Nullifier), keyEntry), nil
+		return &nonFungibleWitnessInputs{}, nil
+	case constants.CIRCUIT_NF_ANON_NULLIFIER: // TODO: implemented
+		return &nonFungibleWitnessInputs{}, nil
 	case constants.CIRCUIT_ANON_ENC, constants.CIRCUIT_ANON_ENC_BATCH:
 		encExtras, ok := extras.(*pb.ProvingRequestExtras_Encryption)
 		if !ok {
 			return nil, fmt.Errorf("unexpected extras type for encryption circuit")
 		}
-		return assembleInputs_anon_enc(ctx, inputs, encExtras, keyEntry)
-	case constants.CIRCUIT_ANON_NULLIFIER, constants.CIRCUIT_ANON_NULLIFIER_BATCH:
+		return &fungibleEncWitnessInputs{enc: encExtras}, nil
+	case constants.CIRCUIT_ANON_NULLIFIER, constants.CIRCUIT_ANON_NULLIFIER_BATCH,
+		constants.CIRCUIT_WITHDRAW_NULLIFIER, constants.CIRCUIT_WITHDRAW_NULLIFIER_BATCH:
 		nullifierExtras, ok := extras.(*pb.ProvingRequestExtras_Nullifiers)
 		if !ok {
 			return nil, fmt.Errorf("unexpected extras type for anon nullifier circuit")
 		}
-		return assembleInputs_anon_nullifier(ctx, inputs, nullifierExtras, keyEntry)
+		return &fungibleNullifierWitnessInputs{nul: nullifierExtras}, nil
 	case constants.CIRCUIT_DEPOSIT:
-		return assembleInputs_deposit(inputs), nil
-	case constants.CIRCUIT_WITHDRAW, constants.CIRCUIT_WITHDRAW_BATCH:
-		return assembleInputs_withdraw(inputs, keyEntry), nil
-	case constants.CIRCUIT_WITHDRAW_NULLIFIER, constants.CIRCUIT_WITHDRAW_NULLIFIER_BATCH:
-		nullifierExtras, ok := extras.(*pb.ProvingRequestExtras_Nullifiers)
-		if !ok {
-			return nil, fmt.Errorf("unexpected extras type for withdraw nullifier circuit")
-		}
-		return assembleInputs_withdraw_nullifier(ctx, inputs, nullifierExtras, keyEntry)
-	case constants.CIRCUIT_LOCK, constants.CIRCUIT_LOCK_BATCH:
-		return assembleInputs_lock(inputs, keyEntry), nil
+		return &depositWitnessInputs{}, nil
 	default:
-		return nil, fmt.Errorf("unsupported circuit id: %s", circuitId)
+		return &fungibleWitnessInputs{}, nil
 	}
 }
 

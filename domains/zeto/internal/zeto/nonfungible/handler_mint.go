@@ -40,13 +40,15 @@ var mintABI = &abi.Entry{
 var _ types.DomainHandler = &mintHandler{}
 
 type mintHandler struct {
-	name        string
+	baseHandler
 	stateSchema *pb.StateSchema
 }
 
 func NewMintHandler(name string, stateSchema *pb.StateSchema) *mintHandler {
 	return &mintHandler{
-		name:        name,
+		baseHandler: baseHandler{
+			name: name,
+		},
 		stateSchema: stateSchema,
 	}
 }
@@ -159,7 +161,4 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 			RequiredSigner:  &req.Transaction.From, // must be signed by the authorized minter on-chain
 		},
 	}, nil
-}
-func (h *mintHandler) getAlgoZetoSnarkBJJ() string {
-	return zetosignerapi.AlgoDomainZetoSnarkBJJ(h.name)
 }

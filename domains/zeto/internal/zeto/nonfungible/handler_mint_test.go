@@ -19,7 +19,9 @@ import (
 
 func TestGetAlgoZetoSnarkBJJ_mintHandler(t *testing.T) {
 	h := &mintHandler{
-		name: "mint",
+		baseHandler: baseHandler{
+			name: "mint",
+		},
 	}
 	assert.Equal(t, "domain:mint:snark:babyjubjub", h.getAlgoZetoSnarkBJJ())
 }
@@ -188,7 +190,9 @@ func TestMintHandler_Assemble(t *testing.T) {
 
 	// Instantiate a mintHandler with a valid state schema.
 	handler := &mintHandler{
-		name: "mint",
+		baseHandler: baseHandler{
+			"mint",
+		},
 		stateSchema: &pb.StateSchema{
 			Id: "schema1",
 		},

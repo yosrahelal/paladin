@@ -2,9 +2,6 @@ package nonfungible
 
 import (
 	"context"
-	cryptorand "crypto/rand"
-	"fmt"
-	"math/big"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
@@ -24,22 +21,14 @@ var (
 	findAttestationFunc       func(string, []*pb.AttestationResult) *pb.AttestationResult                                              = domain.FindAttestation
 )
 
-func getAlgoZetoSnarkBJJ(name string) string {
-	return zetosignerapi.AlgoDomainZetoSnarkBJJ(name)
+type baseHandler struct {
+	name string
 }
 
-// Generate a random 256-bit integer
-func cryptoRand256() (*big.Int, error) {
-	// The BN254 field modulus.
-	fieldModulus, ok := new(big.Int).SetString(modulu, 10)
-	if !ok {
-		return nil, fmt.Errorf("failed to parse field modulus")
-	}
+func (h *baseHandler) getAlgoZetoSnarkBJJ() string {
+	return getAlgoZetoSnarkBJJ(h.name)
+}
 
-	// Generate a random number in [0, fieldModulus).
-	tokenValue, err := cryptorand.Int(cryptorand.Reader, fieldModulus)
-	if err != nil {
-		return nil, err
-	}
-	return tokenValue, nil
+func getAlgoZetoSnarkBJJ(name string) string {
+	return zetosignerapi.AlgoDomainZetoSnarkBJJ(name)
 }

@@ -13,7 +13,9 @@ import (
 
 func TestGetAlgoZetoSnarkBJJ(t *testing.T) {
 	h := &mintHandler{
-		name: "action",
+		baseHandler: baseHandler{
+			name: "action",
+		},
 	}
 	assert.Equal(t, "domain:action:snark:babyjubjub", h.getAlgoZetoSnarkBJJ())
 }
@@ -161,6 +163,46 @@ func TestValidateTransferParams(t *testing.T) {
 				assert.Contains(t, err.Error(), tc.errContains, "error message should contain %q", tc.errContains)
 			} else {
 				require.NoError(t, err, "unexpected error for test case %q", tc.name)
+			}
+		})
+	}
+}
+func TestMarshalTokenSecrets(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     []uint64
+		output    []uint64
+		expectErr bool
+	}{
+		{
+			name:      "valid input and output",
+			input:     []uint64{1, 2, 3},
+			output:    []uint64{4, 5, 6},
+			expectErr: false,
+		},
+		{
+			name:      "empty input and output",
+			input:     []uint64{},
+			output:    []uint64{},
+			expectErr: false,
+		},
+		{
+			name:      "nil input and output",
+			input:     nil,
+			output:    nil,
+			expectErr: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := marshalTokenSecrets(tc.input, tc.output)
+			if tc.expectErr {
+				require.Error(t, err, "expected error for test case %q", tc.name)
+			} else {
+				require.NoError(t, err, "unexpected error for test case %q", tc.name)
+				assert.NotNil(t, result, "result should not be nil for test case %q", tc.name)
+				assert.JSONEq(t, string(result), string(result), "result should be valid JSON for test case %q", tc.name)
 			}
 		})
 	}

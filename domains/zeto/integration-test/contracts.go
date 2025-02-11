@@ -191,21 +191,23 @@ func registerImpl(ctx context.Context, name string, domainContracts *ZetoDomainC
 		Name: name,
 	}
 
+	if verifierName == "" {
+		return fmt.Errorf("verifierName not found among the deployed contracts. name: %s", name)
+	}
+
 	implAddr, ok := domainContracts.deployedContracts[name]
 	if !ok {
 		return fmt.Errorf("implementation contract %s not found among the deployed contracts", name)
 	}
 	params.Implementation.Implementation = implAddr.String()
 
-	if verifierName != "" {
-		verifierAddr, ok := domainContracts.deployedContracts[verifierName]
-		if !ok {
-			return fmt.Errorf("verifier contract %s not found among the deployed contracts", verifierName)
-		}
-		params.Implementation.Verifier = verifierAddr.String()
-		if params.Implementation.Verifier == "" {
-			return nil
-		}
+	verifierAddr, ok := domainContracts.deployedContracts[verifierName]
+	if !ok {
+		return fmt.Errorf("verifier contract %s not found among the deployed contracts", verifierName)
+	}
+	params.Implementation.Verifier = verifierAddr.String()
+	if params.Implementation.Verifier == "" {
+		return nil
 	}
 
 	if batchVerifierName != "" {

@@ -38,17 +38,11 @@ import (
 var _ types.DomainHandler = &transferHandler{}
 
 type transferHandler struct {
-	name                 string
+	baseHandler
 	callbacks            plugintk.DomainCallbacks
 	nftSchema            *pb.StateSchema
 	merkleTreeRootSchema *prototk.StateSchema
 	merkleTreeNodeSchema *prototk.StateSchema
-}
-
-var proofComponents = abi.ParameterArray{
-	{Name: "pA", Type: "uint256[2]"},
-	{Name: "pB", Type: "uint256[2][2]"},
-	{Name: "pC", Type: "uint256[2]"},
 }
 
 var transferABI = &abi.Entry{
@@ -57,7 +51,7 @@ var transferABI = &abi.Entry{
 	Inputs: abi.ParameterArray{
 		{Name: "input", Type: "uint256"},
 		{Name: "output", Type: "uint256"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
@@ -69,14 +63,16 @@ var transferABI = &abi.Entry{
 // 		{Name: "nullifier", Type: "uint256"},
 // 		{Name: "output", Type: "uint256"},
 // 		{Name: "root", Type: "uint256"},
-// 		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+// 		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 // 		{Name: "data", Type: "bytes"},
 // 	},
 // }
 
 func NewTransferHandler(name string, callbacks plugintk.DomainCallbacks, nftSchema, merkleTreeRootSchema, merkleTreeNodeSchema *pb.StateSchema) *transferHandler {
 	return &transferHandler{
-		name:                 name,
+		baseHandler: baseHandler{
+			name: name,
+		},
 		callbacks:            callbacks,
 		nftSchema:            nftSchema,
 		merkleTreeRootSchema: merkleTreeRootSchema,
@@ -273,9 +269,9 @@ func (h *transferHandler) formatProvingRequest(ctx context.Context, input, outpu
 	}
 	*/
 
-	provingRequestExtras := &corepb.ProvingRequestExtras_NonFungible{
-		TokenIds:  tokenIDs,
-		TokenUris: tokenURIs,
+	tokenSecrets, err := json.Marshal(corepb.TokenSecrets_NonFungible{TokenIds: tokenIDs, TokenUris: tokenURIs})
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalValuesNonFungible, err)
 	}
 
 	payload := &corepb.ProvingRequest{
@@ -287,20 +283,12 @@ func (h *transferHandler) formatProvingRequest(ctx context.Context, input, outpu
 			OutputSalts:       outputSalts,
 			OutputOwners:      outputOwners,
 			OutputCommitments: outputCommitments,
+			TokenType:         corepb.TokenType_nunFungible,
+			TokenSecrets:      tokenSecrets,
 		},
 	}
-	extras, err := proto.Marshal(provingRequestExtras)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalExtraObj, err)
-	}
-	if extras != nil {
-		payload.Extras = extras
-	}
-	return proto.Marshal(payload)
-}
 
-func (h *transferHandler) getAlgoZetoSnarkBJJ() string {
-	return zetosignerapi.AlgoDomainZetoSnarkBJJ(h.name)
+	return proto.Marshal(payload)
 }
 
 func getTransferABI(tokenName string) *abi.Entry {

@@ -39,17 +39,11 @@ import (
 var _ types.DomainHandler = &transferHandler{}
 
 type transferHandler struct {
-	name                 string
+	baseHandler
 	callbacks            plugintk.DomainCallbacks
 	coinSchema           *pb.StateSchema
 	merkleTreeRootSchema *prototk.StateSchema
 	merkleTreeNodeSchema *prototk.StateSchema
-}
-
-var proofComponents = abi.ParameterArray{
-	{Name: "pA", Type: "uint256[2]"},
-	{Name: "pB", Type: "uint256[2][2]"},
-	{Name: "pC", Type: "uint256[2]"},
 }
 
 var transferABI = &abi.Entry{
@@ -58,7 +52,7 @@ var transferABI = &abi.Entry{
 	Inputs: abi.ParameterArray{
 		{Name: "inputs", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
@@ -70,7 +64,7 @@ var transferABI_nullifiers = &abi.Entry{
 		{Name: "nullifiers", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
 		{Name: "root", Type: "uint256"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
@@ -84,7 +78,7 @@ var transferABI_withEncryption = &abi.Entry{
 		{Name: "encryptionNonce", Type: "uint256"},
 		{Name: "ecdhPublicKey", Type: "uint256[2]"},
 		{Name: "encryptedValues", Type: "uint256[]"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
@@ -99,14 +93,16 @@ var transferABI_withEncryption_nullifiers = &abi.Entry{
 		{Name: "encryptionNonce", Type: "uint256"},
 		{Name: "ecdhPublicKey", Type: "uint256[2]"},
 		{Name: "encryptedValues", Type: "uint256[]"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "data", Type: "bytes"},
 	},
 }
 
 func NewTransferHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema *pb.StateSchema) *transferHandler {
 	return &transferHandler{
-		name:                 name,
+		baseHandler: baseHandler{
+			name: name,
+		},
 		callbacks:            callbacks,
 		coinSchema:           coinSchema,
 		merkleTreeRootSchema: merkleTreeRootSchema,
@@ -361,26 +357,27 @@ func (h *transferHandler) formatProvingRequest(ctx context.Context, inputCoins, 
 		extras = protoExtras
 	}
 
+	tokenSecrets, err := marshalTokenSecrets(inputValueInts, outputValueInts)
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalValuesFungible, err)
+	}
+
 	payload := &corepb.ProvingRequest{
 		CircuitId: circuitId,
 		Common: &corepb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
-			InputValues:      inputValueInts,
 			InputSalts:       inputSalts,
 			InputOwner:       inputOwner,
-			OutputValues:     outputValueInts,
 			OutputSalts:      outputSalts,
 			OutputOwners:     outputOwners,
+			TokenSecrets:     tokenSecrets,
+			TokenType:        corepb.TokenType_fungible,
 		},
 	}
 	if extras != nil {
 		payload.Extras = extras
 	}
 	return proto.Marshal(payload)
-}
-
-func (h *transferHandler) getAlgoZetoSnarkBJJ() string {
-	return zetosignerapi.AlgoDomainZetoSnarkBJJ(h.name)
 }
 
 func getTransferABI(tokenName string) *abi.Entry {

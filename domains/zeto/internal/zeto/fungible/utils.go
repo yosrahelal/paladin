@@ -17,6 +17,7 @@ package fungible
 
 import (
 	"context"
+	"encoding/json"
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
@@ -37,6 +38,14 @@ import (
 // the maximum transfer amount is (2^100 - 1)
 // Reference: https://github.com/hyperledger-labs/zeto/blob/main/zkp/circuits/lib/check-positive.circom
 var MAX_TRANSFER_AMOUNT = big.NewInt(0).Exp(big.NewInt(2), big.NewInt(100), nil)
+
+type baseHandler struct {
+	name string
+}
+
+func (h *baseHandler) getAlgoZetoSnarkBJJ() string {
+	return getAlgoZetoSnarkBJJ(h.name)
+}
 
 func validateTransferParams(ctx context.Context, params []*types.FungibleTransferParamEntry) error {
 	if len(params) == 0 {
@@ -140,4 +149,7 @@ func generateMerkleProofs(ctx context.Context, callbacks plugintk.DomainCallback
 }
 func getAlgoZetoSnarkBJJ(name string) string {
 	return zetosignerapi.AlgoDomainZetoSnarkBJJ(name)
+}
+func marshalTokenSecrets(input, output []uint64) ([]byte, error) {
+	return json.Marshal(corepb.TokenSecrets_Fungible{InputValues: input, OutputValues: output})
 }

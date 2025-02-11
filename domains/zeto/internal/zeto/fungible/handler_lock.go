@@ -39,8 +39,8 @@ import (
 var _ types.DomainHandler = &lockHandler{}
 
 type lockHandler struct {
+	baseHandler
 	callbacks  plugintk.DomainCallbacks
-	name       string
 	coinSchema *pb.StateSchema
 }
 
@@ -56,7 +56,7 @@ var lockStatesABI = &abi.Entry{
 	Name: "lockStates",
 	Inputs: abi.ParameterArray{
 		{Name: "utxos", Type: "uint256[]"},
-		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: proofComponents},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
 		{Name: "delegate", Type: "address"},
 		{Name: "data", Type: "bytes"},
 	},
@@ -64,7 +64,9 @@ var lockStatesABI = &abi.Entry{
 
 func NewLockHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema *pb.StateSchema) *lockHandler {
 	return &lockHandler{
-		name:       name,
+		baseHandler: baseHandler{
+			name: name,
+		},
 		coinSchema: coinSchema,
 		callbacks:  callbacks,
 	}
@@ -94,9 +96,7 @@ func (h *lockHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 		},
 	}, nil
 }
-func (h *lockHandler) getAlgoZetoSnarkBJJ() string {
-	return zetosignerapi.AlgoDomainZetoSnarkBJJ(h.name)
-}
+
 func (h *lockHandler) decodeTransferCall(ctx context.Context, config *types.DomainInstanceConfig, encodedCall []byte) (*TransferParams, error) {
 	transferABI := getTransferABI(config.TokenName)
 	if transferABI == nil {
@@ -283,13 +283,19 @@ func (h *lockHandler) formatProvingRequest(ctx context.Context, inputCoins []*ty
 		}
 	}
 
+	tokenSecrets, err := marshalTokenSecrets(inputValueInts, []uint64{})
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalValuesFungible, err)
+	}
+
 	payload := &corepb.ProvingRequest{
 		CircuitId: circuitId,
 		Common: &corepb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
-			InputValues:      inputValueInts,
 			InputSalts:       inputSalts,
 			InputOwner:       inputOwner,
+			TokenSecrets:     tokenSecrets,
+			TokenType:        corepb.TokenType_fungible,
 		},
 	}
 	return proto.Marshal(payload)

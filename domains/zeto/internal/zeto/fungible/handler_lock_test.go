@@ -49,7 +49,9 @@ func sampleTransferPayload() map[string]any {
 
 func TestLockValidateParams(t *testing.T) {
 	h := lockHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	config := &types.DomainInstanceConfig{
 		TokenName: "test",
@@ -85,7 +87,9 @@ func TestLockValidateParams(t *testing.T) {
 
 func TestLocktInit(t *testing.T) {
 	h := lockHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
@@ -121,7 +125,9 @@ func TestLockAssemble(t *testing.T) {
 	}
 
 	h := lockHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 		coinSchema: &prototk.StateSchema{
 			Id: "coin",
 		},
@@ -179,7 +185,9 @@ func TestLockEndorse(t *testing.T) {
 
 func TestLockPrepare(t *testing.T) {
 	h := lockHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{

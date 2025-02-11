@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -105,7 +106,9 @@ func TestTransferValidateParams(t *testing.T) {
 
 func TestTransferInit(t *testing.T) {
 	h := transferHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
@@ -130,7 +133,9 @@ func TestTransferInit(t *testing.T) {
 
 func TestTransferAssemble(t *testing.T) {
 	h := transferHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 		coinSchema: &pb.StateSchema{
 			Id: "coin",
 		},
@@ -307,7 +312,9 @@ func TestTransferEndorse(t *testing.T) {
 
 func TestTransferPrepare(t *testing.T) {
 	h := transferHandler{
-		name: "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	txSpec := &pb.TransactionSpecification{
 		TransactionId: "bad hex",
@@ -413,7 +420,9 @@ func TestGenerateMerkleProofs(t *testing.T) {
 		},
 	}
 	h := transferHandler{
-		name:      "test1",
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 		callbacks: testCallbacks,
 		coinSchema: &pb.StateSchema{
 			Id: "coin",
@@ -523,7 +532,7 @@ func TestGenerateMerkleProofs(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestNonFungibleTransferEndorse(t *testing.T) {
+func TestFungibleTransferEndorse(t *testing.T) {
 	h := transferHandler{}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{}
@@ -533,7 +542,11 @@ func TestNonFungibleTransferEndorse(t *testing.T) {
 	assert.Nil(t, res)
 }
 
-var _ plugintk.DomainCallbacks = &testDomainCallbacks{}
+var _ plugintk.DomainCallbacks = &domain.MockDomainCallbacks{
+	MockFindAvailableStates: func() (*prototk.FindAvailableStatesResponse, error) {
+		return nil, errors.New("test error")
+	},
+}
 
 type testDomainCallbacks struct {
 	returnFunc func() (*pb.FindAvailableStatesResponse, error)
