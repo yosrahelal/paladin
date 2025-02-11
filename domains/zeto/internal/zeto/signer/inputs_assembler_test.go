@@ -51,8 +51,11 @@ func TestAssembleDepositWitnessInputs(t *testing.T) {
 	inputs := depositWitnessInputs{
 		fungibleWitnessInputs: fungibleWitnessInputs{
 			commonWitnessInputs: commonWitnessInputs{
-				inputCommitments: []*big.Int{big.NewInt(1), big.NewInt(2)},
-				inputSalts:       []*big.Int{big.NewInt(3), big.NewInt(4)},
+				inputCommitments:      []*big.Int{big.NewInt(1), big.NewInt(2)},
+				inputSalts:            []*big.Int{big.NewInt(3), big.NewInt(4)},
+				outputCommitments:     []*big.Int{big.NewInt(9), big.NewInt(10)},
+				outputSalts:           []*big.Int{big.NewInt(11), big.NewInt(12)},
+				outputOwnerPublicKeys: [][]*big.Int{},
 			},
 			inputValues:  []*big.Int{big.NewInt(5), big.NewInt(6)},
 			outputValues: []*big.Int{big.NewInt(7), big.NewInt(8)},
@@ -64,11 +67,14 @@ func TestAssembleDepositWitnessInputs(t *testing.T) {
 	ctx := context.Background()
 	result, err := inputs.assemble(ctx, &key)
 	assert.NoError(t, err)
-	assert.Equal(t, inputs.inputCommitments, result["inputCommitments"])
-	assert.Equal(t, inputs.inputSalts, result["inputSalts"])
-	assert.Equal(t, inputs.inputValues, result["inputValues"])
-	assert.Equal(t, inputs.outputValues, result["outputValues"])
+	assert.NotContains(t, result, "inputCommitments")
+	assert.NotContains(t, result, "inputSalts")
+	assert.NotContains(t, result, "inputValues")
 	assert.NotContains(t, result, "inputOwnerPrivateKey")
+	assert.Equal(t, inputs.outputCommitments, result["outputCommitments"])
+	assert.Equal(t, inputs.outputValues, result["outputValues"])
+	assert.Equal(t, inputs.outputSalts, result["outputSalts"])
+	assert.Equal(t, inputs.outputOwnerPublicKeys, result["outputOwnerPublicKeys"])
 }
 
 func TestAssembleNonFungibleWitnessInputs(t *testing.T) {
@@ -199,4 +205,25 @@ func TestPrepareInputsForNullifiers(t *testing.T) {
 		{big.NewInt(0), big.NewInt(0), big.NewInt(0)},
 	}, proofs)
 	assert.Equal(t, []*big.Int{big.NewInt(1), big.NewInt(0)}, enabled)
+}
+func TestAssembleLockWitnessInputs(t *testing.T) {
+	inputs := lockWitnessInputs{
+		fungibleWitnessInputs: fungibleWitnessInputs{
+			commonWitnessInputs: commonWitnessInputs{
+				inputCommitments: []*big.Int{big.NewInt(1), big.NewInt(2)},
+				inputSalts:       []*big.Int{big.NewInt(3), big.NewInt(4)},
+			},
+			inputValues: []*big.Int{big.NewInt(5), big.NewInt(6)},
+		},
+	}
+	key := core.KeyEntry{
+		PrivateKeyForZkp: big.NewInt(123456789),
+	}
+	ctx := context.Background()
+	result, err := inputs.assemble(ctx, &key)
+	assert.NoError(t, err)
+	assert.Equal(t, inputs.inputCommitments, result["commitments"])
+	assert.Equal(t, inputs.inputValues, result["values"])
+	assert.Equal(t, inputs.inputSalts, result["salts"])
+	assert.Equal(t, key.PrivateKeyForZkp, result["ownerPrivateKey"])
 }
