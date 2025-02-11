@@ -162,4 +162,5 @@ var (
 	MsgErrorUnmarshalTokenSecretsFungible    = pde("PD210121", "Failed to unmarshal TokenSecrets_Fungible. %s")
 	MsgErrorUnmarshalTokenSecretsNonFungible = pde("PD210122", "Failed to unmarshal TokenSecrets_NonFungible. %s")
 	MsgErrorTokenTypeMismatch                = pde("PD210123", "Token type mismatch. %s")
+	MsgErrorProvingReqCommonNil              = pde("PD210124", "Proving request common is nil")
 )

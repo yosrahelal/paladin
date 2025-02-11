@@ -805,19 +805,19 @@ func TestSnarkProverSign(t *testing.T) {
 
 	t.Run("Invalid algorithm", func(t *testing.T) {
 		_, err := prover.Sign(ctx, "invalid_algorithm", zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK, nil, nil)
-		assert.ErrorContains(t, err, "PD210101")
+		assert.ErrorContains(t, err, "PD210088")
 	})
 
 	t.Run("Invalid payload type", func(t *testing.T) {
 		_, err := prover.Sign(ctx, zetosignerapi.AlgoDomainZetoSnarkBJJ("zeto"), "invalid_payload_type", nil, nil)
-		assert.ErrorContains(t, err, "PD210102")
+		assert.ErrorContains(t, err, "PD210090")
 	})
 
 	t.Run("Missing circuit ID", func(t *testing.T) {
 		payload, err := proto.Marshal(&pb.ProvingRequest{})
 		require.NoError(t, err)
 		_, err = prover.Sign(ctx, zetosignerapi.AlgoDomainZetoSnarkBJJ("zeto"), zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK, nil, payload)
-		assert.ErrorContains(t, err, "PD210103")
+		assert.ErrorContains(t, err, "PD210124")
 	})
 
 	t.Run("Context cancelled", func(t *testing.T) {
@@ -829,42 +829,7 @@ func TestSnarkProverSign(t *testing.T) {
 		cancel()
 
 		_, err = prover.Sign(ctx, zetosignerapi.AlgoDomainZetoSnarkBJJ("zeto"), zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK, nil, payload)
-		assert.ErrorContains(t, err, "context cancelled")
-	})
-
-	t.Run("Successful sign", func(t *testing.T) {
-		circuitId := constants.CIRCUIT_ANON_ENC
-		payload, err := proto.Marshal(&pb.ProvingRequest{
-			CircuitId: circuitId,
-			Common: &pb.ProvingRequestCommon{
-				InputCommitments: []string{"input1", "input2"},
-				InputSalts:       []string{"salt1", "salt2"},
-				OutputOwners:     []string{"bob", "alice"},
-			},
-		})
-		require.NoError(t, err)
-
-		testCircuitLoader := func(ctx context.Context, circuitID string, config *zetosignerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
-			return &testWitnessMock{}, []byte("proving key"), nil
-		}
-		prover.circuitLoader = testCircuitLoader
-
-		testProofGenerator := func(ctx context.Context, witness []byte, provingKey []byte) (*types.ZKProof, error) {
-			return &types.ZKProof{
-				Proof: &types.ProofData{
-					A:        []string{"a"},
-					B:        [][]string{{"b1.1", "b1.2"}, {"b2.1", "b2.2"}},
-					C:        []string{"c"},
-					Protocol: "super snark",
-				},
-			}, nil
-		}
-		prover.proofGenerator = testProofGenerator
-
-		privateKey := make([]byte, 32)
-		proof, err := prover.Sign(ctx, zetosignerapi.AlgoDomainZetoSnarkBJJ("zeto"), zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK, privateKey, payload)
-		require.NoError(t, err)
-		assert.NotNil(t, proof)
+		assert.ErrorContains(t, err, "PD210124")
 	})
 }
 

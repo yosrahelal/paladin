@@ -33,6 +33,10 @@ func decodeProvingRequest(ctx context.Context, payload []byte) (*pb.ProvingReque
 		return nil, nil, err
 	}
 
+	if inputs.Common == nil {
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorProvingReqCommonNil)
+	}
+
 	if common.IsEncryptionCircuit(inputs.CircuitId) {
 		encExtras := pb.ProvingRequestExtras_Encryption{
 			EncryptionNonce: "",
