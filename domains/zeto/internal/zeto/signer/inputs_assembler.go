@@ -29,57 +29,45 @@ import (
 )
 
 func (inputs *commonWitnessInputs) assemble(keyEntry *core.KeyEntry) map[string]interface{} {
-	m := map[string]interface{}{}
-
-	if len(inputs.inputCommitments) != 0 {
-		m["inputCommitments"] = inputs.inputCommitments
+	return map[string]interface{}{
+		"inputCommitments":      inputs.inputCommitments,
+		"inputSalts":            inputs.inputSalts,
+		"inputOwnerPrivateKey":  keyEntry.PrivateKeyForZkp,
+		"outputCommitments":     inputs.outputCommitments,
+		"outputSalts":           inputs.outputSalts,
+		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
 	}
-	if len(inputs.inputSalts) != 0 {
-		m["inputSalts"] = inputs.inputSalts
-	}
-	if keyEntry.PrivateKeyForZkp.Cmp(big.NewInt(0)) != 0 {
-		m["inputOwnerPrivateKey"] = keyEntry.PrivateKeyForZkp
-	}
-	if len(inputs.outputCommitments) != 0 {
-		m["outputCommitments"] = inputs.outputCommitments
-	}
-	if len(inputs.outputSalts) != 0 {
-		m["outputSalts"] = inputs.outputSalts
-	}
-	if len(inputs.outputOwnerPublicKeys) != 0 {
-		m["outputOwnerPublicKeys"] = inputs.outputOwnerPublicKeys
-	}
-	return m
 }
 
 func (inputs *fungibleWitnessInputs) assemble(ctx context.Context, keyEntry *core.KeyEntry) (map[string]interface{}, error) {
 	m := inputs.commonWitnessInputs.assemble(keyEntry)
-	if len(inputs.inputValues) != 0 {
-		m["inputValues"] = inputs.inputValues
-	}
-	if len(inputs.outputValues) != 0 {
-		m["outputValues"] = inputs.outputValues
-	}
+	m["inputValues"] = inputs.inputValues
+	m["outputValues"] = inputs.outputValues
 	return m, nil
 }
 
 func (inputs *depositWitnessInputs) assemble(ctx context.Context, keyEntry *core.KeyEntry) (map[string]interface{}, error) {
-	m, err := inputs.fungibleWitnessInputs.assemble(ctx, keyEntry)
-	if err != nil {
-		return nil, err
-	}
-	delete(m, "inputOwnerPrivateKey")
-	return m, nil
+	return map[string]interface{}{
+		"outputCommitments":     inputs.outputCommitments,
+		"outputValues":          inputs.outputValues,
+		"outputSalts":           inputs.outputSalts,
+		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
+	}, nil
+}
+
+func (inputs *lockWitnessInputs) assemble(ctx context.Context, keyEntry *core.KeyEntry) (map[string]interface{}, error) {
+	return map[string]interface{}{
+		"commitments":     inputs.inputCommitments,
+		"values":          inputs.inputValues,
+		"salts":           inputs.inputSalts,
+		"ownerPrivateKey": keyEntry.PrivateKeyForZkp,
+	}, nil
 }
 
 func (inputs *nonFungibleWitnessInputs) assemble(ctx context.Context, keyEntry *core.KeyEntry) (map[string]interface{}, error) {
 	m := inputs.commonWitnessInputs.assemble(keyEntry)
-	if inputs.tokenIDs != nil {
-		m["tokenIds"] = inputs.tokenIDs
-	}
-	if inputs.tokenURIs != nil {
-		m["tokenUris"] = inputs.tokenURIs
-	}
+	m["tokenIds"] = inputs.tokenIDs
+	m["tokenUris"] = inputs.tokenURIs
 	return m, nil
 }
 

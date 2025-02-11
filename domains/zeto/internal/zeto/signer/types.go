@@ -55,6 +55,12 @@ type depositWitnessInputs struct {
 	fungibleWitnessInputs
 }
 
+var _ witnessInputs = &lockWitnessInputs{}
+
+type lockWitnessInputs struct {
+	fungibleWitnessInputs
+}
+
 var _ witnessInputs = &fungibleEncWitnessInputs{}
 
 type fungibleEncWitnessInputs struct {

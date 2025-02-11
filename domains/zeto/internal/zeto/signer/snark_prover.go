@@ -297,6 +297,8 @@ func newWitnessInputs(circuitId string, extras interface{}) (witnessInputs, erro
 		return &fungibleNullifierWitnessInputs{nul: nullifierExtras}, nil
 	case constants.CIRCUIT_DEPOSIT:
 		return &depositWitnessInputs{}, nil
+	case constants.CIRCUIT_LOCK, constants.CIRCUIT_LOCK_BATCH:
+		return &lockWitnessInputs{}, nil
 	default:
 		return &fungibleWitnessInputs{}, nil
 	}
