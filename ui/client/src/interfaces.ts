@@ -179,3 +179,10 @@ export interface IFilterField {
   name: string
   type: 'string' | 'number' | 'boolean'
 }
+
+export interface IFilter {
+  field: IFilterField,
+  operator: string
+  value: string
+  caseSensitive?: boolean
+}

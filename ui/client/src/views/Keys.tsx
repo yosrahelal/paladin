@@ -21,7 +21,7 @@ import { fetchKeys } from "../queries/keys";
 import { Hash } from "../components/Hash";
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import { IKeyEntry, IVerifier } from "../interfaces";
+import { IFilter, IKeyEntry, IVerifier } from "../interfaces";
 import { useSearchParams } from "react-router-dom";
 import { Captions, Signature } from "lucide-react";
 import { constants } from "../components/config";
@@ -29,9 +29,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import { ReverseKeyLookupDialog } from "../dialogs/ReverseKeyLookup";
 import RemoveIcon from '@mui/icons-material/Remove';
 import { VerifiersDialog } from "../dialogs/Verifiers";
-import { AddFilterDialog } from "../dialogs/AddFilter";
-import FilterAltOutlinedIcon from '@mui/icons-material/FilterAltOutlined';
 import { useTranslation } from "react-i18next";
+import { Filters } from "../components/Filters";
 
 export const Keys: React.FC = () => {
 
@@ -63,7 +62,7 @@ export const Keys: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(getDefaultSortOrder);
   const [selectedVerifiers, setSelectedVerifiers] = useState<IVerifier[]>();
   const [verifiersDialogOpen, setVerifiersDialogOpen] = useState(false);
-  const [addFilterDialogOpen, setAddFilterDialogOpen] = useState(true);
+  const [filters, setFilters] = useState<IFilter[]>([]);
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -258,7 +257,7 @@ export const Keys: React.FC = () => {
                 {t("localKeys")}
               </Typography>
             </Grid2>
-            <Grid2 size={{ xs: 12, md: 4 }} container justifyContent={{ xs: 'center', sm: 'center', md: 'right' }}>
+            <Grid2 size={{ xs: 12, md: 4 }} container justifyContent="right">
               <Grid2>
                 <Button
                   size="large"
@@ -270,19 +269,45 @@ export const Keys: React.FC = () => {
                   {t('reverseLookup')}
                 </Button>
               </Grid2>
-              <Grid2>
-                <Button
-                  size="large"
-                  variant="outlined"
-                  startIcon={<FilterAltOutlinedIcon />}
-                  sx={{ borderRadius: '20px' }}
-                  onClick={() => setAddFilterDialogOpen(true)}
-                >
-                  {t('filter')}
-                </Button>
-              </Grid2>
             </Grid2>
           </Grid2>
+          <Box sx={{ height: '10px' }} />
+          <Filters
+            filterFields={[
+              {
+                label: t('name'),
+                name: 'path',
+                type: 'string'
+              },
+              {
+                label: t('index'),
+                name: 'index',
+                type: 'number'
+              },
+              {
+                label: t('wallet'),
+                name: 'wallet',
+                type: 'string'
+              },
+              {
+                label: t('handle'),
+                name: 'handle',
+                type: 'string'
+              },
+              {
+                label: t('isFolder'),
+                name: 'isFolder',
+                type: 'boolean'
+              },
+              {
+                label: t('isKey'),
+                name: 'isKey',
+                type: 'boolean'
+              }
+            ]}
+            filters={filters}
+            setFilters={setFilters}
+          />
           <Breadcrumbs
             separator={<NavigateNextIcon fontSize="small" />}
             sx={{ marginLeft: '10px', marginBottom: '10px' }}>
@@ -293,7 +318,6 @@ export const Keys: React.FC = () => {
             </Link>
             {breadcrumbContent}
           </Breadcrumbs>
-
           <TableContainer component={Paper} >
             <Table>
               <TableHead>
@@ -383,27 +407,7 @@ export const Keys: React.FC = () => {
           setDialogOpen={setVerifiersDialogOpen}
           verifiers={selectedVerifiers}
         />}
-      <AddFilterDialog
-      filterFields={[
-        {
-          label: t('name'),
-          name: 'name',
-          type: 'string'
-        },
-        {
-          label: t('index'),
-          name: 'index',
-          type: 'number'
-        },
-        {
-          label: t('isKey'),
-          name: 'isKey',
-          type: 'boolean'
-        }
-      ]}
-        dialogOpen={addFilterDialogOpen}
-        setDialogOpen={setAddFilterDialogOpen}
-      />
+
     </>
   );
 }

@@ -17,30 +17,30 @@
 import {
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   FormControlLabel,
-  FormLabel,
   Grid2,
   MenuItem,
-  Radio,
-  RadioGroup,
   TextField
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { IFilterField } from '../interfaces';
+import { IFilter, IFilterField } from '../interfaces';
 
 type Props = {
   filterFields: IFilterField[]
+  addFilter: (filter: IFilter) => void
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 export const AddFilterDialog: React.FC<Props> = ({
   filterFields,
+  addFilter,
   dialogOpen,
   setDialogOpen
 }) => {
@@ -48,8 +48,9 @@ export const AddFilterDialog: React.FC<Props> = ({
   const [selectedFilterField, setSelectedFilterField] = useState<IFilterField>();
   const [operators, setOperators] = useState<JSX.Element[]>([]);
   const [selectedOperator, setSelectedOperator] = useState<string>();
+  const [isCaseSensitive, setIsCaseSensitive] = useState(false);
+  const [values, setValues] = useState<JSX.Element[]>([]);
   const [value, setValue] = useState('');
-  const [booleanValue, setBooleanValue] = useState(true);
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -58,7 +59,7 @@ export const AddFilterDialog: React.FC<Props> = ({
         setSelectedFilterField(undefined);
         setSelectedOperator(undefined);
         setValue('');
-        setBooleanValue(true);
+        setIsCaseSensitive(false);
       }, 200);
     }
   }, [dialogOpen]);
@@ -68,7 +69,14 @@ export const AddFilterDialog: React.FC<Props> = ({
       let availableOperators: JSX.Element[] = [
         <MenuItem key="equal" value="equal">{t('equal')}</MenuItem>
       ];
-      if (selectedFilterField.type !== 'boolean') {
+      let availableValues: JSX.Element[] = [];
+
+      if (selectedFilterField.type === 'boolean') {
+        availableValues = [
+          <MenuItem key="true" value="true">{t('true')}</MenuItem>,
+          <MenuItem key="false" value="false">{t('false')}</MenuItem>
+        ];
+      } else {
         availableOperators = [
           ...availableOperators,
           <MenuItem key="notEqual" value="notEqual">{t('notEqual')}</MenuItem>,
@@ -93,12 +101,21 @@ export const AddFilterDialog: React.FC<Props> = ({
       if (selectedFilterField.type === 'number' && isNaN(Number(value))) {
         setValue('');
       }
+      setValues(availableValues);
       setOperators(availableOperators);
     }
   }, [selectedFilterField]);
 
   const handleSubmit = () => {
-    
+    if (selectedFilterField !== undefined && selectedOperator !== undefined) {
+      addFilter({
+        field: selectedFilterField,
+        operator: selectedOperator,
+        value,
+        caseSensitive: selectedFilterField?.type === 'string' ? isCaseSensitive : undefined
+      });
+      setDialogOpen(false);
+    }
   };
 
   const canSubmit = selectedFilterField !== undefined
@@ -110,7 +127,7 @@ export const AddFilterDialog: React.FC<Props> = ({
       open={dialogOpen}
       onClose={() => setDialogOpen(false)}
       fullWidth
-      maxWidth="md"
+      maxWidth="xs"
     >
       <form onSubmit={(event) => {
         event.preventDefault();
@@ -121,8 +138,8 @@ export const AddFilterDialog: React.FC<Props> = ({
         </DialogTitle>
         <DialogContent>
           <Box sx={{ marginTop: '5px' }}>
-            <Grid2 container spacing={2} alignItems="center">
-              <Grid2 size={{ xs: 12, sm: 4 }}>
+            <Grid2 container spacing={2}>
+              <Grid2 size={{ xs: 12 }}>
                 <TextField
                   label={t('field')}
                   autoComplete="off"
@@ -138,8 +155,9 @@ export const AddFilterDialog: React.FC<Props> = ({
                   )}
                 </TextField>
               </Grid2>
-              <Grid2 size={{ xs: 12, sm: 4 }}>
+              <Grid2 size={{ xs: 12 }} textAlign="center">
                 <TextField
+                  sx={{ textAlign: 'left' }}
                   label={t('operator')}
                   autoComplete="off"
                   fullWidth
@@ -151,33 +169,25 @@ export const AddFilterDialog: React.FC<Props> = ({
                   {operators}
                 </TextField>
               </Grid2>
-              <Grid2 size={{ xs: 12, sm: 4 }}>
-                {selectedFilterField?.type === 'boolean' ?
-                  <Box sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '15px',
-                    justifyContent: 'center'
-                  }}>
-                    <FormLabel>{t('valueColon')}</FormLabel>
-                    <RadioGroup
-                      row
-                      value={booleanValue}
-                      onChange={event => setBooleanValue(event.target.value === 'true')}>
-                      <FormControlLabel value="true" control={<Radio />} label={t('true')} />
-                      <FormControlLabel value="false" control={<Radio />} label={t('false')} />
-                    </RadioGroup>
-                  </Box>
-                  :
-                  <TextField
-                    type={selectedFilterField?.type === 'number' ? 'number' : 'text'}
-                    label={t('value')}
-                    autoComplete="off"
-                    fullWidth
-                    disabled={selectedFilterField === undefined}
-                    value={value}
-                    onChange={event => setValue(event.target.value)}
-                  />}
+              <Grid2 size={{ xs: 12 }}>
+                <TextField
+                  type={selectedFilterField?.type === 'number' ? 'number' : 'text'}
+                  label={t('value')}
+                  autoComplete="off"
+                  fullWidth
+                  disabled={selectedFilterField === undefined}
+                  value={value}
+                  onChange={event => setValue(event.target.value)}
+                  select={selectedFilterField?.type === 'boolean'}
+                >
+                  {values}
+                </TextField>
+                <Box sx={{ textAlign: 'center' }}>
+                  <FormControlLabel
+                    disabled={selectedFilterField === undefined || selectedFilterField.type !== 'string'}
+                    control={<Checkbox checked={isCaseSensitive} onChange={event => setIsCaseSensitive(event.target.checked)} />}
+                    label={t('caseSensitive')} />
+                </Box>
               </Grid2>
             </Grid2>
           </Box>

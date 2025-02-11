@@ -1,5 +1,7 @@
 {
 	"ISO": "ISO",
+	"isFolder": "Is folder",
+	"isKey": "Is key",
 	"abiFileSelected": "File {{fileName}} selected",
 	"abiHash": "ABI Hash: {{hash}}",
 	"activated": "Activated",
