@@ -74,7 +74,7 @@ func TestRPCLocalDetails(t *testing.T) {
 	err = rpc.CallRPC(ctx, &queryEntries, "keymgr_queryKeys", query.NewQueryBuilder().Equal("parent", "").Sort("index").Limit(10).Query())
 	require.NoError(t, err)
 
-	// Result must contain 3 entries
+	// Result must contain 2 entries
 	assert.Equal(t, len(queryEntries), 2)
 
 	// Verify result is sorted by index

@@ -49,11 +49,11 @@ func (t DBKeyVerifier) TableName() string {
 }
 
 var KeyEntryFilters filters.FieldSet = filters.FieldMap{
-	"isKey":       filters.BooleanField("isKey"),
-	"hasChildren": filters.BooleanField("hasChildren"),
+	"isKey":       filters.BooleanField("key_mappings.identifier IS NOT NULL"),
+	"hasChildren": filters.BooleanField("k.p IS NOT NULL"),
 	"parent":      filters.StringField("parent"),
 	"index":       filters.Int64Field(`"index"`),
 	"path":        filters.StringField("path"),
 	"wallet":      filters.StringField("wallet"),
-	"keyHandle":   filters.StringField("keyHandle"),
+	"keyHandle":   filters.StringField("key_handle"),
 }
