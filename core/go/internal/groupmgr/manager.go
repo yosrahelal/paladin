@@ -256,7 +256,7 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 		for _, identity := range members {
 			msgs = append(msgs, &components.ReliableMessage{
 				Node:        node,
-				MessageType: components.RMTState.Enum(),
+				MessageType: components.RMTPrivacyGroup.Enum(),
 				Metadata: tktypes.JSONString(&components.StateDistribution{
 					IdentityLocator: identity,
 					Domain:          spec.Domain,

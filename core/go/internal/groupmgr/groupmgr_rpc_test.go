@@ -94,7 +94,7 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 		// Validate the state send gets the correct data
 		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 			msg := args[2].(*components.ReliableMessage)
-			require.Equal(t, components.RMTState, msg.MessageType.V())
+			require.Equal(t, components.RMTPrivacyGroup, msg.MessageType.V())
 			var sd *components.StateDistribution
 			err := json.Unmarshal(msg.Metadata, &sd)
 			require.NoError(t, err)
