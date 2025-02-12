@@ -69,7 +69,7 @@ func (iftxs *inFlightTransactionState) CanBeRemoved(ctx context.Context) bool {
 	for _, version := range iftxs.versions {
 		runningStages = runningStages || version.GetRunningStageContext(ctx) != nil
 	}
-	return iftxs.IsReadyToExit() && runningStages
+	return iftxs.IsReadyToExit() && !runningStages
 }
 
 func (iftxs *inFlightTransactionState) CanSubmit(ctx context.Context, cost *big.Int) bool {

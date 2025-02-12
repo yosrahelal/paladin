@@ -150,7 +150,7 @@ func NewInFlightTransactionStageController(
 	return ift
 }
 
-func (it *inFlightTransactionStageController) UpdateTransaction(ctx context.Context, newPtx *DBPublicTxn, response chan error) {
+func (it *inFlightTransactionStageController) UpdateTransaction(ctx context.Context, newPtx *DBPublicTxn, dbUpdate func() error, response chan error) {
 	it.updateMux.Lock()
 	defer it.updateMux.Unlock()
 
@@ -159,8 +159,9 @@ func (it *inFlightTransactionStageController) UpdateTransaction(ctx context.Cont
 	// function; however, that function starts any action with higher latency in separate go routines meaning that we can expect
 	// ProduceLatestInFlightStageContext to run with an acceptable frequency for the response.
 	it.updates = append(it.updates, transactionUpdate{
-		response: response,
-		newPtx:   newPtx,
+		response,
+		newPtx,
+		dbUpdate,
 	})
 }
 
@@ -398,6 +399,9 @@ func (it *inFlightTransactionStageController) processSigningStageOutput(ctx cont
 			log.L(ctx).Debugf("Signed message is not nil: %t", rsc.StageOutput.SignOutput.SignedMessage != nil)
 			if version.IsCurrent(ctx) {
 				it.TriggerNewStageRun(ctx, version, InFlightTxStageSubmitting, BaseTxSubStatusReceived, rsc.StageOutput.SignOutput.SignedMessage)
+			} else {
+				// otherwise there is nothing more to do here
+				version.ClearRunningStageContext(ctx)
 			}
 		}
 	} else if rsIn.SignOutput == nil {
@@ -454,15 +458,16 @@ func (it *inFlightTransactionStageController) processSubmittingStageOutput(ctx c
 		if rsc.StageOutput.SubmitOutput.Err != nil {
 			if rsc.StageOutput.SubmitOutput.ErrorReason == string(ethclient.ErrorReasonInsufficientFunds) {
 				it.balanceManager.NotifyAddressBalanceChanged(ctx, it.signingAddress)
-				// wait for the stale transaction timeout to re-trigger the submission provided this is the current version
-				if version.IsCurrent(ctx) {
-					rsc.StageErrored = true
-				} else {
-					// otherwise there is nothing more to do here- we've been updated with new values and do not want to submit
-					// this transaction again
-					version.ClearRunningStageContext(ctx)
-				}
 			}
+			// wait for the stale transaction timeout to re-trigger the submission provided this is the current version
+			if version.IsCurrent(ctx) {
+				rsc.StageErrored = true
+			} else {
+				// otherwise there is nothing more to do here- we've been updated with new values and do not want to submit
+				// this transaction again
+				version.ClearRunningStageContext(ctx)
+			}
+
 		}
 		if stageOutput.PersistenceOutput.PersistenceError == nil && !rsc.StageErrored {
 			// we've persisted successfully, it's safe to move to the next stage based on the latest state of the managed transaction

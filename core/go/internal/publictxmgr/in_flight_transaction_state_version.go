@@ -35,7 +35,6 @@ type inFlightTransactionStateVersion struct {
 	id int
 
 	current             bool
-	canBeRemoved        bool
 	testOnlyNoEventMode bool
 	signerNonce         string // TODO: replace with function call
 
@@ -108,6 +107,34 @@ func (v *inFlightTransactionStateVersion) IsCurrent(ctx context.Context) bool {
 	return v.current
 }
 
+func (v *inFlightTransactionStateVersion) GetStage(ctx context.Context) InFlightTxStage {
+	return v.stage
+}
+
+func (v *inFlightTransactionStateVersion) GetStageStartTime(ctx context.Context) time.Time {
+	return v.txLevelStageStartTime
+}
+
+func (v *inFlightTransactionStateVersion) SetValidatedTransactionHashMatchState(ctx context.Context, validatedTransactionHashMatchState bool) {
+	v.validatedTransactionHashMatchState = validatedTransactionHashMatchState
+}
+
+func (v *inFlightTransactionStateVersion) ValidatedTransactionHashMatchState(ctx context.Context) bool {
+	return v.validatedTransactionHashMatchState
+}
+
+func (v *inFlightTransactionStateVersion) SetTransientPreviousStageOutputs(tpso *TransientPreviousStageOutputs) {
+	v.TransientPreviousStageOutputs = tpso
+}
+
+func (v *inFlightTransactionStateVersion) GetRunningStageContext(ctx context.Context) *RunningStageContext {
+	return v.runningStageContext
+}
+
+func (v *inFlightTransactionStateVersion) GetStageTriggerError(ctx context.Context) error {
+	return v.stageTriggerError
+}
+
 func (v *inFlightTransactionStateVersion) StartNewStageContext(ctx context.Context, stage InFlightTxStage, substatus BaseTxSubStatus) {
 	nowTime := time.Now() // pin the now time
 	rsc := NewRunningStageContext(ctx, stage, substatus, v.InMemoryTxStateManager)
@@ -145,34 +172,6 @@ func (v *inFlightTransactionStateVersion) StartNewStageContext(ctx context.Conte
 	default:
 		log.L(ctx).Tracef("Transaction with ID %s, didn't trigger any action for new stage: %s", rsc.InMemoryTx.GetSignerNonce(), stage)
 	}
-}
-
-func (v *inFlightTransactionStateVersion) GetStage(ctx context.Context) InFlightTxStage {
-	return v.stage
-}
-
-func (v *inFlightTransactionStateVersion) GetStageStartTime(ctx context.Context) time.Time {
-	return v.txLevelStageStartTime
-}
-
-func (v *inFlightTransactionStateVersion) SetValidatedTransactionHashMatchState(ctx context.Context, validatedTransactionHashMatchState bool) {
-	v.validatedTransactionHashMatchState = validatedTransactionHashMatchState
-}
-
-func (v *inFlightTransactionStateVersion) ValidatedTransactionHashMatchState(ctx context.Context) bool {
-	return v.validatedTransactionHashMatchState
-}
-
-func (v *inFlightTransactionStateVersion) SetTransientPreviousStageOutputs(tpso *TransientPreviousStageOutputs) {
-	v.TransientPreviousStageOutputs = tpso
-}
-
-func (v *inFlightTransactionStateVersion) GetRunningStageContext(ctx context.Context) *RunningStageContext {
-	return v.runningStageContext
-}
-
-func (v *inFlightTransactionStateVersion) GetStageTriggerError(ctx context.Context) error {
-	return v.stageTriggerError
 }
 
 func (v *inFlightTransactionStateVersion) ClearRunningStageContext(ctx context.Context) {

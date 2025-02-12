@@ -73,11 +73,11 @@ func (imtxs *inMemoryTxState) UpdateTransaction(newPtx *DBPublicTxn) {
 func (imtxs *inMemoryTxState) IsTransactionUpdate(newPtx *DBPublicTxn) bool {
 	// TODO AM: test thoroughly that all these comparisons work once the data is parsed in
 	// test each value for not set, same and different
-	return newPtx.To != nil && !newPtx.To.Equals(imtxs.mtx.ptx.To) &&
-		// imtxs.mtx.ptx.Data == newPtx.Data && // TODO AM: needs to be converted to a comparable type
-		newPtx.Gas != 0 && newPtx.Gas != imtxs.mtx.ptx.Gas &&
-		// newPtx.FixedGasPricing != nil && newPtx.FixedGasPricing != imtxs.mtx.ptx.FixedGasPricing // TODO AM: needs to be converted to a comparable type
-		newPtx.Value != nil && newPtx.Value != imtxs.mtx.ptx.Value
+	return (newPtx.To != nil && !newPtx.To.Equals(imtxs.mtx.ptx.To)) ||
+		// (imtxs.mtx.ptx.Data == newPtx.Data || // TODO AM: needs to be converted to a comparable type
+		(newPtx.Gas != 0 && newPtx.Gas != imtxs.mtx.ptx.Gas) ||
+		// (newPtx.FixedGasPricing != nil && newPtx.FixedGasPricing != imtxs.mtx.ptx.FixedGasPricing) || // TODO AM: needs to be converted to a comparable type
+		(newPtx.Value != nil && newPtx.Value != imtxs.mtx.ptx.Value)
 }
 
 func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdates *BaseTXUpdates) {

@@ -22,6 +22,7 @@ import (
 
 	"github.com/kaleido-io/paladin/core/mocks/publictxmocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newTestInFlightTransactionStateManager(t *testing.T) (InFlightTransactionStateManager, func()) {
@@ -34,13 +35,43 @@ func newTestInFlightTransactionStateManager(t *testing.T) (InFlightTransactionSt
 
 }
 
+func TestStateManagerBasicLifecycle(t *testing.T) {
+	ctx := context.Background()
+	stateManager, done := newTestInFlightTransactionStateManager(t)
+	defer done()
+	stateManager.SetOrchestratorContext(ctx, &OrchestratorContext{})
+
+	// check it has one version which is current
+	require.Len(t, stateManager.GetVersions(ctx), 1)
+	assert.True(t, stateManager.GetVersion(ctx, 0).IsCurrent(ctx))
+
+	// add a new version, check that one becomes current and the previous one is not
+	stateManager.NewVersion(ctx)
+	require.Len(t, stateManager.GetVersions(ctx), 2)
+	assert.False(t, stateManager.GetVersion(ctx, 0).IsCurrent(ctx))
+	assert.True(t, stateManager.GetVersion(ctx, 1).IsCurrent(ctx))
+
+	// check removal conditions
+	mtx := stateManager.(*inFlightTransactionState).InMemoryTxStateManager.(*inMemoryTxState).mtx
+	mtx.InFlightStatus = InFlightStatusPending
+	currentVersion := stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
+	currentVersion.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, stateManager.(*inFlightTransactionState).InMemoryTxStateManager)
+	assert.False(t, stateManager.CanBeRemoved(ctx))
+
+	stateManager.GetCurrentVersion(ctx).ClearRunningStageContext(ctx)
+	assert.False(t, stateManager.CanBeRemoved(ctx))
+
+	mtx.InFlightStatus = InFlightStatusConfirmReceived
+	assert.True(t, stateManager.CanBeRemoved(ctx))
+}
+
 func TestStateManagerStageManagementCanSubmit(t *testing.T) {
 	ctx := context.Background()
 	stateManager, done := newTestInFlightTransactionStateManager(t)
 	defer done()
 	stateManager.SetOrchestratorContext(ctx, &OrchestratorContext{
 		PreviousNonceCostUnknown: false,
-		// no available to spent provided, this means we don't need to check balance
+		// no availableToSpend provided, this means we don't need to check balance
 	})
 	assert.True(t, stateManager.CanSubmit(context.Background(), big.NewInt(0)))
 	stateManager.SetOrchestratorContext(ctx, &OrchestratorContext{

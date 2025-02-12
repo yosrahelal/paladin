@@ -33,8 +33,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/keymanager"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
@@ -231,7 +231,7 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 		txIDs[i] = uuid.New()
 
 		// We do the public TX manager's job for it in this test
-		fakeTxManagerInsert(t, ble.p.DB(), txIDs[i], "signer1")
+		fakeTxManagerInsert(t, ble.p.DB(), txIDs[i], "signer2")
 
 		txs[i] = &components.PublicTxSubmission{
 			Bindings: []*components.PaladinTXReference{
