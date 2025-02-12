@@ -32,7 +32,16 @@ type ZetoHelper struct {
 	Address *tktypes.EthAddress
 }
 
-func DeployZeto(ctx context.Context, t *testing.T, rpc rpcclient.Client, domainName, controllerName, tokenName string) *ZetoHelper {
+// =============================================================================
+//
+//	Fungible
+//
+// =============================================================================
+type ZetoHelperFungible struct {
+	ZetoHelper
+}
+
+func DeployZetoFungible(ctx context.Context, t *testing.T, rpc rpcclient.Client, domainName, controllerName, tokenName string) *ZetoHelperFungible {
 	var addr tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, controllerName, &types.InitializerParams{
 		TokenName: tokenName,
@@ -40,17 +49,19 @@ func DeployZeto(ctx context.Context, t *testing.T, rpc rpcclient.Client, domainN
 	if rpcerr != nil {
 		assert.NoError(t, rpcerr)
 	}
-	return &ZetoHelper{
-		t:       t,
-		rpc:     rpc,
-		Address: &addr,
+	return &ZetoHelperFungible{
+		ZetoHelper: ZetoHelper{
+			t:       t,
+			rpc:     rpc,
+			Address: &addr,
+		},
 	}
 }
 
-func (n *ZetoHelper) Mint(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
-	fn := types.ZetoABI.Functions()["mint"]
-	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.MintParams{
-		Mints: []*types.TransferParamEntry{
+func (n *ZetoHelperFungible) Mint(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
+	fn := types.ZetoFungibleABI.Functions()["mint"]
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.FungibleMintParams{
+		Mints: []*types.FungibleTransferParamEntry{
 			{
 				To:     to,
 				Amount: tktypes.Uint64ToUint256(amount),
@@ -59,10 +70,10 @@ func (n *ZetoHelper) Mint(ctx context.Context, to string, amount uint64) *Domain
 	}))
 }
 
-func (n *ZetoHelper) Transfer(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
-	fn := types.ZetoABI.Functions()["transfer"]
-	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.TransferParams{
-		Transfers: []*types.TransferParamEntry{
+func (n *ZetoHelperFungible) Transfer(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
+	fn := types.ZetoFungibleABI.Functions()["transfer"]
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.FungibleTransferParams{
+		Transfers: []*types.FungibleTransferParamEntry{
 			{
 				To:     to,
 				Amount: tktypes.Uint64ToUint256(amount),
@@ -71,10 +82,60 @@ func (n *ZetoHelper) Transfer(ctx context.Context, to string, amount uint64) *Do
 	}))
 }
 
-func (z *ZetoHelper) Lock(ctx context.Context, delegate *tktypes.EthAddress, call []byte) *DomainTransactionHelper {
-	fn := types.ZetoABI.Functions()["lock"]
+func (z *ZetoHelperFungible) Lock(ctx context.Context, delegate *tktypes.EthAddress, call []byte) *DomainTransactionHelper {
+	fn := types.ZetoFungibleABI.Functions()["lock"]
 	return NewDomainTransactionHelper(ctx, z.t, z.rpc, z.Address, fn, toJSON(z.t, &types.LockParams{
 		Delegate: delegate,
 		Call:     call,
+	}))
+}
+
+// =============================================================================
+//
+//	NonFungible
+//
+// =============================================================================
+type ZetoHelperNonFungible struct {
+	ZetoHelper
+}
+
+func DeployZetoNonFungible(ctx context.Context, t *testing.T, rpc rpcclient.Client, domainName, controllerName, tokenName string) *ZetoHelperNonFungible {
+	var addr tktypes.EthAddress
+	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, controllerName, &types.InitializerParams{
+		TokenName: tokenName,
+	})
+	if rpcerr != nil {
+		assert.NoError(t, rpcerr)
+	}
+	return &ZetoHelperNonFungible{
+		ZetoHelper: ZetoHelper{
+			t:       t,
+			rpc:     rpc,
+			Address: &addr,
+		},
+	}
+}
+
+func (n *ZetoHelperNonFungible) Mint(ctx context.Context, to, uri string) *DomainTransactionHelper {
+	fn := types.ZetoNonFungibleABI.Functions()["mint"]
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.NonFungibleMintParams{
+		Mints: []*types.NonFungibleTransferParamEntry{
+			{
+				To:  to,
+				URI: uri,
+			},
+		},
+	}))
+}
+
+func (n *ZetoHelperNonFungible) Transfer(ctx context.Context, to string, tokenID string) *DomainTransactionHelper {
+	fn := types.ZetoNonFungibleABI.Functions()["transfer"]
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.NonFungibleTransferParams{
+		Transfers: []*types.NonFungibleTransferParamEntry{
+			{
+				To:      to,
+				TokenID: tktypes.MustParseHexUint256(tokenID),
+			},
+		},
 	}))
 }

@@ -364,7 +364,7 @@ func (s *pvpTestSuite) TestNotoForZeto() {
 
 	log.L(ctx).Infof("Deploying Noto and Zeto")
 	noto := helpers.DeployNoto(ctx, t, rpc, s.notoDomainName, notary, nil)
-	zeto := helpers.DeployZeto(ctx, t, rpc, s.zetoDomainName, notary, tokenName)
+	zeto := helpers.DeployZetoFungible(ctx, t, rpc, s.zetoDomainName, notary, tokenName)
 	log.L(ctx).Infof("Noto deployed to %s", noto.Address)
 	log.L(ctx).Infof("Zeto deployed to %s", zeto.Address)
 
