@@ -15,7 +15,7 @@ contract HelloWorld {
      * @param name The name of the recipient
      */
     function sayHello(string memory name) public {
-        string memory message = string.concat("Welcome to Paladin, ", name, " :)");
+        string memory message = string.concat("Welcome to Paladin, ", name);
 
         // Emit the event with the formatted message        
         emit HelloEvent(message);

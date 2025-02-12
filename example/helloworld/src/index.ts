@@ -34,7 +34,7 @@ async function main(): Promise<boolean> {
 
   // STEP 2: Call the sayHello function
   logger.log("STEP 2: Calling the sayHello function...");
-  const name = "Blocky McChainface"; // Example name for the greeting
+  const name = "John"; // Example name for the greeting
 
   const sayHelloTxID = await paladin.sendTransaction({
     type: TransactionType.PUBLIC,
@@ -70,9 +70,9 @@ async function main(): Promise<boolean> {
 
   // Extract the event message and validate its content
   const message = events[0].data["message"];
-  const expectedOutput = `Welcome to Paladin, ${name}:)`;
+  const expectedOutput = `Welcome to Paladin, ${name}`;
   if (message !== expectedOutput) {
-    logger.error("STEP 3: Event data does not match the expected output!");
+    logger.error(`STEP 3: ERROR - Event data does not match the expected output! message: "${message}"`);
     return false;
   }
   logger.log("STEP 3: Events verified successfully!");
