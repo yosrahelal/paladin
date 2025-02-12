@@ -12,8 +12,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-const modulu = "21888242871839275222246405745257275088548364400416034343698204186575808495617"
-
 var (
 	encodeTransactionDataFunc func(context.Context, *pb.TransactionSpecification, ethtypes.HexBytes0xPrefix) (tktypes.HexBytes, error) = common.EncodeTransactionData
 	encodeProofFunc           func(proof *corepb.SnarkProof) map[string]interface{}                                                    = common.EncodeProof

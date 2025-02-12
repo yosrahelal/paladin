@@ -34,7 +34,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-const modulu = "21888242871839275222246405745257275088548364400416034343698204186575808495617"
+const modulus = "21888242871839275222246405745257275088548364400416034343698204186575808495617"
 
 func IsNullifiersCircuit(circuitId string) bool {
 	return IsFungibleNullifiersCircuit(circuitId) || IsNonFungibleNullifiersCircuit(circuitId)
@@ -142,9 +142,9 @@ func EncodeProof(proof *corepb.SnarkProof) map[string]interface{} {
 }
 
 // Generate a random 256-bit integer
-func CryptoRand256() (*big.Int, error) {
+func CryptoRandBN254() (*big.Int, error) {
 	// The BN254 field modulus.
-	fieldModulus, ok := new(big.Int).SetString(modulu, 10)
+	fieldModulus, ok := new(big.Int).SetString(modulus, 10)
 	if !ok {
 		return nil, fmt.Errorf("failed to parse field modulus")
 	}

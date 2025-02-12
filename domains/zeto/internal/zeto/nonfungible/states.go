@@ -33,7 +33,7 @@ import (
 
 // this is a helper function to generate a random number
 // it is a variable so that it can be mocked in tests
-var Rand256 func() (*big.Int, error) = common.CryptoRand256
+var Rand256 func() (*big.Int, error) = common.CryptoRandBN254
 
 var NewSalt func() *big.Int = crypto.NewSalt
 
