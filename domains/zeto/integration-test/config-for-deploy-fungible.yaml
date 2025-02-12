@@ -107,3 +107,4 @@ contracts:
       cloneable: true
       abiAndBytecode:
         path: ./abis/Zeto_AnonNullifier.json
+ 

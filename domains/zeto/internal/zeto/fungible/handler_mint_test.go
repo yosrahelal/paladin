@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zeto
+package fungible
 
 import (
 	"context"
@@ -38,7 +38,7 @@ func TestMintValidateParams(t *testing.T) {
 	assert.EqualError(t, err, "PD210024: No transfer parameters provided")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"mints\":{}}")
-	assert.EqualError(t, err, "json: cannot unmarshal object into Go struct field MintParams.mints of type []*types.TransferParamEntry")
+	assert.EqualError(t, err, "json: cannot unmarshal object into Go struct field FungibleMintParams.mints of type []*types.FungibleTransferParamEntry")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{}]}")
 	assert.EqualError(t, err, "PD210025: Parameter 'to' is required (index=0)")
@@ -55,19 +55,19 @@ func TestMintValidateParams(t *testing.T) {
 
 	params, err := h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}]}")
 	assert.NoError(t, err)
-	assert.Equal(t, "0x1234567890123456789012345678901234567890", params.([]*types.TransferParamEntry)[0].To)
-	assert.Equal(t, "0x0a", params.([]*types.TransferParamEntry)[0].Amount.String())
+	assert.Equal(t, "0x1234567890123456789012345678901234567890", params.([]*types.FungibleTransferParamEntry)[0].To)
+	assert.Equal(t, "0x0a", params.([]*types.FungibleTransferParamEntry)[0].Amount.String())
 }
 
 func TestMintInit(t *testing.T) {
 	h := mintHandler{
-		zeto: &Zeto{
+		baseHandler: baseHandler{
 			name: "test1",
 		},
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
-		Params: []*types.TransferParamEntry{
+		Params: []*types.FungibleTransferParamEntry{
 			{
 				To:     "Alice",
 				Amount: tktypes.MustParseHexUint256("0x0a"),
@@ -85,16 +85,16 @@ func TestMintInit(t *testing.T) {
 
 func TestMintAssemble(t *testing.T) {
 	h := mintHandler{
-		zeto: &Zeto{
+		baseHandler: baseHandler{
 			name: "test1",
-			coinSchema: &prototk.StateSchema{
-				Id: "coin",
-			},
+		},
+		coinSchema: &prototk.StateSchema{
+			Id: "coin",
 		},
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
-		Params: []*types.TransferParamEntry{
+		Params: []*types.FungibleTransferParamEntry{
 			{
 				To:     "Alice",
 				Amount: tktypes.MustParseHexUint256("0x0a"),
@@ -130,11 +130,11 @@ func TestMintAssemble(t *testing.T) {
 	pubKey := privKey.Public()
 	compressedKey := pubKey.Compress()
 	req.ResolvedVerifiers[0].Verifier = compressedKey.String()
-	tx.Params.([]*types.TransferParamEntry)[0].Amount = tktypes.MustParseHexUint256("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+	tx.Params.([]*types.FungibleTransferParamEntry)[0].Amount = tktypes.MustParseHexUint256("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210038: Failed to create new state. inputs values not inside Finite Field")
 
-	tx.Params.([]*types.TransferParamEntry)[0].Amount = tktypes.MustParseHexUint256("0x0f")
+	tx.Params.([]*types.FungibleTransferParamEntry)[0].Amount = tktypes.MustParseHexUint256("0x0f")
 	res, err := h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Equal(t, prototk.AssembleTransactionResponse_OK, res.AssemblyResult)
@@ -152,18 +152,17 @@ func TestMintEndorse(t *testing.T) {
 }
 
 func TestMintPrepare(t *testing.T) {
-	z := &Zeto{
-		name: "test1",
-	}
 	h := mintHandler{
-		zeto: z,
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	txSpec := &prototk.TransactionSpecification{
 		TransactionId: "bad hex",
 		From:          "Bob",
 	}
 	tx := &types.ParsedTransaction{
-		Params: []*types.TransferParamEntry{
+		Params: []*types.FungibleTransferParamEntry{
 			{
 				To:     "Alice",
 				Amount: tktypes.MustParseHexUint256("0x0a"),
@@ -195,19 +194,6 @@ func TestMintPrepare(t *testing.T) {
 	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id. PD020007: Invalid hex")
 
 	txSpec.TransactionId = "0x1234567890123456789012345678901234567890"
-	z.config = &types.DomainFactoryConfig{
-		DomainContracts: types.DomainConfigContracts{
-			Implementations: []*types.DomainContract{
-				{
-					Name: "tokenContract2",
-				},
-			},
-		},
-	}
-
-	z.config.DomainContracts.Implementations = append(z.config.DomainContracts.Implementations, &types.DomainContract{
-		Name: "tokenContract1",
-	})
 	_, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
 }
