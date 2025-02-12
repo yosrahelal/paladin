@@ -92,17 +92,15 @@ func (h *transferLockedHandler) Init(ctx context.Context, tx *types.ParsedTransa
 			},
 		},
 	}
-	if params.Delegate != "" {
-		// the delegate can be an address, or a resolvable name
-		_, err := tktypes.ParseEthAddress(params.Delegate)
-		if err != nil {
-			// delegate is not an eth address, so we need to resolve it
-			res.RequiredVerifiers = append(res.RequiredVerifiers, &pb.ResolveVerifierRequest{
-				Lookup:       params.Delegate,
-				Algorithm:    algorithms.ECDSA_SECP256K1,
-				VerifierType: verifiers.ETH_ADDRESS,
-			})
-		}
+	// the delegate can be an address, or a resolvable name
+	_, err := tktypes.ParseEthAddress(params.Delegate)
+	if err != nil {
+		// delegate is not an eth address, so we need to resolve it
+		res.RequiredVerifiers = append(res.RequiredVerifiers, &pb.ResolveVerifierRequest{
+			Lookup:       params.Delegate,
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+		})
 	}
 	for _, transfer := range params.Transfers {
 		res.RequiredVerifiers = append(res.RequiredVerifiers, &pb.ResolveVerifierRequest{
@@ -123,17 +121,15 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, tx.Transaction.From)
 	}
 	var delegateAddr string
-	if params.Delegate != "" {
-		_, err := tktypes.ParseEthAddress(params.Delegate)
-		if err != nil {
-			resolvedDelegate := domain.FindVerifier(params.Delegate, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-			if resolvedDelegate == nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, params.Delegate)
-			}
-			delegateAddr = resolvedDelegate.Verifier
-		} else {
-			delegateAddr = params.Delegate
+	_, err := tktypes.ParseEthAddress(params.Delegate)
+	if err != nil {
+		resolvedDelegate := domain.FindVerifier(params.Delegate, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
+		if resolvedDelegate == nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, params.Delegate)
 		}
+		delegateAddr = resolvedDelegate.Verifier
+	} else {
+		delegateAddr = params.Delegate
 	}
 
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
