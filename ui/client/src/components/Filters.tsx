@@ -75,6 +75,17 @@ export const Filters: React.FC<Props> = ({
           />
         )}
 
+        {filters.length > 0 &&
+          <Button
+            size="small"
+            variant="outlined"
+            sx={{ borderRadius: '20px' }}
+            onClick={() => setFilters([])}
+          >
+            {t('clear')}
+          </Button>
+        }
+
         <Button
           size="large"
           variant="outlined"
