@@ -33,5 +33,7 @@ export const RpcMethods = {
   reg_Registries: "reg_registries",
   transport_nodeName: "transport_nodeName",
   transport_localTransportDetails: "transport_localTransportDetails",
-  transport_peers: "transport_peers"
+  transport_peers: "transport_peers",
+  keymgr_queryKeys: "keymgr_queryKeys",
+  keymgr_reverseKeyLookup: "keymgr_reverseKeyLookup"
 };
