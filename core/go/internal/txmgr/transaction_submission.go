@@ -433,8 +433,6 @@ func (tm *txManager) UpdateTransaction(ctx context.Context, txu *pldapi.Transact
 	}
 	pubTX := pubTXs[txID][0]
 
-	// TODO AM: validation at this point that the tranaction isn't complete?
-	// maybe further down the stack as we'd want to check later anyway
 	err = tm.publicTxMgr.UpdateTransaction(ctx, *pubTX.LocalID, tx.From, txu)
 	if err != nil {
 		return nil, err

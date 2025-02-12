@@ -63,21 +63,73 @@ func NewInMemoryTxStateManager(ctx context.Context, ptx *DBPublicTxn) InMemoryTx
 }
 
 func (imtxs *inMemoryTxState) UpdateTransaction(newPtx *DBPublicTxn) {
-	imtxs.mtx.ptx.To = newPtx.To
-	imtxs.mtx.ptx.Data = newPtx.Data
-	imtxs.mtx.ptx.Gas = newPtx.Gas
-	imtxs.mtx.ptx.FixedGasPricing = newPtx.FixedGasPricing
-	imtxs.mtx.ptx.Value = newPtx.Value
+	// TODO AM: test this because there's some possible default values here
+	// and need to check that they don't get initialised to non nil empty
+	// values earlier up the stack
+	ptx := imtxs.mtx.ptx
+
+	if newPtx.To != nil {
+		ptx.To = newPtx.To
+	}
+	if newPtx.Data != nil {
+		ptx.Data = newPtx.Data
+	}
+	if newPtx.Gas != 0 {
+		ptx.Gas = newPtx.Gas
+	}
+	if newPtx.FixedGasPricing != nil {
+		ptx.FixedGasPricing = newPtx.FixedGasPricing
+	}
+	if newPtx.Value != nil {
+		ptx.Value = newPtx.Value
+	}
 }
 
 func (imtxs *inMemoryTxState) IsTransactionUpdate(newPtx *DBPublicTxn) bool {
-	// TODO AM: test thoroughly that all these comparisons work once the data is parsed in
-	// test each value for not set, same and different
-	return (newPtx.To != nil && !newPtx.To.Equals(imtxs.mtx.ptx.To)) ||
-		// (imtxs.mtx.ptx.Data == newPtx.Data || // TODO AM: needs to be converted to a comparable type
-		(newPtx.Gas != 0 && newPtx.Gas != imtxs.mtx.ptx.Gas) ||
-		// (newPtx.FixedGasPricing != nil && newPtx.FixedGasPricing != imtxs.mtx.ptx.FixedGasPricing) || // TODO AM: needs to be converted to a comparable type
-		(newPtx.Value != nil && newPtx.Value != imtxs.mtx.ptx.Value)
+	// this code in theory could be combined into one single return statement but this more
+	// verbose version is a lot easier to read, even if using if statements to return boolean
+	// values isn't generally the most elegant
+	ptx := imtxs.mtx.ptx
+
+	if newPtx.To != nil && !newPtx.To.Equals(ptx.To) {
+		return true
+	}
+
+	if newPtx.Gas != 0 && newPtx.Gas != ptx.Gas {
+		return true
+	}
+
+	if newPtx.Value != nil && (ptx.Value == nil || newPtx.Value.Int().Cmp(ptx.Value.Int()) != 0) {
+		return true
+	}
+
+	if newPtx.Data != nil && (ptx.Data == nil || newPtx.Data.String() != ptx.Data.String()) {
+		return true
+	}
+
+	// all the fields are the same value as value
+	if newPtx.FixedGasPricing != nil {
+		// TODO AM: if we move to fixed gas pricing, how does this affect the gas pricing variable
+		// is it as simple as just leave it in place and nothing ever touches it?
+		// or do we need to clear it out, and make sure it doesn't get reloaded from the db?
+		if ptx.FixedGasPricing == nil {
+			return true
+		}
+		newParsed := recoverGasPriceOptions(newPtx.FixedGasPricing)
+		oldParsed := recoverGasPriceOptions(ptx.FixedGasPricing)
+
+		if newParsed.GasPrice != nil && (oldParsed.GasPrice == nil || newParsed.GasPrice.Int().Cmp(oldParsed.GasPrice.Int()) != 0) {
+			return true
+		}
+		if newParsed.MaxPriorityFeePerGas != nil && (oldParsed.MaxPriorityFeePerGas == nil || newParsed.MaxPriorityFeePerGas.Int().Cmp(oldParsed.MaxPriorityFeePerGas.Int()) != 0) {
+			return true
+		}
+		if newParsed.MaxFeePerGas != nil && (oldParsed.MaxFeePerGas == nil || newParsed.MaxFeePerGas.Int().Cmp(oldParsed.MaxFeePerGas.Int()) != 0) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdates *BaseTXUpdates) {
