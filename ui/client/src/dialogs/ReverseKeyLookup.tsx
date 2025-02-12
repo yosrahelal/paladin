@@ -32,19 +32,20 @@ import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import { reverseKeyLookup } from '../queries/keys';
 import { constants } from '../components/config';
 import { useTranslation } from 'react-i18next';
+import { IFilter } from '../interfaces';
 
 type Props = {
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
   setParent: Dispatch<SetStateAction<string>>
-  setFilter: Dispatch<SetStateAction<string | undefined>>
+  setFilters: Dispatch<SetStateAction<IFilter[]>>
 }
 
 export const ReverseKeyLookupDialog: React.FC<Props> = ({
   dialogOpen,
   setDialogOpen,
   setParent,
-  setFilter
+  setFilters
 }) => {
 
   const [verifier, setVerifier] = useState('');
@@ -88,9 +89,26 @@ export const ReverseKeyLookupDialog: React.FC<Props> = ({
         const index = path.lastIndexOf('.');
         if(index !== -1) {
           setParent(path.substring(0, index));
-          setFilter(path.substring(index + 1))
+          // setFilter(path.substring(index + 1))
+          setFilters([{
+            field: {
+              label: t('name'),
+              name: 'path',
+              type: 'string'
+            },
+            operator: 'equal',
+            value: path.substring(index + 1)
+          }]);
         } else {
-          setFilter(path);
+          setFilters([{
+            field: {
+              label: t('name'),
+              name: 'path',
+              type: 'string'
+            },
+            operator: 'equal',
+            value: path
+          }]);
         }
         setDialogOpen(false);
       } else if (result.status === 'error') {

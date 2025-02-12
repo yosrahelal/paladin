@@ -79,7 +79,7 @@ export const AddFilterDialog: React.FC<Props> = ({
       } else {
         availableOperators = [
           ...availableOperators,
-          <MenuItem key="notEqual" value="notEqual">{t('notEqual')}</MenuItem>,
+          <MenuItem key="neq" value="neq">{t('notEqual')}</MenuItem>,
           <MenuItem key="greaterThan" value="greaterThan">{t('greaterThan')}</MenuItem>,
           <MenuItem key="greaterThanOrEqual" value="greaterThanOrEqual">{t('greaterThanOrEqual')}</MenuItem>,
           <MenuItem key="lessThan" value="lessThan">{t('lessThan')}</MenuItem>,
@@ -101,10 +101,13 @@ export const AddFilterDialog: React.FC<Props> = ({
       if (selectedFilterField.type === 'number' && isNaN(Number(value))) {
         setValue('');
       }
+      if (selectedOperator !== undefined && ['greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual'].includes(selectedOperator)) {
+        setIsCaseSensitive(true);
+      }
       setValues(availableValues);
       setOperators(availableOperators);
     }
-  }, [selectedFilterField]);
+  }, [selectedFilterField, selectedOperator]);
 
   const handleSubmit = () => {
     if (selectedFilterField !== undefined && selectedOperator !== undefined) {
@@ -184,7 +187,10 @@ export const AddFilterDialog: React.FC<Props> = ({
                 </TextField>
                 <Box sx={{ textAlign: 'center' }}>
                   <FormControlLabel
-                    disabled={selectedFilterField === undefined || selectedFilterField.type !== 'string'}
+                    disabled={selectedFilterField === undefined || selectedFilterField.type !== 'string'
+                      || (selectedOperator !== undefined &&
+                        ['greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual'].includes(selectedOperator))
+                    }
                     control={<Checkbox checked={isCaseSensitive} onChange={event => setIsCaseSensitive(event.target.checked)} />}
                     label={t('caseSensitive')} />
                 </Box>

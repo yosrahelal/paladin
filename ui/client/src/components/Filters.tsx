@@ -36,12 +36,10 @@ export const Filters: React.FC<Props> = ({
   const [addFilterDialogOpen, setAddFilterDialogOpen] = useState(false);
   const { t } = useTranslation();
 
-  console.log(filters)
-
   const getOperatorLabel = (operator: string) => {
     switch (operator) {
       case 'equal': return '= ';
-      case 'notEqual': return '!= ';
+      case 'neq': return '!= ';
       case 'greaterThan': return '> ';
       case 'greaterThanOrEqual': return '>= ';
       case 'lessThan': return '< ';

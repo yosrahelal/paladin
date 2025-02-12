@@ -52,7 +52,6 @@ export const Keys: React.FC = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [refEntries, setRefEntries] = useState<IKeyEntry[]>([]);
-  const [filter, setFilter] = useState<string | undefined>(searchParams.get('filter') ?? undefined);
   const [page, setPage] = useState(0);
   const [count, setCount] = useState(-1);
   const [rowsPerPage, setRowsPerPage] = useState(getDefaultRowsPerPage());
@@ -66,13 +65,12 @@ export const Keys: React.FC = () => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    setFilter(searchParams.get('filter') ?? undefined);
     setParent(searchParams.get('path') ?? '');
   }, [searchParams]);
 
   const { data: keys, error } = useQuery({
-    queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filter],
-    queryFn: () => fetchKeys(parent, rowsPerPage, sortBy, sortOrder, filter, refEntries[refEntries.length - 1])
+    queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filters],
+    queryFn: () => fetchKeys(parent, rowsPerPage, sortBy, sortOrder, filters, refEntries[refEntries.length - 1])
   });
 
   useEffect(() => {
@@ -100,11 +98,8 @@ export const Keys: React.FC = () => {
     if (parent !== '') {
       value.path = parent;
     }
-    if (filter !== undefined) {
-      value.filter = filter;
-    }
     setSearchParams(value);
-  }, [parent, page, filter]);
+  }, [parent, page]);
 
   if (error) {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
@@ -150,20 +145,12 @@ export const Keys: React.FC = () => {
           href=""
           onClick={event => {
             event.preventDefault();
-            setFilter(undefined);
             setParent(target);
           }}>
           {segment === '' ? t('root') : segment}
         </Link>
       )
     }
-  }
-  if (filter !== undefined) {
-    breadcrumbContent.push(
-      <Link underline="none"
-        key={filter}>
-        {filter}
-      </Link>);
   }
 
   const getEthAddress = (key: IKeyEntry) => {
@@ -291,12 +278,12 @@ export const Keys: React.FC = () => {
               },
               {
                 label: t('handle'),
-                name: 'handle',
+                name: 'keyHandle',
                 type: 'string'
               },
               {
                 label: t('isFolder'),
-                name: 'isFolder',
+                name: 'hasChildren',
                 type: 'boolean'
               },
               {
@@ -313,7 +300,7 @@ export const Keys: React.FC = () => {
             sx={{ marginLeft: '10px', marginBottom: '10px' }}>
             <Link underline="none"
               href=""
-              onClick={event => { event.preventDefault(); setFilter(undefined); setParent('') }}>
+              onClick={event => { event.preventDefault(); setParent('') }}>
               {t('root')}
             </Link>
             {breadcrumbContent}
@@ -354,7 +341,7 @@ export const Keys: React.FC = () => {
                   <TableRow sx={{ height: '70px' }} key={`${key.path}${key.index}`}>
                     <TableCell>{key.hasChildren &&
                       <Tooltip arrow title={t('openFolder')}>
-                        <IconButton onClick={() => { setFilter(undefined); setParent(key.path) }}>
+                        <IconButton onClick={() => { setParent(key.path) }}>
                           <FolderOpenIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
@@ -399,7 +386,7 @@ export const Keys: React.FC = () => {
         dialogOpen={reverseLookupDialogOpen}
         setDialogOpen={setReverseLookupDialogOpen}
         setParent={setParent}
-        setFilter={setFilter}
+        setFilters={setFilters}
       />
       {selectedVerifiers &&
         <VerifiersDialog

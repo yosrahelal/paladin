@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { IFilter } from "./interfaces";
+
 export const formatJSONWhenApplicable = (value: any) => {
   if (typeof value === 'object') {
     try {
@@ -21,4 +23,39 @@ export const formatJSONWhenApplicable = (value: any) => {
     } catch (err) { }
   }
   return String(value);
+};
+
+export const translateFilters = (filters: IFilter[]) => {
+
+  let result: any = {};
+
+  for (const filter of filters) {
+
+    let entry: any = {
+      field: filter.field.name,
+      value: filter.value,
+    };
+
+    if(filter.caseSensitive === false) {
+      entry.caseInsensitive = true;
+    }
+
+    let operator = filter.operator;
+
+    switch (operator) {
+      case 'contains': operator = 'like'; entry.value = `%${entry.value}%`; break;
+      case 'startsWith': operator = 'like'; entry.value = `${entry.value}%`; break;
+      case 'endsWith': operator = 'like'; entry.value = `%${entry.value}`; break;
+      case 'doesNotContain': operator = 'like'; entry.not = true; entry.value = `%${entry.value}%`; break;
+      case 'doesNotStartWith': operator = 'like'; entry.not = true; entry.value = `${entry.value}%`; break;
+      case 'doesNotEndWith': operator = 'like'; entry.not = true; entry.value = `%${entry.value}`; break;
+    }
+
+    let group = result[operator] ?? [];
+    group.push(entry);
+    result[operator] = group;
+  }
+
+  return result;
+
 };

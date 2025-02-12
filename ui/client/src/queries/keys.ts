@@ -14,27 +14,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { IKeyEntry, IKeyMappingAndVerifier } from "../interfaces";
+import { IFilter, IKeyEntry, IKeyMappingAndVerifier } from "../interfaces";
+import { translateFilters } from "../utils";
 import { generatePostReq, returnResponse } from "./common";
 import { RpcEndpoint, RpcMethods } from "./rpcMethods";
 import i18next from "i18next";
 
-export const fetchKeys = async (parent: string, limit: number, sortBy: string, sortOrder: 'asc' | 'desc', pathFilter?: string, refEntry?: IKeyEntry): Promise<IKeyEntry[]> => {
+export const fetchKeys = async (parent: string, limit: number, sortBy: string, sortOrder: 'asc' | 'desc', filters: IFilter[], refEntry?: IKeyEntry): Promise<IKeyEntry[]> => {
+
+  let translatedFilters = translateFilters(filters);
+
+  if (translatedFilters.eq === undefined) {
+    translatedFilters.eq = [];
+  }
+  translatedFilters.eq.push({
+    field: 'parent',
+    value: parent
+  });
+
   let requestPayload: any = {
     jsonrpc: "2.0",
     id: Date.now(),
     method: RpcMethods.keymgr_queryKeys,
     params: [{
-      eq: [
-        {
-          field: 'parent',
-          value: parent
-        }
-      ],
+      ...translatedFilters,
       sort: [`${sortBy} ${sortOrder}`],
       limit
     }]
   };
+
+
+  // console.log(translateFilters(filters))
 
   if (refEntry !== undefined) {
     requestPayload.params[0][sortOrder === 'asc' ? 'greaterThan' : 'lessThan'] = [{
@@ -43,12 +53,14 @@ export const fetchKeys = async (parent: string, limit: number, sortBy: string, s
     }];
   }
 
-  if (pathFilter !== undefined) {
-    requestPayload.params[0].eq.push({
-      field: 'path',
-      value: parent !== '' ? `${parent}.${pathFilter}` : pathFilter
-    });
-  }
+  // if (pathFilter !== undefined) {
+  //   requestPayload.params[0].eq.push({
+  //     field: 'path',
+  //     value: parent !== '' ? `${parent}.${pathFilter}` : pathFilter
+  //   });
+  // }
+
+  // console.log(JSON.stringify(translateFilters(filters), null, 2));
 
   return <Promise<IKeyEntry[]>>(
     returnResponse(
