@@ -86,7 +86,7 @@ func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDo
 		dm:              dm,
 		conf:            conf,
 		defaultGasLimit: pldconf.DefaultDefaultGasLimit, // can be set by config below
-		initRetry:       retry.NewRetryIndefinite(&conf.Init.Retry),
+		initRetry:       retry.NewRetryLimited(&conf.Init.Retry),
 		name:            name,
 		api:             toDomain,
 		initDone:        make(chan struct{}),

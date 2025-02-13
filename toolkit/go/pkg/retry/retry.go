@@ -65,15 +65,11 @@ func (r *Retry) Do(ctx context.Context, do func(attempt int) (retryable bool, er
 		attempt++
 		retry, err := do(attempt)
 		if err != nil {
-			log.L(ctx).Errorf("%s (attempt=%d, maxAttempts=%d)", err, attempt, r.maxAttempts)
+			log.L(ctx).Errorf("%s (attempt=%d)", err, attempt)
 		}
 		if !retry || err == nil || (r.maxAttempts > 0 && attempt >= r.maxAttempts) {
-			if err != nil {
-				log.L(ctx).Errorf("failed after %d attempts (maxAttempts=%d)", attempt, r.maxAttempts)
-			}
 			return err
 		}
-		log.L(ctx).Infof("retrying. (attempt=%d, maxAttempts=%d)", attempt, r.maxAttempts)
 		if err := r.WaitDelay(ctx, attempt); err != nil {
 			return err
 		}

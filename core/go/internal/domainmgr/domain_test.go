@@ -193,6 +193,11 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 				Config:          map[string]any{"some": "conf"},
 				RegistryAddress: tktypes.RandHex(20),
 				DefaultGasLimit: confutil.P(uint64(100000)),
+				Init: pldconf.DomainInitConfig{
+					Retry: pldconf.RetryConfigWithMax{
+						MaxAttempts: confutil.P(1),
+					},
+				},
 			},
 		},
 	}, extraSetup...)
@@ -256,7 +261,6 @@ func registerTestDomain(t *testing.T, dm *domainManager, tp *testPlugin) {
 	da, err := dm.getDomainByName(context.Background(), "test1")
 	require.NoError(t, err)
 	tp.d = da
-	tp.d.initRetry.UTSetMaxAttempts(1)
 	<-tp.d.initDone
 }
 
