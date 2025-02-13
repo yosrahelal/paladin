@@ -50,6 +50,16 @@ export const Keys: React.FC = () => {
     return window.localStorage.getItem(constants.KEYS_SORT_ORDER_STORAGE_KEY) as 'asc' | 'desc' ?? 'asc';
   };
 
+  const getFiltersFromStorage = () => {
+    const value = window.localStorage.getItem(constants.KEYS_FILTERS_KEY);
+    if (value !== null) {
+      try {
+        return JSON.parse(value);
+      } catch (_err) { }
+    }
+    return [];
+  };
+
   const [searchParams, setSearchParams] = useSearchParams();
   const [refEntries, setRefEntries] = useState<IKeyEntry[]>([]);
   const [page, setPage] = useState(0);
@@ -61,7 +71,7 @@ export const Keys: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(getDefaultSortOrder);
   const [selectedVerifiers, setSelectedVerifiers] = useState<IVerifier[]>();
   const [verifiersDialogOpen, setVerifiersDialogOpen] = useState(false);
-  const [filters, setFilters] = useState<IFilter[]>([]);
+  const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -74,7 +84,7 @@ export const Keys: React.FC = () => {
   });
 
   useEffect(() => {
-    if (count !== -1 && (page * rowsPerPage === count)) {
+    if (count !== -1 && (page !== 0 && page * rowsPerPage === count)) {
       handleChangePage(null, page - 1);
     }
   }, [count, rowsPerPage, page]);
@@ -100,6 +110,10 @@ export const Keys: React.FC = () => {
     }
     setSearchParams(value);
   }, [parent, page]);
+
+  useEffect(() => {
+    window.localStorage.setItem(constants.KEYS_FILTERS_KEY, JSON.stringify(filters));
+  }, [filters]);
 
   if (error) {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
@@ -224,7 +238,6 @@ export const Keys: React.FC = () => {
     top: '14px',
     left: '2px'
   }} />;
-
 
   return (
     <>

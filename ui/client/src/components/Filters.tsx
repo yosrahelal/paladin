@@ -15,7 +15,6 @@
 // limitations under the License.
 
 import { Box, Button, Chip } from "@mui/material";
-import FilterAltOutlinedIcon from '@mui/icons-material/FilterAltOutlined';
 import { Dispatch, SetStateAction, useState } from "react";
 import { AddFilterDialog } from "../dialogs/AddFilter";
 import { useTranslation } from "react-i18next";
@@ -62,12 +61,19 @@ export const Filters: React.FC<Props> = ({
 
   return (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'right', gap: '10px' }}>
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'right',
+        gap: '10px',
+        flexWrap: 'wrap'
+      }}>
 
         {filters.map(filter =>
           <Chip
             key={getFilterId(filter)}
             label={generateFilterLabel(filter)}
+            
             onDelete={() => {
               const id = getFilterId(filter);
               setFilters(filters.filter(currentFilter => getFilterId(currentFilter) !== id));
@@ -79,21 +85,20 @@ export const Filters: React.FC<Props> = ({
           <Button
             size="small"
             variant="outlined"
-            sx={{ borderRadius: '20px' }}
+            sx={{ borderRadius: '20px', minWidth: '100px'  }}
             onClick={() => setFilters([])}
           >
-            {t('clear')}
+            {t('clearFilters')}
           </Button>
         }
 
         <Button
-          size="large"
+          size="small"
           variant="outlined"
-          startIcon={<FilterAltOutlinedIcon />}
-          sx={{ borderRadius: '20px' }}
+          sx={{ borderRadius: '20px', minWidth: '100px' }}
           onClick={() => setAddFilterDialogOpen(true)}
         >
-          {t('filter')}
+          {t('addFilter')}
         </Button>
 
       </Box>
