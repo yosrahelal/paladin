@@ -35,7 +35,7 @@ export const Header: React.FC = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const getTabFromPath = (path: string) => {
-    if (path.startsWith(AppRoutes.Indexer)) {
+    if (path.startsWith(AppRoutes.Activity)) {
       return 0;
     } else if (path.startsWith(AppRoutes.Submissions)) {
       return 1;
@@ -54,7 +54,7 @@ export const Header: React.FC = () => {
   const handleNavigation = (tab: number) => {
     setTab(tab);
     switch (tab) {
-      case 0: navigate(AppRoutes.Indexer); break;
+      case 0: navigate(AppRoutes.Activity); break;
       case 1: navigate(AppRoutes.Submissions); break;
       case 2: navigate(AppRoutes.Peers); break;
       case 3: navigate(AppRoutes.Keys); break;
@@ -77,7 +77,7 @@ export const Header: React.FC = () => {
                 <Tabs
                   TabIndicatorProps={{ style: { height: '4px' } }}
                   value={tab} onChange={(_event, value) => handleNavigation(value)} centered>
-                  <Tab label={t('indexer')} />
+                  <Tab label={t('activity')} />
                   <Tab label={t('submissions')} />
                   <Tab label={t('peers')} />
                   <Tab label={t('keys')} />

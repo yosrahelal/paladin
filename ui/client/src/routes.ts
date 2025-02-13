@@ -15,7 +15,7 @@
 // limitations under the License.
 
 export const AppRoutes = {
-  Indexer: '/ui/indexer',
+  Activity: '/ui/activity',
   Submissions: '/ui/submissions',
   Peers: '/ui/peers',
   Keys: '/ui/keys',

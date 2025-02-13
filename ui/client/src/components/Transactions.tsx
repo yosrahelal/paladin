@@ -52,7 +52,7 @@ export const Transactions: React.FC = () => {
   return (
     <>
       <Typography align="center" variant="h5" sx={{ marginBottom: '20px' }}>
-        {t("transactions")}
+        {t("receipts")}
       </Typography>
       <Box
         id="scrollableDivEventsTransactions"
