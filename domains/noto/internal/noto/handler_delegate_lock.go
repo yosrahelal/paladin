@@ -20,11 +20,11 @@ import (
 	"encoding/json"
 	"math/big"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -43,6 +43,9 @@ func (h *delegateLockHandler) ValidateParams(ctx context.Context, config *types.
 	}
 	if delegateParams.LockID.IsZero() {
 		return nil, i18n.NewError(ctx, msgs.MsgParameterRequired, "lockId")
+	}
+	if delegateParams.Unlock == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgParameterRequired, "unlock")
 	}
 	if delegateParams.Delegate.IsZero() {
 		return nil, i18n.NewError(ctx, msgs.MsgInvalidDelegate, delegateParams.Delegate)
@@ -178,15 +181,20 @@ func (h *delegateLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.Pa
 		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 	}
 
+	unlockHash, err := h.noto.unlockHashFromIDs(ctx, tx.ContractAddress, inParams.Unlock.LockedInputs, inParams.Unlock.LockedOutputs, inParams.Unlock.Outputs, inParams.Unlock.Data)
+	if err != nil {
+		return nil, err
+	}
+
 	data, err := h.noto.encodeTransactionData(ctx, req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, err
 	}
 	params := &NotoDelegateLockParams{
-		LockID:    inParams.LockID,
-		Delegate:  inParams.Delegate,
-		Signature: sender.Payload,
-		Data:      data,
+		UnlockHash: tktypes.Bytes32(unlockHash),
+		Delegate:   inParams.Delegate,
+		Signature:  sender.Payload,
+		Data:       data,
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {

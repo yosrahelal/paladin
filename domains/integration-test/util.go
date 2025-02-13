@@ -20,13 +20,14 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
+
 	"github.com/go-resty/resty/v2"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/noto"
 	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	zetotypes "github.com/kaleido-io/paladin/domains/zeto/pkg/types"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"

@@ -19,11 +19,11 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -116,7 +116,7 @@ func (h *prepareUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.P
 
 	lockedInputs := req.ReadStates
 	outputs, lockedOutputs := h.noto.splitStates(req.InfoStates)
-	unlockHash, err := h.noto.encodeUnlockMasked(ctx, tx.ContractAddress, lockedInputs, lockedOutputs, outputs, inParams.Data)
+	unlockHash, err := h.noto.unlockHashFromStates(ctx, tx.ContractAddress, lockedInputs, lockedOutputs, outputs, inParams.Data)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,6 @@ func (h *prepareUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.P
 		return nil, err
 	}
 	params := &NotoPrepareUnlockParams{
-		LockID:       inParams.LockID,
 		LockedInputs: endorsableStateIDs(lockedInputs),
 		UnlockHash:   tktypes.Bytes32(unlockHash),
 		Signature:    sender.Payload,

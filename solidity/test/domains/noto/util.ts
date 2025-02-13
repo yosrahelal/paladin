@@ -105,7 +105,6 @@ export async function doTransfer(
 export async function doLock(
   notary: Signer,
   noto: Noto,
-  lockId: string,
   inputs: string[],
   outputs: string[],
   lockedOutputs: string[],
@@ -113,7 +112,7 @@ export async function doLock(
 ) {
   const tx = await noto
     .connect(notary)
-    .lock(lockId, inputs, outputs, lockedOutputs, "0x", data);
+    .lock(inputs, outputs, lockedOutputs, "0x", data);
   const results = await tx.wait();
   expect(results).to.exist;
 
@@ -133,7 +132,7 @@ export async function doLock(
     expect(await noto.isUnspent(output)).to.equal(true);
   }
   for (const output of lockedOutputs) {
-    expect(await noto.isLocked(lockId, output)).to.equal(true);
+    expect(await noto.isLocked(output)).to.equal(true);
     expect(await noto.isUnspent(output)).to.equal(false);
   }
 }
@@ -141,7 +140,6 @@ export async function doLock(
 export async function doUnlock(
   sender: Signer,
   noto: Noto,
-  lockId: string,
   lockedInputs: string[],
   lockedOutputs: string[],
   outputs: string[],
@@ -149,7 +147,7 @@ export async function doUnlock(
 ) {
   const tx = await noto
     .connect(sender)
-    .unlock(lockId, lockedInputs, lockedOutputs, outputs, "0x", data);
+    .unlock(lockedInputs, lockedOutputs, outputs, "0x", data);
   const results = await tx.wait();
   expect(results).to.exist;
 
@@ -163,11 +161,11 @@ export async function doUnlock(
     expect(event?.args.data).to.deep.equal(data);
   }
   for (const input of lockedInputs) {
-    expect(await noto.isLocked(lockId, input)).to.equal(false);
+    expect(await noto.isLocked(input)).to.equal(false);
     expect(await noto.isUnspent(input)).to.equal(false);
   }
   for (const output of lockedOutputs) {
-    expect(await noto.isLocked(lockId, output)).to.equal(true);
+    expect(await noto.isLocked(output)).to.equal(true);
     expect(await noto.isUnspent(output)).to.equal(false);
   }
   for (const output of outputs) {
@@ -178,14 +176,13 @@ export async function doUnlock(
 export async function doPrepareUnlock(
   notary: Signer,
   noto: Noto,
-  lockId: string,
   lockedInputs: string[],
   unlockHash: string,
   data: string
 ) {
   const tx = await noto
     .connect(notary)
-    .prepareUnlock(lockId, lockedInputs, unlockHash, "0x", data);
+    .prepareUnlock(lockedInputs, unlockHash, "0x", data);
   const results = await tx.wait();
   expect(results).to.exist;
 
@@ -198,20 +195,20 @@ export async function doPrepareUnlock(
     expect(event?.args.data).to.deep.equal(data);
   }
   for (const input of lockedInputs) {
-    expect(await noto.isLocked(lockId, input)).to.equal(true);
+    expect(await noto.isLocked(input)).to.equal(true);
   }
 }
 
 export async function doDelegateLock(
   notary: Signer,
   noto: Noto,
-  lockId: string,
+  unlockHash: string,
   delegate: string,
   data: string
 ) {
   const tx = await noto
     .connect(notary)
-    .delegateLock(lockId, delegate, "0x", data);
+    .delegateLock(unlockHash, delegate, "0x", data);
   const results = await tx.wait();
   expect(results).to.exist;
 

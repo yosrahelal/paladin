@@ -1,4 +1,4 @@
-package zeto
+package fungible
 
 import (
 	"context"
@@ -34,7 +34,7 @@ func TestWithdrawValidateParams(t *testing.T) {
 
 func TestWithdrawInit(t *testing.T) {
 	h := withdrawHandler{
-		zeto: &Zeto{
+		baseHandler: baseHandler{
 			name: "test1",
 		},
 	}
@@ -55,17 +55,17 @@ func TestWithdrawInit(t *testing.T) {
 
 func TestWithdrawAssemble(t *testing.T) {
 	h := withdrawHandler{
-		zeto: &Zeto{
+		baseHandler: baseHandler{
 			name: "test1",
-			coinSchema: &prototk.StateSchema{
-				Id: "coin",
-			},
-			merkleTreeRootSchema: &prototk.StateSchema{
-				Id: "merkle_tree_root",
-			},
-			merkleTreeNodeSchema: &prototk.StateSchema{
-				Id: "merkle_tree_node",
-			},
+		},
+		coinSchema: &prototk.StateSchema{
+			Id: "coin",
+		},
+		merkleTreeRootSchema: &prototk.StateSchema{
+			Id: "merkle_tree_root",
+		},
+		merkleTreeNodeSchema: &prototk.StateSchema{
+			Id: "merkle_tree_node",
 		},
 	}
 	ctx := context.Background()
@@ -88,7 +88,7 @@ func TestWithdrawAssemble(t *testing.T) {
 			{
 				Lookup:       "Alice",
 				Verifier:     "0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922",
-				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+				Algorithm:    h.getAlgoZetoSnarkBJJ(),
 				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 		},
@@ -100,7 +100,7 @@ func TestWithdrawAssemble(t *testing.T) {
 	req.ResolvedVerifiers = append(req.ResolvedVerifiers, &prototk.ResolvedVerifier{
 		Lookup:       "Bob",
 		Verifier:     "0x1234567890123456789012345678901234567890",
-		Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+		Algorithm:    h.getAlgoZetoSnarkBJJ(),
 		VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 	})
 	testCallbacks := &domain.MockDomainCallbacks{
@@ -108,12 +108,12 @@ func TestWithdrawAssemble(t *testing.T) {
 			return nil, errors.New("test error")
 		},
 	}
-	h.zeto.Callbacks = testCallbacks
+	h.callbacks = testCallbacks
 	_, err = h.Assemble(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210039: Failed to prepare transaction inputs. PD210032: Failed to query the state store for available coins. test error")
 
-	h.zeto.Callbacks = &domain.MockDomainCallbacks{
-		MockFindAvailableStates: func() (*prototk.FindAvailableStatesResponse, error) {
+	h.callbacks = &testDomainCallbacks{
+		returnFunc: func() (*prototk.FindAvailableStatesResponse, error) {
 			return &prototk.FindAvailableStatesResponse{
 				States: []*prototk.StoredState{
 					{
@@ -135,8 +135,8 @@ func TestWithdrawAssemble(t *testing.T) {
 	_, err = h.Assemble(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210042: Failed to format proving request.")
 
-	h.zeto.Callbacks = &domain.MockDomainCallbacks{
-		MockFindAvailableStates: func() (*prototk.FindAvailableStatesResponse, error) {
+	h.callbacks = &testDomainCallbacks{
+		returnFunc: func() (*prototk.FindAvailableStatesResponse, error) {
 			return &prototk.FindAvailableStatesResponse{
 				States: []*prototk.StoredState{
 					{
@@ -153,8 +153,8 @@ func TestWithdrawAssemble(t *testing.T) {
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
 	tx.DomainConfig.CircuitId = constants.CIRCUIT_ANON_NULLIFIER
 	called := 0
-	h.zeto.Callbacks = &domain.MockDomainCallbacks{
-		MockFindAvailableStates: func() (*prototk.FindAvailableStatesResponse, error) {
+	h.callbacks = &testDomainCallbacks{
+		returnFunc: func() (*prototk.FindAvailableStatesResponse, error) {
 			var dataJson string
 			if called == 0 {
 				dataJson = "{\"salt\":\"0x13de02d64a5736a56b2d35d2a83dd60397ba70aae6f8347629f0960d4fee5d58\",\"owner\":\"0xc1d218cf8993f940e75eabd3fee23dadc4e89cd1de479f03a61e91727959281b\",\"amount\":\"0x65\"}"
@@ -177,8 +177,8 @@ func TestWithdrawAssemble(t *testing.T) {
 	require.ErrorContains(t, err, "PD210042: Failed to format proving request. PD210052: Failed to generate merkle proofs.")
 
 	called = 0
-	h.zeto.Callbacks = &domain.MockDomainCallbacks{
-		MockFindAvailableStates: func() (*prototk.FindAvailableStatesResponse, error) {
+	h.callbacks = &testDomainCallbacks{
+		returnFunc: func() (*prototk.FindAvailableStatesResponse, error) {
 			var dataJson string
 			if called == 0 {
 				dataJson = "{\"salt\":\"0x13de02d64a5736a56b2d35d2a83dd60397ba70aae6f8347629f0960d4fee5d58\",\"owner\":\"0xc1d218cf8993f940e75eabd3fee23dadc4e89cd1de479f03a61e91727959281b\",\"amount\":\"0x65\"}"
@@ -213,11 +213,10 @@ func TestWithdrawEndorse(t *testing.T) {
 }
 
 func TestWithdrawPrepare(t *testing.T) {
-	z := &Zeto{
-		name: "test1",
-	}
 	h := withdrawHandler{
-		zeto: z,
+		baseHandler: baseHandler{
+			name: "test1",
+		},
 	}
 	txSpec := &prototk.TransactionSpecification{
 		TransactionId: "bad hex",
@@ -304,16 +303,6 @@ func TestWithdrawPrepare(t *testing.T) {
 	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id.")
 
 	txSpec.TransactionId = "0x1234567890123456789012345678901234567890123456789012345678901234"
-	z.config = &types.DomainFactoryConfig{
-		DomainContracts: types.DomainConfigContracts{
-			Implementations: []*types.DomainContract{},
-		},
-	}
-	z.config.DomainContracts.Implementations = []*types.DomainContract{
-		{
-			Name: constants.TOKEN_ANON_ENC,
-		},
-	}
 	res, err := h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Equal(t, "{\"amount\":\"100\",\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"inputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"output\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)
@@ -330,4 +319,19 @@ func TestWithdrawPrepare(t *testing.T) {
 	res, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Equal(t, "{\"amount\":\"100\",\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"nullifiers\":[\"0x1234567890\",\"0x1234567890\"],\"output\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]},\"root\":\"0x1234567890\"}", res.Transaction.ParamsJson)
+}
+func TestNewWithdrawHandler(t *testing.T) {
+	name := "testHandler"
+	callbacks := &testDomainCallbacks{}
+	coinSchema := &prototk.StateSchema{Id: "coin"}
+	merkleTreeRootSchema := &prototk.StateSchema{Id: "merkle_tree_root"}
+	merkleTreeNodeSchema := &prototk.StateSchema{Id: "merkle_tree_node"}
+
+	handler := NewWithdrawHandler(name, callbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema)
+
+	assert.Equal(t, name, handler.name)
+	assert.Equal(t, callbacks, handler.callbacks)
+	assert.Equal(t, coinSchema, handler.coinSchema)
+	assert.Equal(t, merkleTreeRootSchema, handler.merkleTreeRootSchema)
+	assert.Equal(t, merkleTreeNodeSchema, handler.merkleTreeNodeSchema)
 }
