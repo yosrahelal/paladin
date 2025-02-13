@@ -43,24 +43,12 @@ export const fetchKeys = async (parent: string, limit: number, sortBy: string, s
     }]
   };
 
-
-  // console.log(translateFilters(filters))
-
   if (refEntry !== undefined) {
     requestPayload.params[0][sortOrder === 'asc' ? 'greaterThan' : 'lessThan'] = [{
       field: sortBy,
       value: refEntry[sortBy as 'path' | 'index']
     }];
   }
-
-  // if (pathFilter !== undefined) {
-  //   requestPayload.params[0].eq.push({
-  //     field: 'path',
-  //     value: parent !== '' ? `${parent}.${pathFilter}` : pathFilter
-  //   });
-  // }
-
-  // console.log(JSON.stringify(translateFilters(filters), null, 2));
 
   return <Promise<IKeyEntry[]>>(
     returnResponse(
