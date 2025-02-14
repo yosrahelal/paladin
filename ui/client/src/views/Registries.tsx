@@ -28,7 +28,7 @@ import { ResolveVerifierDialog } from "../dialogs/ResolveVerifier";
 export const Registries: React.FC = () => {
 
   const { lastBlockWithTransactions, autoRefreshEnabled } = useContext(ApplicationContext);
-  const [resolveVerifierDialogOpen, setResolveVerifierDialogOpen] = useState(true);
+  const [resolveVerifierDialogOpen, setResolveVerifierDialogOpen] = useState(false);
   const theme = useTheme();
   const { t } = useTranslation();
 
