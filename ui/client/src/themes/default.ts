@@ -66,6 +66,18 @@ export const darkThemeOptions: ThemeOptions = {
       default: 'black',
       paper: '#1E242B',
     }
+  },
+  components: {
+    MuiAlert: {
+      styleOverrides: {
+        filledSuccess: {
+          color: 'white'
+        },
+        filledError: {
+          color: 'white'
+        }
+      }
+    }
   }
 };
 

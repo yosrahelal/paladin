@@ -14,18 +14,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Fade, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Button, Fade, Grid2, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { Registry } from "../components/Registry";
 import { ApplicationContext } from "../contexts/ApplicationContext";
 import { fetchRegistries } from "../queries/registry";
 import { getAltModeScrollBarStyle } from "../themes/default";
 import { useTranslation } from "react-i18next";
+import PersonSearchIcon from '@mui/icons-material/PersonSearch';
+import { ResolveVerifierDialog } from "../dialogs/ResolveVerifier";
 
 export const Registries: React.FC = () => {
 
   const { lastBlockWithTransactions, autoRefreshEnabled } = useContext(ApplicationContext);
+  const [resolveVerifierDialogOpen, setResolveVerifierDialogOpen] = useState(true);
   const theme = useTheme();
   const { t } = useTranslation();
 
@@ -34,7 +37,7 @@ export const Registries: React.FC = () => {
     queryFn: () => fetchRegistries()
   });
 
-  if(isFetching) {
+  if (isFetching) {
     return <></>;
   }
 
@@ -43,30 +46,55 @@ export const Registries: React.FC = () => {
   }
 
   return (
-    <Fade timeout={600} in={true}>
-      <Box
-        sx={{
-          padding: "30px",
-          maxWidth: "1300px",
-          marginLeft: "auto",
-          marginRight: "auto",
-        }}
-      >
-        <Typography align="center" variant="h5" sx={{ marginBottom: '20px' }}>
-          {t("entries")}
-        </Typography>
+    <>
+      <Fade timeout={600} in={true}>
         <Box
           sx={{
-            paddingRight: '15px',
-            height: "calc(100vh - 170px)",
-            ...getAltModeScrollBarStyle(theme.palette.mode)
+            padding: "30px",
+            maxWidth: "1300px",
+            marginLeft: "auto",
+            marginRight: "auto",
           }}
         >
-          {registries?.map((registry) => (
-            <Registry key={registry} registryName={registry} />
-          ))}
+          <Grid2 container alignItems="center" spacing={2}>
+            <Grid2 sx={{ display: { xs: 'none', sm: 'none', md: 'block' } }} size={{ md: 4 }} />
+            <Grid2 size={{ xs: 12, md: 4 }}>
+              <Typography align="center" variant="h5">
+                {t("entries")}
+              </Typography>
+            </Grid2>
+            <Grid2 size={{ xs: 12, md: 4 }} container justifyContent="right">
+              <Grid2>
+                <Button
+                  size="large"
+                  variant="outlined"
+                  startIcon={<PersonSearchIcon />}
+                  sx={{ borderRadius: '20px', marginRight: '14px' }}
+                  onClick={() => setResolveVerifierDialogOpen(true)}
+                >
+                  {t('resolveVerifier')}
+                </Button>
+              </Grid2>
+            </Grid2>
+          </Grid2>
+          <Box
+            sx={{
+              marginTop: '20px',
+              paddingRight: '15px',
+              height: "calc(100vh - 170px)",
+              ...getAltModeScrollBarStyle(theme.palette.mode)
+            }}
+          >
+            {registries?.map((registry) => (
+              <Registry key={registry} registryName={registry} />
+            ))}
+          </Box>
         </Box>
-      </Box>
-    </Fade>
+      </Fade>
+      <ResolveVerifierDialog
+        dialogOpen={resolveVerifierDialogOpen}
+        setDialogOpen={setResolveVerifierDialogOpen}
+      />
+    </>
   );
 };
