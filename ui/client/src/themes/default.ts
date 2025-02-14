@@ -68,6 +68,7 @@ export const darkThemeOptions: ThemeOptions = {
     }
   },
   components: {
+    ...commonThemeOptions.components,
     MuiAlert: {
       styleOverrides: {
         filledSuccess: {

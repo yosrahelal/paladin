@@ -39,6 +39,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useQuery } from '@tanstack/react-query';
 import { resolveVerifier } from '../queries/states';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { constants } from '../components/config';
 
 type Props = {
   dialogOpen: boolean
@@ -53,8 +54,8 @@ export const ResolveVerifierDialog: React.FC<Props> = ({
   const [keyIdentifier, setKeyIdentifier] = useState('');
   const [isLocalNode, setIsLocalNode] = useState(true);
   const [remoteNodeName, setRemoteNodeName] = useState('');
-  const [algorithm, setAlgorithm] = useState('ecdsa:secp256k1');
-  const [verifierType, setVerifierType] = useState('eth_address');
+  const [algorithm, setAlgorithm] = useState(constants.KEY_ETHEREUM_ALGORITHM);
+  const [verifierType, setVerifierType] = useState(constants.KEY_ETHEREUM_TYPE);
   const [isError, setIsError] = useState(false);
   const [result, setResult] = useState<string>();
   const [copyLabel, setCopyLabel] = useState('copyToClipboard');
@@ -73,6 +74,9 @@ export const ResolveVerifierDialog: React.FC<Props> = ({
       setTimeout(() => {
         setKeyIdentifier('');
         setIsLocalNode(true);
+        setRemoteNodeName('');
+        setAlgorithm(constants.KEY_ETHEREUM_ALGORITHM);
+        setVerifierType(constants.KEY_ETHEREUM_TYPE);
         setIsError(false);
         setResult(undefined);
       }, 200);
@@ -146,7 +150,7 @@ export const ResolveVerifierDialog: React.FC<Props> = ({
               </Box>
             </Box>
           </RadioGroup>
-          <Accordion elevation={0} sx={{ marginTop: '20px' }}>
+          <Accordion elevation={1} sx={{ marginTop: '20px' }}>
             <AccordionSummary
               expandIcon={<ExpandMoreIcon />}
               aria-controls="panel1-content"
