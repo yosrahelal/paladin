@@ -162,14 +162,14 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 		}
 
 		It("mints some zetos to bob on node1", func() {
-			txn := rpc["node1"].ForABI(ctx, zetotypes.ZetoABI).
+			txn := rpc["node1"].ForABI(ctx, zetotypes.ZetoFungibleABI).
 				Private().
 				Domain("zeto").
 				Function("mint").
 				To(zetoContract).
 				From(operator).
-				Inputs(&zetotypes.MintParams{
-					Mints: []*zetotypes.TransferParamEntry{
+				Inputs(&zetotypes.FungibleMintParams{
+					Mints: []*zetotypes.FungibleTransferParamEntry{
 						{
 							To:     "bob@node1",
 							Amount: with10Decimals(15),
@@ -200,14 +200,14 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 				with10Decimals(33), // 79
 				with10Decimals(66), // 13
 			} {
-				txn := rpc["node1"].ForABI(ctx, zetotypes.ZetoABI).
+				txn := rpc["node1"].ForABI(ctx, zetotypes.ZetoFungibleABI).
 					Private().
 					Domain("zeto").
 					Function("transfer").
 					To(zetoContract).
 					From("bob@node1").
-					Inputs(&zetotypes.TransferParams{
-						Transfers: []*zetotypes.TransferParamEntry{
+					Inputs(&zetotypes.FungibleTransferParams{
+						Transfers: []*zetotypes.FungibleTransferParamEntry{
 							{
 								To:     "sally@node2",
 								Amount: amount,
@@ -224,14 +224,14 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 		})
 
 		It("sally on node2 sends some zetos to fred on node3", func() {
-			txn := rpc["node2"].ForABI(ctx, zetotypes.ZetoABI).
+			txn := rpc["node2"].ForABI(ctx, zetotypes.ZetoFungibleABI).
 				Private().
 				Domain("zeto").
 				Function("transfer").
 				To(zetoContract).
 				From("sally@node2").
-				Inputs(&zetotypes.TransferParams{
-					Transfers: []*zetotypes.TransferParamEntry{
+				Inputs(&zetotypes.FungibleTransferParams{
+					Transfers: []*zetotypes.FungibleTransferParamEntry{
 						{
 							To:     "fred@node3",
 							Amount: with10Decimals(20),
@@ -250,7 +250,7 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 		It("Bob on node1 locks some zetos and designate sally as the delegate", func() {
 			sallyEthAddr := getEthAddress(ctx, rpc["node2"], "sally", "node2")
 
-			txn := rpc["node1"].ForABI(ctx, zetotypes.ZetoABI).
+			txn := rpc["node1"].ForABI(ctx, zetotypes.ZetoFungibleABI).
 				Private().
 				Domain("zeto").
 				Function("lock").
@@ -273,7 +273,7 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 			Expect(err).To(BeNil())
 			Expect(coins).To(HaveLen(1))
 
-			result := rpc["node1"].ForABI(ctx, zetotypes.ZetoABI).
+			result := rpc["node1"].ForABI(ctx, zetotypes.ZetoFungibleABI).
 				Private().
 				Domain("zeto").
 				Function("transferLocked").
@@ -282,7 +282,7 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 				Inputs(&zetotypes.TransferLockedParams{
 					LockedInputs: []*tktypes.HexUint256{&coins[0].ID},
 					Delegate:     "sally@node2",
-					Transfers: []*zetotypes.TransferParamEntry{
+					Transfers: []*zetotypes.FungibleTransferParamEntry{
 						{
 							To:     "fred@node3",
 							Amount: with10Decimals(10),

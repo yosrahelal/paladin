@@ -20,81 +20,12 @@ import (
 	"testing"
 
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
-
-func TestDecodeProvingRequest_AnonEnc(t *testing.T) {
-	common := pb.ProvingRequestCommon{}
-	circuit := pb.Circuit{
-		Name:           "anon_enc",
-		UsesEncryption: true,
-	}
-	req := &pb.ProvingRequest{
-		Circuit: &circuit,
-		Common:  &common,
-	}
-	bytes, err := proto.Marshal(req)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	_, extras, err := decodeProvingRequest(ctx, bytes)
-	require.NoError(t, err)
-	assert.Empty(t, extras)
-
-	encExtras := &pb.ProvingRequestExtras_Encryption{
-		EncryptionNonce: "123456",
-	}
-	req.Extras, err = proto.Marshal(encExtras)
-	require.NoError(t, err)
-
-	bytes, err = proto.Marshal(req)
-	require.NoError(t, err)
-	_, extras, err = decodeProvingRequest(ctx, bytes)
-	require.NoError(t, err)
-	assert.Equal(t, "123456", extras.(*pb.ProvingRequestExtras_Encryption).EncryptionNonce)
-}
-
-func TestDecodeProvingRequest_AnonNullifier(t *testing.T) {
-	common := pb.ProvingRequestCommon{}
-	circuit := pb.Circuit{
-		Name:           "anon_nullifier",
-		UsesNullifiers: true,
-	}
-	req := &pb.ProvingRequest{
-		Circuit: &circuit,
-		Common:  &common,
-	}
-	encExtras := &pb.ProvingRequestExtras_Nullifiers{
-		Root: "123456",
-		MerkleProofs: []*pb.MerkleProof{
-			{
-				Nodes: []string{"1", "2", "3"},
-			},
-		},
-		Enabled: []bool{true},
-	}
-	var err error
-	req.Extras, err = proto.Marshal(encExtras)
-	assert.NoError(t, err)
-
-	bytes, err := proto.Marshal(req)
-	assert.NoError(t, err)
-
-	signReq := &signerapi.SignRequest{
-		Payload: bytes,
-	}
-
-	ctx := context.Background()
-	bytes, err = proto.Marshal(req)
-	assert.NoError(t, err)
-	signReq.Payload = bytes
-	_, extras, err := decodeProvingRequest(ctx, signReq.Payload)
-	assert.NoError(t, err)
-	assert.Equal(t, "123456", extras.(*pb.ProvingRequestExtras_Nullifiers).Root)
-}
 
 func TestDecodeProvingRequest_Fail(t *testing.T) {
 	common := pb.ProvingRequestCommon{}
@@ -132,4 +63,121 @@ func TestDecodeProvingRequest_Fail(t *testing.T) {
 	assert.ErrorContains(t, err, "PD210076: Failed to unmarshal proving request extras for circuit anon_nullifier")
 	_, _, err = decodeProvingRequest(ctx, bytes)
 	assert.ErrorContains(t, err, "cannot parse invalid wire-format data")
+}
+
+func TestInvalidDecodeProvingRequest(t *testing.T) {
+	_, _, err := decodeProvingRequest(context.Background(), []byte("invalid"))
+	assert.Error(t, err)
+}
+
+func TestDecodeProvingRequest(t *testing.T) {
+	tests := []struct {
+		name        string
+		circuit     *zetosignerapi.Circuit
+		extras      interface{}
+		expectError bool
+		expectValue interface{}
+	}{
+		{
+			name:    "AnonEnc No Extras",
+			circuit: &zetosignerapi.Circuit{Name: "anon_enc", UsesEncryption: true},
+		},
+		{
+			name:    "AnonEnc With Extras",
+			circuit: &zetosignerapi.Circuit{Name: "anon_enc", UsesEncryption: true},
+			extras: &pb.ProvingRequestExtras_Encryption{
+				EncryptionNonce: "123456",
+			},
+			expectValue: "123456",
+		},
+		{
+			name:    "AnonNullifier With Extras",
+			circuit: &zetosignerapi.Circuit{Name: "anon_nullifier", UsesNullifiers: true},
+			extras: &pb.ProvingRequestExtras_Nullifiers{
+				Root: "123456",
+				MerkleProofs: []*pb.MerkleProof{
+					{
+						Nodes: []string{"1", "2", "3"},
+					},
+				},
+				Enabled: []bool{true},
+			},
+			expectValue: "123456",
+		},
+		{
+			name:        "AnonNullifier Invalid Extras",
+			circuit:     &zetosignerapi.Circuit{Name: "anon_nullifier", UsesNullifiers: true},
+			extras:      []byte("invalid"),
+			expectError: true,
+		},
+		{
+			name:    "AnonNullifier valid Extras",
+			circuit: &zetosignerapi.Circuit{Name: "anon_nullifier", UsesNullifiers: true},
+			extras: &pb.ProvingRequestExtras_Nullifiers{
+				Root: "123456",
+				MerkleProofs: []*pb.MerkleProof{
+					{
+						Nodes: []string{"1", "2", "3"},
+					},
+				},
+				Enabled: []bool{true},
+			},
+			expectValue: "123456",
+		},
+		{
+			name:        "NfAnonNullifier Invalid Extras",
+			circuit:     &zetosignerapi.Circuit{Name: "nf_anon_nullifier", UsesNullifiers: true},
+			extras:      []byte("invalid"),
+			expectError: true,
+		},
+		{
+			name:        "Invalid Extras",
+			circuit:     &zetosignerapi.Circuit{Name: "anon_enc", UsesEncryption: true},
+			extras:      []byte("invalid"),
+			expectError: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			common := pb.ProvingRequestCommon{}
+			req := &pb.ProvingRequest{
+				Circuit: tt.circuit.ToProto(),
+				Common:  &common,
+			}
+
+			if tt.extras != nil {
+				var err error
+				switch extras := tt.extras.(type) {
+				case proto.Message:
+					req.Extras, err = proto.Marshal(extras)
+					require.NoError(t, err)
+				case []byte:
+					req.Extras = extras
+				}
+			}
+
+			bytes, err := proto.Marshal(req)
+			require.NoError(t, err)
+
+			ctx := context.Background()
+			_, extras, err := decodeProvingRequest(ctx, bytes)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				if tt.expectValue != nil {
+					switch v := extras.(type) {
+					case *pb.ProvingRequestExtras_Encryption:
+						assert.Equal(t, tt.expectValue, v.EncryptionNonce)
+					case *pb.ProvingRequestExtras_Nullifiers:
+						assert.Equal(t, tt.expectValue, v.Root)
+					}
+				} else {
+					assert.Empty(t, extras)
+				}
+			}
+		})
+	}
+
 }

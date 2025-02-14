@@ -16,11 +16,43 @@
 package common
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"math/big"
+
+	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
+
+	"github.com/iden3/go-iden3-crypto/babyjub"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+type StateSchemas struct {
+	CoinSchema           *prototk.StateSchema
+	NftSchema            *prototk.StateSchema
+	MerkleTreeRootSchema *prototk.StateSchema
+	MerkleTreeNodeSchema *prototk.StateSchema
+	LockInfoSchema       *prototk.StateSchema
+}
+
+const modulus = "21888242871839275222246405745257275088548364400416034343698204186575808495617"
+
+func IsBatchCircuit(sizeOfEndorsableStates int) bool {
+	return sizeOfEndorsableStates > 2
+}
+
 func IsNullifiersToken(tokenName string) bool {
-	return tokenName == constants.TOKEN_ANON_NULLIFIER
+	return tokenName == constants.TOKEN_ANON_NULLIFIER || tokenName == constants.TOKEN_NF_ANON_NULLIFIER
+}
+
+func IsNonFungibleToken(tokenName string) bool {
+	return tokenName == constants.TOKEN_NF_ANON || tokenName == constants.TOKEN_NF_ANON_NULLIFIER
 }
 
 func IsEncryptionToken(tokenName string) bool {
@@ -35,4 +67,64 @@ func GetInputSize(sizeOfEndorsableStates int) int {
 		return 2
 	}
 	return 10
+}
+
+func HexUint256To32ByteHexString(v *tktypes.HexUint256) string {
+	paddedBytes := IntTo32ByteSlice(v.Int())
+	return hex.EncodeToString(paddedBytes)
+}
+
+func IntTo32ByteSlice(bigInt *big.Int) (res []byte) {
+	return bigInt.FillBytes(make([]byte, 32))
+}
+
+func IntTo32ByteHexString(bigInt *big.Int) string {
+	paddedBytes := bigInt.FillBytes(make([]byte, 32))
+	return hex.EncodeToString(paddedBytes)
+}
+
+func LoadBabyJubKey(payload []byte) (*babyjub.PublicKey, error) {
+	var keyCompressed babyjub.PublicKeyComp
+	if err := keyCompressed.UnmarshalText(payload); err != nil {
+		return nil, err
+	}
+	return keyCompressed.Decompress()
+}
+func EncodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
+	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorParseTxId, err)
+	}
+	var data []byte
+	data = append(data, types.ZetoTransactionData_V0...)
+	data = append(data, txID...)
+	return data, nil
+}
+
+func EncodeProof(proof *corepb.SnarkProof) map[string]interface{} {
+	// Convert the proof json to the format that the Solidity verifier expects
+	return map[string]interface{}{
+		"pA": []string{proof.A[0], proof.A[1]},
+		"pB": [][]string{
+			{proof.B[0].Items[1], proof.B[0].Items[0]},
+			{proof.B[1].Items[1], proof.B[1].Items[0]},
+		},
+		"pC": []string{proof.C[0], proof.C[1]},
+	}
+}
+
+// Generate a random 256-bit integer
+func CryptoRandBN254() (*big.Int, error) {
+	// The BN254 field modulus.
+	fieldModulus, ok := new(big.Int).SetString(modulus, 10)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse field modulus")
+	}
+
+	// Generate a random number in [0, fieldModulus).
+	tokenValue, err := rand.Int(rand.Reader, fieldModulus)
+	if err != nil {
+		return nil, err
+	}
+	return tokenValue, nil
 }

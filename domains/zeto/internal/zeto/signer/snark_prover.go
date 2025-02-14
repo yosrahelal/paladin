@@ -30,6 +30,8 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer/common"
+	wtns "github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer/witness"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
@@ -41,6 +43,7 @@ import (
 var defaultSnarkProverConfig = zetosignerapi.SnarkProverConfig{
 	MaxProverPerCircuit: confutil.P(10),
 }
+var getWitnessInputs func(tokeType pb.TokenType, circuit *zetosignerapi.Circuit, extras interface{}) (witnessInputs, error) = newWitnessInputs
 
 // snarkProver encapsulates the logic for generating SNARK proofs
 type snarkProver struct {
@@ -81,11 +84,11 @@ func (sp *snarkProver) GetVerifier(ctx context.Context, algorithm, verifierType 
 	if verifierType != zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X {
 		return "", i18n.NewError(ctx, msgs.MsgErrorVerifierTypeMismatch, algorithm, zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X)
 	}
-	pk, err := NewBabyJubJubPrivateKey(privateKey)
+	pk, err := common.NewBabyJubJubPrivateKey(privateKey)
 	if err != nil {
 		return "", err
 	}
-	return EncodeBabyJubJubPublicKey(pk.Public()), nil
+	return common.EncodeBabyJubJubPublicKey(pk.Public()), nil
 }
 
 func (sp *snarkProver) GetMinimumKeyLen(ctx context.Context, algorithm string) (int, error) {
@@ -114,9 +117,6 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 	// Perform proof generation
 	if inputs.Circuit.Name == "" {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorMissingCircuitID)
-	}
-	if err := validateInputs(ctx, inputs.Common); err != nil {
-		return nil, err
 	}
 
 	circuit := getCircuit(inputs)
@@ -207,16 +207,6 @@ func getCircuit(inputs *pb.ProvingRequest) *zetosignerapi.Circuit {
 	return ret
 }
 
-func validateInputs(ctx context.Context, inputs *pb.ProvingRequestCommon) error {
-	if len(inputs.InputCommitments) != len(inputs.InputValues) || len(inputs.InputCommitments) != len(inputs.InputSalts) {
-		return i18n.NewError(ctx, msgs.MsgErrorInputsDiffLength)
-	}
-	if len(inputs.OutputValues) != len(inputs.OutputOwners) {
-		return i18n.NewError(ctx, msgs.MsgErrorOutputsDiffLength)
-	}
-	return nil
-}
-
 func serializeProofResponse(circuit *zetosignerapi.Circuit, proof *types.ZKProof) ([]byte, error) {
 	snark := pb.SnarkProof{}
 	snark.A = proof.Proof.A
@@ -270,55 +260,80 @@ func serializeProofResponse(circuit *zetosignerapi.Circuit, proof *types.ZKProof
 }
 
 func calculateWitness(ctx context.Context, circuit *zetosignerapi.Circuit, commonInputs *pb.ProvingRequestCommon, extras interface{}, keyEntry *core.KeyEntry, witnessCalculator witness.Calculator) ([]byte, error) {
-	inputs, err := buildCircuitInputs(ctx, commonInputs)
+	inputs, err := getWitnessInputs(commonInputs.TokenType, circuit, extras)
 	if err != nil {
 		return nil, err
 	}
 
-	var witnessInputs map[string]any
-	switch circuit.Type {
-	case zetosignerapi.Deposit:
-		witnessInputs = assembleInputs_deposit(inputs)
-	case zetosignerapi.Withdraw:
-		if circuit.UsesNullifiers {
-			witnessInputs, err = assembleInputs_withdraw_nullifier(ctx, inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
-			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
-			}
-		} else {
-			witnessInputs = assembleInputs_withdraw(inputs, keyEntry)
-		}
-	case zetosignerapi.Transfer:
-		if circuit.UsesNullifiers {
-			witnessInputs, err = assembleInputs_anon_nullifier(ctx, inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
-			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
-			}
-		} else if circuit.UsesEncryption {
-			witnessInputs, err = assembleInputs_anon_enc(ctx, inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
-			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
-			}
-		} else {
-			witnessInputs = assembleInputs_anon(inputs, keyEntry)
-		}
-	case zetosignerapi.TransferLocked:
-		if circuit.UsesNullifiers {
-			witnessInputs, err = assembleInputs_anon_nullifier(ctx, inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
-			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
-			}
-		} else {
-			witnessInputs = assembleInputs_anon(inputs, keyEntry)
-		}
+	// Validate the inputs
+	if err := inputs.Validate(ctx, commonInputs); err != nil {
+		return nil, err
 	}
 
+	// Build the common witness inputs
+	if err := inputs.Build(ctx, commonInputs); err != nil {
+		return nil, err
+	}
+
+	// Assemble the circuit-specific witness inputs
+	witnessInputs, err := inputs.Assemble(ctx, keyEntry)
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
+	}
+
+	// Calculate the witness binary
 	wtns, err := witnessCalculator.CalculateWTNSBin(witnessInputs, true)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorCalcWitness, err)
 	}
 
 	return wtns, nil
+}
+
+func newWitnessInputs(tokenType pb.TokenType, circuit *zetosignerapi.Circuit, extras interface{}) (witnessInputs, error) {
+	switch circuit.Type {
+	case zetosignerapi.Deposit:
+		return &wtns.DepositWitnessInputs{}, nil
+	case zetosignerapi.Withdraw:
+		if circuit.UsesNullifiers {
+			nullifierExtras, ok := extras.(*pb.ProvingRequestExtras_Nullifiers)
+			if !ok {
+				return nil, fmt.Errorf("unexpected extras type for anon nullifier circuit")
+			}
+			return &wtns.WithdrawNullifierWitnessInputs{
+				FungibleNullifierWitnessInputs: wtns.FungibleNullifierWitnessInputs{
+					Extras: nullifierExtras,
+				},
+			}, nil
+		}
+		return &wtns.WithdrawWitnessInputs{}, nil
+	case zetosignerapi.Transfer:
+		if tokenType == pb.TokenType_fungible {
+			if circuit.UsesEncryption {
+				encExtras, ok := extras.(*pb.ProvingRequestExtras_Encryption)
+				if !ok {
+					return nil, fmt.Errorf("unexpected extras type for encryption circuit")
+				}
+				return &wtns.FungibleEncWitnessInputs{Enc: encExtras}, nil
+			} else if circuit.UsesNullifiers {
+				nullifierExtras, ok := extras.(*pb.ProvingRequestExtras_Nullifiers)
+				if !ok {
+					return nil, fmt.Errorf("unexpected extras type for anon nullifier circuit")
+				}
+				return &wtns.FungibleNullifierWitnessInputs{
+					Extras: nullifierExtras,
+				}, nil
+			} else {
+				return &wtns.FungibleWitnessInputs{}, nil
+			}
+		} else {
+			return &wtns.NonFungibleWitnessInputs{}, nil
+		}
+	case zetosignerapi.TransferLocked:
+		return &wtns.FungibleWitnessInputs{}, nil
+	}
+
+	return nil, fmt.Errorf("unsupported circuit type %s", circuit.Type)
 }
 
 func generateProof(ctx context.Context, wtns, provingKey []byte) (*types.ZKProof, error) {

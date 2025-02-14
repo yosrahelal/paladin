@@ -17,82 +17,26 @@ package signer
 
 import (
 	"context"
-	"math/big"
 
-	"github.com/hyperledger-labs/zeto/go-sdk/pkg/utxo"
-	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer/witness"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
-	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 )
 
-type commonWitnessInputs struct {
-	inputCommitments      []*big.Int
-	inputValues           []*big.Int
-	inputSalts            []*big.Int
-	outputCommitments     []*big.Int
-	outputValues          []*big.Int
-	outputSalts           []*big.Int
-	outputOwnerPublicKeys [][]*big.Int
+type witnessInputs interface {
+	Validate(ctx context.Context, inputs *pb.ProvingRequestCommon) error
+	Build(ctx context.Context, commonInputs *pb.ProvingRequestCommon) error
+	Assemble(ctx context.Context, keyEntry *core.KeyEntry) (map[string]interface{}, error)
 }
 
-func buildCircuitInputs(ctx context.Context, commonInputs *pb.ProvingRequestCommon) (*commonWitnessInputs, error) {
-	// construct the output UTXOs based on the values and owner public keys
-	outputCommitments := make([]*big.Int, len(commonInputs.OutputValues))
-	outputSalts := make([]*big.Int, len(commonInputs.OutputValues))
-	outputOwnerPublicKeys := make([][]*big.Int, len(commonInputs.OutputValues))
-	outputValues := make([]*big.Int, len(commonInputs.OutputValues))
+var _ witnessInputs = &witness.FungibleWitnessInputs{}
 
-	for i := 0; i < len(commonInputs.OutputSalts); i++ {
-		salt, ok := new(big.Int).SetString(commonInputs.OutputSalts[i], 16)
-		if !ok {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorParseOutputSalt)
-		}
-		outputSalts[i] = salt
+var _ witnessInputs = &witness.DepositWitnessInputs{}
 
-		if salt.Cmp(big.NewInt(0)) == 0 {
-			outputOwnerPublicKeys[i] = []*big.Int{big.NewInt(0), big.NewInt(0)}
-			outputValues[i] = big.NewInt(0)
-			outputCommitments[i] = big.NewInt(0)
-		} else {
-			ownerPubKey, err := DecodeBabyJubJubPublicKey(commonInputs.OutputOwners[i])
-			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
-			}
-			outputOwnerPublicKeys[i] = []*big.Int{ownerPubKey.X, ownerPubKey.Y}
-			value := commonInputs.OutputValues[i]
-			outputValues[i] = new(big.Int).SetUint64(value)
-			u := utxo.NewFungible(new(big.Int).SetUint64(value), ownerPubKey, salt)
-			hash, err := u.GetHash()
-			if err != nil {
-				return nil, err
-			}
-			outputCommitments[i] = hash
-		}
-	}
+var _ witnessInputs = &witness.LockWitnessInputs{}
 
-	inputCommitments := make([]*big.Int, len(commonInputs.InputCommitments))
-	inputValues := make([]*big.Int, len(commonInputs.InputValues))
-	inputSalts := make([]*big.Int, len(commonInputs.InputSalts))
-	for i, c := range commonInputs.InputCommitments {
-		commitment, ok := new(big.Int).SetString(c, 16)
-		if !ok {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorParseInputCommitment)
-		}
-		inputCommitments[i] = commitment
-		inputValues[i] = new(big.Int).SetUint64(commonInputs.InputValues[i])
-		salt, ok := new(big.Int).SetString(commonInputs.InputSalts[i], 16)
-		if !ok {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorParseInputSalt)
-		}
-		inputSalts[i] = salt
-	}
-	return &commonWitnessInputs{
-		inputCommitments:      inputCommitments,
-		inputValues:           inputValues,
-		inputSalts:            inputSalts,
-		outputCommitments:     outputCommitments,
-		outputValues:          outputValues,
-		outputSalts:           outputSalts,
-		outputOwnerPublicKeys: outputOwnerPublicKeys,
-	}, nil
-}
+var _ witnessInputs = &witness.FungibleEncWitnessInputs{}
+
+var _ witnessInputs = &witness.FungibleNullifierWitnessInputs{}
+
+var _ witnessInputs = &witness.NonFungibleWitnessInputs{}

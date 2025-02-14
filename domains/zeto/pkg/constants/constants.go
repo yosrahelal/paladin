@@ -26,4 +26,7 @@ const (
 	TOKEN_ANON           = "Zeto_Anon"
 	TOKEN_ANON_ENC       = "Zeto_AnonEnc"
 	TOKEN_ANON_NULLIFIER = "Zeto_AnonNullifier"
+
+	TOKEN_NF_ANON           = "Zeto_NfAnon"
+	TOKEN_NF_ANON_NULLIFIER = "Zeto_NfAnonNullifier"
 )

@@ -18,7 +18,6 @@ package zeto
 import (
 	"context"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"math/big"
 
@@ -28,7 +27,9 @@ import (
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
-	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/fungible"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/nonfungible"
+	signercommon "github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer/common"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
@@ -43,6 +44,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
+var _ plugintk.DomainAPI = &Zeto{}
+
 type Zeto struct {
 	Callbacks plugintk.DomainCallbacks
 
@@ -50,6 +53,7 @@ type Zeto struct {
 	config                   *types.DomainFactoryConfig
 	chainID                  int64
 	coinSchema               *prototk.StateSchema
+	nftSchema                *prototk.StateSchema
 	merkleTreeRootSchema     *prototk.StateSchema
 	merkleTreeNodeSchema     *prototk.StateSchema
 	lockedInfoSchema         *prototk.StateSchema
@@ -110,6 +114,7 @@ var factoryDeployABI = &abi.Entry{
 		{Name: "tokenName", Type: "string"},
 		{Name: "initialOwner", Type: "address"},
 		{Name: "data", Type: "bytes"},
+		{Name: "isNonFungible", Type: "bool"},
 	},
 }
 
@@ -127,6 +132,9 @@ func (z *Zeto) CoinSchemaID() string {
 	return z.coinSchema.Id
 }
 
+func (z *Zeto) NFTSchemaID() string {
+	return z.nftSchema.Id
+}
 func (z *Zeto) getAlgoZetoSnarkBJJ() string {
 	return zetosignerapi.AlgoDomainZetoSnarkBJJ(z.name)
 }
@@ -146,7 +154,7 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	z.config = &config
 	z.chainID = req.ChainId
 
-	schemas, err := getStateSchemas()
+	schemas, err := types.GetStateSchemas()
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorConfigZetoDomain, err)
 	}
@@ -183,9 +191,10 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 
 func (z *Zeto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error) {
 	z.coinSchema = req.AbiStateSchemas[0]
-	z.merkleTreeRootSchema = req.AbiStateSchemas[1]
-	z.merkleTreeNodeSchema = req.AbiStateSchemas[2]
-	z.lockedInfoSchema = req.AbiStateSchemas[3]
+	z.nftSchema = req.AbiStateSchemas[1]
+	z.merkleTreeRootSchema = req.AbiStateSchemas[2]
+	z.merkleTreeNodeSchema = req.AbiStateSchemas[3]
+	z.lockedInfoSchema = req.AbiStateSchemas[4]
 
 	return &prototk.InitDomainResponse{}, nil
 }
@@ -233,6 +242,7 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 		Data:          tktypes.HexBytes(encoded),
 		TokenName:     initParams.TokenName,
 		InitialOwner:  req.ResolvedVerifiers[0].Verifier, // TODO: allow the initial owner to be specified by the deploy request
+		IsNonFungible: common.IsNonFungibleToken(initParams.TokenName),
 	}
 	paramsJSON, err := json.Marshal(deployParams)
 	if err != nil {
@@ -306,20 +316,30 @@ func (z *Zeto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTrans
 	return handler.Prepare(ctx, tx, req)
 }
 
-func (z *Zeto) GetHandler(method string) types.DomainHandler {
+func (z *Zeto) GetHandler(method, tokenName string) types.DomainHandler {
+	if common.IsNonFungibleToken(tokenName) {
+		switch method {
+		case "mint":
+			return nonfungible.NewMintHandler(z.name, z.nftSchema)
+		case "transfer":
+			return nonfungible.NewTransferHandler(z.name, z.Callbacks, z.nftSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
+		default:
+			return nil
+		}
+	}
 	switch method {
 	case "mint":
-		return &mintHandler{zeto: z}
+		return fungible.NewMintHandler(z.name, z.coinSchema)
 	case "transfer":
-		return &transferHandler{zeto: z}
+		return fungible.NewTransferHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
 	case "transferLocked":
-		return &transferLockedHandler{zeto: z}
+		return fungible.NewTransferLockedHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
 	case "lock":
-		return &lockHandler{zeto: z}
+		return fungible.NewLockHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema, z.lockedInfoSchema)
 	case "deposit":
-		return &depositHandler{zeto: z}
+		return fungible.NewDepositHandler(z.name, z.coinSchema)
 	case "withdraw":
-		return &withdrawHandler{zeto: z}
+		return fungible.NewWithdrawHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
 	default:
 		return nil
 	}
@@ -358,8 +378,15 @@ func (z *Zeto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, err
 	}
 
-	abi := types.ZetoABI.Functions()[functionABI.Name]
-	handler := z.GetHandler(functionABI.Name)
+	// TODO: we should probably have this validation checks as part of the ValidateParams function
+	var abi *abi.Entry
+	if common.IsNonFungibleToken(domainConfig.TokenName) {
+		abi = types.ZetoNonFungibleABI.Functions()[functionABI.Name]
+	} else {
+		abi = types.ZetoFungibleABI.Functions()[functionABI.Name]
+	}
+
+	handler := z.GetHandler(functionABI.Name, domainConfig.TokenName)
 	if abi == nil || handler == nil {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, functionABI.Name)
 	}
@@ -482,32 +509,23 @@ func (z *Zeto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest)
 	}, nil
 }
 
-func intTo32ByteSlice(bigInt *big.Int) (res []byte) {
-	return bigInt.FillBytes(make([]byte, 32))
-}
-
-func hexUint256To32ByteHexString(v *tktypes.HexUint256) string {
-	paddedBytes := intTo32ByteSlice(v.Int())
-	return hex.EncodeToString(paddedBytes)
-}
-
 func (z *Zeto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.SignResponse, error) {
 	switch req.PayloadType {
 	case zetosignerapi.PAYLOAD_DOMAIN_ZETO_NULLIFIER:
 		var coin *types.ZetoCoin
 		var hashInt *big.Int
-		keyPair, err := signer.NewBabyJubJubPrivateKey(req.PrivateKey)
+		keyPair, err := signercommon.NewBabyJubJubPrivateKey(req.PrivateKey)
 		if err == nil {
 			err = json.Unmarshal(req.Payload, &coin)
 		}
 		if err == nil {
-			hashInt, err = signer.CalculateNullifier(coin.Amount.Int(), coin.Salt.Int(), babyjub.SkToBigInt(keyPair))
+			hashInt, err = signercommon.CalculateNullifier(coin.Amount.Int(), coin.Salt.Int(), babyjub.SkToBigInt(keyPair))
 		}
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgNullifierGenerationFailed)
 		}
 		return &prototk.SignResponse{
-			Payload: intTo32ByteSlice(hashInt),
+			Payload: common.IntTo32ByteSlice(hashInt),
 		}, nil
 	case zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK:
 		proof, err := z.snarkProver.Sign(ctx, req.Algorithm, req.PayloadType, req.PrivateKey, req.Payload)
@@ -537,7 +555,7 @@ func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateSta
 			log.L(ctx).Errorf("Error hashing state data: %s", err)
 			return nil, i18n.NewError(ctx, msgs.MsgErrorHashOutputState, err)
 		}
-		hashString := hexUint256To32ByteHexString(hash)
+		hashString := common.HexUint256To32ByteHexString(hash)
 		if state.Id == "" {
 			// if the requested state ID is empty, we simply set it
 			res.StateIds = append(res.StateIds, hashString)

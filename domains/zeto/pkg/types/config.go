@@ -43,20 +43,6 @@ type DomainContract struct {
 	Circuits *zetosignerapi.Circuits `yaml:"circuits"`
 }
 
-// func (d *DomainFactoryConfig) GetContractAbi(ctx context.Context, tokenName string) (abi.ABI, error) {
-// 	for _, contract := range d.DomainContracts.Implementations {
-// 		if contract.Name == tokenName {
-// 			var contractAbi abi.ABI
-// 			err := json.Unmarshal([]byte(contract.Abi), &contractAbi)
-// 			if err != nil {
-// 				return nil, err
-// 			}
-// 			return contractAbi, nil
-// 		}
-// 	}
-// 	return nil, i18n.NewError(ctx, msgs.MsgContractNotFound, tokenName)
-// }
-
 func (d *DomainFactoryConfig) GetCircuits(ctx context.Context, tokenName string) (*zetosignerapi.Circuits, error) {
 	for _, contract := range d.DomainContracts.Implementations {
 		if contract.Name == tokenName {
