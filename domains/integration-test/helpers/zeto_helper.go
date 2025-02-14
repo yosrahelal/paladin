@@ -91,7 +91,7 @@ func (n *ZetoHelperFungible) Transfer(ctx context.Context, to string, amount uin
 
 func (n *ZetoHelper) TransferLocked(ctx context.Context, lockedUtxo *tktypes.HexUint256, delegate string, to string, amount uint64) *DomainTransactionHelper {
 	fn := types.ZetoFungibleABI.Functions()["transferLocked"]
-	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.TransferLockedParams{
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.FungibleTransferLockedParams{
 		LockedInputs: []*tktypes.HexUint256{lockedUtxo},
 		Delegate:     delegate,
 		Transfers: []*types.FungibleTransferParamEntry{

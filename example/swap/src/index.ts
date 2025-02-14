@@ -190,13 +190,6 @@ async function main(): Promise<boolean> {
 
   const encodedCashTransfer = await encodeZetoTransfer(preparedCashTransfer);
 
-  //   logger.log("Locking transfer proof...");
-  //   receipt = await zetoCash.using(paladin3).lock(investor2, {
-  //     call: encodedCashTransfer,
-  //     delegate: await investor2.address(),
-  //   });
-  //   if (!checkReceipt(receipt)) return false;
-
   // Create an atom for the swap
   logger.log("Creating atom...");
   const atom = await atomFactory.create(cashIssuer, [

@@ -273,13 +273,14 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 			Expect(err).To(BeNil())
 			Expect(coins).To(HaveLen(1))
 
+			// Bob must generate a proof for Sally to use to perform the transfer
 			result := rpc["node1"].ForABI(ctx, zetotypes.ZetoFungibleABI).
 				Private().
 				Domain("zeto").
 				Function("transferLocked").
 				To(zetoContract).
 				From("bob@node1").
-				Inputs(&zetotypes.TransferLockedParams{
+				Inputs(&zetotypes.FungibleTransferLockedParams{
 					LockedInputs: []*tktypes.HexUint256{&coins[0].ID},
 					Delegate:     "sally@node2",
 					Transfers: []*zetotypes.FungibleTransferParamEntry{
@@ -290,9 +291,10 @@ var _ = Describe(fmt.Sprintf("zeto - %s", tokenType), Ordered, func() {
 					},
 				}).
 				Prepare().
-				Wait(1 * time.Second)
+				Wait(5 * time.Second)
 			Expect(result.Error()).To(BeNil())
 
+			// Sally as the delegate can use the proof to transfer the locked funds
 			zetoAnonSpec := solutils.MustLoadBuild(zetoAnonBuildJSON)
 			result1 := rpc["node2"].ForABI(ctx, zetoAnonSpec.ABI).
 				Public().

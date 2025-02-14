@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -267,11 +268,19 @@ func (h *transferLockedHandler) Prepare(ctx context.Context, tx *types.ParsedTra
 		return nil, err
 	}
 
+	signer := &tx.Params.(*types.FungibleTransferLockedParams).Delegate
+	if req.Transaction.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION {
+		// if called as prepare, it means the delegate might not exist locally
+		// and the signer doesn't matter because the caller is interested in the
+		// prepared transaction, not the signature
+		signer = &req.Transaction.From
+	}
+
 	return &pb.PrepareTransactionResponse{
 		Transaction: &pb.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
-			RequiredSigner:  &tx.Params.(*types.FungibleTransferLockedParams).Delegate,
+			RequiredSigner:  signer,
 		},
 	}, nil
 }
