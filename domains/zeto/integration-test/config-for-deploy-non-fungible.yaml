@@ -13,10 +13,12 @@ contracts:
       circuits:
         transfer:
           name: nf_anon
-          usesEncryption: true
         transferLocked:
           name: nf_anon
-          usesEncryption: true
+        deposit:
+          name: not_implemented
+        withdraw:
+          name: not_implemented
       cloneable: true
       abiAndBytecode:
         path: ./abis/Zeto_NfAnon.json

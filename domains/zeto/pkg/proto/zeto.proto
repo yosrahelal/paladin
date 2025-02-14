@@ -23,7 +23,6 @@ message Circuit {
   string type = 2;
   bool usesNullifiers = 3;
   bool usesEncryption = 4;
-  bool isFungible = 5;
 }
 
 message ProvingRequest {

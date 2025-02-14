@@ -44,7 +44,6 @@ type Circuit struct {
 	Type           CircuitType `yaml:"type" json:"type"`
 	UsesNullifiers bool        `yaml:"usesNullifiers" json:"usesNullifiers"`
 	UsesEncryption bool        `yaml:"usesEncryption" json:"usesEncryption"`
-	IsFungible     bool        `yaml:"fungible" json:"fungible"`
 }
 
 func (c *Circuit) ToProto() *proto.Circuit {
@@ -53,7 +52,6 @@ func (c *Circuit) ToProto() *proto.Circuit {
 		Type:           string(c.Type),
 		UsesNullifiers: c.UsesNullifiers,
 		UsesEncryption: c.UsesEncryption,
-		IsFungible:     c.IsFungible,
 	}
 }
 
@@ -71,7 +69,6 @@ func NewCircuitFromProto(pb *proto.Circuit) *Circuit {
 		Type:           CircuitType(pb.Type),
 		UsesNullifiers: pb.UsesNullifiers,
 		UsesEncryption: pb.UsesEncryption,
-		IsFungible:     pb.IsFungible,
 	}
 }
 

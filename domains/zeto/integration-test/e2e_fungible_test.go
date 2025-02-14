@@ -46,7 +46,6 @@ import (
 )
 
 func TestFungibleZetoDomainTestSuite(t *testing.T) {
-	t.Skip("Skipping test")
 	contractsFile = "./config-for-deploy-fungible.yaml"
 	suite.Run(t, new(fungibleTestSuiteHelper))
 }

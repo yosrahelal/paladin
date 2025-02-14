@@ -84,7 +84,6 @@ func TestSnarkProve(t *testing.T) {
 			Type:           string(zetosignerapi.Transfer),
 			UsesNullifiers: false,
 			UsesEncryption: false,
-			IsFungible:     true,
 		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
@@ -183,7 +182,6 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 			Type:           string(zetosignerapi.Transfer),
 			UsesNullifiers: false,
 			UsesEncryption: false,
-			IsFungible:     true,
 		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
@@ -398,7 +396,6 @@ func TestSnarkProveErrorGenerateProof(t *testing.T) {
 			Type:           string(zetosignerapi.Transfer),
 			UsesNullifiers: false,
 			UsesEncryption: false,
-			IsFungible:     true,
 		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
@@ -460,7 +457,6 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 			Type:           string(zetosignerapi.Transfer),
 			UsesNullifiers: false,
 			UsesEncryption: false,
-			IsFungible:     true,
 		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
@@ -483,7 +479,6 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 			Type:           string(zetosignerapi.Transfer),
 			UsesNullifiers: false,
 			UsesEncryption: false,
-			IsFungible:     true,
 		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
@@ -518,7 +513,6 @@ func TestSerializeProofResponse(t *testing.T) {
 		Type:           zetosignerapi.Transfer,
 		UsesNullifiers: false,
 		UsesEncryption: true,
-		IsFungible:     true,
 	}
 	bytes, err := serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
@@ -529,7 +523,6 @@ func TestSerializeProofResponse(t *testing.T) {
 		Type:           zetosignerapi.Transfer,
 		UsesNullifiers: true,
 		UsesEncryption: false,
-		IsFungible:     true,
 	}
 	bytes, err = serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
@@ -545,7 +538,6 @@ func TestSerializeProofResponse(t *testing.T) {
 		Type:           zetosignerapi.Transfer,
 		UsesNullifiers: false,
 		UsesEncryption: true,
-		IsFungible:     true,
 	}
 	bytes, err = serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
@@ -557,7 +549,6 @@ func TestSerializeProofResponse(t *testing.T) {
 		Type:           zetosignerapi.Transfer,
 		UsesNullifiers: true,
 		UsesEncryption: false,
-		IsFungible:     true,
 	}
 	bytes, err = serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
@@ -568,7 +559,6 @@ func TestSerializeProofResponse(t *testing.T) {
 		Type:           zetosignerapi.Withdraw,
 		UsesNullifiers: true,
 		UsesEncryption: false,
-		IsFungible:     true,
 	}
 	bytes, err = serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
@@ -584,7 +574,6 @@ func TestSerializeProofResponse(t *testing.T) {
 		Type:           zetosignerapi.Withdraw,
 		UsesNullifiers: true,
 		UsesEncryption: false,
-		IsFungible:     true,
 	}
 	bytes, err = serializeProofResponse(circuit, &snark)
 	assert.NoError(t, err)
@@ -630,7 +619,6 @@ func TestGetCircuitId(t *testing.T) {
 			Type:           string(zetosignerapi.Transfer),
 			UsesNullifiers: true,
 			UsesEncryption: false,
-			IsFungible:     true,
 		},
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
@@ -686,7 +674,7 @@ func TestNewWitnessInputs(t *testing.T) {
 		{
 			name:       "Valid fungible encryption witness inputs",
 			tokenType:  pb.TokenType_fungible,
-			circuit:    &zetosignerapi.Circuit{Name: "anon_enc", Type: zetosignerapi.Transfer, UsesEncryption: true, IsFungible: true},
+			circuit:    &zetosignerapi.Circuit{Name: "anon_enc", Type: zetosignerapi.Transfer, UsesEncryption: true},
 			extras:     &pb.ProvingRequestExtras_Encryption{},
 			expectType: &wtns.FungibleEncWitnessInputs{},
 			expectErr:  false,
@@ -694,7 +682,7 @@ func TestNewWitnessInputs(t *testing.T) {
 		{
 			name:       "Valid fungible encryption batch witness inputs",
 			tokenType:  pb.TokenType_fungible,
-			circuit:    &zetosignerapi.Circuit{Name: "anon_enc", Type: zetosignerapi.Transfer, UsesEncryption: true, IsFungible: true},
+			circuit:    &zetosignerapi.Circuit{Name: "anon_enc", Type: zetosignerapi.Transfer, UsesEncryption: true},
 			extras:     &pb.ProvingRequestExtras_Encryption{},
 			expectType: &wtns.FungibleEncWitnessInputs{},
 			expectErr:  false,
@@ -702,7 +690,7 @@ func TestNewWitnessInputs(t *testing.T) {
 		{
 			name:       "Valid fungible nullifier witness inputs",
 			tokenType:  pb.TokenType_fungible,
-			circuit:    &zetosignerapi.Circuit{Name: "anon_nullifier", Type: zetosignerapi.Transfer, UsesNullifiers: true, IsFungible: true},
+			circuit:    &zetosignerapi.Circuit{Name: "anon_nullifier", Type: zetosignerapi.Transfer, UsesNullifiers: true},
 			extras:     &pb.ProvingRequestExtras_Nullifiers{},
 			expectType: &wtns.FungibleNullifierWitnessInputs{},
 			expectErr:  false,
@@ -710,7 +698,7 @@ func TestNewWitnessInputs(t *testing.T) {
 		{
 			name:       "Valid fungible nullifier batch witness inputs",
 			tokenType:  pb.TokenType_fungible,
-			circuit:    &zetosignerapi.Circuit{Name: "anon_nullifier", Type: zetosignerapi.Transfer, UsesNullifiers: true, IsFungible: true},
+			circuit:    &zetosignerapi.Circuit{Name: "anon_nullifier", Type: zetosignerapi.Transfer, UsesNullifiers: true},
 			extras:     &pb.ProvingRequestExtras_Nullifiers{},
 			expectType: &wtns.FungibleNullifierWitnessInputs{},
 			expectErr:  false,
@@ -718,7 +706,7 @@ func TestNewWitnessInputs(t *testing.T) {
 		{
 			name:       "Valid withdraw nullifier witness inputs",
 			tokenType:  pb.TokenType_fungible,
-			circuit:    &zetosignerapi.Circuit{Name: "withdraw_nullifier", Type: zetosignerapi.Withdraw, UsesNullifiers: true, IsFungible: true},
+			circuit:    &zetosignerapi.Circuit{Name: "withdraw_nullifier", Type: zetosignerapi.Withdraw, UsesNullifiers: true},
 			extras:     &pb.ProvingRequestExtras_Nullifiers{},
 			expectType: &wtns.WithdrawNullifierWitnessInputs{},
 			expectErr:  false,
@@ -726,7 +714,7 @@ func TestNewWitnessInputs(t *testing.T) {
 		{
 			name:       "Valid withdraw nullifier batch witness inputs",
 			tokenType:  pb.TokenType_fungible,
-			circuit:    &zetosignerapi.Circuit{Name: "withdraw_nullifier", Type: zetosignerapi.Withdraw, UsesNullifiers: true, IsFungible: true},
+			circuit:    &zetosignerapi.Circuit{Name: "withdraw_nullifier", Type: zetosignerapi.Withdraw, UsesNullifiers: true},
 			extras:     &pb.ProvingRequestExtras_Nullifiers{},
 			expectType: &wtns.WithdrawNullifierWitnessInputs{},
 			expectErr:  false,
@@ -734,14 +722,14 @@ func TestNewWitnessInputs(t *testing.T) {
 		{
 			name:       "Valid withdraw deposit witness inputs",
 			tokenType:  pb.TokenType_fungible,
-			circuit:    &zetosignerapi.Circuit{Name: "deposit", Type: zetosignerapi.Deposit, IsFungible: true},
+			circuit:    &zetosignerapi.Circuit{Name: "deposit", Type: zetosignerapi.Deposit},
 			expectType: &wtns.DepositWitnessInputs{},
 			expectErr:  false,
 		},
 		{
 			name:        "Invalid extras type for encryption circuit",
 			tokenType:   pb.TokenType_fungible,
-			circuit:     &zetosignerapi.Circuit{Name: "anon_enc", Type: zetosignerapi.Transfer, UsesEncryption: true, IsFungible: true},
+			circuit:     &zetosignerapi.Circuit{Name: "anon_enc", Type: zetosignerapi.Transfer, UsesEncryption: true},
 			extras:      &pb.ProvingRequestExtras_Nullifiers{},
 			expectType:  nil,
 			expectErr:   true,
@@ -750,7 +738,7 @@ func TestNewWitnessInputs(t *testing.T) {
 		{
 			name:        "Invalid extras type for nullifier circuit",
 			tokenType:   pb.TokenType_fungible,
-			circuit:     &zetosignerapi.Circuit{Name: "anon_nullifier", Type: zetosignerapi.Transfer, UsesNullifiers: true, IsFungible: true},
+			circuit:     &zetosignerapi.Circuit{Name: "anon_nullifier", Type: zetosignerapi.Transfer, UsesNullifiers: true},
 			extras:      &pb.ProvingRequestExtras_Encryption{},
 			expectType:  nil,
 			expectErr:   true,

@@ -667,7 +667,6 @@ func TestSign(t *testing.T) {
 			Type:           "transfer",
 			UsesNullifiers: false,
 			UsesEncryption: false,
-			IsFungible:     true,
 		},
 		Common: &protoz.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
