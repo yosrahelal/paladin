@@ -300,10 +300,10 @@ func TestInitContract(t *testing.T) {
 	require.True(t, res.Valid)
 	require.JSONEq(t, `{
 		"circuits": {
-			"deposit": { "fungible":false, "name": "circuit-deposit", "type": "", "usesEncryption": false, "usesNullifiers": false },
-			"withdraw": { "fungible":false, "name": "circuit-withdraw", "type": "", "usesEncryption": false, "usesNullifiers": false },
-			"transfer": { "fungible":false, "name": "circuit-transfer", "type": "", "usesEncryption": false, "usesNullifiers": false },
-			"transferLocked": { "fungible":false, "name": "circuit-transfer-locked", "type": "", "usesEncryption": false, "usesNullifiers": false }
+			"deposit": { "name": "circuit-deposit", "type": "", "usesEncryption": false, "usesNullifiers": false },
+			"withdraw": { "name": "circuit-withdraw", "type": "", "usesEncryption": false, "usesNullifiers": false },
+			"transfer": { "name": "circuit-transfer", "type": "", "usesEncryption": false, "usesNullifiers": false },
+			"transferLocked": { "name": "circuit-transfer-locked", "type": "", "usesEncryption": false, "usesNullifiers": false }
 		},
 		"tokenName": "testToken1"
 	}`, res.ContractConfig.ContractConfigJson)
