@@ -70,7 +70,9 @@ jobs:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-typescript-sdk:
-    needs: release-charts
+    needs: [set-variables, release-charts]
     uses: ./.github/workflows/release-typescript-sdk.yaml
+    with:
+      sdk_version: ${{ needs.set-variables.outputs.tag }}
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
