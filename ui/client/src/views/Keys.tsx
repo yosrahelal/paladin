@@ -276,7 +276,7 @@ export const Keys: React.FC = () => {
             filterFields={[
               {
                 label: t('name'),
-                name: 'path',
+                name: 'name',
                 type: 'string'
               },
               {

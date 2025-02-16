@@ -131,6 +131,7 @@
 	"paladin": "Paladin",
 	"parentIdentityHash": "Parent Identity Hash",
 	"pasteABI": "Paste ABI",
+	"path": "Path",
 	"paused": "Paused",
 	"peers": "Peers",
 	"pending": "Pending",

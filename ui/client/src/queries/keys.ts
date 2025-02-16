@@ -24,10 +24,10 @@ export const fetchKeys = async (parent: string, limit: number, sortBy: string, s
 
   let translatedFilters = translateFilters(filters);
 
-  if (translatedFilters.eq === undefined) {
-    translatedFilters.eq = [];
+  if (translatedFilters.equal === undefined) {
+    translatedFilters.equal = [];
   }
-  translatedFilters.eq.push({
+  translatedFilters.equal.push({
     field: 'parent',
     value: parent
   });

@@ -89,26 +89,16 @@ export const ReverseKeyLookupDialog: React.FC<Props> = ({
         const index = path.lastIndexOf('.');
         if(index !== -1) {
           setParent(path.substring(0, index));
-          setFilters([{
-            field: {
-              label: t('name'),
-              name: 'path',
-              type: 'string'
-            },
-            operator: 'equal',
-            value: path.substring(index + 1)
-          }]);
-        } else {
-          setFilters([{
-            field: {
-              label: t('name'),
-              name: 'path',
-              type: 'string'
-            },
-            operator: 'equal',
-            value: path
-          }]);
         }
+        setFilters([{
+          field: {
+            label: t('name'),
+            name: 'name',
+            type: 'string'
+          },
+          operator: 'equal',
+          value: result.data.path[result.data.path.length - 1].name
+        }]);
         setDialogOpen(false);
       } else if (result.status === 'error') {
         setNotFound(true);
