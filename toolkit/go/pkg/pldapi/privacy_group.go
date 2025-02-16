@@ -33,9 +33,15 @@ type PrivacyGroup struct {
 	GenesisSignature   string            `docstruct:"PrivacyGroup" json:"genesisSignature"`
 }
 
+type PrivacyGroupTXOptions struct {
+	IdempotencyKey string `docstruct:"PrivacyGroup" json:"idempotencyKey,omitempty"`
+	PublicTxOptions
+}
+
 type PrivacyGroupInput struct {
-	Domain        string             `docstruct:"PrivacyGroup" json:"domain"`
-	Members       []string           `docstruct:"PrivacyGroup" json:"members"`
-	Properties    tktypes.RawJSON    `docstruct:"PrivacyGroup" json:"properties"`              // properties that inform genesis state
-	PropertiesABI abi.ParameterArray `docstruct:"PrivacyGroup" json:"propertiesABI,omitempty"` // without this the property types will be inferred
+	Domain             string                 `docstruct:"PrivacyGroup" json:"domain"`
+	Members            []string               `docstruct:"PrivacyGroup" json:"members"`
+	Properties         tktypes.RawJSON        `docstruct:"PrivacyGroup" json:"properties"`              // properties that inform genesis state
+	PropertiesABI      abi.ParameterArray     `docstruct:"PrivacyGroup" json:"propertiesABI,omitempty"` // without this the property types will be inferred
+	TransactionOptions *PrivacyGroupTXOptions `docstruct:"PrivacyGroup" json:"transactionOptions,omitempty"`
 }

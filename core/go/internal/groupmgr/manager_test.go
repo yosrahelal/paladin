@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -44,11 +45,11 @@ type mockComponents struct {
 	db               *mockpersistence.SQLMockProvider
 	p                persistence.Persistence
 	stateManager     *componentmocks.StateManager
+	txManager        *componentmocks.TXManager
 	domainManager    *componentmocks.DomainManager
 	domain           *componentmocks.Domain
 	registryManager  *componentmocks.RegistryManager
 	transportManager *componentmocks.TransportManager
-	txManager        *componentmocks.TXManager
 }
 
 func newMockComponents(t *testing.T, realDB bool) *mockComponents {
@@ -243,7 +244,7 @@ func TestPrivacyGroupDomainInitFail(t *testing.T) {
 
 	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
-		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
+		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 
@@ -262,7 +263,10 @@ func TestPrivacyGroupDomainInitGenerateBadSchema(t *testing.T) {
 	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
 		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).
-			Return(tktypes.RawJSON(`{}`), &abi.Parameter{}, nil)
+			Return(&components.PreparedGroupInitTransaction{
+				GenesisState:  tktypes.RawJSON(`{}`),
+				GenesisSchema: &abi.Parameter{},
+			}, nil)
 		mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
 			Return(nil, fmt.Errorf("pop"))
 	})
@@ -283,7 +287,10 @@ func TestPrivacyGroupWriteStateFail(t *testing.T) {
 	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
 		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).
-			Return(tktypes.RawJSON(`{}`), &abi.Parameter{}, nil)
+			Return(&components.PreparedGroupInitTransaction{
+				GenesisState:  tktypes.RawJSON(`{}`),
+				GenesisSchema: &abi.Parameter{},
+			}, nil)
 		ms := componentmocks.NewSchema(t)
 		ms.On("ID").Return(tktypes.RandBytes32())
 		mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
@@ -303,19 +310,48 @@ func TestPrivacyGroupWriteStateFail(t *testing.T) {
 	require.Regexp(t, "pop", err)
 }
 
-func mockReadyToInsertGroup(t *testing.T) func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+func TestPrivacyGroupSendTransactionFail(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockBeginRollback,
+		mockReadyToSendTransaction(t),
+		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+			mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		})
+	defer done()
+
+	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
+			Domain:  "domain1",
+			Members: []string{"me@node1", "you@node2"},
+		})
+		return err
+	})
+	require.Regexp(t, "pop", err)
+}
+
+func mockReadyToSendTransaction(t *testing.T) func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 	return func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
 		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).
-			Return(tktypes.RawJSON(`{}`), &abi.Parameter{
-				Type:         "tuple",
-				Name:         "TestGroup",
-				InternalType: "struct TestGroup;",
-				Components:   abi.ParameterArray{},
+			Return(&components.PreparedGroupInitTransaction{
+				TX: &pldapi.TransactionInput{
+					TransactionBase: pldapi.TransactionBase{
+						Domain: "domain1",
+						Type:   pldapi.TransactionTypePrivate.Enum(),
+					},
+				},
+				GenesisState: tktypes.RawJSON(`{}`),
+				GenesisSchema: &abi.Parameter{
+					Type:         "tuple",
+					Name:         "TestGroup",
+					InternalType: "struct TestGroup;",
+					Components:   abi.ParameterArray{},
+				},
 			}, nil)
 		ms := componentmocks.NewSchema(t)
 		ms.On("ID").Return(tktypes.RandBytes32())
-		ms.On("Signature").Return("")
+		ms.On("Signature").Return("").Maybe()
 		mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
 			Return([]components.Schema{ms}, nil)
 		mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
@@ -324,6 +360,13 @@ func mockReadyToInsertGroup(t *testing.T) func(mc *mockComponents, conf *pldconf
 					ID: tktypes.RandBytes(32),
 				}},
 			}, nil)
+	}
+}
+
+func mockReadyToInsertGroup(t *testing.T) func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+	return func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+		mockReadyToSendTransaction(t)(mc, conf)
+		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mock.Anything).Return([]uuid.UUID{uuid.New()}, nil)
 	}
 }
 

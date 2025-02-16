@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
@@ -32,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -75,21 +77,38 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 			require.JSONEq(t, `{"name": "secret things"}`, spec.Properties.Pretty())
 			require.Len(t, spec.Members, 2)
 			ipg.Return(
-				tktypes.RawJSON(mergedGenesis),
-				&abi.Parameter{
-					Name:         "TestPrivacyGroup",
-					Type:         "tuple",
-					InternalType: "struct TestPrivacyGroup;",
-					Indexed:      true,
-					Components: append(spec.PropertiesABI, &abi.Parameter{
-						Name:    "version",
-						Type:    "uint256",
-						Indexed: true,
-					}),
+				&components.PreparedGroupInitTransaction{
+					TX: &pldapi.TransactionInput{
+						TransactionBase: pldapi.TransactionBase{
+							Type: pldapi.TransactionTypePrivate.Enum(),
+						},
+					},
+					GenesisState: tktypes.RawJSON(mergedGenesis),
+					GenesisSchema: &abi.Parameter{
+						Name:         "TestPrivacyGroup",
+						Type:         "tuple",
+						InternalType: "struct TestPrivacyGroup;",
+						Indexed:      true,
+						Components: append(spec.PropertiesABI, &abi.Parameter{
+							Name:    "version",
+							Type:    "uint256",
+							Indexed: true,
+						}),
+					},
 				},
 				nil,
 			)
 		})
+
+		txID := uuid.New()
+		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mock.Anything).
+			Return([]uuid.UUID{txID}, nil).
+			Run(func(args mock.Arguments) {
+				tx := args[2].(*pldapi.TransactionInput)
+				assert.Regexp(t, `domains\.domain1\.pgroupinit\.0x[0-9a-f]{32}`, tx.From)
+				assert.Equal(t, "tx_1", tx.IdempotencyKey)
+				assert.Equal(t, uint64(12345), tx.PublicTxOptions.Gas.Uint64())
+			})
 
 		// Validate the state send gets the correct data
 		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
@@ -114,6 +133,12 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 		Properties: tktypes.RawJSON(`{
 			  "name": "secret things"
 			}`),
+		TransactionOptions: &pldapi.PrivacyGroupTXOptions{
+			IdempotencyKey: "tx_1",
+			PublicTxOptions: pldapi.PublicTxOptions{
+				Gas: confutil.P(tktypes.HexUint64(12345)),
+			},
+		},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, groupID)

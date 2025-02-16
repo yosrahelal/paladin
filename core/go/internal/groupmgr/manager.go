@@ -17,7 +17,9 @@ package groupmgr
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -49,6 +51,7 @@ type groupManager struct {
 	conf      *pldconf.GroupManagerConfig
 
 	stateManager     components.StateManager
+	txManager        components.TXManager
 	domainManager    components.DomainManager
 	transportManager components.TransportManager
 	registryManager  components.RegistryManager
@@ -61,6 +64,7 @@ type persistedGroup struct {
 	Created         tktypes.Timestamp `gorm:"column:created"`
 	SchemaID        tktypes.Bytes32   `gorm:"column:schema_id"`
 	SchemaSignature string            `gorm:"column:schema_signature"`
+	GenesisTX       uuid.UUID         `gorm:"column:genesis_tx"`
 }
 
 func (pg persistedGroup) TableName() string {
@@ -95,6 +99,7 @@ func (gm *groupManager) PreInit(pic components.PreInitComponents) (*components.M
 
 func (gm *groupManager) PostInit(c components.AllComponents) error {
 	gm.stateManager = c.StateManager()
+	gm.txManager = c.TxManager()
 	gm.domainManager = c.DomainManager()
 	gm.persistence = c.Persistence()
 	gm.transportManager = c.TransportManager()
@@ -212,13 +217,13 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 
 	// Now we can ask the domain code to take the input properties, and validated members, and come back with the
 	// complete genesis state object for the group
-	genesis, genesisSchema, err := domain.InitPrivacyGroup(ctx, spec)
+	tx, err := domain.InitPrivacyGroup(ctx, spec)
 	if err != nil {
 		return nil, err
 	}
 
 	// We need to ensure the ABI exists, before we can store the state
-	stateABIs, err := gm.stateManager.EnsureABISchemas(ctx, dbTX, spec.Domain, []*abi.Parameter{genesisSchema})
+	stateABIs, err := gm.stateManager.EnsureABISchemas(ctx, dbTX, spec.Domain, []*abi.Parameter{tx.GenesisSchema})
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +233,7 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 	states, err := gm.stateManager.WriteReceivedStates(ctx, dbTX, spec.Domain, []*components.StateUpsertOutsideContext{
 		{
 			SchemaID: genesisSchemaID,
-			Data:     genesis,
+			Data:     tx.GenesisState,
 			// Note there is no contract address associated with this state - as it comes into existence before the deploy
 		},
 	})
@@ -236,6 +241,21 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 		return nil, err
 	}
 	id = states[0].ID
+
+	// Propagate over input TX options
+	if spec.TransactionOptions != nil {
+		tx.TX.IdempotencyKey = spec.TransactionOptions.IdempotencyKey
+		tx.TX.PublicTxOptions = spec.TransactionOptions.PublicTxOptions
+	}
+	if tx.TX.From == "" {
+		tx.TX.From = fmt.Sprintf("domains.%s.pgroupinit.%s", spec.Domain, id)
+	}
+
+	// Insert the transaction
+	txIDs, err := gm.txManager.SendTransactions(ctx, dbTX, tx.TX)
+	if err != nil {
+		return nil, err
+	}
 
 	// We have the privacy group, and the state, so we can store all of these in the DB transaction - along with a reliable
 	// message transfer to all the parties in the group so they get notification it's there.
@@ -245,6 +265,7 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 		Domain:          spec.Domain,
 		SchemaID:        genesisSchemaID,
 		SchemaSignature: stateABIs[0].Signature(),
+		GenesisTX:       txIDs[0],
 	}, spec.Members)
 	if err != nil {
 		return nil, err
@@ -261,7 +282,7 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 					IdentityLocator: identity,
 					Domain:          spec.Domain,
 					StateID:         id.String(),
-					SchemaID:        genesisSchema.String(),
+					SchemaID:        tx.GenesisSchema.String(),
 				}),
 			})
 		}
