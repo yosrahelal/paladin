@@ -38,7 +38,7 @@ import (
 var groupDBOnlyFilters = filters.FieldMap{
 	"id":               filters.HexBytesField("id"),
 	"created":          filters.TimestampField("created"),
-	"domain":           filters.StringField("domain"),
+	"domain":           filters.StringField(`"privacy_groups"."domain"`),
 	"genesisSchema":    filters.StringField("schema_id"),
 	"genesisSignature": filters.StringField("schema_signature"),
 }
@@ -58,13 +58,23 @@ type groupManager struct {
 	persistence      persistence.Persistence
 }
 
+type referencedReceipt struct {
+	Transaction     uuid.UUID           `gorm:"column:transaction;primaryKey"`
+	ContractAddress *tktypes.EthAddress `gorm:"column:contract_address"`
+}
+
+func (rr referencedReceipt) TableName() string {
+	return "transaction_receipts"
+}
+
 type persistedGroup struct {
-	Domain          string            `gorm:"column:domain;primaryKey"`
-	ID              tktypes.HexBytes  `gorm:"column:id;primaryKey"`
-	Created         tktypes.Timestamp `gorm:"column:created"`
-	SchemaID        tktypes.Bytes32   `gorm:"column:schema_id"`
-	SchemaSignature string            `gorm:"column:schema_signature"`
-	GenesisTX       uuid.UUID         `gorm:"column:genesis_tx"`
+	Domain          string             `gorm:"column:domain;primaryKey"`
+	ID              tktypes.HexBytes   `gorm:"column:id;primaryKey"`
+	Created         tktypes.Timestamp  `gorm:"column:created"`
+	SchemaID        tktypes.Bytes32    `gorm:"column:schema_id"`
+	SchemaSignature string             `gorm:"column:schema_signature"`
+	GenesisTX       uuid.UUID          `gorm:"column:genesis_tx"`
+	Receipt         *referencedReceipt `gorm:"foreignKey:genesis_tx;references:transaction"`
 }
 
 func (pg persistedGroup) TableName() string {
@@ -359,13 +369,18 @@ func (gm *groupManager) enrichGenesisData(ctx context.Context, dbTX persistence.
 }
 
 func (dbPG *persistedGroup) mapToAPI() *pldapi.PrivacyGroup {
-	return &pldapi.PrivacyGroup{
-		ID:               dbPG.ID,
-		Domain:           dbPG.Domain,
-		Created:          dbPG.Created,
-		GenesisSchema:    dbPG.SchemaID,
-		GenesisSignature: dbPG.SchemaSignature,
+	pg := &pldapi.PrivacyGroup{
+		ID:                 dbPG.ID,
+		Domain:             dbPG.Domain,
+		Created:            dbPG.Created,
+		GenesisSchema:      dbPG.SchemaID,
+		GenesisSignature:   dbPG.SchemaSignature,
+		GenesisTransaction: dbPG.GenesisTX,
 	}
+	if dbPG.Receipt != nil {
+		pg.ContractAddress = dbPG.Receipt.ContractAddress
+	}
+	return pg
 }
 
 func (gm *groupManager) GetGroupByID(ctx context.Context, dbTX persistence.DBTX, domainName string, id tktypes.HexBytes) (*pldapi.PrivacyGroup, error) {
@@ -385,6 +400,9 @@ func (gm *groupManager) QueryGroups(ctx context.Context, dbTX persistence.DBTX, 
 		Query:       jq,
 		MapResult: func(dbPG *persistedGroup) (*pldapi.PrivacyGroup, error) {
 			return dbPG.mapToAPI(), nil
+		},
+		Finalize: func(db *gorm.DB) *gorm.DB {
+			return db.Joins("Receipt")
 		},
 	}
 	pgs, err := qw.Run(ctx, dbTX)
@@ -429,6 +447,7 @@ func (gm *groupManager) QueryGroupsByProperties(ctx context.Context, dbTX persis
 	var dbPGs []*persistedGroup
 	err = dbTX.DB().WithContext(ctx).
 		Where("id IN (?)", stateIDs).
+		Joins("Receipt").
 		Find(&dbPGs).
 		Error
 	if err != nil {

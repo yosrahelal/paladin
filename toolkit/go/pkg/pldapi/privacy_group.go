@@ -23,14 +23,15 @@ import (
 )
 
 type PrivacyGroup struct {
-	ID                 tktypes.HexBytes  `docstruct:"PrivacyGroup" json:"id"`
-	Domain             string            `docstruct:"PrivacyGroup" json:"domain"`
-	Created            tktypes.Timestamp `docstruct:"PrivacyGroup" json:"created"`
-	Members            []string          `docstruct:"PrivacyGroup" json:"members"`
-	Genesis            tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"genesis,omitempty"` // full genesis state
-	GenesisTransaction uuid.UUID         `docstruct:"PrivacyGroup" json:"genesisTransaction"`
-	GenesisSchema      tktypes.Bytes32   `docstruct:"PrivacyGroup" json:"genesisSchema"`
-	GenesisSignature   string            `docstruct:"PrivacyGroup" json:"genesisSignature"`
+	ID                 tktypes.HexBytes    `docstruct:"PrivacyGroup" json:"id"`
+	Domain             string              `docstruct:"PrivacyGroup" json:"domain"`
+	Created            tktypes.Timestamp   `docstruct:"PrivacyGroup" json:"created"`
+	Members            []string            `docstruct:"PrivacyGroup" json:"members"`
+	ContractAddress    *tktypes.EthAddress `docstruct:"PrivacyGroup" json:"contractAddress"`
+	Genesis            tktypes.RawJSON     `docstruct:"PrivacyGroup" json:"genesis,omitempty"` // full genesis state
+	GenesisTransaction uuid.UUID           `docstruct:"PrivacyGroup" json:"genesisTransaction"`
+	GenesisSchema      tktypes.Bytes32     `docstruct:"PrivacyGroup" json:"genesisSchema"`
+	GenesisSignature   string              `docstruct:"PrivacyGroup" json:"genesisSignature"`
 }
 
 type PrivacyGroupTXOptions struct {

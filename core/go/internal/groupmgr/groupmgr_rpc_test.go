@@ -153,16 +153,29 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	require.JSONEq(t, mergedGenesis, string(groups[0].Genesis))            // enriched from state store
 	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members) // enriched from members table
 
+	// Simulate completion of the transaction so we have the contract address
+	addr := tktypes.RandAddress()
+	err = gm.persistence.DB().Exec("INSERT INTO transaction_receipts (transaction, domain, indexed, success, contract_address) VALUES ( ?, ?, ?, ?, ? )",
+		groups[0].GenesisTransaction,
+		groups[0].Domain,
+		tktypes.TimestampNow(),
+		true,
+		addr,
+	).Error
+	require.NoError(t, err)
+
 	// Get it directly by ID
 	group, err := pgroupRPC.GetGroupById(ctx, "domain1", groupID)
 	require.NoError(t, err)
 	require.NotNil(t, group)
+	require.Equal(t, addr, group.ContractAddress)
 
 	// Search for it by name
 	groups, err = pgroupRPC.QueryGroupsByProperties(ctx, "domain1", group.GenesisSchema,
 		query.NewQueryBuilder().Equal("name", "secret things").Equal("version", 200).Limit(1).Query())
 	require.NoError(t, err)
 	require.Len(t, groups, 1)
+	require.Equal(t, addr, groups[0].ContractAddress)
 	require.Equal(t, "domain1", groups[0].Domain)
 	require.Equal(t, groupID, groups[0].ID)
 	require.NotNil(t, groups[0].Genesis)
