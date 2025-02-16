@@ -86,6 +86,8 @@ func TestRPCLocalDetails(t *testing.T) {
 	assert.Equal(t, queryEntries[1].Parent, "")
 	assert.Equal(t, queryEntries[0].Path, "my")
 	assert.Equal(t, queryEntries[1].Path, "a")
+	assert.Equal(t, queryEntries[0].Name, "my")
+	assert.Equal(t, queryEntries[1].Name, "a")
 
 	// Entries "my" and "a" are not keys and have children
 	assert.Equal(t, queryEntries[0].IsKey, false)
@@ -103,6 +105,7 @@ func TestRPCLocalDetails(t *testing.T) {
 	// Check parent and path
 	assert.Equal(t, queryEntries[0].Parent, "a")
 	assert.Equal(t, queryEntries[0].Path, "a.b")
+	assert.Equal(t, queryEntries[0].Name, "b")
 
 	// Check entry is key and has children
 	assert.Equal(t, queryEntries[0].IsKey, true)
@@ -124,6 +127,7 @@ func TestRPCLocalDetails(t *testing.T) {
 	// Check parent and path
 	assert.Equal(t, queryEntries[0].Parent, "a.b")
 	assert.Equal(t, queryEntries[0].Path, "a.b.c")
+	assert.Equal(t, queryEntries[0].Name, "c")
 
 	// Check entry is key and has no children
 	assert.Equal(t, queryEntries[0].IsKey, true)
