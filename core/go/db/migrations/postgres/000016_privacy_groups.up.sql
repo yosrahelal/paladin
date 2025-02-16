@@ -4,6 +4,7 @@ CREATE TABLE privacy_groups (
   "domain"                    TEXT            NOT NULL,
   "id"                        TEXT            NOT NULL,
   "created"                   BIGINT          NOT NULL,
+  "genesis_tx"                UUID            NOT NULL,
   "schema_id"                 TEXT            NOT NULL,
   "schema_signature"          TEXT            NOT NULL,
   PRIMARY KEY ( "domain", "id" )

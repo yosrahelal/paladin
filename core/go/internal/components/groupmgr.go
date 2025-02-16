@@ -30,6 +30,12 @@ type PrivacyGroupGenesisWithABI struct {
 	GenesisABI   abi.Parameter             `json:"genesisABI"`
 }
 
+type PreparedGroupInitTransaction struct {
+	TX            *pldapi.TransactionInput
+	GenesisState  tktypes.RawJSON
+	GenesisSchema *abi.Parameter
+}
+
 type GroupManager interface {
 	ManagerLifecycle
 

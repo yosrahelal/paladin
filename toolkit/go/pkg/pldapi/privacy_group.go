@@ -17,18 +17,20 @@
 package pldapi
 
 import (
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type PrivacyGroup struct {
-	ID               tktypes.HexBytes  `docstruct:"PrivacyGroup" json:"id"`
-	Domain           string            `docstruct:"PrivacyGroup" json:"domain"`
-	Created          tktypes.Timestamp `docstruct:"PrivacyGroup" json:"created"`
-	Members          []string          `docstruct:"PrivacyGroup" json:"members"`
-	Genesis          tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"genesis,omitempty"` // full genesis state
-	GenesisSchema    tktypes.Bytes32   `docstruct:"PrivacyGroup" json:"genesisSchema"`
-	GenesisSignature string            `docstruct:"PrivacyGroup" json:"genesisSignature"`
+	ID                 tktypes.HexBytes  `docstruct:"PrivacyGroup" json:"id"`
+	Domain             string            `docstruct:"PrivacyGroup" json:"domain"`
+	Created            tktypes.Timestamp `docstruct:"PrivacyGroup" json:"created"`
+	Members            []string          `docstruct:"PrivacyGroup" json:"members"`
+	Genesis            tktypes.RawJSON   `docstruct:"PrivacyGroup" json:"genesis,omitempty"` // full genesis state
+	GenesisTransaction uuid.UUID         `docstruct:"PrivacyGroup" json:"genesisTransaction"`
+	GenesisSchema      tktypes.Bytes32   `docstruct:"PrivacyGroup" json:"genesisSchema"`
+	GenesisSignature   string            `docstruct:"PrivacyGroup" json:"genesisSignature"`
 }
 
 type PrivacyGroupInput struct {

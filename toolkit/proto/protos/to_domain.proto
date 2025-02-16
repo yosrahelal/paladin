@@ -237,6 +237,7 @@ message InitPrivacyGroupRequest {
 message InitPrivacyGroupResponse {
   string genesis_state_json = 1; // The full definition of the group, encoding the properties, the members, and any needed configuration for all members
   string genesis_abi_state_schema_json = 2; // The ABI definition that must be distributed alongside the state to decode and index it in the state store
+  PreparedTransaction transaction = 3; // The transaction that will result from this against the domain
 }
 
 message DomainConfig {
