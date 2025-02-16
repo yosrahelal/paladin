@@ -174,6 +174,10 @@ func configureFactoryContract(ctx context.Context, tb testbed.Testbed, deployer 
 }
 
 func registerImpl(ctx context.Context, name string, domainContracts *ZetoDomainContracts, abiFunc *abi.Entry, deployer string, addr *tktypes.EthAddress, tb testbed.Testbed) error {
+	if name == "" {
+		return fmt.Errorf("no name specified for implementation")
+	}
+
 	log.L(ctx).Infof("Registering implementation %s", name)
 	verifierName := domainContracts.cloneableContracts[name].verifier
 	batchVerifierName := domainContracts.cloneableContracts[name].batchVerifier
@@ -182,51 +186,78 @@ func registerImpl(ctx context.Context, name string, domainContracts *ZetoDomainC
 	batchWithdrawVerifierName := domainContracts.cloneableContracts[name].batchWithdrawVerifier
 	lockVerifierName := domainContracts.cloneableContracts[name].lockVerifier
 	batchLockVerifierName := domainContracts.cloneableContracts[name].batchLockVerifier
+
+	params := &setImplementationParams{
+		Name: name,
+	}
+
+	if verifierName == "" {
+		return fmt.Errorf("verifierName not found among the deployed contracts. name: %s", name)
+	}
+
 	implAddr, ok := domainContracts.deployedContracts[name]
 	if !ok {
 		return fmt.Errorf("implementation contract %s not found among the deployed contracts", name)
 	}
+	params.Implementation.Implementation = implAddr.String()
+
 	verifierAddr, ok := domainContracts.deployedContracts[verifierName]
 	if !ok {
 		return fmt.Errorf("verifier contract %s not found among the deployed contracts", verifierName)
 	}
-	batchVerifierAddr, ok := domainContracts.deployedContracts[batchVerifierName]
-	if !ok {
-		return fmt.Errorf("batch verifier contract %s not found among the deployed contracts", batchVerifierName)
+	params.Implementation.Verifier = verifierAddr.String()
+	if params.Implementation.Verifier == "" {
+		return nil
 	}
-	depositVerifierAddr, ok := domainContracts.deployedContracts[depositVerifierName]
-	if !ok {
-		return fmt.Errorf("deposit verifier contract not found among the deployed contracts")
+
+	if batchVerifierName != "" {
+		batchVerifierAddr, ok := domainContracts.deployedContracts[batchVerifierName]
+		if !ok {
+			return fmt.Errorf("batch verifier contract %s not found among the deployed contracts", batchVerifierName)
+		}
+		params.Implementation.BatchVerifier = batchVerifierAddr.String()
 	}
-	withdrawVerifierAddr, ok := domainContracts.deployedContracts[withdrawVerifierName]
-	if !ok {
-		return fmt.Errorf("withdraw verifier contract not found among the deployed contracts")
+
+	if depositVerifierName != "" {
+		depositVerifierAddr, ok := domainContracts.deployedContracts[depositVerifierName]
+		if !ok {
+			return fmt.Errorf("deposit verifier contract not found among the deployed contracts")
+		}
+		params.Implementation.DepositVerifier = depositVerifierAddr.String()
 	}
-	batchWithdrawVerifierAddr, ok := domainContracts.deployedContracts[batchWithdrawVerifierName]
-	if !ok {
-		return fmt.Errorf("batch withdraw verifier contract not found among the deployed contracts")
+
+	if withdrawVerifierName != "" {
+		withdrawVerifierAddr, ok := domainContracts.deployedContracts[withdrawVerifierName]
+		if !ok {
+			return fmt.Errorf("withdraw verifier contract not found among the deployed contracts")
+		}
+		params.Implementation.WithdrawVerifier = withdrawVerifierAddr.String()
 	}
-	lockVerifierAddr, ok := domainContracts.deployedContracts[lockVerifierName]
-	if !ok {
-		return fmt.Errorf("lock verifier contract not found among the deployed contracts")
+
+	if batchWithdrawVerifierName != "" {
+		batchWithdrawVerifierAddr, ok := domainContracts.deployedContracts[batchWithdrawVerifierName]
+		if !ok {
+			return fmt.Errorf("batch withdraw verifier contract not found among the deployed contracts")
+		}
+		params.Implementation.BatchWithdrawVerifier = batchWithdrawVerifierAddr.String()
 	}
-	batchLockVerifierAddr, ok := domainContracts.deployedContracts[batchLockVerifierName]
-	if !ok {
-		return fmt.Errorf("batch lock verifier contract not found among the deployed contracts")
+
+	if lockVerifierName != "" {
+		lockVerifierAddr, ok := domainContracts.deployedContracts[lockVerifierName]
+		if !ok {
+			return fmt.Errorf("lock verifier contract not found among the deployed contracts")
+		}
+		params.Implementation.LockVerifier = lockVerifierAddr.String()
 	}
-	params := &setImplementationParams{
-		Name: name,
-		Implementation: implementationInfo{
-			Implementation:        implAddr.String(),
-			Verifier:              verifierAddr.String(),
-			BatchVerifier:         batchVerifierAddr.String(),
-			DepositVerifier:       depositVerifierAddr.String(),
-			WithdrawVerifier:      withdrawVerifierAddr.String(),
-			BatchWithdrawVerifier: batchWithdrawVerifierAddr.String(),
-			LockVerifier:          lockVerifierAddr.String(),
-			BatchLockVerifier:     batchLockVerifierAddr.String(),
-		},
+
+	if batchLockVerifierName != "" {
+		batchLockVerifierAddr, ok := domainContracts.deployedContracts[batchLockVerifierName]
+		if !ok {
+			return fmt.Errorf("batch lock verifier contract not found among the deployed contracts")
+		}
+		params.Implementation.BatchLockVerifier = batchLockVerifierAddr.String()
 	}
+
 	_, err := tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			Type:     pldapi.TransactionTypePublic.Enum(),

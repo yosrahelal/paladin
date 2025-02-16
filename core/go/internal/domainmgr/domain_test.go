@@ -242,6 +242,9 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 		}, func() {
 			c.close()
 			c.dCtx.Close()
+			if mdc != nil {
+				mdc.Close()
+			}
 			dmDone()
 		}
 }
