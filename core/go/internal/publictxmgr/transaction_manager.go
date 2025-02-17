@@ -248,6 +248,7 @@ func (ptm *pubTxManager) SingleTransactionSubmit(ctx context.Context, txi *compo
 	return tx, err
 }
 
+// TODO AM: do we need some validation on the update?
 func (ptm *pubTxManager) ValidateTransaction(ctx context.Context, dbTX persistence.DBTX, txi *components.PublicTxSubmission) error {
 	log.L(ctx).Tracef("PrepareSubmission transaction: %+v", txi)
 
@@ -348,6 +349,23 @@ func (ptm *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persiste
 	return pubTxns, err
 }
 
+func (ptm *pubTxManager) writeUpdatedTransaction(ctx context.Context, dbTX persistence.DBTX, pubTXID uint64, from tktypes.EthAddress, newPtx *DBPublicTxn) error {
+	err := dbTX.DB().
+		WithContext(ctx).
+		Table("public_txns").
+		Where("pub_txn_id = ?", pubTXID).
+		Updates(newPtx).
+		Error
+
+	if err == nil {
+		toNotify := map[tktypes.EthAddress]bool{
+			from: true,
+		}
+		dbTX.AddPostCommit(ptm.postCommitNewTransactions(toNotify))
+	}
+	return err
+}
+
 func (ptm *pubTxManager) postCommitNewTransactions(toNotify map[tktypes.EthAddress]bool) func(ctx context.Context) {
 	return func(ctx context.Context) {
 		// Mark any active orchestrators stale
@@ -362,6 +380,7 @@ func (ptm *pubTxManager) postCommitNewTransactions(toNotify map[tktypes.EthAddre
 			}
 		}
 		// And if there was an orchestrator un-loaded, then mark the main poll loop stale
+		// TODO: this doesn't guarantee it will be loaded if there are no free orchestrator spaces
 		if inactive {
 			ptm.MarkInFlightOrchestratorsStale()
 		}
@@ -581,8 +600,30 @@ func (ptm *pubTxManager) ResumeTransaction(ctx context.Context, from tktypes.Eth
 	return nil
 }
 
-func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, pubTXID uint64, from string, txu *pldapi.TransactionUpdate) error {
-	if err := ptm.dispatchUpdate(ctx, pubTXID, from, txu); err != nil {
+func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, pubTXID uint64, from string, txu *pldapi.TransactionUpdate, publicTxData []byte, publicDBUpdate func(dbTX persistence.DBTX) error) error {
+	// TODO AM: test this very carefully for empty values
+	newPtx := &DBPublicTxn{
+		To:    txu.To,
+		Value: txu.Value,
+		Data:  publicTxData,
+	}
+	if txu.Gas != nil {
+		newPtx.Gas = txu.Gas.Uint64()
+	}
+	if txu.PublicTxGasPricing.GasPrice != nil || txu.PublicTxGasPricing.MaxFeePerGas != nil || txu.PublicTxGasPricing.MaxPriorityFeePerGas != nil {
+		newPtx.FixedGasPricing = tktypes.JSONString(txu.PublicTxGasPricing)
+	}
+
+	dbUpdate := func() error {
+		return ptm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+			if err := publicDBUpdate(dbTX); err != nil {
+				return err
+			}
+			return ptm.writeUpdatedTransaction(ctx, dbTX, pubTXID, *tktypes.MustEthAddress(from), newPtx)
+		})
+	}
+
+	if err := ptm.dispatchUpdate(ctx, pubTXID, from, newPtx, dbUpdate); err != nil {
 		return err
 	}
 	return nil

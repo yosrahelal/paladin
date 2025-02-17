@@ -22,7 +22,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -45,6 +44,11 @@ func (pte *pubTxManager) persistSuspendedFlag(ctx context.Context, from tktypes.
 		Error
 }
 
+// TODO: this code needs to stop using from and nonce as the way of identifying a transaction. It didn't get edited
+// with the move to delayed nonce assignment, where pubTXID became the primary key for a public transaction instead
+// of from and nonce as a composite primary key. This isn't a problem for dispatching a confirm action because a
+// confirmed transaction must have a nonce, but it isn't guaranteed to work for suspend and resume. Those actions
+// have been copied across but aren't wired up above this level so they aren't obviously broken yet.
 func (pte *pubTxManager) dispatchAction(ctx context.Context, from tktypes.EthAddress, nonce uint64, action AsyncRequestType) error {
 	response := make(chan error, 1)
 	startTime := time.Now()
@@ -113,11 +117,7 @@ func (oc *orchestrator) dispatchAction(ctx context.Context, nonce uint64, action
 	}
 }
 
-// TODO AM: an update has to change both the transaction and the public transaction - persistedTransaction also has from, data, function
-// TODO AM: can the update be made in here or does a function to call need to be passed through
-// TODO AM: can the inflight controller modify the DB or is that another function that needs to be passed through?
-
-func (pte *pubTxManager) dispatchUpdate(ctx context.Context, pubTXID uint64, from string, txu *pldapi.TransactionUpdate) error {
+func (pte *pubTxManager) dispatchUpdate(ctx context.Context, pubTXID uint64, from string, newPtx *DBPublicTxn, dbUpdate func() error) error {
 	response := make(chan error, 1)
 	startTime := time.Now()
 	go func() {
@@ -127,11 +127,10 @@ func (pte *pubTxManager) dispatchUpdate(ctx context.Context, pubTXID uint64, fro
 		inFlightOrchestrator, orchestratorInFlight := pte.inFlightOrchestrators[*from]
 		if !orchestratorInFlight {
 			// no in-flight orchestrator for the signing address, it's OK to update the DB directly
-			// TODO AM: for an update though we need to ensure that the orchestrator does get scheduled asap after this
-			// response <- pte.persistSuspendedFlag(ctx, from, nonce, suspended)
+			// the postcommit hook on the dbUpdate will handle an orchestrator being scheduled for this signer
+			response <- dbUpdate()
 		} else {
-			// has to be done in the context of the orchestrator
-			inFlightOrchestrator.dispatchUpdate(ctx, pubTXID, txu, response)
+			inFlightOrchestrator.dispatchUpdate(ctx, pubTXID, newPtx, dbUpdate, response)
 		}
 	}()
 
@@ -143,7 +142,7 @@ func (pte *pubTxManager) dispatchUpdate(ctx context.Context, pubTXID uint64, fro
 	}
 }
 
-func (oc *orchestrator) dispatchUpdate(ctx context.Context, pubTXID uint64, txu *pldapi.TransactionUpdate, response chan<- error) {
+func (oc *orchestrator) dispatchUpdate(ctx context.Context, pubTXID uint64, newPtx *DBPublicTxn, dbUpdate func() error, response chan error) {
 	oc.inFlightTxsMux.Lock()
 	defer oc.inFlightTxsMux.Unlock()
 	var pending *inFlightTransactionStageController
@@ -154,15 +153,11 @@ func (oc *orchestrator) dispatchUpdate(ctx context.Context, pubTXID uint64, txu 
 		}
 	}
 	if pending != nil {
-		// TODO AM: implement the actual update here
-		// get a lock on the inflight transaction - could this potentially block and cause a timeout?
-		// update the DB
-		// make any updates to the inflight transaction
-
-		// needs to return on the response channel
+		pending.UpdateTransaction(ctx, newPtx, dbUpdate, response)
 		oc.MarkInFlightTxStale()
 	} else {
 		// make the update straight to the db
+		response <- dbUpdate()
 	}
 
 }

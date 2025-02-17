@@ -233,7 +233,7 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 		// last one will be acted on
 		for _, update := range updates {
 			if it.stateManager.IsComplete() {
-				update.response <- errors.New("Complete") // TODO AM: replace with a proper error
+				update.response <- errors.New("Complete") // TODO AM: replace with a proper error and test this
 			} else if !it.stateManager.IsTransactionUpdate(update.newPtx) {
 				update.response <- nil
 			} else {

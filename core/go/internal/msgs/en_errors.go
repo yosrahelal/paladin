@@ -431,6 +431,9 @@ var (
 	MsgTxMgrListenerNameRequired         = pde("PD012241", "Receipt listener name is required")
 	MsgTxMgrJSONRPCSubscriptionClosed    = pde("PD012242", "JSON/RPC subscription '%s' closed")
 	MsgTxMgrJSONRPCSubscriptionNack      = pde("PD012243", "JSON/RPC subscription '%s' returned nack for receipt batch")
+	MsgTxMgrDeployUpdateNotAllowed       = pde("PD012244", "Update not allowed for deploy transaction")
+	MsgTxMgrTransactionNotFound          = pde("PD012245", "Transaction not found with id %s")
+	MsgTxMgrUpdateInvalidType            = pde("PD012246", "Private transaction cannot be updated")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = pde("PD012300", "Writer shutting down")

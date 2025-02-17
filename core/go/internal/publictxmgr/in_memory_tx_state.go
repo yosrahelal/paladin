@@ -63,9 +63,6 @@ func NewInMemoryTxStateManager(ctx context.Context, ptx *DBPublicTxn) InMemoryTx
 }
 
 func (imtxs *inMemoryTxState) UpdateTransaction(newPtx *DBPublicTxn) {
-	// TODO AM: test this because there's some possible default values here
-	// and need to check that they don't get initialised to non nil empty
-	// values earlier up the stack
 	ptx := imtxs.mtx.ptx
 
 	if newPtx.To != nil {
