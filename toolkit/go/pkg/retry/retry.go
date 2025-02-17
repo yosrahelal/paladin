@@ -96,7 +96,9 @@ func (r *Retry) WaitDelay(ctx context.Context, failureCount int) error {
 	return nil
 }
 
-// SetMaxAttempts is useful for unit tests
+// UTSetMaxAttempts is a UNIT TEST ONLY function to switch an unlimited retry, into a limited retry.
+// This is helpful to provoke code to return an error condition, rather than just spinning indefinitely
+// retrying against that error condition. For unit tests that are testing individual error conditions.
 func (r *Retry) UTSetMaxAttempts(maxAttempts int) {
 	r.maxAttempts = maxAttempts
 }
