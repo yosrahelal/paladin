@@ -193,7 +193,8 @@ uninstall-crds: ## Uninstall CRDs.
 
 .PHONY: helm-template
 helm-template: ## Install operator using Helm.
-	$(HELM) template ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} --set operator.namespace=${NAMESPACE} 
+	$(HELM) template ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} --set operator.namespace=${NAMESPACE} --set mode=${MODE}
+
 
 .PHONY: helm-install-dependencies
 helm-install-dependencies: ## Install operator using Helm.

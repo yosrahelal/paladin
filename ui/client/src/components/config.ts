@@ -19,6 +19,8 @@ export const constants = {
   KEYS_SORT_BY_STORAGE_KEY: 'keys-sort-by',
   KEYS_SORT_ORDER_STORAGE_KEY: 'keys-sort-order',
   KEYS_ROWS_PER_PAGE: 'keys-rows-per-page',
+  KEYS_FILTERS_KEY: 'keys-filters',
+  KEYS_MODE: 'keys-mode',
   EVENT_QUERY_LIMIT: 10,
   SUBMISSIONS_QUERY_LIMIT: 10,
   REGISTRY_ENTRIES_QUERY_LIMIT: 100,

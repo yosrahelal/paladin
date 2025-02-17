@@ -50,7 +50,7 @@ export const Hash: React.FC<Props> = ({ Icon, title, hideTitle, hash, secondary 
         fullWidth
         variant="contained"
         color={ secondary? 'secondary' : 'primary' }
-        sx={{ paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400', whiteSpace: 'nowrap' }}
+        sx={{ paddingTop: 0, paddingBottom: 0, fontWeight: '400', whiteSpace: 'nowrap' }}
         size="small">
         {content}
       </Button>
