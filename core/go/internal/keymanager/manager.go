@@ -249,7 +249,6 @@ func (km *keyManager) QueryKeys(ctx context.Context, dbTX *gorm.DB, jq *query.Qu
 		`key_paths.parent AS "parent",` +
 		`key_paths."index" AS "index",` +
 		`key_paths.path AS "path",` +
-		`REGEXP_SUBSTR(key_paths.path, '[^\.]+$') as "name",` +
 		`key_mappings.wallet AS "wallet",` +
 		`key_mappings.key_handle AS "key_handle"`,
 	)

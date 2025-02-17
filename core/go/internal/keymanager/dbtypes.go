@@ -54,7 +54,6 @@ var KeyEntryFilters filters.FieldSet = filters.FieldMap{
 	"parent":      filters.StringField("parent"),
 	"index":       filters.Int64Field(`"index"`),
 	"path":        filters.StringField("path"),
-	"name":        filters.StringField("REGEXP_SUBSTR(key_paths.path, '[^\\.]+$')"),
 	"wallet":      filters.StringField("wallet"),
 	"keyHandle":   filters.StringField("key_handle"),
 }
