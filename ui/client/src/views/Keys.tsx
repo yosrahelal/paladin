@@ -130,6 +130,9 @@ export const Keys: React.FC = () => {
     if(mode !== 'explorer') {
       setParent('');
     }
+    setCount(-1);
+    setPage(0);
+    setRefEntries([]);
     window.localStorage.setItem(constants.KEYS_MODE, mode);
   }, [mode]);
 
