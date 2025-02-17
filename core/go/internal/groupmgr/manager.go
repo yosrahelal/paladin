@@ -474,3 +474,25 @@ func (gm *groupManager) QueryGroupsByProperties(ctx context.Context, dbTX persis
 	}
 	return pgs, nil
 }
+
+func (gm *groupManager) SendTransaction(ctx context.Context, dbTX persistence.DBTX, domainName string, pGroup tktypes.HexBytes, tx pldapi.TransactionInput) (*uuid.UUID, error) {
+
+	pg, err := gm.GetGroupByID(ctx, dbTX, domainName, pGroup)
+	if err != nil {
+		return nil, err
+	}
+	if pg == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgPGroupsNotFound, pGroup)
+	}
+	if pg.ContractAddress == nil || pg.Genesis == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgPGroupsNotReady, pGroup, pg.GenesisTransaction)
+	}
+
+	psc, err := gm.domainManager.GetSmartContractByAddress(ctx, dbTX, *pg.ContractAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := psc.InitPrivacyGroup()
+
+}

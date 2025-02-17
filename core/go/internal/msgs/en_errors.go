@@ -448,4 +448,6 @@ var (
 	// Privacy group manager PD0125XX
 	MsgPGroupsDataDoesNotMatchSchema = pde("PD012500", "Supplied properties could not be parsed against the ABI schema (generated=%t)")
 	MsgPGroupsNoMembers              = pde("PD012501", "The privacy group must have at least one member")
+	MsgPGroupsNotFound               = pde("PD012502", "Privacy group '%s' not found")
+	MsgPGroupsNotReady               = pde("PD012503", "Privacy group '%s' is not ready (check transaction '%s' has been confirmed on-chain)")
 )
