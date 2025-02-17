@@ -46,10 +46,14 @@ export const fetchKeys = async (parent: string | undefined, limit: number, sortB
   };
 
   if (refEntry !== undefined) {
-    requestPayload.params[0][sortOrder === 'asc' ? 'greaterThan' : 'lessThan'] = [{
+    const paramName = sortOrder === 'asc' ? 'greaterThan' : 'lessThan';
+    if(requestPayload.params[0][paramName] === undefined) {
+      requestPayload.params[0][paramName] = [];
+    }
+    requestPayload.params[0][paramName].push({
       field: sortBy,
       value: refEntry[sortBy as 'path' | 'index']
-    }];
+    });
   }
 
   return <Promise<IKeyEntry[]>>(

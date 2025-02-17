@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Breadcrumbs, Button, Fade, Grid2, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Breadcrumbs, Button, Fade, Grid2, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { fetchKeys } from "../queries/keys";
@@ -33,6 +33,7 @@ import { useTranslation } from "react-i18next";
 import { Filters } from "../components/Filters";
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import ViewListIcon from '@mui/icons-material/ViewList';
+import { getAltModeScrollBarStyle } from "../themes/default";
 
 export const Keys: React.FC = () => {
 
@@ -84,6 +85,7 @@ export const Keys: React.FC = () => {
   const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
   const [mode, setMode] = useState<'explorer' | 'list'>(getDefaultMode());
   const { t } = useTranslation();
+  const theme = useTheme();
 
   useEffect(() => {
     setParent(searchParams.get('path') ?? '');
@@ -91,7 +93,7 @@ export const Keys: React.FC = () => {
 
   const { data: keys, error } = useQuery({
     queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filters, mode],
-    queryFn: () => fetchKeys(mode === 'explorer'? parent : undefined, rowsPerPage, sortBy, sortOrder, filters, refEntries[refEntries.length - 1])
+    queryFn: () => fetchKeys(mode === 'explorer' ? parent : undefined, rowsPerPage, sortBy, sortOrder, filters, refEntries[refEntries.length - 1])
   });
 
   useEffect(() => {
@@ -109,8 +111,8 @@ export const Keys: React.FC = () => {
   }, [keys, rowsPerPage, page]);
 
   useEffect(() => {
-    setCount(-1);
     setPage(0);
+    setCount(-1);
     setRefEntries([]);
   }, [parent]);
 
@@ -127,11 +129,12 @@ export const Keys: React.FC = () => {
   }, [filters]);
 
   useEffect(() => {
-    if(mode !== 'explorer') {
+    if (mode === 'list') {
       setParent('');
+      setSortBy('path');
     }
-    setCount(-1);
     setPage(0);
+    setCount(-1);
     setRefEntries([]);
     window.localStorage.setItem(constants.KEYS_MODE, mode);
   }, [mode]);
@@ -157,6 +160,8 @@ export const Keys: React.FC = () => {
       }
       setSortBy(column);
     }
+    setPage(0);
+    setRefEntries([]);
   };
 
   let breadcrumbContent: JSX.Element[] = [];
@@ -354,14 +359,14 @@ export const Keys: React.FC = () => {
                 {breadcrumbContent}
               </Breadcrumbs>}
           </Box>
-          <TableContainer component={Paper} >
-            <Table>
+          <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', ...getAltModeScrollBarStyle(theme.palette.mode) }}>
+            <Table stickyHeader>
               <TableHead>
                 <TableRow>
                   {mode === 'explorer' &&
-                    <TableCell width={1} />
+                    <TableCell width={1} sx={{ backgroundColor: theme => theme.palette.background.paper }} />
                   }
-                  <TableCell sx={{ position: 'relative' }}>
+                  <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper }}>
                     <TableSortLabel
                       active={sortBy === 'path'}
                       direction={sortOrder}
@@ -371,9 +376,10 @@ export const Keys: React.FC = () => {
                     </TableSortLabel>
                     {mode === 'explorer' && headerDivider}
                   </TableCell>
-                  <TableCell width={1} sx={{ position: 'relative' }}>
+                  <TableCell width={1} sx={{ backgroundColor: theme => theme.palette.background.paper }}>
                     <TableSortLabel
                       active={sortBy === 'index'}
+                      disabled={mode === 'list'}
                       direction={sortOrder}
                       onClick={() => handleSortChange('index')}
                     >
@@ -381,10 +387,10 @@ export const Keys: React.FC = () => {
                     </TableSortLabel>
                     {headerDivider}
                   </TableCell>
-                  <TableCell width={1} sx={{ position: 'relative' }}>{t('address')}{headerDivider}</TableCell>
-                  <TableCell width={1} sx={{ whiteSpace: 'nowrap', position: 'relative' }}>{t('otherVerifiers')}{headerDivider}</TableCell>
-                  <TableCell sx={{ position: 'relative' }}>{t('wallet')}{headerDivider}</TableCell>
-                  <TableCell width={1} sx={{ position: 'relative' }}>{t('handle')}{headerDivider}</TableCell>
+                  <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper }} width={1} >{t('address')}{headerDivider}</TableCell>
+                  <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper, whiteSpace: 'nowrap' }} width={1} >{t('otherVerifiers')}{headerDivider}</TableCell>
+                  <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper }} >{t('wallet')}{headerDivider}</TableCell>
+                  <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper }} width={1} >{t('handle')}{headerDivider}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -414,24 +420,24 @@ export const Keys: React.FC = () => {
                 )}
               </TableBody>
             </Table>
-            <TablePagination
-              slotProps={{
-                actions: {
-                  lastButton: {
-                    disabled: true
-                  }
-                }
-              }}
-              component="div"
-              showFirstButton
-              showLastButton
-              count={count}
-              page={page}
-              onPageChange={handleChangePage}
-              rowsPerPage={rowsPerPage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-            />
           </TableContainer>
+          <TablePagination
+            slotProps={{
+              actions: {
+                lastButton: {
+                  disabled: true
+                }
+              }
+            }}
+            component="div"
+            showFirstButton
+            showLastButton
+            count={count}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
         </Box>
       </Fade>
       <ReverseKeyLookupDialog
