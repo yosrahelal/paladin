@@ -193,11 +193,7 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 				Config:          map[string]any{"some": "conf"},
 				RegistryAddress: tktypes.RandHex(20),
 				DefaultGasLimit: confutil.P(uint64(100000)),
-				Init: pldconf.DomainInitConfig{
-					Retry: pldconf.RetryConfigWithMax{
-						MaxAttempts: confutil.P(1),
-					},
-				},
+				Init:            pldconf.DomainInitConfig{},
 			},
 		},
 	}, extraSetup...)
@@ -255,8 +251,14 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 }
 
 func registerTestDomain(t *testing.T, dm *domainManager, tp *testPlugin) {
-	_, err := dm.DomainRegistered("test1", tp)
+	d, err := dm.registerDomain("test1", tp)
 	require.NoError(t, err)
+
+	// For unit tests, we want any errors to pop out - rather than the actual runtime behavior of infinite retry
+	d.initRetry.UTSetMaxAttempts(1)
+
+	// Kick off the init (as would happen in DomainRegistered callback otherwise)
+	go d.init()
 
 	da, err := dm.getDomainByName(context.Background(), "test1")
 	require.NoError(t, err)

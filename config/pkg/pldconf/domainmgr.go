@@ -46,5 +46,5 @@ var ContractCacheDefaults = &CacheConfig{
 }
 
 type DomainInitConfig struct {
-	Retry RetryConfigWithMax `json:"retry"`
+	Retry RetryConfig `json:"retry"`
 }
