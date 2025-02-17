@@ -143,10 +143,6 @@ export const Keys: React.FC = () => {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
   }
 
-  if (keys === undefined) {
-    return <></>;
-  }
-
   const handleSortChange = (column: string) => {
     if (column === sortBy) {
       const order = sortOrder === 'asc' ? 'desc' : 'asc';
@@ -239,7 +235,9 @@ export const Keys: React.FC = () => {
     if (newPage === 0) {
       setRefEntries([]);
     } else if (newPage > page) {
-      refEntries.push(keys[keys.length - 1]);
+      if(keys !== undefined) {
+        refEntries.push(keys[keys.length - 1]);
+      }
     } else {
       refEntries.pop();
     }
@@ -394,7 +392,7 @@ export const Keys: React.FC = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {keys.map(key =>
+                {keys?.map(key =>
                   <TableRow sx={{ height: '70px' }} key={`${key.path}${key.index}`}>
                     {mode === 'explorer' &&
                       <TableCell>{key.hasChildren &&
