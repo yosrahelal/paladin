@@ -145,3 +145,31 @@ export interface ITransportPeer {
     endpoint: string
   }
 }
+
+export interface IVerifier {
+  verifier: string
+  type: string
+  algorithm: string
+}
+
+export interface IKeyEntry {
+  isKey: boolean
+  hasChildren: boolean
+  path: string
+  index: number
+  type: string
+  verifiers: IVerifier[] | null
+  wallet: string
+  keyHandle: string
+}
+
+export interface IKeyMappingAndVerifier {
+  identifier: string
+  keyHandle: string
+  path: {
+    index: number
+    name: string
+  }[]
+  verifier: IVerifier
+  wallet: string
+}

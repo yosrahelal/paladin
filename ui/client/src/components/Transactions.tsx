@@ -68,7 +68,7 @@ export const Transactions: React.FC = () => {
           hasMore={hasNextPage}
           loader={<LinearProgress />}
         >
-          {transactions.pages.map(transactionArrat => transactionArrat?.map((transaction) => (
+          {transactions.pages.map(transactionArray => transactionArray.map((transaction) => (
             <Transaction
               key={transaction.hash}
               transaction={transaction}

@@ -41,8 +41,10 @@ export const Header: React.FC = () => {
       return 1;
     } else if (path.startsWith(AppRoutes.Peers)) {
       return 2;  
-    } else if (path.startsWith(AppRoutes.Registry)) {
+    } else if (path.startsWith(AppRoutes.Keys)) {
       return 3;
+    }else if (path.startsWith(AppRoutes.Registry)) {
+      return 4;
     }
     return 0;
   };
@@ -55,7 +57,8 @@ export const Header: React.FC = () => {
       case 0: navigate(AppRoutes.Indexer); break;
       case 1: navigate(AppRoutes.Submissions); break;
       case 2: navigate(AppRoutes.Peers); break;
-      case 3: navigate(AppRoutes.Registry); break;
+      case 3: navigate(AppRoutes.Keys); break;
+      case 4: navigate(AppRoutes.Registry); break;
     }
   };
 
@@ -77,6 +80,7 @@ export const Header: React.FC = () => {
                   <Tab sx={{ textTransform: 'none' }} label={t('indexer')} />
                   <Tab sx={{ textTransform: 'none' }} label={t('submissions')} />
                   <Tab sx={{ textTransform: 'none' }} label={t('peers')} />
+                  <Tab sx={{ textTransform: 'none' }} label={t('keys')} />
                   <Tab sx={{ textTransform: 'none' }} label={t('registry')} />
                 </Tabs>
               </Grid2>

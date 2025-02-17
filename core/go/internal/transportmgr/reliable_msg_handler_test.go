@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -71,14 +72,9 @@ func TestReceiveMessageStateWithNullifierSendAckRealDB(t *testing.T) {
 			nullifier := &components.NullifierUpsert{ID: tktypes.RandBytes(32)}
 			mc.stateManager.On("WriteNullifiersForReceivedStates", mock.Anything, mock.Anything, "domain1", []*components.NullifierUpsert{nullifier}).
 				Return(nil).Once()
-			mkrc := componentmocks.NewKeyResolutionContext(t)
 			mkr := componentmocks.NewKeyResolver(t)
 			mc.privateTxManager.On("BuildNullifier", mock.Anything, mkr, mock.Anything).Return(nullifier, nil)
-			mkrc.On("KeyResolver", mock.Anything).Return(mkr)
-			mkrc.On("PreCommit").Return(nil)
-			mkrc.On("Close", true).Return(nil)
-			mc.keyManager.On("NewKeyResolutionContext", mock.Anything).
-				Return(mkrc).Once()
+			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(mkr).Once()
 		},
 	)
 	defer done()
@@ -131,6 +127,8 @@ func TestHandleStateDistroBadState(t *testing.T) {
 		mockGoodTransport,
 		mockEmptyReliableMsgs,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
 			mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
 				Return(nil, fmt.Errorf("bad data")).Twice()
 		},
@@ -155,13 +153,57 @@ func TestHandleStateDistroBadState(t *testing.T) {
 	require.NoError(t, err)
 
 	// Handle the batch - will fail to write the states
-	postCommit, _, err := tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.NoError(t, err)
 
-	// Run the postCommit and check we get the nack
-	postCommit(nil)
+	ackNackCheck()
+}
+
+func TestHandleStateDistroMixedBatchBadAndGoodStates(t *testing.T) {
+	ctx, tm, tp, done := newTestTransport(t, false,
+		mockGoodTransport,
+		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+			mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
+				Return(nil, fmt.Errorf("bad data")).Once()
+			mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
+				Return(nil, nil).Once()
+		},
+	)
+	defer done()
+
+	msg := testReceivedReliableMsg(
+		RMHMessageTypeStateDistribution,
+		&components.StateDistributionWithData{
+			StateDistribution: components.StateDistribution{
+				Domain:          "domain1",
+				ContractAddress: tktypes.RandAddress().String(),
+				SchemaID:        tktypes.RandHex(32),
+				StateID:         tktypes.RandHex(32),
+			},
+			StateData: []byte(`{"some":"data"}`),
+		})
+
+	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "")
+
+	p, err := tm.getPeer(ctx, "node2", false)
+	require.NoError(t, err)
+
+	// Handle the batch - will fail to write the states
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
+	})
+	require.NoError(t, err)
 
 	ackNackCheck()
 }
@@ -171,14 +213,11 @@ func TestHandleStateDistroBadNullifier(t *testing.T) {
 		mockGoodTransport,
 		mockEmptyReliableMsgs,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-			mkrc := componentmocks.NewKeyResolutionContext(t)
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
 			mkr := componentmocks.NewKeyResolver(t)
 			mc.privateTxManager.On("BuildNullifier", mock.Anything, mkr, mock.Anything).Return(nil, fmt.Errorf("bad nullifier"))
-			mkrc.On("KeyResolver", mock.Anything).Return(mkr)
-			mkrc.On("PreCommit").Return(nil)
-			mkrc.On("Close", true).Return(nil)
-			mc.keyManager.On("NewKeyResolutionContext", mock.Anything).
-				Return(mkrc).Once()
+			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(mkr).Once()
 		},
 	)
 	defer done()
@@ -204,13 +243,13 @@ func TestHandleStateDistroBadNullifier(t *testing.T) {
 	require.NoError(t, err)
 
 	// Handle the batch - will fail to write the states
-	postCommit, _, err := tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.NoError(t, err)
-
-	// Run the postCommit and check we get the nack
-	postCommit(nil)
 
 	ackNackCheck()
 }
@@ -219,6 +258,10 @@ func TestHandleStateDistroBadMsg(t *testing.T) {
 	ctx, tm, tp, done := newTestTransport(t, false,
 		mockGoodTransport,
 		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
 	)
 	defer done()
 
@@ -240,13 +283,13 @@ func TestHandleStateDistroBadMsg(t *testing.T) {
 	require.NoError(t, err)
 
 	// Handle the batch - will fail to write the states
-	postCommit, _, err := tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.NoError(t, err)
-
-	// Run the postCommit and check we get the nack
-	postCommit(nil)
 
 	ackNackCheck()
 }
@@ -255,6 +298,10 @@ func TestHandleStateDistroUnknownMsgType(t *testing.T) {
 	ctx, tm, tp, done := newTestTransport(t, false,
 		mockGoodTransport,
 		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
 	)
 	defer done()
 
@@ -266,19 +313,20 @@ func TestHandleStateDistroUnknownMsgType(t *testing.T) {
 	require.NoError(t, err)
 
 	// Handle the batch - will fail to write the states
-	postCommit, _, err := tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.NoError(t, err)
-
-	// Run the postCommit and check we get the nack
-	postCommit(nil)
 
 	ackNackCheck()
 }
 
 func TestHandleAckFailReadMsg(t *testing.T) {
 	ctx, tm, _, done := newTestTransport(t, false, func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+		mc.db.Mock.ExpectBegin()
 		mc.db.Mock.ExpectQuery("SELECT.*reliable_msgs").WillReturnError(fmt.Errorf("pop"))
 	})
 	defer done()
@@ -289,8 +337,11 @@ func TestHandleAckFailReadMsg(t *testing.T) {
 	require.NoError(t, err)
 
 	// Handle the batch - will fail to write the states
-	_, _, err = tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err = tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.Regexp(t, "pop", err)
 
@@ -300,6 +351,7 @@ func TestHandleNackFailWriteAck(t *testing.T) {
 	msgID := uuid.New()
 
 	ctx, tm, _, done := newTestTransport(t, false, func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+		mc.db.Mock.ExpectBegin()
 		mc.db.Mock.ExpectQuery("SELECT.*reliable_msgs").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(msgID.String()))
 		mc.db.Mock.ExpectExec("INSERT.*reliable_msg_acks").WillReturnError(fmt.Errorf("pop"))
 	})
@@ -312,8 +364,11 @@ func TestHandleNackFailWriteAck(t *testing.T) {
 	require.NoError(t, err)
 
 	// Handle the batch - will fail to write the states
-	_, _, err = tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err = tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.Regexp(t, "pop", err)
 
@@ -321,7 +376,10 @@ func TestHandleNackFailWriteAck(t *testing.T) {
 
 func TestHandleBadAckNoCorrelId(t *testing.T) {
 
-	ctx, tm, _, done := newTestTransport(t, false)
+	ctx, tm, _, done := newTestTransport(t, false, func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+		mc.db.Mock.ExpectBegin()
+		mc.db.Mock.ExpectCommit()
+	})
 	defer done()
 
 	msg := testReceivedReliableMsg(RMHMessageTypeAck, struct{}{})
@@ -331,16 +389,19 @@ func TestHandleBadAckNoCorrelId(t *testing.T) {
 	require.NoError(t, err)
 
 	// Handle the batch - will fail to write the states
-	postCommit, _, err := tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.NoError(t, err)
-	postCommit(nil)
 }
 
 func TestHandleReceiptFail(t *testing.T) {
 	ctx, tm, _, done := newTestTransport(t, false,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
 			mc.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).
 				Return(fmt.Errorf("pop"))
 		},
@@ -358,18 +419,54 @@ func TestHandleReceiptFail(t *testing.T) {
 	require.NoError(t, err)
 
 	// Handle the batch - will fail to write the states
-	_, _, err = tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err = tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.Regexp(t, "pop", err)
+
+}
+
+func TestHandleReceiptOk(t *testing.T) {
+	ctx, tm, _, done := newTestTransport(t, false,
+		mockGoodTransport,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+			mc.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).
+				Return(nil)
+		},
+	)
+	defer done()
+
+	msg := testReceivedReliableMsg(
+		RMHMessageTypeReceipt,
+		&components.ReceiptInput{
+			Domain:      "domain1",
+			ReceiptType: components.RT_Success,
+		})
+
+	p, err := tm.getPeer(ctx, "node2", false)
+	require.NoError(t, err)
+
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
+	})
+	require.NoError(t, err)
 
 }
 
 func TestHandlePreparedTxFail(t *testing.T) {
 	ctx, tm, _, done := newTestTransport(t, false,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
 			mc.txManager.On("WritePreparedTransactions", mock.Anything, mock.Anything, mock.Anything).
-				Return(nil, fmt.Errorf("pop"))
+				Return(fmt.Errorf("pop"))
 		},
 	)
 	defer done()
@@ -385,8 +482,11 @@ func TestHandlePreparedTxFail(t *testing.T) {
 	p, err := tm.getPeer(ctx, "node2", false)
 	require.NoError(t, err)
 
-	_, _, err = tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err = tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.Regexp(t, "pop", err)
 
@@ -395,18 +495,15 @@ func TestHandlePreparedTxFail(t *testing.T) {
 func TestHandleNullifierFail(t *testing.T) {
 	ctx, tm, _, done := newTestTransport(t, false,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
 			mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
 				Return(nil, nil).Once()
 			nullifier := &components.NullifierUpsert{ID: tktypes.RandBytes(32)}
 			mc.stateManager.On("WriteNullifiersForReceivedStates", mock.Anything, mock.Anything, "domain1", []*components.NullifierUpsert{nullifier}).
 				Return(fmt.Errorf("pop")).Once()
-			mkrc := componentmocks.NewKeyResolutionContext(t)
 			mkr := componentmocks.NewKeyResolver(t)
 			mc.privateTxManager.On("BuildNullifier", mock.Anything, mkr, mock.Anything).Return(nullifier, nil)
-			mkrc.On("KeyResolver", mock.Anything).Return(mkr)
-			mkrc.On("Close", false).Return(nil)
-			mc.keyManager.On("NewKeyResolutionContext", mock.Anything).
-				Return(mkrc).Once()
+			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(mkr).Once()
 		},
 	)
 	defer done()
@@ -429,59 +526,13 @@ func TestHandleNullifierFail(t *testing.T) {
 	p, err := tm.getPeer(ctx, "node2", false)
 	require.NoError(t, err)
 
-	pc, _, err := tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
-	})
-	require.Regexp(t, "pop", err)
-
-	pc(err)
-
-}
-
-func TestHandleNullifierPreCommitKRCFail(t *testing.T) {
-	ctx, tm, _, done := newTestTransport(t, false,
-		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-			mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
-				Return(nil, nil).Once()
-			nullifier := &components.NullifierUpsert{ID: tktypes.RandBytes(32)}
-			mc.stateManager.On("WriteNullifiersForReceivedStates", mock.Anything, mock.Anything, "domain1", []*components.NullifierUpsert{nullifier}).
-				Return(nil).Once()
-			mkrc := componentmocks.NewKeyResolutionContext(t)
-			mkr := componentmocks.NewKeyResolver(t)
-			mc.privateTxManager.On("BuildNullifier", mock.Anything, mkr, mock.Anything).Return(nullifier, nil)
-			mkrc.On("KeyResolver", mock.Anything).Return(mkr)
-			mkrc.On("PreCommit").Return(fmt.Errorf("pop"))
-			mkrc.On("Close", false).Return(nil)
-			mc.keyManager.On("NewKeyResolutionContext", mock.Anything).
-				Return(mkrc).Once()
-		},
-	)
-	defer done()
-
-	msg := testReceivedReliableMsg(
-		RMHMessageTypeStateDistribution,
-		&components.StateDistributionWithData{
-			StateDistribution: components.StateDistribution{
-				Domain:                "domain1",
-				ContractAddress:       tktypes.RandAddress().String(),
-				SchemaID:              tktypes.RandHex(32),
-				StateID:               tktypes.RandHex(32),
-				NullifierAlgorithm:    confutil.P("algo1"),
-				NullifierVerifierType: confutil.P("vtype1"),
-				NullifierPayloadType:  confutil.P("ptype1"),
-			},
-			StateData: []byte(`{"some":"data"}`),
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
 		})
-
-	p, err := tm.getPeer(ctx, "node2", false)
-	require.NoError(t, err)
-
-	pc, _, err := tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+		return err
 	})
 	require.Regexp(t, "pop", err)
-
-	pc(err)
 
 }
 
@@ -489,6 +540,10 @@ func TestHandleReceiptBadData(t *testing.T) {
 	ctx, tm, tp, done := newTestTransport(t, false,
 		mockGoodTransport,
 		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
 	)
 	defer done()
 
@@ -501,12 +556,13 @@ func TestHandleReceiptBadData(t *testing.T) {
 	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "invalid character")
 
 	// Handle the batch - will fail to write the states
-	pc, _, err := tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.NoError(t, err)
-
-	pc(nil)
 
 	ackNackCheck()
 }
@@ -515,6 +571,10 @@ func TestHandlePreparedTxBadData(t *testing.T) {
 	ctx, tm, tp, done := newTestTransport(t, false,
 		mockGoodTransport,
 		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
 	)
 	defer done()
 
@@ -526,26 +586,26 @@ func TestHandlePreparedTxBadData(t *testing.T) {
 
 	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "invalid character")
 
-	pc, _, err := tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.NoError(t, err)
-
-	pc(nil)
 
 	ackNackCheck()
 }
 
 func TestHandlePreparedOk(t *testing.T) {
-	persistentTxPCCalled := make(chan struct{})
 	ctx, tm, tp, done := newTestTransport(t, false,
 		mockGoodTransport,
 		mockEmptyReliableMsgs,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
 			mc.txManager.On("WritePreparedTransactions", mock.Anything, mock.Anything, mock.Anything).
-				Return(func() {
-					close(persistentTxPCCalled)
-				}, nil)
+				Return(nil)
 		},
 	)
 	defer done()
@@ -562,14 +622,13 @@ func TestHandlePreparedOk(t *testing.T) {
 	require.NoError(t, err)
 
 	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "")
-	pc, _, err := tm.handleReliableMsgBatch(ctx, tm.persistence.DB(), []*reliableMsgOp{
-		{p: p, msg: msg},
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
 	})
 	require.NoError(t, err)
-
-	pc(nil)
-
-	<-persistentTxPCCalled
 
 	ackNackCheck()
 }
