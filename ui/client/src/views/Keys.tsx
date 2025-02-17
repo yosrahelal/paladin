@@ -216,6 +216,14 @@ export const Keys: React.FC = () => {
     return <RemoveIcon color="disabled" />;
   };
 
+  const removeParentFromPath = (path: string) => {
+    let index = parent.length;
+    if (index > 0) {
+      index++;
+    }
+    return path.substring(index);
+  }
+
   const handleChangePage = (
     _event: React.MouseEvent<HTMLButtonElement> | null,
     newPage: number
@@ -284,11 +292,6 @@ export const Keys: React.FC = () => {
           <Box sx={{ height: '10px' }} />
           <Filters
             filterFields={[
-              {
-                label: t('name'),
-                name: 'name',
-                type: 'string'
-              },
               {
                 label: t('path'),
                 name: 'path',
@@ -361,7 +364,7 @@ export const Keys: React.FC = () => {
                       direction={sortOrder}
                       onClick={() => handleSortChange('path')}
                     >
-                      {t(mode === 'explorer' ? 'name' : 'path')}
+                      {t(mode === 'explorer' ? 'pathSegment' : 'path')}
                     </TableSortLabel>
                     {mode === 'explorer' && headerDivider}
                   </TableCell>
@@ -392,7 +395,7 @@ export const Keys: React.FC = () => {
                           </IconButton>
                         </Tooltip>
                       }</TableCell>}
-                    <TableCell sx={{ wordBreak: 'break-all' }}>{mode === 'explorer' ? key.name : key.path}</TableCell>
+                    <TableCell sx={{ wordBreak: 'break-all' }}>{mode === 'explorer' ? removeParentFromPath(key.path) : key.path}</TableCell>
                     <TableCell>{key.index}</TableCell>
                     <TableCell>
                       {getEthAddress(key)}

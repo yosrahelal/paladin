@@ -94,12 +94,12 @@ export const ReverseKeyLookupDialog: React.FC<Props> = ({
         }
         setFilters([{
           field: {
-            label: t('name'),
-            name: 'name',
+            label: t('path'),
+            name: 'path',
             type: 'string'
           },
           operator: 'equal',
-          value: result.data.path[result.data.path.length - 1].name
+          value: path
         }]);
         setDialogOpen(false);
       } else if (result.status === 'error') {

@@ -134,6 +134,7 @@
 	"parentIdentityHash": "Parent Identity Hash",
 	"pasteABI": "Paste ABI",
 	"path": "Path",
+	"pathSegment": "Path Segment",
 	"paused": "Paused",
 	"peers": "Peers",
 	"pending": "Pending",
