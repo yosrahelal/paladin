@@ -18,7 +18,7 @@ import { Box, Fade, Grid2, useMediaQuery, useTheme } from "@mui/material";
 import { Transactions } from "../components/Transactions";
 import { Events } from "../components/Events";
 
-export const Indexer: React.FC = () => {
+export const Activity: React.FC = () => {
 
   const theme = useTheme();
   const displayLine = useMediaQuery(theme.breakpoints.up('md'));

@@ -22,15 +22,16 @@ import { Alert, Box, Button, Fade, Typography, useTheme } from "@mui/material";
 import { getAltModeScrollBarStyle } from "../themes/default";
 import { TransportPeer } from "../components/TransportPeer";
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { t } from "i18next";
 import { fetchTransportNodeName, fetchTransportPeers } from "../queries/transport";
 import { MyNodeDialog } from "../dialogs/MyNode";
+import { useTranslation } from "react-i18next";
 
 export const Nodes: React.FC = () => {
 
   const { lastBlockWithTransactions, autoRefreshEnabled } = useContext(ApplicationContext);
   const theme = useTheme();
   const [MyNodeDialogOpen, setMyNodeDialogOpen] = useState(false);
+  const { t } = useTranslation();
 
   const { data: transportNodeName, error: errorFetchingTransportNodeName, isFetching: isFetchingTransportNodeName } = useQuery({
     queryKey: ["transportNodeName"],
@@ -73,7 +74,7 @@ export const Nodes: React.FC = () => {
             size="large"
             variant="outlined"
             startIcon={<LocationOnOutlinedIcon />}
-            sx={{ position: 'absolute', right: '46px', top: '23px', textTransform: 'none', borderRadius: '20px' }}
+            sx={{ position: 'absolute', right: '46px', top: '23px', borderRadius: '20px' }}
             onClick={() => setMyNodeDialogOpen(true)}
           >
             {transportNodeName}
