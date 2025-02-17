@@ -37,6 +37,7 @@ import { IFilter } from '../interfaces';
 type Props = {
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
+  mode: 'explorer' | 'list'
   setParent: Dispatch<SetStateAction<string>>
   setFilters: Dispatch<SetStateAction<IFilter[]>>
 }
@@ -44,6 +45,7 @@ type Props = {
 export const ReverseKeyLookupDialog: React.FC<Props> = ({
   dialogOpen,
   setDialogOpen,
+  mode,
   setParent,
   setFilters
 }) => {
@@ -87,7 +89,7 @@ export const ReverseKeyLookupDialog: React.FC<Props> = ({
       if (result.status === 'success') {
         const path = result.data.path.map(segment => segment.name).join('.');
         const index = path.lastIndexOf('.');
-        if(index !== -1) {
+        if(index !== -1 && mode === 'explorer') {
           setParent(path.substring(0, index));
         }
         setFilters([{

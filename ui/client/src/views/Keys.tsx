@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Breadcrumbs, Button, Fade, Grid2, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Breadcrumbs, Button, Fade, Grid2, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { fetchKeys } from "../queries/keys";
@@ -31,6 +31,8 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import { VerifiersDialog } from "../dialogs/Verifiers";
 import { useTranslation } from "react-i18next";
 import { Filters } from "../components/Filters";
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import ViewListIcon from '@mui/icons-material/ViewList';
 
 export const Keys: React.FC = () => {
 
@@ -40,6 +42,14 @@ export const Keys: React.FC = () => {
       return Number(valueFromStorage);
     }
     return 10;
+  };
+
+  const getDefaultMode = () => {
+    const valueFromStorage = window.localStorage.getItem(constants.KEYS_MODE);
+    if (valueFromStorage === 'explorer' || valueFromStorage === 'list') {
+      return valueFromStorage;
+    }
+    return 'explorer';
   };
 
   const getDefaultSortBy = () => {
@@ -72,6 +82,7 @@ export const Keys: React.FC = () => {
   const [selectedVerifiers, setSelectedVerifiers] = useState<IVerifier[]>();
   const [verifiersDialogOpen, setVerifiersDialogOpen] = useState(false);
   const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
+  const [mode, setMode] = useState<'explorer' | 'list'>(getDefaultMode());
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -79,8 +90,8 @@ export const Keys: React.FC = () => {
   }, [searchParams]);
 
   const { data: keys, error } = useQuery({
-    queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filters],
-    queryFn: () => fetchKeys(parent, rowsPerPage, sortBy, sortOrder, filters, refEntries[refEntries.length - 1])
+    queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filters, mode],
+    queryFn: () => fetchKeys(mode === 'explorer'? parent : undefined, rowsPerPage, sortBy, sortOrder, filters, refEntries[refEntries.length - 1])
   });
 
   useEffect(() => {
@@ -115,20 +126,19 @@ export const Keys: React.FC = () => {
     window.localStorage.setItem(constants.KEYS_FILTERS_KEY, JSON.stringify(filters));
   }, [filters]);
 
+  useEffect(() => {
+    if(mode !== 'explorer') {
+      setParent('');
+    }
+    window.localStorage.setItem(constants.KEYS_MODE, mode);
+  }, [mode]);
+
   if (error) {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
   }
 
   if (keys === undefined) {
     return <></>;
-  }
-
-  const removeParentFromPath = (path: string) => {
-    let index = parent.length;
-    if (index > 0) {
-      index++;
-    }
-    return path.substring(index);
   }
 
   const handleSortChange = (column: string) => {
@@ -280,6 +290,11 @@ export const Keys: React.FC = () => {
                 type: 'string'
               },
               {
+                label: t('path'),
+                name: 'path',
+                type: 'string'
+              },
+              {
                 label: t('index'),
                 name: 'index',
                 type: 'number'
@@ -308,30 +323,47 @@ export const Keys: React.FC = () => {
             filters={filters}
             setFilters={setFilters}
           />
-          <Breadcrumbs
-            separator={<NavigateNextIcon fontSize="small" />}
-            sx={{ marginLeft: '10px', marginBottom: '10px' }}>
-            <Link underline="none"
-              href=""
-              onClick={event => { event.preventDefault(); setParent('') }}>
-              {t('root')}
-            </Link>
-            {breadcrumbContent}
-          </Breadcrumbs>
+          <Box sx={{ display: 'flex', marginBottom: '15px', alignItems: 'center' }}>
+            <ToggleButtonGroup exclusive onChange={(_event, value) => setMode(value)} value={mode}>
+              <Tooltip arrow title={t('listView')}>
+                <ToggleButton color="primary" value="list">
+                  <ViewListIcon fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+              <Tooltip arrow title={t('explorerView')}>
+                <ToggleButton color="primary" value="explorer">
+                  <AccountTreeIcon fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+            </ToggleButtonGroup>
+            {mode === 'explorer' &&
+              <Breadcrumbs
+                separator={<NavigateNextIcon fontSize="small" />}
+                sx={{ marginLeft: '10px' }}>
+                <Link underline="none"
+                  href=""
+                  onClick={event => { event.preventDefault(); setParent('') }}>
+                  {t('root')}
+                </Link>
+                {breadcrumbContent}
+              </Breadcrumbs>}
+          </Box>
           <TableContainer component={Paper} >
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell width={1} />
+                  {mode === 'explorer' &&
+                    <TableCell width={1} />
+                  }
                   <TableCell sx={{ position: 'relative' }}>
                     <TableSortLabel
                       active={sortBy === 'path'}
                       direction={sortOrder}
                       onClick={() => handleSortChange('path')}
                     >
-                      {t('name')}
+                      {t(mode === 'explorer' ? 'name' : 'path')}
                     </TableSortLabel>
-                    {headerDivider}
+                    {mode === 'explorer' && headerDivider}
                   </TableCell>
                   <TableCell width={1} sx={{ position: 'relative' }}>
                     <TableSortLabel
@@ -352,14 +384,15 @@ export const Keys: React.FC = () => {
               <TableBody>
                 {keys.map(key =>
                   <TableRow sx={{ height: '70px' }} key={`${key.path}${key.index}`}>
-                    <TableCell>{key.hasChildren &&
-                      <Tooltip arrow title={t('openFolder')}>
-                        <IconButton onClick={() => { setParent(key.path) }}>
-                          <FolderOpenIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    }</TableCell>
-                    <TableCell>{removeParentFromPath(key.path)}</TableCell>
+                    {mode === 'explorer' &&
+                      <TableCell>{key.hasChildren &&
+                        <Tooltip arrow title={t('openFolder')}>
+                          <IconButton onClick={() => { setParent(key.path) }}>
+                            <FolderOpenIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      }</TableCell>}
+                    <TableCell sx={{ wordBreak: 'break-all' }}>{mode === 'explorer' ? key.name : key.path}</TableCell>
                     <TableCell>{key.index}</TableCell>
                     <TableCell>
                       {getEthAddress(key)}
@@ -398,6 +431,7 @@ export const Keys: React.FC = () => {
       <ReverseKeyLookupDialog
         dialogOpen={reverseLookupDialogOpen}
         setDialogOpen={setReverseLookupDialogOpen}
+        mode={mode}
         setParent={setParent}
         setFilters={setFilters}
       />

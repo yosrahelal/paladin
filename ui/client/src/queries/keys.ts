@@ -20,17 +20,19 @@ import { generatePostReq, returnResponse } from "./common";
 import { RpcEndpoint, RpcMethods } from "./rpcMethods";
 import i18next from "i18next";
 
-export const fetchKeys = async (parent: string, limit: number, sortBy: string, sortOrder: 'asc' | 'desc', filters: IFilter[], refEntry?: IKeyEntry): Promise<IKeyEntry[]> => {
+export const fetchKeys = async (parent: string | undefined, limit: number, sortBy: string, sortOrder: 'asc' | 'desc', filters: IFilter[], refEntry?: IKeyEntry): Promise<IKeyEntry[]> => {
 
   let translatedFilters = translateFilters(filters);
 
-  if (translatedFilters.equal === undefined) {
-    translatedFilters.equal = [];
+  if (parent !== undefined) {
+    if (translatedFilters.equal === undefined) {
+      translatedFilters.equal = [];
+    }
+    translatedFilters.equal.push({
+      field: 'parent',
+      value: parent
+    });
   }
-  translatedFilters.equal.push({
-    field: 'parent',
-    value: parent
-  });
 
   let requestPayload: any = {
     jsonrpc: "2.0",

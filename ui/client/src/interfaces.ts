@@ -156,6 +156,7 @@ export interface IKeyEntry {
   isKey: boolean
   hasChildren: boolean
   path: string
+  name: string
   index: number
   type: string
   verifiers: IVerifier[] | null
