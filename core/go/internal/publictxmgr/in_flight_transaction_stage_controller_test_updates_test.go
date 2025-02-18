@@ -28,8 +28,6 @@ import (
 // add updates to the array and check how they get handled - cover all the cases where the way that
 // a previous version is handled is different to if it is the current version
 
-// test all of the update comparisons - memory test
-
 func TestTXStageControllerNoUpdate(t *testing.T) {
 	ctx, o, _, done := newTestOrchestrator(t)
 	defer done()
@@ -285,6 +283,29 @@ func TestTXStageControllerUpdateNoResubmit(t *testing.T) {
 	select {
 	case err := <-response:
 		require.NoError(t, err)
+	default:
+		t.Fail()
+	}
+}
+
+func TestTXStageControllerComplete(t *testing.T) {
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, _ := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+
+	mtx := it.stateManager.(*inFlightTransactionState).InMemoryTxStateManager.(*inMemoryTxState).mtx
+	mtx.InFlightStatus = InFlightStatusConfirmReceived
+
+	response := make(chan error, 1)
+	it.UpdateTransaction(ctx, nil, nil, response)
+
+	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
+
+	// the response should be available on the channel before ProduceLatestInFlightStageContext returns
+	select {
+	case err := <-response:
+		require.ErrorContains(t, err, "PD011937")
 	default:
 		t.Fail()
 	}

@@ -218,7 +218,7 @@ func TestProduceLatestInFlightStageContextTriggerSign(t *testing.T) {
 	mockKeyManager := m.keyManager.(*componentmocks.KeyManager)
 	mockKeyManager.On("ReverseKeyLookup", mock.Anything, mock.Anything, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, o.signingAddress.String()).
 		Return(nil, fmt.Errorf("pop")).Once()
-	err := it.TriggerSignTx(ctx, 0, it.stateManager.GetFrom(), it.stateManager.BuildEthTX())
+	err := it.TriggerSignTx(ctx, 0)
 	require.NoError(t, err)
 	ticker := time.NewTicker(10 * time.Millisecond)
 	currentVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)

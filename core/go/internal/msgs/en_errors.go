@@ -355,6 +355,7 @@ var (
 	MsgInvalidAutoFuelSource           = pde("PD011934", "Invalid auto-fueling source '%s'")
 	MsgInvalidStateMissingTXHash       = pde("PD011935", "Invalid state - missing transaction hash from previous sign stage")
 	MsgInvalidTXMissingFromAddr        = pde("PD011936", "From address missing for transaction")
+	MsgTransactionAlreadyCompleted     = pde("PD011937", "Transaction cannot be updated as it is already complete")
 
 	// TransportManager module PD0120XX
 	MsgTransportInvalidMessage                = pde("PD012000", "Invalid message")

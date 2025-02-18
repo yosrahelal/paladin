@@ -51,6 +51,7 @@ func (iftxs *inFlightTransactionState) GetCurrentVersion(ctx context.Context) In
 
 func (iftxs *inFlightTransactionState) NewVersion(ctx context.Context) {
 	iftxs.versions[len(iftxs.versions)-1].SetCurrent(ctx, false)
+	iftxs.versions[len(iftxs.versions)-1].Cancel(ctx)
 	iftxs.versions = append(iftxs.versions, NewInFlightTransactionStateVersion(
 		len(iftxs.versions),
 		iftxs.PublicTxManagerMetricsManager,

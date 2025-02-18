@@ -601,7 +601,6 @@ func (ptm *pubTxManager) ResumeTransaction(ctx context.Context, from tktypes.Eth
 }
 
 func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, pubTXID uint64, from string, txu *pldapi.TransactionUpdate, publicTxData []byte, publicDBUpdate func(dbTX persistence.DBTX) error) error {
-	// TODO AM: test this very carefully for empty values
 	newPtx := &DBPublicTxn{
 		To:    txu.To,
 		Value: txu.Value,

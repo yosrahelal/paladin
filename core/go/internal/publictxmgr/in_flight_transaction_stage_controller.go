@@ -18,7 +18,6 @@ package publictxmgr
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"runtime/debug"
@@ -26,7 +25,6 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
-	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -233,7 +231,7 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 		// last one will be acted on
 		for _, update := range updates {
 			if it.stateManager.IsComplete() {
-				update.response <- errors.New("Complete") // TODO AM: replace with a proper error and test this
+				update.response <- i18n.NewError(ctx, msgs.MsgTransactionAlreadyCompleted)
 			} else if !it.stateManager.IsTransactionUpdate(update.newPtx) {
 				update.response <- nil
 			} else {
@@ -706,9 +704,12 @@ func (it *inFlightTransactionStageController) TriggerStatusUpdate(ctx context.Co
 	}, ctx, version, false)
 	return nil
 }
-func (it *inFlightTransactionStageController) TriggerSignTx(ctx context.Context, versionID int, from tktypes.EthAddress, ethTX *ethsigner.Transaction) error {
+
+func (it *inFlightTransactionStageController) TriggerSignTx(ctx context.Context, versionID int) error {
 	// the version ID is passed in so that this function doesn't cause a type import from this package when it is mocked
 	version := it.stateManager.GetVersion(ctx, versionID)
+	from := it.stateManager.GetFrom()
+	ethTX := it.stateManager.BuildEthTX()
 	it.executeAsync(func() {
 		signedMessage, txHash, err := it.signTx(ctx, from, ethTX)
 		log.L(ctx).Debugf("Adding signed message to output, hash %s, signedMessage not nil %t, err %+v", txHash, signedMessage != nil, err)
@@ -720,8 +721,11 @@ func (it *inFlightTransactionStageController) TriggerSignTx(ctx context.Context,
 func (it *inFlightTransactionStageController) TriggerSubmitTx(ctx context.Context, versionID int, signedMessage []byte) error {
 	// the version ID is passed in so that this function doesn't cause a type import from this package when it is mocked
 	version := it.stateManager.GetVersion(ctx, versionID)
+	calculatedHash := it.stateManager.GetTransactionHash()
+	signerNonce := it.stateManager.GetSignerNonce()
+	lastSubmitTime := it.stateManager.GetLastSubmitTime()
 	it.executeAsync(func() {
-		txHash, submissionTime, errReason, submissionOutcome, err := it.submitTX(ctx, it.stateManager, signedMessage)
+		txHash, submissionTime, errReason, submissionOutcome, err := it.submitTX(ctx, signedMessage, calculatedHash, signerNonce, lastSubmitTime, version.IsCancelled)
 		version.AddSubmitOutput(ctx, txHash, submissionTime, submissionOutcome, errReason, err)
 	}, ctx, version, false)
 	return nil

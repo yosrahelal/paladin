@@ -328,7 +328,7 @@ type PersistenceOutput struct {
 
 type InFlightStageActionTriggers interface {
 	TriggerRetrieveGasPrice(ctx context.Context, versionID int) error
-	TriggerSignTx(ctx context.Context, versionID int, from tktypes.EthAddress, ethTX *ethsigner.Transaction) error
+	TriggerSignTx(ctx context.Context, versionID int) error
 	TriggerSubmitTx(ctx context.Context, versionID int, signedMessage []byte) error
 	TriggerStatusUpdate(ctx context.Context, versionID int) error
 }
@@ -416,6 +416,8 @@ type InFlightTransactionStateManager interface {
 
 type InFlightTransactionStateVersion interface {
 	GetID(ctx context.Context) int
+	Cancel(ctx context.Context)
+	IsCancelled(ctx context.Context) bool
 	SetCurrent(ctx context.Context, current bool)
 	IsCurrent(ctx context.Context) bool
 

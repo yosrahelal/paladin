@@ -36,7 +36,6 @@ type inFlightTransactionStateVersion struct {
 
 	current             bool
 	testOnlyNoEventMode bool
-	signerNonce         string // TODO: replace with function call
 
 	PublicTxManagerMetricsManager
 	InFlightStageActionTriggers
@@ -67,6 +66,8 @@ type inFlightTransactionStateVersion struct {
 	bufferedStageOutputsMux sync.Mutex
 	bufferedStageOutputs    []*StageOutput
 
+	cancel chan bool
+
 	submissionWriter *submissionWriter
 	statusUpdater    StatusUpdater
 }
@@ -84,6 +85,7 @@ func NewInFlightTransactionStateVersion(
 		id:                            id,
 		current:                       true,
 		bufferedStageOutputs:          make([]*StageOutput, 0),
+		cancel:                        make(chan bool, 1),
 		testOnlyNoEventMode:           noEventMode,
 		txLevelStageStartTime:         time.Now(),
 		statusUpdater:                 statusUpdater,
@@ -91,12 +93,29 @@ func NewInFlightTransactionStateVersion(
 		PublicTxManagerMetricsManager: thm,
 		InFlightStageActionTriggers:   ifsat,
 		InMemoryTxStateManager:        imtxs,
-		signerNonce:                   imtxs.GetSignerNonce(),
 	}
 }
 
 func (v *inFlightTransactionStateVersion) GetID(ctx context.Context) int {
 	return v.id
+}
+
+func (v *inFlightTransactionStateVersion) Cancel(ctx context.Context) {
+	select {
+	case v.cancel <- true:
+	default:
+	}
+}
+
+// IsCancelled is intended to be used by async actions to check if there is a now a new version and they should stop work.
+// There should only ever be 1 async action running at a time for a given version
+func (v *inFlightTransactionStateVersion) IsCancelled(ctx context.Context) bool {
+	select {
+	case <-v.cancel:
+		return true
+	default:
+		return false
+	}
 }
 
 func (v *inFlightTransactionStateVersion) SetCurrent(ctx context.Context, current bool) {
@@ -158,7 +177,7 @@ func (v *inFlightTransactionStateVersion) StartNewStageContext(ctx context.Conte
 		v.stageTriggerError = v.TriggerRetrieveGasPrice(ctx, v.GetID(ctx))
 	case InFlightTxStageSigning:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering sign tx", rsc.InMemoryTx.GetSignerNonce())
-		v.stageTriggerError = v.TriggerSignTx(ctx, v.GetID(ctx), v.GetFrom(), v.BuildEthTX())
+		v.stageTriggerError = v.TriggerSignTx(ctx, v.GetID(ctx))
 	case InFlightTxStageSubmitting:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering submission, signed message not nil: %t", rsc.InMemoryTx.GetSignerNonce(), v.TransientPreviousStageOutputs != nil && v.TransientPreviousStageOutputs.SignedMessage != nil)
 		var signedMessage []byte
@@ -179,7 +198,7 @@ func (v *inFlightTransactionStateVersion) ClearRunningStageContext(ctx context.C
 		rsc := v.runningStageContext
 		log.L(ctx).Debugf("Transaction with ID %s clearing stage context for stage: %s after %s, total time spent on this stage so far: %s, txHash: %s", rsc.InMemoryTx.GetSignerNonce(), rsc.Stage, time.Since(rsc.StageStartTime), time.Since(v.txLevelStageStartTime), rsc.InMemoryTx.GetTransactionHash())
 	} else {
-		log.L(ctx).Warnf("Transaction with ID %s  has no running stage context to clear", v.signerNonce)
+		log.L(ctx).Warnf("Transaction with ID %s  has no running stage context to clear", v.GetSignerNonce())
 	}
 	v.runningStageContext = nil
 	v.stageTriggerError = nil
@@ -194,12 +213,12 @@ func (v *inFlightTransactionStateVersion) AddPersistenceOutput(ctx context.Conte
 			Time:             persistenceTime,
 		},
 	})
-	log.L(ctx).Debugf("%s AddPersistenceOutput took %s to write the result", v.signerNonce, time.Since(start))
+	log.L(ctx).Debugf("%s AddPersistenceOutput took %s to write the result", v.GetSignerNonce(), time.Since(start))
 }
 
 func (v *inFlightTransactionStateVersion) AddSubmitOutput(ctx context.Context, txHash *tktypes.Bytes32, submissionTime *tktypes.Timestamp, submissionOutcome SubmissionOutcome, errorReason ethclient.ErrorReason, err error) {
 	start := time.Now()
-	log.L(ctx).Debugf("%s Setting submit output, submissionOutcome: %s, errReason: %s, err %+v", v.signerNonce, submissionOutcome, errorReason, err)
+	log.L(ctx).Debugf("%s Setting submit output, submissionOutcome: %s, errReason: %s, err %+v", v.GetSignerNonce(), submissionOutcome, errorReason, err)
 	v.AddStageOutputs(ctx, &StageOutput{
 		Stage: InFlightTxStageSubmitting,
 		SubmitOutput: &SubmitOutputs{
@@ -210,7 +229,7 @@ func (v *inFlightTransactionStateVersion) AddSubmitOutput(ctx context.Context, t
 			Err:               err,
 		},
 	})
-	log.L(ctx).Debugf("%s AddSubmitOutput took %s to write the result", v.signerNonce, time.Since(start))
+	log.L(ctx).Debugf("%s AddSubmitOutput took %s to write the result", v.GetSignerNonce(), time.Since(start))
 }
 
 func (v *inFlightTransactionStateVersion) ProcessStageOutputs(ctx context.Context, processFunction func(stageOutputs []*StageOutput) (unprocessedStageOutputs []*StageOutput)) {
@@ -230,7 +249,7 @@ func (v *inFlightTransactionStateVersion) AddStageOutputs(ctx context.Context, s
 
 func (v *inFlightTransactionStateVersion) AddSignOutput(ctx context.Context, signedMessage []byte, txHash *tktypes.Bytes32, err error) {
 	start := time.Now()
-	log.L(ctx).Debugf("%s Setting signed message, hash %s, signed message not nil %t, err %+v", v.signerNonce, txHash, signedMessage != nil, err)
+	log.L(ctx).Debugf("%s Setting signed message, hash %s, signed message not nil %t, err %+v", v.GetSignerNonce(), txHash, signedMessage != nil, err)
 	v.AddStageOutputs(ctx, &StageOutput{
 		Stage: InFlightTxStageSigning,
 		SignOutput: &SignOutputs{
@@ -239,7 +258,7 @@ func (v *inFlightTransactionStateVersion) AddSignOutput(ctx context.Context, sig
 			Err:           err,
 		},
 	})
-	log.L(ctx).Debugf("%s AddSignOutput took %s to write the result", v.signerNonce, time.Since(start))
+	log.L(ctx).Debugf("%s AddSignOutput took %s to write the result", v.GetSignerNonce(), time.Since(start))
 }
 
 func (v *inFlightTransactionStateVersion) AddGasPriceOutput(ctx context.Context, gasPriceObject *pldapi.PublicTxGasPricing, err error) {
@@ -251,7 +270,7 @@ func (v *inFlightTransactionStateVersion) AddGasPriceOutput(ctx context.Context,
 			Err:            err,
 		},
 	})
-	log.L(ctx).Debugf("%s AddGasPriceOutput took %s to write the result", v.signerNonce, time.Since(start))
+	log.L(ctx).Debugf("%s AddGasPriceOutput took %s to write the result", v.GetSignerNonce(), time.Since(start))
 }
 
 func (v *inFlightTransactionStateVersion) AddConfirmationsOutput(ctx context.Context, confirmedTx *pldapi.IndexedTransaction) {
@@ -271,7 +290,7 @@ func (v *inFlightTransactionStateVersion) AddPanicOutput(ctx context.Context, st
 	v.AddStageOutputs(ctx, &StageOutput{
 		Stage: stage,
 	})
-	log.L(ctx).Debugf("%s AddPanicOutput took %s to write the result", v.signerNonce, time.Since(start))
+	log.L(ctx).Debugf("%s AddPanicOutput took %s to write the result", v.GetSignerNonce(), time.Since(start))
 }
 
 func (v *inFlightTransactionStateVersion) PersistTxState(ctx context.Context) (stage InFlightTxStage, persistenceTime time.Time, err error) {
@@ -312,8 +331,10 @@ func (v *inFlightTransactionStateVersion) PersistTxState(ctx context.Context) (s
 			v.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusSuccess))
 		}
 
-		// update the in memory state
-		v.ApplyInMemoryUpdates(ctx, rsc.StageOutputsToBePersisted.TxUpdates)
+		// update the in memory state if the current version
+		if v.IsCurrent(ctx) {
+			v.ApplyInMemoryUpdates(ctx, rsc.StageOutputsToBePersisted.TxUpdates)
+		}
 	}
 	return rsc.Stage, time.Now(), nil
 }
