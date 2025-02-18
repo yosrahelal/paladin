@@ -116,6 +116,7 @@
 	"noActivePeers": "There are no active peers",
 	"noPendingTransactions": "No Pending Transactions",
 	"noProperties": "No Properties",
+	"noRegistryEntries": "No registry entries",
 	"nodeName": "Node Name",
 	"nonce": "Nonce",
 	"notEqual": "Not equal",

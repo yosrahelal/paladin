@@ -14,10 +14,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
+import { Alert, Box, LinearProgress, Typography, useTheme } from "@mui/material";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { fetchRegistryEntries } from "../queries/registry";
 import { RegistryEntry } from "./RegistryEntry";
+import { IRegistryEntry } from "../interfaces";
+import { getAltModeScrollBarStyle } from "../themes/default";
+import InfiniteScroll from "react-infinite-scroll-component";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   registryName: string;
@@ -25,22 +29,51 @@ type Props = {
 
 export const Registry: React.FC<Props> = ({ registryName }) => {
 
-  const { data: registryEntries } = useQuery({
-    queryKey: ["registryEntries", registryName],
-    queryFn: () =>
-      fetchRegistryEntries(registryName).then((entries) =>
-        entries.sort((a, b) => (a.name < b.name ? -1 : 0))
-      ),
-      retry: true
+  const theme = useTheme();
+  const { t } = useTranslation();
+
+  const { data: registryEntries, fetchNextPage, hasNextPage, error } = useInfiniteQuery({
+    queryKey: ["registryEntries"],
+    queryFn: ({ pageParam }) => fetchRegistryEntries(registryName, pageParam),
+    initialPageParam: undefined as IRegistryEntry | undefined,
+    getNextPageParam: (lastPage) => { return lastPage.length > 0 ? lastPage[lastPage.length - 1] : undefined },
   });
 
+  if (error) {
+    return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
+  }
+
+  if (registryEntries?.pages === undefined) {
+    return <></>;
+  }
+
   return (
-    <Box>
-      {registryEntries
-        ?.filter((registryEntry) => registryEntry.name !== "root")
-        .map((registryEntry) => (
-          <RegistryEntry key={registryEntry.id} registryEntry={registryEntry} />
-        ))}
+    <Box
+      id="scrollableDivRegistryEntries"
+      sx={{
+        paddingRight: "15px",
+        height: "calc(100vh - 250px)",
+        ...getAltModeScrollBarStyle(theme.palette.mode)
+      }}
+    >
+      <InfiniteScroll
+        scrollableTarget="scrollableDivRegistryEntries"
+        dataLength={registryEntries.pages.length}
+        next={() => fetchNextPage()}
+        hasMore={hasNextPage}
+        loader={<LinearProgress />}
+      >
+        {registryEntries.pages.map(registryEntriesArray =>
+          registryEntriesArray.map(registryEntry => (
+            <RegistryEntry
+              key={registryEntry.name}
+              registryEntry={registryEntry}
+            />
+          ))
+        )}
+      </InfiniteScroll>
+      {registryEntries.pages.length === 1 && registryEntries.pages[0].length === 0 &&
+        <Typography color="textSecondary" align="center" variant="h6" sx={{ marginTop: '40px' }}>{t('noPendingTransactions')}</Typography>}
     </Box>
   );
 };

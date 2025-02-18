@@ -36,18 +36,35 @@ export const fetchRegistries = async (): Promise<string[]> => {
 };
 
 export const fetchRegistryEntries = async (
-  registryName: string
+  registryName: string,
+  pageParam?: IRegistryEntry
 ): Promise<IRegistryEntry[]> => {
-  const requestPayload = {
+  let requestPayload: any = {
     jsonrpc: "2.0",
     id: Date.now(),
     method: RpcMethods.reg_QueryEntriesWithProps,
     params: [
       registryName,
-      { limit: constants.REGISTRY_ENTRIES_QUERY_LIMIT },
+      {
+        notEqual: [{
+          field: '.name',
+          value: 'root'
+        }],
+        limit: constants.REGISTRY_ENTRIES_QUERY_LIMIT,
+        sort: ['.name ASC']
+      },
       "any",
     ],
   };
+
+  if(pageParam !== undefined) {
+    requestPayload.params[1].greaterThan = [
+      {
+        "field": ".name",
+        "value": pageParam.name
+      }
+    ];
+  }
 
   return <Promise<IRegistryEntry[]>>(
     returnResponse(
