@@ -384,3 +384,18 @@ func (br *domainBridge) InitPrivacyGroup(ctx context.Context, req *prototk.InitP
 	)
 	return
 }
+
+func (br *domainBridge) WrapPrivacyGroupTransaction(ctx context.Context, req *prototk.WrapPrivacyGroupTransactionRequest) (res *prototk.WrapPrivacyGroupTransactionResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_WrapPrivacyGroupTransaction{WrapPrivacyGroupTransaction: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_WrapPrivacyGroupTransactionRes); ok {
+				res = r.WrapPrivacyGroupTransactionRes
+			}
+			return res != nil
+		},
+	)
+	return
+}

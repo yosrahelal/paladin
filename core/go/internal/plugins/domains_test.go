@@ -250,6 +250,14 @@ func TestDomainRequestsOK(t *testing.T) {
 				GenesisStateJson: `{"full":"props"}`,
 			}, nil
 		},
+		WrapPrivacyGroupTransaction: func(ctx context.Context, wpgtr *prototk.WrapPrivacyGroupTransactionRequest) (*prototk.WrapPrivacyGroupTransactionResponse, error) {
+			assert.Equal(t, `{"orig":"params"}`, wpgtr.Transaction.FunctionParamsJson)
+			return &prototk.WrapPrivacyGroupTransactionResponse{
+				Transaction: &prototk.PreparedTransaction{
+					ParamsJson: `{"wrapped":"params"}`,
+				},
+			}, nil
+		},
 	}
 
 	tdm := &testDomainManager{
@@ -438,6 +446,14 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, `{"full":"props"}`, ipgr.GenesisStateJson)
+
+	wpgtr, err := domainAPI.WrapPrivacyGroupTransaction(ctx, &prototk.WrapPrivacyGroupTransactionRequest{
+		Transaction: &prototk.PrivacyGroupTransaction{
+			FunctionParamsJson: `{"orig":"params"}`,
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, `{"wrapped":"params"}`, wpgtr.Transaction.ParamsJson)
 
 	callbacks := <-waitForCallbacks
 
