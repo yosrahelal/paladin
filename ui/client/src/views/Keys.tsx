@@ -126,6 +126,7 @@ export const Keys: React.FC = () => {
 
   useEffect(() => {
     window.localStorage.setItem(constants.KEYS_FILTERS_KEY, JSON.stringify(filters));
+    setCount(-1);
   }, [filters]);
 
   useEffect(() => {
@@ -361,7 +362,7 @@ export const Keys: React.FC = () => {
               <TableHead>
                 <TableRow>
                   {mode === 'explorer' &&
-                    <TableCell width={1} sx={{ backgroundColor: theme => theme.palette.background.paper }} />
+                    <TableCell width={1} sx={{ minWidth: '70px', backgroundColor: theme => theme.palette.background.paper }} />
                   }
                   <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper }}>
                     <TableSortLabel
