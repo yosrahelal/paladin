@@ -18,6 +18,7 @@ package pldclient
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -27,9 +28,11 @@ type PrivacyGroups interface {
 	RPCModule
 
 	CreateGroup(ctx context.Context, spec *pldapi.PrivacyGroupInput) (id tktypes.HexBytes, err error)
-	GetGroupById(ctx context.Context, domainName string, id tktypes.HexBytes) (group *pldapi.PrivacyGroup, err error)
+	GetGroupById(ctx context.Context, domainName string, id tktypes.HexBytes) (group *pldapi.PrivacyGroupWithABI, err error)
 	QueryGroups(ctx context.Context, jq *query.QueryJSON) (groups []*pldapi.PrivacyGroup, err error)
 	QueryGroupsByProperties(ctx context.Context, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) (groups []*pldapi.PrivacyGroup, err error)
+	SendTransaction(ctx context.Context, tx *pldapi.PrivacyGroupTransactionInput) (txID uuid.UUID, err error)
+	Call(ctx context.Context, call *pldapi.PrivacyGroupTransactionCall) (data tktypes.RawJSON, err error)
 }
 
 // This is necessary because there's no way to introspect function parameter names via reflection
@@ -52,6 +55,14 @@ var privacyGroupsInfo = &rpcModuleInfo{
 			Inputs: []string{"domainName", "schemaId", "query"},
 			Output: "pgroups",
 		},
+		"pgroup_sendTransaction": {
+			Inputs: []string{"tx"},
+			Output: "transactionId",
+		},
+		"pgroup_call": {
+			Inputs: []string{"call"},
+			Output: "data",
+		},
 	},
 }
 
@@ -69,7 +80,7 @@ func (r *pgroup) CreateGroup(ctx context.Context, spec *pldapi.PrivacyGroupInput
 	return
 }
 
-func (r *pgroup) GetGroupById(ctx context.Context, domainName string, id tktypes.HexBytes) (group *pldapi.PrivacyGroup, err error) {
+func (r *pgroup) GetGroupById(ctx context.Context, domainName string, id tktypes.HexBytes) (group *pldapi.PrivacyGroupWithABI, err error) {
 	err = r.c.CallRPC(ctx, &group, "pgroup_getGroupById", domainName, id)
 	return
 }
@@ -81,5 +92,15 @@ func (r *pgroup) QueryGroups(ctx context.Context, jq *query.QueryJSON) (groups [
 
 func (r *pgroup) QueryGroupsByProperties(ctx context.Context, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) (groups []*pldapi.PrivacyGroup, err error) {
 	err = r.c.CallRPC(ctx, &groups, "pgroup_queryGroupsByProperties", domainName, schemaID, jq)
+	return
+}
+
+func (r *pgroup) SendTransaction(ctx context.Context, tx *pldapi.PrivacyGroupTransactionInput) (txID uuid.UUID, err error) {
+	err = r.c.CallRPC(ctx, &txID, "pgroup_sendTransaction", tx)
+	return
+}
+
+func (r *pgroup) Call(ctx context.Context, call *pldapi.PrivacyGroupTransactionCall) (data tktypes.RawJSON, err error) {
+	err = r.c.CallRPC(ctx, &data, "pgroup_call", call)
 	return
 }

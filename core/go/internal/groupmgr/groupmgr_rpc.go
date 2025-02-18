@@ -19,6 +19,7 @@ package groupmgr
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -35,7 +36,9 @@ func (gm *groupManager) initRPC() {
 		Add("pgroup_createGroup", gm.rpcCreateGroup()).
 		Add("pgroup_getGroupById", gm.rpcGetGroupByID()).
 		Add("pgroup_queryGroups", gm.rpcQueryGroups()).
-		Add("pgroup_queryGroupsByProperties", gm.rpcQueryGroupsByProperties())
+		Add("pgroup_queryGroupsByProperties", gm.rpcQueryGroupsByProperties()).
+		Add("pgroup_sendTransaction", gm.rpcSendTransaction()).
+		Add("pgroup_call", gm.rpcCall())
 }
 
 func (gm *groupManager) rpcCreateGroup() rpcserver.RPCHandler {
@@ -49,7 +52,7 @@ func (gm *groupManager) rpcCreateGroup() rpcserver.RPCHandler {
 }
 
 func (gm *groupManager) rpcGetGroupByID() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context, domainName string, id tktypes.HexBytes) (*pldapi.PrivacyGroup, error) {
+	return rpcserver.RPCMethod2(func(ctx context.Context, domainName string, id tktypes.HexBytes) (*pldapi.PrivacyGroupWithABI, error) {
 		return gm.GetGroupByID(ctx, gm.persistence.NOTX(), domainName, id)
 	})
 }
@@ -63,5 +66,22 @@ func (gm *groupManager) rpcQueryGroups() rpcserver.RPCHandler {
 func (gm *groupManager) rpcQueryGroupsByProperties() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod3(func(ctx context.Context, domainName string, schemaID tktypes.Bytes32, jq query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
 		return gm.QueryGroupsByProperties(ctx, gm.persistence.NOTX(), domainName, schemaID, &jq)
+	})
+}
+
+func (gm *groupManager) rpcSendTransaction() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context, tx *pldapi.PrivacyGroupTransactionInput) (txID *uuid.UUID, err error) {
+		err = gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+			txID, err = gm.SendTransaction(ctx, dbTX, tx)
+			return err
+		})
+		return txID, err
+	})
+}
+
+func (gm *groupManager) rpcCall() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context, call *pldapi.PrivacyGroupTransactionCall) (result tktypes.RawJSON, err error) {
+		err = gm.Call(ctx, gm.persistence.NOTX(), &result, call)
+		return result, err
 	})
 }

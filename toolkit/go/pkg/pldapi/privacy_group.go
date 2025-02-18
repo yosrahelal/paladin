@@ -22,6 +22,11 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+type PrivacyGroupWithABI struct {
+	*PrivacyGroup
+	GenesisABI *abi.Parameter `docstruct:"PrivacyGroup" json:"genesisABI"`
+}
+
 type PrivacyGroup struct {
 	ID                 tktypes.HexBytes    `docstruct:"PrivacyGroup" json:"id"`
 	Domain             string              `docstruct:"PrivacyGroup" json:"domain"`

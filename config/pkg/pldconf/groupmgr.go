@@ -14,5 +14,14 @@
  */
 package pldconf
 
+import "github.com/kaleido-io/paladin/config/pkg/confutil"
+
 type GroupManagerConfig struct {
+	Cache CacheConfig `json:"cache"`
+}
+
+var GroupManagerDefaults = &GroupManagerConfig{
+	Cache: CacheConfig{
+		Capacity: confutil.P(50),
+	},
 }

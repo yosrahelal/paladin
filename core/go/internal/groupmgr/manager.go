@@ -17,6 +17,7 @@ package groupmgr
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -28,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"gorm.io/gorm"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -50,6 +52,7 @@ type groupManager struct {
 	rpcModule *rpcserver.RPCModule
 	conf      *pldconf.GroupManagerConfig
 
+	deployedPGCache  cache.Cache[string, *pldapi.PrivacyGroupWithABI]
 	stateManager     components.StateManager
 	txManager        components.TXManager
 	domainManager    components.DomainManager
@@ -94,7 +97,8 @@ func (pgm persistedGroupMember) TableName() string {
 
 func NewGroupManager(bgCtx context.Context, conf *pldconf.GroupManagerConfig) components.GroupManager {
 	gm := &groupManager{
-		conf: conf,
+		conf:            conf,
+		deployedPGCache: cache.NewCache[string, *pldapi.PrivacyGroupWithABI](&conf.Cache, &pldconf.GroupManagerDefaults.Cache),
 	}
 	gm.bgCtx, gm.cancelCtx = context.WithCancel(bgCtx)
 	return gm
@@ -269,14 +273,15 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 
 	// We have the privacy group, and the state, so we can store all of these in the DB transaction - along with a reliable
 	// message transfer to all the parties in the group so they get notification it's there.
-	err = gm.insertGroup(ctx, dbTX, &persistedGroup{
+	dbPG := &persistedGroup{
 		ID:              id,
 		Created:         tktypes.TimestampNow(),
 		Domain:          spec.Domain,
 		SchemaID:        genesisSchemaID,
 		SchemaSignature: stateABIs[0].Signature(),
 		GenesisTX:       txIDs[0],
-	}, spec.Members)
+	}
+	err = gm.insertGroup(ctx, dbTX, dbPG, spec.Members)
 	if err != nil {
 		return nil, err
 	}
@@ -307,6 +312,9 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 }
 
 func (gm *groupManager) enrichMembers(ctx context.Context, dbTX persistence.DBTX, pgs []*pldapi.PrivacyGroup) error {
+	if len(pgs) == 0 {
+		return nil
+	}
 	groupIDs := make([]tktypes.HexBytes, len(pgs))
 	for i, pg := range pgs {
 		groupIDs[i] = pg.ID
@@ -348,8 +356,8 @@ func (gm *groupManager) enrichGenesisData(ctx context.Context, dbTX persistence.
 	}
 
 	for domainName, forDomain := range groupIDsByDomain {
-		for _, schemaIDs := range forDomain {
-			states, err := gm.stateManager.GetStatesByID(ctx, dbTX, domainName, nil, schemaIDs, false, false)
+		for _, stateIDs := range forDomain {
+			states, err := gm.stateManager.GetStatesByID(ctx, dbTX, domainName, nil, stateIDs, false, false)
 			if err != nil {
 				return err
 			}
@@ -383,12 +391,33 @@ func (dbPG *persistedGroup) mapToAPI() *pldapi.PrivacyGroup {
 	return pg
 }
 
-func (gm *groupManager) GetGroupByID(ctx context.Context, dbTX persistence.DBTX, domainName string, id tktypes.HexBytes) (*pldapi.PrivacyGroup, error) {
-	groups, err := gm.QueryGroups(ctx, dbTX, query.NewQueryBuilder().Equal("id", id).Limit(1).Query())
-	if err != nil || len(groups) < 1 {
+func (gm *groupManager) GetGroupByID(ctx context.Context, dbTX persistence.DBTX, domainName string, groupID tktypes.HexBytes) (*pldapi.PrivacyGroupWithABI, error) {
+	groupIDStr := groupID.String()
+	pg, found := gm.deployedPGCache.Get(groupIDStr)
+	if found {
+		return pg, nil
+	}
+
+	groups, err := gm.QueryGroups(ctx, dbTX, query.NewQueryBuilder().Equal("id", groupID).Limit(1).Query())
+	if err != nil || len(groups) == 0 {
 		return nil, err
 	}
-	return groups[0], nil
+
+	pg = &pldapi.PrivacyGroupWithABI{
+		PrivacyGroup: groups[0],
+	}
+	schema, err := gm.stateManager.GetSchemaByID(ctx, dbTX, domainName, pg.GenesisSchema, true)
+	if err == nil {
+		err = json.Unmarshal(schema.Definition.Bytes(), &pg.GenesisABI)
+	}
+	if err != nil {
+		return nil, err
+	}
+	// ONLY cache if there is a contract address set (that one-time bind is immutable, but until it happens we need to do the DB JOIN)
+	if pg.ContractAddress != nil {
+		gm.deployedPGCache.Set(groupIDStr, pg)
+	}
+	return pg, nil
 }
 
 // This function queries the groups only using what's in the DB, without allowing properties of the group to be used to do the query
@@ -475,24 +504,72 @@ func (gm *groupManager) QueryGroupsByProperties(ctx context.Context, dbTX persis
 	return pgs, nil
 }
 
-func (gm *groupManager) SendTransaction(ctx context.Context, dbTX persistence.DBTX, domainName string, pGroup tktypes.HexBytes, tx pldapi.TransactionInput) (*uuid.UUID, error) {
+func (gm *groupManager) prepareTransaction(ctx context.Context, dbTX persistence.DBTX, groupID tktypes.HexBytes, tx *pldapi.TransactionInput) error {
 
-	pg, err := gm.GetGroupByID(ctx, dbTX, domainName, pGroup)
+	if tx.Type.V() != pldapi.TransactionTypePrivate {
+		return i18n.NewError(ctx, msgs.MsgPGroupsTXMustBePrivate)
+	}
+
+	if tx.Domain == "" {
+		return i18n.NewError(ctx, msgs.MsgPGroupsNoDomain)
+	}
+
+	if groupID == nil {
+		return i18n.NewError(ctx, msgs.MsgPGroupsNoGroupID)
+	}
+
+	// Fluff up the privacy group
+	pg, err := gm.GetGroupByID(ctx, dbTX, tx.Domain, groupID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if pg == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgPGroupsNotFound, pGroup)
+		return i18n.NewError(ctx, msgs.MsgPGroupsNotFound, groupID)
 	}
 	if pg.ContractAddress == nil || pg.Genesis == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgPGroupsNotReady, pGroup, pg.GenesisTransaction)
+		return i18n.NewError(ctx, msgs.MsgPGroupsNotReady, groupID, pg.GenesisTransaction)
 	}
 
+	// Get the domain smart contract object from domain mgr
 	psc, err := gm.domainManager.GetSmartContractByAddress(ctx, dbTX, *pg.ContractAddress)
+	if err != nil {
+		return err
+	}
+
+	// Resolve the input data of the transaction to obtain the ABI etc.
+	fn, _, normalizedJSON, err := gm.txManager.ResolveTransactionInputs(ctx, dbTX, tx)
+	if err != nil {
+		return err
+	}
+	tx.Data = normalizedJSON
+
+	// Call the domain to take the transaction details that need to be run in the privacy group, and wrap them
+	// to build the transaction to call against the domain.
+	return psc.WrapPrivacyGroupTransaction(ctx, pg, fn.Definition, tx)
+
+}
+
+func (gm *groupManager) SendTransaction(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.PrivacyGroupTransactionInput) (*uuid.UUID, error) {
+
+	if err := gm.prepareTransaction(ctx, dbTX, tx.GroupID, &tx.TransactionInput); err != nil {
+		return nil, err
+	}
+
+	txIDs, err := gm.txManager.SendTransactions(ctx, dbTX, &tx.TransactionInput)
 	if err != nil {
 		return nil, err
 	}
 
-	tx, err := psc.InitPrivacyGroup()
+	return &txIDs[0], nil
+
+}
+
+func (gm *groupManager) Call(ctx context.Context, dbTX persistence.DBTX, result any, call *pldapi.PrivacyGroupTransactionCall) error {
+
+	if err := gm.prepareTransaction(ctx, dbTX, call.GroupID, &call.TransactionInput); err != nil {
+		return err
+	}
+
+	return gm.txManager.CallTransaction(ctx, dbTX, result, &call.TransactionCall)
 
 }

@@ -450,4 +450,7 @@ var (
 	MsgPGroupsNoMembers              = pde("PD012501", "The privacy group must have at least one member")
 	MsgPGroupsNotFound               = pde("PD012502", "Privacy group '%s' not found")
 	MsgPGroupsNotReady               = pde("PD012503", "Privacy group '%s' is not ready (check transaction '%s' has been confirmed on-chain)")
+	MsgPGroupsNoGroupID              = pde("PD012504", "groupId must be specified")
+	MsgPGroupsNoDomain               = pde("PD012505", "domain must be specified")
+	MsgPGroupsTXMustBePrivate        = pde("PD012506", "type must be 'private' for invocations and calls via privacy groups")
 )

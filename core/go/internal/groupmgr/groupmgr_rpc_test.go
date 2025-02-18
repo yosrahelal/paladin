@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -65,6 +66,7 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 		"name": "secret things",
 		"version": "200"
 	}`
+	contractAddr := tktypes.RandAddress()
 	ctx, gm, _, done := newTestGroupManager(t, true, &pldconf.GroupManagerConfig{}, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").
 			Return([]*components.RegistryNodeTransportEntry{ /* contents not checked */ }, nil)
@@ -100,15 +102,15 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 			)
 		})
 
-		txID := uuid.New()
+		deployTXID := uuid.New()
 		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mock.Anything).
-			Return([]uuid.UUID{txID}, nil).
+			Return([]uuid.UUID{deployTXID}, nil).
 			Run(func(args mock.Arguments) {
 				tx := args[2].(*pldapi.TransactionInput)
 				assert.Regexp(t, `domains\.domain1\.pgroupinit\.0x[0-9a-f]{32}`, tx.From)
 				assert.Equal(t, "tx_1", tx.IdempotencyKey)
 				assert.Equal(t, uint64(12345), tx.PublicTxOptions.Gas.Uint64())
-			})
+			}).Once()
 
 		// Validate the state send gets the correct data
 		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
@@ -121,6 +123,73 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 			require.Empty(t, sd.ContractAddress)
 			require.Equal(t, "you@node2", sd.IdentityLocator)
 		})
+
+		psc := componentmocks.NewDomainSmartContract(t)
+		mc.domainManager.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *contractAddr).Return(psc, nil)
+
+		mrti1 := mc.txManager.On("ResolveTransactionInputs", mock.Anything, mock.Anything, mock.Anything).Once()
+		mrti1.Run(func(args mock.Arguments) {
+			tx := args[2].(*pldapi.TransactionInput)
+			assert.Nil(t, tx.To)
+			mrti1.Return(&components.ResolvedFunction{
+				ABIReference: tx.ABIReference,
+				Definition:   &abi.Entry{Type: abi.Constructor},
+				Signature:    "constructor()",
+			}, nil /* unused */, tktypes.RawJSON(tx.Data.Pretty()), nil)
+		})
+
+		mwpgt1 := psc.On("WrapPrivacyGroupTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		mwpgt1.Run(func(args mock.Arguments) {
+			pg := args[1].(*pldapi.PrivacyGroupWithABI)
+			require.NotNil(t, pg.GenesisABI)
+			fABI := args[2].(*abi.Entry)
+			require.Equal(t, abi.Constructor, fABI.Type)
+			tx := args[3].(*pldapi.TransactionInput)
+			tx.Data = tktypes.RawJSON(`{"wrapped":"transaction"}`)
+		})
+
+		tx1ID := uuid.New()
+		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mock.Anything).
+			Return([]uuid.UUID{tx1ID}, nil).
+			Run(func(args mock.Arguments) {
+				tx := args[2].(*pldapi.TransactionInput)
+				assert.Regexp(t, `my.key`, tx.From)
+				assert.Equal(t, "pgtx_deploy", tx.IdempotencyKey)
+				assert.JSONEq(t, `{"wrapped":"transaction"}`, tx.Data.Pretty())
+			}).Once()
+
+		mrti2 := mc.txManager.On("ResolveTransactionInputs", mock.Anything, mock.Anything, mock.Anything).Once()
+		mrti2.Run(func(args mock.Arguments) {
+			tx := args[2].(*pldapi.TransactionInput)
+			assert.NotNil(t, tx.To)
+			mrti2.Return(&components.ResolvedFunction{
+				ABIReference: confutil.P(tktypes.RandBytes32()),
+				Definition:   tx.ABI[0],
+				Signature:    "getThing()",
+			}, nil /* unused */, tktypes.RawJSON(tx.Data.Pretty()), nil)
+		})
+
+		mwpgt2 := psc.On("WrapPrivacyGroupTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		mwpgt2.Run(func(args mock.Arguments) {
+			pg := args[1].(*pldapi.PrivacyGroupWithABI)
+			require.NotNil(t, pg.GenesisABI)
+			fABI := args[2].(*abi.Entry)
+			require.Equal(t, abi.Function, fABI.Type)
+			require.Equal(t, "getThing", fABI.Name)
+			tx := args[3].(*pldapi.TransactionInput)
+			tx.Data = tktypes.RawJSON(`{"wrapped":"call"}`)
+		})
+
+		mc.txManager.On("CallTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(nil).
+			Run(func(args mock.Arguments) {
+				tx := args[3].(*pldapi.TransactionCall)
+				assert.Empty(t, tx.From)
+				assert.NotNil(t, tx.To)
+				assert.JSONEq(t, `{"wrapped":"call"}`, tx.Data.Pretty())
+				res := args[2].(*tktypes.RawJSON)
+				*res = tktypes.RawJSON(`{"call":"result"}`)
+			}).Once()
 	})
 	defer done()
 
@@ -154,13 +223,12 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members) // enriched from members table
 
 	// Simulate completion of the transaction so we have the contract address
-	addr := tktypes.RandAddress()
 	err = gm.persistence.DB().Exec("INSERT INTO transaction_receipts (transaction, domain, indexed, success, contract_address) VALUES ( ?, ?, ?, ?, ? )",
 		groups[0].GenesisTransaction,
 		groups[0].Domain,
 		tktypes.TimestampNow(),
 		true,
-		addr,
+		contractAddr,
 	).Error
 	require.NoError(t, err)
 
@@ -168,18 +236,55 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	group, err := pgroupRPC.GetGroupById(ctx, "domain1", groupID)
 	require.NoError(t, err)
 	require.NotNil(t, group)
-	require.Equal(t, addr, group.ContractAddress)
+	require.Equal(t, contractAddr, group.ContractAddress)
 
 	// Search for it by name
 	groups, err = pgroupRPC.QueryGroupsByProperties(ctx, "domain1", group.GenesisSchema,
 		query.NewQueryBuilder().Equal("name", "secret things").Equal("version", 200).Limit(1).Query())
 	require.NoError(t, err)
 	require.Len(t, groups, 1)
-	require.Equal(t, addr, groups[0].ContractAddress)
+	require.Equal(t, contractAddr, groups[0].ContractAddress)
 	require.Equal(t, "domain1", groups[0].Domain)
 	require.Equal(t, groupID, groups[0].ID)
 	require.NotNil(t, groups[0].Genesis)
 	require.JSONEq(t, mergedGenesis, string(groups[0].Genesis))
 	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members)
+
+	// Send a transaction to it
+	tx1ID, err := pgroupRPC.SendTransaction(ctx, &pldapi.PrivacyGroupTransactionInput{
+		GroupID: group.ID,
+		TransactionInput: pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type:           pldapi.TransactionTypePrivate.Enum(),
+				Domain:         "domain1",
+				IdempotencyKey: "pgtx_deploy",
+				Function:       "deployThing",
+				From:           "my.key",
+				To:             nil,                               // this is a deploy inside the privacy group
+				ABIReference:   confutil.P(tktypes.RandBytes32()), // simulate the case where the ABI needs resolving
+			},
+			Bytecode: tktypes.MustParseHexBytes(`0xfeedbeef`),
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, tx1ID)
+
+	// Do a call via it
+	callData, err := pgroupRPC.Call(ctx, &pldapi.PrivacyGroupTransactionCall{
+		GroupID: group.ID,
+		TransactionCall: pldapi.TransactionCall{
+			TransactionInput: pldapi.TransactionInput{
+				TransactionBase: pldapi.TransactionBase{
+					Type:     pldapi.TransactionTypePrivate.Enum(),
+					Domain:   "domain1",
+					Function: "getThing",
+					To:       tktypes.RandAddress(),
+				},
+				ABI: abi.ABI{{Type: abi.Function, Name: "getThing"}},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"call":"result"}`, callData.Pretty())
 
 }

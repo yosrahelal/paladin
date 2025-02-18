@@ -581,7 +581,7 @@ func TestQueryGroupsByPropertiesMembersFail(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 }
 
-func TestGetGroupsByIDFail(t *testing.T) {
+func TestGetGroupByIDFailDB(t *testing.T) {
 
 	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
 	defer done()
@@ -590,4 +590,259 @@ func TestGetGroupsByIDFail(t *testing.T) {
 
 	_, err := gm.GetGroupByID(ctx, gm.persistence.NOTX(), "domain1", tktypes.RandBytes(32))
 	assert.Regexp(t, "pop", err)
+}
+
+func mockDBPrivacyGroup(mc *mockComponents, schemaID tktypes.Bytes32, stateID tktypes.HexBytes, contractAddr *tktypes.EthAddress) {
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{
+		"domain",
+		"id",
+		"schema_id",
+		`Receipt__contract_address`,
+	}).AddRow(
+		"domain1",
+		stateID,
+		schemaID,
+		contractAddr,
+	))
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_group_members").WillReturnRows(sqlmock.NewRows([]string{}))
+}
+
+func mockPrivacyGroupState(mc *mockComponents, schemaID tktypes.Bytes32, id tktypes.HexBytes) {
+	mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, "domain1", (*tktypes.EthAddress)(nil), []tktypes.HexBytes{id}, false, false).
+		Return([]*pldapi.State{
+			{StateBase: pldapi.StateBase{
+				ID:     id,
+				Schema: schemaID,
+				Data:   tktypes.RawJSON(`{}`),
+			}},
+		}, nil)
+	mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", schemaID, true).
+		Return(&pldapi.Schema{
+			ID:         schemaID,
+			Definition: tktypes.JSONString(&abi.Parameter{Type: "tuple", InternalType: "struct MyType;", Components: abi.ParameterArray{}}),
+		}, nil)
+}
+
+func TestGetGroupByIDFailSchema(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	schemaID := tktypes.RandBytes32()
+	groupID := tktypes.RandBytes(32)
+	mockDBPrivacyGroup(mc, schemaID, groupID, nil)
+
+	mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, "domain1", (*tktypes.EthAddress)(nil), mock.Anything, false, false).
+		Return(nil, nil)
+	mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", schemaID, true).
+		Return(nil, fmt.Errorf("pop"))
+
+	_, err := gm.GetGroupByID(ctx, gm.persistence.NOTX(), "domain1", groupID)
+	assert.Regexp(t, "pop", err)
+}
+
+func TestSendTransactionNotPrivate(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+		TransactionInput: pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type: pldapi.TransactionTypePublic.Enum(),
+			},
+		},
+	})
+	require.Regexp(t, "PD012506", err)
+
+}
+
+func TestSendTransactionNoDomain(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+		TransactionInput: pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type: pldapi.TransactionTypePrivate.Enum(),
+			},
+		},
+	})
+	require.Regexp(t, "PD012505", err)
+
+}
+
+func TestSendTransactionNoGroup(t *testing.T) {
+
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+		TransactionInput: pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type:   pldapi.TransactionTypePrivate.Enum(),
+				Domain: "domain1",
+			},
+		},
+	})
+	require.Regexp(t, "PD012504", err)
+
+}
+
+func TestSendTransactionGroupNotFound(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{}))
+
+	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+		GroupID: tktypes.RandBytes(32),
+		TransactionInput: pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type:   pldapi.TransactionTypePrivate.Enum(),
+				Domain: "domain1",
+			},
+		},
+	})
+	require.Regexp(t, "PD012502", err)
+
+}
+
+func TestSendTransactionGroupFailQuery(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+		GroupID: tktypes.RandBytes(32),
+		TransactionInput: pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type:   pldapi.TransactionTypePrivate.Enum(),
+				Domain: "domain1",
+			},
+		},
+	})
+	require.Regexp(t, "pop", err)
+
+}
+
+func TestSendTransactionGroupNotReady(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	schemaID := tktypes.RandBytes32()
+	groupID := tktypes.RandBytes(32)
+	mockDBPrivacyGroup(mc, schemaID, groupID, nil)
+	mockPrivacyGroupState(mc, schemaID, groupID)
+
+	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+		GroupID: groupID,
+		TransactionInput: pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type:   pldapi.TransactionTypePrivate.Enum(),
+				Domain: "domain1",
+			},
+		},
+	})
+	require.Regexp(t, "PD012503", err)
+
+}
+
+func TestSendTransactionGroupGetContractFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	schemaID := tktypes.RandBytes32()
+	groupID := tktypes.RandBytes(32)
+	contractAddr := tktypes.RandAddress()
+	mockDBPrivacyGroup(mc, schemaID, groupID, contractAddr)
+	mockPrivacyGroupState(mc, schemaID, groupID)
+
+	mc.domainManager.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *contractAddr).Return(nil, fmt.Errorf("pop"))
+
+	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+		GroupID: groupID,
+		TransactionInput: pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type:   pldapi.TransactionTypePrivate.Enum(),
+				Domain: "domain1",
+			},
+		},
+	})
+	require.Regexp(t, "pop", err)
+
+}
+
+func TestCallGroupResolveInputsFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	schemaID := tktypes.RandBytes32()
+	groupID := tktypes.RandBytes(32)
+	contractAddr := tktypes.RandAddress()
+	mockDBPrivacyGroup(mc, schemaID, groupID, contractAddr)
+	mockPrivacyGroupState(mc, schemaID, groupID)
+
+	psc := componentmocks.NewDomainSmartContract(t)
+	mc.domainManager.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *contractAddr).Return(psc, nil)
+
+	mc.txManager.On("ResolveTransactionInputs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil, nil, fmt.Errorf("pop"))
+
+	var res any
+	err := gm.Call(ctx, gm.persistence.NOTX(), &res, &pldapi.PrivacyGroupTransactionCall{
+		GroupID: groupID,
+		TransactionCall: pldapi.TransactionCall{
+			TransactionInput: pldapi.TransactionInput{
+				TransactionBase: pldapi.TransactionBase{
+					Type:   pldapi.TransactionTypePrivate.Enum(),
+					Domain: "domain1",
+				},
+			},
+		},
+	})
+	require.Regexp(t, "pop", err)
+
+}
+
+func TestSendTransactionGroupResolveInputsFail(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	schemaID := tktypes.RandBytes32()
+	groupID := tktypes.RandBytes(32)
+	contractAddr := tktypes.RandAddress()
+	mockDBPrivacyGroup(mc, schemaID, groupID, contractAddr)
+	mockPrivacyGroupState(mc, schemaID, groupID)
+
+	psc := componentmocks.NewDomainSmartContract(t)
+	mc.domainManager.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *contractAddr).Return(psc, nil)
+
+	mc.txManager.On("ResolveTransactionInputs", mock.Anything, mock.Anything, mock.Anything).Return(&components.ResolvedFunction{
+		Definition: &abi.Entry{Type: abi.Constructor},
+		Signature:  "constructor()",
+	}, nil /* unused */, tktypes.RawJSON(`{}`), nil)
+
+	psc.On("WrapPrivacyGroupTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+
+	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+		GroupID: groupID,
+		TransactionInput: pldapi.TransactionInput{
+			TransactionBase: pldapi.TransactionBase{
+				Type:   pldapi.TransactionTypePrivate.Enum(),
+				Domain: "domain1",
+			},
+		},
+	})
+	require.Regexp(t, "pop", err)
+
 }
