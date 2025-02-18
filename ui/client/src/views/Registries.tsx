@@ -68,7 +68,7 @@ export const Registries: React.FC = () => {
                 color="secondary"
                 slotProps={{ input: { sx: { color: theme => theme.palette.text.secondary, borderRadius: '30px' } } }}
                 select
-                value={selectedRegistry}
+                value={selectedRegistry ?? ''}
                 onChange={event => setSelectedRegistry(event.target.value)}
               >
                 {registries?.map(registry =>
