@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Breadcrumbs, Button, Fade, Grid2, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Breadcrumbs, Button, Fade, Grid2, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { fetchKeys } from "../queries/keys";
@@ -33,6 +33,7 @@ import { useTranslation } from "react-i18next";
 import { Filters } from "../components/Filters";
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import ViewListIcon from '@mui/icons-material/ViewList';
+import { getAltModeScrollBarStyle } from "../themes/default";
 
 export const Keys: React.FC = () => {
 
@@ -77,21 +78,22 @@ export const Keys: React.FC = () => {
   const [rowsPerPage, setRowsPerPage] = useState(getDefaultRowsPerPage());
   const [parent, setParent] = useState(searchParams.get('path') ?? '');
   const [reverseLookupDialogOpen, setReverseLookupDialogOpen] = useState(false);
-  const [sortBy, setSortBy] = useState(getDefaultSortBy());
+  const [sortByPathFirst, setSortByPathFirst] = useState(getDefaultSortBy() === 'path');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(getDefaultSortOrder);
   const [selectedVerifiers, setSelectedVerifiers] = useState<IVerifier[]>();
   const [verifiersDialogOpen, setVerifiersDialogOpen] = useState(false);
   const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
   const [mode, setMode] = useState<'explorer' | 'list'>(getDefaultMode());
   const { t } = useTranslation();
+  const theme = useTheme();
 
   useEffect(() => {
     setParent(searchParams.get('path') ?? '');
   }, [searchParams]);
 
   const { data: keys, error } = useQuery({
-    queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filters, mode],
-    queryFn: () => fetchKeys(mode === 'explorer'? parent : undefined, rowsPerPage, sortBy, sortOrder, filters, refEntries[refEntries.length - 1])
+    queryKey: ["keys", parent, sortByPathFirst, sortOrder, refEntries, rowsPerPage, filters, mode],
+    queryFn: () => fetchKeys(mode === 'explorer' ? parent : undefined, rowsPerPage, sortByPathFirst, sortOrder, filters, refEntries[refEntries.length - 1])
   });
 
   useEffect(() => {
@@ -109,8 +111,8 @@ export const Keys: React.FC = () => {
   }, [keys, rowsPerPage, page]);
 
   useEffect(() => {
-    setCount(-1);
     setPage(0);
+    setCount(-1);
     setRefEntries([]);
   }, [parent]);
 
@@ -124,12 +126,16 @@ export const Keys: React.FC = () => {
 
   useEffect(() => {
     window.localStorage.setItem(constants.KEYS_FILTERS_KEY, JSON.stringify(filters));
+    setCount(-1);
   }, [filters]);
 
   useEffect(() => {
-    if(mode !== 'explorer') {
+    if (mode === 'list') {
       setParent('');
     }
+    setPage(0);
+    setCount(-1);
+    setRefEntries([]);
     window.localStorage.setItem(constants.KEYS_MODE, mode);
   }, [mode]);
 
@@ -137,12 +143,8 @@ export const Keys: React.FC = () => {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
   }
 
-  if (keys === undefined) {
-    return <></>;
-  }
-
   const handleSortChange = (column: string) => {
-    if (column === sortBy) {
+    if ((column === 'path' && sortByPathFirst) || (column === 'index' && !sortByPathFirst)) {
       const order = sortOrder === 'asc' ? 'desc' : 'asc';
       setSortOrder(order);
       window.localStorage.setItem(constants.KEYS_SORT_ORDER_STORAGE_KEY, order);
@@ -152,8 +154,10 @@ export const Keys: React.FC = () => {
         window.localStorage.setItem(constants.KEYS_SORT_ORDER_STORAGE_KEY, 'asc');
         setSortOrder('asc');
       }
-      setSortBy(column);
+      setSortByPathFirst(column === 'path');
     }
+    setPage(0);
+    setRefEntries([]);
   };
 
   let breadcrumbContent: JSX.Element[] = [];
@@ -231,7 +235,9 @@ export const Keys: React.FC = () => {
     if (newPage === 0) {
       setRefEntries([]);
     } else if (newPage > page) {
-      refEntries.push(keys[keys.length - 1]);
+      if(keys !== undefined) {
+        refEntries.push(keys[keys.length - 1]);
+      }
     } else {
       refEntries.pop();
     }
@@ -351,16 +357,16 @@ export const Keys: React.FC = () => {
                 {breadcrumbContent}
               </Breadcrumbs>}
           </Box>
-          <TableContainer component={Paper} >
-            <Table>
+          <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', ...getAltModeScrollBarStyle(theme.palette.mode) }}>
+            <Table stickyHeader>
               <TableHead>
                 <TableRow>
                   {mode === 'explorer' &&
-                    <TableCell width={1} />
+                    <TableCell width={1} sx={{ minWidth: '70px', backgroundColor: theme => theme.palette.background.paper }} />
                   }
-                  <TableCell sx={{ position: 'relative' }}>
+                  <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper }}>
                     <TableSortLabel
-                      active={sortBy === 'path'}
+                      active={sortByPathFirst}
                       direction={sortOrder}
                       onClick={() => handleSortChange('path')}
                     >
@@ -368,9 +374,9 @@ export const Keys: React.FC = () => {
                     </TableSortLabel>
                     {mode === 'explorer' && headerDivider}
                   </TableCell>
-                  <TableCell width={1} sx={{ position: 'relative' }}>
+                  <TableCell width={1} sx={{ backgroundColor: theme => theme.palette.background.paper }}>
                     <TableSortLabel
-                      active={sortBy === 'index'}
+                      active={!sortByPathFirst}
                       direction={sortOrder}
                       onClick={() => handleSortChange('index')}
                     >
@@ -378,14 +384,14 @@ export const Keys: React.FC = () => {
                     </TableSortLabel>
                     {headerDivider}
                   </TableCell>
-                  <TableCell width={1} sx={{ position: 'relative' }}>{t('address')}{headerDivider}</TableCell>
-                  <TableCell width={1} sx={{ whiteSpace: 'nowrap', position: 'relative' }}>{t('otherVerifiers')}{headerDivider}</TableCell>
-                  <TableCell sx={{ position: 'relative' }}>{t('wallet')}{headerDivider}</TableCell>
-                  <TableCell width={1} sx={{ position: 'relative' }}>{t('handle')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper }} width={1} >{t('address')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper, whiteSpace: 'nowrap' }} width={1} >{t('otherVerifiers')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper }} width={1}>{t('wallet')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper }} width={1} >{t('handle')}{headerDivider}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {keys.map(key =>
+                {keys?.map(key =>
                   <TableRow sx={{ height: '70px' }} key={`${key.path}${key.index}`}>
                     {mode === 'explorer' &&
                       <TableCell>{key.hasChildren &&
@@ -411,24 +417,24 @@ export const Keys: React.FC = () => {
                 )}
               </TableBody>
             </Table>
-            <TablePagination
-              slotProps={{
-                actions: {
-                  lastButton: {
-                    disabled: true
-                  }
-                }
-              }}
-              component="div"
-              showFirstButton
-              showLastButton
-              count={count}
-              page={page}
-              onPageChange={handleChangePage}
-              rowsPerPage={rowsPerPage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-            />
           </TableContainer>
+          <TablePagination
+            slotProps={{
+              actions: {
+                lastButton: {
+                  disabled: true
+                }
+              }
+            }}
+            component="div"
+            showFirstButton
+            showLastButton
+            count={count}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
         </Box>
       </Fade>
       <ReverseKeyLookupDialog
