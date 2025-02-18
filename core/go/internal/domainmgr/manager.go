@@ -154,6 +154,16 @@ func (dm *domainManager) ConfiguredDomains() map[string]*pldconf.PluginConfig {
 }
 
 func (dm *domainManager) DomainRegistered(name string, toDomain components.DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error) {
+	d, err := dm.registerDomain(name, toDomain)
+	if err != nil {
+		return nil, err
+	}
+	// Now the domain is registered, perform the initialization
+	go d.init()
+	return d, nil
+}
+
+func (dm *domainManager) registerDomain(name string, toDomain components.DomainManagerToDomain) (d *domain, err error) {
 	dm.mux.Lock()
 	defer dm.mux.Unlock()
 
@@ -175,12 +185,10 @@ func (dm *domainManager) DomainRegistered(name string, toDomain components.Domai
 	}
 
 	// Initialize
-	d := dm.newDomain(name, conf, toDomain)
+	d = dm.newDomain(name, conf, toDomain)
 	dm.domainsByName[name] = d
 
 	log.L(dm.bgCtx).Infof("Domain plugin registered name=%s address=%s", d.name, d.RegistryAddress())
-
-	go d.init()
 	return d, nil
 }
 

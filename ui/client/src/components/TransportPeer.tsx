@@ -17,10 +17,10 @@
 import { Box, Grid2, Typography } from "@mui/material";
 import { ITransportPeer } from "../interfaces";
 import byteSize from "pretty-bytes";
-import { t } from "i18next";
 import UploadIcon from '@mui/icons-material/Upload';
 import DownloadIcon from '@mui/icons-material/Download';
 import { EllapsedTime } from "./EllapsedTime";
+import { useTranslation } from "react-i18next";
 
 
 type Props = {
@@ -28,6 +28,8 @@ type Props = {
 }
 
 export const TransportPeer: React.FC<Props> = ({ transportPeer }) => {
+
+  const { t } = useTranslation();
 
   return (
     <Box
@@ -37,8 +39,6 @@ export const TransportPeer: React.FC<Props> = ({ transportPeer }) => {
         borderRadius: "4px"
       }}
     >
-
-
       <Box sx={{ padding: '10px', paddingLeft: '20px', paddingRight: '20px', borderBottom: theme => `solid 1px ${theme.palette.divider}` }}>
         <Grid2>
           <Typography align="center" sx={{ fontWeight: 500 }} variant="h5" color="textPrimary">{transportPeer.name}</Typography>

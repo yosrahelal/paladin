@@ -58,6 +58,7 @@ type KeyQueryEntry struct {
 	HasChildren bool           `docstruct:"KeyListEntry" json:"hasChildren"`
 	Parent      string         `docstruct:"KeyListEntry" json:"parent"`
 	Path        string         `docstruct:"KeyListEntry" json:"path"`
+	Name        string         `docstruct:"KeyListEntry" json:"name"`
 	Index       int64          `docstruct:"KeyListEntry" json:"index"`
 	Wallet      string         `docstruct:"KeyListEntry" json:"wallet"`
 	KeyHandle   string         `docstruct:"KeyListEntry" json:"keyHandle"`

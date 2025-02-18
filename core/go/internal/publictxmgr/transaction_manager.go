@@ -291,7 +291,6 @@ func (ble *pubTxManager) ValidateTransaction(ctx context.Context, dbTX persisten
 	ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusSuccess), time.Since(prepareStart).Seconds())
 	log.L(ctx).Debugf("HandleNewTx <%s> transaction validated and nonce assignment intent created for %s", txType, txi.From)
 	return nil
-
 }
 
 func (ble *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persistence.DBTX, transactions []*components.PublicTxSubmission) (pubTxns []*pldapi.PublicTx, err error) {
@@ -669,12 +668,10 @@ func (pte *pubTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX p
 		return nil, err
 	}
 	return txns[0], nil
-
 }
 
 // note this function guarantees the return order of the matches corresponds to the input order
 func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, dbTX persistence.DBTX, itxs []*blockindexer.IndexedTransactionNotify) ([]*components.PublicTxMatch, error) {
-
 	// Do a DB query in the TX to reverse lookup the TX details we need to match/update the completed status
 	// and return the list that matched (which is very possibly none as we only track transactions submitted
 	// via our node to the network).
@@ -737,7 +734,6 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 	}
 
 	return results, nil
-
 }
 
 // We've got to be super careful not to block this thread, so we treat this just like a suspend/resume
