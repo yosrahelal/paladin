@@ -78,7 +78,7 @@ export const Keys: React.FC = () => {
   const [rowsPerPage, setRowsPerPage] = useState(getDefaultRowsPerPage());
   const [parent, setParent] = useState(searchParams.get('path') ?? '');
   const [reverseLookupDialogOpen, setReverseLookupDialogOpen] = useState(false);
-  const [sortBy, setSortBy] = useState(getDefaultSortBy());
+  const [sortByPathFirst, setSortByPathFirst] = useState(getDefaultSortBy() === 'path');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(getDefaultSortOrder);
   const [selectedVerifiers, setSelectedVerifiers] = useState<IVerifier[]>();
   const [verifiersDialogOpen, setVerifiersDialogOpen] = useState(false);
@@ -92,8 +92,8 @@ export const Keys: React.FC = () => {
   }, [searchParams]);
 
   const { data: keys, error } = useQuery({
-    queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filters, mode],
-    queryFn: () => fetchKeys(mode === 'explorer' ? parent : undefined, rowsPerPage, sortBy, sortOrder, filters, refEntries[refEntries.length - 1])
+    queryKey: ["keys", parent, sortByPathFirst, sortOrder, refEntries, rowsPerPage, filters, mode],
+    queryFn: () => fetchKeys(mode === 'explorer' ? parent : undefined, rowsPerPage, sortByPathFirst, sortOrder, filters, refEntries[refEntries.length - 1])
   });
 
   useEffect(() => {
@@ -131,7 +131,6 @@ export const Keys: React.FC = () => {
   useEffect(() => {
     if (mode === 'list') {
       setParent('');
-      setSortBy('path');
     }
     setPage(0);
     setCount(-1);
@@ -144,7 +143,7 @@ export const Keys: React.FC = () => {
   }
 
   const handleSortChange = (column: string) => {
-    if (column === sortBy) {
+    if ((column === 'path' && sortByPathFirst) || (column === 'index' && !sortByPathFirst)) {
       const order = sortOrder === 'asc' ? 'desc' : 'asc';
       setSortOrder(order);
       window.localStorage.setItem(constants.KEYS_SORT_ORDER_STORAGE_KEY, order);
@@ -154,7 +153,7 @@ export const Keys: React.FC = () => {
         window.localStorage.setItem(constants.KEYS_SORT_ORDER_STORAGE_KEY, 'asc');
         setSortOrder('asc');
       }
-      setSortBy(column);
+      setSortByPathFirst(column === 'path');
     }
     setPage(0);
     setRefEntries([]);
@@ -366,7 +365,7 @@ export const Keys: React.FC = () => {
                   }
                   <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper }}>
                     <TableSortLabel
-                      active={sortBy === 'path'}
+                      active={sortByPathFirst}
                       direction={sortOrder}
                       onClick={() => handleSortChange('path')}
                     >
@@ -376,8 +375,7 @@ export const Keys: React.FC = () => {
                   </TableCell>
                   <TableCell width={1} sx={{ backgroundColor: theme => theme.palette.background.paper }}>
                     <TableSortLabel
-                      active={sortBy === 'index'}
-                      disabled={mode === 'list'}
+                      active={!sortByPathFirst}
                       direction={sortOrder}
                       onClick={() => handleSortChange('index')}
                     >
@@ -385,10 +383,10 @@ export const Keys: React.FC = () => {
                     </TableSortLabel>
                     {headerDivider}
                   </TableCell>
-                  <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper }} width={1} >{t('address')}{headerDivider}</TableCell>
-                  <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper, whiteSpace: 'nowrap' }} width={1} >{t('otherVerifiers')}{headerDivider}</TableCell>
-                  <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper }} >{t('wallet')}{headerDivider}</TableCell>
-                  <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper }} width={1} >{t('handle')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper }} width={1} >{t('address')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper, whiteSpace: 'nowrap' }} width={1} >{t('otherVerifiers')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper }} width={1}>{t('wallet')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper }} width={1} >{t('handle')}{headerDivider}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
