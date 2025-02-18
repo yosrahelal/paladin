@@ -14,15 +14,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Breadcrumbs, Button, Fade, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Breadcrumbs, Button, Fade, Grid2, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { t } from "i18next";
 import { useEffect, useState } from "react";
 import { fetchKeys } from "../queries/keys";
 import { Hash } from "../components/Hash";
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import { IKeyEntry, IVerifier } from "../interfaces";
+import { IFilter, IKeyEntry, IVerifier } from "../interfaces";
 import { useSearchParams } from "react-router-dom";
 import { Captions, Signature } from "lucide-react";
 import { constants } from "../components/config";
@@ -30,6 +29,10 @@ import SearchIcon from '@mui/icons-material/Search';
 import { ReverseKeyLookupDialog } from "../dialogs/ReverseKeyLookup";
 import RemoveIcon from '@mui/icons-material/Remove';
 import { VerifiersDialog } from "../dialogs/Verifiers";
+import { useTranslation } from "react-i18next";
+import { Filters } from "../components/Filters";
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import ViewListIcon from '@mui/icons-material/ViewList';
 
 export const Keys: React.FC = () => {
 
@@ -41,6 +44,14 @@ export const Keys: React.FC = () => {
     return 10;
   };
 
+  const getDefaultMode = () => {
+    const valueFromStorage = window.localStorage.getItem(constants.KEYS_MODE);
+    if (valueFromStorage === 'explorer' || valueFromStorage === 'list') {
+      return valueFromStorage;
+    }
+    return 'explorer';
+  };
+
   const getDefaultSortBy = () => {
     return window.localStorage.getItem(constants.KEYS_SORT_BY_STORAGE_KEY) ?? 'index';
   };
@@ -49,9 +60,18 @@ export const Keys: React.FC = () => {
     return window.localStorage.getItem(constants.KEYS_SORT_ORDER_STORAGE_KEY) as 'asc' | 'desc' ?? 'asc';
   };
 
+  const getFiltersFromStorage = () => {
+    const value = window.localStorage.getItem(constants.KEYS_FILTERS_KEY);
+    if (value !== null) {
+      try {
+        return JSON.parse(value);
+      } catch (_err) { }
+    }
+    return [];
+  };
+
   const [searchParams, setSearchParams] = useSearchParams();
   const [refEntries, setRefEntries] = useState<IKeyEntry[]>([]);
-  const [filter, setFilter] = useState<string | undefined>(searchParams.get('filter') ?? undefined);
   const [page, setPage] = useState(0);
   const [count, setCount] = useState(-1);
   const [rowsPerPage, setRowsPerPage] = useState(getDefaultRowsPerPage());
@@ -61,19 +81,21 @@ export const Keys: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(getDefaultSortOrder);
   const [selectedVerifiers, setSelectedVerifiers] = useState<IVerifier[]>();
   const [verifiersDialogOpen, setVerifiersDialogOpen] = useState(false);
+  const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
+  const [mode, setMode] = useState<'explorer' | 'list'>(getDefaultMode());
+  const { t } = useTranslation();
 
   useEffect(() => {
-    setFilter(searchParams.get('filter') ?? undefined);
     setParent(searchParams.get('path') ?? '');
   }, [searchParams]);
 
   const { data: keys, error } = useQuery({
-    queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filter],
-    queryFn: () => fetchKeys(parent, rowsPerPage, sortBy, sortOrder, filter, refEntries[refEntries.length - 1])
+    queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filters, mode],
+    queryFn: () => fetchKeys(mode === 'explorer'? parent : undefined, rowsPerPage, sortBy, sortOrder, filters, refEntries[refEntries.length - 1])
   });
 
   useEffect(() => {
-    if (count !== -1 && (page * rowsPerPage === count)) {
+    if (count !== -1 && (page !== 0 && page * rowsPerPage === count)) {
       handleChangePage(null, page - 1);
     }
   }, [count, rowsPerPage, page]);
@@ -97,11 +119,19 @@ export const Keys: React.FC = () => {
     if (parent !== '') {
       value.path = parent;
     }
-    if (filter !== undefined) {
-      value.filter = filter;
-    }
     setSearchParams(value);
-  }, [parent, page, filter]);
+  }, [parent, page]);
+
+  useEffect(() => {
+    window.localStorage.setItem(constants.KEYS_FILTERS_KEY, JSON.stringify(filters));
+  }, [filters]);
+
+  useEffect(() => {
+    if(mode !== 'explorer') {
+      setParent('');
+    }
+    window.localStorage.setItem(constants.KEYS_MODE, mode);
+  }, [mode]);
 
   if (error) {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
@@ -109,14 +139,6 @@ export const Keys: React.FC = () => {
 
   if (keys === undefined) {
     return <></>;
-  }
-
-  const removeParentFromPath = (path: string) => {
-    let index = parent.length;
-    if (index > 0) {
-      index++;
-    }
-    return path.substring(index);
   }
 
   const handleSortChange = (column: string) => {
@@ -145,24 +167,14 @@ export const Keys: React.FC = () => {
         <Link underline="none"
           key={segment}
           href=""
-          sx={{ textTransform: 'none' }}
           onClick={event => {
             event.preventDefault();
-            setFilter(undefined);
             setParent(target);
           }}>
           {segment === '' ? t('root') : segment}
         </Link>
       )
     }
-  }
-  if (filter !== undefined) {
-    breadcrumbContent.push(
-      <Link underline="none"
-        key={filter}
-        sx={{ textTransform: 'none' }}>
-        {filter}
-      </Link>);
   }
 
   const getEthAddress = (key: IKeyEntry) => {
@@ -193,7 +205,7 @@ export const Keys: React.FC = () => {
             disableElevation
             color="primary"
             size="small"
-            sx={{ minWidth: '110px', paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400', whiteSpace: 'nowrap' }}
+            sx={{ minWidth: '110px', paddingTop: 0, paddingBottom: 0, fontWeight: '400', whiteSpace: 'nowrap' }}
             onClick={() => { setSelectedVerifiers(entries); setVerifiersDialogOpen(true) }}
           >
             {t('manyN', { n: entries.length })}
@@ -203,6 +215,14 @@ export const Keys: React.FC = () => {
     }
     return <RemoveIcon color="disabled" />;
   };
+
+  const removeParentFromPath = (path: string) => {
+    let index = parent.length;
+    if (index > 0) {
+      index++;
+    }
+    return path.substring(index);
+  }
 
   const handleChangePage = (
     _event: React.MouseEvent<HTMLButtonElement> | null,
@@ -237,7 +257,6 @@ export const Keys: React.FC = () => {
     left: '2px'
   }} />;
 
-
   return (
     <>
       <Fade timeout={300} in={true}>
@@ -247,47 +266,107 @@ export const Keys: React.FC = () => {
             maxWidth: "1300px",
             marginLeft: "auto",
             marginRight: "auto",
-            position: 'relative'
           }}
         >
-          <Typography align="center" variant="h5" sx={{ marginBottom: '20px' }}>
-            {t("localKeys")}
-          </Typography>
-          <Button
-            size="large"
-            variant="outlined"
-            startIcon={<SearchIcon />}
-            sx={{ position: 'absolute', right: '46px', top: '23px', textTransform: 'none', borderRadius: '20px' }}
-            onClick={() => setReverseLookupDialogOpen(true)}
-          >
-            {t('reverseLookup')}
-          </Button>
-          <Breadcrumbs
-            separator={<NavigateNextIcon fontSize="small" />}
-            sx={{ marginLeft: '10px', marginBottom: '10px' }}>
-            <Link underline="none"
-              href=""
-              sx={{ textTransform: 'none' }}
-              onClick={event => { event.preventDefault(); setFilter(undefined); setParent('') }}>
-              {t('root')}
-            </Link>
-            {breadcrumbContent}
-          </Breadcrumbs>
-
+          <Grid2 container alignItems="center" spacing={2}>
+            <Grid2 sx={{ display: { xs: 'none', sm: 'none', md: 'block' } }} size={{ md: 4 }} />
+            <Grid2 size={{ xs: 12, md: 4 }}>
+              <Typography align="center" variant="h5">
+                {t("localKeys")}
+              </Typography>
+            </Grid2>
+            <Grid2 size={{ xs: 12, md: 4 }} container justifyContent="right">
+              <Grid2>
+                <Button
+                  size="large"
+                  variant="outlined"
+                  startIcon={<SearchIcon />}
+                  sx={{ borderRadius: '20px' }}
+                  onClick={() => setReverseLookupDialogOpen(true)}
+                >
+                  {t('reverseLookup')}
+                </Button>
+              </Grid2>
+            </Grid2>
+          </Grid2>
+          <Box sx={{ height: '10px' }} />
+          <Filters
+            filterFields={[
+              {
+                label: t('path'),
+                name: 'path',
+                type: 'string'
+              },
+              {
+                label: t('index'),
+                name: 'index',
+                type: 'number'
+              },
+              {
+                label: t('wallet'),
+                name: 'wallet',
+                type: 'string'
+              },
+              {
+                label: t('handle'),
+                name: 'keyHandle',
+                type: 'string'
+              },
+              {
+                label: t('isFolder'),
+                name: 'hasChildren',
+                type: 'boolean'
+              },
+              {
+                label: t('isKey'),
+                name: 'isKey',
+                type: 'boolean'
+              }
+            ]}
+            filters={filters}
+            setFilters={setFilters}
+          />
+          <Box sx={{ display: 'flex', marginBottom: '15px', alignItems: 'center' }}>
+            <ToggleButtonGroup exclusive onChange={(_event, value) => setMode(value)} value={mode}>
+              <Tooltip arrow title={t('listView')}>
+                <ToggleButton color="primary" value="list">
+                  <ViewListIcon fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+              <Tooltip arrow title={t('explorerView')}>
+                <ToggleButton color="primary" value="explorer">
+                  <AccountTreeIcon fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+            </ToggleButtonGroup>
+            {mode === 'explorer' &&
+              <Breadcrumbs
+                separator={<NavigateNextIcon fontSize="small" />}
+                sx={{ marginLeft: '10px' }}>
+                <Link underline="none"
+                  href=""
+                  onClick={event => { event.preventDefault(); setParent('') }}>
+                  {t('root')}
+                </Link>
+                {breadcrumbContent}
+              </Breadcrumbs>}
+          </Box>
           <TableContainer component={Paper} >
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell width={1} />
+                  {mode === 'explorer' &&
+                    <TableCell width={1} />
+                  }
                   <TableCell sx={{ position: 'relative' }}>
                     <TableSortLabel
                       active={sortBy === 'path'}
                       direction={sortOrder}
                       onClick={() => handleSortChange('path')}
                     >
-                      {t('name')}
+                      {t(mode === 'explorer' ? 'pathSegment' : 'path')}
                     </TableSortLabel>
-                    {headerDivider}
+                    {mode === 'explorer' && headerDivider}
                   </TableCell>
                   <TableCell width={1} sx={{ position: 'relative' }}>
                     <TableSortLabel
@@ -308,14 +387,15 @@ export const Keys: React.FC = () => {
               <TableBody>
                 {keys.map(key =>
                   <TableRow sx={{ height: '70px' }} key={`${key.path}${key.index}`}>
-                    <TableCell>{key.hasChildren &&
-                      <Tooltip arrow title={t('openFolder')}>
-                        <IconButton onClick={() => { setFilter(undefined); setParent(key.path) }}>
-                          <FolderOpenIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    }</TableCell>
-                    <TableCell>{removeParentFromPath(key.path)}</TableCell>
+                    {mode === 'explorer' &&
+                      <TableCell>{key.hasChildren &&
+                        <Tooltip arrow title={t('openFolder')}>
+                          <IconButton onClick={() => { setParent(key.path) }}>
+                            <FolderOpenIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      }</TableCell>}
+                    <TableCell sx={{ wordBreak: 'break-all' }}>{mode === 'explorer' ? removeParentFromPath(key.path) : key.path}</TableCell>
                     <TableCell>{key.index}</TableCell>
                     <TableCell>
                       {getEthAddress(key)}
@@ -354,8 +434,9 @@ export const Keys: React.FC = () => {
       <ReverseKeyLookupDialog
         dialogOpen={reverseLookupDialogOpen}
         setDialogOpen={setReverseLookupDialogOpen}
+        mode={mode}
         setParent={setParent}
-        setFilter={setFilter}
+        setFilters={setFilters}
       />
       {selectedVerifiers &&
         <VerifiersDialog
@@ -363,6 +444,7 @@ export const Keys: React.FC = () => {
           setDialogOpen={setVerifiersDialogOpen}
           verifiers={selectedVerifiers}
         />}
+
     </>
   );
 }

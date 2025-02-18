@@ -173,3 +173,16 @@ export interface IKeyMappingAndVerifier {
   verifier: IVerifier
   wallet: string
 }
+
+export interface IFilterField {
+  label: string
+  name: string
+  type: 'string' | 'number' | 'boolean'
+}
+
+export interface IFilter {
+  field: IFilterField,
+  operator: string
+  value: string
+  caseSensitive?: boolean
+}

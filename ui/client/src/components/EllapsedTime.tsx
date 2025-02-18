@@ -49,7 +49,7 @@ export const EllapsedTime: React.FC<Props> = ({
   return (
     <>
       <Button
-        sx={{ textTransform: 'none', fontWeight: '400' }}
+        sx={{ fontWeight: '400' }}
         size="small"
         startIcon={icon}
         onClick={() => setTimestampDialogOpen(true)}>
