@@ -49,7 +49,7 @@ type lockedStatesInfo struct {
 
 var lockABI = &abi.Entry{
 	Type: abi.Function,
-	Name: "lock",
+	Name: types.METHOD_LOCK,
 	Inputs: abi.ParameterArray{
 		{Name: "inputs", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
@@ -60,9 +60,9 @@ var lockABI = &abi.Entry{
 	},
 }
 
-var lockABI_nullifiers = &abi.Entry{
+var lockABINullifiers = &abi.Entry{
 	Type: abi.Function,
-	Name: "lock",
+	Name: types.METHOD_LOCK,
 	Inputs: abi.ParameterArray{
 		{Name: "nullifiers", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
@@ -166,7 +166,7 @@ func (h *lockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
 	allOutputCoins := slices.Concat(outputCoins, lockedOutputCoins)
-	circuit := (*tx.DomainConfig.Circuits)["transfer"] // use the transfer circuit for locking proofs
+	circuit := (*tx.DomainConfig.Circuits)[types.METHOD_TRANSFER] // use the transfer circuit for locking proofs
 	payloadBytes, err := formatTransferProvingRequest(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, inputCoins, allOutputCoins, circuit, tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
@@ -285,7 +285,7 @@ func (h *lockHandler) newInfoStates(lockedOutputStates []*pb.NewState) []*pb.New
 func getLockABI(tokenName string) *abi.Entry {
 	transferFunction := lockABI
 	if common.IsNullifiersToken(tokenName) {
-		transferFunction = lockABI_nullifiers
+		transferFunction = lockABINullifiers
 	}
 	return transferFunction
 }

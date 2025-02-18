@@ -44,7 +44,7 @@ type transferHandler struct {
 
 var transferABI = &abi.Entry{
 	Type: abi.Function,
-	Name: "transfer",
+	Name: types.METHOD_TRANSFER,
 	Inputs: abi.ParameterArray{
 		{Name: "inputs", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
@@ -53,9 +53,9 @@ var transferABI = &abi.Entry{
 	},
 }
 
-var transferABI_nullifiers = &abi.Entry{
+var transferABINullifiers = &abi.Entry{
 	Type: abi.Function,
-	Name: "transfer",
+	Name: types.METHOD_TRANSFER,
 	Inputs: abi.ParameterArray{
 		{Name: "nullifiers", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
@@ -67,7 +67,7 @@ var transferABI_nullifiers = &abi.Entry{
 
 var transferABI_withEncryption = &abi.Entry{
 	Type: abi.Function,
-	Name: "transfer",
+	Name: types.METHOD_TRANSFER,
 	Inputs: abi.ParameterArray{
 		{Name: "inputs", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
@@ -167,7 +167,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := formatTransferProvingRequest(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, inputCoins, outputCoins, (*tx.DomainConfig.Circuits)["transfer"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
+	payloadBytes, err := formatTransferProvingRequest(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, inputCoins, outputCoins, (*tx.DomainConfig.Circuits)[types.METHOD_TRANSFER], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
@@ -266,7 +266,7 @@ func getTransferABI(tokenName string) *abi.Entry {
 	if common.IsEncryptionToken(tokenName) {
 		transferFunction = transferABI_withEncryption
 	} else if common.IsNullifiersToken(tokenName) {
-		transferFunction = transferABI_nullifiers
+		transferFunction = transferABINullifiers
 	}
 	return transferFunction
 }

@@ -30,7 +30,7 @@ import (
 
 var mintABI = &abi.Entry{
 	Type: abi.Function,
-	Name: "mint",
+	Name: types.METHOD_MINT,
 	Inputs: abi.ParameterArray{
 		{Name: "utxos", Type: "uint256[]"},
 		{Name: "data", Type: "bytes"},

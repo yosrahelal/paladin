@@ -53,7 +53,7 @@ func NewDepositHandler(name string, coinSchema *pb.StateSchema) *depositHandler 
 
 var depositABI = &abi.Entry{
 	Type: abi.Function,
-	Name: "deposit",
+	Name: types.METHOD_DEPOSIT,
 	Inputs: abi.ParameterArray{
 		{Name: "amount", Type: "uint256"},
 		{Name: "outputs", Type: "uint256[]"},
@@ -102,7 +102,7 @@ func (h *depositHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
 
-	payloadBytes, err := h.formatProvingRequest(ctx, outputCoins, (*tx.DomainConfig.Circuits)["deposit"])
+	payloadBytes, err := h.formatProvingRequest(ctx, outputCoins, (*tx.DomainConfig.Circuits)[types.METHOD_DEPOSIT])
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}

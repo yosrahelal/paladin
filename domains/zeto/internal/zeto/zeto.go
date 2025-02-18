@@ -319,26 +319,26 @@ func (z *Zeto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTrans
 func (z *Zeto) GetHandler(method, tokenName string) types.DomainHandler {
 	if common.IsNonFungibleToken(tokenName) {
 		switch method {
-		case "mint":
+		case types.METHOD_MINT:
 			return nonfungible.NewMintHandler(z.name, z.nftSchema)
-		case "transfer":
+		case types.METHOD_TRANSFER:
 			return nonfungible.NewTransferHandler(z.name, z.Callbacks, z.nftSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
 		default:
 			return nil
 		}
 	}
 	switch method {
-	case "mint":
+	case types.METHOD_MINT:
 		return fungible.NewMintHandler(z.name, z.coinSchema)
-	case "transfer":
+	case types.METHOD_TRANSFER:
 		return fungible.NewTransferHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
-	case "transferLocked":
+	case types.METHOD_TRANSFER_LOCKED:
 		return fungible.NewTransferLockedHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
-	case "lock":
+	case types.METHOD_LOCK:
 		return fungible.NewLockHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema, z.lockedInfoSchema)
-	case "deposit":
+	case types.METHOD_DEPOSIT:
 		return fungible.NewDepositHandler(z.name, z.coinSchema)
-	case "withdraw":
+	case types.METHOD_WITHDRAW:
 		return fungible.NewWithdrawHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
 	default:
 		return nil

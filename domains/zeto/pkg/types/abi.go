@@ -32,6 +32,15 @@ var ZetoFungibleABI = solutils.MustParseBuildABI(zetoFungibleJSON)
 
 var ZetoNonFungibleABI = solutils.MustParseBuildABI(zetoNonFungibleJSON)
 
+const (
+	METHOD_MINT            = "mint"
+	METHOD_TRANSFER        = "transfer"
+	METHOD_TRANSFER_LOCKED = "transferLocked"
+	METHOD_LOCK            = "lock"
+	METHOD_DEPOSIT         = "deposit"
+	METHOD_WITHDRAW        = "withdraw"
+)
+
 type InitializerParams struct {
 	TokenName string `json:"tokenName"`
 	// InitialOwner string `json:"initialOwner"` // TODO: allow the initial owner to be specified by the deploy request

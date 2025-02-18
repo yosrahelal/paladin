@@ -50,16 +50,6 @@ func (h *baseHandler) getAlgoZetoSnarkBJJ() string {
 	return getAlgoZetoSnarkBJJ(h.name)
 }
 
-// the Zeto implementations support two input/output sizes for the circuits: 2 and 10,
-// if the input or output size is larger than 2, then the batch circuit is used with
-// input/output size 10
-func getInputSize(sizeOfEndorsableStates int) int {
-	if sizeOfEndorsableStates <= 2 {
-		return 2
-	}
-	return 10
-}
-
 func validateTransferParams(ctx context.Context, params []*types.FungibleTransferParamEntry) error {
 	if len(params) == 0 {
 		return i18n.NewError(ctx, msgs.MsgNoTransferParams)
@@ -92,14 +82,14 @@ func validateAmountParam(ctx context.Context, amount *tktypes.HexUint256, i int)
 }
 
 func utxosFromInputStates(ctx context.Context, states []*prototk.EndorsableState, desiredSize int) ([]string, error) {
-	return _utxosFromStates(ctx, states, desiredSize, true)
+	return utxosFromStates(ctx, states, desiredSize, true)
 }
 
 func utxosFromOutputStates(ctx context.Context, states []*prototk.EndorsableState, desiredSize int) ([]string, error) {
-	return _utxosFromStates(ctx, states, desiredSize, false)
+	return utxosFromStates(ctx, states, desiredSize, false)
 }
 
-func _utxosFromStates(ctx context.Context, states []*prototk.EndorsableState, desiredSize int, isInputs bool) ([]string, error) {
+func utxosFromStates(ctx context.Context, states []*prototk.EndorsableState, desiredSize int, isInputs bool) ([]string, error) {
 	utxos := make([]string, desiredSize)
 	for i := 0; i < desiredSize; i++ {
 		if i < len(states) {

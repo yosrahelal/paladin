@@ -47,7 +47,7 @@ type withdrawHandler struct {
 
 var withdrawABI = &abi.Entry{
 	Type: abi.Function,
-	Name: "withdraw",
+	Name: types.METHOD_WITHDRAW,
 	Inputs: abi.ParameterArray{
 		{Name: "amount", Type: "uint256"},
 		{Name: "inputs", Type: "uint256[]"},
@@ -59,7 +59,7 @@ var withdrawABI = &abi.Entry{
 
 var withdrawABI_nullifiers = &abi.Entry{
 	Type: abi.Function,
-	Name: "withdraw",
+	Name: types.METHOD_WITHDRAW,
 	Inputs: abi.ParameterArray{
 		{Name: "amount", Type: "uint256"},
 		{Name: "nullifiers", Type: "uint256[]"},
@@ -132,7 +132,7 @@ func (h *withdrawHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := h.formatProvingRequest(ctx, inputCoins, outputCoin, (*tx.DomainConfig.Circuits)["withdraw"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
+	payloadBytes, err := h.formatProvingRequest(ctx, inputCoins, outputCoin, (*tx.DomainConfig.Circuits)[types.METHOD_WITHDRAW], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}

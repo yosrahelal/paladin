@@ -47,7 +47,7 @@ type transferHandler struct {
 
 var transferABI = &abi.Entry{
 	Type: abi.Function,
-	Name: "transfer",
+	Name: types.METHOD_TRANSFER,
 	Inputs: abi.ParameterArray{
 		{Name: "input", Type: "uint256"},
 		{Name: "output", Type: "uint256"},
@@ -138,7 +138,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := h.formatProvingRequest(ctx, inputTokens, outputTokens, (*tx.DomainConfig.Circuits)["transfer"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
+	payloadBytes, err := h.formatProvingRequest(ctx, inputTokens, outputTokens, (*tx.DomainConfig.Circuits)[types.METHOD_TRANSFER], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}

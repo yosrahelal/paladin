@@ -46,7 +46,7 @@ type transferLockedHandler struct {
 
 var transferLockedABI = &abi.Entry{
 	Type: abi.Function,
-	Name: "transferLocked",
+	Name: types.METHOD_TRANSFER_LOCKED,
 	Inputs: abi.ParameterArray{
 		{Name: "inputs", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
@@ -55,9 +55,9 @@ var transferLockedABI = &abi.Entry{
 	},
 }
 
-var transferLockedABI_nullifiers = &abi.Entry{
+var transferLockedABINullifiers = &abi.Entry{
 	Type: abi.Function,
-	Name: "transferLocked",
+	Name: types.METHOD_TRANSFER_LOCKED,
 	Inputs: abi.ParameterArray{
 		{Name: "nullifiers", Type: "uint256[]"},
 		{Name: "outputs", Type: "uint256[]"},
@@ -194,7 +194,7 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := formatTransferProvingRequest(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, inputCoins, outputCoins, (*tx.DomainConfig.Circuits)["transferLocked"], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress, delegateAddr)
+	payloadBytes, err := formatTransferProvingRequest(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, inputCoins, outputCoins, (*tx.DomainConfig.Circuits)[types.METHOD_TRANSFER_LOCKED], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress, delegateAddr)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
@@ -334,7 +334,7 @@ func validateTransferLockedParams(ctx context.Context, params types.FungibleTran
 func getTransferLockedABI(tokenName string) *abi.Entry {
 	transferFunction := transferLockedABI
 	if common.IsNullifiersToken(tokenName) {
-		transferFunction = transferLockedABI_nullifiers
+		transferFunction = transferLockedABINullifiers
 	}
 	return transferFunction
 }
