@@ -195,15 +195,17 @@ uninstall-crds: ## Uninstall CRDs.
 helm-template: ## Install operator using Helm.
 	$(HELM) template ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} --set operator.namespace=${NAMESPACE} --set mode=${MODE}
 
-
 .PHONY: helm-install-dependencies
 helm-install-dependencies: ## Install operator using Helm.
-	$(HELM) repo add jetstack https://charts.jetstack.io --force-update
+	$(HELM) repo add prometheus-community https://prometheus-community.github.io/helm-charts
+	$(HELM) repo add jetstack https://charts.jetstack.io
+	$(HELM) repo update
+	$(HELM) dependency update ${CHART_PATH_OPERATOR} || true
+	$(HELM) dependency build ${CHART_PATH_OPERATOR} || true
 	$(HELM) upgrade --install cert-manager --namespace cert-manager --version v1.16.1 jetstack/cert-manager --create-namespace --set crds.enabled=true
 
 .PHONY: helm-install
 helm-install: helm-install-dependencies ## Install operator using Helm.
-	$(HELM) dependency build ${CHART_PATH_OPERATOR} || true
 	$(HELM) upgrade --install ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} \
 		-n ${NAMESPACE} --create-namespace \
 		--set operator.namespace=${NAMESPACE} \
