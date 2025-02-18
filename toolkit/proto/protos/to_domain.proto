@@ -240,6 +240,14 @@ message InitPrivacyGroupResponse {
   PreparedTransaction transaction = 3; // The transaction that will result from this against the domain
 }
 
+message WrapPrivacyGroupTransactionRequest {
+  PrivacyGroupTransaction transaction = 1; // the transaction to wrap
+}
+
+message WrapPrivacyGroupTransactionResponse {
+  PreparedTransaction transaction = 1; // The transaction that will result from this against the domain
+}
+
 message DomainConfig {
   bool custom_hash_function = 1; // If true then the ValidateStateHashes function must be implemeted, and all states must come with a pre-caclculated ID
   repeated string abi_state_schemas_json = 2; // A list of Schema definitions (in ABI parameter format) the domain requires for all state types it interacts with
@@ -296,6 +304,16 @@ message TransactionSpecification {
   string function_params_json = 6; // The parameters supplied in the invocation in normalized JSON format, after validation against the ABI the caller supplied
   int64 base_block = 7; // The block number on the base ledger, upon which this transaction is being assembled
   Intent intent = 8; // The sender's intended outcome (a submitted transaction or only a call)
+}
+
+message PrivacyGroupTransaction {
+  ContractInfo contract_info = 1; // Details of the privacy group smart contract
+  string from = 2; // The unresolved sender identity
+  optional string to = 3; // The ethereum identifier specified in the to of the transaction. Null for deployment
+  string function_signature = 4; // The calculated signature of the function ABI the caller is attempting to invoke
+  string function_abi_json = 5; // The function ABI (asserted by the caller) they wish to inovoke on the smart contract
+  string function_params_json = 6; // The parameters supplied in the invocation in normalized JSON format, after validation against the ABI the caller supplied
+  optional bytes bytecode = 7; // For deployment transactions only 
 }
 
 message AssembledTransaction {

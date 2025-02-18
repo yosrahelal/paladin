@@ -695,3 +695,9 @@ func (dc *domainContract) loadStatesFromContext(dCtx components.DomainContext, r
 	return states, nil
 
 }
+
+func (dc *domainContract) WrapPrivacyGroupTransaction(ctx context.Context, pg *pldapi.PrivacyGroupWithABI, fnDef *abi.Entry, pgInput *pldapi.TransactionInput) (err error) {
+
+	return nil
+
+}
