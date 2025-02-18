@@ -11,6 +11,7 @@
 	"address": "Address",
 	"algorithm": "Algorithm",
 	"implementation": "Implementation",
+	"inactive": "Inactive",
 	"invalidABI": "Invalid ABI",
 	"active": "Active",
 	"all": "All",

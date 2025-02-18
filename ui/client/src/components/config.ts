@@ -21,6 +21,7 @@ export const constants = {
   KEYS_ROWS_PER_PAGE: 'keys-rows-per-page',
   KEYS_FILTERS_KEY: 'keys-filters',
   KEYS_MODE: 'keys-mode',
+  REGISTRY_FILTERS: 'registry-filters',
   EVENT_QUERY_LIMIT: 10,
   SUBMISSIONS_QUERY_LIMIT: 10,
   REGISTRY_ENTRIES_QUERY_LIMIT: 10,

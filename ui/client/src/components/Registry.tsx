@@ -14,14 +14,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, LinearProgress, Typography, useTheme } from "@mui/material";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { Alert, Box, LinearProgress, ToggleButton, ToggleButtonGroup, Typography, useTheme } from "@mui/material";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { fetchRegistryEntries } from "../queries/registry";
 import { RegistryEntry } from "./RegistryEntry";
-import { IRegistryEntry } from "../interfaces";
+import { IFilter, IRegistryEntry } from "../interfaces";
 import { getAltModeScrollBarStyle } from "../themes/default";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { useTranslation } from "react-i18next";
+import { Filters } from "./Filters";
+import { useState } from "react";
+import { constants } from "./config";
 
 type Props = {
   registryName: string;
@@ -29,12 +32,24 @@ type Props = {
 
 export const Registry: React.FC<Props> = ({ registryName }) => {
 
+  const getFiltersFromStorage = () => {
+    const value = window.localStorage.getItem(constants.REGISTRY_FILTERS);
+    if (value !== null) {
+      try {
+        return JSON.parse(value);
+      } catch (_err) { }
+    }
+    return [];
+  };
+
+  const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
+  const [tab, setTab] = useState<'active' | 'inactive' | 'any'>('any');
   const theme = useTheme();
   const { t } = useTranslation();
 
   const { data: registryEntries, fetchNextPage, hasNextPage, error } = useInfiniteQuery({
-    queryKey: ["registryEntries"],
-    queryFn: ({ pageParam }) => fetchRegistryEntries(registryName, pageParam),
+    queryKey: ["registryEntries", tab, filters],
+    queryFn: ({ pageParam }) => fetchRegistryEntries(registryName, filters, tab, pageParam),
     initialPageParam: undefined as IRegistryEntry | undefined,
     getNextPageParam: (lastPage) => { return lastPage.length > 0 ? lastPage[lastPage.length - 1] : undefined },
   });
@@ -48,32 +63,64 @@ export const Registry: React.FC<Props> = ({ registryName }) => {
   }
 
   return (
-    <Box
-      id="scrollableDivRegistryEntries"
-      sx={{
-        paddingRight: "15px",
-        height: "calc(100vh - 250px)",
-        ...getAltModeScrollBarStyle(theme.palette.mode)
-      }}
-    >
-      <InfiniteScroll
-        scrollableTarget="scrollableDivRegistryEntries"
-        dataLength={registryEntries.pages.length}
-        next={() => fetchNextPage()}
-        hasMore={hasNextPage}
-        loader={<LinearProgress />}
+    <>
+      <Box sx={{ margin: '10px', textAlign: 'center' }}>
+        <ToggleButtonGroup exclusive onChange={(_event, value) => setTab(value)} value={tab}>
+          <ToggleButton color="primary" value="any" sx={{ width: '130px', height: '45px' }}>{t('all')}</ToggleButton>
+          <ToggleButton color="primary" value="active" sx={{ width: '130px', height: '45px' }}>{t('active')}</ToggleButton>
+          <ToggleButton color="primary" value="inactive" sx={{ width: '130px', height: '45px' }}>{t('inactive')}</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+      <Box sx={{ margin: '15px' }}>
+        <Filters
+          filterFields={[
+            {
+              label: t('id'),
+              name: '.id',
+              type: 'string'
+            },
+            {
+              label: t('owner'),
+              name: '$owner',
+              type: 'string'
+            },
+            {
+              label: t('name'),
+              name: '.name',
+              type: 'string'
+            }
+          ]}
+          filters={filters}
+          setFilters={setFilters}
+        />
+      </Box>
+      <Box
+        id="scrollableDivRegistryEntries"
+        sx={{
+          paddingRight: "15px",
+          height: "calc(100vh - 300px)",
+          ...getAltModeScrollBarStyle(theme.palette.mode)
+        }}
       >
-        {registryEntries.pages.map(registryEntriesArray =>
-          registryEntriesArray.map(registryEntry => (
-            <RegistryEntry
-              key={registryEntry.name}
-              registryEntry={registryEntry}
-            />
-          ))
-        )}
-      </InfiniteScroll>
-      {registryEntries.pages.length === 1 && registryEntries.pages[0].length === 0 &&
-        <Typography color="textSecondary" align="center" variant="h6" sx={{ marginTop: '40px' }}>{t('noPendingTransactions')}</Typography>}
-    </Box>
+        <InfiniteScroll
+          scrollableTarget="scrollableDivRegistryEntries"
+          dataLength={registryEntries.pages.length}
+          next={() => fetchNextPage()}
+          hasMore={hasNextPage}
+          loader={<LinearProgress />}
+        >
+          {registryEntries.pages.map(registryEntriesArray =>
+            registryEntriesArray.map(registryEntry => (
+              <RegistryEntry
+                key={registryEntry.name}
+                registryEntry={registryEntry}
+              />
+            ))
+          )}
+        </InfiniteScroll>
+        {registryEntries.pages.length === 1 && registryEntries.pages[0].length === 0 &&
+          <Typography color="textSecondary" align="center" variant="h6" sx={{ marginTop: '40px' }}>{t('noRegistryEntries')}</Typography>}
+      </Box>
+    </>
   );
 };

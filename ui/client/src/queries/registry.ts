@@ -16,9 +16,10 @@
 
 import i18next from "i18next";
 import { constants } from "../components/config";
-import { IRegistryEntry } from "../interfaces";
+import { IFilter, IRegistryEntry } from "../interfaces";
 import { generatePostReq, returnResponse } from "./common";
 import { RpcEndpoint, RpcMethods } from "./rpcMethods";
+import { translateFilters } from "../utils";
 
 export const fetchRegistries = async (): Promise<string[]> => {
   const requestPayload = {
@@ -37,8 +38,16 @@ export const fetchRegistries = async (): Promise<string[]> => {
 
 export const fetchRegistryEntries = async (
   registryName: string,
+  filters: IFilter[],
+  tab: 'active' | 'inactive' | 'any',
   pageParam?: IRegistryEntry
 ): Promise<IRegistryEntry[]> => {
+
+  let translatedFilters = translateFilters(filters);
+
+
+  
+
   let requestPayload: any = {
     jsonrpc: "2.0",
     id: Date.now(),
@@ -46,14 +55,11 @@ export const fetchRegistryEntries = async (
     params: [
       registryName,
       {
-        notEqual: [{
-          field: '.name',
-          value: 'root'
-        }],
+        ...translatedFilters,
         limit: constants.REGISTRY_ENTRIES_QUERY_LIMIT,
         sort: ['.name ASC']
       },
-      "any",
+      tab,
     ],
   };
 
