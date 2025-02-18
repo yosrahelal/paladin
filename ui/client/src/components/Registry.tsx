@@ -23,7 +23,7 @@ import { getAltModeScrollBarStyle } from "../themes/default";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { useTranslation } from "react-i18next";
 import { Filters } from "./Filters";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { constants } from "./config";
 
 type Props = {
@@ -53,6 +53,10 @@ export const Registry: React.FC<Props> = ({ registryName }) => {
     initialPageParam: undefined as IRegistryEntry | undefined,
     getNextPageParam: (lastPage) => { return lastPage.length > 0 ? lastPage[lastPage.length - 1] : undefined },
   });
+
+  useEffect(() => {
+    window.localStorage.setItem(constants.REGISTRY_FILTERS, JSON.stringify(filters));
+  }, [filters]);
 
   if (error) {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
