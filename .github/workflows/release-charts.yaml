@@ -142,7 +142,7 @@ jobs:
             -PoperatorImageTag=${{ inputs.images_tag }} \
             -PpaladinImageName=${{ env.IMG_PALADIN }} \
             -PpaladinImageTag=${{ inputs.images_tag }} \
-            -PdeleteCluster=true
+            -PdeleteCluster=false
 
       # set CR_TOKEN env with the GitHub token secret when it is workflow_dispatch action
       - name: Set CR_TOKEN
