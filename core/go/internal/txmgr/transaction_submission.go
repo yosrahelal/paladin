@@ -393,73 +393,6 @@ func (tm *txManager) PrepareTransactions(ctx context.Context, dbTX persistence.D
 	return tm.processNewTransactions(ctx, dbTX, txs, pldapi.SubmitModeExternal)
 }
 
-func (tm *txManager) processUpdatedTransaction(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.Transaction, validatedTransaction *components.ValidatedTransaction) error {
-	if validatedTransaction == nil {
-		return nil
-	}
-
-	// only update the fields which might have changed with this request
-	return dbTX.DB().
-		WithContext(ctx).
-		Table("transactions").
-		Where("id = ?", tx.ID).
-		Updates(&persistedTransaction{
-			ABIReference: validatedTransaction.Function.ABIReference,
-			Function:     notEmptyOrNull(validatedTransaction.Function.Signature),
-			To:           validatedTransaction.Transaction.To,
-			Data:         validatedTransaction.Transaction.Data,
-		}).
-		Error
-
-}
-
-func (tm *txManager) UpdateTransaction(ctx context.Context, txu *pldapi.TransactionUpdate) (*uuid.UUID, error) {
-	if txu.ID == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgMissingTransactionID)
-	}
-
-	tx, err := tm.GetTransactionByID(ctx, *txu.ID)
-	if err != nil {
-		return nil, err
-	}
-	if tx == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgTxMgrTransactionNotFound, txu.ID)
-	}
-
-	if tx.Type.V() != pldapi.TransactionTypePublic {
-		return nil, i18n.NewError(ctx, msgs.MsgTxMgrUpdateInvalidType)
-	}
-
-	txID := *tx.ID
-
-	pubTXs, err := tm.publicTxMgr.QueryPublicTxForTransactions(ctx, tm.p.NOTX(), []uuid.UUID{txID}, nil)
-	if err != nil {
-		return nil, err
-	}
-	// if this is a public transaction there should be exactly one entry in the map and exactly one entry
-	// in the array but it's still best to avoid any risk of a nil pointer exception
-	if _, ok := pubTXs[txID]; !ok || len(pubTXs[txID]) == 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgPublicTransactionNotFound, txID)
-	}
-	pubTX := pubTXs[txID][0]
-
-	var validatedTransaction *components.ValidatedTransaction
-
-	err = tm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
-		validatedTransaction, err = tm.resolveUpdatedTransaction(ctx, dbTX, tx, txu)
-		return
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = tm.publicTxMgr.UpdateTransaction(ctx, *pubTX.LocalID, tx.From, txu, validatedTransaction.PublicTxData, func(dbTX persistence.DBTX) error {
-		return tm.processUpdatedTransaction(ctx, dbTX, tx, validatedTransaction)
-	})
-
-	return tx.ID, err
-}
-
 func (tm *txManager) processNewTransactions(ctx context.Context, dbTX persistence.DBTX, txs []*pldapi.TransactionInput, submitMode pldapi.SubmitMode) (txIDs []uuid.UUID, err error) {
 
 	// Public transactions need a signing address resolution and nonce allocation trackers
@@ -647,90 +580,6 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX persistence
 	}, nil
 }
 
-func (tm *txManager) resolveUpdatedTransaction(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.Transaction, txu *pldapi.TransactionUpdate) (*components.ValidatedTransaction, error) {
-	// first validate that we're not trying to update a deploy with any thing other than gas limit or public transaction options
-	if tx.Function == "" {
-		// if any of these fields are set then we disallow the whole update
-		if txu.Data != nil || txu.To != nil || txu.Function != "" || txu.ABI != nil || txu.ABIReference != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgTxMgrDeployUpdateNotAllowed)
-		}
-		// otherwise we continue but don't require any update of the transaction - updates may still happen in the public transaction
-		return nil, nil
-	}
-
-	var update bool
-	// these variables will be set from a combination of the update and the existing transaction
-	var abi abi.ABI
-	var abiReference *tktypes.Bytes32
-	var function string
-	var to *tktypes.EthAddress
-	var data tktypes.RawJSON
-	// next check whether there's an update to be made in this component
-	// this logic doesn't take into account that these fields may be set to the same value as the existing transaction
-	if txu.ABI != nil {
-		abi = txu.ABI
-		update = true
-	}
-	if txu.ABIReference != nil {
-		abiReference = txu.ABIReference
-		update = true
-	}
-	if abi == nil && abiReference == nil {
-		abiReference = tx.ABIReference
-	}
-
-	if txu.Function != "" {
-		function = txu.Function
-		update = true
-	} else {
-		function = tx.Function
-	}
-
-	if txu.To != nil {
-		to = txu.To
-		update = true
-	} else {
-		to = tx.To
-	}
-
-	if txu.Data != nil {
-		data = txu.Data
-		update = true
-	} else {
-		data = tx.Data
-	}
-
-	if !update {
-		return nil, nil
-	}
-
-	fn, err := tm.resolveFunction(ctx, dbTX, abi, abiReference, function, to)
-	if err != nil {
-		return nil, err
-	}
-
-	var publicTxData []byte
-	cv, normalizedJSON, err := tm.parseInputs(ctx, fn.Definition, pldapi.TransactionTypePublic.Enum(), data, nil)
-	if err == nil {
-		publicTxData, err = tm.getPublicTxData(ctx, fn.Definition, nil, cv)
-	}
-	if err != nil {
-		return nil, err
-	}
-	// Update to normalized JSON in what we store
-	tx.TransactionBase.Data = normalizedJSON
-	return &components.ValidatedTransaction{
-		ResolvedTransaction: components.ResolvedTransaction{
-			Transaction: &pldapi.Transaction{
-				TransactionBase: tx.TransactionBase,
-				ID:              tx.ID,
-			},
-			Function: fn,
-		},
-		PublicTxData: publicTxData,
-	}, nil
-}
-
 func (tm *txManager) getPublicTxData(ctx context.Context, fnDef *abi.Entry, bytecode []byte, cv *abi.ComponentValue) ([]byte, error) {
 	switch fnDef.Type {
 	case abi.Function:
@@ -822,20 +671,163 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX persistence.DB
 	return rowsAffected, nil
 }
 
-func (tm *txManager) updateTransactionDB(ctx context.Context, dbTX persistence.DBTX, tx *components.ValidatedTransaction) error {
+func (tm *txManager) UpdateTransaction(ctx context.Context, txu *pldapi.TransactionUpdate) (*uuid.UUID, error) {
+	if txu.ID == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgMissingTransactionID)
+	}
+
+	tx, err := tm.GetTransactionByID(ctx, *txu.ID)
+	if err != nil {
+		return nil, err
+	}
+	if tx == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrTransactionNotFound, txu.ID)
+	}
+
+	if tx.Type.V() != pldapi.TransactionTypePublic {
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrUpdateInvalidType)
+	}
+
+	txID := *tx.ID
+
+	pubTXs, err := tm.publicTxMgr.QueryPublicTxForTransactions(ctx, tm.p.NOTX(), []uuid.UUID{txID}, nil)
+	if err != nil {
+		return nil, err
+	}
+	// if this is a public transaction there should be exactly one entry in the map and exactly one entry
+	// in the array but it's still best to avoid any risk of a nil pointer exception
+	if _, ok := pubTXs[txID]; !ok || len(pubTXs[txID]) == 0 {
+		return nil, i18n.NewError(ctx, msgs.MsgPublicTransactionNotFound, txID)
+	}
+	pubTX := pubTXs[txID][0]
+
+	validatedTransaction, err := tm.resolveUpdatedTransaction(ctx, tx, txu)
+	if err != nil {
+		return nil, err
+	}
+
+	var publicTxData []byte
+	if validatedTransaction != nil {
+		publicTxData = validatedTransaction.PublicTxData
+	}
+
+	err = tm.publicTxMgr.UpdateTransaction(ctx, *pubTX.LocalID, tx.From, txu, publicTxData, func(dbTX persistence.DBTX) error {
+		return tm.processUpdatedTransaction(ctx, dbTX, tx.ID, validatedTransaction)
+	})
+
+	return tx.ID, err
+}
+
+func (tm *txManager) processUpdatedTransaction(ctx context.Context, dbTX persistence.DBTX, id *uuid.UUID, validatedTransaction *components.ValidatedTransaction) error {
+	if validatedTransaction == nil {
+		return nil
+	}
+
 	// only update the fields which might have changed with this request
-	// TODO AM: I think some of these fields can legimately move to null
-	tx.Transaction.ABIReference = tx.Function.ABIReference
-	tx.Transaction.Function = tx.Function.Signature
 	return dbTX.DB().
 		WithContext(ctx).
 		Table("transactions").
-		Where("id = ?", tx.Transaction.ID).
+		Where("id = ?", id).
 		Updates(&persistedTransaction{
-			ABIReference: tx.Transaction.ABIReference,
-			Function:     notEmptyOrNull(tx.Function.Signature),
-			To:           tx.Transaction.To,
-			Data:         tx.Transaction.Data,
+			ABIReference: validatedTransaction.Function.ABIReference,
+			Function:     notEmptyOrNull(validatedTransaction.Function.Signature),
+			To:           validatedTransaction.Transaction.To,
+			Data:         validatedTransaction.Transaction.Data,
 		}).
 		Error
+}
+
+func (tm *txManager) resolveUpdatedTransaction(ctx context.Context, tx *pldapi.Transaction, txu *pldapi.TransactionUpdate) (*components.ValidatedTransaction, error) {
+	// first validate that we're not trying to update a deploy with any thing other than gas limit or public transaction options
+	if tx.Function == "" {
+		// if any of these fields are set then we disallow the whole update
+		if txu.Data != nil || txu.To != nil || txu.Function != "" || txu.ABI != nil || txu.ABIReference != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgTxMgrDeployUpdateNotAllowed)
+		}
+		// otherwise we continue but don't require any update of the transaction - updates may still happen in the public transaction
+		return nil, nil
+	}
+
+	// next check whether there's an update to be made in this component
+	// this logic doesn't take into account that these fields may be set to the same value as the existing transaction
+	var update bool
+
+	// these variables will be set from a combination of the update and the existing transaction
+	var abi abi.ABI
+	var abiReference *tktypes.Bytes32
+	var function string
+	var to *tktypes.EthAddress
+	var data tktypes.RawJSON
+
+	if txu.ABI != nil {
+		abi = txu.ABI
+		update = true
+	}
+	if txu.ABIReference != nil {
+		abiReference = txu.ABIReference
+		update = true
+	}
+	if abi == nil && abiReference == nil {
+		abiReference = tx.ABIReference
+	}
+
+	if txu.Function != "" {
+		function = txu.Function
+		update = true
+	} else {
+		function = tx.Function
+	}
+
+	if txu.To != nil {
+		to = txu.To
+		update = true
+	} else {
+		to = tx.To
+	}
+
+	if txu.Data != nil {
+		data = txu.Data
+		update = true
+	} else {
+		data = tx.Data
+	}
+
+	if !update {
+		return nil, nil
+	}
+
+	var fn *components.ResolvedFunction
+	var err error
+
+	err = tm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		fn, err = tm.resolveFunction(ctx, dbTX, abi, abiReference, function, to)
+		return
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	var publicTxData []byte
+	cv, normalizedJSON, err := tm.parseInputs(ctx, fn.Definition, pldapi.TransactionTypePublic.Enum(), data, nil)
+	if err == nil {
+		publicTxData, err = tm.getPublicTxData(ctx, fn.Definition, nil, cv)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	tx.To = to
+	// Update to normalized JSON in what we store
+	tx.TransactionBase.Data = normalizedJSON
+	return &components.ValidatedTransaction{
+		ResolvedTransaction: components.ResolvedTransaction{
+			Transaction: &pldapi.Transaction{
+				TransactionBase: tx.TransactionBase,
+				ID:              tx.ID,
+			},
+			Function: fn,
+		},
+		PublicTxData: publicTxData,
+	}, nil
 }

@@ -679,6 +679,11 @@ func (it *inFlightTransactionStageController) NotifyStatusUpdate(ctx context.Con
 	return true, nil
 }
 
+// For each of these "trigger" functions, if the asynchronous part requires values from the managed transaction or the version,
+// they should be read and passed in to the function in the goroutine as arguments. This is to ensure that these values are only
+// ever read/set from the main orchestrator polling thread which has the benefit that we don't then have to worry about mutexes
+// and synchronisation
+
 func (it *inFlightTransactionStageController) TriggerRetrieveGasPrice(ctx context.Context, versionID int) error {
 	// the version ID is passed in so that this function doesn't cause a type import from this package when it is mocked
 	version := it.stateManager.GetVersion(ctx, versionID)
