@@ -15,12 +15,12 @@ export const newERC20Tracker = async (
   from: PaladinVerifier,
   params: ERC20TrackerConstructorParams
 ) => {
-  const address = await pente.deploy(
-    erc20Tracker.abi,
-    erc20Tracker.bytecode,
-    from,
-    params
-  );
+  const address = await pente.deploy({
+    abi: erc20Tracker.abi,
+    bytecode: erc20Tracker.bytecode,
+    from: from.lookup,
+    inputs: params,
+  });
   return address ? new BondTracker(pente, address) : undefined;
 };
 
