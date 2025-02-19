@@ -14,40 +14,59 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { IKeyEntry, IKeyMappingAndVerifier } from "../interfaces";
+import { IFilter, IKeyEntry, IKeyMappingAndVerifier } from "../interfaces";
+import { translateFilters } from "../utils";
 import { generatePostReq, returnResponse } from "./common";
 import { RpcEndpoint, RpcMethods } from "./rpcMethods";
 import i18next from "i18next";
 
-export const fetchKeys = async (parent: string, limit: number, sortBy: string, sortOrder: 'asc' | 'desc', pathFilter?: string, refEntry?: IKeyEntry): Promise<IKeyEntry[]> => {
+export const fetchKeys = async (parent: string | undefined, limit: number, sortByPathFirst: boolean, sortOrder: 'asc' | 'desc', filters: IFilter[], refEntry?: IKeyEntry): Promise<IKeyEntry[]> => {
+
+  let translatedFilters = translateFilters(filters);
+
+  if (parent !== undefined) {
+    if (translatedFilters.equal === undefined) {
+      translatedFilters.equal = [];
+    }
+    translatedFilters.equal.push({
+      field: 'parent',
+      value: parent
+    });
+  }
+
   let requestPayload: any = {
     jsonrpc: "2.0",
     id: Date.now(),
     method: RpcMethods.keymgr_queryKeys,
     params: [{
-      eq: [
-        {
-          field: 'parent',
-          value: parent
-        }
-      ],
-      sort: [`${sortBy} ${sortOrder}`],
+      ...translatedFilters,
+      sort: [`${sortByPathFirst? 'path' : 'index'} ${sortOrder}`, `${sortByPathFirst? 'index' : 'path'} ${sortOrder}`],
       limit
     }]
   };
 
   if (refEntry !== undefined) {
-    requestPayload.params[0][sortOrder === 'asc' ? 'greaterThan' : 'lessThan'] = [{
-      field: sortBy,
-      value: refEntry[sortBy as 'path' | 'index']
-    }];
-  }
-
-  if (pathFilter !== undefined) {
-    requestPayload.params[0].eq.push({
-      field: 'path',
-      value: parent !== '' ? `${parent}.${pathFilter}` : pathFilter
-    });
+    const comparison = sortOrder === 'asc' ? 'greaterThan' : 'lessThan';
+    const firstSortField = sortByPathFirst? 'path' : 'index';
+    const secondSortField = sortByPathFirst? 'index' : 'path';
+    requestPayload.params[0].or = [
+      {
+        [comparison]: [{
+          field: firstSortField,
+          value: refEntry[firstSortField]
+        }]
+      },
+      {
+        equal: [{
+          field: firstSortField,
+          value: refEntry[firstSortField]
+        }],
+        [comparison]: [{
+          field: secondSortField,
+          value: refEntry[secondSortField]
+        }],
+      }
+    ];
   }
 
   return <Promise<IKeyEntry[]>>(

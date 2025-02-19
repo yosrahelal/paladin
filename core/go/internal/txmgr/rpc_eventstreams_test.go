@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
@@ -112,6 +113,9 @@ func TestRPCEventListenerE2E(t *testing.T) {
 					receipts <- r
 				}
 
+				for subID.Load() == nil { // wait for subID to be set
+					time.Sleep(10 * time.Millisecond)
+				}
 				_, req := rpcTestRequest("ptx_ack", *subID.Load())
 				err = wsc.Send(ctx, req)
 				require.NoError(t, err)
@@ -211,6 +215,9 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 				switch rpcID {
 				case subReqID: // Subscribe reply
 					subIDChan <- rpcPayload.Result.StringValue()
+					for subID.Load() == nil { // wait for subID to be set
+						time.Sleep(10 * time.Millisecond)
+					}
 				case unSubReqID.Load(): // Unsubscribe reply
 					unSubChan <- true
 				}

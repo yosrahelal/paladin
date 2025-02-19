@@ -29,6 +29,7 @@ export const RpcMethods = {
   ptx_decodeCall: "ptx_decodeCall",
   ptx_decodeEvent: "ptx_decodeEvent",
   ptx_storeABI: "ptx_storeABI",
+  ptx_resolveVerifier: "ptx_resolveVerifier",
   reg_QueryEntriesWithProps: "reg_queryEntriesWithProps",
   reg_Registries: "reg_registries",
   transport_nodeName: "transport_nodeName",
