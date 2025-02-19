@@ -9,9 +9,9 @@ This tutorial walks you through deploying and interacting with a simple `HelloWo
 
 ## Running the Example
 
-The example code can be found in the [Paladin example repository](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/example/public-storage).
+The example code can be found in the [Paladin example repository](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/example/helloworld).
 
-The storage solidity contract can be found [here](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/solidity/contracts/tutorial/Storage.sol).
+The HelloWorld solidity contract can be found [here](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/solidity/contracts/tutorial/HelloWorld.sol).
 
 Follow the [Getting Started](../../getting-started/installation/) instructions to set up a Paladin environment. Then, follow the example [README](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/example/helloworld/README.md) to run the code.
 

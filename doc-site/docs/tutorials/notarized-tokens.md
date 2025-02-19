@@ -41,12 +41,12 @@ First, create a **Noto Factory** instance and deploy a new token. **Node1** will
 logger.log("Step 1: Deploying a Noto cash token...");
 const notoFactory = new NotoFactory(paladinClientNode1, "noto");
 const cashToken = await notoFactory.newNoto(verifierNode1, {
-notary: verifierNode1,// The notary overseeing ALL token transactions
-notaryMode: "basic",// The notary mode
+  notary: verifierNode1,
+  notaryMode: "basic",
 });
 if (!cashToken) {
-logger.error("Failed to deploy the Noto cash token!");
-return false;
+  logger.error("Failed to deploy the Noto cash token!");
+  return false;
 }
 logger.log("Noto cash token deployed successfully!");
 ```
@@ -82,7 +82,7 @@ logger.log("Successfully minted 2000 units of cash to Node1!");
 
 ### What Happens Here?
 
-1. **Node1 submits a minting request** to the notary.
+1. **Node1 submits a minting request** to the notary (in this case, node1 is the notary so it will be receiving and validating it's own request).
 2. **The notary reviews and approves** the request.
 3. **Tokens are minted and assigned** to the recipient.
 4. **The `data` field is recorded** in the transaction receipt for auditability.
