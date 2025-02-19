@@ -243,7 +243,7 @@ async function main(): Promise<boolean> {
     logger.error("Prepared bond transfer had no 'to' address");
     return false;
   }
-  if (!bondTransfer2.transaction.function.startsWith("transition(")) {
+  if (!bondTransfer2.transaction.function?.startsWith("transition(")) {
     logger.error(
       `Prepared bond transfer did not seem to be a Pente transition: ${bondTransfer2.transaction}`
     );

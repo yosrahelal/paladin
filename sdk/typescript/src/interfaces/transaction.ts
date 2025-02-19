@@ -16,7 +16,7 @@ export enum TransactionType {
 export interface ITransactionBase {
   type: TransactionType;
   domain?: string;
-  function: string;
+  function?: string;
   from: string;
   to?: string;
   data: {
