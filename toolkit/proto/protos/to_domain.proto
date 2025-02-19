@@ -241,7 +241,9 @@ message InitPrivacyGroupResponse {
 }
 
 message WrapPrivacyGroupTransactionRequest {
-  PrivacyGroupTransaction transaction = 1; // the transaction to wrap
+  EndorsableState genesis_state = 1; // the full genesis state of the transaction
+  string genesis_abi_json = 2; // the full ABI of the genesis state
+  PrivacyGroupTransaction transaction = 3; // the transaction to wrap
 }
 
 message WrapPrivacyGroupTransactionResponse {

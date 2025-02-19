@@ -285,6 +285,8 @@ var (
 	MsgDomainInvalidCoordinatorSelection      = pde("PD011662", "Invalid coordinator selection of '%s' configured. valid options are: COORDINATOR_SENDER, COORDINATOR_STATIC, COORDINATOR_ENDORSER")
 	MsgDomainWriteActionNotPossibleInContext  = pde("PD011663", "Requested write action is not possible in this domain context")
 	MsgDomainInvalidPGroupGenesisABI          = pde("PD011664", "Domain generated an invalid privacy group genesis ABI parameter schema")
+	MsgDomainInvalidPGroupTxTypeNotPrivate    = pde("PD011665", "Resulting wrapped function call for privacy group must be a private transaction (type=%s)")
+	MsgDomainInvalidPGroupTxCannotRedirect    = pde("PD011666", "Resulting wrapped function call must target the same smart contract (contract=%s,addr=%s)")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = pde("PD011700", "Unknown run mode '%s'")
