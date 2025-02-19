@@ -600,7 +600,7 @@ func (ptm *pubTxManager) ResumeTransaction(ctx context.Context, from tktypes.Eth
 	return nil
 }
 
-func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, pubTXID uint64, from string, txu *pldapi.TransactionUpdate, publicTxData []byte, publicDBUpdate func(dbTX persistence.DBTX) error) error {
+func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, pubTXID uint64, from *tktypes.EthAddress, txu *pldapi.TransactionUpdate, publicTxData []byte, publicDBUpdate func(dbTX persistence.DBTX) error) error {
 	newPtx := &DBPublicTxn{
 		To:    txu.To,
 		Value: txu.Value,
@@ -618,7 +618,7 @@ func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, pubTXID uint64, 
 			if err := publicDBUpdate(dbTX); err != nil {
 				return err
 			}
-			return ptm.writeUpdatedTransaction(ctx, dbTX, pubTXID, *tktypes.MustEthAddress(from), newPtx)
+			return ptm.writeUpdatedTransaction(ctx, dbTX, pubTXID, *from, newPtx)
 		})
 	}
 

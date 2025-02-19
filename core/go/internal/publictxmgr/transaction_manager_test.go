@@ -204,9 +204,6 @@ func TestInit(t *testing.T) {
 	defer done()
 }
 
-// TODO AM: do a version of this for update- will need to mock the sendRawTransaction call so that the transaction isn't
-// successfully submitted to give us time to make the update
-// can we check that there is more than one submission?- or are they only for success?
 func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	ctx, ptm, m, done := newTestPublicTxManager(t, true, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		conf.Manager.Interval = confutil.P("50ms")
@@ -672,7 +669,7 @@ func TestUpdateTransactionRealDB(t *testing.T) {
 	}
 
 	// update the transaction
-	err = ptm.UpdateTransaction(ctx, *pubTx.LocalID, resolvedKey.String(), &pldapi.TransactionUpdate{
+	err = ptm.UpdateTransaction(ctx, *pubTx.LocalID, resolvedKey, &pldapi.TransactionUpdate{
 		PublicTxOptions: pldapi.PublicTxOptions{
 			Gas: confutil.P(tktypes.HexUint64(2223451)),
 		},

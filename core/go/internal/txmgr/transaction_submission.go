@@ -689,29 +689,52 @@ func (tm *txManager) UpdateTransaction(ctx context.Context, txu *pldapi.Transact
 	}
 
 	txID := *tx.ID
-
-	pubTXs, err := tm.publicTxMgr.QueryPublicTxForTransactions(ctx, tm.p.NOTX(), []uuid.UUID{txID}, nil)
-	if err != nil {
-		return nil, err
-	}
-	// if this is a public transaction there should be exactly one entry in the map and exactly one entry
-	// in the array but it's still best to avoid any risk of a nil pointer exception
-	if _, ok := pubTXs[txID]; !ok || len(pubTXs[txID]) == 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgPublicTransactionNotFound, txID)
-	}
-	pubTX := pubTXs[txID][0]
-
-	validatedTransaction, err := tm.resolveUpdatedTransaction(ctx, tx, txu)
-	if err != nil {
-		return nil, err
-	}
-
+	var pubTXID uint64
 	var publicTxData []byte
-	if validatedTransaction != nil {
-		publicTxData = validatedTransaction.PublicTxData
+	var validatedTransaction *components.ValidatedTransaction
+	var from *tktypes.EthAddress
+
+	err = tm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		pubTXs, err := tm.publicTxMgr.QueryPublicTxForTransactions(ctx, dbTX, []uuid.UUID{txID}, nil)
+		if err != nil {
+			return err
+		}
+		// if this is a public transaction there should be exactly one entry in the map and exactly one entry
+		// in the array but it's still best to avoid any risk of a nil pointer exception
+		if _, ok := pubTXs[txID]; !ok || len(pubTXs[txID]) == 0 {
+			return i18n.NewError(ctx, msgs.MsgPublicTransactionNotFound, txID)
+		}
+		pubTXID = *pubTXs[txID][0].LocalID
+
+		// TODO AM: there will probably be more validation that needs to be done here
+		validatedTransaction, err = tm.resolveUpdatedTransaction(ctx, dbTX, tx, txu)
+		if err != nil {
+			return err
+		}
+
+		if validatedTransaction != nil {
+			publicTxData = validatedTransaction.PublicTxData
+		}
+
+		from, err = tktypes.ParseEthAddress(tx.From)
+		if err != nil {
+			identifier := strings.Split(tx.From, "@")[0]
+			kr := tm.keyManager.KeyResolverForDBTX(dbTX)
+			var resolvedKey *pldapi.KeyMappingAndVerifier
+			resolvedKey, err = kr.ResolveKey(ctx, identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			if err == nil {
+				// this failure should be impossible if key manager is working correctly
+				from, err = tktypes.ParseEthAddress(resolvedKey.Verifier.Verifier)
+			}
+		}
+		return err
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
-	err = tm.publicTxMgr.UpdateTransaction(ctx, *pubTX.LocalID, tx.From, txu, publicTxData, func(dbTX persistence.DBTX) error {
+	err = tm.publicTxMgr.UpdateTransaction(ctx, pubTXID, from, txu, publicTxData, func(dbTX persistence.DBTX) error {
 		return tm.processUpdatedTransaction(ctx, dbTX, tx.ID, validatedTransaction)
 	})
 
@@ -737,7 +760,7 @@ func (tm *txManager) processUpdatedTransaction(ctx context.Context, dbTX persist
 		Error
 }
 
-func (tm *txManager) resolveUpdatedTransaction(ctx context.Context, tx *pldapi.Transaction, txu *pldapi.TransactionUpdate) (*components.ValidatedTransaction, error) {
+func (tm *txManager) resolveUpdatedTransaction(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.Transaction, txu *pldapi.TransactionUpdate) (*components.ValidatedTransaction, error) {
 	// first validate that we're not trying to update a deploy with any thing other than gas limit or public transaction options
 	if tx.Function == "" {
 		// if any of these fields are set then we disallow the whole update
@@ -796,13 +819,7 @@ func (tm *txManager) resolveUpdatedTransaction(ctx context.Context, tx *pldapi.T
 		return nil, nil
 	}
 
-	var fn *components.ResolvedFunction
-	var err error
-
-	err = tm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
-		fn, err = tm.resolveFunction(ctx, dbTX, abi, abiReference, function, to)
-		return
-	})
+	fn, err := tm.resolveFunction(ctx, dbTX, abi, abiReference, function, to)
 
 	if err != nil {
 		return nil, err

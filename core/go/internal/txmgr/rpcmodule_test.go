@@ -107,7 +107,7 @@ func mockResolveKeyOKThenFail(t *testing.T, mc *mockComponents, identifier strin
 
 func mockResolveKey(t *testing.T, mc *mockComponents, identifier string, senderAddr *tktypes.EthAddress) {
 	kr := mockKeyResolver(t, mc)
-	kr.On("ResolveKey", mock.Anything, identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+	kr.On("ResolveKey", mock.Anything, mock.Anything, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 		Return(&pldapi.KeyMappingAndVerifier{Verifier: &pldapi.KeyVerifier{
 			Verifier: senderAddr.String(),
 		}}, nil)
@@ -180,7 +180,6 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.UUID{}, tx1ID)
 
-	// TODO AM: add the entry to here
 	// Mock up the existence of the public TXs
 	publicTxns = map[uuid.UUID][]*pldapi.PublicTx{
 		tx1ID: {

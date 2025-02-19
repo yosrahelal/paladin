@@ -117,13 +117,12 @@ func (oc *orchestrator) dispatchAction(ctx context.Context, nonce uint64, action
 	}
 }
 
-func (pte *pubTxManager) dispatchUpdate(ctx context.Context, pubTXID uint64, from string, newPtx *DBPublicTxn, dbUpdate func() error) error {
+func (pte *pubTxManager) dispatchUpdate(ctx context.Context, pubTXID uint64, from *tktypes.EthAddress, newPtx *DBPublicTxn, dbUpdate func() error) error {
 	response := make(chan error, 1)
 	startTime := time.Now()
 	go func() {
 		pte.inFlightOrchestratorMux.Lock()
 		defer pte.inFlightOrchestratorMux.Unlock()
-		from := tktypes.MustEthAddress(from)
 		inFlightOrchestrator, orchestratorInFlight := pte.inFlightOrchestrators[*from]
 		if !orchestratorInFlight {
 			// no in-flight orchestrator for the signing address, it's OK to update the DB directly
