@@ -16,7 +16,7 @@
 
 import { Alert, Box, Fade, LinearProgress, ToggleButton, ToggleButtonGroup, Typography, useTheme } from "@mui/material";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { PaladinTransaction } from "../components/PaladinTransaction";
 import { ApplicationContext } from "../contexts/ApplicationContext";
 import { fetchSubmissions } from "../queries/transactions";
@@ -53,12 +53,12 @@ export const Submissions: React.FC = () => {
     getNextPageParam: (lastPage) => { return lastPage.length > 0 ? lastPage[lastPage.length - 1] : undefined },
   });
 
+  useEffect(() => {
+    window.localStorage.setItem(constants.SUBMISSIONS_FILTERS_KEY, JSON.stringify(filters));
+  }, [filters]);
+
   if (error) {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
-  }
-
-  if (transactions?.pages === undefined) {
-    return <></>;
   }
 
   return (
@@ -97,7 +97,8 @@ export const Submissions: React.FC = () => {
               {
                 label: t('to'),
                 name: 'to',
-                type: 'string'
+                type: 'string',
+                isHexValue: true
               },
               {
                 label: t('type'),
@@ -122,24 +123,29 @@ export const Submissions: React.FC = () => {
             ...getAltModeScrollBarStyle(theme.palette.mode)
           }}
         >
-          <InfiniteScroll
-            scrollableTarget="scrollableDivSubmissions"
-            dataLength={transactions.pages.length}
-            next={() => fetchNextPage()}
-            hasMore={hasNextPage}
-            loader={<LinearProgress />}
-          >
-            {transactions.pages.map(transactionsArray =>
-              transactionsArray.map(transaction => (
-                <PaladinTransaction
-                  key={transaction.id}
-                  paladinTransaction={transaction}
-                />
-              ))
-            )}
-          </InfiniteScroll>
-          {transactions.pages.length === 1 && transactions.pages[0].length === 0 &&
-            <Typography color="textSecondary" align="center" variant="h6" sx={{ marginTop: '40px' }}>{t('noPendingTransactions')}</Typography>}
+          {transactions !== undefined &&
+            <>
+              <InfiniteScroll
+                scrollableTarget="scrollableDivSubmissions"
+                dataLength={transactions.pages.length}
+                next={() => fetchNextPage()}
+                hasMore={hasNextPage}
+                loader={<LinearProgress />}
+              >
+                {transactions.pages.map(transactionsArray =>
+                  transactionsArray.map(transaction => (
+                    <PaladinTransaction
+                      key={transaction.id}
+                      paladinTransaction={transaction}
+                    />
+                  ))
+                )}
+              </InfiniteScroll>
+              {transactions.pages.length === 1 && transactions.pages[0].length === 0 &&
+                <Typography color="textSecondary" align="center" variant="h6" sx={{ marginTop: '40px' }}>{t('noPendingTransactions')}</Typography>}
+
+            </>
+          }
         </Box>
       </Box>
     </Fade>

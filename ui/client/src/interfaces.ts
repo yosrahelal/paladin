@@ -179,6 +179,7 @@ export interface IFilterField {
   name: string
   type: 'string' | 'number' | 'boolean'
   isUUID?: boolean
+  isHexValue?: boolean
   emun?: string[]
 }
 
