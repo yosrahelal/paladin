@@ -40,6 +40,7 @@ var transactionFilters = filters.FieldMap{
 	"domain":         filters.StringField(`transactions.domain`),
 	"from":           filters.StringField(`"from"`),
 	"to":             filters.HexBytesField(`"to"`),
+	"type":           filters.StringField(`"type"`),
 }
 
 func (tm *txManager) mapPersistedTXBase(pt *persistedTransaction) *pldapi.Transaction {
