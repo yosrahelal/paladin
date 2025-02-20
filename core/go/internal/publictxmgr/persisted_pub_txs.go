@@ -54,6 +54,7 @@ func (DBPublicTxnBinding) TableName() string {
 	return "public_txn_bindings"
 }
 
+// TODO AM: this is where the submissions array comes from
 type DBPubTxnSubmission struct {
 	from            string            `gorm:"-"` // just used to ensure we dispatch to same writer as the associated pubic TX
 	PublicTxnID     uint64            `gorm:"column:pub_txn_id"`

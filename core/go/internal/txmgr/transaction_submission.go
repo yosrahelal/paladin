@@ -393,6 +393,55 @@ func (tm *txManager) PrepareTransactions(ctx context.Context, dbTX persistence.D
 	return tm.processNewTransactions(ctx, dbTX, txs, pldapi.SubmitModeExternal)
 }
 
+// TODO AM
+func (tm *txManager) UpdateTransaction(ctx context.Context, txu *pldapi.TransactionUpdate) (*uuid.UUID, error) {
+	// check that there is an ID
+	if txu.ID == nil {
+		// return an error if ID is not set
+	}
+
+	tx, err := tm.GetTransactionByID(ctx, *txu.ID)
+	// TODO AM: is this the right response if the transaction doesn't exist
+	// probably want something like
+	// {
+	// 	"jsonrpc": "2.0",
+	// 	"id": "1",
+	// 	"error": {
+	// 		"code": -32603,
+	// 		"message": "PD012238: Receipt listener 'publiclistener1' does not exist"
+	// 	}
+	// }
+	// instead
+	if err != nil || tx == nil {
+		return nil, err
+	}
+
+	if tx.Type.V() != pldapi.TransactionTypePublic {
+		// return an error if the type isn't public
+	}
+
+	txID := *tx.ID
+
+	pubTXs, err := tm.publicTxMgr.QueryPublicTxForTransactions(ctx, tm.p.NOTX(), []uuid.UUID{txID}, nil)
+	if err != nil {
+		return nil, err
+	}
+	// if this is a public transaction there should be exactly one entry in the map and exactly one entry
+	// in the array but it's still best to avoid any risk of a nil pointer exception
+	if _, ok := pubTXs[txID]; !ok || len(pubTXs[txID]) == 0 {
+		// return an error
+	}
+	pubTX := pubTXs[txID][0]
+
+	// TODO AM: validation at this point that the tranaction isn't complete?
+	// maybe further down the stack as we'd want to check later anyway
+	err = tm.publicTxMgr.UpdateTransaction(ctx, *pubTX.LocalID, tx.From, txu)
+	if err != nil {
+		return nil, err
+	}
+	return tx.ID, nil
+}
+
 func (tm *txManager) processNewTransactions(ctx context.Context, dbTX persistence.DBTX, txs []*pldapi.TransactionInput, submitMode pldapi.SubmitMode) (txIDs []uuid.UUID, err error) {
 
 	// Public transactions need a signing address resolution and nonce allocation trackers

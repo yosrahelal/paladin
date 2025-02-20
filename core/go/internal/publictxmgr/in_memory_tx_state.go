@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+// TODO AM: check how all of these fields interact with the different versions
 type managedTx struct {
 	// persisted parts of the transaction, and the list of flushed DB submissions
 	ptx *DBPublicTxn
@@ -34,13 +35,11 @@ type managedTx struct {
 	unflushedSubmission *DBPubTxnSubmission
 
 	// In-memory state that we update as we process the transaction in an active orchestrator
-	// TODO: Validate that all of these fields are actively used
 	InFlightStatus  InFlightStatus             // moves to pending/confirmed to cause the inflight to exit
 	GasPricing      *pldapi.PublicTxGasPricing // the most recently used gas pricing information
 	TransactionHash *tktypes.Bytes32           // the most recently submitted transaction hash (not guaranteed to be the one mined)
 	FirstSubmit     *tktypes.Timestamp         // the time this runtime instance first did a submit JSON/RPC call (for success or failure)
 	LastSubmit      *tktypes.Timestamp         // the last time runtime instance first did a submit JSON/RPC call (for success or failure)
-	ErrorMessage    *string                    // ???
 }
 
 type inMemoryTxState struct {
@@ -64,11 +63,26 @@ func NewInMemoryTxStateManager(ctx context.Context, ptx *DBPublicTxn) InMemoryTx
 	return imtxs
 }
 
+func (imtxs *inMemoryTxState) UpdateTransaction(newPtx *DBPublicTxn) {
+	imtxs.mtx.ptx.To = newPtx.To
+	imtxs.mtx.ptx.Data = newPtx.Data
+	imtxs.mtx.ptx.Gas = newPtx.Gas
+	imtxs.mtx.ptx.FixedGasPricing = newPtx.FixedGasPricing
+	imtxs.mtx.ptx.Value = newPtx.Value
+}
+
+func (imtxs *inMemoryTxState) IsTransactionUpdate(newPtx *DBPublicTxn) bool {
+	// TODO AM: test thoroughly that all these comparisons work once the data is parsed in
+	// test each value for not set, same and different
+	return newPtx.To != nil && !newPtx.To.Equals(imtxs.mtx.ptx.To) &&
+		// imtxs.mtx.ptx.Data == newPtx.Data && // TODO AM: needs to be converted to a comparable type
+		newPtx.Gas != 0 && newPtx.Gas != imtxs.mtx.ptx.Gas &&
+		// newPtx.FixedGasPricing != nil && newPtx.FixedGasPricing != imtxs.mtx.ptx.FixedGasPricing // TODO AM: needs to be converted to a comparable type
+		newPtx.Value != nil && newPtx.Value != imtxs.mtx.ptx.Value
+}
+
 func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdates *BaseTXUpdates) {
 	mtx := imtxs.mtx
-	if txUpdates.ErrorMessage != nil {
-		mtx.ErrorMessage = txUpdates.ErrorMessage
-	}
 
 	if txUpdates.FirstSubmit != nil {
 		mtx.FirstSubmit = txUpdates.FirstSubmit
@@ -131,6 +145,10 @@ func (imtxs *inMemoryTxState) GetTransactionHash() *tktypes.Bytes32 {
 	return imtxs.mtx.TransactionHash
 }
 
+func (imtxs *inMemoryTxState) ResetTransactionHash() {
+	imtxs.mtx.TransactionHash = nil
+}
+
 func (imtxs *inMemoryTxState) GetNonce() uint64 {
 	return *imtxs.mtx.ptx.Nonce
 }
@@ -140,6 +158,7 @@ func (imtxs *inMemoryTxState) GetFrom() tktypes.EthAddress {
 }
 
 func (imtxs *inMemoryTxState) GetTo() *tktypes.EthAddress {
+
 	return imtxs.mtx.ptx.To
 }
 
@@ -190,6 +209,10 @@ func (imtxs *inMemoryTxState) GetInFlightStatus() InFlightStatus {
 
 func (imtxs *inMemoryTxState) IsReadyToExit() bool {
 	return imtxs.mtx.InFlightStatus != InFlightStatusPending
+}
+
+func (imtxs *inMemoryTxState) IsComplete() bool {
+	return imtxs.mtx.InFlightStatus == InFlightStatusConfirmReceived
 }
 
 func NewRunningStageContext(ctx context.Context, stage InFlightTxStage, substatus BaseTxSubStatus, imtxs InMemoryTxStateManager) *RunningStageContext {
