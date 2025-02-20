@@ -127,6 +127,7 @@ kind-delete: ## Delete the Kind cluster.
 .PHONY: build
 build: manifests generate fmt vet test ## Build manager binary.
 	go build -o bin/manager cmd/main.go
+	chmod -R u+w $(LOCALBIN)
 
 .PHONY: run 
 run: manifests generate fmt vet ## Run controller locally.
