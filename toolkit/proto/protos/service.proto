@@ -24,6 +24,8 @@ import "from_transport.proto";
 import "to_registry.proto";
 import "from_registry.proto";
 
+option java_multiple_files = true;
+
 message Header {
   enum MessageType {
     REGISTER = 0;

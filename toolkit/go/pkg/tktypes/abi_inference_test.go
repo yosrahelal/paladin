@@ -126,7 +126,7 @@ func TestABIInference(t *testing.T) {
 func TestABIInferenceBadJSON(t *testing.T) {
 
 	_, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{! wrong`))
-	assert.Regexp(t, "PD020018", err)
+	assert.Regexp(t, "PD020020", err)
 
 }
 
@@ -149,27 +149,27 @@ func TestABIInferenceEmpty(t *testing.T) {
 func TestABIInferenceNonInt(t *testing.T) {
 
 	_, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{"nonInt": 1.2}`))
-	assert.Regexp(t, "PD020020", err)
+	assert.Regexp(t, "PD020022", err)
 
 }
 
 func TestABIInferenceEmptyArray(t *testing.T) {
 
 	_, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{"emptyArray": []}`))
-	assert.Regexp(t, "PD020021", err)
+	assert.Regexp(t, "PD020023", err)
 
 }
 
 func TestABIInferenceNestedArrayIssue(t *testing.T) {
 
 	_, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{"nestedArrayIssue": [[1.2]]}`))
-	assert.Regexp(t, `PD020020.*nestedArrayIssue\[\]\[\]`, err)
+	assert.Regexp(t, `PD020022.*nestedArrayIssue\[\]\[\]`, err)
 
 }
 
 func TestABIInferenceNestedObjectNullError(t *testing.T) {
 
 	_, err := ABIInferenceFromJSON(context.Background(), RawJSON(`{"nested": { "isNull": null }}`))
-	assert.Regexp(t, `PD020019.*isNull`, err)
+	assert.Regexp(t, `PD020021.*isNull`, err)
 
 }

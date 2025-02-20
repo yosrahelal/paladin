@@ -19,6 +19,9 @@ package io.kaleido.paladin.toolkit;
 
 import "on_chain_events.proto";
 
+// This is necessary to avoid ToDomain.java being >2.5MB in size
+option java_multiple_files = true;
+
 // **CONFIGURE** happens once when the domain is loaded into Paladin
 message ConfigureDomainRequest {
   string name = 1; // The name
