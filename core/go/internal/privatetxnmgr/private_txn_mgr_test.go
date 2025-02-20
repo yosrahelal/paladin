@@ -2081,10 +2081,10 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	// at this point we should get a flush of the states
 	dcFlushed := mockDCFlushWithWaiter(aliceEngineMocks)
 
-	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID1.String(), 120*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID1.String(), 30*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	status = pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID2.String(), 120*time.Second)
+	status = pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID2.String(), 30*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 	<-dcFlushed
