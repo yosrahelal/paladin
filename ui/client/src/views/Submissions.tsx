@@ -22,21 +22,35 @@ import { ApplicationContext } from "../contexts/ApplicationContext";
 import { fetchSubmissions } from "../queries/transactions";
 import { getAltModeScrollBarStyle } from "../themes/default";
 import InfiniteScroll from "react-infinite-scroll-component";
-import { IPaladinTransaction } from "../interfaces";
+import { IFilter, IPaladinTransaction } from "../interfaces";
 import { useTranslation } from "react-i18next";
+import { Filters } from "../components/Filters";
+import { constants } from "../components/config";
 
 export const Submissions: React.FC = () => {
+
+  const getFiltersFromStorage = () => {
+    const value = window.localStorage.getItem(constants.SUBMISSIONS_FILTERS_KEY);
+    if (value !== null) {
+      try {
+        return JSON.parse(value);
+      } catch (_err) { }
+    }
+    return [];
+  };
+
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
+  const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
   const [tab, setTab] = useState<'all' | 'pending'>('all');
 
   const theme = useTheme();
   const { t } = useTranslation();
 
   const { data: transactions, fetchNextPage, hasNextPage, error } = useInfiniteQuery({
-    queryKey: ["submissions", tab, lastBlockWithTransactions],
-    queryFn: ({ pageParam }) => fetchSubmissions(tab, pageParam),
+    queryKey: ["submissions", tab, lastBlockWithTransactions, filters],
+    queryFn: ({ pageParam }) => fetchSubmissions(tab, filters, pageParam),
     initialPageParam: undefined as IPaladinTransaction | undefined,
-    getNextPageParam: (lastPage) => { return lastPage.length > 0? lastPage[lastPage.length - 1] : undefined },
+    getNextPageParam: (lastPage) => { return lastPage.length > 0 ? lastPage[lastPage.length - 1] : undefined },
   });
 
   if (error) {
@@ -62,6 +76,40 @@ export const Submissions: React.FC = () => {
             <ToggleButton color="primary" value="all" sx={{ width: '130px', height: '45px' }}>{t('all')}</ToggleButton>
             <ToggleButton color="primary" value="pending" sx={{ width: '130px', height: '45px' }}>{t('pending')}</ToggleButton>
           </ToggleButtonGroup>
+        </Box>
+        <Box sx={{ marginBottom: '20px' }}>
+          <Filters
+            filterFields={[
+              {
+                label: t('id'),
+                name: 'id',
+                type: 'string',
+                isUUID: true
+              },
+              {
+                label: t('from'),
+                name: 'from',
+                type: 'string'
+              },
+              {
+                label: t('to'),
+                name: 'to',
+                type: 'string'
+              },
+              {
+                label: t('type'),
+                name: 'type',
+                type: 'string'
+              },
+              {
+                label: t('domain'),
+                name: 'domain',
+                type: 'string'
+              }
+            ]}
+            filters={filters}
+            setFilters={setFilters}
+          />
         </Box>
         <Box
           id="scrollableDivSubmissions"

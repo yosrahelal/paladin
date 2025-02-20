@@ -30,6 +30,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IFilter, IFilterField } from '../interfaces';
+import { isValidUUID } from '../utils';
 
 type Props = {
   filterFields: IFilterField[]
@@ -101,7 +102,8 @@ export const AddFilterDialog: React.FC<Props> = ({
       if (selectedFilterField.type === 'number' && isNaN(Number(value))) {
         setValue('');
       }
-      if (selectedOperator !== undefined && ['greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual'].includes(selectedOperator)) {
+      if (selectedFilterField.isUUID || (selectedOperator !== undefined
+        && ['greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual'].includes(selectedOperator))) {
         setIsCaseSensitive(true);
       }
       setValues(availableValues);
@@ -121,9 +123,12 @@ export const AddFilterDialog: React.FC<Props> = ({
     }
   };
 
+  
+
   const canSubmit = selectedFilterField !== undefined
     && selectedOperator !== undefined
-    && (selectedFilterField.type === 'boolean' || value.length > 0);
+    && (selectedFilterField.type === 'boolean' || value.length > 0)
+    && (selectedFilterField.isUUID === false || isValidUUID(value));
 
   return (
     <Dialog
@@ -176,6 +181,7 @@ export const AddFilterDialog: React.FC<Props> = ({
                 <TextField
                   type={selectedFilterField?.type === 'number' ? 'number' : 'text'}
                   label={t('value')}
+                  helperText={selectedFilterField?.isUUID && t('mustBeAValidUUID')}
                   autoComplete="off"
                   fullWidth
                   disabled={selectedFilterField === undefined}
@@ -187,7 +193,7 @@ export const AddFilterDialog: React.FC<Props> = ({
                 </TextField>
                 <Box sx={{ textAlign: 'center' }}>
                   <FormControlLabel
-                    disabled={selectedFilterField === undefined || selectedFilterField.type !== 'string'
+                    disabled={selectedFilterField === undefined || selectedFilterField.isUUID || selectedFilterField.type !== 'string'
                       || (selectedOperator !== undefined &&
                         ['greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual'].includes(selectedOperator))
                     }
@@ -197,7 +203,6 @@ export const AddFilterDialog: React.FC<Props> = ({
               </Grid2>
             </Grid2>
           </Box>
-
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'center', paddingBottom: '20px' }}>
           <Button
