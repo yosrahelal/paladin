@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -147,6 +147,23 @@ type TransactionStates struct {
 	Unavailable *UnavailableStates `docstruct:"TransactionStates" json:"unavailable,omitempty"` // nil if we have the data for all states
 }
 
+func (ts *TransactionStates) FirstUnavailable() tktypes.HexBytes {
+	switch {
+	case ts.Unavailable == nil:
+		return nil
+	case len(ts.Unavailable.Confirmed) > 0:
+		return ts.Unavailable.Confirmed[0]
+	case len(ts.Unavailable.Spent) > 0:
+		return ts.Unavailable.Spent[0]
+	case len(ts.Unavailable.Read) > 0:
+		return ts.Unavailable.Read[0]
+	case len(ts.Unavailable.Info) > 0:
+		return ts.Unavailable.Info[0]
+	default:
+		return nil
+	}
+}
+
 type UnavailableStates struct {
 	Confirmed []tktypes.HexBytes `docstruct:"UnavailableStates" json:"confirmed"`
 	Read      []tktypes.HexBytes `docstruct:"UnavailableStates" json:"read"`
@@ -233,7 +250,7 @@ func (tt StateLockType) Options() []string {
 // (and maybe later spending) a state that is yet to be confirmed.
 type StateLock struct {
 	DomainName  string                      `json:"-"`
-	State       tktypes.HexBytes            `json:"-"`
+	StateID     tktypes.HexBytes            `json:"-"`
 	Transaction uuid.UUID                   `docstruct:"StateLock" json:"transaction"`
 	Type        tktypes.Enum[StateLockType] `docstruct:"StateLock" json:"type"`
 }

@@ -26,8 +26,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -78,6 +78,9 @@ var allTypes = []interface{}{
 	pldapi.IndexedEvent{},
 	pldapi.TransactionReceipt{},
 	pldapi.TransactionReceiptFull{},
+	pldapi.TransactionReceiptListener{},
+	pldapi.TransactionReceiptFilters{},
+	pldapi.TransactionReceiptListenerOptions{},
 	pldapi.TransactionStates{},
 	pldapi.TransactionInput{},
 	pldapi.TransactionFull{},
@@ -113,6 +116,7 @@ var allTypes = []interface{}{
 	pldapi.IndexedEvent{},
 	pldapi.EventWithData{},
 	pldapi.ABIDecodedData{},
+	pldapi.PeerInfo{},
 	tktypes.JSONFormatOptions(""),
 	pldapi.StateStatusQualifier(""),
 	query.QueryJSON{
@@ -125,7 +129,7 @@ var allTypes = []interface{}{
 						Op: query.Op{
 							Field: "field1",
 						},
-						Value: tktypes.RawJSON(`{"value": 12345}`),
+						Value: tktypes.RawJSON(`"abcde"`),
 					},
 					{
 						Op: query.Op{
@@ -133,7 +137,7 @@ var allTypes = []interface{}{
 							Not:             true,
 							CaseInsensitive: true,
 						},
-						Value: tktypes.RawJSON(`{"value": 12345}`),
+						Value: tktypes.RawJSON(`"abcde"`),
 					},
 				},
 				NEq: []*query.OpSingleVal{
@@ -141,7 +145,7 @@ var allTypes = []interface{}{
 						Op: query.Op{
 							Field: "field2",
 						},
-						Value: tktypes.RawJSON(`{"value": 12345}`),
+						Value: tktypes.RawJSON(`"abcde"`),
 					},
 				},
 				Like: []*query.OpSingleVal{
@@ -149,7 +153,7 @@ var allTypes = []interface{}{
 						Op: query.Op{
 							Field: "field3",
 						},
-						Value: tktypes.RawJSON(`{"value": 12345}`),
+						Value: tktypes.RawJSON(`"abcde"`),
 					},
 				},
 				LT: []*query.OpSingleVal{
@@ -157,7 +161,7 @@ var allTypes = []interface{}{
 						Op: query.Op{
 							Field: "field4",
 						},
-						Value: tktypes.RawJSON([]byte(`{"value": 12345}`)),
+						Value: tktypes.RawJSON([]byte(`12345`)),
 					},
 				},
 				LTE: []*query.OpSingleVal{
@@ -165,7 +169,7 @@ var allTypes = []interface{}{
 						Op: query.Op{
 							Field: "field5",
 						},
-						Value: tktypes.RawJSON([]byte(`{"value": 12345}`)),
+						Value: tktypes.RawJSON([]byte(`12345`)),
 					},
 				},
 				GT: []*query.OpSingleVal{
@@ -173,7 +177,7 @@ var allTypes = []interface{}{
 						Op: query.Op{
 							Field: "field6",
 						},
-						Value: tktypes.RawJSON([]byte(`{"value": 12345}`)),
+						Value: tktypes.RawJSON([]byte(`12345`)),
 					},
 				},
 				GTE: []*query.OpSingleVal{
@@ -181,7 +185,7 @@ var allTypes = []interface{}{
 						Op: query.Op{
 							Field: "field7",
 						},
-						Value: tktypes.RawJSON([]byte(`{"value": 12345}`)),
+						Value: tktypes.RawJSON([]byte(`12345`)),
 					},
 				},
 				In: []*query.OpMultiVal{
@@ -189,7 +193,7 @@ var allTypes = []interface{}{
 						Op: query.Op{
 							Field: "field8",
 						},
-						Values: []tktypes.RawJSON{[]byte(`{"value": 12345}`)},
+						Values: []tktypes.RawJSON{[]byte(`"abcde"`), []byte(`"fghij"`)},
 					},
 				},
 				NIn: []*query.OpMultiVal{
@@ -197,16 +201,16 @@ var allTypes = []interface{}{
 						Op: query.Op{
 							Field: "field9",
 						},
-						Values: []tktypes.RawJSON{[]byte(`{"value": 12345}`)},
+						Values: []tktypes.RawJSON{[]byte(`"abcde"`), []byte(`"fghij"`)},
 					},
 				},
 				Null: []*query.Op{
 					{
-						Field: "field10",
+						Field: "field1",
 						Not:   true,
 					},
 					{
-						Field: "field11",
+						Field: "field2",
 					},
 				},
 			},

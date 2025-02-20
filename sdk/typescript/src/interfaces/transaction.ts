@@ -1,3 +1,4 @@
+import { NotoUnlockPublicParams } from "../domains/noto";
 import { IStateBase } from "./states";
 import { ethers } from "ethers";
 
@@ -15,7 +16,7 @@ export enum TransactionType {
 export interface ITransactionBase {
   type: TransactionType;
   domain?: string;
-  function: string;
+  function?: string;
   from: string;
   to?: string;
   data: {
@@ -59,9 +60,10 @@ export interface ITransactionReceipt {
   success: boolean;
   transactionHash: string;
   source: string;
+  domain?: string;
   contractAddress?: string;
   states?: ITransactionStates;
-  domainReceipt?: IPenteDomainReceipt;
+  domainReceipt?: IPenteDomainReceipt | INotoDomainReceipt;
   failureMessage?: string;
 }
 
@@ -78,6 +80,50 @@ export interface IPenteLog {
   address: string;
   topics: string[];
   data: string;
+}
+
+export interface INotoDomainReceipt {
+  states: {
+    inputs?: IReceiptState<INotoCoin>[];
+    outputs?: IReceiptState<INotoCoin>[];
+    readInputs?: IReceiptState<INotoCoin>[];
+    preparedOutputs?: IReceiptState<INotoCoin>[];
+
+    lockedInputs?: IReceiptState<INotoLockedCoin>[];
+    lockedOutputs?: IReceiptState<INotoLockedCoin>[];
+    readLockedInputs?: IReceiptState<INotoLockedCoin>[];
+    preparedLockedOutputs?: IReceiptState<INotoLockedCoin>[];
+  };
+  transfers?: {
+    from?: string;
+    to?: string;
+    amount: string;
+  }[];
+  lockInfo?: {
+    lockId: string;
+    delegate?: string;
+    unlockParams?: NotoUnlockPublicParams;
+    unlockCall?: string;
+  };
+  data?: string;
+}
+
+export interface IReceiptState<T> {
+  id: string;
+  data: T;
+}
+
+export interface INotoCoin {
+  salt: string;
+  owner: string;
+  amount: string;
+}
+
+export interface INotoLockedCoin {
+  lockId: string;
+  salt: string;
+  owner: string;
+  amount: string;
 }
 
 export interface ITransactionStates {
@@ -115,4 +161,9 @@ export interface IEventWithData {
   soliditySignature: string;
   address: string;
   data: any;
+}
+
+export interface IStoredABI {
+  hash: string;
+  abi: ethers.InterfaceAbi;
 }

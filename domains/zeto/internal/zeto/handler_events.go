@@ -7,10 +7,11 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -119,6 +120,24 @@ func (z *Zeto) handleWithdrawEvent(ctx context.Context, tree core.SparseMerkleTr
 	return nil
 }
 
+func (z *Zeto) handleLockedEvent(ctx context.Context, ev *prototk.OnChainEvent, res *prototk.HandleEventBatchResponse) error {
+	var lock LockedEvent
+	if err := json.Unmarshal([]byte(ev.DataJson), &lock); err == nil {
+		txID := decodeTransactionData(lock.Data)
+		if txID == nil {
+			log.L(ctx).Errorf("Failed to decode transaction data for lock event: %s. Skip to the next event", lock.Data)
+			return nil
+		}
+		res.TransactionsComplete = append(res.TransactionsComplete, &prototk.CompletedTransaction{
+			TransactionId: txID.String(),
+			Location:      ev.Location,
+		})
+	} else {
+		log.L(ctx).Errorf("Failed to unmarshal lock event: %s", err)
+	}
+	return nil
+}
+
 func (z *Zeto) updateMerkleTree(ctx context.Context, tree core.SparseMerkleTree, storage smt.StatesStorage, txID tktypes.HexBytes, outputs []tktypes.HexUint256) error {
 	storage.SetTransactionId(txID.HexString0xPrefix())
 	for _, out := range outputs {
@@ -154,7 +173,7 @@ func parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.HexUint256) []
 	refs := make([]*prototk.StateUpdate, len(states))
 	for i, state := range states {
 		refs[i] = &prototk.StateUpdate{
-			Id:            state.String(),
+			Id:            common.HexUint256To32ByteHexString(&state),
 			TransactionId: txID.String(),
 		}
 	}
@@ -167,4 +186,14 @@ func formatErrors(errors []string) string {
 		msg = fmt.Sprintf("%s. [%d]%s", msg, i, err)
 	}
 	return msg
+}
+func decodeTransactionData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
+	if len(data) < 4 {
+		return nil
+	}
+	dataPrefix := data[0:4]
+	if dataPrefix.String() != types.ZetoTransactionData_V0.String() {
+		return nil
+	}
+	return data[4:]
 }

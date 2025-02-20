@@ -16,7 +16,6 @@
 
 import { Alert, Box, Fade, LinearProgress, ToggleButton, ToggleButtonGroup, Typography, useTheme } from "@mui/material";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { t } from "i18next";
 import { useContext, useState } from "react";
 import { PaladinTransaction } from "../components/PaladinTransaction";
 import { ApplicationContext } from "../contexts/ApplicationContext";
@@ -24,12 +23,14 @@ import { fetchSubmissions } from "../queries/transactions";
 import { getAltModeScrollBarStyle } from "../themes/default";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { IPaladinTransaction } from "../interfaces";
+import { useTranslation } from "react-i18next";
 
 export const Submissions: React.FC = () => {
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
   const [tab, setTab] = useState<'all' | 'pending'>('all');
 
   const theme = useTheme();
+  const { t } = useTranslation();
 
   const { data: transactions, fetchNextPage, hasNextPage, error } = useInfiniteQuery({
     queryKey: ["submissions", tab, lastBlockWithTransactions],
@@ -58,8 +59,8 @@ export const Submissions: React.FC = () => {
       >
         <Box sx={{ marginBottom: '20px', textAlign: 'right' }}>
           <ToggleButtonGroup exclusive onChange={(_event, value) => setTab(value)} value={tab}>
-            <ToggleButton color="primary" value="all" sx={{ textTransform: 'none', width: '130px', height: '45px' }}>{t('all')}</ToggleButton>
-            <ToggleButton color="primary" value="pending" sx={{ textTransform: 'none', width: '130px', height: '45px' }}>{t('pending')}</ToggleButton>
+            <ToggleButton color="primary" value="all" sx={{ width: '130px', height: '45px' }}>{t('all')}</ToggleButton>
+            <ToggleButton color="primary" value="pending" sx={{ width: '130px', height: '45px' }}>{t('pending')}</ToggleButton>
           </ToggleButtonGroup>
         </Box>
         <Box
