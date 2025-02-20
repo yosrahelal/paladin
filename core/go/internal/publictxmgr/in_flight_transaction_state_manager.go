@@ -18,7 +18,6 @@ package publictxmgr
 import (
 	"context"
 	"math/big"
-	"time"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
@@ -30,10 +29,20 @@ type inFlightTransactionState struct {
 
 	orchestratorContext *OrchestratorContext
 	versions            []InFlightTransactionStateVersion
+
+	// not used by this struct but passed down into versions
+	testOnlyNoEventMode bool
+	InFlightStageActionTriggers
+	statusUpdater    StatusUpdater
+	submissionWriter *submissionWriter
 }
 
 func (iftxs *inFlightTransactionState) GetVersions(ctx context.Context) []InFlightTransactionStateVersion {
 	return iftxs.versions
+}
+
+func (iftxs *inFlightTransactionState) GetVersion(ctx context.Context, id int) InFlightTransactionStateVersion {
+	return iftxs.versions[id]
 }
 
 func (iftxs *inFlightTransactionState) GetCurrentVersion(ctx context.Context) InFlightTransactionStateVersion {
@@ -42,10 +51,16 @@ func (iftxs *inFlightTransactionState) GetCurrentVersion(ctx context.Context) In
 
 func (iftxs *inFlightTransactionState) NewVersion(ctx context.Context) {
 	iftxs.versions[len(iftxs.versions)-1].SetCurrent(ctx, false)
-	iftxs.versions = append(iftxs.versions, &inFlightTransactionStateVersion{
-		current:              true,
-		bufferedStageOutputs: make([]*StageOutput, 0),
-	})
+	iftxs.versions = append(iftxs.versions, NewInFlightTransactionStateVersion(
+		len(iftxs.versions),
+		iftxs.PublicTxManagerMetricsManager,
+		iftxs.BalanceManager,
+		iftxs.InFlightStageActionTriggers,
+		iftxs.InMemoryTxStateManager,
+		iftxs.statusUpdater,
+		iftxs.submissionWriter,
+		iftxs.testOnlyNoEventMode,
+	))
 }
 
 // I think the answer is to look at all the stage outputs and if they're gone then it can be removed
@@ -78,9 +93,6 @@ func (iftxs *inFlightTransactionState) GetStage(ctx context.Context) InFlightTxS
 	return iftxs.GetCurrentVersion(ctx).GetStage(ctx)
 }
 
-// 	iftxs.versions[0].AddStageOutputs(ctx, stageOutput)
-// }
-
 func NewInFlightTransactionStateManager(thm PublicTxManagerMetricsManager,
 	bm BalanceManager,
 	ifsat InFlightStageActionTriggers,
@@ -93,18 +105,12 @@ func NewInFlightTransactionStateManager(thm PublicTxManagerMetricsManager,
 		PublicTxManagerMetricsManager: thm,
 		BalanceManager:                bm,
 		versions: []InFlightTransactionStateVersion{
-			&inFlightTransactionStateVersion{
-				current:                       true,
-				bufferedStageOutputs:          make([]*StageOutput, 0),
-				testOnlyNoEventMode:           noEventMode,
-				txLevelStageStartTime:         time.Now(),
-				statusUpdater:                 statusUpdater,
-				submissionWriter:              submissionWriter,
-				PublicTxManagerMetricsManager: thm,
-				InFlightStageActionTriggers:   ifsat,
-				InMemoryTxStateManager:        imtxs,
-			},
+			NewInFlightTransactionStateVersion(0, thm, bm, ifsat, imtxs, statusUpdater, submissionWriter, noEventMode),
 		},
-		InMemoryTxStateManager: imtxs,
+		InMemoryTxStateManager:      imtxs,
+		InFlightStageActionTriggers: ifsat,
+		statusUpdater:               statusUpdater,
+		submissionWriter:            submissionWriter,
+		testOnlyNoEventMode:         noEventMode,
 	}
 }

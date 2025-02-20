@@ -279,7 +279,7 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 							if stageOutput.PersistenceOutput != nil && stageOutput.PersistenceOutput.PersistenceError != nil {
 								if time.Since(stageOutput.PersistenceOutput.Time) > it.persistenceRetryTimeout {
 									// retry persistence
-									_ = it.TriggerPersistTxState(ctx, version)
+									_ = it.TriggerPersistTxState(ctx, version.GetID(ctx))
 								} else {
 									// wait for retry timeout
 									unprocessedStageOutputs = append(unprocessedStageOutputs, stageOutput)
@@ -376,7 +376,7 @@ func (it *inFlightTransactionStageController) processRetrieveGasPriceStageOutput
 			rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{GasPricing: gpo}
 			rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr(string(gpoJSON)), nil)
 		}
-		_ = it.TriggerPersistTxState(ctx, version)
+		_ = it.TriggerPersistTxState(ctx, version.GetID(ctx))
 	}
 	return
 }
@@ -443,7 +443,7 @@ func (it *inFlightTransactionStageController) processSigningStageOutput(ctx cont
 			rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash = rsc.StageOutput.SignOutput.TxHash
 		}
 
-		_ = it.TriggerPersistTxState(ctx, version)
+		_ = it.TriggerPersistTxState(ctx, version.GetID(ctx))
 	}
 	return
 }
@@ -524,7 +524,7 @@ func (it *inFlightTransactionStageController) processSubmittingStageOutput(ctx c
 			}
 		}
 
-		_ = it.TriggerPersistTxState(ctx, version)
+		_ = it.TriggerPersistTxState(ctx, version.GetID(ctx))
 	}
 	return
 }
@@ -676,7 +676,9 @@ func (it *inFlightTransactionStageController) NotifyStatusUpdate(ctx context.Con
 	return true, nil
 }
 
-func (it *inFlightTransactionStageController) TriggerRetrieveGasPrice(ctx context.Context, version InFlightTransactionStateVersion) error {
+func (it *inFlightTransactionStageController) TriggerRetrieveGasPrice(ctx context.Context, versionID int) error {
+	// the version ID is passed in so that this function doesn't cause a type import from this package when it is mocked
+	version := it.stateManager.GetVersion(ctx, versionID)
 	it.executeAsync(func() {
 		gasPrice, err := it.gasPriceClient.GetGasPriceObject(ctx)
 		version.AddGasPriceOutput(ctx, gasPrice, err)
@@ -684,7 +686,9 @@ func (it *inFlightTransactionStageController) TriggerRetrieveGasPrice(ctx contex
 	return nil
 }
 
-func (it *inFlightTransactionStageController) TriggerStatusUpdate(ctx context.Context, version InFlightTransactionStateVersion) error {
+func (it *inFlightTransactionStageController) TriggerStatusUpdate(ctx context.Context, versionID int) error {
+	// the version ID is passed in so that this function doesn't cause a type import from this package when it is mocked
+	version := it.stateManager.GetVersion(ctx, versionID)
 	it.executeAsync(func() {
 		rsc := version.GetRunningStageContext(ctx)
 		rsc.SetNewPersistenceUpdateOutput()
@@ -697,7 +701,9 @@ func (it *inFlightTransactionStageController) TriggerStatusUpdate(ctx context.Co
 	}, ctx, version, false)
 	return nil
 }
-func (it *inFlightTransactionStageController) TriggerSignTx(ctx context.Context, version InFlightTransactionStateVersion, from tktypes.EthAddress, ethTX *ethsigner.Transaction) error {
+func (it *inFlightTransactionStageController) TriggerSignTx(ctx context.Context, versionID int, from tktypes.EthAddress, ethTX *ethsigner.Transaction) error {
+	// the version ID is passed in so that this function doesn't cause a type import from this package when it is mocked
+	version := it.stateManager.GetVersion(ctx, versionID)
 	it.executeAsync(func() {
 		signedMessage, txHash, err := it.signTx(ctx, from, ethTX)
 		log.L(ctx).Debugf("Adding signed message to output, hash %s, signedMessage not nil %t, err %+v", txHash, signedMessage != nil, err)
@@ -706,7 +712,9 @@ func (it *inFlightTransactionStageController) TriggerSignTx(ctx context.Context,
 	return nil
 }
 
-func (it *inFlightTransactionStageController) TriggerSubmitTx(ctx context.Context, version InFlightTransactionStateVersion, signedMessage []byte) error {
+func (it *inFlightTransactionStageController) TriggerSubmitTx(ctx context.Context, versionID int, signedMessage []byte) error {
+	// the version ID is passed in so that this function doesn't cause a type import from this package when it is mocked
+	version := it.stateManager.GetVersion(ctx, versionID)
 	it.executeAsync(func() {
 		txHash, submissionTime, errReason, submissionOutcome, err := it.submitTX(ctx, it.stateManager, signedMessage)
 		version.AddSubmitOutput(ctx, txHash, submissionTime, submissionOutcome, errReason, err)
@@ -714,7 +722,9 @@ func (it *inFlightTransactionStageController) TriggerSubmitTx(ctx context.Contex
 	return nil
 }
 
-func (it *inFlightTransactionStageController) TriggerPersistTxState(ctx context.Context, version InFlightTransactionStateVersion) error {
+func (it *inFlightTransactionStageController) TriggerPersistTxState(ctx context.Context, versionID int) error {
+	// the version ID is passed in so that this function doesn't cause a type import from this package when it is mocked
+	version := it.stateManager.GetVersion(ctx, versionID)
 	it.executeAsync(func() {
 		stage, persistenceTime, err := version.PersistTxState(ctx)
 		version.AddPersistenceOutput(ctx, stage, persistenceTime, err)

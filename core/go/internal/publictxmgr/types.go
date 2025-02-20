@@ -327,10 +327,10 @@ type PersistenceOutput struct {
 }
 
 type InFlightStageActionTriggers interface {
-	TriggerRetrieveGasPrice(ctx context.Context, version InFlightTransactionStateVersion) error
-	TriggerSignTx(ctx context.Context, version InFlightTransactionStateVersion, from tktypes.EthAddress, ethTX *ethsigner.Transaction) error
-	TriggerSubmitTx(ctx context.Context, version InFlightTransactionStateVersion, signedMessage []byte) error
-	TriggerStatusUpdate(ctx context.Context, version InFlightTransactionStateVersion) error
+	TriggerRetrieveGasPrice(ctx context.Context, versionID int) error
+	TriggerSignTx(ctx context.Context, versionID int, from tktypes.EthAddress, ethTX *ethsigner.Transaction) error
+	TriggerSubmitTx(ctx context.Context, versionID int, signedMessage []byte) error
+	TriggerStatusUpdate(ctx context.Context, versionID int) error
 }
 
 // RunningStageContext is the context for an individual run of the transaction process
@@ -409,11 +409,13 @@ type InFlightTransactionStateManager interface {
 
 	// version management
 	GetVersions(ctx context.Context) []InFlightTransactionStateVersion
+	GetVersion(ctx context.Context, id int) InFlightTransactionStateVersion
 	GetCurrentVersion(ctx context.Context) InFlightTransactionStateVersion
 	NewVersion(ctx context.Context)
 }
 
 type InFlightTransactionStateVersion interface {
+	GetID(ctx context.Context) int
 	SetCurrent(ctx context.Context, current bool)
 	IsCurrent(ctx context.Context) bool
 

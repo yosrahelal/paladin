@@ -26,7 +26,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-// TODO AM: check how all of these fields interact with the different versions
 type managedTx struct {
 	// persisted parts of the transaction, and the list of flushed DB submissions
 	ptx *DBPublicTxn

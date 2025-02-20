@@ -29,10 +29,15 @@ import (
 )
 
 type inFlightTransactionStateVersion struct {
+	// This id is never persisted in the database it only exists in memory so that we can pass around a reference
+	// to the version id in some functions rather than passing the reference to the version struct itself. This
+	// is because having any types imported from this package into mocks files results in circular dependencies
+	id int
+
 	current             bool
 	canBeRemoved        bool
 	testOnlyNoEventMode bool
-	signerNonce         string
+	signerNonce         string // TODO: replace with function call
 
 	PublicTxManagerMetricsManager
 	InFlightStageActionTriggers
@@ -67,6 +72,34 @@ type inFlightTransactionStateVersion struct {
 	statusUpdater    StatusUpdater
 }
 
+func NewInFlightTransactionStateVersion(
+	id int,
+	thm PublicTxManagerMetricsManager,
+	bm BalanceManager,
+	ifsat InFlightStageActionTriggers,
+	imtxs InMemoryTxStateManager,
+	statusUpdater StatusUpdater,
+	submissionWriter *submissionWriter,
+	noEventMode bool) InFlightTransactionStateVersion {
+	return &inFlightTransactionStateVersion{
+		id:                            id,
+		current:                       true,
+		bufferedStageOutputs:          make([]*StageOutput, 0),
+		testOnlyNoEventMode:           noEventMode,
+		txLevelStageStartTime:         time.Now(),
+		statusUpdater:                 statusUpdater,
+		submissionWriter:              submissionWriter,
+		PublicTxManagerMetricsManager: thm,
+		InFlightStageActionTriggers:   ifsat,
+		InMemoryTxStateManager:        imtxs,
+		signerNonce:                   imtxs.GetSignerNonce(),
+	}
+}
+
+func (v *inFlightTransactionStateVersion) GetID(ctx context.Context) int {
+	return v.id
+}
+
 func (v *inFlightTransactionStateVersion) SetCurrent(ctx context.Context, current bool) {
 	v.current = current
 }
@@ -95,20 +128,20 @@ func (v *inFlightTransactionStateVersion) StartNewStageContext(ctx context.Conte
 	switch stage {
 	case InFlightTxStageRetrieveGasPrice:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering retrieve gas price", rsc.InMemoryTx.GetSignerNonce())
-		v.stageTriggerError = v.TriggerRetrieveGasPrice(ctx, v)
+		v.stageTriggerError = v.TriggerRetrieveGasPrice(ctx, v.GetID(ctx))
 	case InFlightTxStageSigning:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering sign tx", rsc.InMemoryTx.GetSignerNonce())
-		v.stageTriggerError = v.TriggerSignTx(ctx, v, v.GetFrom(), v.BuildEthTX())
+		v.stageTriggerError = v.TriggerSignTx(ctx, v.GetID(ctx), v.GetFrom(), v.BuildEthTX())
 	case InFlightTxStageSubmitting:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering submission, signed message not nil: %t", rsc.InMemoryTx.GetSignerNonce(), v.TransientPreviousStageOutputs != nil && v.TransientPreviousStageOutputs.SignedMessage != nil)
 		var signedMessage []byte
 		if v.TransientPreviousStageOutputs != nil {
 			signedMessage = v.TransientPreviousStageOutputs.SignedMessage
 		}
-		v.stageTriggerError = v.TriggerSubmitTx(ctx, v, signedMessage)
+		v.stageTriggerError = v.TriggerSubmitTx(ctx, v.GetID(ctx), signedMessage)
 	case InFlightTxStageStatusUpdate:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering status update", rsc.InMemoryTx.GetSignerNonce())
-		v.stageTriggerError = v.TriggerStatusUpdate(ctx, v)
+		v.stageTriggerError = v.TriggerStatusUpdate(ctx, v.GetID(ctx))
 	default:
 		log.L(ctx).Tracef("Transaction with ID %s, didn't trigger any action for new stage: %s", rsc.InMemoryTx.GetSignerNonce(), stage)
 	}
