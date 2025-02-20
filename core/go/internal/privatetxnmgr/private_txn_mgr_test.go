@@ -1887,7 +1887,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		}
 	}).Times(2).Return(nil)
 
-	sentEndorsementRequest := make(chan string, 1)
+	sentEndorsementRequest := make(chan string, 2)
 	aliceEngineMocks.transportManager.On("Send", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		send := args.Get(1).(*components.FireAndForgetMessageSend)
 		endorsementRequest := &pbEngine.EndorsementRequest{}
@@ -1896,9 +1896,9 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			log.L(ctx).Errorf("Failed to unmarshal endorsement request: %s", err)
 			return
 		}
-
+		log.L(ctx).Debugf("Sending endorsement request for %s", endorsementRequest.IdempotencyKey)
 		sentEndorsementRequest <- endorsementRequest.IdempotencyKey
-	}).Return(nil).Maybe()
+	}).Times(2).Return(nil)
 
 	aliceEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
 		Result:  prototk.EndorseTransactionResponse_SIGN,
@@ -1943,6 +1943,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 
 	err := aliceEngine.Start()
 	require.NoError(t, err)
+	defer aliceEngine.Stop()
 
 	tx1 := &components.ValidatedTransaction{
 		ResolvedTransaction: components.ResolvedTransaction{
@@ -2012,9 +2013,20 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	attestationResultAny, err := anypb.New(&attestationResult)
 	require.NoError(t, err)
 
-	//wait for both transactions to send an endorsement request each
-	idempotencyKey1 := <-sentEndorsementRequest
-	idempotencyKey2 := <-sentEndorsementRequest
+	// Wait for both transactions to send an endorsement request each with timeout
+	var idempotencyKey1, idempotencyKey2 string
+	select {
+	case idempotencyKey1 = <-sentEndorsementRequest:
+		// Proceed with key
+	case <-time.After(30 * time.Second):
+		t.Fatal("Timed out waiting for first endorsement request")
+	}
+	select {
+	case idempotencyKey2 = <-sentEndorsementRequest:
+		// Proceed with key
+	case <-time.After(30 * time.Second):
+		t.Fatal("Timed out waiting for second endorsement request")
+	}
 
 	// endorse transaction 2 before 1 and check that 2 is not dispatched before 1
 	endorsementResponse2 := &pbEngine.EndorsementResponse{
@@ -2069,10 +2081,10 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	// at this point we should get a flush of the states
 	dcFlushed := mockDCFlushWithWaiter(aliceEngineMocks)
 
-	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID1.String(), 200*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID1.String(), 120*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	status = pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID2.String(), 200*time.Second)
+	status = pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, testTransactionID2.String(), 120*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 	<-dcFlushed
