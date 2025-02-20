@@ -71,7 +71,10 @@ export const Submissions: React.FC = () => {
           marginRight: "auto",
         }}
       >
-        <Box sx={{ marginBottom: '20px', textAlign: 'right' }}>
+        <Typography align="center" variant="h5">
+          {t("transactions")}
+        </Typography>
+        <Box sx={{ marginTop: '15px', marginBottom: '25px', textAlign: 'center' }}>
           <ToggleButtonGroup exclusive onChange={(_event, value) => setTab(value)} value={tab}>
             <ToggleButton color="primary" value="all" sx={{ width: '130px', height: '45px' }}>{t('all')}</ToggleButton>
             <ToggleButton color="primary" value="pending" sx={{ width: '130px', height: '45px' }}>{t('pending')}</ToggleButton>
@@ -115,7 +118,7 @@ export const Submissions: React.FC = () => {
           id="scrollableDivSubmissions"
           sx={{
             paddingRight: "15px",
-            height: "calc(100vh - 178px)",
+            height: "calc(100vh - 250px)",
             ...getAltModeScrollBarStyle(theme.palette.mode)
           }}
         >

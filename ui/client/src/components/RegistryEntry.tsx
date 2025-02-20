@@ -60,10 +60,10 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
         <Box sx={{ padding: '10px', paddingLeft: '20px', paddingRight: '20px', borderBottom: theme => `solid 1px ${theme.palette.divider}` }}>
 
           <Grid2 container justifyContent="space-between" alignItems="center" spacing={2}>
-            <Grid2 size={{ xs: 3 }}>
+            <Grid2 size={{ xs: 4 }}>
               <Hash Icon={<Tag size="18px" />} title={t("id")} hash={registryEntry.id} />
             </Grid2>
-            <Grid2 size={{ xs: 3 }}>
+            <Grid2 size={{ xs: 4 }}>
               <Hash
                 Icon={<Captions size="18px" />}
                 title={t("owner")}
@@ -82,20 +82,8 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
                 {t("name")}
               </Typography>
             </Grid2>
-            <Grid2 size={{ xs: 2 }}>
-              <Typography align="center" variant="h6" color="textPrimary">
-                {registryEntry.registry}
-              </Typography>
-              <Typography
-                align="center"
-                variant="body2"
-                color="textSecondary"
-              >
-                {t("registry")}
-              </Typography>
-            </Grid2>
             <Grid2 sx={{ textAlign: "center" }} alignContent="center" size={{ xs: 2 }}>
-              {registryEntry.active ? (
+              {registryEntry.active !== false ? (
                 <CheckCircleOutlineIcon color="primary" />
               ) : (
                 <ErrorOutlineIcon color="error" />
