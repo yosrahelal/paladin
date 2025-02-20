@@ -29,10 +29,10 @@ jobs:
 
     - name: Archive ABI directory
       run: |
-        tar -czvf contracts.tar.gz -C contracts .
+        tar -czvf abis.tar.gz -C contracts .
 
     - name: Upload artifacts for inspection (optional)
       uses: actions/upload-artifact@v4
       with:
         name: contracts
-        path: contracts.tar.gz
+        path: abis.tar.gz

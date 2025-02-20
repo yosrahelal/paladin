@@ -101,7 +101,7 @@ jobs:
             helm-artifacts/basenet.yaml
             helm-artifacts/devnet.yaml
             helm-artifacts/artifacts.tar.gz
-            contracts/contracts.tar.gz
+            contracts/abis.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
