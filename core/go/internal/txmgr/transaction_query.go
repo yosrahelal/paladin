@@ -37,7 +37,7 @@ var transactionFilters = filters.FieldMap{
 	"created":        filters.TimestampField("created"),
 	"abiReference":   filters.TimestampField("abi_ref"),
 	"functionName":   filters.StringField("fn_name"),
-	"domain":         filters.StringField(`transactions.domain`),
+	"domain":         filters.StringField(`"transactions"."domain"`),
 	"from":           filters.StringField(`"from"`),
 	"to":             filters.HexBytesField(`"to"`),
 	"type":           filters.StringField(`"type"`),
