@@ -46,18 +46,19 @@ type PrivacyGroupTXOptions struct {
 
 type PrivacyGroupMessage struct {
 	LocalSequence uint64            `docstruct:"PrivacyGroupMessage" json:"localSequence"`
-	Domain        string            `docstruct:"PrivacyGroupMessage" json:"domain"`
-	Group         tktypes.HexBytes  `docstruct:"PrivacyGroupMessage" json:"group"`
 	Sent          tktypes.Timestamp `docstruct:"PrivacyGroupMessage" json:"sent"`
 	Received      tktypes.Timestamp `docstruct:"PrivacyGroupMessage" json:"received"`
+	Node          string            `docstruct:"PrivacyGroupMessage" json:"node"`
 	ID            uuid.UUID         `docstruct:"PrivacyGroupMessage" json:"id"`
 	PrivacyGroupMessageInput
 }
 
 type PrivacyGroupMessageInput struct {
-	CorrelationID *uuid.UUID      `docstruct:"PrivacyGroupMessage" json:"id,omitempty"`
-	Topic         string          `docstruct:"PrivacyGroupMessage" json:"topic,omitempty"`
-	Data          tktypes.RawJSON `docstruct:"PrivacyGroupMessage" json:"data,omitempty"`
+	CorrelationID *uuid.UUID       `docstruct:"PrivacyGroupMessage" json:"id,omitempty"`
+	Domain        string           `docstruct:"PrivacyGroupMessage" json:"domain"`
+	Group         tktypes.HexBytes `docstruct:"PrivacyGroupMessage" json:"group"`
+	Topic         string           `docstruct:"PrivacyGroupMessage" json:"topic,omitempty"`
+	Data          tktypes.RawJSON  `docstruct:"PrivacyGroupMessage" json:"data,omitempty"`
 }
 
 type PrivacyGroupInput struct {
@@ -84,4 +85,5 @@ type PrivacyGroupMessageListenerFilters struct {
 }
 
 type PrivacyGroupMessageListenerOptions struct {
+	IncludeLocal bool `docstruct:"MessageListenerOptions" json:"includeLocal,omitempty"`
 }

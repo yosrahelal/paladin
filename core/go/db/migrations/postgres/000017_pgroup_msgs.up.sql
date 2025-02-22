@@ -4,6 +4,7 @@ CREATE TABLE pgroup_msgs (
   "local_seq"                 BIGINT          GENERATED ALWAYS AS IDENTITY,
   "domain"                    TEXT            NOT NULL,
   "group"                     TEXT            NOT NULL,
+  "node"                      TEXT            NOT NULL,
   "sent"                      BIGINT          NOT NULL,
   "received"                  BIGINT          NOT NULL,
   "id"                        UUID            NOT NULL,

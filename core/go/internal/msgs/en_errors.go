@@ -450,7 +450,7 @@ var (
 	// Privacy group manager PD0125XX
 	MsgPGroupsDataDoesNotMatchSchema        = pde("PD012500", "Supplied properties could not be parsed against the ABI schema (generated=%t)")
 	MsgPGroupsNoMembers                     = pde("PD012501", "The privacy group must have at least one member")
-	MsgPGroupsNotFound                      = pde("PD012502", "Privacy group '%s' not found")
+	MsgPGroupsGroupNotFound                 = pde("PD012502", "Privacy group '%s' not found")
 	MsgPGroupsNotReady                      = pde("PD012503", "Privacy group '%s' is not ready (check transaction '%s' has been confirmed on-chain)")
 	MsgPGroupsNoGroupID                     = pde("PD012504", "groupId must be specified")
 	MsgPGroupsNoDomain                      = pde("PD012505", "domain must be specified")
@@ -461,4 +461,5 @@ var (
 	MsgPGroupsBadMessageListenerFilter      = pde("PD012510", "Message listener '%s' filters are invalid")
 	MsgPGroupsBadMessageListenerOptions     = pde("PD012511", "Message listener '%s' options are invalid")
 	MsgPGroupsMessageListenerDupLoad        = pde("PD012512", "Message listener '%s' already loaded")
+	MsgPGroupsMessageNotFound               = pde("PD012513", "Message not found")
 )

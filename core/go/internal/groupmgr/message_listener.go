@@ -38,39 +38,12 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-type persistedMessage struct {
-	LocalSeq uint64            `gorm:"column:local_seq;autoIncrement;primaryKey"`
-	Domain   string            `gorm:"column:domain"`
-	Group    tktypes.HexBytes  `gorm:"column:group"`
-	Sent     tktypes.Timestamp `gorm:"column:sent"`
-	Received tktypes.Timestamp `gorm:"column:received"`
-	ID       uuid.UUID         `gorm:"column:id"`
-	CID      *uuid.UUID        `gorm:"column:cid"`
-	Topic    string            `gorm:"column:topic"`
-	Data     tktypes.RawJSON   `gorm:"column:data"`
-}
-
-func (persistedMessage) TableName() string {
-	return "transaction_receipts"
-}
-
 type persistedMessageListener struct {
 	Name    string            `gorm:"column:name"`
 	Created tktypes.Timestamp `gorm:"column:created"`
 	Started *bool             `gorm:"column:started"`
 	Filters tktypes.RawJSON   `gorm:"column:filters"`
 	Options tktypes.RawJSON   `gorm:"column:options"`
-}
-
-var messageFilters = filters.FieldMap{
-	"localSequence": filters.Int64Field("local_seq"),
-	"domain":        filters.StringField("domain"),
-	"group":         filters.HexBytesField("group"),
-	"sent":          filters.TimestampField("sent"),
-	"received":      filters.TimestampField("received"),
-	"id":            filters.UUIDField("id"),
-	"correlationId": filters.UUIDField("cid"),
-	"topic":         filters.StringField("topic"),
 }
 
 var messageListenerFilters = filters.FieldMap{
@@ -133,12 +106,13 @@ func (gm *groupManager) messagesInit() {
 func (pm *persistedMessage) mapToAPI() *pldapi.PrivacyGroupMessage {
 	return &pldapi.PrivacyGroupMessage{
 		LocalSequence: pm.LocalSeq,
-		Domain:        pm.Domain,
-		Group:         pm.Group,
+		Node:          pm.Node,
 		Sent:          pm.Sent,
 		Received:      pm.Received,
 		ID:            pm.ID,
 		PrivacyGroupMessageInput: pldapi.PrivacyGroupMessageInput{
+			Domain:        pm.Domain,
+			Group:         pm.Group,
 			CorrelationID: pm.CID,
 			Topic:         pm.Topic,
 			Data:          pm.Data,
@@ -393,6 +367,10 @@ func (gm *groupManager) buildListenerDBQuery(spec *pldapi.PrivacyGroupMessageLis
 		q = q.Where("group = ?", spec.Filters.Group)
 	}
 
+	if !spec.Options.IncludeLocal {
+		q = q.Where("node <> ?", gm.transportManager.LocalNodeName())
+	}
+
 	// Note we do post-filter on topic (no DB filter)
 
 	// Standard parts
@@ -421,6 +399,9 @@ func (l *messageListener) checkMatch(r *persistedMessage) bool {
 	}
 	if l.topicMatch != nil {
 		matches = matches && (l.topicMatch.MatchString(r.Topic))
+	}
+	if !spec.Options.IncludeLocal {
+		matches = matches && (l.gm.transportManager.LocalNodeName() != r.Node)
 	}
 
 	// Note we don't factor sequence into the tap - as the notification does not contain the DB-generated sequence

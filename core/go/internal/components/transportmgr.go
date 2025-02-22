@@ -51,6 +51,7 @@ const (
 	RMTReceipt             ReliableMessageType = "receipt"
 	RMTPreparedTransaction ReliableMessageType = "prepared_txn"
 	RMTPrivacyGroup        ReliableMessageType = "privacy_group"
+	RMTPrivacyGroupMessage ReliableMessageType = "privacy_group_message"
 )
 
 func (t ReliableMessageType) Enum() tktypes.Enum[ReliableMessageType] {

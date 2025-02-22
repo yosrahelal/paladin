@@ -18,6 +18,7 @@ package components
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -36,6 +37,12 @@ type PreparedGroupInitTransaction struct {
 	GenesisSchema *abi.Parameter
 }
 
+type PrivacyGroupMessageDistribution struct {
+	Domain string           `json:"domain"`
+	Group  tktypes.HexBytes `json:"group"`
+	ID     uuid.UUID        `json:"id"`
+}
+
 type PrivacyGroupMessageReceiver interface {
 	DeliverMessageBatch(ctx context.Context, batchID uint64, msgs []*pldapi.PrivacyGroupMessage) error
 }
@@ -51,4 +58,13 @@ type GroupManager interface {
 	GetGroupByID(ctx context.Context, dbTX persistence.DBTX, domainName string, groupID tktypes.HexBytes) (*pldapi.PrivacyGroupWithABI, error)
 	QueryGroups(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error)
 	QueryGroupsByProperties(ctx context.Context, dbTX persistence.DBTX, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error)
+
+	SendMessage(ctx context.Context, dbTX persistence.DBTX, msg pldapi.PrivacyGroupMessageInput) (*uuid.UUID, error)
+	ReceiveMessages(ctx context.Context, dbTX persistence.DBTX, node string, msgs ...pldapi.PrivacyGroupMessage) error
+	QueryMessages(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroupMessage, error)
+	GetMessagesByID(ctx context.Context, dbTX persistence.DBTX, ids []uuid.UUID, failNotFound bool) ([]*pldapi.PrivacyGroupMessage, error)
+
+	CreateMessageListener(ctx context.Context, spec *pldapi.PrivacyGroupMessageListener) error
+	AddMessageReceiver(ctx context.Context, name string, r PrivacyGroupMessageReceiver) (PrivacyGroupMessageReceiverCloser, error)
+	GetMessageListener(ctx context.Context, name string) *pldapi.PrivacyGroupMessageListener
 }

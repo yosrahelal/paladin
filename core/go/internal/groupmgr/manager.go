@@ -532,7 +532,7 @@ func (gm *groupManager) prepareTransaction(ctx context.Context, dbTX persistence
 		return err
 	}
 	if pg == nil {
-		return i18n.NewError(ctx, msgs.MsgPGroupsNotFound, groupID)
+		return i18n.NewError(ctx, msgs.MsgPGroupsGroupNotFound, groupID)
 	}
 	if pg.ContractAddress == nil || pg.Genesis == nil {
 		return i18n.NewError(ctx, msgs.MsgPGroupsNotReady, groupID, pg.GenesisTransaction)
