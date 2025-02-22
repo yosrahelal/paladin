@@ -44,10 +44,44 @@ type PrivacyGroupTXOptions struct {
 	PublicTxOptions
 }
 
+type PrivacyGroupMessage struct {
+	LocalSequence uint64            `docstruct:"PrivacyGroupMessage" json:"localSequence"`
+	Domain        string            `docstruct:"PrivacyGroupMessage" json:"domain"`
+	Group         tktypes.HexBytes  `docstruct:"PrivacyGroupMessage" json:"group"`
+	Sent          tktypes.Timestamp `docstruct:"PrivacyGroupMessage" json:"sent"`
+	Received      tktypes.Timestamp `docstruct:"PrivacyGroupMessage" json:"received"`
+	ID            uuid.UUID         `docstruct:"PrivacyGroupMessage" json:"id"`
+	PrivacyGroupMessageInput
+}
+
+type PrivacyGroupMessageInput struct {
+	CorrelationID *uuid.UUID      `docstruct:"PrivacyGroupMessage" json:"id,omitempty"`
+	Topic         string          `docstruct:"PrivacyGroupMessage" json:"topic,omitempty"`
+	Data          tktypes.RawJSON `docstruct:"PrivacyGroupMessage" json:"data,omitempty"`
+}
+
 type PrivacyGroupInput struct {
 	Domain             string                 `docstruct:"PrivacyGroup" json:"domain"`
 	Members            []string               `docstruct:"PrivacyGroup" json:"members"`
 	Properties         tktypes.RawJSON        `docstruct:"PrivacyGroup" json:"properties"`              // properties that inform genesis state
 	PropertiesABI      abi.ParameterArray     `docstruct:"PrivacyGroup" json:"propertiesABI,omitempty"` // without this the property types will be inferred
 	TransactionOptions *PrivacyGroupTXOptions `docstruct:"PrivacyGroup" json:"transactionOptions,omitempty"`
+}
+
+type PrivacyGroupMessageListener struct {
+	Name    string                             `docstruct:"MessageListener" json:"name"`
+	Created tktypes.Timestamp                  `docstruct:"MessageListener" json:"created"`
+	Started *bool                              `docstruct:"MessageListener" json:"started"`
+	Filters PrivacyGroupMessageListenerFilters `docstruct:"MessageListener" json:"filters"`
+	Options PrivacyGroupMessageListenerOptions `docstruct:"MessageListener" json:"options"`
+}
+
+type PrivacyGroupMessageListenerFilters struct {
+	SequenceAbove *uint64          `docstruct:"MessageListenerFilters" json:"sequenceAbove,omitempty"`
+	Domain        string           `docstruct:"MessageListenerFilters" json:"domain,omitempty"`
+	Group         tktypes.HexBytes `docstruct:"MessageListenerFilters" json:"group,omitempty"`
+	Topic         string           `docstruct:"MessageListenerFilters" json:"topic,omitempty"`
+}
+
+type PrivacyGroupMessageListenerOptions struct {
 }

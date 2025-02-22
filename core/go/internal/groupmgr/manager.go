@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -33,6 +34,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -58,7 +60,13 @@ type groupManager struct {
 	domainManager    components.DomainManager
 	transportManager components.TransportManager
 	registryManager  components.RegistryManager
-	persistence      persistence.Persistence
+	p                persistence.Persistence
+
+	messagesRetry                *retry.Retry
+	messagesReadPageSize         int
+	messageListenersLoadPageSize int
+	messageListenerLock          sync.Mutex
+	messageListeners             map[string]*messageListener
 }
 
 type referencedReceipt struct {
@@ -115,7 +123,7 @@ func (gm *groupManager) PostInit(c components.AllComponents) error {
 	gm.stateManager = c.StateManager()
 	gm.txManager = c.TxManager()
 	gm.domainManager = c.DomainManager()
-	gm.persistence = c.Persistence()
+	gm.p = c.Persistence()
 	gm.transportManager = c.TransportManager()
 	gm.registryManager = c.RegistryManager()
 	return nil
@@ -423,7 +431,7 @@ func (gm *groupManager) GetGroupByID(ctx context.Context, dbTX persistence.DBTX,
 // This function queries the groups only using what's in the DB, without allowing properties of the group to be used to do the query
 func (gm *groupManager) QueryGroups(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
 	qw := &filters.QueryWrapper[persistedGroup, pldapi.PrivacyGroup]{
-		P:           gm.persistence,
+		P:           gm.p,
 		DefaultSort: "-created",
 		Filters:     groupDBOnlyFilters,
 		Query:       jq,

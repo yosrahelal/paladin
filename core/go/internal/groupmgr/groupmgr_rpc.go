@@ -43,7 +43,7 @@ func (gm *groupManager) initRPC() {
 
 func (gm *groupManager) rpcCreateGroup() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, spec pldapi.PrivacyGroupInput) (id tktypes.HexBytes, err error) {
-		err = gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		err = gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 			id, err = gm.CreateGroup(ctx, dbTX, &spec)
 			return err
 		})
@@ -53,25 +53,25 @@ func (gm *groupManager) rpcCreateGroup() rpcserver.RPCHandler {
 
 func (gm *groupManager) rpcGetGroupByID() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context, domainName string, id tktypes.HexBytes) (*pldapi.PrivacyGroupWithABI, error) {
-		return gm.GetGroupByID(ctx, gm.persistence.NOTX(), domainName, id)
+		return gm.GetGroupByID(ctx, gm.p.NOTX(), domainName, id)
 	})
 }
 
 func (gm *groupManager) rpcQueryGroups() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
-		return gm.QueryGroups(ctx, gm.persistence.NOTX(), &jq)
+		return gm.QueryGroups(ctx, gm.p.NOTX(), &jq)
 	})
 }
 
 func (gm *groupManager) rpcQueryGroupsByProperties() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod3(func(ctx context.Context, domainName string, schemaID tktypes.Bytes32, jq query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
-		return gm.QueryGroupsByProperties(ctx, gm.persistence.NOTX(), domainName, schemaID, &jq)
+		return gm.QueryGroupsByProperties(ctx, gm.p.NOTX(), domainName, schemaID, &jq)
 	})
 }
 
 func (gm *groupManager) rpcSendTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, tx *pldapi.PrivacyGroupTransactionInput) (txID *uuid.UUID, err error) {
-		err = gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		err = gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 			txID, err = gm.SendTransaction(ctx, dbTX, tx)
 			return err
 		})
@@ -81,7 +81,7 @@ func (gm *groupManager) rpcSendTransaction() rpcserver.RPCHandler {
 
 func (gm *groupManager) rpcCall() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, call *pldapi.PrivacyGroupTransactionCall) (result tktypes.RawJSON, err error) {
-		err = gm.Call(ctx, gm.persistence.NOTX(), &result, call)
+		err = gm.Call(ctx, gm.p.NOTX(), &result, call)
 		return result, err
 	})
 }

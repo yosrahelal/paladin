@@ -143,7 +143,7 @@ func TestPrivacyGroupInvalidABI(t *testing.T) {
 	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me@node1", "you@node2"},
@@ -161,7 +161,7 @@ func TestPrivacyGroupMixedArrayFailParseAfterInfer(t *testing.T) {
 	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me@node1", "you@node2"},
@@ -179,7 +179,7 @@ func TestPrivacyGroupNoMembers(t *testing.T) {
 	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain: "domain1",
 		})
@@ -193,7 +193,7 @@ func TestPrivacyGroupNonQualfiedMembers(t *testing.T) {
 	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me", "you"},
@@ -211,7 +211,7 @@ func TestPrivacyGroupNoTransportsForNode(t *testing.T) {
 	})
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me@node1", "you@node2"},
@@ -230,7 +230,7 @@ func TestPrivacyGroupInvalidDomain(t *testing.T) {
 	})
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain2",
 			Members: []string{"me@node1", "you@node2"},
@@ -248,7 +248,7 @@ func TestPrivacyGroupDomainInitFail(t *testing.T) {
 	})
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me@node1", "you@node2"},
@@ -272,7 +272,7 @@ func TestPrivacyGroupDomainInitGenerateBadSchema(t *testing.T) {
 	})
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me@node1", "you@node2"},
@@ -300,7 +300,7 @@ func TestPrivacyGroupWriteStateFail(t *testing.T) {
 	})
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me@node1", "you@node2"},
@@ -320,7 +320,7 @@ func TestPrivacyGroupSendTransactionFail(t *testing.T) {
 		})
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me@node1", "you@node2"},
@@ -381,7 +381,7 @@ func TestPrivacyGroupWriteGroupFail(t *testing.T) {
 		})
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me@node1", "you@node2"},
@@ -406,7 +406,7 @@ func TestPrivacyGroupMembersWriteFail(t *testing.T) {
 		})
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me@node1", "you@node2"},
@@ -437,7 +437,7 @@ func TestPrivacyGroupSendReliableFail(t *testing.T) {
 	)
 	defer done()
 
-	err := gm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := gm.CreateGroup(ctx, dbTX, &pldapi.PrivacyGroupInput{
 			Domain:  "domain1",
 			Members: []string{"me@node1", "you@node2"},
@@ -456,7 +456,7 @@ func TestQueryGroupsFail(t *testing.T) {
 
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := gm.QueryGroups(ctx, gm.persistence.NOTX(), query.NewQueryBuilder().Limit(1).Query())
+	_, err := gm.QueryGroups(ctx, gm.p.NOTX(), query.NewQueryBuilder().Limit(1).Query())
 	require.Regexp(t, "pop", err)
 }
 
@@ -474,7 +474,7 @@ func TestQueryGroupsEnrichMembersFail(t *testing.T) {
 	))
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_group_members").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := gm.QueryGroups(ctx, gm.persistence.NOTX(), query.NewQueryBuilder().Limit(1).Query())
+	_, err := gm.QueryGroups(ctx, gm.p.NOTX(), query.NewQueryBuilder().Limit(1).Query())
 	require.Regexp(t, "pop", err)
 }
 
@@ -495,7 +495,7 @@ func TestQueryGroupsEnrichGenesisFail(t *testing.T) {
 	mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, "domain1", (*tktypes.EthAddress)(nil), mock.Anything, false, false).
 		Return(nil, fmt.Errorf("pop"))
 
-	_, err := gm.QueryGroups(ctx, gm.persistence.NOTX(), query.NewQueryBuilder().Limit(1).Query())
+	_, err := gm.QueryGroups(ctx, gm.p.NOTX(), query.NewQueryBuilder().Limit(1).Query())
 	require.Regexp(t, "pop", err)
 }
 
@@ -505,7 +505,7 @@ func TestQueryGroupsByPropertiesFail(t *testing.T) {
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
-	dbTX := gm.persistence.NOTX()
+	dbTX := gm.p.NOTX()
 	mc.stateManager.On("FindStates", mock.Anything, dbTX, "domain1", schemaID, mock.Anything, mock.Anything).
 		Return(nil, fmt.Errorf("pop"))
 
@@ -519,7 +519,7 @@ func TestQueryGroupsByPropertiesNoResults(t *testing.T) {
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
-	dbTX := gm.persistence.NOTX()
+	dbTX := gm.p.NOTX()
 	mc.stateManager.On("FindStates", mock.Anything, dbTX, "domain1", schemaID, mock.Anything, mock.Anything).
 		Return([]*pldapi.State{}, nil)
 
@@ -535,7 +535,7 @@ func TestQueryGroupsByPropertiesQueryFail(t *testing.T) {
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
-	dbTX := gm.persistence.NOTX()
+	dbTX := gm.p.NOTX()
 	mc.stateManager.On("FindStates", mock.Anything, dbTX, "domain1", schemaID, mock.Anything, mock.Anything).
 		Return([]*pldapi.State{
 			{
@@ -557,7 +557,7 @@ func TestQueryGroupsByPropertiesMembersFail(t *testing.T) {
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
-	dbTX := gm.persistence.NOTX()
+	dbTX := gm.p.NOTX()
 	stateID := tktypes.RandBytes(32)
 	mc.stateManager.On("FindStates", mock.Anything, dbTX, "domain1", schemaID, mock.Anything, mock.Anything).
 		Return([]*pldapi.State{
@@ -588,7 +588,7 @@ func TestGetGroupByIDFailDB(t *testing.T) {
 
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := gm.GetGroupByID(ctx, gm.persistence.NOTX(), "domain1", tktypes.RandBytes(32))
+	_, err := gm.GetGroupByID(ctx, gm.p.NOTX(), "domain1", tktypes.RandBytes(32))
 	assert.Regexp(t, "pop", err)
 }
 
@@ -637,7 +637,7 @@ func TestGetGroupByIDFailSchema(t *testing.T) {
 	mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", schemaID, true).
 		Return(nil, fmt.Errorf("pop"))
 
-	_, err := gm.GetGroupByID(ctx, gm.persistence.NOTX(), "domain1", groupID)
+	_, err := gm.GetGroupByID(ctx, gm.p.NOTX(), "domain1", groupID)
 	assert.Regexp(t, "pop", err)
 }
 
@@ -646,7 +646,7 @@ func TestSendTransactionNotPrivate(t *testing.T) {
 	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
 	defer done()
 
-	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+	_, err := gm.SendTransaction(ctx, gm.p.NOTX(), &pldapi.PrivacyGroupTransactionInput{
 		TransactionInput: pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
 				Type: pldapi.TransactionTypePublic.Enum(),
@@ -662,7 +662,7 @@ func TestSendTransactionNoDomain(t *testing.T) {
 	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
 	defer done()
 
-	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+	_, err := gm.SendTransaction(ctx, gm.p.NOTX(), &pldapi.PrivacyGroupTransactionInput{
 		TransactionInput: pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
 				Type: pldapi.TransactionTypePrivate.Enum(),
@@ -678,7 +678,7 @@ func TestSendTransactionNoGroup(t *testing.T) {
 	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
 	defer done()
 
-	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+	_, err := gm.SendTransaction(ctx, gm.p.NOTX(), &pldapi.PrivacyGroupTransactionInput{
 		TransactionInput: pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
 				Type:   pldapi.TransactionTypePrivate.Enum(),
@@ -697,7 +697,7 @@ func TestSendTransactionGroupNotFound(t *testing.T) {
 
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{}))
 
-	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+	_, err := gm.SendTransaction(ctx, gm.p.NOTX(), &pldapi.PrivacyGroupTransactionInput{
 		GroupID: tktypes.RandBytes(32),
 		TransactionInput: pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
@@ -717,7 +717,7 @@ func TestSendTransactionGroupFailQuery(t *testing.T) {
 
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+	_, err := gm.SendTransaction(ctx, gm.p.NOTX(), &pldapi.PrivacyGroupTransactionInput{
 		GroupID: tktypes.RandBytes(32),
 		TransactionInput: pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
@@ -740,7 +740,7 @@ func TestSendTransactionGroupNotReady(t *testing.T) {
 	mockDBPrivacyGroup(mc, schemaID, groupID, nil)
 	mockPrivacyGroupState(mc, schemaID, groupID)
 
-	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+	_, err := gm.SendTransaction(ctx, gm.p.NOTX(), &pldapi.PrivacyGroupTransactionInput{
 		GroupID: groupID,
 		TransactionInput: pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
@@ -766,7 +766,7 @@ func TestSendTransactionGroupGetContractFail(t *testing.T) {
 
 	mc.domainManager.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *contractAddr).Return(nil, fmt.Errorf("pop"))
 
-	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+	_, err := gm.SendTransaction(ctx, gm.p.NOTX(), &pldapi.PrivacyGroupTransactionInput{
 		GroupID: groupID,
 		TransactionInput: pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{
@@ -796,7 +796,7 @@ func TestCallGroupResolveInputsFail(t *testing.T) {
 	mc.txManager.On("ResolveTransactionInputs", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil, nil, fmt.Errorf("pop"))
 
 	var res any
-	err := gm.Call(ctx, gm.persistence.NOTX(), &res, &pldapi.PrivacyGroupTransactionCall{
+	err := gm.Call(ctx, gm.p.NOTX(), &res, &pldapi.PrivacyGroupTransactionCall{
 		GroupID: groupID,
 		TransactionCall: pldapi.TransactionCall{
 			TransactionInput: pldapi.TransactionInput{
@@ -834,7 +834,7 @@ func TestSendTransactionGroupResolveInputsFail(t *testing.T) {
 
 	mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 
-	_, err := gm.SendTransaction(ctx, gm.persistence.NOTX(), &pldapi.PrivacyGroupTransactionInput{
+	_, err := gm.SendTransaction(ctx, gm.p.NOTX(), &pldapi.PrivacyGroupTransactionInput{
 		GroupID: groupID,
 		TransactionInput: pldapi.TransactionInput{
 			TransactionBase: pldapi.TransactionBase{

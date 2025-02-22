@@ -36,6 +36,14 @@ type PreparedGroupInitTransaction struct {
 	GenesisSchema *abi.Parameter
 }
 
+type PrivacyGroupMessageReceiver interface {
+	DeliverMessageBatch(ctx context.Context, batchID uint64, msgs []*pldapi.PrivacyGroupMessage) error
+}
+
+type PrivacyGroupMessageReceiverCloser interface {
+	Close()
+}
+
 type GroupManager interface {
 	ManagerLifecycle
 

@@ -17,11 +17,21 @@ package pldconf
 import "github.com/kaleido-io/paladin/config/pkg/confutil"
 
 type GroupManagerConfig struct {
-	Cache CacheConfig `json:"cache"`
+	Cache            CacheConfig      `json:"cache"`
+	MessageListeners MessageListeners `json:"messageListeners"`
+}
+
+type MessageListeners struct {
+	Retry        RetryConfig `json:"retry"`
+	ReadPageSize *int        `json:"readPageSize"`
 }
 
 var GroupManagerDefaults = &GroupManagerConfig{
 	Cache: CacheConfig{
 		Capacity: confutil.P(50),
+	},
+	MessageListeners: MessageListeners{
+		Retry:        GenericRetryDefaults.RetryConfig,
+		ReadPageSize: confutil.P(100),
 	},
 }

@@ -49,6 +49,7 @@ type persistedReceiptListener struct {
 var receiptListenerFilters = filters.FieldMap{
 	"name":    filters.StringField("name"),
 	"created": filters.TimestampField("created"),
+	"started": filters.BooleanField("started"),
 }
 
 func (persistedReceiptListener) TableName() string {
@@ -315,7 +316,7 @@ func (tm *txManager) loadReceiptListeners() error {
 		}
 
 		if len(page) < tm.receiptListenersLoadPageSize {
-			log.L(ctx).Infof("loaded %d receipted listeners", len(tm.receiptListeners))
+			log.L(ctx).Infof("loaded %d receipt listeners", len(tm.receiptListeners))
 			return nil
 		}
 
