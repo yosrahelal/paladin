@@ -64,6 +64,7 @@ func (t ReliableMessageType) Options() []string {
 		string(RMTReceipt),
 		string(RMTPreparedTransaction),
 		string(RMTPrivacyGroup),
+		string(RMTPrivacyGroupMessage),
 	}
 }
 

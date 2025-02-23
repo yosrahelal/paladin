@@ -141,18 +141,19 @@ func (gm *groupManager) SendMessage(ctx context.Context, dbTX persistence.DBTX, 
 
 }
 
-func (gm *groupManager) ReceiveMessages(ctx context.Context, dbTX persistence.DBTX, node string, msgs []*pldapi.PrivacyGroupMessage) (accepted []uuid.UUID, err error) {
+func (gm *groupManager) ReceiveMessages(ctx context.Context, dbTX persistence.DBTX, messages []*pldapi.PrivacyGroupMessage) (results map[uuid.UUID]error, err error) {
 
+	results = make(map[uuid.UUID]error)
 	now := tktypes.TimestampNow()
-	pMsgs := make([]*persistedMessage, 0, len(msgs))
+	pMsgs := make([]*persistedMessage, 0, len(messages))
 	validatedGroups := make(map[string]*pldapi.PrivacyGroupWithABI)
-	for _, msg := range msgs {
+	for _, msg := range messages {
 		pm := &persistedMessage{
 			Domain:   msg.Domain,
 			Group:    msg.Group,
 			Sent:     msg.Sent,
-			Received: now,  // we're receiving
-			Node:     node, // from this node
+			Received: now,      // we're receiving
+			Node:     msg.Node, // must be validated by caller
 			ID:       msg.ID,
 			CID:      msg.CorrelationID,
 			Topic:    msg.Topic,
@@ -160,17 +161,23 @@ func (gm *groupManager) ReceiveMessages(ctx context.Context, dbTX persistence.DB
 		}
 		if err := pm.preValidate(ctx); err != nil {
 			log.L(ctx).Errorf("Unable to process received message %s: %s", pm.ID, err)
+			results[pm.ID] = err
 			continue
 		}
 		mapKey := pm.Domain + "/" + pm.Group.String()
 		if validatedGroups[mapKey] == nil {
-			validatedGroups[mapKey], err = gm.GetGroupByID(ctx, dbTX, pm.Domain, pm.Group)
+			group, err := gm.GetGroupByID(ctx, dbTX, pm.Domain, pm.Group)
 			if err != nil {
+				return nil, err
+			}
+			if group == nil {
 				log.L(ctx).Errorf("Unable to process received message as group not initialized %s: %s", pm.ID, err)
+				results[pm.ID] = i18n.NewError(ctx, msgs.MsgPGroupsGroupNotFound, pm.Group)
 				continue
 			}
+			validatedGroups[mapKey] = group
 		}
-		accepted = append(accepted, msg.ID)
+		results[pm.ID] = nil // success
 		pMsgs = append(pMsgs, pm)
 	}
 
@@ -188,8 +195,7 @@ func (gm *groupManager) ReceiveMessages(ctx context.Context, dbTX persistence.DB
 		})
 	}
 
-	return accepted, nil
-
+	return results, nil
 }
 
 func (gm *groupManager) QueryMessages(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroupMessage, error) {

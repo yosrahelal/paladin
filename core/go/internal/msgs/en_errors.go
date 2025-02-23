@@ -383,6 +383,7 @@ var (
 	MsgTransportAckMissingCorrelationID        = pde("PD012018", "Ack/nack missing correlation ID")
 	MsgTransportNackMissingError               = pde("PD012019", "Nack missing error information")
 	MsgTransportStateSchemaNotAvailableLocally = pde("PD012020", "State schema not available locally: domain=%s,id=%s")
+	MsgTransportMessageNotAvailableLocally     = pde("PD012021", "Message not available locally: id=%s")
 
 	// RegistryManager module PD0121XX
 	MsgRegistryNodeEntiresNotFound     = pde("PD012100", "No entries found for node '%s'")

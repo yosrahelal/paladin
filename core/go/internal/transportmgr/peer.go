@@ -384,6 +384,8 @@ func (p *peer) processReliableMsgPage(dbTX persistence.DBTX, page []*components.
 			msg, errorAck, err = p.tm.buildStateDistributionMsg(p.ctx, dbTX, rm)
 		case components.RMTPrivacyGroup:
 			msg, errorAck, err = p.tm.buildPrivacyGroupDistributionMsg(p.ctx, dbTX, rm)
+		case components.RMTPrivacyGroupMessage:
+			msg, errorAck, err = p.tm.buildPrivacyGroupMessageMsg(p.ctx, dbTX, rm)
 		case components.RMTReceipt:
 			// TODO: Implement for receipt distribution
 			fallthrough

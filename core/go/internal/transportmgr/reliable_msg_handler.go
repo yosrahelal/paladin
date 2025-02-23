@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -38,6 +39,7 @@ const (
 	RMHMessageTypeReceipt             = string(components.RMTReceipt)
 	RMHMessageTypePreparedTransaction = string(components.RMTPreparedTransaction)
 	RMHMessageTypePrivacyGroup        = string(components.RMTPrivacyGroup)
+	RMHMessageTypePrivacyGroupMessage = string(components.RMTPrivacyGroupMessage)
 )
 
 type reliableMsgOp struct {
@@ -71,6 +73,7 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 	nullifierUpserts := make(map[string][]*components.NullifierUpsert)
 	var preparedTxnToAdd []*components.PreparedTransactionWithRefs
 	var txReceiptsToFinalize []*components.ReceiptInput
+	var msgsToReceive []*pldapi.PrivacyGroupMessage
 
 	dbTX.AddPostCommit(func(ctx context.Context) {
 		// We've committed the database work ok - send the acks/nacks to the other side
@@ -116,7 +119,15 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 					ack:   &ackInfo{node: v.p.Name, id: v.msg.MessageID},
 				})
 			}
-
+		case RMHMessageTypePrivacyGroupMessage:
+			msg, err := parsePrivacyGroupMessage(ctx, v.p.Name, v.msg.MessageID, v.msg.Payload)
+			if err != nil {
+				acksToSend = append(acksToSend,
+					&ackInfo{node: v.p.Name, id: v.msg.MessageID, Error: err.Error()}, // reject the message permanently
+				)
+			} else {
+				msgsToReceive = append(msgsToReceive, msg)
+			}
 		case RMHMessageTypePreparedTransaction:
 			var pt components.PreparedTransactionWithRefs
 			err := json.Unmarshal(v.msg.Payload, &pt)
@@ -234,6 +245,22 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 	for domain, nullifiers := range nullifierUpserts {
 		if err := tm.stateManager.WriteNullifiersForReceivedStates(ctx, dbTX, domain, nullifiers); err != nil {
 			return nil, err
+		}
+	}
+
+	// Write an received privacy group messages
+	if len(msgsToReceive) > 0 {
+		results, err := tm.groupManager.ReceiveMessages(ctx, dbTX, msgsToReceive)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range msgsToReceive {
+			validateErr := results[m.ID]
+			errStr := ""
+			if validateErr != nil {
+				errStr = validateErr.Error()
+			}
+			acksToSend = append(acksToSend, &ackInfo{node: m.Node, id: m.ID, Error: errStr})
 		}
 	}
 
@@ -360,6 +387,50 @@ func (tm *transportManager) buildPrivacyGroupDistributionMsg(ctx context.Context
 			GenesisState: *sd,
 			GenesisABI:   abiDefinition,
 		}),
+	}, nil, nil
+}
+
+func parsePrivacyGroupMessageDistribution(ctx context.Context, msgID uuid.UUID, data []byte) (pmd *components.PrivacyGroupMessageDistribution, err error) {
+	err = json.Unmarshal(data, &pmd)
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTransportInvalidMessageData, msgID)
+	}
+	return
+}
+
+func parsePrivacyGroupMessage(ctx context.Context, node string, msgID uuid.UUID, data []byte) (msg *pldapi.PrivacyGroupMessage, err error) {
+	err = json.Unmarshal(data, &msg)
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTransportInvalidMessageData, msgID)
+	}
+	msg.Node = node
+	return
+}
+
+func (tm *transportManager) buildPrivacyGroupMessageMsg(ctx context.Context, dbTX persistence.DBTX, rm *components.ReliableMessage) (*prototk.PaladinMsg, error, error) {
+
+	// Validate the message first (not retryable)
+	pmd, parseErr := parsePrivacyGroupMessageDistribution(ctx, rm.ID, rm.Metadata)
+	if parseErr != nil {
+		return nil, parseErr, nil
+	}
+
+	// Get the Message
+	msg, err := tm.groupManager.GetMessageByID(ctx, dbTX, pmd.ID, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	if msg == nil {
+		return nil,
+			i18n.NewError(ctx, msgs.MsgTransportMessageNotAvailableLocally, pmd.ID),
+			nil
+	}
+
+	return &prototk.PaladinMsg{
+		MessageId:   rm.ID.String(),
+		Component:   prototk.PaladinMsg_RELIABLE_MESSAGE_HANDLER,
+		MessageType: RMHMessageTypePrivacyGroupMessage,
+		Payload:     tktypes.JSONString(msg),
 	}, nil, nil
 }
 

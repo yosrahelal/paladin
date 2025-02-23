@@ -97,8 +97,10 @@ func TestReceiveMessageInvalid(t *testing.T) {
 	)
 	require.Len(t, groupIDs, 1)
 
-	accepted, err := gm.ReceiveMessages(ctx, gm.p.NOTX(), "node2", []*pldapi.PrivacyGroupMessage{
+	badID := uuid.New()
+	results, err := gm.ReceiveMessages(ctx, gm.p.NOTX(), []*pldapi.PrivacyGroupMessage{
 		{
+			ID: badID,
 			PrivacyGroupMessageInput: pldapi.PrivacyGroupMessageInput{
 				Domain: "domain1",
 				Data:   tktypes.JSONString("some data"),
@@ -108,7 +110,7 @@ func TestReceiveMessageInvalid(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Empty(t, accepted)
+	require.Regexp(t, "PD012516", results[badID])
 }
 
 func TestSendMessageWriteFail(t *testing.T) {
@@ -181,20 +183,22 @@ func TestSendMessageSendMessageFail(t *testing.T) {
 	require.Regexp(t, "pop", err)
 }
 
-func TestReceiveMessagesFailFindGroup(t *testing.T) {
+func TestReceiveMessagesGroupNotFound(t *testing.T) {
 	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mc.db.Mock.ExpectBegin()
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{}))
 	mc.db.Mock.ExpectCommit()
 
+	badID := uuid.New()
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		accepted, err := gm.ReceiveMessages(ctx, dbTX, "node2", []*pldapi.PrivacyGroupMessage{
+		results, err := gm.ReceiveMessages(ctx, dbTX, []*pldapi.PrivacyGroupMessage{
 			{
 				Sent:     tktypes.TimestampNow(),
 				Received: tktypes.TimestampNow(),
 				Node:     "node2",
-				ID:       uuid.New(),
+				ID:       badID,
 				PrivacyGroupMessageInput: pldapi.PrivacyGroupMessageInput{
 					Domain: "domain1",
 					Data:   tktypes.JSONString("some data"),
@@ -203,10 +207,39 @@ func TestReceiveMessagesFailFindGroup(t *testing.T) {
 				},
 			},
 		})
-		require.Empty(t, accepted)
+		require.Regexp(t, "PD012502", results[badID])
 		return err
 	})
 	require.NoError(t, err)
+}
+
+func TestReceiveMessagesFailFindGroup(t *testing.T) {
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
+	defer done()
+
+	mc.db.Mock.ExpectBegin()
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
+	mc.db.Mock.ExpectCommit()
+
+	badID := uuid.New()
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := gm.ReceiveMessages(ctx, dbTX, []*pldapi.PrivacyGroupMessage{
+			{
+				Sent:     tktypes.TimestampNow(),
+				Received: tktypes.TimestampNow(),
+				Node:     "node2",
+				ID:       badID,
+				PrivacyGroupMessageInput: pldapi.PrivacyGroupMessageInput{
+					Domain: "domain1",
+					Data:   tktypes.JSONString("some data"),
+					Group:  tktypes.RandBytes(32),
+					Topic:  "topic1",
+				},
+			},
+		})
+		return err
+	})
+	require.Regexp(t, "pop", err)
 }
 
 func TestReceiveMessagesFailInsert(t *testing.T) {
@@ -222,7 +255,7 @@ func TestReceiveMessagesFailInsert(t *testing.T) {
 	mc.db.Mock.ExpectRollback()
 
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		accepted, err := gm.ReceiveMessages(ctx, dbTX, "node2", []*pldapi.PrivacyGroupMessage{
+		accepted, err := gm.ReceiveMessages(ctx, dbTX, []*pldapi.PrivacyGroupMessage{
 			{
 				Sent:     tktypes.TimestampNow(),
 				Received: tktypes.TimestampNow(),

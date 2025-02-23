@@ -60,7 +60,7 @@ type GroupManager interface {
 	QueryGroupsByProperties(ctx context.Context, dbTX persistence.DBTX, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error)
 
 	SendMessage(ctx context.Context, dbTX persistence.DBTX, msg *pldapi.PrivacyGroupMessageInput) (*uuid.UUID, error)
-	ReceiveMessages(ctx context.Context, dbTX persistence.DBTX, node string, msgs []*pldapi.PrivacyGroupMessage) (accepted []uuid.UUID, err error)
+	ReceiveMessages(ctx context.Context, dbTX persistence.DBTX, msgs []*pldapi.PrivacyGroupMessage) (results map[uuid.UUID]error, err error)
 	QueryMessages(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroupMessage, error)
 	GetMessageByID(ctx context.Context, dbTX persistence.DBTX, id uuid.UUID, failNotFound bool) (*pldapi.PrivacyGroupMessage, error)
 

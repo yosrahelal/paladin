@@ -227,13 +227,15 @@ func TestE2EMessageListenerDelivery(t *testing.T) {
 		},
 	}
 	err = gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
-		accepted, err := gm.ReceiveMessages(ctx, dbTX, "node2", []*pldapi.PrivacyGroupMessage{
+		badID := uuid.New()
+		accepted, err := gm.ReceiveMessages(ctx, dbTX, []*pldapi.PrivacyGroupMessage{
 			goodRemoteMsg,
-			{ /* bad remote message */ },
+			{ID: badID /* bad remote message */},
 		})
 		require.NoError(t, err)
-		require.Len(t, accepted, 1)
-		require.Equal(t, accepted[0], goodRemoteMsg.ID)
+		require.Len(t, accepted, 2)
+		require.Regexp(t, "PD012514", accepted[badID])
+		require.Nil(t, accepted[goodRemoteMsg.ID])
 		return nil
 	})
 	require.NoError(t, err)
