@@ -23,6 +23,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -622,6 +623,304 @@ func TestHandlePreparedOk(t *testing.T) {
 	require.NoError(t, err)
 
 	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "")
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
+	})
+	require.NoError(t, err)
+
+	ackNackCheck()
+}
+
+func TestHandlePrivacyGroupOK(t *testing.T) {
+	ctx, tm, tp, done := newTestTransport(t, false,
+		mockGoodTransport,
+		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).Return([]components.Schema{
+				componentmocks.NewSchema(t),
+			}, nil).Once()
+			mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
+				Return(nil, nil).Once()
+
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	msg := testReceivedReliableMsg(
+		RMHMessageTypePrivacyGroup,
+		&components.PrivacyGroupGenesisWithABI{
+			GenesisState: components.StateDistributionWithData{
+				StateDistribution: components.StateDistribution{
+					Domain:          "domain1",
+					ContractAddress: tktypes.RandAddress().String(),
+					SchemaID:        tktypes.RandHex(32),
+					StateID:         tktypes.RandHex(32),
+				},
+				StateData: []byte(`{"some":"data"}`),
+			},
+			GenesisABI: abi.Parameter{
+				Type:         "tuple",
+				InternalType: "struct SaltedStruct;",
+				Components: abi.ParameterArray{
+					{Name: "salt", Type: "bytes32"},
+				},
+			},
+		})
+
+	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "")
+
+	p, err := tm.getPeer(ctx, "node2", false)
+	require.NoError(t, err)
+
+	// Handle the batch - will fail to write the states
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
+	})
+	require.NoError(t, err)
+
+	ackNackCheck()
+}
+
+func TestHandlePrivacyGroupABIsFail(t *testing.T) {
+	ctx, tm, tp, done := newTestTransport(t, false,
+		mockGoodTransport,
+		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).Return(nil, fmt.Errorf("pop"))
+			mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
+				Return(nil, fmt.Errorf("bad data"))
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	msg := testReceivedReliableMsg(
+		RMHMessageTypePrivacyGroup,
+		&components.PrivacyGroupGenesisWithABI{
+			GenesisState: components.StateDistributionWithData{
+				StateDistribution: components.StateDistribution{
+					Domain:          "domain1",
+					ContractAddress: tktypes.RandAddress().String(),
+					SchemaID:        tktypes.RandHex(32),
+					StateID:         tktypes.RandHex(32),
+				},
+				StateData: []byte(`{"some":"data"}`),
+			},
+			GenesisABI: abi.Parameter{
+				Type:         "tuple",
+				InternalType: "struct SaltedStruct;",
+				Components: abi.ParameterArray{
+					{Name: "salt", Type: "bytes32"},
+				},
+			},
+		})
+	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "bad data")
+
+	p, err := tm.getPeer(ctx, "node2", false)
+	require.NoError(t, err)
+
+	// Handle the batch - will fail to write the states
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
+	})
+	require.NoError(t, err)
+
+	ackNackCheck()
+}
+
+func TestHandlePrivacyGroupInvalid(t *testing.T) {
+	ctx, tm, tp, done := newTestTransport(t, false,
+		mockGoodTransport,
+		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	msg := testReceivedReliableMsg(
+		RMHMessageTypePrivacyGroup,
+		&components.PrivacyGroupGenesisWithABI{
+			/* invalid */
+		})
+
+	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "PD012016")
+
+	p, err := tm.getPeer(ctx, "node2", false)
+	require.NoError(t, err)
+
+	// Handle the batch - will fail to write the states
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
+	})
+	require.NoError(t, err)
+
+	ackNackCheck()
+}
+
+func mockReceiveMessagesOK(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+	mrm := mc.groupManager.On("ReceiveMessages", mock.Anything, mock.Anything, mock.Anything)
+	mrm.Run(func(args mock.Arguments) {
+		pms := args[2].([]*pldapi.PrivacyGroupMessage)
+		res := map[uuid.UUID]error{}
+		for _, pm := range pms {
+			res[pm.ID] = nil
+		}
+		mrm.Return(res, nil)
+	})
+}
+
+func testReceivedMesage() *components.ReceivedMessage {
+	msgID := uuid.New()
+	return &components.ReceivedMessage{
+		MessageID:     msgID,
+		CorrelationID: confutil.P(uuid.New()),
+		MessageType:   RMHMessageTypePrivacyGroupMessage,
+		Payload: tktypes.JSONString(&pldapi.PrivacyGroupMessage{
+			Sent: tktypes.TimestampNow(),
+			ID:   msgID,
+			PrivacyGroupMessageInput: pldapi.PrivacyGroupMessageInput{
+				Domain: "domain1",
+				Group:  tktypes.RandBytes(32),
+				Topic:  "topic.1",
+				Data:   tktypes.JSONString("some data"),
+			},
+		}),
+	}
+}
+
+func TestHandlePrivacyGroupMessageOK(t *testing.T) {
+	ctx, tm, tp, done := newTestTransport(t, false,
+		mockGoodTransport,
+		mockEmptyReliableMsgs,
+		mockReceiveMessagesOK,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	msg := testReceivedMesage()
+	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "")
+
+	p, err := tm.getPeer(ctx, "node2", false)
+	require.NoError(t, err)
+
+	// Handle the batch - will fail to write the states
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
+	})
+	require.NoError(t, err)
+
+	ackNackCheck()
+}
+
+func TestHandlePrivacyGroupMessageReject(t *testing.T) {
+	ctx, tm, tp, done := newTestTransport(t, false,
+		mockGoodTransport,
+		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mrm := mc.groupManager.On("ReceiveMessages", mock.Anything, mock.Anything, mock.Anything)
+			mrm.Run(func(args mock.Arguments) {
+				pms := args[2].([]*pldapi.PrivacyGroupMessage)
+				res := map[uuid.UUID]error{}
+				for _, pm := range pms {
+					res[pm.ID] = fmt.Errorf("badness")
+				}
+				mrm.Return(res, nil)
+			})
+
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	msg := testReceivedMesage()
+	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "badness")
+
+	p, err := tm.getPeer(ctx, "node2", false)
+	require.NoError(t, err)
+
+	// Handle the batch - will fail to write the states
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
+	})
+	require.NoError(t, err)
+
+	ackNackCheck()
+}
+
+func TestHandlePrivacyGroupMessageFail(t *testing.T) {
+	ctx, tm, _, done := newTestTransport(t, false,
+		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.groupManager.On("ReceiveMessages", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+			mc.db.Mock.ExpectBegin()
+		},
+	)
+	defer done()
+
+	msg := testReceivedMesage()
+
+	p, err := tm.getPeer(ctx, "node2", false)
+	require.NoError(t, err)
+
+	// Handle the batch - will fail to write the states
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
+	})
+	require.Regexp(t, "pop", err)
+}
+
+func TestHandlePrivacyGroupMessageBad(t *testing.T) {
+	ctx, tm, tp, done := newTestTransport(t, false,
+		mockGoodTransport,
+		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	msg := testReceivedReliableMsg(
+		RMHMessageTypePrivacyGroupMessage,
+		&pldapi.PrivacyGroupMessage{
+			/* invalid */
+		})
+	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "PD012016")
+
+	p, err := tm.getPeer(ctx, "node2", false)
+	require.NoError(t, err)
+
+	// Handle the batch - will fail to write the states
 	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
 			{p: p, msg: msg},

@@ -400,7 +400,7 @@ func parsePrivacyGroupMessageDistribution(ctx context.Context, msgID uuid.UUID, 
 
 func parsePrivacyGroupMessage(ctx context.Context, node string, msgID uuid.UUID, data []byte) (msg *pldapi.PrivacyGroupMessage, err error) {
 	err = json.Unmarshal(data, &msg)
-	if err != nil {
+	if err != nil || msg.ID != msgID {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTransportInvalidMessageData, msgID)
 	}
 	msg.Node = node
