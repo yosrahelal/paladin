@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -33,6 +34,20 @@ type PrivacyGroups interface {
 	QueryGroupsByProperties(ctx context.Context, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) (groups []*pldapi.PrivacyGroup, err error)
 	SendTransaction(ctx context.Context, tx *pldapi.PrivacyGroupTransactionInput) (txID uuid.UUID, err error)
 	Call(ctx context.Context, call *pldapi.PrivacyGroupTransactionCall) (data tktypes.RawJSON, err error)
+
+	SendMessage(ctx context.Context, msg *pldapi.PrivacyGroupMessageInput) (msgID uuid.UUID, err error)
+	GetMessageById(ctx context.Context, id uuid.UUID) (msg *pldapi.PrivacyGroupMessage, err error)
+	QueryMessages(ctx context.Context, q *query.QueryJSON) (msgs []*pldapi.PrivacyGroupMessage, err error)
+
+	SubscribeMessages(ctx context.Context, listenerName string) (sub rpcclient.Subscription, err error)
+}
+
+var pgroupReceiptsSubscriptionConfig = rpcclient.SubscriptionConfig{
+	SubscribeMethod:    "pgroup_subscribe",
+	UnsubscribeMethod:  "pgroup_unsubscribe",
+	NotificationMethod: "pgroup_subscription",
+	AckMethod:          "pgroup_ack",
+	NackMethod:         "pgroup_nack",
 }
 
 // This is necessary because there's no way to introspect function parameter names via reflection
@@ -62,6 +77,25 @@ var privacyGroupsInfo = &rpcModuleInfo{
 		"pgroup_call": {
 			Inputs: []string{"call"},
 			Output: "data",
+		},
+		"pgroup_sendMessage": {
+			Inputs: []string{"msg"},
+			Output: "msgId",
+		},
+		"pgroup_getMessageById": {
+			Inputs: []string{"id"},
+			Output: "msg",
+		},
+		"pgroup_queryMessages": {
+			Inputs: []string{"query"},
+			Output: "msgs",
+		},
+	},
+	subscriptions: []RPCSubscriptionInfo{
+		{
+			SubscriptionConfig: pgroupReceiptsSubscriptionConfig,
+			FixedInputs:        []string{"messages"},
+			Inputs:             []string{"listenerName"},
 		},
 	},
 }
@@ -103,4 +137,27 @@ func (r *pgroup) SendTransaction(ctx context.Context, tx *pldapi.PrivacyGroupTra
 func (r *pgroup) Call(ctx context.Context, call *pldapi.PrivacyGroupTransactionCall) (data tktypes.RawJSON, err error) {
 	err = r.c.CallRPC(ctx, &data, "pgroup_call", call)
 	return
+}
+
+func (r *pgroup) SendMessage(ctx context.Context, msg *pldapi.PrivacyGroupMessageInput) (msgID uuid.UUID, err error) {
+	err = r.c.CallRPC(ctx, &msgID, "pgroup_sendMessage", msg)
+	return
+}
+
+func (r *pgroup) GetMessageById(ctx context.Context, id uuid.UUID) (msg *pldapi.PrivacyGroupMessage, err error) {
+	err = r.c.CallRPC(ctx, &msg, "pgroup_getMessageById", id)
+	return
+}
+
+func (r *pgroup) QueryMessages(ctx context.Context, jq *query.QueryJSON) (msgs []*pldapi.PrivacyGroupMessage, err error) {
+	err = r.c.CallRPC(ctx, &msgs, "pgroup_queryMessages", jq)
+	return
+}
+
+func (r *pgroup) SubscribeMessages(ctx context.Context, listenerName string) (sub rpcclient.Subscription, err error) {
+	ws, err := r.c.WSClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ws.Subscribe(ctx, pgroupReceiptsSubscriptionConfig, "messages", listenerName)
 }

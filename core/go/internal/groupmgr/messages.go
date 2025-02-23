@@ -69,7 +69,7 @@ func (gm *persistedMessage) preValidate(ctx context.Context) error {
 	}
 	// Check for invalid scenarios that could occur when receiving data from another node
 	var zeroUUID uuid.UUID
-	if gm.ID == zeroUUID || gm.Node == "" || gm.Sent == 0 || gm.Received == 0 {
+	if gm.ID == zeroUUID || gm.Node == "" || gm.Sent == 0 || gm.Received == 0 || gm.Group == nil {
 		log.L(ctx).Errorf("Invalid message: %+v", gm)
 		return i18n.NewError(ctx, msgs.MsgPGroupsMessageInvalid)
 	}
@@ -119,7 +119,7 @@ func (gm *groupManager) SendMessage(ctx context.Context, dbTX persistence.DBTX, 
 		// Each node gets a single copy (not one per identity)
 		msgs = append(msgs, &components.ReliableMessage{
 			Node:        node,
-			MessageType: components.RMTPrivacyGroup.Enum(),
+			MessageType: components.RMTPrivacyGroupMessage.Enum(),
 			Metadata: tktypes.JSONString(&components.PrivacyGroupMessageDistribution{
 				Domain: msg.Domain,
 				Group:  msg.Group,
@@ -145,6 +145,7 @@ func (gm *groupManager) ReceiveMessages(ctx context.Context, dbTX persistence.DB
 
 	now := tktypes.TimestampNow()
 	pMsgs := make([]*persistedMessage, 0, len(msgs))
+	validatedGroups := make(map[string]*pldapi.PrivacyGroupWithABI)
 	for _, msg := range msgs {
 		pm := &persistedMessage{
 			Domain:   msg.Domain,
@@ -160,6 +161,14 @@ func (gm *groupManager) ReceiveMessages(ctx context.Context, dbTX persistence.DB
 		if err := pm.preValidate(ctx); err != nil {
 			log.L(ctx).Errorf("Unable to process received message %s: %s", pm.ID, err)
 			continue
+		}
+		mapKey := pm.Domain + "/" + pm.Group.String()
+		if validatedGroups[mapKey] == nil {
+			validatedGroups[mapKey], err = gm.GetGroupByID(ctx, dbTX, pm.Domain, pm.Group)
+			if err != nil {
+				log.L(ctx).Errorf("Unable to process received message as group not initialized %s: %s", pm.ID, err)
+				continue
+			}
 		}
 		accepted = append(accepted, msg.ID)
 		pMsgs = append(pMsgs, pm)

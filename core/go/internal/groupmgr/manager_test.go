@@ -611,7 +611,7 @@ func TestGetGroupByIDFailDB(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 }
 
-func mockDBPrivacyGroup(mc *mockComponents, schemaID tktypes.Bytes32, stateID tktypes.HexBytes, contractAddr *tktypes.EthAddress) {
+func mockDBPrivacyGroup(mc *mockComponents, schemaID tktypes.Bytes32, stateID tktypes.HexBytes, contractAddr *tktypes.EthAddress, members ...string) {
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{
 		"domain",
 		"id",
@@ -623,7 +623,11 @@ func mockDBPrivacyGroup(mc *mockComponents, schemaID tktypes.Bytes32, stateID tk
 		schemaID,
 		contractAddr,
 	))
-	mc.db.Mock.ExpectQuery("SELECT.*privacy_group_members").WillReturnRows(sqlmock.NewRows([]string{}))
+	memberRows := sqlmock.NewRows([]string{"group", "domain", "idx", "identity"})
+	for i, m := range members {
+		memberRows.AddRow(stateID, "domain1", i, m)
+	}
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_group_members").WillReturnRows(memberRows)
 }
 
 func mockPrivacyGroupState(mc *mockComponents, schemaID tktypes.Bytes32, id tktypes.HexBytes) {

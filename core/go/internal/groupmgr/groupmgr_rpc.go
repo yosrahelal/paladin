@@ -39,6 +39,9 @@ func (gm *groupManager) initRPC() {
 		Add("pgroup_queryGroupsByProperties", gm.rpcQueryGroupsByProperties()).
 		Add("pgroup_sendTransaction", gm.rpcSendTransaction()).
 		Add("pgroup_call", gm.rpcCall()).
+		Add("pgroup_sendMessage", gm.rpcSendMessage()).
+		Add("pgroup_getMessageById", gm.rpcGetMessageByID()).
+		Add("pgroup_queryMessages", gm.rpcQueryMessages()).
 		AddAsync(gm.rpcEventStreams)
 }
 
@@ -84,5 +87,27 @@ func (gm *groupManager) rpcCall() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, call *pldapi.PrivacyGroupTransactionCall) (result tktypes.RawJSON, err error) {
 		err = gm.Call(ctx, gm.p.NOTX(), &result, call)
 		return result, err
+	})
+}
+
+func (gm *groupManager) rpcSendMessage() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context, msg *pldapi.PrivacyGroupMessageInput) (msgID *uuid.UUID, err error) {
+		err = gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+			msgID, err = gm.SendMessage(ctx, dbTX, msg)
+			return err
+		})
+		return msgID, err
+	})
+}
+
+func (gm *groupManager) rpcGetMessageByID() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context, id uuid.UUID) (msg *pldapi.PrivacyGroupMessage, err error) {
+		return gm.GetMessageByID(ctx, gm.p.NOTX(), id, false)
+	})
+}
+
+func (gm *groupManager) rpcQueryMessages() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) (msgs []*pldapi.PrivacyGroupMessage, err error) {
+		return gm.QueryMessages(ctx, gm.p.NOTX(), &jq)
 	})
 }

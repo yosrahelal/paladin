@@ -113,7 +113,9 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 			}).Once()
 
 		// Validate the state send gets the correct data
-		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm *components.ReliableMessage) bool {
+			return rm.MessageType.V() == components.RMTPrivacyGroup
+		})).Return(nil).Run(func(args mock.Arguments) {
 			msg := args[2].(*components.ReliableMessage)
 			require.Equal(t, components.RMTPrivacyGroup, msg.MessageType.V())
 			var sd *components.StateDistribution
@@ -190,6 +192,11 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 				res := args[2].(*tktypes.RawJSON)
 				*res = tktypes.RawJSON(`{"call":"result"}`)
 			}).Once()
+
+		// Validate we also get a send reliable for the message
+		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm *components.ReliableMessage) bool {
+			return rm.MessageType.V() == components.RMTPrivacyGroupMessage
+		})).Return(nil)
 	})
 	defer done()
 
@@ -286,5 +293,28 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.JSONEq(t, `{"call":"result"}`, callData.Pretty())
+
+	// Send a messages
+	cid := uuid.New()
+	msgID, err := pgroupRPC.SendMessage(ctx, &pldapi.PrivacyGroupMessageInput{
+		Domain:        "domain1",
+		Group:         groupID,
+		Data:          tktypes.JSONString("some data"),
+		Topic:         "my/topic",
+		CorrelationID: &cid,
+	})
+	require.NoError(t, err)
+
+	// Query by ID
+	msgByID, err := pgroupRPC.GetMessageById(ctx, msgID)
+	require.NoError(t, err)
+	require.Equal(t, msgID, msgByID.ID)
+	require.NotEqual(t, msgID, (uuid.UUID{}))
+
+	// Query by correlation ID
+	msgByCID, err := pgroupRPC.QueryMessages(ctx, query.NewQueryBuilder().Equal("correlationId", cid).Limit(1).Query())
+	require.NoError(t, err)
+	require.Len(t, msgByCID, 1)
+	require.Equal(t, msgID, msgByCID[0].ID)
 
 }
