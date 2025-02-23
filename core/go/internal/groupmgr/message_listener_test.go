@@ -19,6 +19,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,6 +116,10 @@ func createTestGroups(t *testing.T, ctx context.Context, mc *mockComponents, gm 
 	return ids
 }
 
+func mockEmptyMessageListeners(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+	mc.db.Mock.ExpectQuery("SELECT.*message_listeners").WillReturnRows(mc.db.Mock.NewRows([]string{}))
+}
+
 func TestE2EMessageListenerDelivery(t *testing.T) {
 	ctx, gm, mc, done := newTestGroupManager(t, true, &pldconf.GroupManagerConfig{})
 	defer done()
@@ -141,6 +146,7 @@ func TestE2EMessageListenerDelivery(t *testing.T) {
 		Filters: pldapi.PrivacyGroupMessageListenerFilters{
 			Domain: "domain1",
 			Group:  groupIDs[0],
+			Topic:  "my\\/.*",
 		},
 		Options: pldapi.PrivacyGroupMessageListenerOptions{
 			IncludeLocal: true, // we'll get notified for all the messages we send locally
@@ -188,7 +194,7 @@ func TestE2EMessageListenerDelivery(t *testing.T) {
 
 	// The messages should all be delivered to the receiver that specifies local
 	for _, m := range msgs {
-		if !m.Group.Equals(groupIDs[0]) {
+		if !m.Group.Equals(groupIDs[0]) || !strings.HasPrefix(m.Topic, "my") {
 			continue
 		}
 		rm := <-receivedMsgsIncLocalGroup0.pgMsgs
@@ -245,7 +251,9 @@ func TestLoadListenersMultiPage(t *testing.T) {
 	mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").
 		Return([]*components.RegistryNodeTransportEntry{ /* contents not checked */ }, nil).Maybe()
 
-	err := gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{Name: "listener1"})
+	err := gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{Name: "listener1",
+		Started: confutil.P(false),
+	})
 	require.NoError(t, err)
 
 	err = gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{Name: "listener2"})
@@ -256,13 +264,28 @@ func TestLoadListenersMultiPage(t *testing.T) {
 
 	err = gm.loadMessageListeners()
 	require.NoError(t, err)
+	gm.startMessageListeners()
 
 	require.Len(t, gm.messageListeners, 2)
+
+	err = gm.StartMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+
+	err = gm.StopMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+
+	err = gm.DeleteMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+
+	ls, err := gm.QueryMessageListeners(ctx, gm.p.NOTX(), query.NewQueryBuilder().Limit(100).Query())
+	require.NoError(t, err)
+	require.Len(t, ls, 1)
+	require.Equal(t, "listener2", ls[0].Name)
 
 }
 
 func TestLoadListenersFailBadListenerName(t *testing.T) {
-	_, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	_, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -281,7 +304,7 @@ func TestLoadListenersFailBadListenerName(t *testing.T) {
 }
 
 func TestLoadListenersFailBadListenerTopicFilterRegexp(t *testing.T) {
-	_, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	_, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -299,8 +322,22 @@ func TestLoadListenersFailBadListenerTopicFilterRegexp(t *testing.T) {
 	require.Regexp(t, "PD012509", err)
 }
 
+func TestLoadListenersFail(t *testing.T) {
+	_, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
+	defer done()
+
+	mdb := mc.db.Mock
+
+	mdb.ExpectQuery("SELECT.*message_listeners").WillReturnError(fmt.Errorf("pop"))
+
+	gm.messagesInit()
+
+	err := gm.loadMessageListeners()
+	require.Regexp(t, "pop", err)
+}
+
 func TestCreateBadListener(t *testing.T) {
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	err := gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
@@ -313,7 +350,7 @@ func TestCreateBadListener(t *testing.T) {
 }
 
 func TestCreateListenerFail(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mc.db.Mock.ExpectExec("INSERT.*message_listeners").WillReturnError(fmt.Errorf("pop"))
@@ -325,7 +362,7 @@ func TestCreateListenerFail(t *testing.T) {
 }
 
 func TestAddMessageReceiverNotFound(t *testing.T) {
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	_, err := gm.AddMessageReceiver(ctx, "test1", newTestMessageReceiver(nil))
@@ -333,7 +370,7 @@ func TestAddMessageReceiverNotFound(t *testing.T) {
 }
 
 func TestStopMessageListenerNotFound(t *testing.T) {
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	err := gm.StopMessageListener(ctx, "test1")
@@ -341,7 +378,7 @@ func TestStopMessageListenerNotFound(t *testing.T) {
 }
 
 func TestStartMessageListenerNotFound(t *testing.T) {
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	err := gm.StartMessageListener(ctx, "test1")
@@ -349,7 +386,7 @@ func TestStartMessageListenerNotFound(t *testing.T) {
 }
 
 func TestStartMessageListenerFail(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -367,7 +404,7 @@ func TestStartMessageListenerFail(t *testing.T) {
 }
 
 func TestDeleteMessageListenerNotFound(t *testing.T) {
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	err := gm.DeleteMessageListener(ctx, "test1")
@@ -375,7 +412,7 @@ func TestDeleteMessageListenerNotFound(t *testing.T) {
 }
 
 func TestDeleteMessageListenerFail(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -388,6 +425,9 @@ func TestDeleteMessageListenerFail(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	_, err = gm.loadListener(ctx, &persistedMessageListener{Name: "test1", Filters: tktypes.RawJSON(`{"topic":"(((bad listener"}`), Options: tktypes.RawJSON(`{}`)})
+	assert.Regexp(t, "PD012509", err)
+
 	_, err = gm.loadListener(ctx, &persistedMessageListener{Name: "test1", Filters: tktypes.RawJSON(`{}`), Options: tktypes.RawJSON(`{}`)})
 	assert.Regexp(t, "PD012512", err)
 
@@ -396,7 +436,7 @@ func TestDeleteMessageListenerFail(t *testing.T) {
 }
 
 func TestCreateListenerBadOptions(t *testing.T) {
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	_, err := gm.loadListener(ctx, &persistedMessageListener{
@@ -413,7 +453,7 @@ func TestCreateListenerBadOptions(t *testing.T) {
 }
 
 func TestAddReceiverNoBlock(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -435,7 +475,7 @@ func TestAddReceiverNoBlock(t *testing.T) {
 }
 
 func TestNotifyNewMessagesNoBlock(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -452,7 +492,7 @@ func TestNotifyNewMessagesNoBlock(t *testing.T) {
 }
 
 func TestClosedRetryingLoadingCheckpoint(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -490,7 +530,7 @@ func mockMessages(count int, mc *mockComponents) {
 }
 
 func TestClosedRetryingBatchDeliver(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -517,7 +557,7 @@ func TestClosedRetryingBatchDeliver(t *testing.T) {
 }
 
 func TestClosedRetryingWritingCheckpoint(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -545,7 +585,7 @@ func TestClosedRetryingWritingCheckpoint(t *testing.T) {
 }
 
 func TestClosedRetryingQueryMessages(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -566,7 +606,7 @@ func TestClosedRetryingQueryMessages(t *testing.T) {
 }
 
 func TestDeliverBatchCancelledCtxNoReceiver(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -586,7 +626,7 @@ func TestDeliverBatchCancelledCtxNoReceiver(t *testing.T) {
 }
 
 func TestDeliverBatchCancelledCtxNotifyReceiver(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -617,7 +657,7 @@ func TestDeliverBatchCancelledCtxNotifyReceiver(t *testing.T) {
 }
 
 func TestProcessPersistedMessagePostFilter(t *testing.T) {
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mdb := mc.db.Mock
@@ -635,10 +675,70 @@ func TestProcessPersistedMessagePostFilter(t *testing.T) {
 	l := gm.messageListeners["listener1"]
 	l.initStart()
 
-	err = l.processPersistedMessage(&messageDeliveryBatch{}, &persistedMessage{
+	l.processPersistedMessage(&messageDeliveryBatch{}, &persistedMessage{
 		Domain: "domain2",
 	})
 	require.NoError(t, err)
 	close(l.done)
+
+}
+
+func TestCreateMessageListenerDup(t *testing.T) {
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
+	defer done()
+
+	mdb := mc.db.Mock
+	mdb.ExpectExec("INSERT.*message_listeners").WillReturnResult(driver.ResultNoRows)
+
+	err := gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
+		Name:    "listener1",
+		Started: confutil.P(false),
+	})
+	require.NoError(t, err)
+
+	err = gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
+		Name:    "listener1",
+		Started: confutil.P(false),
+	})
+	require.Regexp(t, "PD012507", err)
+
+}
+
+func TestLoadCheckpoint(t *testing.T) {
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
+	defer done()
+
+	mdb := mc.db.Mock
+	mdb.ExpectExec("INSERT.*message_listeners").WillReturnResult(driver.ResultNoRows)
+	mdb.ExpectExec("UPDATE.*message_listeners").WillReturnResult(driver.ResultNoRows)
+
+	err := gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
+		Name:    "listener1",
+		Started: confutil.P(true),
+	})
+	require.NoError(t, err)
+
+	l := gm.messageListeners["listener1"]
+	require.NotNil(t, l)
+
+	err = gm.StopMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+
+	l.ctx = context.Background()
+
+	l.spec.Filters.SequenceAbove = confutil.P(uint64(100))
+	mdb.ExpectQuery("SELECT.*message_listener_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
+	err = l.loadCheckpoint()
+	require.NoError(t, err)
+	require.Equal(t, uint64(100), *l.checkpoint)
+
+	mdb.ExpectQuery("SELECT.*message_listener_checkpoints").WillReturnRows(sqlmock.NewRows([]string{
+		"listener", "sequence", "time",
+	}).AddRow(
+		"listener1", int64(400), tktypes.TimestampNow(),
+	))
+	err = l.loadCheckpoint()
+	require.NoError(t, err)
+	require.Equal(t, uint64(400), *l.checkpoint)
 
 }

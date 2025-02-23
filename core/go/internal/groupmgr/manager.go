@@ -132,10 +132,12 @@ func (gm *groupManager) PostInit(c components.AllComponents) error {
 }
 
 func (gm *groupManager) Start() error {
+	gm.startMessageListeners()
 	return nil
 }
 
 func (gm *groupManager) Stop() {
+	gm.stopMessageListeners()
 	gm.cancelCtx()
 }
 

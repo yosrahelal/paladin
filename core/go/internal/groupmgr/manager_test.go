@@ -108,9 +108,6 @@ func newTestGroupManager(t *testing.T, realDB bool, conf *pldconf.GroupManagerCo
 	logrus.SetLevel(logrus.TraceLevel)
 
 	mc := newMockComponents(t, realDB)
-	if mc.db != nil {
-		mc.db.Mock.ExpectQuery("SELECT.*message_listeners").WillReturnRows(mc.db.Mock.NewRows([]string{}))
-	}
 	for _, fn := range extraSetup {
 		fn(mc, conf)
 	}
@@ -143,7 +140,7 @@ func mockBeginRollback(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 
 func TestPrivacyGroupInvalidABI(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners, mockBeginRollback)
 	defer done()
 
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -161,7 +158,7 @@ func TestPrivacyGroupInvalidABI(t *testing.T) {
 
 func TestPrivacyGroupMixedArrayFailParseAfterInfer(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners, mockBeginRollback)
 	defer done()
 
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -179,7 +176,7 @@ func TestPrivacyGroupMixedArrayFailParseAfterInfer(t *testing.T) {
 
 func TestPrivacyGroupNoMembers(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners, mockBeginRollback)
 	defer done()
 
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -193,7 +190,7 @@ func TestPrivacyGroupNoMembers(t *testing.T) {
 
 func TestPrivacyGroupNonQualfiedMembers(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback)
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners, mockBeginRollback)
 	defer done()
 
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -208,10 +205,13 @@ func TestPrivacyGroupNonQualfiedMembers(t *testing.T) {
 
 func TestPrivacyGroupNoTransportsForNode(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
-		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").
-			Return(nil, fmt.Errorf("nope"))
-	})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockEmptyMessageListeners,
+		mockBeginRollback,
+		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+			mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").
+				Return(nil, fmt.Errorf("nope"))
+		})
 	defer done()
 
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -226,11 +226,14 @@ func TestPrivacyGroupNoTransportsForNode(t *testing.T) {
 
 func TestPrivacyGroupInvalidDomain(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
-		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockEmptyMessageListeners,
+		mockBeginRollback,
+		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+			mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
 
-		mc.domainManager.On("GetDomainByName", mock.Anything, "domain2").Return(nil, fmt.Errorf("nope"))
-	})
+			mc.domainManager.On("GetDomainByName", mock.Anything, "domain2").Return(nil, fmt.Errorf("nope"))
+		})
 	defer done()
 
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -245,10 +248,13 @@ func TestPrivacyGroupInvalidDomain(t *testing.T) {
 
 func TestPrivacyGroupDomainInitFail(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
-		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
-		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
-	})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockEmptyMessageListeners,
+		mockBeginRollback,
+		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+			mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
+			mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		})
 	defer done()
 
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -263,16 +269,19 @@ func TestPrivacyGroupDomainInitFail(t *testing.T) {
 
 func TestPrivacyGroupDomainInitGenerateBadSchema(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
-		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
-		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).
-			Return(&components.PreparedGroupInitTransaction{
-				GenesisState:  tktypes.RawJSON(`{}`),
-				GenesisSchema: &abi.Parameter{},
-			}, nil)
-		mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
-			Return(nil, fmt.Errorf("pop"))
-	})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockEmptyMessageListeners,
+		mockBeginRollback,
+		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+			mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
+			mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).
+				Return(&components.PreparedGroupInitTransaction{
+					GenesisState:  tktypes.RawJSON(`{}`),
+					GenesisSchema: &abi.Parameter{},
+				}, nil)
+			mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
+				Return(nil, fmt.Errorf("pop"))
+		})
 	defer done()
 
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -287,20 +296,23 @@ func TestPrivacyGroupDomainInitGenerateBadSchema(t *testing.T) {
 
 func TestPrivacyGroupWriteStateFail(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockBeginRollback, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
-		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
-		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).
-			Return(&components.PreparedGroupInitTransaction{
-				GenesisState:  tktypes.RawJSON(`{}`),
-				GenesisSchema: &abi.Parameter{},
-			}, nil)
-		ms := componentmocks.NewSchema(t)
-		ms.On("ID").Return(tktypes.RandBytes32())
-		mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
-			Return([]components.Schema{ms}, nil)
-		mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
-			Return(nil, fmt.Errorf("pop"))
-	})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockEmptyMessageListeners,
+		mockBeginRollback,
+		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+			mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
+			mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).
+				Return(&components.PreparedGroupInitTransaction{
+					GenesisState:  tktypes.RawJSON(`{}`),
+					GenesisSchema: &abi.Parameter{},
+				}, nil)
+			ms := componentmocks.NewSchema(t)
+			ms.On("ID").Return(tktypes.RandBytes32())
+			mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
+				Return([]components.Schema{ms}, nil)
+			mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
+				Return(nil, fmt.Errorf("pop"))
+		})
 	defer done()
 
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -316,6 +328,7 @@ func TestPrivacyGroupWriteStateFail(t *testing.T) {
 func TestPrivacyGroupSendTransactionFail(t *testing.T) {
 
 	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockEmptyMessageListeners,
 		mockBeginRollback,
 		mockReadyToSendTransaction(t),
 		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
@@ -376,6 +389,7 @@ func mockReadyToInsertGroup(t *testing.T) func(mc *mockComponents, conf *pldconf
 func TestPrivacyGroupWriteGroupFail(t *testing.T) {
 
 	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockEmptyMessageListeners,
 		mockReadyToInsertGroup(t),
 		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 			mc.db.Mock.ExpectBegin()
@@ -400,6 +414,7 @@ func TestPrivacyGroupWriteGroupFail(t *testing.T) {
 func TestPrivacyGroupMembersWriteFail(t *testing.T) {
 
 	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockEmptyMessageListeners,
 		mockReadyToInsertGroup(t),
 		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 			mc.db.Mock.ExpectBegin()
@@ -431,6 +446,7 @@ func mockInsertPrivacyGroupOK(mc *mockComponents, conf *pldconf.GroupManagerConf
 func TestPrivacyGroupSendReliableFail(t *testing.T) {
 
 	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{},
+		mockEmptyMessageListeners,
 		mockReadyToInsertGroup(t),
 		mockInsertPrivacyGroupOK,
 		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
@@ -454,7 +470,7 @@ func TestPrivacyGroupSendReliableFail(t *testing.T) {
 
 func TestQueryGroupsFail(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
@@ -465,7 +481,7 @@ func TestQueryGroupsFail(t *testing.T) {
 
 func TestQueryGroupsEnrichMembersFail(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{
@@ -483,7 +499,7 @@ func TestQueryGroupsEnrichMembersFail(t *testing.T) {
 
 func TestQueryGroupsEnrichGenesisFail(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{
@@ -504,7 +520,7 @@ func TestQueryGroupsEnrichGenesisFail(t *testing.T) {
 
 func TestQueryGroupsByPropertiesFail(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
@@ -518,7 +534,7 @@ func TestQueryGroupsByPropertiesFail(t *testing.T) {
 
 func TestQueryGroupsByPropertiesNoResults(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
@@ -534,7 +550,7 @@ func TestQueryGroupsByPropertiesNoResults(t *testing.T) {
 
 func TestQueryGroupsByPropertiesQueryFail(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
@@ -556,7 +572,7 @@ func TestQueryGroupsByPropertiesQueryFail(t *testing.T) {
 
 func TestQueryGroupsByPropertiesMembersFail(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
@@ -586,7 +602,7 @@ func TestQueryGroupsByPropertiesMembersFail(t *testing.T) {
 
 func TestGetGroupByIDFailDB(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
@@ -628,7 +644,7 @@ func mockPrivacyGroupState(mc *mockComponents, schemaID tktypes.Bytes32, id tkty
 
 func TestGetGroupByIDFailSchema(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
@@ -646,7 +662,7 @@ func TestGetGroupByIDFailSchema(t *testing.T) {
 
 func TestSendTransactionNotPrivate(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	_, err := gm.SendTransaction(ctx, gm.p.NOTX(), &pldapi.PrivacyGroupTransactionInput{
@@ -662,7 +678,7 @@ func TestSendTransactionNotPrivate(t *testing.T) {
 
 func TestSendTransactionNoDomain(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	_, err := gm.SendTransaction(ctx, gm.p.NOTX(), &pldapi.PrivacyGroupTransactionInput{
@@ -678,7 +694,7 @@ func TestSendTransactionNoDomain(t *testing.T) {
 
 func TestSendTransactionNoGroup(t *testing.T) {
 
-	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, _, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	_, err := gm.SendTransaction(ctx, gm.p.NOTX(), &pldapi.PrivacyGroupTransactionInput{
@@ -695,7 +711,7 @@ func TestSendTransactionNoGroup(t *testing.T) {
 
 func TestSendTransactionGroupNotFound(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{}))
@@ -715,7 +731,7 @@ func TestSendTransactionGroupNotFound(t *testing.T) {
 
 func TestSendTransactionGroupFailQuery(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
@@ -735,7 +751,7 @@ func TestSendTransactionGroupFailQuery(t *testing.T) {
 
 func TestSendTransactionGroupNotReady(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
@@ -758,7 +774,7 @@ func TestSendTransactionGroupNotReady(t *testing.T) {
 
 func TestSendTransactionGroupGetContractFail(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
@@ -784,7 +800,7 @@ func TestSendTransactionGroupGetContractFail(t *testing.T) {
 
 func TestCallGroupResolveInputsFail(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	schemaID := tktypes.RandBytes32()
@@ -816,7 +832,7 @@ func TestCallGroupResolveInputsFail(t *testing.T) {
 
 func TestSendTransactionGroupResolveInputsFail(t *testing.T) {
 
-	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{})
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
 	defer done()
 
 	schemaID := tktypes.RandBytes32()

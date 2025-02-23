@@ -123,7 +123,7 @@ func (pm *persistedMessage) mapToAPI() *pldapi.PrivacyGroupMessage {
 func (gm *groupManager) CreateMessageListener(ctx context.Context, spec *pldapi.PrivacyGroupMessageListener) error {
 
 	log.L(ctx).Infof("Creating message listener '%s'", spec.Name)
-	if err := gm.validateListenerSpec(ctx, spec); err != nil {
+	if _, err := gm.validateListenerSpec(ctx, spec); err != nil {
 		return err
 	}
 
@@ -256,7 +256,8 @@ func (gm *groupManager) QueryMessageListeners(ctx context.Context, dbTX persiste
 		Filters:     messageListenerFilters,
 		Query:       jq,
 		MapResult: func(pl *persistedMessageListener) (*pldapi.PrivacyGroupMessageListener, error) {
-			return gm.mapListener(ctx, pl)
+			_, l, err := gm.mapListener(ctx, pl)
+			return l, err
 		},
 	}
 	return qw.Run(ctx, dbTX)
@@ -347,18 +348,19 @@ func (gm *groupManager) stopMessageListeners() {
 	}
 }
 
-func (gm *groupManager) validateListenerSpec(ctx context.Context, spec *pldapi.PrivacyGroupMessageListener) error {
+func (gm *groupManager) validateListenerSpec(ctx context.Context, spec *pldapi.PrivacyGroupMessageListener) (topicMatch *regexp.Regexp, err error) {
 	if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, spec.Name, tktypes.DefaultNameMaxLen, "name"); err != nil {
-		return err
+		return nil, err
 	}
 
 	if spec.Filters.Topic != "" {
-		if _, err := regexp.Compile(spec.Filters.Topic); err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgPGroupsMessageListenerBadTopicFilter, spec.Filters.Topic)
+		topicMatch, err = regexp.Compile(spec.Filters.Topic)
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgPGroupsMessageListenerBadTopicFilter, spec.Filters.Topic)
 		}
 	}
 
-	return nil
+	return topicMatch, nil
 }
 
 // Build parts of the matching that can be pre-filtered efficiently in the DB.
@@ -415,43 +417,36 @@ func (l *messageListener) checkMatch(r *persistedMessage) bool {
 	return matches
 }
 
-func (gm *groupManager) mapListener(ctx context.Context, pl *persistedMessageListener) (*pldapi.PrivacyGroupMessageListener, error) {
+func (gm *groupManager) mapListener(ctx context.Context, pl *persistedMessageListener) (*regexp.Regexp, *pldapi.PrivacyGroupMessageListener, error) {
 	spec := &pldapi.PrivacyGroupMessageListener{
 		Name:    pl.Name,
 		Started: pl.Started,
 		Created: pl.Created,
 	}
 	if err := json.Unmarshal(pl.Filters, &spec.Filters); err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgPGroupsBadMessageListenerFilter, pl.Name)
+		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgPGroupsBadMessageListenerFilter, pl.Name)
 	}
 	if err := json.Unmarshal(pl.Options, &spec.Options); err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgPGroupsBadMessageListenerOptions, pl.Name)
+		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgPGroupsBadMessageListenerOptions, pl.Name)
 	}
-	if err := gm.validateListenerSpec(ctx, spec); err != nil {
-		return nil, err
+	topicMatch, err := gm.validateListenerSpec(ctx, spec)
+	if err != nil {
+		return nil, nil, err
 	}
-	return spec, nil
+	return topicMatch, spec, nil
 }
 
-func (gm *groupManager) loadListener(ctx context.Context, pl *persistedMessageListener) (*messageListener, error) {
+func (gm *groupManager) loadListener(ctx context.Context, pl *persistedMessageListener) (l *messageListener, err error) {
 
-	spec, err := gm.mapListener(ctx, pl)
-	if err != nil {
-		return nil, err
-	}
-
-	l := &messageListener{
+	l = &messageListener{
 		gm:           gm,
-		spec:         spec,
 		newReceivers: make(chan bool, 1),
 		newMessages:  make(chan bool, 1),
 	}
 
-	if l.spec.Filters.Topic != "" {
-		l.topicMatch, err = regexp.Compile(l.spec.Filters.Topic)
-		if err != nil {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgPGroupsMessageListenerBadTopicFilter, l.spec.Filters.Topic)
-		}
+	l.topicMatch, l.spec, err = gm.mapListener(ctx, pl)
+	if err != nil {
+		return nil, err
 	}
 
 	gm.messageListenerLock.Lock()
@@ -563,14 +558,14 @@ func (l *messageListener) readPage() ([]*persistedMessage, error) {
 	return messages, err
 }
 
-func (l *messageListener) processPersistedMessage(b *messageDeliveryBatch, pm *persistedMessage) error {
+func (l *messageListener) processPersistedMessage(b *messageDeliveryBatch, pm *persistedMessage) {
 	if !l.checkMatch(pm) {
-		return nil
+		return
 	}
 	// Otherwise we can process the message
 	log.L(l.ctx).Infof("Added message %d/%s (domain='%s') to batch %d", pm.LocalSeq, pm.ID, pm.Domain, b.ID)
 	b.Messages = append(b.Messages, pm.mapToAPI())
-	return nil
+	return
 }
 
 func (l *messageListener) nextReceiver(b *messageDeliveryBatch) (r components.PrivacyGroupMessageReceiver, err error) {
@@ -641,12 +636,7 @@ func (l *messageListener) processPage(page []*persistedMessage) (*messageDeliver
 	batch.ID = l.nextBatchID
 	l.nextBatchID++
 	for _, r := range page {
-		err := l.gm.messagesRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
-			return true, l.processPersistedMessage(&batch, r)
-		})
-		if err != nil {
-			return nil, err
-		}
+		l.processPersistedMessage(&batch, r)
 	}
 
 	// If our batch contains some work, we need to wait for someone to process that work
