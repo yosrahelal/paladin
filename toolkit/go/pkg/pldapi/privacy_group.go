@@ -77,6 +77,11 @@ type PrivacyGroupMessageListener struct {
 	Options PrivacyGroupMessageListenerOptions `docstruct:"MessageListener" json:"options"`
 }
 
+type PrivacyGroupMessageBatch struct {
+	BatchID  uint64                 `docstruct:"PrivacyGroupMessageBatch" json:"batchId,omitempty"`
+	Messages []*PrivacyGroupMessage `docstruct:"PrivacyGroupMessageBatch" json:"messages,omitempty"`
+}
+
 type PrivacyGroupMessageListenerFilters struct {
 	SequenceAbove *uint64          `docstruct:"MessageListenerFilters" json:"sequenceAbove,omitempty"`
 	Domain        string           `docstruct:"MessageListenerFilters" json:"domain,omitempty"`
@@ -86,4 +91,20 @@ type PrivacyGroupMessageListenerFilters struct {
 
 type PrivacyGroupMessageListenerOptions struct {
 	IncludeLocal bool `docstruct:"MessageListenerOptions" json:"includeLocal,omitempty"`
+}
+
+type PGroupEventType string
+
+const (
+	PGroupEventTypeMessages PGroupEventType = "messages"
+)
+
+func (tt PGroupEventType) Enum() tktypes.Enum[PGroupEventType] {
+	return tktypes.Enum[PGroupEventType](tt)
+}
+
+func (tt PGroupEventType) Options() []string {
+	return []string{
+		string(PGroupEventTypeMessages),
+	}
 }

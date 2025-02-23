@@ -61,6 +61,7 @@ type groupManager struct {
 	transportManager components.TransportManager
 	registryManager  components.RegistryManager
 	p                persistence.Persistence
+	rpcEventStreams  *rpcEventStreams
 
 	messagesRetry                *retry.Retry
 	messagesReadPageSize         int
@@ -110,6 +111,7 @@ func NewGroupManager(bgCtx context.Context, conf *pldconf.GroupManagerConfig) co
 		messageListeners: make(map[string]*messageListener),
 	}
 	gm.messagesInit()
+	gm.rpcEventStreams = newRPCEventStreams(gm)
 	gm.bgCtx, gm.cancelCtx = context.WithCancel(bgCtx)
 	return gm
 }
@@ -137,6 +139,7 @@ func (gm *groupManager) Start() error {
 }
 
 func (gm *groupManager) Stop() {
+	gm.rpcEventStreams.stop()
 	gm.stopMessageListeners()
 	gm.cancelCtx()
 }

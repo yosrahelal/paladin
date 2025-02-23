@@ -38,7 +38,8 @@ func (gm *groupManager) initRPC() {
 		Add("pgroup_queryGroups", gm.rpcQueryGroups()).
 		Add("pgroup_queryGroupsByProperties", gm.rpcQueryGroupsByProperties()).
 		Add("pgroup_sendTransaction", gm.rpcSendTransaction()).
-		Add("pgroup_call", gm.rpcCall())
+		Add("pgroup_call", gm.rpcCall()).
+		AddAsync(gm.rpcEventStreams)
 }
 
 func (gm *groupManager) rpcCreateGroup() rpcserver.RPCHandler {
