@@ -351,31 +351,37 @@ func (gm *groupManager) validateListenerSpec(ctx context.Context, spec *pldapi.P
 	if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, spec.Name, tktypes.DefaultNameMaxLen, "name"); err != nil {
 		return err
 	}
-	_, err := gm.buildListenerDBQuery(spec, gm.p.DB())
-	return err
+
+	if spec.Filters.Topic != "" {
+		if _, err := regexp.Compile(spec.Filters.Topic); err != nil {
+			return i18n.WrapError(ctx, err, msgs.MsgPGroupsMessageListenerBadTopicFilter, spec.Filters.Topic)
+		}
+	}
+
+	return nil
 }
 
 // Build parts of the matching that can be pre-filtered efficiently in the DB.
 //
 // IMPORTANT: Make sure to also update checkMatch() when adding filter dimensions
-func (gm *groupManager) buildListenerDBQuery(spec *pldapi.PrivacyGroupMessageListener, q *gorm.DB) (*gorm.DB, error) {
+func (gm *groupManager) buildListenerDBQuery(spec *pldapi.PrivacyGroupMessageListener, q *gorm.DB) *gorm.DB {
 	// Filter based on the domain
 	if spec.Filters.Domain != "" {
 		q = q.Where("domain = ?", spec.Filters.Domain)
 	}
 	if spec.Filters.Group != nil {
-		q = q.Where("group = ?", spec.Filters.Group)
+		q = q.Where(`"group" = ?`, spec.Filters.Group)
 	}
 
 	if !spec.Options.IncludeLocal {
 		q = q.Where("node <> ?", gm.transportManager.LocalNodeName())
 	}
 
-	// Note we do post-filter on topic (no DB filter)
+	// Note we do post-filter on topic (no DB filter) as it's a regular expression
 
 	// Standard parts
-	q = q.Order(`"transaction_messages"."sequence"`).Limit(gm.messagesReadPageSize)
-	return q, nil
+	q = q.Order(`"pgroup_msgs"."local_seq"`).Limit(gm.messagesReadPageSize)
+	return q
 }
 
 // Applies all the rules in-memory to a message, including:
@@ -544,18 +550,15 @@ func (l *messageListener) loadCheckpoint() error {
 	return nil
 }
 
-func (l *messageListener) readHeadPage() ([]*persistedMessage, error) {
+func (l *messageListener) readPage() ([]*persistedMessage, error) {
 	var messages []*persistedMessage
 	err := l.gm.messagesRetry.Do(l.ctx, func(attempt int) (retryable bool, err error) {
 		db := l.gm.p.DB()
-		q, err := l.gm.buildListenerDBQuery(l.spec, db)
-		if err == nil && l.checkpoint != nil {
-			q = q.Where(`"transaction_messages"."sequence" > ?`, *l.checkpoint)
+		q := l.gm.buildListenerDBQuery(l.spec, db)
+		if l.checkpoint != nil {
+			q = q.Where(`"pgroup_msgs"."local_seq" > ?`, *l.checkpoint)
 		}
-		if err == nil {
-			err = q.Find(&messages).Error
-		}
-		return true, err
+		return true, q.Find(&messages).Error
 	})
 	return messages, err
 }
@@ -674,8 +677,8 @@ func (l *messageListener) runListener() {
 
 	for {
 
-		// Read the next page of messages from non-gapped sources - the head
-		page, err := l.readHeadPage()
+		// Read the next page of messages
+		page, err := l.readPage()
 		if err != nil {
 			log.L(l.ctx).Warnf("listener stopping: %s", err) // cancelled context
 			return

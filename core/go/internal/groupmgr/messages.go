@@ -24,9 +24,11 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"gorm.io/gorm/clause"
 )
 
 type persistedMessage struct {
@@ -43,13 +45,13 @@ type persistedMessage struct {
 }
 
 func (persistedMessage) TableName() string {
-	return "transaction_receipts"
+	return "pgroup_msgs"
 }
 
 var messageFilters = filters.FieldMap{
 	"localSequence": filters.Int64Field("local_seq"),
 	"domain":        filters.StringField("domain"),
-	"group":         filters.HexBytesField("group"),
+	"group":         filters.HexBytesField(`"group"`),
 	"sent":          filters.TimestampField("sent"),
 	"received":      filters.TimestampField("received"),
 	"id":            filters.UUIDField("id"),
@@ -57,7 +59,24 @@ var messageFilters = filters.FieldMap{
 	"topic":         filters.StringField("topic"),
 }
 
-func (gm *groupManager) SendMessage(ctx context.Context, dbTX persistence.DBTX, msg pldapi.PrivacyGroupMessageInput) (*uuid.UUID, error) {
+// Validation before attempting DB insertion
+func (gm *persistedMessage) preValidate(ctx context.Context) error {
+	if gm.Data == nil {
+		return i18n.NewError(ctx, msgs.MsgPGroupsMessageDataNil)
+	}
+	if gm.Topic == "" {
+		return i18n.NewError(ctx, msgs.MsgPGroupsMessageTopicEmpty)
+	}
+	// Check for invalid scenarios that could occur when receiving data from another node
+	var zeroUUID uuid.UUID
+	if gm.ID == zeroUUID || gm.Node == "" || gm.Sent == 0 || gm.Received == 0 {
+		log.L(ctx).Errorf("Invalid message: %+v", gm)
+		return i18n.NewError(ctx, msgs.MsgPGroupsMessageInvalid)
+	}
+	return nil
+}
+
+func (gm *groupManager) SendMessage(ctx context.Context, dbTX persistence.DBTX, msg *pldapi.PrivacyGroupMessageInput) (*uuid.UUID, error) {
 
 	pg, err := gm.GetGroupByID(ctx, dbTX, msg.Domain, msg.Group)
 	if err != nil {
@@ -80,6 +99,9 @@ func (gm *groupManager) SendMessage(ctx context.Context, dbTX persistence.DBTX, 
 		CID:      msg.CorrelationID,
 		Topic:    msg.Topic,
 		Data:     msg.Data,
+	}
+	if err := pMsg.preValidate(ctx); err != nil {
+		return nil, err
 	}
 	if err := dbTX.DB().WithContext(ctx).Create(pMsg).Error; err != nil {
 		return nil, err
@@ -119,13 +141,12 @@ func (gm *groupManager) SendMessage(ctx context.Context, dbTX persistence.DBTX, 
 
 }
 
-func (gm *groupManager) ReceiveMessages(ctx context.Context, dbTX persistence.DBTX, node string, msgs ...pldapi.PrivacyGroupMessage) error {
+func (gm *groupManager) ReceiveMessages(ctx context.Context, dbTX persistence.DBTX, node string, msgs []*pldapi.PrivacyGroupMessage) (accepted []uuid.UUID, err error) {
 
-	// Build and insert the messages
 	now := tktypes.TimestampNow()
-	pMsgs := make([]*persistedMessage, len(msgs))
-	for i, msg := range msgs {
-		pMsgs[i] = &persistedMessage{
+	pMsgs := make([]*persistedMessage, 0, len(msgs))
+	for _, msg := range msgs {
+		pm := &persistedMessage{
 			Domain:   msg.Domain,
 			Group:    msg.Group,
 			Sent:     msg.Sent,
@@ -136,16 +157,29 @@ func (gm *groupManager) ReceiveMessages(ctx context.Context, dbTX persistence.DB
 			Topic:    msg.Topic,
 			Data:     msg.Data,
 		}
-	}
-	if err := dbTX.DB().WithContext(ctx).Create(pMsgs).Error; err != nil {
-		return err
+		if err := pm.preValidate(ctx); err != nil {
+			log.L(ctx).Errorf("Unable to process received message %s: %s", pm.ID, err)
+			continue
+		}
+		accepted = append(accepted, msg.ID)
+		pMsgs = append(pMsgs, pm)
 	}
 
-	dbTX.AddPostCommit(func(txCtx context.Context) {
-		gm.notifyNewMessages(pMsgs)
-	})
+	if len(pMsgs) > 0 {
+		if err := dbTX.DB().
+			WithContext(ctx).
+			Clauses(clause.OnConflict{DoNothing: true}).
+			Create(pMsgs).
+			Error; err != nil {
+			return nil, err
+		}
 
-	return nil
+		dbTX.AddPostCommit(func(txCtx context.Context) {
+			gm.notifyNewMessages(pMsgs)
+		})
+	}
+
+	return accepted, nil
 
 }
 
@@ -162,17 +196,16 @@ func (gm *groupManager) QueryMessages(ctx context.Context, dbTX persistence.DBTX
 	return qw.Run(ctx, dbTX)
 }
 
-func (gm *groupManager) GetMessagesByID(ctx context.Context, dbTX persistence.DBTX, ids []uuid.UUID, failNotFound bool) ([]*pldapi.PrivacyGroupMessage, error) {
-	inIDs := make([]any, len(ids))
-	for i, id := range ids {
-		inIDs[i] = id
-	}
-	dbMsgs, err := gm.QueryMessages(ctx, dbTX, query.NewQueryBuilder().In("id", inIDs).Limit(len(ids)).Query())
+func (gm *groupManager) GetMessageByID(ctx context.Context, dbTX persistence.DBTX, id uuid.UUID, failNotFound bool) (*pldapi.PrivacyGroupMessage, error) {
+	dbMsgs, err := gm.QueryMessages(ctx, dbTX, query.NewQueryBuilder().Equal("id", id).Limit(1).Query())
 	if err != nil {
 		return nil, err
 	}
-	if failNotFound && len(dbMsgs) != len(ids) {
-		return nil, i18n.NewError(ctx, msgs.MsgPGroupsMessageNotFound)
+	if len(dbMsgs) < 1 {
+		if failNotFound {
+			return nil, i18n.NewError(ctx, msgs.MsgPGroupsMessageNotFound)
+		}
+		return nil, nil
 	}
-	return dbMsgs, nil
+	return dbMsgs[0], nil
 }

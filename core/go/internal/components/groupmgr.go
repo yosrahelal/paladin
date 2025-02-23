@@ -59,10 +59,10 @@ type GroupManager interface {
 	QueryGroups(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error)
 	QueryGroupsByProperties(ctx context.Context, dbTX persistence.DBTX, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error)
 
-	SendMessage(ctx context.Context, dbTX persistence.DBTX, msg pldapi.PrivacyGroupMessageInput) (*uuid.UUID, error)
-	ReceiveMessages(ctx context.Context, dbTX persistence.DBTX, node string, msgs ...pldapi.PrivacyGroupMessage) error
+	SendMessage(ctx context.Context, dbTX persistence.DBTX, msg *pldapi.PrivacyGroupMessageInput) (*uuid.UUID, error)
+	ReceiveMessages(ctx context.Context, dbTX persistence.DBTX, node string, msgs []*pldapi.PrivacyGroupMessage) (accepted []uuid.UUID, err error)
 	QueryMessages(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroupMessage, error)
-	GetMessagesByID(ctx context.Context, dbTX persistence.DBTX, ids []uuid.UUID, failNotFound bool) ([]*pldapi.PrivacyGroupMessage, error)
+	GetMessageByID(ctx context.Context, dbTX persistence.DBTX, id uuid.UUID, failNotFound bool) (*pldapi.PrivacyGroupMessage, error)
 
 	CreateMessageListener(ctx context.Context, spec *pldapi.PrivacyGroupMessageListener) error
 	AddMessageReceiver(ctx context.Context, name string, r PrivacyGroupMessageReceiver) (PrivacyGroupMessageReceiverCloser, error)

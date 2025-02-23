@@ -105,9 +105,11 @@ func (pgm persistedGroupMember) TableName() string {
 
 func NewGroupManager(bgCtx context.Context, conf *pldconf.GroupManagerConfig) components.GroupManager {
 	gm := &groupManager{
-		conf:            conf,
-		deployedPGCache: cache.NewCache[string, *pldapi.PrivacyGroupWithABI](&conf.Cache, &pldconf.GroupManagerDefaults.Cache),
+		conf:             conf,
+		deployedPGCache:  cache.NewCache[string, *pldapi.PrivacyGroupWithABI](&conf.Cache, &pldconf.GroupManagerDefaults.Cache),
+		messageListeners: make(map[string]*messageListener),
 	}
+	gm.messagesInit()
 	gm.bgCtx, gm.cancelCtx = context.WithCancel(bgCtx)
 	return gm
 }
@@ -126,7 +128,7 @@ func (gm *groupManager) PostInit(c components.AllComponents) error {
 	gm.p = c.Persistence()
 	gm.transportManager = c.TransportManager()
 	gm.registryManager = c.RegistryManager()
-	return nil
+	return gm.loadMessageListeners()
 }
 
 func (gm *groupManager) Start() error {

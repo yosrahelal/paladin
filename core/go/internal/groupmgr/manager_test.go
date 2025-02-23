@@ -108,6 +108,9 @@ func newTestGroupManager(t *testing.T, realDB bool, conf *pldconf.GroupManagerCo
 	logrus.SetLevel(logrus.TraceLevel)
 
 	mc := newMockComponents(t, realDB)
+	if mc.db != nil {
+		mc.db.Mock.ExpectQuery("SELECT.*message_listeners").WillReturnRows(mc.db.Mock.NewRows([]string{}))
+	}
 	for _, fn := range extraSetup {
 		fn(mc, conf)
 	}

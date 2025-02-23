@@ -462,4 +462,7 @@ var (
 	MsgPGroupsBadMessageListenerOptions     = pde("PD012511", "Message listener '%s' options are invalid")
 	MsgPGroupsMessageListenerDupLoad        = pde("PD012512", "Message listener '%s' already loaded")
 	MsgPGroupsMessageNotFound               = pde("PD012513", "Message not found")
+	MsgPGroupsMessageDataNil                = pde("PD012514", "Message data cannot be null")
+	MsgPGroupsMessageTopicEmpty             = pde("PD012515", "Message topic cannot be empty")
+	MsgPGroupsMessageInvalid                = pde("PD012516", "Message invalid")
 )
