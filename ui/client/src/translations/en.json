@@ -112,6 +112,8 @@
 	"messagesReceived": "Messages Received",
 	"messagesSent": "Messages Sent",
 	"mustBeANumber": "Must be a number",
+	"mustBeAValidHex": "Must be a valid Hex value",
+	"mustBeAValidUUID": "Must be a valid UUID",
 	"name": "Name",
 	"newData": "New data",
 	"noActivePeers": "There are no active peers",
