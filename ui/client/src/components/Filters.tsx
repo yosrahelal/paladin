@@ -95,6 +95,7 @@ export const Filters: React.FC<Props> = ({
         <Button
           size="small"
           variant="outlined"
+          color="secondary"
           sx={{ borderRadius: '20px', minWidth: '100px' }}
           onClick={() => setAddFilterDialogOpen(true)}
         >
