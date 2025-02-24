@@ -555,7 +555,7 @@ func TestProcessReliableMsgPagePrivacyGroup(t *testing.T) {
 
 	sentMsg := <-sentMessages
 
-	rMsg, err := parseReceivedMessage(ctx, "ndoe2", sentMsg)
+	rMsg, err := parseReceivedMessage(ctx, "node2", sentMsg)
 	require.NoError(t, err)
 	require.Equal(t, RMHMessageTypePrivacyGroup, rMsg.MessageType)
 

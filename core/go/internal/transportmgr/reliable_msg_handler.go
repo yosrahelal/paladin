@@ -360,7 +360,9 @@ func (tm *transportManager) buildPrivacyGroupDistributionMsg(ctx context.Context
 		return nil, nil, findErr // retryable
 	}
 	var abiDefinition abi.Parameter
-	parseErr = json.Unmarshal(abiSchema.Definition, &abiDefinition)
+	if abiSchema != nil {
+		parseErr = json.Unmarshal(abiSchema.Definition, &abiDefinition)
+	}
 	if parseErr != nil || abiSchema == nil {
 		return nil,
 			i18n.WrapError(ctx, parseErr, msgs.MsgTransportStateSchemaNotAvailableLocally, sd.Domain, parsed.SchemaID),

@@ -931,3 +931,219 @@ func TestHandlePrivacyGroupMessageBad(t *testing.T) {
 
 	ackNackCheck()
 }
+
+func TestBuildPrivacyGroupDistributionMsgBadMsg(t *testing.T) {
+
+	ctx, tm, _, done := newTestTransport(t, false,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	_, parseErr, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{})
+	require.NoError(t, err)
+	require.Regexp(t, "PD012016", parseErr)
+
+}
+
+func TestBuildPrivacyGroupDistributionMsgSchemaError(t *testing.T) {
+
+	ctx, tm, _, done := newTestTransport(t, false,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", mock.Anything, false).
+				Return(nil, fmt.Errorf("schema error"))
+
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	distroID := uuid.New()
+	_, _, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+		ID:          distroID,
+		MessageType: components.RMTPrivacyGroup.Enum(),
+		Metadata: tktypes.JSONString(&components.StateDistributionWithData{
+			StateDistribution: components.StateDistribution{
+				Domain:          "domain1",
+				ContractAddress: tktypes.RandAddress().String(),
+				SchemaID:        tktypes.RandHex(32),
+				StateID:         tktypes.RandHex(32),
+			},
+		}),
+	})
+	require.Regexp(t, "schema error", err)
+
+}
+
+func TestBuildPrivacyGroupDistributionMsgSchemaInvalidABI(t *testing.T) {
+
+	ctx, tm, _, done := newTestTransport(t, false,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", mock.Anything, false).
+				Return(&pldapi.Schema{}, nil)
+
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	distroID := uuid.New()
+	_, parseErr, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+		ID:          distroID,
+		MessageType: components.RMTPrivacyGroup.Enum(),
+		Metadata: tktypes.JSONString(&components.StateDistributionWithData{
+			StateDistribution: components.StateDistribution{
+				Domain:          "domain1",
+				ContractAddress: tktypes.RandAddress().String(),
+				SchemaID:        tktypes.RandHex(32),
+				StateID:         tktypes.RandHex(32),
+			},
+		}),
+	})
+	require.NoError(t, err)
+	require.Regexp(t, "PD012020", parseErr)
+
+}
+
+func TestBuildPrivacyGroupDistributionMsgGetStatesError(t *testing.T) {
+
+	ctx, tm, _, done := newTestTransport(t, false,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", mock.Anything, false).
+				Return(&pldapi.Schema{Definition: tktypes.JSONString(&abi.Parameter{Type: "tuple", InternalType: "struct EmptyStruct;"})}, nil)
+			mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
+				Return(nil, fmt.Errorf("pop")).Once()
+
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	distroID := uuid.New()
+	_, _, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+		ID:          distroID,
+		MessageType: components.RMTPrivacyGroup.Enum(),
+		Metadata: tktypes.JSONString(&components.StateDistributionWithData{
+			StateDistribution: components.StateDistribution{
+				Domain:          "domain1",
+				ContractAddress: tktypes.RandAddress().String(),
+				SchemaID:        tktypes.RandHex(32),
+				StateID:         tktypes.RandHex(32),
+			},
+		}),
+	})
+	require.Regexp(t, "pop", err)
+
+}
+
+func TestBuildPrivacyGroupDistributionMsgGetStatesNotFound(t *testing.T) {
+
+	ctx, tm, _, done := newTestTransport(t, false,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", mock.Anything, false).
+				Return(&pldapi.Schema{Definition: tktypes.JSONString(&abi.Parameter{Type: "tuple", InternalType: "struct EmptyStruct;"})}, nil)
+			mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
+				Return(nil, nil).Once()
+
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	distroID := uuid.New()
+	_, parseErr, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+		ID:          distroID,
+		MessageType: components.RMTPrivacyGroup.Enum(),
+		Metadata: tktypes.JSONString(&components.StateDistributionWithData{
+			StateDistribution: components.StateDistribution{
+				Domain:          "domain1",
+				ContractAddress: tktypes.RandAddress().String(),
+				SchemaID:        tktypes.RandHex(32),
+				StateID:         tktypes.RandHex(32),
+			},
+		}),
+	})
+	require.NoError(t, err)
+	require.Regexp(t, "PD012014", parseErr)
+
+}
+
+func TestParsePrivacyGroupMessageDistributionFail(t *testing.T) {
+
+	ctx, tm, _, done := newTestTransport(t, false,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	distroID := uuid.New()
+	_, parseErr, err := tm.buildPrivacyGroupMessageMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+		ID:          distroID,
+		MessageType: components.RMTPrivacyGroup.Enum(),
+		Metadata:    nil,
+	})
+	require.NoError(t, err)
+	require.Regexp(t, "PD012016", parseErr)
+
+}
+
+func TestParsePrivacyGroupMessageGetMessageError(t *testing.T) {
+
+	ctx, tm, _, done := newTestTransport(t, false,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.groupManager.On("GetMessageByID", mock.Anything, mock.Anything, mock.Anything, false).Return(nil, fmt.Errorf("pop"))
+
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	distroID := uuid.New()
+	_, _, err := tm.buildPrivacyGroupMessageMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+		ID:          distroID,
+		MessageType: components.RMTPrivacyGroup.Enum(),
+		Metadata: tktypes.JSONString(&components.PrivacyGroupMessageDistribution{
+			Domain: "domain1",
+			Group:  tktypes.RandBytes(32),
+			ID:     uuid.New(),
+		}),
+	})
+	require.Regexp(t, "pop", err)
+
+}
+
+func TestParsePrivacyGroupMessageGetMessageNotFound(t *testing.T) {
+
+	ctx, tm, _, done := newTestTransport(t, false,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.groupManager.On("GetMessageByID", mock.Anything, mock.Anything, mock.Anything, false).Return(nil, nil)
+
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	distroID := uuid.New()
+	_, parseErr, err := tm.buildPrivacyGroupMessageMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+		ID:          distroID,
+		MessageType: components.RMTPrivacyGroup.Enum(),
+		Metadata: tktypes.JSONString(&components.PrivacyGroupMessageDistribution{
+			Domain: "domain1",
+			Group:  tktypes.RandBytes(32),
+			ID:     uuid.New(),
+		}),
+	})
+	require.NoError(t, err)
+	require.Regexp(t, "PD012021", parseErr)
+
+}
