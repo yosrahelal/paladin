@@ -165,7 +165,7 @@ func TestUpdatePublicTransaction(t *testing.T) {
 		PublicTxOptions: pldapi.PublicTxOptions{
 			Gas: confutil.P(tktypes.HexUint64(10000000)),
 		},
-	})
+	}, &pldapi.TransactionUpdateOptions{})
 	require.NoError(t, err)
 
 	var receipt *pldapi.TransactionReceiptFull
