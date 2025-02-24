@@ -1,5 +1,5 @@
 CREATE TABLE pgroup_msgs (
-  "local_seq"                 BIGINT          GENERATED ALWAYS AS IDENTITY,
+  "local_seq"                 INTEGER         PRIMARY KEY AUTOINCREMENT,
   "domain"                    TEXT            NOT NULL,
   "group"                     TEXT            NOT NULL,
   "node"                      TEXT            NOT NULL,

@@ -565,7 +565,6 @@ func (l *messageListener) processPersistedMessage(b *messageDeliveryBatch, pm *p
 	// Otherwise we can process the message
 	log.L(l.ctx).Infof("Added message %d/%s (domain='%s') to batch %d", pm.LocalSeq, pm.ID, pm.Domain, b.ID)
 	b.Messages = append(b.Messages, pm.mapToAPI())
-	return
 }
 
 func (l *messageListener) nextReceiver(b *messageDeliveryBatch) (r components.PrivacyGroupMessageReceiver, err error) {

@@ -173,7 +173,7 @@ func TestE2EMessageListenerDelivery(t *testing.T) {
 				Domain: "domain1",
 				Group:  groupIDs[i%2],
 				Topic:  topics[i%len(topics)],
-				Data:   tktypes.JSONString(fmt.Sprintf("some data")),
+				Data:   tktypes.JSONString("some data"),
 			})
 			require.NoError(t, err)
 			msgIDs[i] = *msgID
