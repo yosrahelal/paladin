@@ -382,7 +382,7 @@ func (tm *transportManager) buildPrivacyGroupDistributionMsg(ctx context.Context
 	return &prototk.PaladinMsg{
 		MessageId:   rm.ID.String(),
 		Component:   prototk.PaladinMsg_RELIABLE_MESSAGE_HANDLER,
-		MessageType: RMHMessageTypeStateDistribution,
+		MessageType: RMHMessageTypePrivacyGroup,
 		Payload: tktypes.JSONString(components.PrivacyGroupGenesisWithABI{
 			GenesisState: *sd,
 			GenesisABI:   abiDefinition,
