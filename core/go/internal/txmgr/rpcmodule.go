@@ -106,10 +106,10 @@ func (tm *txManager) rpcPrepareTransactions() rpcserver.RPCHandler {
 
 func (tm *txManager) rpcUpdateTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
-		tx pldapi.TransactionUpdate,
-		uto pldapi.TransactionUpdateOptions,
-	) (*uuid.UUID, error) {
-		return tm.UpdateTransaction(ctx, &tx, &uto)
+		id uuid.UUID,
+		tx *pldapi.TransactionInput,
+	) (uuid.UUID, error) {
+		return tm.UpdateTransaction(ctx, id, tx)
 	})
 }
 

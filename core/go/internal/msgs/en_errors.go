@@ -357,6 +357,7 @@ var (
 	MsgInvalidTXMissingFromAddr        = pde("PD011936", "From address missing for transaction")
 	MsgTransactionAlreadyCompleted     = pde("PD011937", "Transaction cannot be updated as it is already complete")
 	MsgGasAndEstimateGas               = pde("PD011938", "Gas cannot be estimated when gas limit is provided")
+	MsgGasDecreaseNotAllowed           = pde("PD011939", "Gas limit decrease not allowed. Current gas limit: %d, requested gas limit: %d")
 
 	// TransportManager module PD0120XX
 	MsgTransportInvalidMessage                = pde("PD012000", "Invalid message")
@@ -433,9 +434,8 @@ var (
 	MsgTxMgrListenerNameRequired         = pde("PD012241", "Receipt listener name is required")
 	MsgTxMgrJSONRPCSubscriptionClosed    = pde("PD012242", "JSON/RPC subscription '%s' closed")
 	MsgTxMgrJSONRPCSubscriptionNack      = pde("PD012243", "JSON/RPC subscription '%s' returned nack for receipt batch")
-	MsgTxMgrDeployUpdateNotAllowed       = pde("PD012244", "Update not allowed for deploy transaction")
-	MsgTxMgrTransactionNotFound          = pde("PD012245", "Transaction not found with id %s")
-	MsgTxMgrUpdateInvalidType            = pde("PD012246", "Private transaction cannot be updated")
+	MsgTxMgrTransactionNotFound          = pde("PD012244", "Transaction not found with id %s")
+	MsgTxMgrUpdateInvalidType            = pde("PD012245", "Private transaction cannot be updated")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = pde("PD012300", "Writer shutting down")

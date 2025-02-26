@@ -1115,14 +1115,6 @@ func TestUpsertInternalPrivateTxsIdempotencyMisMatch(t *testing.T) {
 
 }
 
-func TestUpdateTransactionNoID(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockEmptyReceiptListeners)
-	defer done()
-
-	_, err := txm.UpdateTransaction(ctx, &pldapi.TransactionUpdate{}, nil)
-	assert.ErrorContains(t, err, "PD011910")
-}
-
 func TestUpdateTransactionDBReadError(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t,
 		false,
@@ -1133,10 +1125,7 @@ func TestUpdateTransactionDBReadError(t *testing.T) {
 	)
 	defer done()
 
-	id := uuid.New()
-	_, err := txm.UpdateTransaction(ctx, &pldapi.TransactionUpdate{
-		ID: &id,
-	}, nil)
+	_, err := txm.UpdateTransaction(ctx, uuid.New(), &pldapi.TransactionInput{})
 	assert.ErrorContains(t, err, "pop")
 }
 
@@ -1150,11 +1139,8 @@ func TestUpdateTransactionNotFound(t *testing.T) {
 	)
 	defer done()
 
-	id := uuid.New()
-	_, err := txm.UpdateTransaction(ctx, &pldapi.TransactionUpdate{
-		ID: &id,
-	}, nil)
-	assert.ErrorContains(t, err, "PD012245")
+	_, err := txm.UpdateTransaction(ctx, uuid.New(), &pldapi.TransactionInput{})
+	assert.ErrorContains(t, err, "PD012244")
 }
 
 func TestUpdateTransactionPrivate(t *testing.T) {
@@ -1169,11 +1155,8 @@ func TestUpdateTransactionPrivate(t *testing.T) {
 	)
 	defer done()
 
-	id := uuid.New()
-	_, err := txm.UpdateTransaction(ctx, &pldapi.TransactionUpdate{
-		ID: &id,
-	}, nil)
-	assert.ErrorContains(t, err, "PD012246")
+	_, err := txm.UpdateTransaction(ctx, uuid.New(), &pldapi.TransactionInput{})
+	assert.ErrorContains(t, err, "PD012245")
 }
 
 func TestUpdateTransactionErrorQueryingPublicTX(t *testing.T) {
@@ -1193,10 +1176,7 @@ func TestUpdateTransactionErrorQueryingPublicTX(t *testing.T) {
 	)
 	defer done()
 
-	id := uuid.New()
-	_, err := txm.UpdateTransaction(ctx, &pldapi.TransactionUpdate{
-		ID: &id,
-	}, nil)
+	_, err := txm.UpdateTransaction(ctx, uuid.New(), &pldapi.TransactionInput{})
 	assert.ErrorContains(t, err, "pop")
 
 }
@@ -1222,10 +1202,9 @@ func TestUpdateTransactionPublicTXNotFound(t *testing.T) {
 	)
 	defer done()
 
-	_, err := txm.UpdateTransaction(ctx, &pldapi.TransactionUpdate{
-		ID: &id,
-	}, nil)
+	_, err := txm.UpdateTransaction(ctx, id, &pldapi.TransactionInput{})
 	assert.ErrorContains(t, err, "PD011911")
+	assert.ErrorContains(t, err, id.String())
 }
 
 func TestUpdateTransactionFailResolve(t *testing.T) {
@@ -1249,11 +1228,12 @@ func TestUpdateTransactionFailResolve(t *testing.T) {
 	)
 	defer done()
 
-	_, err := txm.UpdateTransaction(ctx, &pldapi.TransactionUpdate{
-		ID:       &id,
-		Function: "set",
-	}, nil)
-	assert.ErrorContains(t, err, "PD012244")
+	_, err := txm.UpdateTransaction(ctx, id, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Function: "set",
+		},
+	})
+	assert.ErrorContains(t, err, "PD012203")
 }
 
 func TestUpdateTransactionKeyResolutionError(t *testing.T) {
@@ -1267,6 +1247,8 @@ func TestUpdateTransactionKeyResolutionError(t *testing.T) {
 			rows := sqlmock.NewRows(columns).AddRow(id.String(), "public", "identity@node1")
 			mc.db.ExpectQuery("SELECT.*transactions.*").WillReturnRows(rows)
 			mc.db.ExpectBegin()
+			mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+			mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		},
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.publicTxMgr.On("QueryPublicTxForTransactions", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -1280,12 +1262,16 @@ func TestUpdateTransactionKeyResolutionError(t *testing.T) {
 	)
 	defer done()
 
-	_, err := txm.UpdateTransaction(ctx, &pldapi.TransactionUpdate{
-		ID: &id,
-		PublicTxOptions: pldapi.PublicTxOptions{
-			Gas: confutil.P(tktypes.HexUint64(1000)),
+	_, err := txm.UpdateTransaction(ctx, id, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Function: "set",
+			Type:     pldapi.TransactionTypePublic.Enum(),
+			From:     "identity@node1",
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.RawJSON(`{"value": 46}`),
 		},
-	}, nil)
+		ABI: abi.ABI{{Type: abi.Function, Name: "set", Inputs: abi.ParameterArray{{Type: "uint256", Name: "value"}}}},
+	})
 	assert.ErrorContains(t, err, "pop")
 }
 
@@ -1300,6 +1286,8 @@ func TestUpdateTransactionKeyParseError(t *testing.T) {
 			rows := sqlmock.NewRows(columns).AddRow(id.String(), "public", "identity@node1")
 			mc.db.ExpectQuery("SELECT.*transactions.*").WillReturnRows(rows)
 			mc.db.ExpectBegin()
+			mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+			mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		},
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.publicTxMgr.On("QueryPublicTxForTransactions", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -1318,12 +1306,16 @@ func TestUpdateTransactionKeyParseError(t *testing.T) {
 	)
 	defer done()
 
-	_, err := txm.UpdateTransaction(ctx, &pldapi.TransactionUpdate{
-		ID: &id,
-		PublicTxOptions: pldapi.PublicTxOptions{
-			Gas: confutil.P(tktypes.HexUint64(1000)),
+	_, err := txm.UpdateTransaction(ctx, id, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Function: "set",
+			Type:     pldapi.TransactionTypePublic.Enum(),
+			From:     "identity@node1",
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.RawJSON(`{"value": 46}`),
 		},
-	}, nil)
+		ABI: abi.ABI{{Type: abi.Function, Name: "set", Inputs: abi.ParameterArray{{Type: "uint256", Name: "value"}}}},
+	})
 	assert.ErrorContains(t, err, "bad address")
 }
 
@@ -1331,26 +1323,39 @@ func TestUpdateTransactionCallPublicTXUpdate(t *testing.T) {
 	id := uuid.New()
 	from := tktypes.MustEthAddress(tktypes.RandHex(20))
 	to := tktypes.MustEthAddress(tktypes.RandHex(20))
+	abiRef := tktypes.MustParseBytes32("0x76458e36bbb1e4f5e5742aa62b3122eb2e4622e19489dd2eb4c7370858085511")
+	function := "set(uint256)"
+	data := tktypes.RawJSON(`{"value":"46"}`)
+	var dbUpdateFn func(dbTX persistence.DBTX) error
 
-	txu := &pldapi.TransactionUpdate{
-		ID:       &id,
-		Data:     tktypes.RawJSON(`{"value": 46}`),
-		ABI:      abi.ABI{{Type: abi.Function, Name: "set", Inputs: abi.ParameterArray{{Type: "uint256", Name: "value"}}}},
-		Function: "set",
-		To:       to,
+	tx := &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Function: "set",
+			Type:     pldapi.TransactionTypePublic.Enum(),
+			From:     from.HexString(),
+			To:       to,
+			Data:     tktypes.RawJSON(`{"value": 46}`),
+		},
+		ABI: abi.ABI{{Type: abi.Function, Name: "set", Inputs: abi.ParameterArray{{Type: "uint256", Name: "value"}}}},
 	}
 
 	ctx, txm, done := newTestTransactionManager(t,
 		false,
 		mockEmptyReceiptListeners,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			columns := []string{"id", "type", "from", "function"}
-			rows := sqlmock.NewRows(columns).AddRow(id.String(), "public", from.HexString(), "get()")
+			columns := []string{"id", "type", "from"}
+			rows := sqlmock.NewRows(columns).AddRow(id.String(), "public", from.HexString())
 			mc.db.ExpectQuery("SELECT.*transactions.*").WillReturnRows(rows)
 			mc.db.ExpectBegin()
 			mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectCommit()
+			mc.db.ExpectBegin()
+			mc.db.ExpectExec("UPDATE \"transactions\" SET \"abi_ref\"=\\$1,\"function\"=\\$2,\"to\"=\\$3,\"data\"=\\$4 WHERE id = \\$5").
+				WithArgs(abiRef, function, to, data, id).
+				WillReturnResult(driver.ResultNoRows)
+			mc.db.ExpectCommit()
+
 		},
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			localID := uint64(1)
@@ -1366,132 +1371,29 @@ func TestUpdateTransactionCallPublicTXUpdate(t *testing.T) {
 					}},
 				}, nil)
 			pubTxData, _ := hex.DecodeString("60fe47b1000000000000000000000000000000000000000000000000000000000000002e")
-			mc.publicTxMgr.On("UpdateTransaction",
+			mockUpdateTX := mc.publicTxMgr.On("UpdateTransaction",
 				mock.Anything,
+				id,
 				uint64(1),
 				from,
-				txu,
-				mock.Anything, // TODO AM: gas estimation will want to be covered in a test
+				tx,
 				pubTxData,
 				mock.Anything,
 			).Return(nil)
-		},
-	)
-	defer done()
-
-	_, err := txm.UpdateTransaction(ctx, txu, nil)
-	assert.NoError(t, err)
-}
-
-func TestUpdateTransactionCallPublicTXUpdateNoChange(t *testing.T) {
-	id := uuid.New()
-	from := tktypes.MustEthAddress(tktypes.RandHex(20))
-	to := tktypes.MustEthAddress(tktypes.RandHex(20))
-
-	txu := &pldapi.TransactionUpdate{
-		ID: &id,
-	}
-
-	ctx, txm, done := newTestTransactionManager(t,
-		false,
-		mockEmptyReceiptListeners,
-		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			columns := []string{"id", "type", "from", "to", "function", "data", "abi_hash"}
-			rows := sqlmock.NewRows(columns).AddRow(id.String(), "public", from.HexString(), to.HexString(), "set(uint256)", tktypes.RawJSON(`{"value":"46"}`), "0x76458e36bbb1e4f5e5742aa62b3122eb2e4622e19489dd2eb4c7370858085511")
-			mc.db.ExpectQuery("SELECT.*transactions.*").WillReturnRows(rows)
-			mc.db.ExpectBegin()
-			mc.db.ExpectCommit()
-		},
-		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			localID := uint64(1)
-			mc.publicTxMgr.On("QueryPublicTxForTransactions",
-				mock.Anything,
-				mock.Anything,
-				mock.Anything,
-				mock.Anything,
-			).
-				Return(map[uuid.UUID][]*pldapi.PublicTx{
-					id: {{
-						LocalID: &localID,
-					}},
-				}, nil)
-			mockUpdateTX := mc.publicTxMgr.On("UpdateTransaction",
-				mock.Anything,
-				uint64(1),
-				from,
-				txu,
-				(*pldapi.TransactionUpdateOptions)(nil),
-				[]byte(nil),
-				mock.Anything,
-			).Return(nil)
 			mockUpdateTX.Run(func(args mock.Arguments) {
-				dbUpdateFunc := args.Get(6).(func(dbTX persistence.DBTX) error)
-				err := dbUpdateFunc(nil)
-				assert.NoError(t, err)
+				dbUpdateFn = args.Get(6).(func(dbTX persistence.DBTX) error)
 			})
 		},
 	)
 	defer done()
 
-	_, err := txm.UpdateTransaction(ctx, txu, nil)
-	assert.NoError(t, err)
-}
+	_, err := txm.UpdateTransaction(ctx, id, tx)
+	require.NoError(t, err)
 
-func TestResolveUpdatedTransactionDeployUpdate(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockEmptyReceiptListeners)
-	defer done()
-
-	tx := &pldapi.Transaction{}
-	txu := &pldapi.TransactionUpdate{
-		Data: tktypes.RawJSON(`{"bytecode": "0x1234"}`),
-	}
-
-	_, err := txm.resolveUpdatedTransaction(ctx, nil, tx, txu)
-	assert.ErrorContains(t, err, "PD012244")
-
-	txu.To = tktypes.MustEthAddress(tktypes.RandHex(20))
-	_, err = txm.resolveUpdatedTransaction(ctx, nil, tx, txu)
-	assert.ErrorContains(t, err, "PD012244")
-
-	txu.Function = "set"
-	_, err = txm.resolveUpdatedTransaction(ctx, nil, tx, txu)
-	assert.ErrorContains(t, err, "PD012244")
-
-	txu.ABI = abi.ABI{{Type: abi.Constructor}}
-	_, err = txm.resolveUpdatedTransaction(ctx, nil, tx, txu)
-	assert.ErrorContains(t, err, "PD012244")
-
-	abiRef := tktypes.RandBytes32()
-	txu.ABIReference = &abiRef
-	_, err = txm.resolveUpdatedTransaction(ctx, nil, tx, txu)
-	assert.ErrorContains(t, err, "PD012244")
-
-	gas := tktypes.MustParseHexUint64("10000")
-	_, err = txm.resolveUpdatedTransaction(ctx, nil, tx, &pldapi.TransactionUpdate{
-		PublicTxOptions: pldapi.PublicTxOptions{
-			Gas: &gas,
-		},
+	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return dbUpdateFn(dbTX)
 	})
-	assert.NoError(t, err)
-}
-
-func TestResolveUpdatedTransactionNoUpdate(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t,
-		false,
-		mockEmptyReceiptListeners,
-	)
-	defer done()
-
-	tx := &pldapi.Transaction{
-		TransactionBase: pldapi.TransactionBase{
-			Function: "set",
-		},
-	}
-	txu := &pldapi.TransactionUpdate{}
-
-	validatedTransaction, err := txm.resolveUpdatedTransaction(ctx, nil, tx, txu)
-	assert.NoError(t, err)
-	assert.Nil(t, validatedTransaction)
+	require.NoError(t, err)
 }
 
 func TestResolveUpdatedTransactionResolveFunctionError(t *testing.T) {
@@ -1501,17 +1403,14 @@ func TestResolveUpdatedTransactionResolveFunctionError(t *testing.T) {
 	)
 	defer done()
 
-	tx := &pldapi.Transaction{
+	tx := &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
-			Function: "set",
+			To: tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
-	}
-	txu := &pldapi.TransactionUpdate{
-		To:  tktypes.MustEthAddress(tktypes.RandHex(20)),
 		ABI: abi.ABI{},
 	}
 
-	_, err := txm.resolveUpdatedTransaction(ctx, nil, tx, txu)
+	_, err := txm.resolveUpdatedTransaction(ctx, nil, uuid.New(), tx)
 	assert.ErrorContains(t, err, "PD012218")
 }
 
@@ -1527,36 +1426,31 @@ func TestResolveUpdatedTransactionParseInputError(t *testing.T) {
 	)
 	defer done()
 
-	tx := &pldapi.Transaction{
+	tx := &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
-			Function: "set",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Function: "set",
+			Data:     tktypes.RawJSON(`{`),
 		},
+		ABI: abi.ABI{{Type: abi.Function, Name: "set"}},
 	}
-	txu := &pldapi.TransactionUpdate{
-		Data: tktypes.RawJSON(`{`),
-		ABI:  abi.ABI{{Type: abi.Function, Name: "set"}},
-	}
+
 	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		_, err := txm.resolveUpdatedTransaction(ctx, dbTX, tx, txu)
+		_, err := txm.resolveUpdatedTransaction(ctx, dbTX, uuid.New(), tx)
 		return err
 	})
 	assert.ErrorContains(t, err, "PD012208")
 }
 
-func TestResolveUpdatedTransactionUpdateAbiDataFunction(t *testing.T) {
+func TestResolveUpdatedTransactionSuccess(t *testing.T) {
 	to := tktypes.MustEthAddress(tktypes.RandHex(20))
-
-	tx := &pldapi.Transaction{
+	tx := &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
-			Function: "get",
 			To:       to,
+			Function: "set",
+			Data:     tktypes.RawJSON(`{"value": 46}`),
 		},
-	}
-	txu := &pldapi.TransactionUpdate{
-		Data:     tktypes.RawJSON(`{"value": 46}`),
-		ABI:      abi.ABI{{Type: abi.Function, Name: "set", Inputs: abi.ParameterArray{{Type: "uint256", Name: "value"}}}},
-		Function: "set",
+		ABI: abi.ABI{{Type: abi.Function, Name: "set", Inputs: abi.ParameterArray{{Type: "uint256", Name: "value"}}}},
 	}
 
 	ctx, txm, done := newTestTransactionManager(t,
@@ -1574,7 +1468,7 @@ func TestResolveUpdatedTransactionUpdateAbiDataFunction(t *testing.T) {
 	var validatedTransaction *components.ValidatedTransaction
 	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		var err error
-		validatedTransaction, err = txm.resolveUpdatedTransaction(ctx, dbTX, tx, txu)
+		validatedTransaction, err = txm.resolveUpdatedTransaction(ctx, dbTX, uuid.New(), tx)
 		return err
 	})
 
@@ -1585,136 +1479,4 @@ func TestResolveUpdatedTransactionUpdateAbiDataFunction(t *testing.T) {
 	assert.Equal(t, "0x76458e36bbb1e4f5e5742aa62b3122eb2e4622e19489dd2eb4c7370858085511", validatedTransaction.ResolvedTransaction.Function.ABIReference.HexString0xPrefix())
 	assert.Equal(t, `{"value":"46"}`, validatedTransaction.Transaction.Data.String())
 	assert.Equal(t, "60fe47b1000000000000000000000000000000000000000000000000000000000000002e", hex.EncodeToString(validatedTransaction.PublicTxData))
-}
-
-func TestResolveUpdatedTransactionUpdateTo(t *testing.T) {
-	to := tktypes.MustEthAddress(tktypes.RandHex(20))
-	abiRef := tktypes.MustParseBytes32("0x76458e36bbb1e4f5e5742aa62b3122eb2e4622e19489dd2eb4c7370858085511")
-
-	tx := &pldapi.Transaction{
-		TransactionBase: pldapi.TransactionBase{
-			Function:     "set(uint256)",
-			Data:         tktypes.RawJSON(`{"value":"46"}`),
-			ABIReference: &abiRef,
-		},
-	}
-	txu := &pldapi.TransactionUpdate{
-		To: to,
-	}
-
-	ctx, txm, done := newTestTransactionManager(t,
-		false,
-		mockEmptyReceiptListeners,
-		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			columns := []string{"hash", "abi"}
-			abiString := `[{"type":"function","name":"set","inputs":[{"type":"uint256","name":"value"}]}]`
-			rows := sqlmock.NewRows(columns).AddRow(abiRef.HexString0xPrefix(), abiString)
-
-			mc.db.ExpectBegin()
-			mc.db.ExpectQuery("SELECT.*abis.*").WillReturnRows(rows)
-			mc.db.ExpectCommit()
-		},
-	)
-	defer done()
-
-	var validatedTransaction *components.ValidatedTransaction
-	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		var err error
-		validatedTransaction, err = txm.resolveUpdatedTransaction(ctx, dbTX, tx, txu)
-		return err
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, validatedTransaction)
-	assert.Equal(t, to, validatedTransaction.Transaction.To)
-	assert.Equal(t, "set(uint256)", validatedTransaction.ResolvedTransaction.Function.Signature)
-	assert.Equal(t, "0x76458e36bbb1e4f5e5742aa62b3122eb2e4622e19489dd2eb4c7370858085511", validatedTransaction.ResolvedTransaction.Function.ABIReference.HexString0xPrefix())
-	assert.Equal(t, `{"value":"46"}`, validatedTransaction.Transaction.Data.String())
-	assert.Equal(t, "60fe47b1000000000000000000000000000000000000000000000000000000000000002e", hex.EncodeToString(validatedTransaction.PublicTxData))
-}
-
-func TestResolveUpdatedTransactionUpdateABIReference(t *testing.T) {
-	to := tktypes.MustEthAddress(tktypes.RandHex(20))
-	abiRef := tktypes.MustParseBytes32("0x76458e36bbb1e4f5e5742aa62b3122eb2e4622e19489dd2eb4c7370858085511")
-
-	tx := &pldapi.Transaction{
-		TransactionBase: pldapi.TransactionBase{
-			Function: "set(uint256)",
-			Data:     tktypes.RawJSON(`{"value":"46"}`),
-		},
-	}
-	txu := &pldapi.TransactionUpdate{
-		To:           to,
-		ABIReference: &abiRef,
-	}
-
-	ctx, txm, done := newTestTransactionManager(t,
-		false,
-		mockEmptyReceiptListeners,
-		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			columns := []string{"hash", "abi"}
-			abiString := `[{"type":"function","name":"set","inputs":[{"type":"uint256","name":"value"}]}]`
-			rows := sqlmock.NewRows(columns).AddRow(abiRef.HexString0xPrefix(), abiString)
-
-			mc.db.ExpectBegin()
-			mc.db.ExpectQuery("SELECT.*abis.*").WillReturnRows(rows)
-			mc.db.ExpectCommit()
-		},
-	)
-	defer done()
-
-	var validatedTransaction *components.ValidatedTransaction
-	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		var err error
-		validatedTransaction, err = txm.resolveUpdatedTransaction(ctx, dbTX, tx, txu)
-		return err
-	})
-	require.NoError(t, err)
-	require.NotNil(t, validatedTransaction)
-	assert.Equal(t, to, validatedTransaction.Transaction.To)
-	assert.Equal(t, "set(uint256)", validatedTransaction.ResolvedTransaction.Function.Signature)
-	assert.Equal(t, "0x76458e36bbb1e4f5e5742aa62b3122eb2e4622e19489dd2eb4c7370858085511", validatedTransaction.ResolvedTransaction.Function.ABIReference.HexString0xPrefix())
-	assert.Equal(t, `{"value":"46"}`, validatedTransaction.Transaction.Data.String())
-	assert.Equal(t, "60fe47b1000000000000000000000000000000000000000000000000000000000000002e", hex.EncodeToString(validatedTransaction.PublicTxData))
-}
-
-func TestProcessUpdatedTransaction(t *testing.T) {
-	id := uuid.New()
-	to := tktypes.MustEthAddress(tktypes.RandHex(20))
-	abiRef := tktypes.MustParseBytes32("0x76458e36bbb1e4f5e5742aa62b3122eb2e4622e19489dd2eb4c7370858085511")
-	function := "set(uint256)"
-	data := tktypes.RawJSON(`{"value":"46"}`)
-
-	ctx, txm, done := newTestTransactionManager(t,
-		false,
-		mockEmptyReceiptListeners,
-		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			mc.db.ExpectBegin()
-			mc.db.ExpectExec("UPDATE \"transactions\" SET \"abi_ref\"=\\$1,\"function\"=\\$2,\"to\"=\\$3,\"data\"=\\$4 WHERE id = \\$5").
-				WithArgs(abiRef, function, to, data, id).
-				WillReturnResult(driver.ResultNoRows)
-			mc.db.ExpectCommit()
-		},
-	)
-	defer done()
-
-	validatedTransaction := &components.ValidatedTransaction{
-		ResolvedTransaction: components.ResolvedTransaction{
-			Function: &components.ResolvedFunction{
-				ABIReference: &abiRef,
-				Signature:    function,
-			},
-			Transaction: &pldapi.Transaction{
-				TransactionBase: pldapi.TransactionBase{
-					To:   to,
-					Data: data,
-				},
-			},
-		},
-	}
-
-	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
-		return txm.processUpdatedTransaction(ctx, dbTX, &id, validatedTransaction)
-	})
-	assert.NoError(t, err)
 }

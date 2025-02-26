@@ -28,32 +28,6 @@ import (
 // add updates to the array and check how they get handled - cover all the cases where the way that
 // a previous version is handled is different to if it is the current version
 
-func TestTXStageControllerNoUpdate(t *testing.T) {
-	ctx, o, _, done := newTestOrchestrator(t)
-	defer done()
-	it, _ := newInflightTransaction(o, 1)
-	it.testOnlyNoActionMode = true
-
-	response := make(chan error, 1)
-	it.UpdateTransaction(ctx, &DBPublicTxn{}, func() error { return nil }, response)
-
-	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
-
-	require.Len(t, it.stateManager.GetVersions(ctx), 1)
-
-	rsc := it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx)
-	require.NotNil(t, rsc)
-	assert.Equal(t, InFlightTxStageRetrieveGasPrice, rsc.Stage)
-
-	// the response should be available on the channel before ProduceLatestInFlightStageContext returns
-	select {
-	case err := <-response:
-		require.NoError(t, err)
-	default:
-		t.Fail()
-	}
-}
-
 func TestTXStageControllerUpdateDBError(t *testing.T) {
 	ctx, o, _, done := newTestOrchestrator(t)
 	defer done()

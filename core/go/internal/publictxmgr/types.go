@@ -272,7 +272,6 @@ type InMemoryTxStateReadOnly interface {
 	GetGasLimit() uint64
 	IsReadyToExit() bool
 	IsComplete() bool
-	IsTransactionUpdate(newPtx *DBPublicTxn) bool
 }
 type InMemoryTxStateManager interface {
 	InMemoryTxStateReadOnly

@@ -232,8 +232,6 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 		for _, update := range updates {
 			if it.stateManager.IsComplete() {
 				update.response <- i18n.NewError(ctx, msgs.MsgTransactionAlreadyCompleted)
-			} else if !it.stateManager.IsTransactionUpdate(update.newPtx) {
-				update.response <- nil
 			} else {
 				err := update.dbUpdate()
 				if err != nil {

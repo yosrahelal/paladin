@@ -46,8 +46,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO: these tests can be updated to use the paladin client and receipts rather than JSON RPC calls and hooking in to the block indexer
-
 func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	ctx := context.Background()
 	logrus.SetLevel(logrus.DebugLevel)
@@ -129,7 +127,7 @@ func TestUpdatePublicTransaction(t *testing.T) {
 	logrus.SetLevel(logrus.DebugLevel)
 
 	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil, true)
-	c := pldclient.Wrap(instance.client)
+	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(250 * time.Millisecond)
 
 	// set up the receipt listener
 	success, err := c.PTX().CreateReceiptListener(ctx, &pldapi.TransactionReceiptListener{
@@ -153,24 +151,12 @@ func TestUpdatePublicTransaction(t *testing.T) {
 		Constructor().
 		Bytecode(build.Bytecode).
 		Inputs(`{"x":11223344}`).
-		PublicTxOptions(pldapi.PublicTxOptions{
-			Gas: confutil.P(tktypes.HexUint64(100)),
-		}).
 		Send()
 	require.NoError(t, res.Error())
-	require.NotNil(t, res.ID())
 
-	_, err = c.PTX().UpdateTransaction(ctx, &pldapi.TransactionUpdate{
-		ID: res.ID(),
-		PublicTxOptions: pldapi.PublicTxOptions{
-			Gas: confutil.P(tktypes.HexUint64(10000000)),
-		},
-	}, &pldapi.TransactionUpdateOptions{})
-	require.NoError(t, err)
+	var deployReceipt *pldapi.TransactionReceiptFull
 
-	var receipt *pldapi.TransactionReceiptFull
-
-	for receipt == nil {
+	for deployReceipt == nil {
 		select {
 		case subNotification, ok := <-sub.Notifications():
 			if ok {
@@ -178,7 +164,7 @@ func TestUpdatePublicTransaction(t *testing.T) {
 				json.Unmarshal(subNotification.Result, &batch)
 				for _, r := range batch.Receipts {
 					if *res.ID() == r.ID {
-						receipt = r
+						deployReceipt = r
 					}
 				}
 				subNotification.Ack(ctx)
@@ -188,10 +174,57 @@ func TestUpdatePublicTransaction(t *testing.T) {
 
 	tx, err := c.PTX().GetTransactionFull(ctx, *res.ID())
 	require.NoError(t, err)
+	contractAddr := tx.Receipt.ContractAddress
+
+	setRes := simpleStorage.Clone().
+		Function("set").
+		To(contractAddr).
+		Inputs(`{"_x":99887766}`).
+		PublicTxOptions(pldapi.PublicTxOptions{
+			// gas is set below instrinsic limit
+			Gas: confutil.P(tktypes.HexUint64(100)),
+		}).
+		Send()
+	require.NoError(t, setRes.Error())
+	require.NotNil(t, setRes.ID())
+
+	_, err = c.PTX().UpdateTransaction(ctx, *setRes.ID(), &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:         "key1",
+			Function:     "set",
+			Data:         tktypes.RawJSON(`{"_x":99887766}`),
+			To:           contractAddr,
+			ABIReference: tx.ABIReference,
+			PublicTxOptions: pldapi.PublicTxOptions{
+				Gas: confutil.P(tktypes.HexUint64(10000000)),
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	var setReceipt *pldapi.TransactionReceiptFull
+	for setReceipt == nil {
+		select {
+		case subNotification, ok := <-sub.Notifications():
+			if ok {
+				var batch pldapi.TransactionReceiptBatch
+				json.Unmarshal(subNotification.Result, &batch)
+				for _, r := range batch.Receipts {
+					if *setRes.ID() == r.ID {
+						setReceipt = r
+					}
+				}
+				subNotification.Ack(ctx)
+			}
+		}
+	}
+
+	tx, err = c.PTX().GetTransactionFull(ctx, *setRes.ID())
+	require.NoError(t, err)
 	require.NotNil(t, tx.Receipt)
 	require.True(t, tx.Receipt.Success)
 	require.Len(t, tx.Public, 1)
-	assert.Equal(t, tx.Public[0].Submissions[0].TransactionHash.HexString(), receipt.TransactionHash.HexString())
+	assert.Equal(t, tx.Public[0].Submissions[0].TransactionHash.HexString(), setReceipt.TransactionHash.HexString())
 }
 
 func TestPrivateTransactionsDeployAndExecute(t *testing.T) {

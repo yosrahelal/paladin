@@ -283,13 +283,8 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 
 	// Update the gas limit on the transaction
 	gas := tktypes.HexUint64(12345)
-	txUpdate := &pldapi.TransactionUpdate{
-		ID: &tx2ID,
-		PublicTxOptions: pldapi.PublicTxOptions{
-			Gas: &gas,
-		},
-	}
-	err = rpcClient.CallRPC(ctx, nil, "ptx_updateTransaction", txUpdate, &pldapi.TransactionUpdateOptions{})
+	tx2Input.Gas = &gas
+	err = rpcClient.CallRPC(ctx, nil, "ptx_updateTransaction", tx2ID, tx2Input)
 	require.NoError(t, err)
 
 	// Finalize the deploy as a success
