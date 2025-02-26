@@ -40,16 +40,14 @@ public class PentePrivacyGroupTest {
 
         var pente = new PenteDomain("", "");
 
-        var jsonProtoParser = JsonFormat.parser();
-        var reqBuilder = InitPrivacyGroupRequest.newBuilder();
-        var inputData = new StringReader("""
-                        {
-                            "properties_json": "{\\"name\\":\\"bob\\"}",
-                            "properties_abi_json": "[{\\"type\\":\\"string\\", \\"name\\": \\"name\\", \\"indexed\\":true}]",
-                            "members": ["me@node1","you@node2"]
-                        }
-                """);
-        jsonProtoParser.merge(inputData, reqBuilder);
+        var reqBuilder = InitPrivacyGroupRequest.newBuilder()
+                .addAllMembers(Arrays.asList("me@node1","you@node2"))
+                .setPropertiesJson("""
+                        {"name":"bob"}
+                 """)
+                .setPropertiesAbiJson("""
+                        [{"type":"string", "name": "name", "indexed":true}]
+                 """);
 
         // Run it
         var res = pente.initPrivacyGroup(reqBuilder.build()).get();
@@ -71,7 +69,7 @@ public class PentePrivacyGroupTest {
         expected.put("salt", received.get("salt"));
         assertEquals(expected, received);
 
-        // Check the resulting state ABI definitino
+        // Check the resulting state ABI definition
         expected = new ObjectMapper().readValue("""
                 {
                     "name": "",
@@ -92,8 +90,8 @@ public class PentePrivacyGroupTest {
                         { "name": "name", "type": "string", "indexed": true }
                     ]
                 }
-                """, new TypeReference<Map<Object, Object>>() {});
-        received = new ObjectMapper().readValue(res.getGenesisAbiStateSchemaJson(), new TypeReference<Map<Object, Object>>() {});
+                """, new TypeReference<>() {});
+        received = new ObjectMapper().readValue(res.getGenesisAbiStateSchemaJson(), new TypeReference<>() {});
         assertEquals(expected, received);
 
         // Check the resulting transaction parameters
@@ -108,8 +106,149 @@ public class PentePrivacyGroupTest {
                     "externalCallsEnabled": false
                 }
                 """, new TypeReference<Map<Object, Object>>() {});
-        received = new ObjectMapper().readValue(res.getTransaction().getParamsJson(), new TypeReference<Map<Object, Object>>() {});
+        received = new ObjectMapper().readValue(res.getTransaction().getParamsJson(), new TypeReference<>() {});
         ((Map<Object,Object>)expected.get("group")).put("salt", ((Map<Object,Object>)received.get("group")).get("salt"));
+        assertEquals(expected, received);
+
+
+        // Check the resulting transaction ABI
+        expected = new ObjectMapper().readValue("""
+                {
+                    "type": "constructor",
+                    "inputs": [                        
+                        {
+                            "name": "group",
+                            "type": "tuple",
+                            "internalType": "struct Group",
+                            "components": [
+                                { "name": "salt", "type": "bytes32" },
+                                { "name": "members", "type": "string[]" }
+                            ]
+                        },
+                        {"name":"evmVersion", "type":"string"},
+                        {"name":"endorsementType", "type":"string"},
+                        {"name":"externalCallsEnabled", "type":"boolean"}
+                    ]
+                }
+                """, new TypeReference<Map<Object, Object>>() {});
+        received = new ObjectMapper().readValue(res.getTransaction().getFunctionAbiJson(), new TypeReference<>() {});
+        assertEquals(expected, received);
+    }
+
+    @Test
+    void testInitPrivacyGroupCustomOptions() throws Exception {
+
+        var pente = new PenteDomain("", "");
+
+        var reqBuilder = InitPrivacyGroupRequest.newBuilder()
+                .addAllMembers(Arrays.asList("me@node1","you@node2"))
+                .setPropertiesJson("""
+                        {
+                            "name": "bob",
+                            "salt": "0x33219f6966a20f20bdbf06d3039349a4959c68208fbcda636568e766070a7d4d",
+                            "pente": {
+                                "evmVersion": "london",
+                                "endorsementType": "some_future_option",
+                                "externalCallsEnabled": true                    
+                            }                        
+                 """)
+                .setPropertiesAbiJson("""
+                        [{"type":"string", "name": "name", "indexed":true}],
+                        { "name": "salt", "type": "bytes32", "indexed": true },
+                        {
+                           "name": "pente",
+                           "type": "tuple",
+                           "internalType": "struct PentePrivacyGroupSettings",
+                           "components": [
+                               {"name":"evmVersion", "type":"string"},
+                               {"name":"endorsementType", "type":"string"},
+                               {"name":"externalCallsEnabled", "type":"boolean"}
+                           ]
+                        },
+                        { "name": "name", "type": "string", "indexed": true }
+                 """);
+
+        // Run it
+        var res = pente.initPrivacyGroup(reqBuilder.build()).get();
+
+        // Check the resulting state
+        var expected = new ObjectMapper().readValue("""
+                {
+                    "name":"bob",
+                    "salt":"0x33219f6966a20f20bdbf06d3039349a4959c68208fbcda636568e766070a7d4d",
+                    "pente": {
+                        "members":["me@node1","you@node2"],
+                        "evmVersion":"london",
+                        "endorsementType":"some_future_option",
+                        "externalCallsEnabled":true
+                    }
+                 }
+                """, new TypeReference<Map<Object, Object>>() {});
+        var received = new ObjectMapper().readValue(res.getGenesisStateJson(), new TypeReference<Map<Object, Object>>() {});
+        assertEquals(expected, received);
+
+        // Check the resulting state ABI definition
+        expected = new ObjectMapper().readValue("""
+                {
+                    "name": "",
+                    "type": "tuple",
+                    "internalType": "struct PentePrivacyGroup",
+                    "components": [
+                        { "name": "salt", "type": "bytes32", "indexed": true },
+                        {
+                           "name": "pente",
+                           "type": "tuple",
+                           "internalType": "struct PentePrivacyGroupSettings",
+                           "components": [
+                               {"name":"evmVersion", "type":"string"},
+                               {"name":"endorsementType", "type":"string"},
+                               {"name":"externalCallsEnabled", "type":"boolean"}
+                           ]
+                        },
+                        { "name": "name", "type": "string", "indexed": true }
+                    ]
+                }
+                """, new TypeReference<>() {});
+        received = new ObjectMapper().readValue(res.getGenesisAbiStateSchemaJson(), new TypeReference<>() {});
+        assertEquals(expected, received);
+
+        // Check the resulting transaction parameters
+        expected = new ObjectMapper().readValue("""
+                {
+                    "group": {
+                       "salt": "0x33219f6966a20f20bdbf06d3039349a4959c68208fbcda636568e766070a7d4d",
+                       "members": ["me@node1","you@node2"]
+                    },
+                    "evmVersion": "london",
+                    "endorsementType": "some_future_option",
+                    "externalCallsEnabled": true
+                }
+                """, new TypeReference<Map<Object, Object>>() {});
+        received = new ObjectMapper().readValue(res.getTransaction().getParamsJson(), new TypeReference<>() {});
+        assertEquals(expected, received);
+
+
+        // Check the resulting transaction ABI
+        expected = new ObjectMapper().readValue("""
+                {
+                    "type": "constructor",
+                    "inputs": [                        
+                        {
+                            "name": "group",
+                            "type": "tuple",
+                            "internalType": "struct Group",
+                            "components": [
+                                { "name": "salt", "type": "bytes32" },
+                                { "name": "members", "type": "string[]" }
+                            ]
+                        },
+                        {"name":"evmVersion", "type":"string"},
+                        {"name":"endorsementType", "type":"string"},
+                        {"name":"externalCallsEnabled", "type":"boolean"}
+                    ]
+                }
+                """, new TypeReference<Map<Object, Object>>() {});
+        received = new ObjectMapper().readValue(res.getTransaction().getFunctionAbiJson(), new TypeReference<>() {});
         assertEquals(expected, received);
     }
 }
