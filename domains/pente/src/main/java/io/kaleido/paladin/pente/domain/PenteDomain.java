@@ -33,29 +33,30 @@
  import io.kaleido.paladin.toolkit.JsonHex.Bytes32;
  import org.apache.logging.log4j.Logger;
  import org.apache.logging.log4j.message.FormattedMessage;
+ import org.jetbrains.annotations.NotNull;
 
  import java.io.ByteArrayOutputStream;
  import java.io.IOException;
  import java.nio.charset.StandardCharsets;
  import java.util.*;
  import java.util.concurrent.CompletableFuture;
- 
+
  public class PenteDomain extends DomainInstance {
      private static final Logger LOGGER = PaladinLogging.getLogger(PenteDomain.class);
- 
+
      private final PenteConfiguration config = new PenteConfiguration();
- 
+
      PenteDomain(String grpcTarget, String instanceId) {
          super(grpcTarget, instanceId);
          init();
      }
- 
+
      @Override
      protected CompletableFuture<ConfigureDomainResponse> configureDomain(ConfigureDomainRequest request) {
          // The in-memory config is late initialized here (and does so in its lock so access from any thread
          // we get called on for this and subsequent gRPC calls is safe).
          config.initFromConfig(request);
- 
+
          var domainConfig = DomainConfig.newBuilder()
                  .addAllAbiStateSchemasJson(config.allPenteSchemas())
                  .setAbiEventsJson(config.getEventsABI().toString())
@@ -65,20 +66,20 @@
                  .build()
          );
      }
- 
+
      @Override
      protected CompletableFuture<InitDomainResponse> initDomain(InitDomainRequest request) {
          // Store our state schema
          config.schemasInitialized(request.getAbiStateSchemasList());
          return CompletableFuture.completedFuture(InitDomainResponse.getDefaultInstance());
      }
- 
+
      @Override
      protected CompletableFuture<InitDeployResponse> initDeploy(InitDeployRequest request) {
          try {
              var params = new ObjectMapper().readValue(request.getTransaction().getConstructorParamsJson(),
                      PenteConfiguration.PrivacyGroupConstructorParamsJSON.class);
- 
+
              // Only support one string right now for endorsement type.
              // The intention is that more validation options (BLS and/or ZKP based) can be added later.
              //
@@ -91,11 +92,11 @@
                          Collections.singletonList(PenteConfiguration.ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES)
                  ));
              }
- 
+
              if (params.group() == null || params.group().members() == null || params.group().members().length < 1) {
                  throw new Exception("privacy group must have at least one member");
              }
- 
+
              var response = InitDeployResponse.newBuilder();
              var lookups = PenteTransaction.buildGroupScopeIdentityLookups(params.group().salt(), params.group().members());
              LOGGER.info("endorsement group identity lookups: {}", lookups);
@@ -111,7 +112,7 @@
              return CompletableFuture.failedFuture(e);
          }
      }
- 
+
      private List<Address> getResolvedEndorsers(Bytes32 salt, String[] members, List<ResolvedVerifier> resolvedVerifiers) {
          // Get the resolved address for each endorser we set the lookup for
          var lookups = PenteTransaction.buildGroupScopeIdentityLookups(salt, members);
@@ -134,13 +135,13 @@
          }
          return endorsementAddresses;
      }
- 
+
      @Override
      protected CompletableFuture<PrepareDeployResponse> prepareDeploy(PrepareDeployRequest request) {
          try {
              var params = new ObjectMapper().readValue(request.getTransaction().getConstructorParamsJson(),
                      PenteConfiguration.PrivacyGroupConstructorParamsJSON.class);
- 
+
              var resolvedVerifiers = getResolvedEndorsers(params.group().salt(), params.group().members(), request.getResolvedVerifiersList());
              var onchainConfBuilder = new ByteArrayOutputStream();
              onchainConfBuilder.write(PenteConfiguration.intToBytes4(PenteConfiguration.PenteConfigID_V0));
@@ -165,12 +166,12 @@
              return CompletableFuture.failedFuture(e);
          }
      }
- 
+
      @Override
      protected CompletableFuture<InitContractResponse> initContract(InitContractRequest request) {
          try {
              var onChainConfig = PenteConfiguration.decodeConfig(request.getContractConfig().toByteArray());
- 
+
              var contractConfigObj = new PenteConfiguration.ContractConfig(onChainConfig.evmVersion());
              var contractConfig = ContractConfig.newBuilder().
                      setContractConfigJson(new ObjectMapper().writeValueAsString(contractConfigObj)).
@@ -181,7 +182,7 @@
                      setValid(true).
                      setContractConfig(contractConfig).
                      build());
- 
+
          } catch (Exception e) {
              LOGGER.error(new FormattedMessage("Invalid configuration for domain {}", request.getContractAddress()), e);
              // We do not stall the indexer for this
@@ -190,7 +191,7 @@
                      build());
          }
      }
- 
+
      @Override
      protected CompletableFuture<InitTransactionResponse> initTransaction(InitTransactionRequest request) {
          try {
@@ -207,7 +208,7 @@
              return CompletableFuture.failedFuture(e);
          }
      }
- 
+
      private List<PenteConfiguration.TransactionExternalCall> parseExternalCalls(List<EVMRunner.JsonEVMLog> logs) throws Exception {
          var externalCalls = new ArrayList<PenteConfiguration.TransactionExternalCall>();
          for (var log : logs) {
@@ -226,25 +227,25 @@
          }
          return externalCalls;
      }
- 
+
      private String buildDomainData(PenteEVMTransaction.EVMExecutionResult execResult) throws Exception {
          return new ObjectMapper().writeValueAsString(
                  new PenteConfiguration.DomainData(
                          new Address(execResult.contractAddress().toArray()),
                          parseExternalCalls(execResult.logs())));
      }
- 
+
      @Override
      protected CompletableFuture<AssembleTransactionResponse> assembleTransaction(AssembleTransactionRequest request) {
          try {
              var tx = new PenteTransaction(this, request.getTransaction());
- 
+
              // Execution throws an EVMExecutionException if fails
              var accountLoader = new AssemblyAccountLoader(request.getStateQueryContext());
              var ethTxn = new PenteEVMTransaction(this, tx, tx.getFromVerifier(request.getResolvedVerifiersList()));
              var execResult = ethTxn.invokeEVM(accountLoader);
              var result = AssembleTransactionResponse.newBuilder();
- 
+
              // Just like a base Eth transaction, we need a signed and encoded transaction for endorser verification.
              // We package this up as an "info" state on the transaction, that will be distributed to all parties
              // just like all the other states. However, it never exists in the UTXO map on-chain, and is never
@@ -252,11 +253,11 @@
              // event from the transaction where it is used.
              var encodedTxn = tx.getSignedRawTransaction(ethTxn);
              var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader, ethTxn, encodedTxn, buildDomainData(execResult));
- 
+
              // We now have the assembly result
              result.setAssemblyResult(AssembleTransactionResponse.Result.OK);
              result.setAssembledTransaction(assembledTransaction);
- 
+
              // In addition to the signing address of the sender of this transaction (which can be any eth address)
              // we need to get endorsements from all endorsers in the list associated with the privacy group.
              // This includes this node, but not the same signing address, so there's no special optimization for "us"
@@ -285,7 +286,7 @@
              return CompletableFuture.failedFuture(e);
          }
      }
- 
+
      @Override
      protected CompletableFuture<EndorseTransactionResponse> endorseTransaction(EndorseTransactionRequest request) {
          try {
@@ -300,18 +301,18 @@
              }
              if (request.getInfoCount() != 1)
                  throw new IllegalArgumentException("Expected exactly one info state containing the transaction input");
- 
+
              // Recover the input from the signed rawTransaction that is in the "info" state recorded alongside the transaction
              var tx = new PenteTransaction(this, request.getTransaction());
              var evmTxn = PenteEVMTransaction.buildFromInput(this, request.getInfo(0).getStateDataJson().getBytes(StandardCharsets.UTF_8));
- 
+
              // Do the execution of the transaction again ourselves
              var endorsementLoader = new EndorsementAccountLoader(inputAccounts, readAccounts);
              var execResult = evmTxn.invokeEVM(endorsementLoader);
- 
+
              // For the inputs, the endorsementLoader checks we loaded everything from the right set
              var inputsMatch = endorsementLoader.checkEmpty();
- 
+
              // Build the expected outputs
              var expectedOutputs = new ArrayList<PersistedAccount>(request.getOutputsCount());
              for (var output : request.getOutputsList()) {
@@ -341,14 +342,14 @@
                  }
                  outputsMatch = outputsMatch && matchFound;
              }
- 
+
              if (!inputsMatch || !outputsMatch) {
                  LOGGER.error("Endorsement failed inputsMatch={} outputsMatch={}. EXPECTED inputs={} reads={} outputs={}",
                          inputsMatch, outputsMatch,
                          inputAccounts, readAccounts, expectedOutputs);
                  throw new IllegalStateException("Execution state mismatch detected in endorsement");
              }
- 
+
              // Check we agree with the typed data we will sign
              var endorsementPayload = tx.eip712TypedDataEndorsementPayload(
                      request.getInputsList().stream().map(EndorsableState::getId).toList(),
@@ -357,7 +358,7 @@
                      request.getInfoList().stream().map(EndorsableState::getId).toList(),
                      parseExternalCalls(execResult.logs())
              );
- 
+
              // Ok - we are happy to add our endorsement signature
              return CompletableFuture.completedFuture(EndorseTransactionResponse.newBuilder().
                      setEndorsementResult(EndorseTransactionResponse.Result.SIGN).
@@ -373,7 +374,7 @@
              return CompletableFuture.failedFuture(e);
          }
      }
- 
+
      @Override
      protected CompletableFuture<PrepareTransactionResponse> prepareTransaction(PrepareTransactionRequest request) {
          try {
@@ -387,7 +388,7 @@
                  var domainData = new ObjectMapper().readValue(request.getDomainData(), PenteConfiguration.DomainData.class);
                  externalCalls = domainData.externalCalls();
              }
- 
+
              var params = new HashMap<String, Object>() {{
                  put("txId", request.getTransaction().getTransactionId());
                  put("states", new HashMap<String, Object>() {{
@@ -399,16 +400,16 @@
                  put("externalCalls", externalCalls);
                  put("signatures", signatures.stream().map(r -> JsonHex.wrap(r.getPayload().toByteArray())).toList());
              }};
- 
+
              var transitionABI = config.getPrivacyGroupABI().getABIEntry("function", "transition").toJSON(false);
              var transitionTX = PreparedTransaction.newBuilder().
                      setFunctionAbiJson(transitionABI).
                      setParamsJson(new ObjectMapper().writeValueAsString(params));
              var result = PrepareTransactionResponse.newBuilder();
- 
+
              if (request.getTransaction().getIntent() == TransactionSpecification.Intent.PREPARE_TRANSACTION) {
                  transitionTX.setRequiredSigner(request.getTransaction().getFrom());
- 
+
                  // TODO: can the transitionHash be reused from a prior step instead of being computed again?
                  var tx = new PenteTransaction(this, request.getTransaction());
                  var transitionHash = tx.eip712TypedDataEndorsementPayload(
@@ -417,7 +418,7 @@
                          request.getOutputStatesList().stream().map(EndorsableState::getId).toList(),
                          request.getInfoStatesList().stream().map(EndorsableState::getId).toList(),
                          externalCalls);
- 
+
                  var transitionWithApprovalABI = config.getPrivacyGroupABI().getABIEntry("function", "transitionWithApproval");
                  var transitionWithApprovalParams = new HashMap<String, Object>() {{
                      put("txId", request.getTransaction().getTransactionId());
@@ -425,14 +426,14 @@
                      put("externalCalls", externalCalls);
                  }};
                  var transitionWithApprovalParamsJSON = new ObjectMapper().writeValueAsString(transitionWithApprovalParams);
- 
+
                  var encodeRequest = EncodeDataRequest.newBuilder().
                          setEncodingType(EncodingType.FUNCTION_CALL_DATA).
                          setDefinition(transitionWithApprovalABI.toJSON(false)).
                          setBody(transitionWithApprovalParamsJSON).
                          build();
                  var encodeResponse = encodeData(encodeRequest).get();
- 
+
                  var metadata = new PenteConfiguration.PenteTransitionMetadata(
                          new PenteConfiguration.PenteApprovalParams(
                                  new JsonHex.Bytes32(transitionHash),
@@ -441,17 +442,17 @@
                                  transitionWithApprovalABI,
                                  transitionWithApprovalParamsJSON,
                                  JsonHex.wrap(encodeResponse.getData().toByteArray())));
- 
+
                  result.setMetadata(new ObjectMapper().writeValueAsString(metadata));
              }
- 
+
              result.setTransaction(transitionTX);
              return CompletableFuture.completedFuture(result.build());
          } catch (Exception e) {
              return CompletableFuture.failedFuture(e);
          }
      }
- 
+
      @Override
      protected CompletableFuture<HandleEventBatchResponse> handleEventBatch(HandleEventBatchRequest request) {
          try {
@@ -490,7 +491,7 @@
                                      .setTransactionId(approval.txId.to0xHex())
                                      .setLocation(event.getLocation())
                                      .build());
-                     
+
                  } else {
                      throw new Exception("Unknown signature: " + event.getSoliditySignature());
                  }
@@ -500,27 +501,27 @@
              return CompletableFuture.failedFuture(e);
          }
      }
- 
+
      @Override
      protected CompletableFuture<SignResponse> sign(SignRequest request) {
          // Pente currently only uses SECP256K1 cryptography, which is fully supported by the built-in
          // Paladin signing module without any extension requirements.
          return CompletableFuture.failedFuture(new UnsupportedOperationException());
      }
- 
+
      @Override
      protected CompletableFuture<GetVerifierResponse> getVerifier(GetVerifierRequest request) {
          // Pente currently only uses SECP256K1 cryptography, which is fully supported by the built-in
          // Paladin signing module without any extension requirements.
          return CompletableFuture.failedFuture(new UnsupportedOperationException());
      }
- 
+
      @Override
      protected CompletableFuture<ValidateStateHashesResponse> validateStateHashes(ValidateStateHashesRequest request) {
          // Pente uses the standard state hash generation of Paladin, so this function is not called per the spec
          return CompletableFuture.failedFuture(new UnsupportedOperationException());
      }
- 
+
      @Override
      protected CompletableFuture<InitCallResponse> initCall(InitCallRequest request) {
          try {
@@ -537,7 +538,7 @@
              return CompletableFuture.failedFuture(e);
          }
      }
- 
+
      @Override
      protected CompletableFuture<ExecCallResponse> execCall(ExecCallRequest request) {
          try {
@@ -545,7 +546,7 @@
              var accountLoader = new AssemblyAccountLoader(request.getStateQueryContext());
              var ethTxn = new PenteEVMTransaction(this, tx, tx.getFromVerifier(request.getResolvedVerifiersList()));
              var result = ethTxn.invokeEVM(accountLoader);
- 
+
              var response = ExecCallResponse.newBuilder();
              response.setResultJson(tx.decodeOutput(result.outputData()));
              return CompletableFuture.completedFuture(response.build());
@@ -553,17 +554,17 @@
              return CompletableFuture.failedFuture(e);
          }
      }
- 
+
      @Override
      protected CompletableFuture<BuildReceiptResponse> buildReceipt(BuildReceiptRequest request) {
          try {
              if (!request.getComplete()) {
                  throw new IllegalStateException("all states must be available to build an EVM receipt");
              }
- 
+
              // We execute the transaction just like we would during endorsement, but here we return the information
              // for users to consume. Such as the contractAddress, the logs, or even the outputData.
- 
+
              var inputAccounts = new ArrayList<PersistedAccount>(request.getInputStatesCount());
              for (var input : request.getInputStatesList()) {
                  inputAccounts.add(PersistedAccount.deserialize(input.getStateDataJson().getBytes(StandardCharsets.UTF_8)));
@@ -574,17 +575,17 @@
              }
              if (request.getInfoStatesCount() != 1)
                  throw new IllegalArgumentException("Expected exactly one info state containing the transaction input");
- 
+
              // Recover the input from the signed rawTransaction that is in the "info" state recorded alongside the transaction
              var evmTxn = PenteEVMTransaction.buildFromInput(this, request.getInfoStates(0).getStateDataJson().getBytes(StandardCharsets.UTF_8));
- 
+
              // Do the execution of the transaction again ourselves
              var endorsementLoader = new EndorsementAccountLoader(inputAccounts, readAccounts);
              var execResult = evmTxn.invokeEVM(endorsementLoader);
- 
+
              // Build the full receipt from the result
              var jsonReceipt = evmTxn.buildJSONReceipt(execResult);
- 
+
              return CompletableFuture.completedFuture(BuildReceiptResponse.newBuilder().
                      setReceiptJson(new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(jsonReceipt)).
                      build());
@@ -696,11 +697,17 @@
      }
 
      @JsonIgnoreProperties(ignoreUnknown = true)
+     record MinimalGenesisPenteConfig(
+             @JsonProperty(required = true)
+             String[] members
+     ) {}
+
+     @JsonIgnoreProperties(ignoreUnknown = true)
      record MinimalGenesisConfig(
              @JsonProperty(required = true)
              JsonHex.Bytes32 salt,
              @JsonProperty(required = true)
-             String[] members
+             MinimalGenesisPenteConfig pente
      ){}
 
      @Override
@@ -725,17 +732,112 @@
              // - The member list
              // That is because these are passed into each transaction in Pente (as has been the case from the
              // beginning, before the privacy group management APIs in Paladin existed).
-             var genesisSettings = new ObjectMapper().readValue(request.getGenesisAbiJson(), MinimalGenesisConfig.class);
+             var mapper = new ObjectMapper();
+             var groupABI = JsonABI.newTuple("group", "Group", JsonABI.newParameters(
+                     JsonABI.newParameter("salt", "bytes32"),
+                     JsonABI.newParameter("members", "string[]")
+             ));
+             var ptxInputsABI = JsonABI.newParameters(groupABI, JsonABI.newParameter("from", "string"));
+             var data = new ObjectNode(JsonNodeFactory.instance);
+             var genesisSettings = mapper.readValue(request.getGenesisAbiJson(), MinimalGenesisConfig.class);
+             var groupJSON = new ObjectNode(getInstance());
+             groupJSON.put("salt", genesisSettings.salt.toString());
+             var membersJSON = new ArrayNode(JsonNodeFactory.instance, genesisSettings.pente.members.length);
+             for (var member : genesisSettings.pente.members) {
+                 membersJSON.add(member);
+             }
+             groupJSON.set("members", membersJSON);
+             data.set("group", groupJSON);
 
-             var propertiesABI = mapper.readValue(request.getPropertiesAbiJson(), JsonABI.Parameters.class);
-             for ( var prop : propertiesABI ) {
+             // This transaction wrapping request can be:
+             // 1) A deploy transaction with bytecode and parameters
+             // 2) An invocation of a smart contract function with parameters
+             // 3) A simple transfer
+             // NOTE: The Pente domain does not support pre-signed "raw" transactions currently (logically a 4th type)
+             JsonABI.Entry privateABI;
+             JsonNode jsonValue = null;
+             var inTxn = request.getTransaction();
+             data.put("from", inTxn.getFrom());
+             if (inTxn.hasInputJson()) {
+                 jsonValue = mapper.readValue(inTxn.getInputJson(), JsonNode.class);
+             }
+             JsonABI.Entry funcDef = null;
+             if (inTxn.hasFunctionAbiJson()) {
+                 funcDef = mapper.readValue(inTxn.getFunctionAbiJson(), JsonABI.Entry.class);
+             }
+             if (!inTxn.hasTo()) {
+                 // Unlike pure ethereum transactions, we require the bytecode to be split out from the
+                 // rest of the inputs. This avoids horrible complexity in attempting to split the two out later
+                 // using eye-catchers.
+                 if (!inTxn.hasBytecode()) {
+                     throw new IllegalArgumentException("EVM privacy group deployment transactions must have bytecode supplied separately to the input data");
+                 }
+                 privateABI = JsonABI.newFunction(
+                         "deploy",
+                         ptxInputsABI,
+                         JsonABI.newParameters()
+                 );
+                 ptxInputsABI.add(JsonABI.newParameter("bytecode", "bytes32"));
+                 data.put("bytecode", JsonHex.wrap(inTxn.getBytecode().toByteArray()).toString());
+             } else if (funcDef != null) {
+                 // We're invoking a function by name, with inputs
+                 privateABI = JsonABI.newFunction(
+                         funcDef.name(),
+                         ptxInputsABI,
+                         JsonABI.newParameters()
+                 );
+             } else {
+                 // We're using the special "invoke" function that does a blind invocation of a
+                 // pre-encoded function call, or a transfer
+                 privateABI = JsonABI.newFunction(
+                         "invoke",
+                         ptxInputsABI,
+                         JsonABI.newParameters()
+                 );
              }
 
+             // Add the input data - setting appropriate ABI information
+             data.set("data", jsonValue);
+             if (funcDef != null) {
+                 // Add the inputs to the ABI
+                 ptxInputsABI.add(JsonABI.newTuple("inputs", "Inputs", funcDef.inputs()));
+                 if (funcDef.outputs() != null) {
+                     privateABI.outputs().addAll(funcDef.outputs());
+                 }
+             } else if (jsonValue != null) {
+                 // Any inputs (if this isn't just a simple base eth value transfer) must be hex string here
+                 if (!jsonValue.isTextual()) {
+                     throw new IllegalArgumentException("if a function ABI is not supplied, then the input must be a pre-encoded hex string");
+                 }
+                 ptxInputsABI.add(JsonABI.newParameter("data", "bytes"));
+             }
 
-             return CompletableFuture.failedFuture(new UnsupportedOperationException());
+             // Add the ethereum gas/value
+             if (inTxn.hasGas()) {
+                 ptxInputsABI.add(JsonABI.newParameter("gas", "uint64"));
+                 data.put("gas", inTxn.getGas());
+             }
+             if (inTxn.hasValue()) {
+                 ptxInputsABI.add(JsonABI.newParameter("value", "uint256"));
+                 data.put("value", inTxn.getValue());
+             }
+
+             // Return the mapped transaction
+             return CompletableFuture.completedFuture(WrapPrivacyGroupEVMTXResponse.newBuilder()
+                     .setTransaction(PreparedTransaction.newBuilder()
+                             .setType(PreparedTransaction.TransactionType.PRIVATE)
+                             .setParamsJson(mapper.writeValueAsString(data))
+                             .setFunctionAbiJson(mapper.writeValueAsString(privateABI))
+                             .build())
+                     .build());
          } catch (Exception e) {
              return CompletableFuture.failedFuture(e);
          }
+     }
+
+     @NotNull
+     private static JsonNodeFactory getInstance() {
+         return JsonNodeFactory.instance;
      }
 
      @JsonIgnoreProperties(ignoreUnknown = true)

@@ -120,7 +120,7 @@
                  case EXEC_CALL -> execCall(request.getExecCall()).thenApply(response::setExecCallRes);
                  case BUILD_RECEIPT -> buildReceipt(request.getBuildReceipt()).thenApply(response::setBuildReceiptRes);
                  case INIT_PRIVACY_GROUP -> initPrivacyGroup(request.getInitPrivacyGroup()).thenApply(response::setInitPrivacyGroupRes);
-                 case WRAP_PRIVACY_GROUP_TRANSACTION -> wrapPrivacyGroupTransaction(request.getWrapPrivacyGroupEVMTX()).thenApply(response::setWrapPrivacyGroupEVMTXRes);
+                 case WRAP_PRIVACY_GROUP_EVMTX -> wrapPrivacyGroupTransaction(request.getWrapPrivacyGroupEvmtx()).thenApply(response::setWrapPrivacyGroupEvmtxRes);
                  default -> throw new IllegalArgumentException("unknown request: %s".formatted(request.getRequestToDomainCase()));
              };
              return resultApplied.thenApply((ra) -> {

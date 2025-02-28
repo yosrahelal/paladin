@@ -388,11 +388,11 @@ func (br *domainBridge) InitPrivacyGroup(ctx context.Context, req *prototk.InitP
 func (br *domainBridge) WrapPrivacyGroupEVMTX(ctx context.Context, req *prototk.WrapPrivacyGroupEVMTXRequest) (res *prototk.WrapPrivacyGroupEVMTXResponse, err error) {
 	err = br.toPlugin.RequestReply(ctx,
 		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
-			dm.Message().RequestToDomain = &prototk.DomainMessage_WrapPrivacyGroupEVMTX{WrapPrivacyGroupEVMTX: req}
+			dm.Message().RequestToDomain = &prototk.DomainMessage_WrapPrivacyGroupEvmtx{WrapPrivacyGroupEvmtx: req}
 		},
 		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
-			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_WrapPrivacyGroupEVMTXRes); ok {
-				res = r.WrapPrivacyGroupEVMTXRes
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_WrapPrivacyGroupEvmtxRes); ok {
+				res = r.WrapPrivacyGroupEvmtxRes
 			}
 			return res != nil
 		},

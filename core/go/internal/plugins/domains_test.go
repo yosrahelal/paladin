@@ -251,7 +251,7 @@ func TestDomainRequestsOK(t *testing.T) {
 			}, nil
 		},
 		WrapPrivacyGroupEVMTX: func(ctx context.Context, wpgtr *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error) {
-			assert.Equal(t, `{"orig":"params"}`, wpgtr.Transaction.FunctionParamsJson)
+			assert.Equal(t, `{"orig":"params"}`, *wpgtr.Transaction.InputJson)
 			return &prototk.WrapPrivacyGroupEVMTXResponse{
 				Transaction: &prototk.PreparedTransaction{
 					ParamsJson: `{"wrapped":"params"}`,
@@ -448,8 +448,8 @@ func TestDomainRequestsOK(t *testing.T) {
 	assert.Equal(t, `{"full":"props"}`, ipgr.GenesisStateJson)
 
 	wpgtr, err := domainAPI.WrapPrivacyGroupEVMTX(ctx, &prototk.WrapPrivacyGroupEVMTXRequest{
-		Transaction: &prototk.PrivacyGroupTransaction{
-			FunctionParamsJson: `{"orig":"params"}`,
+		Transaction: &prototk.PrivacyGroupEVMTX{
+			InputJson: confutil.P(`{"orig":"params"}`),
 		},
 	})
 	require.NoError(t, err)
