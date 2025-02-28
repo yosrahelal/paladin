@@ -43,7 +43,7 @@
      protected abstract CompletableFuture<ExecCallResponse> execCall(ExecCallRequest request);
      protected abstract CompletableFuture<BuildReceiptResponse> buildReceipt(BuildReceiptRequest request);
      protected abstract CompletableFuture<InitPrivacyGroupResponse> initPrivacyGroup(InitPrivacyGroupRequest request);
-     protected abstract CompletableFuture<WrapPrivacyGroupTransactionResponse> wrapPrivacyGroupTransaction(WrapPrivacyGroupTransactionRequest request);
+     protected abstract CompletableFuture<WrapPrivacyGroupEVMTXResponse> wrapPrivacyGroupTransaction(WrapPrivacyGroupEVMTXRequest request);
 
      protected DomainInstance(String grpcTarget, String instanceId) {
          super(grpcTarget, instanceId);
@@ -120,7 +120,7 @@
                  case EXEC_CALL -> execCall(request.getExecCall()).thenApply(response::setExecCallRes);
                  case BUILD_RECEIPT -> buildReceipt(request.getBuildReceipt()).thenApply(response::setBuildReceiptRes);
                  case INIT_PRIVACY_GROUP -> initPrivacyGroup(request.getInitPrivacyGroup()).thenApply(response::setInitPrivacyGroupRes);
-                 case WRAP_PRIVACY_GROUP_TRANSACTION -> wrapPrivacyGroupTransaction(request.getWrapPrivacyGroupTransaction()).thenApply(response::setWrapPrivacyGroupTransactionRes);
+                 case WRAP_PRIVACY_GROUP_TRANSACTION -> wrapPrivacyGroupTransaction(request.getWrapPrivacyGroupEVMTX()).thenApply(response::setWrapPrivacyGroupEVMTXRes);
                  default -> throw new IllegalArgumentException("unknown request: %s".formatted(request.getRequestToDomainCase()));
              };
              return resultApplied.thenApply((ra) -> {

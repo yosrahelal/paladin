@@ -74,7 +74,7 @@ func (gm *groupManager) rpcQueryGroupsByProperties() rpcserver.RPCHandler {
 }
 
 func (gm *groupManager) rpcSendTransaction() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context, tx *pldapi.PrivacyGroupTransactionInput) (txID *uuid.UUID, err error) {
+	return rpcserver.RPCMethod1(func(ctx context.Context, tx *pldapi.PrivacyGroupEVMTXInput) (txID *uuid.UUID, err error) {
 		err = gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 			txID, err = gm.SendTransaction(ctx, dbTX, tx)
 			return err
@@ -84,7 +84,7 @@ func (gm *groupManager) rpcSendTransaction() rpcserver.RPCHandler {
 }
 
 func (gm *groupManager) rpcCall() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context, call *pldapi.PrivacyGroupTransactionCall) (result tktypes.RawJSON, err error) {
+	return rpcserver.RPCMethod1(func(ctx context.Context, call *pldapi.PrivacyGroupEVMCall) (result tktypes.RawJSON, err error) {
 		err = gm.Call(ctx, gm.p.NOTX(), &result, call)
 		return result, err
 	})

@@ -519,58 +519,50 @@ func (gm *groupManager) QueryGroupsByProperties(ctx context.Context, dbTX persis
 	return pgs, nil
 }
 
-func (gm *groupManager) prepareTransaction(ctx context.Context, dbTX persistence.DBTX, groupID tktypes.HexBytes, tx *pldapi.TransactionInput) error {
+func (gm *groupManager) prepareTransaction(ctx context.Context, dbTX persistence.DBTX, domain string, groupID tktypes.HexBytes, pgTX *pldapi.PrivacyGroupEVMTX) (*pldapi.TransactionInput, error) {
 
-	if tx.Type.V() != pldapi.TransactionTypePrivate {
-		return i18n.NewError(ctx, msgs.MsgPGroupsTXMustBePrivate)
-	}
-
-	if tx.Domain == "" {
-		return i18n.NewError(ctx, msgs.MsgPGroupsNoDomain)
+	if domain == "" {
+		return nil, i18n.NewError(ctx, msgs.MsgPGroupsNoDomain)
 	}
 
 	if groupID == nil {
-		return i18n.NewError(ctx, msgs.MsgPGroupsNoGroupID)
+		return nil, i18n.NewError(ctx, msgs.MsgPGroupsNoGroupID)
 	}
 
 	// Fluff up the privacy group
-	pg, err := gm.GetGroupByID(ctx, dbTX, tx.Domain, groupID)
+	pg, err := gm.GetGroupByID(ctx, dbTX, domain, groupID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if pg == nil {
-		return i18n.NewError(ctx, msgs.MsgPGroupsGroupNotFound, groupID)
+		return nil, i18n.NewError(ctx, msgs.MsgPGroupsGroupNotFound, groupID)
 	}
 	if pg.ContractAddress == nil || pg.Genesis == nil {
-		return i18n.NewError(ctx, msgs.MsgPGroupsNotReady, groupID, pg.GenesisTransaction)
+		return nil, i18n.NewError(ctx, msgs.MsgPGroupsNotReady, groupID, pg.GenesisTransaction)
 	}
 
 	// Get the domain smart contract object from domain mgr
 	psc, err := gm.domainManager.GetSmartContractByAddress(ctx, dbTX, *pg.ContractAddress)
 	if err != nil {
-		return err
-	}
-
-	// Resolve the input data of the transaction to obtain the ABI etc.
-	fn, _, normalizedJSON, err := gm.txManager.ResolveTransactionInputs(ctx, dbTX, tx)
-	if err != nil {
-		return err
-	}
-	tx.Data = normalizedJSON
-
-	// Call the domain to take the transaction details that need to be run in the privacy group, and wrap them
-	// to build the transaction to call against the domain.
-	return psc.WrapPrivacyGroupTransaction(ctx, pg, fn.Definition, tx)
-
-}
-
-func (gm *groupManager) SendTransaction(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.PrivacyGroupTransactionInput) (*uuid.UUID, error) {
-
-	if err := gm.prepareTransaction(ctx, dbTX, tx.GroupID, &tx.TransactionInput); err != nil {
 		return nil, err
 	}
 
-	txIDs, err := gm.txManager.SendTransactions(ctx, dbTX, &tx.TransactionInput)
+	// Call the domain to take the transaction details that need to be run in the privacy group, and wrap them
+	// to build the transaction to call against the domain.
+	return psc.WrapPrivacyGroupEVMTX(ctx, pg, pgTX)
+
+}
+
+func (gm *groupManager) SendTransaction(ctx context.Context, dbTX persistence.DBTX, pgTX *pldapi.PrivacyGroupEVMTXInput) (*uuid.UUID, error) {
+
+	tx, err := gm.prepareTransaction(ctx, dbTX, pgTX.Domain, pgTX.Group, &pgTX.PrivacyGroupEVMTX)
+	if err != nil {
+		return nil, err
+	}
+	tx.IdempotencyKey = pgTX.IdempotencyKey
+	tx.PublicTxOptions = pgTX.PublicTxOptions
+
+	txIDs, err := gm.txManager.SendTransactions(ctx, dbTX, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -579,12 +571,17 @@ func (gm *groupManager) SendTransaction(ctx context.Context, dbTX persistence.DB
 
 }
 
-func (gm *groupManager) Call(ctx context.Context, dbTX persistence.DBTX, result any, call *pldapi.PrivacyGroupTransactionCall) error {
+func (gm *groupManager) Call(ctx context.Context, dbTX persistence.DBTX, result any, call *pldapi.PrivacyGroupEVMCall) error {
 
-	if err := gm.prepareTransaction(ctx, dbTX, call.GroupID, &call.TransactionInput); err != nil {
+	tx, err := gm.prepareTransaction(ctx, dbTX, call.Domain, call.Group, &call.PrivacyGroupEVMTX)
+	if err != nil {
 		return err
 	}
 
-	return gm.txManager.CallTransaction(ctx, dbTX, result, &call.TransactionCall)
+	return gm.txManager.CallTransaction(ctx, dbTX, result, &pldapi.TransactionCall{
+		TransactionInput:  *tx,
+		PublicCallOptions: call.PublicCallOptions,
+		DataFormat:        call.DataFormat,
+	})
 
 }

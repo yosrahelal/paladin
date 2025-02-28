@@ -563,7 +563,7 @@ func (z *Zeto) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGro
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
 
-func (z *Zeto) WrapPrivacyGroupTransaction(ctx context.Context, req *prototk.WrapPrivacyGroupTransactionRequest) (*prototk.WrapPrivacyGroupTransactionResponse, error) {
+func (z *Zeto) WrapPrivacyGroupEVMTX(ctx context.Context, req *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
 

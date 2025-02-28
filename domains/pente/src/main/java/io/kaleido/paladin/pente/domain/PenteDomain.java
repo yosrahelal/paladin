@@ -695,9 +695,47 @@
 
      }
 
+     @JsonIgnoreProperties(ignoreUnknown = true)
+     record MinimalGenesisConfig(
+             @JsonProperty(required = true)
+             JsonHex.Bytes32 salt,
+             @JsonProperty(required = true)
+             String[] members
+     ){}
+
      @Override
-     protected CompletableFuture<WrapPrivacyGroupTransactionResponse> wrapPrivacyGroupTransaction(WrapPrivacyGroupTransactionRequest request) {
-         return CompletableFuture.failedFuture(new UnsupportedOperationException());
+     protected CompletableFuture<WrapPrivacyGroupEVMTXResponse> wrapPrivacyGroupTransaction(WrapPrivacyGroupEVMTXRequest request) {
+
+         try {
+             // NOTE: Right now there is no direct validation that the settings recorded in the genesis state,
+             //       are actually the ones that were used to initialize the privacy group.
+             //       The blockchain itself records the actual genesis settings of the privacy group in the clear
+             //       currently - which _should_ be the same ones in the genesis state.
+             //
+             //       A good future improvement, would be to:
+             //       1) Remove the recording of the genesis settings to the chain in the clear
+             //       2) Make the full ID of the genesis state, the salt for the privacy group
+             //
+             //       However, this would require some more engineering in the Paladin orchestration, as it means
+             //       nodes would all need the private state for the genesis to be passed in to all Domain function
+             //       calls that require these settings (member list, EVM configuration etc.).
+
+             // Due to the above, the only things we CURRENTLY need from the genesis state are:
+             // - The salt from inside of the state
+             // - The member list
+             // That is because these are passed into each transaction in Pente (as has been the case from the
+             // beginning, before the privacy group management APIs in Paladin existed).
+             var genesisSettings = new ObjectMapper().readValue(request.getGenesisAbiJson(), MinimalGenesisConfig.class);
+
+             var propertiesABI = mapper.readValue(request.getPropertiesAbiJson(), JsonABI.Parameters.class);
+             for ( var prop : propertiesABI ) {
+             }
+
+
+             return CompletableFuture.failedFuture(new UnsupportedOperationException());
+         } catch (Exception e) {
+             return CompletableFuture.failedFuture(e);
+         }
      }
 
      @JsonIgnoreProperties(ignoreUnknown = true)

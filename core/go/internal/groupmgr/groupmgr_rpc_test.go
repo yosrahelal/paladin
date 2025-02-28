@@ -129,25 +129,18 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 		psc := componentmocks.NewDomainSmartContract(t)
 		mc.domainManager.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *contractAddr).Return(psc, nil)
 
-		mrti1 := mc.txManager.On("ResolveTransactionInputs", mock.Anything, mock.Anything, mock.Anything).Once()
-		mrti1.Run(func(args mock.Arguments) {
-			tx := args[2].(*pldapi.TransactionInput)
-			assert.Nil(t, tx.To)
-			mrti1.Return(&components.ResolvedFunction{
-				ABIReference: tx.ABIReference,
-				Definition:   &abi.Entry{Type: abi.Constructor},
-				Signature:    "constructor()",
-			}, nil /* unused */, tktypes.RawJSON(tx.Data.Pretty()), nil)
-		})
-
-		mwpgt1 := psc.On("WrapPrivacyGroupTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		mwpgt1 := psc.On("WrapPrivacyGroupEVMTX", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Once()
 		mwpgt1.Run(func(args mock.Arguments) {
 			pg := args[1].(*pldapi.PrivacyGroupWithABI)
 			require.NotNil(t, pg.GenesisABI)
-			fABI := args[2].(*abi.Entry)
-			require.Equal(t, abi.Constructor, fABI.Type)
-			tx := args[3].(*pldapi.TransactionInput)
-			tx.Data = tktypes.RawJSON(`{"wrapped":"transaction"}`)
+			mwpgt1.Return(&pldapi.TransactionInput{
+				TransactionBase: pldapi.TransactionBase{
+					Domain: pg.Domain,
+					Type:   pldapi.TransactionTypePrivate.Enum(),
+					From:   `my.key`,
+					Data:   tktypes.RawJSON(`{"wrapped":"transaction"}`),
+				},
+			}, nil)
 		})
 
 		tx1ID := uuid.New()
@@ -160,26 +153,18 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 				assert.JSONEq(t, `{"wrapped":"transaction"}`, tx.Data.Pretty())
 			}).Once()
 
-		mrti2 := mc.txManager.On("ResolveTransactionInputs", mock.Anything, mock.Anything, mock.Anything).Once()
-		mrti2.Run(func(args mock.Arguments) {
-			tx := args[2].(*pldapi.TransactionInput)
-			assert.NotNil(t, tx.To)
-			mrti2.Return(&components.ResolvedFunction{
-				ABIReference: confutil.P(tktypes.RandBytes32()),
-				Definition:   tx.ABI[0],
-				Signature:    "getThing()",
-			}, nil /* unused */, tktypes.RawJSON(tx.Data.Pretty()), nil)
-		})
-
-		mwpgt2 := psc.On("WrapPrivacyGroupTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		mwpgt2 := psc.On("WrapPrivacyGroupEVMTX", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 		mwpgt2.Run(func(args mock.Arguments) {
 			pg := args[1].(*pldapi.PrivacyGroupWithABI)
 			require.NotNil(t, pg.GenesisABI)
-			fABI := args[2].(*abi.Entry)
-			require.Equal(t, abi.Function, fABI.Type)
-			require.Equal(t, "getThing", fABI.Name)
-			tx := args[3].(*pldapi.TransactionInput)
-			tx.Data = tktypes.RawJSON(`{"wrapped":"call"}`)
+			mwpgt2.Return(&pldapi.TransactionInput{
+				TransactionBase: pldapi.TransactionBase{
+					Domain: pg.Domain,
+					To:     tktypes.RandAddress(),
+					Type:   pldapi.TransactionTypePrivate.Enum(),
+					Data:   tktypes.RawJSON(`{"wrapped":"call"}`),
+				},
+			}, nil)
 		})
 
 		mc.txManager.On("CallTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -258,18 +243,17 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members)
 
 	// Send a transaction to it
-	tx1ID, err := pgroupRPC.SendTransaction(ctx, &pldapi.PrivacyGroupTransactionInput{
-		GroupID: group.ID,
-		TransactionInput: pldapi.TransactionInput{
-			TransactionBase: pldapi.TransactionBase{
-				Type:           pldapi.TransactionTypePrivate.Enum(),
-				Domain:         "domain1",
-				IdempotencyKey: "pgtx_deploy",
-				Function:       "deployThing",
-				From:           "my.key",
-				To:             nil,                               // this is a deploy inside the privacy group
-				ABIReference:   confutil.P(tktypes.RandBytes32()), // simulate the case where the ABI needs resolving
-			},
+	tx1ID, err := pgroupRPC.SendTransaction(ctx, &pldapi.PrivacyGroupEVMTXInput{
+		Domain:         "domain1",
+		Group:          group.ID,
+		IdempotencyKey: "pgtx_deploy",
+		PrivacyGroupEVMTX: pldapi.PrivacyGroupEVMTX{
+			From:     "my.key",
+			To:       nil, // simulate is a deploy inside the privacy group
+			Function: &abi.Entry{Type: abi.Constructor, Inputs: abi.ParameterArray{{Type: "string", Name: "input1"}}},
+			Gas:      confutil.P(tktypes.HexUint64(12345)),
+			Value:    tktypes.Int64ToInt256(123456789),
+			Input:    tktypes.RawJSON(`{"input1": "value1"}`),
 			Bytecode: tktypes.MustParseHexBytes(`0xfeedbeef`),
 		},
 	})
@@ -277,18 +261,12 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	require.NotNil(t, tx1ID)
 
 	// Do a call via it
-	callData, err := pgroupRPC.Call(ctx, &pldapi.PrivacyGroupTransactionCall{
-		GroupID: group.ID,
-		TransactionCall: pldapi.TransactionCall{
-			TransactionInput: pldapi.TransactionInput{
-				TransactionBase: pldapi.TransactionBase{
-					Type:     pldapi.TransactionTypePrivate.Enum(),
-					Domain:   "domain1",
-					Function: "getThing",
-					To:       tktypes.RandAddress(),
-				},
-				ABI: abi.ABI{{Type: abi.Function, Name: "getThing"}},
-			},
+	callData, err := pgroupRPC.Call(ctx, &pldapi.PrivacyGroupEVMCall{
+		Domain: "domain1",
+		Group:  group.ID,
+		PrivacyGroupEVMTX: pldapi.PrivacyGroupEVMTX{
+			To:       tktypes.RandAddress(),
+			Function: &abi.Entry{Type: abi.Function, Name: "getThing"},
 		},
 	})
 	require.NoError(t, err)

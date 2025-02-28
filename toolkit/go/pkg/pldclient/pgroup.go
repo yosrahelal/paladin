@@ -32,8 +32,8 @@ type PrivacyGroups interface {
 	GetGroupById(ctx context.Context, domainName string, id tktypes.HexBytes) (group *pldapi.PrivacyGroupWithABI, err error)
 	QueryGroups(ctx context.Context, jq *query.QueryJSON) (groups []*pldapi.PrivacyGroup, err error)
 	QueryGroupsByProperties(ctx context.Context, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) (groups []*pldapi.PrivacyGroup, err error)
-	SendTransaction(ctx context.Context, tx *pldapi.PrivacyGroupTransactionInput) (txID uuid.UUID, err error)
-	Call(ctx context.Context, call *pldapi.PrivacyGroupTransactionCall) (data tktypes.RawJSON, err error)
+	SendTransaction(ctx context.Context, tx *pldapi.PrivacyGroupEVMTXInput) (txID uuid.UUID, err error)
+	Call(ctx context.Context, call *pldapi.PrivacyGroupEVMCall) (data tktypes.RawJSON, err error)
 
 	SendMessage(ctx context.Context, msg *pldapi.PrivacyGroupMessageInput) (msgID uuid.UUID, err error)
 	GetMessageById(ctx context.Context, id uuid.UUID) (msg *pldapi.PrivacyGroupMessage, err error)
@@ -129,12 +129,12 @@ func (r *pgroup) QueryGroupsByProperties(ctx context.Context, domainName string,
 	return
 }
 
-func (r *pgroup) SendTransaction(ctx context.Context, tx *pldapi.PrivacyGroupTransactionInput) (txID uuid.UUID, err error) {
+func (r *pgroup) SendTransaction(ctx context.Context, tx *pldapi.PrivacyGroupEVMTXInput) (txID uuid.UUID, err error) {
 	err = r.c.CallRPC(ctx, &txID, "pgroup_sendTransaction", tx)
 	return
 }
 
-func (r *pgroup) Call(ctx context.Context, call *pldapi.PrivacyGroupTransactionCall) (data tktypes.RawJSON, err error) {
+func (r *pgroup) Call(ctx context.Context, call *pldapi.PrivacyGroupEVMCall) (data tktypes.RawJSON, err error) {
 	err = r.c.CallRPC(ctx, &data, "pgroup_call", call)
 	return
 }

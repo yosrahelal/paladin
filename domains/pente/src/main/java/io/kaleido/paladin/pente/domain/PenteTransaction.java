@@ -84,7 +84,7 @@
              JsonNode inputs
      ) {
      }
- 
+
      private enum ABIEntryType {INVOKE, DEPLOY, CUSTOM_FUNCTION}
  
      private final ABIEntryType abiEntryType;

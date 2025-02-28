@@ -116,7 +116,7 @@ public class TestDomain extends DomainInstance {
     }
 
     @Override
-    protected CompletableFuture<WrapPrivacyGroupTransactionResponse> wrapPrivacyGroupTransaction(WrapPrivacyGroupTransactionRequest request) {
+    protected CompletableFuture<WrapPrivacyGroupEVMTXResponse> wrapPrivacyGroupTransaction(WrapPrivacyGroupEVMTXRequest request) {
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
 }

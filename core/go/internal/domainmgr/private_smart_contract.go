@@ -696,87 +696,104 @@ func (dc *domainContract) loadStatesFromContext(dCtx components.DomainContext, r
 
 }
 
-func (dc *domainContract) WrapPrivacyGroupTransaction(ctx context.Context, pg *pldapi.PrivacyGroupWithABI, origFnABI *abi.Entry, tx *pldapi.TransactionInput) (err error) {
+func (dc *domainContract) WrapPrivacyGroupEVMTX(ctx context.Context, pg *pldapi.PrivacyGroupWithABI, pgTX *pldapi.PrivacyGroupEVMTX) (ptx *pldapi.TransactionInput, err error) {
 
-	var abiJSON []byte
-	inputValues, err := origFnABI.Inputs.ParseJSONCtx(ctx, tx.Data)
-	if err == nil {
-		abiJSON, err = json.Marshal(origFnABI)
-	}
-	var paramsJSON []byte
-	if err == nil {
-		// Serialize to standardized JSON before passing to domain
-		paramsJSON, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, inputValues)
-	}
-	if err != nil {
-		return i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFunctionParams, origFnABI.SolString())
-	}
+	// We do nothing apart from type conversion here, as the domain is going to wrap this call
+	// and return the private transaction, such that it can be validated fully there.
 
 	var pToAddr *string
-	if tx.To != nil {
-		toAddr := tx.To.String()
+	if pgTX.To != nil {
+		toAddr := pgTX.To.String()
 		pToAddr = &toAddr
+	}
+	var pGas *string
+	if pgTX.Gas != nil {
+		gasStr := pgTX.Gas.String()
+		pGas = &gasStr
+	}
+	var pValue *string
+	if pgTX.Value != nil {
+		valueStr := pgTX.Value.String()
+		pValue = &valueStr
+	}
+	var pInput *string
+	if pgTX.Input != nil {
+		inputStr := pgTX.Input.String()
+		pInput = &inputStr
+	}
+	var pABI *string
+	if pgTX.Function != nil {
+		abiStr := tktypes.JSONString(pgTX.Function).String()
+		pABI = &abiStr
 	}
 
 	// Call the domain to do the work
-	res, err := dc.api.WrapPrivacyGroupTransaction(ctx, &prototk.WrapPrivacyGroupTransactionRequest{
+	res, err := dc.api.WrapPrivacyGroupEVMTX(ctx, &prototk.WrapPrivacyGroupEVMTXRequest{
 		GenesisState: &prototk.EndorsableState{
 			Id:            pg.ID.String(),
 			SchemaId:      string(pg.Genesis),
 			StateDataJson: pg.Genesis.String(),
 		},
 		GenesisAbiJson: tktypes.JSONString(pg.GenesisABI).Pretty(),
-		Transaction: &prototk.PrivacyGroupTransaction{
+		Transaction: &prototk.PrivacyGroupEVMTX{
 			ContractInfo: &prototk.ContractInfo{
 				ContractAddress:    dc.info.Address.String(),
 				ContractConfigJson: dc.config.ContractConfigJson,
 			},
-			From:               tx.From,
-			To:                 pToAddr,
-			FunctionAbiJson:    string(abiJSON),
-			FunctionParamsJson: string(paramsJSON),
-			FunctionSignature:  origFnABI.SolString(), // we use the proprietary "Solidity inspired" form that is very specific, including param names and nested struct defs
-			Bytecode:           tx.Bytecode,
+			From:            pgTX.From,
+			To:              pToAddr,
+			Gas:             pGas,
+			Value:           pValue,
+			InputJson:       pInput,
+			FunctionAbiJson: pABI,
+			Bytecode:        pgTX.Bytecode,
 		},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Function returned must be private
 	if res.Transaction.Type != prototk.PreparedTransaction_PRIVATE {
-		return i18n.NewError(ctx, msgs.MsgDomainInvalidPGroupTxTypeNotPrivate, res.Transaction.Type)
+		return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidPGroupTxTypeNotPrivate, res.Transaction.Type)
+	}
+
+	ptx = &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type:   pldapi.TransactionTypePrivate.Enum(),
+			Domain: dc.d.name,
+		},
 	}
 
 	pscAddr := dc.Address()
 	if res.Transaction.ContractAddress != nil {
 		addr, err := tktypes.ParseEthAddress(*res.Transaction.ContractAddress)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if *addr != pscAddr {
-			return i18n.NewError(ctx, msgs.MsgDomainInvalidPGroupTxCannotRedirect, pscAddr, addr)
+			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidPGroupTxCannotRedirect, pscAddr, addr)
 		}
 	}
-	tx.To = &pscAddr
+	ptx.To = &pscAddr
 
 	// Always set the function definition
 	var wrappedFnABI abi.Entry
 	if err := json.Unmarshal([]byte(res.Transaction.FunctionAbiJson), &wrappedFnABI); err != nil {
-		return i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFunctionParams, res.Transaction.FunctionAbiJson)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFunctionParams, res.Transaction.FunctionAbiJson)
 	}
-	tx.Function = wrappedFnABI.Name
-	tx.ABIReference = nil
-	tx.ABI = abi.ABI{&wrappedFnABI}
+	ptx.Function = wrappedFnABI.Name
+	ptx.ABIReference = nil
+	ptx.ABI = abi.ABI{&wrappedFnABI}
 
 	// And the inputs
-	tx.Data = tktypes.RawJSON(res.Transaction.ParamsJson)
+	ptx.Data = tktypes.RawJSON(res.Transaction.ParamsJson)
 
 	// Only update the signer if returned
 	if res.Transaction.RequiredSigner != nil && len(*res.Transaction.RequiredSigner) > 0 {
-		tx.From = *res.Transaction.RequiredSigner
+		ptx.From = *res.Transaction.RequiredSigner
 	}
 
-	return nil
+	return ptx, nil
 
 }

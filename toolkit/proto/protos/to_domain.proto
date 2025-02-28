@@ -243,13 +243,13 @@ message InitPrivacyGroupResponse {
   PreparedTransaction transaction = 3; // The transaction that will result from this against the domain
 }
 
-message WrapPrivacyGroupTransactionRequest {
+message WrapPrivacyGroupEVMTXRequest {
   EndorsableState genesis_state = 1; // the full genesis state of the transaction
   string genesis_abi_json = 2; // the full ABI of the genesis state
-  PrivacyGroupTransaction transaction = 3; // the transaction to wrap
+  PrivacyGroupEVMTX transaction = 3; // the transaction to wrap
 }
 
-message WrapPrivacyGroupTransactionResponse {
+message WrapPrivacyGroupEVMTXResponse {
   PreparedTransaction transaction = 1; // The transaction that will result from this against the domain
 }
 
@@ -311,14 +311,15 @@ message TransactionSpecification {
   Intent intent = 8; // The sender's intended outcome (a submitted transaction or only a call)
 }
 
-message PrivacyGroupTransaction {
+message PrivacyGroupEVMTX {
   ContractInfo contract_info = 1; // Details of the privacy group smart contract
   string from = 2; // The unresolved sender identity
   optional string to = 3; // The ethereum identifier specified in the to of the transaction. Null for deployment
-  string function_signature = 4; // The calculated signature of the function ABI the caller is attempting to invoke
-  string function_abi_json = 5; // The function ABI (asserted by the caller) they wish to inovoke on the smart contract
-  string function_params_json = 6; // The parameters supplied in the invocation in normalized JSON format, after validation against the ABI the caller supplied
-  optional bytes bytecode = 7; // For deployment transactions only 
+  optional string gas = 4; // Gas limit for the transaction (hex encoded unsigned integer)
+  optional string value = 5; // Value of base token to transfer (hex encoded 256bit unsigned integer)
+  optional string input_json = 6; // Could be a hex byte string pre-encoded, or a JSON object
+  optional string function_abi_json = 7; // If supplied, then it implies the input will be a JSON object to decode
+  optional bytes bytecode = 9; // For deployment transactions only 
 }
 
 message AssembledTransaction {

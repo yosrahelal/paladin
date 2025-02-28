@@ -112,10 +112,23 @@ type TransactionInput struct {
 	Bytecode  tktypes.HexBytes `docstruct:"TransactionInput" json:"bytecode,omitempty"`  // for deploy this is prepended to the encoded data inputs
 }
 
-// Transaction for a privacy group
-type PrivacyGroupTransactionInput struct {
-	GroupID tktypes.HexBytes `docstruct:"TransactionInput" json:"groupId,omitempty"`
-	TransactionInput
+type PrivacyGroupEVMTX struct {
+	From     string              `docstruct:"PrivacyGroupEVMTX" json:"from,omitempty"` // signing key reference
+	To       *tktypes.EthAddress `docstruct:"PrivacyGroupEVMTX" json:"to,omitempty"`
+	Gas      *tktypes.HexUint64  `docstruct:"PrivacyGroupEVMTX" json:"gas,omitempty"`
+	Value    *tktypes.HexUint256 `docstruct:"PrivacyGroupEVMTX" json:"value,omitempty"`
+	Input    tktypes.RawJSON     `docstruct:"PrivacyGroupEVMTX" json:"input,omitempty"`    // hex encoded bytes or object
+	Function *abi.Entry          `docstruct:"PrivacyGroupEVMTX" json:"function,omitempty"` // required when JSON object/array input is supplied
+	Bytecode tktypes.HexBytes    `docstruct:"PrivacyGroupEVMTX" json:"bytecode,omitempty"` // bytes or object
+}
+
+// Transaction for a privacy group - is an ethereum style transaction input
+type PrivacyGroupEVMTXInput struct {
+	IdempotencyKey string           `docstruct:"PrivacyGroupEVMTX" json:"idempotencyKey,omitempty"`
+	Domain         string           `docstruct:"PrivacyGroupEVMTX" json:"domain,omitempty"`
+	Group          tktypes.HexBytes `docstruct:"PrivacyGroupEVMTX" json:"group,omitempty"`
+	PrivacyGroupEVMTX
+	PublicTxOptions PublicTxOptions `docstruct:"PrivacyGroupEVMTX" json:"publicTxOptions,omitempty"`
 }
 
 // Call also provides some options on how to execute the call
@@ -126,9 +139,12 @@ type TransactionCall struct {
 }
 
 // Call for a privacy group
-type PrivacyGroupTransactionCall struct {
-	GroupID tktypes.HexBytes `docstruct:"TransactionInput" json:"groupId,omitempty"`
-	TransactionCall
+type PrivacyGroupEVMCall struct {
+	Domain string           `docstruct:"PrivacyGroupEVMTX" json:"domain,omitempty"`
+	Group  tktypes.HexBytes `docstruct:"PrivacyGroupEVMTX" json:"group,omitempty"`
+	PrivacyGroupEVMTX
+	PublicCallOptions
+	DataFormat tktypes.JSONFormatOptions `docstruct:"TransactionCall" json:"dataFormat"` // formatting options for the result data
 }
 
 // Additional fields returned on output when "full" specified

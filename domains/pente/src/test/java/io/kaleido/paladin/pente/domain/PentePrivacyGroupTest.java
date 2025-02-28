@@ -130,7 +130,7 @@ public class PentePrivacyGroupTest {
                         {"name":"externalCallsEnabled", "type":"boolean"}
                     ]
                 }
-                """, new TypeReference<Map<Object, Object>>() {});
+                """, new TypeReference<>() {});
         received = new ObjectMapper().readValue(res.getTransaction().getFunctionAbiJson(), new TypeReference<>() {});
         assertEquals(expected, received);
     }
@@ -223,7 +223,7 @@ public class PentePrivacyGroupTest {
                     "endorsementType": "some_future_option",
                     "externalCallsEnabled": true
                 }
-                """, new TypeReference<Map<Object, Object>>() {});
+                """, new TypeReference<>() {});
         received = new ObjectMapper().readValue(res.getTransaction().getParamsJson(), new TypeReference<>() {});
         assertEquals(expected, received);
 
@@ -247,7 +247,7 @@ public class PentePrivacyGroupTest {
                         {"name":"externalCallsEnabled", "type":"boolean"}
                     ]
                 }
-                """, new TypeReference<Map<Object, Object>>() {});
+                """, new TypeReference<>() {});
         received = new ObjectMapper().readValue(res.getTransaction().getFunctionAbiJson(), new TypeReference<>() {});
         assertEquals(expected, received);
     }
