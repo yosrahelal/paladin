@@ -66,7 +66,7 @@ func newMockComponents(t *testing.T, realDB bool) *mockComponents {
 	mc.c.On("TxManager").Return(mc.txManager).Maybe()
 
 	if realDB {
-		p, cleanup, err := persistence.NewUnitTestPersistence(context.Background(), "transportmgr")
+		p, cleanup, err := persistence.NewUnitTestPersistence(context.Background(), "groupmgr")
 		require.NoError(t, err)
 		t.Cleanup(cleanup)
 		mc.p = p
