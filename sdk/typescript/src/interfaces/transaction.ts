@@ -1,6 +1,6 @@
 import { NotoUnlockPublicParams } from "../domains/noto";
 import { IStateBase } from "./states";
-import { ethers } from "ethers";
+import { BigNumberish, ethers } from "ethers";
 
 export interface IBlock {
   number: number;
@@ -11,6 +11,14 @@ export interface IBlock {
 export enum TransactionType {
   PUBLIC = "public",
   PRIVATE = "private",
+}
+
+export interface PublicTxOptions {
+  gas?: BigNumberish;
+  value?: BigNumberish;
+  maxPriorityFeePerGas?: BigNumberish;
+  maxFeePerGas?: BigNumberish;
+  gasPrice?: BigNumberish;
 }
 
 export interface ITransactionBase {
