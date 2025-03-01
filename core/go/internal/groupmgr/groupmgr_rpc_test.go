@@ -188,7 +188,7 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	client := newTestRPCServer(t, ctx, gm)
 	pgroupRPC := pldclient.Wrap(client).PrivacyGroups()
 
-	groupID, err := pgroupRPC.CreateGroup(ctx, &pldapi.PrivacyGroupInput{
+	group1, err := pgroupRPC.CreateGroup(ctx, &pldapi.PrivacyGroupInput{
 		Domain:  "domain1",
 		Members: []string{"me@node1", "you@node2"},
 		Properties: tktypes.RawJSON(`{
@@ -202,7 +202,10 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.NotNil(t, groupID)
+	require.NotNil(t, group1)
+	groupID := group1.ID
+	require.Equal(t, []string{"me@node1", "you@node2"}, group1.Members)
+	require.NotNil(t, group1.Genesis)
 
 	// Query it back - should be the only one
 	groups, err := pgroupRPC.QueryGroups(ctx, query.NewQueryBuilder().Equal("domain", "domain1").Limit(1).Query())

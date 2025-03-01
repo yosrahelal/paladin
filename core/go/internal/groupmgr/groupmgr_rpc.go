@@ -46,12 +46,12 @@ func (gm *groupManager) initRPC() {
 }
 
 func (gm *groupManager) rpcCreateGroup() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context, spec pldapi.PrivacyGroupInput) (id tktypes.HexBytes, err error) {
+	return rpcserver.RPCMethod1(func(ctx context.Context, spec pldapi.PrivacyGroupInput) (group *pldapi.PrivacyGroup, err error) {
 		err = gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-			id, err = gm.CreateGroup(ctx, dbTX, &spec)
+			group, err = gm.CreateGroup(ctx, dbTX, &spec)
 			return err
 		})
-		return id, err
+		return group, err
 	})
 }
 

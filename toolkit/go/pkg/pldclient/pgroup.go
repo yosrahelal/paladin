@@ -28,7 +28,7 @@ import (
 type PrivacyGroups interface {
 	RPCModule
 
-	CreateGroup(ctx context.Context, spec *pldapi.PrivacyGroupInput) (id tktypes.HexBytes, err error)
+	CreateGroup(ctx context.Context, spec *pldapi.PrivacyGroupInput) (group pldapi.PrivacyGroup, err error)
 	GetGroupById(ctx context.Context, domainName string, id tktypes.HexBytes) (group *pldapi.PrivacyGroupWithABI, err error)
 	QueryGroups(ctx context.Context, jq *query.QueryJSON) (groups []*pldapi.PrivacyGroup, err error)
 	QueryGroupsByProperties(ctx context.Context, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) (groups []*pldapi.PrivacyGroup, err error)
@@ -56,7 +56,7 @@ var privacyGroupsInfo = &rpcModuleInfo{
 	methodInfo: map[string]RPCMethodInfo{
 		"pgroup_createGroup": {
 			Inputs: []string{"spec"},
-			Output: "id",
+			Output: "group",
 		},
 		"pgroup_getGroupById": {
 			Inputs: []string{"domainName", "id"},
@@ -109,8 +109,8 @@ func (c *paladinClient) PrivacyGroups() PrivacyGroups {
 	return &pgroup{rpcModuleInfo: privacyGroupsInfo, c: c}
 }
 
-func (r *pgroup) CreateGroup(ctx context.Context, spec *pldapi.PrivacyGroupInput) (id tktypes.HexBytes, err error) {
-	err = r.c.CallRPC(ctx, &id, "pgroup_createGroup", spec)
+func (r *pgroup) CreateGroup(ctx context.Context, spec *pldapi.PrivacyGroupInput) (group pldapi.PrivacyGroup, err error) {
+	err = r.c.CallRPC(ctx, &group, "pgroup_createGroup", spec)
 	return
 }
 

@@ -222,10 +222,13 @@ func (gm *groupManager) insertGroup(ctx context.Context, dbTX persistence.DBTX, 
 			Create(pgms).
 			Error
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, spec *pldapi.PrivacyGroupInput) (id tktypes.HexBytes, err error) {
+func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, spec *pldapi.PrivacyGroupInput) (group *pldapi.PrivacyGroup, err error) {
 
 	// Do local validation of the supplied properties
 	if err := gm.validateProperties(ctx, spec); err != nil {
@@ -269,7 +272,7 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 	if err != nil {
 		return nil, err
 	}
-	id = states[0].ID
+	id := states[0].ID
 
 	// Propagate over input TX options
 	if spec.TransactionOptions != nil {
@@ -296,10 +299,12 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 		SchemaSignature: stateABIs[0].Signature(),
 		GenesisTX:       txIDs[0],
 	}
-	err = gm.insertGroup(ctx, dbTX, dbPG, spec.Members)
-	if err != nil {
+	if err = gm.insertGroup(ctx, dbTX, dbPG, spec.Members); err != nil {
 		return nil, err
 	}
+	group = dbPG.mapToAPI()
+	group.Genesis = states[0].Data
+	group.Members = spec.Members
 
 	// We also need to create a reliable send the state to all the remote members
 	msgs := make([]*components.ReliableMessage, 0, len(remoteMembers))
@@ -323,7 +328,7 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 		}
 	}
 
-	return id, nil
+	return group, nil
 }
 
 func (gm *groupManager) enrichMembers(ctx context.Context, dbTX persistence.DBTX, pgs []*pldapi.PrivacyGroup) error {

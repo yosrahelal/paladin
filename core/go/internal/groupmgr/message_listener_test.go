@@ -107,8 +107,9 @@ func createTestGroups(t *testing.T, ctx context.Context, mc *mockComponents, gm 
 	ids := make([]tktypes.HexBytes, len(groups))
 	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
 		for i, g := range groups {
-			ids[i], err = gm.CreateGroup(ctx, dbTX, g)
+			g, err := gm.CreateGroup(ctx, dbTX, g)
 			require.NoError(t, err)
+			ids[i] = g.ID
 		}
 		return nil
 	})
