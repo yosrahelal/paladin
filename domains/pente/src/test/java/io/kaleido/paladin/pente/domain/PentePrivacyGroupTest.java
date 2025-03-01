@@ -30,6 +30,7 @@ import org.skyscreamer.jsonassert.JSONCompareMode;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -255,7 +256,7 @@ public class PentePrivacyGroupTest {
     }
 
     @Test
-    void wrapPrivacyGroupTransactionDeployWithFunc() throws Exception {
+    void wrapPrivacyGroupTransactionDeployWithFuncABI() throws Exception {
 
         var pente = new PenteDomain("", "");
 
@@ -294,8 +295,8 @@ public class PentePrivacyGroupTest {
                         "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
                         "members": [ "me@node1", "you@node2" ]
                     },
-                    "data": { "input1": "value1" },
                     "from": "submitter.address",
+                    "data": { "input1": "value1" },
                     "bytecode": "0xfeedbeef"
                  }
                 """, new TypeReference<Map<Object, Object>>() {});
@@ -311,19 +312,285 @@ public class PentePrivacyGroupTest {
                        {
                            "name": "group",
                            "type": "tuple",
+                           "internalType": "struct Group",
                            "components": [
                                { "name": "salt", "type": "bytes32" },
                                { "name": "members", "type": "string[]" }
                            ]
                        },
                        { "name": "from", "type": "string" },
-                       { "name": "inputs", "type": "tuple", "components": [ { "name": "input1", "type": "string" } ] },
-                       { "name": "bytecode", "type": "bytes" }
-                    ]
+                       { "name": "bytecode", "type": "bytes" },
+                       {
+                            "name": "inputs",
+                            "type": "tuple",
+                            "internalType": "struct Inputs",
+                            "components": [
+                                { "name": "input1", "type": "string" }
+                            ]
+                       }
+                    ],
+                    "outputs": []
+                }
+                """, new TypeReference<>() {});
+        received = new ObjectMapper().readValue(resTx.getFunctionAbiJson(), new TypeReference<>() {});
+        assertEquals(expected, received);
+
+    }
+
+    @Test
+    void wrapPrivacyGroupInvokeWithFuncABI() throws Exception {
+
+        var pente = new PenteDomain("", "");
+
+        var reqBuilder = WrapPrivacyGroupEVMTXRequest.newBuilder()
+                .setGenesisAbiJson("""
+                    {
+                        "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
+                        "pente": {
+                            "members": [ "me@node1", "you@node2" ]
+                        }
+                    }
+                """)
+                .setTransaction(PrivacyGroupEVMTX.newBuilder()
+                        .setContractInfo(ContractInfo.newBuilder().build() /* not currently used */)
+                        .setBytecode(ByteString.copyFrom(JsonHex.from("0xfeedbeef").getBytes()))
+                        .setFrom("submitter.address")
+                        .setTo("0x449984cefadce394740a410c7d832a5e2207c27a")
+                        .setFunctionAbiJson("""
+                        {"type": "function", "name": "doAThing", "inputs": [ { "name": "thing", "type": "string" } ], "outputs":  [ { "name": "done", "type": "boolean" } ] }
+                     """)
+                        .setInputJson("""
+                        {"thing":"one"}
+                    """)
+                        .build()
+                );
+
+        // Run it
+        var res = pente.wrapPrivacyGroupTransaction(reqBuilder.build()).get();
+        var resTx = res.getTransaction();
+
+        assertEquals(PreparedTransaction.TransactionType.PRIVATE, resTx.getType());
+
+        // Check the resulting transaction
+        var expected = new ObjectMapper().readValue("""
+                {
+                    "group": {
+                        "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
+                        "members": [ "me@node1", "you@node2" ]
+                    },
+                    "from": "submitter.address",
+                    "to": "0x449984cefadce394740a410c7d832a5e2207c27a",
+                    "data": { "thing": "one" }
+                 }
+                """, new TypeReference<Map<Object, Object>>() {});
+        var received = new ObjectMapper().readValue(resTx.getParamsJson(), new TypeReference<Map<Object, Object>>() {});
+        assertEquals(expected, received);
+
+        // Check the resulting ABI for the TX
+        expected = new ObjectMapper().readValue("""
+                {
+                    "type": "function",
+                    "name": "doAThing",
+                    "inputs": [
+                       {
+                           "name": "group",
+                           "type": "tuple",
+                           "internalType": "struct Group",
+                           "components": [
+                               { "name": "salt", "type": "bytes32" },
+                               { "name": "members", "type": "string[]" }
+                           ]
+                       },
+                       { "name": "from", "type": "string" },
+                       { "name": "to", "type": "address" },
+                       {
+                            "name": "inputs",
+                            "type": "tuple",
+                            "internalType": "struct Inputs",
+                            "components": [
+                                { "name": "thing", "type": "string" }
+                            ]
+                       }
+                    ],
+                    "outputs": [{ "name": "done", "type": "boolean" }]
                 }
                 """, new TypeReference<Map<Object, Object>>() {});
         received = new ObjectMapper().readValue(resTx.getFunctionAbiJson(), new TypeReference<>() {});
         assertEquals(expected, received);
+
+    }
+
+    @Test
+    void wrapPrivacyGroupInvokeSimpleTransfer() throws Exception {
+
+        var pente = new PenteDomain("", "");
+
+        var reqBuilder = WrapPrivacyGroupEVMTXRequest.newBuilder()
+                .setGenesisAbiJson("""
+                    {
+                        "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
+                        "pente": {
+                            "members": [ "me@node1", "you@node2" ]
+                        }
+                    }
+                """)
+                .setTransaction(PrivacyGroupEVMTX.newBuilder()
+                        .setContractInfo(ContractInfo.newBuilder().build() /* not currently used */)
+                        .setBytecode(ByteString.copyFrom(JsonHex.from("0xfeedbeef").getBytes()))
+                        .setFrom("submitter.address")
+                        .setTo("0x449984cefadce394740a410c7d832a5e2207c27a")
+                        .setGas("0x112233")
+                        .setValue("0x99999999999999999999")
+                        .build()
+                );
+
+        // Run it
+        var res = pente.wrapPrivacyGroupTransaction(reqBuilder.build()).get();
+        var resTx = res.getTransaction();
+
+        assertEquals(PreparedTransaction.TransactionType.PRIVATE, resTx.getType());
+
+        // Check the resulting transaction
+        var expected = new ObjectMapper().readValue("""
+                {
+                    "group": {
+                        "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
+                        "members": [ "me@node1", "you@node2" ]
+                    },
+                    "from": "submitter.address",
+                    "to": "0x449984cefadce394740a410c7d832a5e2207c27a",
+                    "data": null,
+                    "gas": "0x112233",
+                    "value": "0x99999999999999999999"
+                 }
+                """, new TypeReference<Map<Object, Object>>() {});
+        var received = new ObjectMapper().readValue(resTx.getParamsJson(), new TypeReference<Map<Object, Object>>() {});
+        assertEquals(expected, received);
+
+        // Check the resulting ABI for the TX
+        expected = new ObjectMapper().readValue("""
+                {
+                    "type": "function",
+                    "name": "invoke",
+                    "inputs": [
+                       {
+                           "name": "group",
+                           "type": "tuple",
+                           "internalType": "struct Group",
+                           "components": [
+                               { "name": "salt", "type": "bytes32" },
+                               { "name": "members", "type": "string[]" }
+                           ]
+                       },
+                       { "name": "from", "type": "string" },
+                       { "name": "to", "type": "address" },
+                       { "name": "gas", "type": "uint64"},
+                       { "name": "value", "type":"uint256"}
+                    ],
+                    "outputs": []
+                }
+                """, new TypeReference<Map<Object, Object>>() {});
+        received = new ObjectMapper().readValue(resTx.getFunctionAbiJson(), new TypeReference<>() {});
+        assertEquals(expected, received);
+
+    }
+
+    @Test
+    void wrapPrivacyGroupInvokePreEncodedFuncCall() throws Exception {
+
+        var pente = new PenteDomain("", "");
+
+        var reqBuilder = WrapPrivacyGroupEVMTXRequest.newBuilder()
+                .setGenesisAbiJson("""
+                    {
+                        "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
+                        "pente": {
+                            "members": [ "me@node1", "you@node2" ]
+                        }
+                    }
+                """)
+                .setTransaction(PrivacyGroupEVMTX.newBuilder()
+                        .setContractInfo(ContractInfo.newBuilder().build() /* not currently used */)
+                        .setBytecode(ByteString.copyFrom(JsonHex.from("0xfeedbeef").getBytes()))
+                        .setFrom("submitter.address")
+                        .setTo("0x449984cefadce394740a410c7d832a5e2207c27a")
+                        .setInputJson("\"0xfeedbeef\"")
+                        .build()
+                );
+
+        // Run it
+        var res = pente.wrapPrivacyGroupTransaction(reqBuilder.build()).get();
+        var resTx = res.getTransaction();
+
+        assertEquals(PreparedTransaction.TransactionType.PRIVATE, resTx.getType());
+
+        // Check the resulting transaction
+        var expected = new ObjectMapper().readValue("""
+                {
+                    "group": {
+                        "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
+                        "members": [ "me@node1", "you@node2" ]
+                    },
+                    "from": "submitter.address",
+                    "to": "0x449984cefadce394740a410c7d832a5e2207c27a",
+                    "data": "0xfeedbeef"
+                 }
+                """, new TypeReference<Map<Object, Object>>() {});
+        var received = new ObjectMapper().readValue(resTx.getParamsJson(), new TypeReference<Map<Object, Object>>() {});
+        assertEquals(expected, received);
+
+        // Check the resulting ABI for the TX
+        expected = new ObjectMapper().readValue("""
+                {
+                    "type": "function",
+                    "name": "invoke",
+                    "inputs": [
+                       {
+                           "name": "group",
+                           "type": "tuple",
+                           "internalType": "struct Group",
+                           "components": [
+                               { "name": "salt", "type": "bytes32" },
+                               { "name": "members", "type": "string[]" }
+                           ]
+                       },
+                       { "name": "from", "type": "string" },
+                       { "name": "to", "type": "address" },
+                       { "name": "data", "type":"bytes"}
+                    ],
+                    "outputs": []
+                }
+                """, new TypeReference<Map<Object, Object>>() {});
+        received = new ObjectMapper().readValue(resTx.getFunctionAbiJson(), new TypeReference<>() {});
+        assertEquals(expected, received);
+
+    }
+
+    @Test
+    void wrapPrivacyGroupInvokePreEncodedObjectNoABI() throws Exception {
+
+        var pente = new PenteDomain("", "");
+
+        var reqBuilder = WrapPrivacyGroupEVMTXRequest.newBuilder()
+                .setGenesisAbiJson("""
+                    {
+                        "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
+                        "pente": {
+                            "members": [ "me@node1", "you@node2" ]
+                        }
+                    }
+                """)
+                .setTransaction(PrivacyGroupEVMTX.newBuilder()
+                        .setContractInfo(ContractInfo.newBuilder().build() /* not currently used */)
+                        .setBytecode(ByteString.copyFrom(JsonHex.from("0xfeedbeef").getBytes()))
+                        .setFrom("submitter.address")
+                        .setTo("0x449984cefadce394740a410c7d832a5e2207c27a")
+                        .setInputJson("{}")
+                        .build()
+                );
+
+        // Run it
+        assertThrows(ExecutionException.class, () -> pente.wrapPrivacyGroupTransaction(reqBuilder.build()).get());
 
     }
 }

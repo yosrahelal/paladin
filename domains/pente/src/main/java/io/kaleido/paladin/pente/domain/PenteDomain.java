@@ -777,23 +777,27 @@
                          ptxInputsABI,
                          JsonABI.newParameters()
                  );
-                 ptxInputsABI.add(JsonABI.newParameter("bytecode", "bytes32"));
+                 ptxInputsABI.add(JsonABI.newParameter("bytecode", "bytes"));
                  data.put("bytecode", JsonHex.wrap(inTxn.getBytecode().toByteArray()).toString());
-             } else if (funcDef != null) {
-                 // We're invoking a function by name, with inputs
-                 privateABI = JsonABI.newFunction(
-                         funcDef.name(),
-                         ptxInputsABI,
-                         JsonABI.newParameters()
-                 );
              } else {
-                 // We're using the special "invoke" function that does a blind invocation of a
-                 // pre-encoded function call, or a transfer
-                 privateABI = JsonABI.newFunction(
-                         "invoke",
-                         ptxInputsABI,
-                         JsonABI.newParameters()
-                 );
+                 ptxInputsABI.add(JsonABI.newParameter("to", "address"));
+                 data.put("to", inTxn.getTo());
+                 if (funcDef != null) {
+                     // We're invoking a function by name, with inputs
+                     privateABI = JsonABI.newFunction(
+                             funcDef.name(),
+                             ptxInputsABI,
+                             JsonABI.newParameters()
+                     );
+                 } else {
+                     // We're using the special "invoke" function that does a blind invocation of a
+                     // pre-encoded function call, or a transfer
+                     privateABI = JsonABI.newFunction(
+                             "invoke",
+                             ptxInputsABI,
+                             JsonABI.newParameters()
+                     );
+                 }
              }
 
              // Add the input data - setting appropriate ABI information
