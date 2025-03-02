@@ -769,6 +769,10 @@ func (n *Noto) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGro
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
 
+func (n *Noto) ValidatePrivacyGroup(ctx context.Context, req *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}
+
 func (n *Noto) WrapPrivacyGroupEVMTX(ctx context.Context, req *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }

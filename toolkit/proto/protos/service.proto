@@ -63,7 +63,8 @@ message DomainMessage {
     ValidateStateHashesRequest    validate_state_hashes =        1150;
     BuildReceiptRequest           build_receipt =                1160;
     InitPrivacyGroupRequest       init_privacy_group =           1170;
-    WrapPrivacyGroupEVMTXRequest  wrap_privacy_group_evmtx =     1180;
+    ValidatePrivacyGroupRequest   validate_privacy_group =       1180;
+    WrapPrivacyGroupEVMTXRequest  wrap_privacy_group_evmtx =     1190;
   }
 
   oneof response_from_domain {
@@ -84,7 +85,8 @@ message DomainMessage {
     ValidateStateHashesResponse   validate_state_hashes_res =    1151;
     BuildReceiptResponse          build_receipt_res =            1161;
     InitPrivacyGroupResponse      init_privacy_group_res =       1171;
-    WrapPrivacyGroupEVMTXResponse wrap_privacy_group_evmtx_res = 1181;
+    ValidatePrivacyGroupResponse  validate_privacy_group_res =   1181;
+    WrapPrivacyGroupEVMTXResponse wrap_privacy_group_evmtx_res = 1191;
   }
 
   // Request/reply exchanges initiated by the domain, to the paladin node

@@ -457,7 +457,7 @@ func parseState(ctx context.Context, sd *components.StateDistributionWithData) (
 	if err == nil {
 		parsed.SchemaID, err = tktypes.ParseBytes32(sd.SchemaID)
 	}
-	if err == nil {
+	if err == nil && sd.ContractAddress != "" {
 		parsed.ContractAddress, err = tktypes.ParseEthAddress(sd.ContractAddress)
 	}
 	if err != nil {

@@ -607,9 +607,10 @@
              final var mapper = new ObjectMapper();
 
              // Process the well-known property names that could be supplied externally
-             var finalABI = JsonABI.newTuple("", "PentePrivacyGroup", JsonABI.newParameters(
+             var finalABI = JsonABI.newTuple("PentePrivacyGroup", "PentePrivacyGroup", JsonABI.newParameters(
                      JsonABI.newIndexedParameter("salt", "bytes32"),
                      JsonABI.newTuple("pente", "PentePrivacyGroupSettings", JsonABI.newParameters(
+                             JsonABI.newParameter("members", "string[]"),
                              JsonABI.newParameter("evmVersion", "string"),
                              JsonABI.newParameter("endorsementType", "string"),
                              JsonABI.newParameter("externalCallsEnabled", "bool")
@@ -696,6 +697,19 @@
 
      }
 
+     @Override
+     protected CompletableFuture<ValidatePrivacyGroupResponse> validatePrivacyGroup(ValidatePrivacyGroupRequest request) {
+         try {
+                final var mapper = new ObjectMapper();
+                var genesisSettings = mapper.readValue(request.getGenesisState().getStateDataJson(), MinimalGenesisConfig.class);
+                return CompletableFuture.completedFuture(ValidatePrivacyGroupResponse.newBuilder()
+                        .addAllMembers(Arrays.asList(genesisSettings.pente.members))
+                        .build());
+         } catch (Exception e) {
+             return CompletableFuture.failedFuture(e);
+         }
+     }
+
      @JsonIgnoreProperties(ignoreUnknown = true)
      record MinimalGenesisPenteConfig(
              @JsonProperty(required = true)
@@ -739,7 +753,7 @@
              ));
              var ptxInputsABI = JsonABI.newParameters(groupABI, JsonABI.newParameter("from", "string"));
              var data = new ObjectNode(JsonNodeFactory.instance);
-             var genesisSettings = mapper.readValue(request.getGenesisAbiJson(), MinimalGenesisConfig.class);
+             var genesisSettings = mapper.readValue(request.getGenesisState().getStateDataJson(), MinimalGenesisConfig.class);
              var groupJSON = new ObjectNode(getInstance());
              groupJSON.put("salt", genesisSettings.salt.toString());
              var membersJSON = new ArrayNode(JsonNodeFactory.instance, genesisSettings.pente.members.length);

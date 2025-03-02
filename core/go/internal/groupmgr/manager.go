@@ -317,7 +317,7 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 					IdentityLocator: identity,
 					Domain:          spec.Domain,
 					StateID:         id.String(),
-					SchemaID:        tx.GenesisSchema.String(),
+					SchemaID:        genesisSchemaID.String(),
 				}),
 			})
 		}
@@ -329,6 +329,11 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 	}
 
 	return group, nil
+}
+
+func (gm *groupManager) StoreReceivedGroup(ctx context.Context, dbTX persistence.DBTX, schema components.Schema, state *pldapi.State) error {
+	// TODO: need to extract the members from the group
+	panic("TODO")
 }
 
 func (gm *groupManager) enrichMembers(ctx context.Context, dbTX persistence.DBTX, pgs []*pldapi.PrivacyGroup) error {

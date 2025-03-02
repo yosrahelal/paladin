@@ -56,7 +56,7 @@ type ReliableMessage struct {
 }
 
 type ReliableMessageAckNoMsgID struct {
-	MessageID uuid.UUID         `json:"-,omitempty"                      gorm:"column:id;primaryKey"`
+	MessageID uuid.UUID         `json:"-"                                gorm:"column:id;primaryKey"`
 	Time      tktypes.Timestamp `json:"time,omitempty"                   gorm:"column:time;autoCreateTime:false"` // generated in our code
 	Error     string            `json:"error,omitempty"                  gorm:"column:error"`
 }

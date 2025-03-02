@@ -1524,3 +1524,60 @@ func TestDomainInitPrivacyGroupBadResFromAddr(t *testing.T) {
 	assert.Regexp(t, "bad address", err)
 
 }
+
+func TestDomainValidatePrivacyGroupOk(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	pg := &pldapi.PrivacyGroupWithABI{
+		PrivacyGroup: &pldapi.PrivacyGroup{
+			ID:            tktypes.RandBytes(32),
+			GenesisSchema: tktypes.RandBytes32(),
+			Genesis:       tktypes.RawJSON(`{"some":"data with members"}`),
+		},
+		GenesisABI: &abi.Parameter{
+			Name: "PGInfo", Type: "tuple",
+		},
+	}
+
+	td.tp.Functions.ValidatePrivacyGroup = func(ctx context.Context, vpgr *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error) {
+		require.JSONEq(t, vpgr.GenesisAbiJson, `{"name": "PGInfo", "type": "tuple"}`)
+		require.Equal(t, pg.ID.String(), vpgr.GenesisState.Id)
+		require.Equal(t, pg.GenesisSchema.String(), vpgr.GenesisState.SchemaId)
+		require.JSONEq(t, pg.Genesis.String(), vpgr.GenesisState.StateDataJson)
+		return &prototk.ValidatePrivacyGroupResponse{Members: []string{"me@node1", "you@node2"}}, nil
+	}
+
+	domain := td.d
+	members, err := domain.ValidatePrivacyGroup(td.ctx, pg)
+	require.NoError(t, err)
+	require.Equal(t, []string{"me@node1", "you@node2"}, members)
+
+}
+
+func TestDomainValidatePrivacyGroupFail(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	pg := &pldapi.PrivacyGroupWithABI{
+		PrivacyGroup: &pldapi.PrivacyGroup{
+			ID:            tktypes.RandBytes(32),
+			GenesisSchema: tktypes.RandBytes32(),
+			Genesis:       tktypes.RawJSON(`{"some":"data with members"}`),
+		},
+		GenesisABI: &abi.Parameter{
+			Name: "PGInfo", Type: "tuple",
+		},
+	}
+
+	td.tp.Functions.ValidatePrivacyGroup = func(ctx context.Context, vpgr *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	domain := td.d
+	_, err := domain.ValidatePrivacyGroup(td.ctx, pg)
+	require.Regexp(t, "pop", err)
+
+}

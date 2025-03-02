@@ -442,6 +442,23 @@ func TestDomainFunction_InitPrivacyGroup(t *testing.T) {
 	})
 }
 
+func TestDomainFunction_ValidatePrivacyGroup(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// ValidatePrivacyGroup - paladin to domain
+	funcs.ValidatePrivacyGroup = func(ctx context.Context, cdr *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error) {
+		return &prototk.ValidatePrivacyGroupResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_ValidatePrivacyGroup{
+			ValidatePrivacyGroup: &prototk.ValidatePrivacyGroupRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_ValidatePrivacyGroupRes{}, res.ResponseFromDomain)
+	})
+}
+
 func TestDomainFunction_WrapPrivacyGroupEVMTX(t *testing.T) {
 	_, exerciser, funcs, _, _, done := setupDomainTests(t)
 	defer done()

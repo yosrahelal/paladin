@@ -74,7 +74,7 @@ public class PentePrivacyGroupTest {
         // Check the resulting state ABI definition
         expected = new ObjectMapper().readValue("""
                 {
-                    "name": "",
+                    "name": "PentePrivacyGroup",
                     "type": "tuple",
                     "internalType": "struct PentePrivacyGroup",
                     "components": [
@@ -84,6 +84,7 @@ public class PentePrivacyGroupTest {
                            "type": "tuple",
                            "internalType": "struct PentePrivacyGroupSettings",
                            "components": [
+                               {"name":"members", "type":"string[]"},
                                {"name":"evmVersion", "type":"string"},
                                {"name":"endorsementType", "type":"string"},
                                {"name":"externalCallsEnabled", "type":"bool"}
@@ -135,6 +136,12 @@ public class PentePrivacyGroupTest {
                 """, new TypeReference<>() {});
         received = new ObjectMapper().readValue(res.getTransaction().getFunctionAbiJson(), new TypeReference<>() {});
         assertEquals(expected, received);
+
+        // Call validate on it
+        var validateRes = pente.validatePrivacyGroup(ValidatePrivacyGroupRequest.newBuilder()
+                .setGenesisState(EndorsableState.newBuilder().setStateDataJson(res.getGenesisStateJson()).build())
+                .build()).get();
+        assertArrayEquals(new Object[]{"me@node1","you@node2"}, validateRes.getMembersList().toArray());
     }
 
     @Test
@@ -151,7 +158,7 @@ public class PentePrivacyGroupTest {
                             "pente": {
                                 "evmVersion": "london",
                                 "endorsementType": "some_future_option",
-                                "externalCallsEnabled": true  
+                                "externalCallsEnabled": true
                             }
                         }
                  """)
@@ -163,6 +170,7 @@ public class PentePrivacyGroupTest {
                            "type": "tuple",
                            "internalType": "struct PentePrivacyGroupSettings",
                            "components": [
+                               {"name":"members", "type":"string[]"},
                                {"name":"evmVersion", "type":"string"},
                                {"name":"endorsementType", "type":"string"},
                                {"name":"externalCallsEnabled", "type":"bool"}
@@ -193,7 +201,7 @@ public class PentePrivacyGroupTest {
         // Check the resulting state ABI definition
         expected = new ObjectMapper().readValue("""
                 {
-                    "name": "",
+                    "name": "PentePrivacyGroup",
                     "type": "tuple",
                     "internalType": "struct PentePrivacyGroup",
                     "components": [
@@ -203,6 +211,7 @@ public class PentePrivacyGroupTest {
                            "type": "tuple",
                            "internalType": "struct PentePrivacyGroupSettings",
                            "components": [
+                               {"name":"members", "type":"string[]"},
                                {"name":"evmVersion", "type":"string"},
                                {"name":"endorsementType", "type":"string"},
                                {"name":"externalCallsEnabled", "type":"bool"}
@@ -261,14 +270,14 @@ public class PentePrivacyGroupTest {
         var pente = new PenteDomain("", "");
 
         var reqBuilder = WrapPrivacyGroupEVMTXRequest.newBuilder()
-                .setGenesisAbiJson("""
+                .setGenesisState(EndorsableState.newBuilder().setStateDataJson("""
                     {
                         "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
                         "pente": {
                             "members": [ "me@node1", "you@node2" ]
                         }
                     }
-                """)
+                """).build())
                 .setTransaction(PrivacyGroupEVMTX.newBuilder()
                     .setContractInfo(ContractInfo.newBuilder().build() /* not currently used */)
                     .setBytecode(ByteString.copyFrom(JsonHex.from("0xfeedbeef").getBytes()))
@@ -343,14 +352,14 @@ public class PentePrivacyGroupTest {
         var pente = new PenteDomain("", "");
 
         var reqBuilder = WrapPrivacyGroupEVMTXRequest.newBuilder()
-                .setGenesisAbiJson("""
+                .setGenesisState(EndorsableState.newBuilder().setStateDataJson("""
                     {
                         "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
                         "pente": {
                             "members": [ "me@node1", "you@node2" ]
                         }
                     }
-                """)
+                """).build())
                 .setTransaction(PrivacyGroupEVMTX.newBuilder()
                         .setContractInfo(ContractInfo.newBuilder().build() /* not currently used */)
                         .setBytecode(ByteString.copyFrom(JsonHex.from("0xfeedbeef").getBytes()))
@@ -426,14 +435,14 @@ public class PentePrivacyGroupTest {
         var pente = new PenteDomain("", "");
 
         var reqBuilder = WrapPrivacyGroupEVMTXRequest.newBuilder()
-                .setGenesisAbiJson("""
+                .setGenesisState(EndorsableState.newBuilder().setStateDataJson("""
                     {
                         "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
                         "pente": {
                             "members": [ "me@node1", "you@node2" ]
                         }
                     }
-                """)
+                """).build())
                 .setTransaction(PrivacyGroupEVMTX.newBuilder()
                         .setContractInfo(ContractInfo.newBuilder().build() /* not currently used */)
                         .setBytecode(ByteString.copyFrom(JsonHex.from("0xfeedbeef").getBytes()))
@@ -501,14 +510,14 @@ public class PentePrivacyGroupTest {
         var pente = new PenteDomain("", "");
 
         var reqBuilder = WrapPrivacyGroupEVMTXRequest.newBuilder()
-                .setGenesisAbiJson("""
+                .setGenesisState(EndorsableState.newBuilder().setStateDataJson("""
                     {
                         "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
                         "pente": {
                             "members": [ "me@node1", "you@node2" ]
                         }
                     }
-                """)
+                """).build())
                 .setTransaction(PrivacyGroupEVMTX.newBuilder()
                         .setContractInfo(ContractInfo.newBuilder().build() /* not currently used */)
                         .setBytecode(ByteString.copyFrom(JsonHex.from("0xfeedbeef").getBytes()))

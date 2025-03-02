@@ -243,6 +243,15 @@ message InitPrivacyGroupResponse {
   PreparedTransaction transaction = 3; // The transaction that will result from this against the domain
 }
 
+message ValidatePrivacyGroupRequest {
+  EndorsableState genesis_state = 1; // the full genesis state of the transaction
+  string genesis_abi_json = 2; // the full ABI of the genesis state
+}
+
+message ValidatePrivacyGroupResponse {
+  repeated string members = 1; // the member list is processed out of the state
+}
+
 message WrapPrivacyGroupEVMTXRequest {
   EndorsableState genesis_state = 1; // the full genesis state of the transaction
   string genesis_abi_json = 2; // the full ABI of the genesis state

@@ -731,7 +731,7 @@ func (dc *domainContract) WrapPrivacyGroupEVMTX(ctx context.Context, pg *pldapi.
 	res, err := dc.api.WrapPrivacyGroupEVMTX(ctx, &prototk.WrapPrivacyGroupEVMTXRequest{
 		GenesisState: &prototk.EndorsableState{
 			Id:            pg.ID.String(),
-			SchemaId:      string(pg.Genesis),
+			SchemaId:      pg.GenesisSchema.String(),
 			StateDataJson: pg.Genesis.String(),
 		},
 		GenesisAbiJson: tktypes.JSONString(pg.GenesisABI).Pretty(),
