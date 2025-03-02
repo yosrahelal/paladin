@@ -897,14 +897,14 @@ func (d *domain) InitPrivacyGroup(ctx context.Context, pgInput *pldapi.PrivacyGr
 
 }
 
-func (d *domain) ValidatePrivacyGroup(ctx context.Context, pg *pldapi.PrivacyGroupWithABI) (members []string, err error) {
+func (d *domain) ValidatePrivacyGroup(ctx context.Context, schema *pldapi.Schema, state *pldapi.State) (members []string, err error) {
 	res, err := d.api.ValidatePrivacyGroup(ctx, &prototk.ValidatePrivacyGroupRequest{
 		GenesisState: &prototk.EndorsableState{
-			Id:            pg.ID.String(),
-			SchemaId:      pg.GenesisSchema.String(),
-			StateDataJson: pg.Genesis.String(),
+			Id:            state.ID.String(),
+			SchemaId:      state.Schema.String(),
+			StateDataJson: state.Data.Pretty(),
 		},
-		GenesisAbiJson: tktypes.JSONString(pg.GenesisABI).Pretty(),
+		GenesisAbiJson: schema.Definition.Pretty(),
 	})
 	if err != nil {
 		return nil, err

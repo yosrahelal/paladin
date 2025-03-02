@@ -384,6 +384,7 @@ var (
 	MsgTransportNackMissingError               = pde("PD012019", "Nack missing error information")
 	MsgTransportStateSchemaNotAvailableLocally = pde("PD012020", "State schema not available locally: domain=%s,id=%s")
 	MsgTransportMessageNotAvailableLocally     = pde("PD012021", "Message not available locally: id=%s")
+	MsgTransportPrivacyGroupStateStorageFailed = pde("PD012022", "Storage of privacy group state failed: id=%s")
 
 	// RegistryManager module PD0121XX
 	MsgRegistryNodeEntiresNotFound     = pde("PD012100", "No entries found for node '%s'")

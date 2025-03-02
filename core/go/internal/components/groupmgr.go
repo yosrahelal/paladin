@@ -27,8 +27,9 @@ import (
 )
 
 type PrivacyGroupGenesisWithABI struct {
-	GenesisState StateDistributionWithData `json:"genesisState"`
-	GenesisABI   abi.Parameter             `json:"genesisABI"`
+	GenesisTransaction uuid.UUID                 `json:"genesisTransaction"`
+	GenesisState       StateDistributionWithData `json:"genesisState"`
+	GenesisABI         abi.Parameter             `json:"genesisABI"`
 }
 
 type PreparedGroupInitTransaction struct {
@@ -43,6 +44,11 @@ type PrivacyGroupMessageDistribution struct {
 	ID     uuid.UUID        `json:"id"`
 }
 
+type PrivacyGroupDistribution struct {
+	GenesisTransaction uuid.UUID                 `json:"genesisTransaction"`
+	GenesisState       StateDistributionWithData `json:"genesisState"`
+}
+
 type PrivacyGroupMessageReceiver interface {
 	DeliverMessageBatch(ctx context.Context, batchID uint64, msgs []*pldapi.PrivacyGroupMessage) error
 }
@@ -55,6 +61,7 @@ type GroupManager interface {
 	ManagerLifecycle
 
 	CreateGroup(ctx context.Context, dbTX persistence.DBTX, spec *pldapi.PrivacyGroupInput) (group *pldapi.PrivacyGroup, err error)
+	StoreReceivedGroup(ctx context.Context, dbTX persistence.DBTX, domainName string, tx uuid.UUID, schema *pldapi.Schema, state *pldapi.State) (rejectionErr, err error)
 	GetGroupByID(ctx context.Context, dbTX persistence.DBTX, domainName string, groupID tktypes.HexBytes) (*pldapi.PrivacyGroupWithABI, error)
 	QueryGroups(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error)
 	QueryGroupsByProperties(ctx context.Context, dbTX persistence.DBTX, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error)

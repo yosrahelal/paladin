@@ -527,11 +527,16 @@ func TestProcessReliableMsgPagePrivacyGroup(t *testing.T) {
 		transport: tp.t,
 	}
 
-	sd := &components.StateDistribution{
-		Domain:          "domain1",
-		ContractAddress: tktypes.RandAddress().String(),
-		SchemaID:        schemaID.String(),
-		StateID:         tktypes.RandHex(32),
+	pgd := &components.PrivacyGroupDistribution{
+		GenesisTransaction: uuid.New(),
+		GenesisState: components.StateDistributionWithData{
+			StateDistribution: components.StateDistribution{
+				Domain:          "domain1",
+				ContractAddress: tktypes.RandAddress().String(),
+				SchemaID:        schemaID.String(),
+				StateID:         tktypes.RandHex(32),
+			},
+		},
 	}
 
 	rm := &pldapi.ReliableMessage{
@@ -539,7 +544,7 @@ func TestProcessReliableMsgPagePrivacyGroup(t *testing.T) {
 		Sequence:    50,
 		MessageType: pldapi.RMTPrivacyGroup.Enum(),
 		Node:        "node2",
-		Metadata:    tktypes.JSONString(sd),
+		Metadata:    tktypes.JSONString(pgd),
 		Created:     tktypes.TimestampNow(),
 	}
 
@@ -559,11 +564,13 @@ func TestProcessReliableMsgPagePrivacyGroup(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RMHMessageTypePrivacyGroup, rMsg.MessageType)
 
-	domain, genesisABI, genesisState, err := parsePrivacyGroupDistribution(ctx, rMsg.MessageID, rMsg.Payload)
+	rpg, err := parsePrivacyGroupDistribution(ctx, rMsg.MessageID, rMsg.Payload, "node2")
 	require.NoError(t, err)
-	require.Equal(t, "domain1", domain)
-	require.Equal(t, simpleABI, genesisABI)
-	require.JSONEq(t, fmt.Sprintf(`{"dataFor": "%s"}`, genesisState.ID.HexString()), genesisState.Data.Pretty())
+	require.Equal(t, "domain1", rpg.domain)
+	require.Equal(t, simpleABI, rpg.genesisABI)
+	require.JSONEq(t, fmt.Sprintf(`{"dataFor": "%s"}`, rpg.genesisState.ID.HexString()), rpg.genesisState.Data.Pretty())
+	require.Equal(t, pgd.GenesisTransaction, rpg.genesisTx)
+	require.Equal(t, "node2", rpg.node)
 }
 
 func TestProcessReliableMsgPagePrivacyGroupMessage(t *testing.T) {

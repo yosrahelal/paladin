@@ -1530,27 +1530,27 @@ func TestDomainValidatePrivacyGroupOk(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	pg := &pldapi.PrivacyGroupWithABI{
-		PrivacyGroup: &pldapi.PrivacyGroup{
-			ID:            tktypes.RandBytes(32),
-			GenesisSchema: tktypes.RandBytes32(),
-			Genesis:       tktypes.RawJSON(`{"some":"data with members"}`),
+	state := &pldapi.State{
+		StateBase: pldapi.StateBase{
+			ID:     tktypes.RandBytes(32),
+			Schema: tktypes.RandBytes32(),
+			Data:   tktypes.RawJSON(`{"some":"data with members"}`),
 		},
-		GenesisABI: &abi.Parameter{
-			Name: "PGInfo", Type: "tuple",
-		},
+	}
+	stateSchema := &pldapi.Schema{
+		Definition: tktypes.RawJSON(`{"name": "PGInfo", "type": "tuple"}`),
 	}
 
 	td.tp.Functions.ValidatePrivacyGroup = func(ctx context.Context, vpgr *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error) {
-		require.JSONEq(t, vpgr.GenesisAbiJson, `{"name": "PGInfo", "type": "tuple"}`)
-		require.Equal(t, pg.ID.String(), vpgr.GenesisState.Id)
-		require.Equal(t, pg.GenesisSchema.String(), vpgr.GenesisState.SchemaId)
-		require.JSONEq(t, pg.Genesis.String(), vpgr.GenesisState.StateDataJson)
+		require.JSONEq(t, vpgr.GenesisAbiJson, stateSchema.Definition.Pretty())
+		require.Equal(t, state.ID.String(), vpgr.GenesisState.Id)
+		require.Equal(t, state.Schema.String(), vpgr.GenesisState.SchemaId)
+		require.JSONEq(t, state.Data.String(), vpgr.GenesisState.StateDataJson)
 		return &prototk.ValidatePrivacyGroupResponse{Members: []string{"me@node1", "you@node2"}}, nil
 	}
 
 	domain := td.d
-	members, err := domain.ValidatePrivacyGroup(td.ctx, pg)
+	members, err := domain.ValidatePrivacyGroup(td.ctx, stateSchema, state)
 	require.NoError(t, err)
 	require.Equal(t, []string{"me@node1", "you@node2"}, members)
 
@@ -1561,15 +1561,15 @@ func TestDomainValidatePrivacyGroupFail(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	pg := &pldapi.PrivacyGroupWithABI{
-		PrivacyGroup: &pldapi.PrivacyGroup{
-			ID:            tktypes.RandBytes(32),
-			GenesisSchema: tktypes.RandBytes32(),
-			Genesis:       tktypes.RawJSON(`{"some":"data with members"}`),
+	state := &pldapi.State{
+		StateBase: pldapi.StateBase{
+			ID:     tktypes.RandBytes(32),
+			Schema: tktypes.RandBytes32(),
+			Data:   tktypes.RawJSON(`{"some":"data with members"}`),
 		},
-		GenesisABI: &abi.Parameter{
-			Name: "PGInfo", Type: "tuple",
-		},
+	}
+	stateSchema := &pldapi.Schema{
+		Definition: tktypes.RawJSON(`{"name": "PGInfo", "type": "tuple"}`),
 	}
 
 	td.tp.Functions.ValidatePrivacyGroup = func(ctx context.Context, vpgr *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error) {
@@ -1577,7 +1577,7 @@ func TestDomainValidatePrivacyGroupFail(t *testing.T) {
 	}
 
 	domain := td.d
-	_, err := domain.ValidatePrivacyGroup(td.ctx, pg)
+	_, err := domain.ValidatePrivacyGroup(td.ctx, stateSchema, state)
 	require.Regexp(t, "pop", err)
 
 }

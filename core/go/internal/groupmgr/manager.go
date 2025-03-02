@@ -313,11 +313,16 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 			msgs = append(msgs, &pldapi.ReliableMessage{
 				Node:        node,
 				MessageType: pldapi.RMTPrivacyGroup.Enum(),
-				Metadata: tktypes.JSONString(&components.StateDistribution{
-					IdentityLocator: identity,
-					Domain:          spec.Domain,
-					StateID:         id.String(),
-					SchemaID:        genesisSchemaID.String(),
+				Metadata: tktypes.JSONString(&components.PrivacyGroupDistribution{
+					GenesisTransaction: txIDs[0],
+					GenesisState: components.StateDistributionWithData{
+						StateDistribution: components.StateDistribution{
+							IdentityLocator: identity,
+							Domain:          spec.Domain,
+							StateID:         id.String(),
+							SchemaID:        genesisSchemaID.String(),
+						},
+					},
 				}),
 			})
 		}
@@ -331,9 +336,29 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 	return group, nil
 }
 
-func (gm *groupManager) StoreReceivedGroup(ctx context.Context, dbTX persistence.DBTX, schema components.Schema, state *pldapi.State) error {
-	// TODO: need to extract the members from the group
-	panic("TODO")
+func (gm *groupManager) StoreReceivedGroup(ctx context.Context, dbTX persistence.DBTX, domainName string, tx uuid.UUID, schema *pldapi.Schema, state *pldapi.State) (rejectionErr, err error) {
+
+	// We need to call the domain to validate the state schema before we can insert it
+	domain, rejectionErr := gm.domainManager.GetDomainByName(ctx, domainName)
+	if rejectionErr != nil {
+		return rejectionErr, nil
+	}
+	members, rejectionErr := domain.ValidatePrivacyGroup(ctx, schema, state)
+	if rejectionErr != nil {
+		return rejectionErr, nil
+	}
+
+	// Now do the insert
+	dbPG := &persistedGroup{
+		ID:              state.ID,
+		Created:         state.Created,
+		Domain:          domainName,
+		SchemaID:        state.Schema,
+		SchemaSignature: schema.Signature,
+		GenesisTX:       tx,
+	}
+	return nil, gm.insertGroup(ctx, dbTX, dbPG, members)
+
 }
 
 func (gm *groupManager) enrichMembers(ctx context.Context, dbTX persistence.DBTX, pgs []*pldapi.PrivacyGroup) error {
