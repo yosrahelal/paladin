@@ -1,10 +1,9 @@
 import PaladinClient, {
-  PenteFactory,
-  newGroupSalt,
+  PenteFactory
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import storageJson from "./abis/Storage.json";
-import { checkDeploy } from "./util";
 import { PrivateStorage } from "./helpers/storage";
+import { checkDeploy } from "./util";
 
 const logger = console;
 
