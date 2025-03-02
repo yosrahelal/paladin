@@ -22,12 +22,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/sirupsen/logrus"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -199,8 +199,8 @@ func TestSendReliableBadMsg(t *testing.T) {
 	ctx, tm, _, done := newTestTransport(t, false)
 	defer done()
 
-	err := tm.SendReliable(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
-		MessageType: components.RMTReceipt.Enum(),
+	err := tm.SendReliable(ctx, tm.persistence.NOTX(), &pldapi.ReliableMessage{
+		MessageType: pldapi.RMTReceipt.Enum(),
 	})
 	assert.Regexp(t, "PD012015", err)
 }

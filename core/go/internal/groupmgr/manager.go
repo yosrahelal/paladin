@@ -307,12 +307,12 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 	group.Members = spec.Members
 
 	// We also need to create a reliable send the state to all the remote members
-	msgs := make([]*components.ReliableMessage, 0, len(remoteMembers))
+	msgs := make([]*pldapi.ReliableMessage, 0, len(remoteMembers))
 	for node, members := range remoteMembers {
 		for _, identity := range members {
-			msgs = append(msgs, &components.ReliableMessage{
+			msgs = append(msgs, &pldapi.ReliableMessage{
 				Node:        node,
-				MessageType: components.RMTPrivacyGroup.Enum(),
+				MessageType: pldapi.RMTPrivacyGroup.Enum(),
 				Metadata: tktypes.JSONString(&components.StateDistribution{
 					IdentityLocator: identity,
 					Domain:          spec.Domain,

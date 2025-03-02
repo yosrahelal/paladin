@@ -942,7 +942,7 @@ func TestBuildPrivacyGroupDistributionMsgBadMsg(t *testing.T) {
 	)
 	defer done()
 
-	_, parseErr, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{})
+	_, parseErr, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &pldapi.ReliableMessage{})
 	require.NoError(t, err)
 	require.Regexp(t, "PD012016", parseErr)
 
@@ -962,9 +962,9 @@ func TestBuildPrivacyGroupDistributionMsgSchemaError(t *testing.T) {
 	defer done()
 
 	distroID := uuid.New()
-	_, _, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+	_, _, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &pldapi.ReliableMessage{
 		ID:          distroID,
-		MessageType: components.RMTPrivacyGroup.Enum(),
+		MessageType: pldapi.RMTPrivacyGroup.Enum(),
 		Metadata: tktypes.JSONString(&components.StateDistributionWithData{
 			StateDistribution: components.StateDistribution{
 				Domain:          "domain1",
@@ -992,9 +992,9 @@ func TestBuildPrivacyGroupDistributionMsgSchemaInvalidABI(t *testing.T) {
 	defer done()
 
 	distroID := uuid.New()
-	_, parseErr, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+	_, parseErr, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &pldapi.ReliableMessage{
 		ID:          distroID,
-		MessageType: components.RMTPrivacyGroup.Enum(),
+		MessageType: pldapi.RMTPrivacyGroup.Enum(),
 		Metadata: tktypes.JSONString(&components.StateDistributionWithData{
 			StateDistribution: components.StateDistribution{
 				Domain:          "domain1",
@@ -1025,9 +1025,9 @@ func TestBuildPrivacyGroupDistributionMsgGetStatesError(t *testing.T) {
 	defer done()
 
 	distroID := uuid.New()
-	_, _, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+	_, _, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &pldapi.ReliableMessage{
 		ID:          distroID,
-		MessageType: components.RMTPrivacyGroup.Enum(),
+		MessageType: pldapi.RMTPrivacyGroup.Enum(),
 		Metadata: tktypes.JSONString(&components.StateDistributionWithData{
 			StateDistribution: components.StateDistribution{
 				Domain:          "domain1",
@@ -1057,9 +1057,9 @@ func TestBuildPrivacyGroupDistributionMsgGetStatesNotFound(t *testing.T) {
 	defer done()
 
 	distroID := uuid.New()
-	_, parseErr, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+	_, parseErr, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &pldapi.ReliableMessage{
 		ID:          distroID,
-		MessageType: components.RMTPrivacyGroup.Enum(),
+		MessageType: pldapi.RMTPrivacyGroup.Enum(),
 		Metadata: tktypes.JSONString(&components.StateDistributionWithData{
 			StateDistribution: components.StateDistribution{
 				Domain:          "domain1",
@@ -1085,9 +1085,9 @@ func TestParsePrivacyGroupMessageDistributionFail(t *testing.T) {
 	defer done()
 
 	distroID := uuid.New()
-	_, parseErr, err := tm.buildPrivacyGroupMessageMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+	_, parseErr, err := tm.buildPrivacyGroupMessageMsg(ctx, tm.persistence.NOTX(), &pldapi.ReliableMessage{
 		ID:          distroID,
-		MessageType: components.RMTPrivacyGroup.Enum(),
+		MessageType: pldapi.RMTPrivacyGroup.Enum(),
 		Metadata:    nil,
 	})
 	require.NoError(t, err)
@@ -1108,9 +1108,9 @@ func TestParsePrivacyGroupMessageGetMessageError(t *testing.T) {
 	defer done()
 
 	distroID := uuid.New()
-	_, _, err := tm.buildPrivacyGroupMessageMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+	_, _, err := tm.buildPrivacyGroupMessageMsg(ctx, tm.persistence.NOTX(), &pldapi.ReliableMessage{
 		ID:          distroID,
-		MessageType: components.RMTPrivacyGroup.Enum(),
+		MessageType: pldapi.RMTPrivacyGroup.Enum(),
 		Metadata: tktypes.JSONString(&components.PrivacyGroupMessageDistribution{
 			Domain: "domain1",
 			Group:  tktypes.RandBytes(32),
@@ -1134,9 +1134,9 @@ func TestParsePrivacyGroupMessageGetMessageNotFound(t *testing.T) {
 	defer done()
 
 	distroID := uuid.New()
-	_, parseErr, err := tm.buildPrivacyGroupMessageMsg(ctx, tm.persistence.NOTX(), &components.ReliableMessage{
+	_, parseErr, err := tm.buildPrivacyGroupMessageMsg(ctx, tm.persistence.NOTX(), &pldapi.ReliableMessage{
 		ID:          distroID,
-		MessageType: components.RMTPrivacyGroup.Enum(),
+		MessageType: pldapi.RMTPrivacyGroup.Enum(),
 		Metadata: tktypes.JSONString(&components.PrivacyGroupMessageDistribution{
 			Domain: "domain1",
 			Group:  tktypes.RandBytes(32),

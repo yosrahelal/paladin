@@ -101,8 +101,8 @@ func TestReliableMessageResendRealDB(t *testing.T) {
 				StateID:         tktypes.RandHex(32),
 			}
 
-			err := tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
-				MessageType: components.RMTState.Enum(),
+			err := tm.SendReliable(ctx, dbTX, &pldapi.ReliableMessage{
+				MessageType: pldapi.RMTState.Enum(),
 				Node:        "node2",
 				Metadata:    tktypes.JSONString(sds[i]),
 			})
@@ -180,8 +180,8 @@ func TestReliableMessageSendSendQuiesceRealDB(t *testing.T) {
 		}
 
 		err := tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-			return tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
-				MessageType: components.RMTState.Enum(),
+			return tm.SendReliable(ctx, dbTX, &pldapi.ReliableMessage{
+				MessageType: pldapi.RMTState.Enum(),
 				Node:        "node2",
 				Metadata:    tktypes.JSONString(sd),
 			})
@@ -239,8 +239,8 @@ func TestSendBadReliableMessageMarkedFailRealDB(t *testing.T) {
 	mockActivateDeactivateOk(tp)
 
 	// First with missing metadata
-	rm := &components.ReliableMessage{
-		MessageType: components.RMTState.Enum(),
+	rm := &pldapi.ReliableMessage{
+		MessageType: pldapi.RMTState.Enum(),
 		Node:        "node2",
 	}
 	err := tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -249,8 +249,8 @@ func TestSendBadReliableMessageMarkedFailRealDB(t *testing.T) {
 	require.NoError(t, err)
 
 	// Second with missing state
-	rm2 := &components.ReliableMessage{
-		MessageType: components.RMTState.Enum(),
+	rm2 := &pldapi.ReliableMessage{
+		MessageType: pldapi.RMTState.Enum(),
 		Node:        "node2",
 		Metadata: tktypes.JSONString(&components.StateDistribution{
 			Domain:          "domain1",
@@ -265,7 +265,7 @@ func TestSendBadReliableMessageMarkedFailRealDB(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait for nack
-	var rmWithAck *components.ReliableMessage
+	var rmWithAck *pldapi.ReliableMessage
 	for (rmWithAck == nil || rmWithAck.Ack == nil) && !t.Failed() {
 		time.Sleep(10 * time.Millisecond)
 		rmWithAck, err = tm.getReliableMessageByID(ctx, tm.persistence.NOTX(), rm.ID)
@@ -434,7 +434,7 @@ func TestProcessReliableMsgPageIgnoreBeforeHWM(t *testing.T) {
 		lastDrainHWM: confutil.P(uint64(100)),
 	}
 
-	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*components.ReliableMessage{
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*pldapi.ReliableMessage{
 		{
 			ID:       uuid.New(),
 			Sequence: 50,
@@ -457,12 +457,12 @@ func TestProcessReliableMsgPageIgnoreUnsupported(t *testing.T) {
 		tm:  tm,
 	}
 
-	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*components.ReliableMessage{
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*pldapi.ReliableMessage{
 		{
 			ID:          uuid.New(),
 			Sequence:    50,
 			Created:     tktypes.TimestampNow(),
-			MessageType: components.RMTReceipt.Enum(),
+			MessageType: pldapi.RMTReceipt.Enum(),
 		},
 	})
 	require.Regexp(t, "pop", err)
@@ -491,16 +491,16 @@ func TestProcessReliableMsgPageInsertFail(t *testing.T) {
 		StateID:         tktypes.RandHex(32),
 	}
 
-	rm := &components.ReliableMessage{
+	rm := &pldapi.ReliableMessage{
 		ID:          uuid.New(),
 		Sequence:    50,
-		MessageType: components.RMTState.Enum(),
+		MessageType: pldapi.RMTState.Enum(),
 		Node:        "node2",
 		Metadata:    tktypes.JSONString(sd),
 		Created:     tktypes.TimestampNow(),
 	}
 
-	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*components.ReliableMessage{rm})
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*pldapi.ReliableMessage{rm})
 	require.Regexp(t, "PD020302", err)
 
 }
@@ -534,10 +534,10 @@ func TestProcessReliableMsgPagePrivacyGroup(t *testing.T) {
 		StateID:         tktypes.RandHex(32),
 	}
 
-	rm := &components.ReliableMessage{
+	rm := &pldapi.ReliableMessage{
 		ID:          uuid.New(),
 		Sequence:    50,
-		MessageType: components.RMTPrivacyGroup.Enum(),
+		MessageType: pldapi.RMTPrivacyGroup.Enum(),
 		Node:        "node2",
 		Metadata:    tktypes.JSONString(sd),
 		Created:     tktypes.TimestampNow(),
@@ -550,7 +550,7 @@ func TestProcessReliableMsgPagePrivacyGroup(t *testing.T) {
 		return nil, nil
 	}
 
-	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*components.ReliableMessage{rm})
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*pldapi.ReliableMessage{rm})
 	require.NoError(t, err)
 
 	sentMsg := <-sentMessages
@@ -599,10 +599,10 @@ func TestProcessReliableMsgPagePrivacyGroupMessage(t *testing.T) {
 		ID:     origMsg.ID,
 	}
 
-	rm := &components.ReliableMessage{
+	rm := &pldapi.ReliableMessage{
 		ID:          origMsg.ID,
 		Sequence:    50,
-		MessageType: components.RMTPrivacyGroupMessage.Enum(),
+		MessageType: pldapi.RMTPrivacyGroupMessage.Enum(),
 		Node:        "node2",
 		Metadata:    tktypes.JSONString(pmd),
 		Created:     tktypes.TimestampNow(),
@@ -615,7 +615,7 @@ func TestProcessReliableMsgPagePrivacyGroupMessage(t *testing.T) {
 		return nil, nil
 	}
 
-	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*components.ReliableMessage{rm})
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*pldapi.ReliableMessage{rm})
 	require.NoError(t, err)
 
 	sentMsg := <-sentMessages

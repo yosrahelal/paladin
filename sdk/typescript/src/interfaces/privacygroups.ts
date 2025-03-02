@@ -1,11 +1,10 @@
 import { BigNumberish, ethers } from "ethers";
-import { PublicTxOptions } from ".";
-import { PaladinVerifier } from "../verifier";
 import { HexString } from "ethers/lib.commonjs/utils/data";
+import { PublicTxOptions } from ".";
 
 export interface IPrivacyGroupInput {
   domain: string;
-  members: (string | PaladinVerifier)[];
+  members: string[];
   properties?: Record<string, any>;
   propertiesABI?: string;
   transactionOptions?: IPrivacyGroupTXOptions;

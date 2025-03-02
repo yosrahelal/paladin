@@ -113,11 +113,11 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 			}).Once()
 
 		// Validate the state send gets the correct data
-		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm *components.ReliableMessage) bool {
-			return rm.MessageType.V() == components.RMTPrivacyGroup
+		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm *pldapi.ReliableMessage) bool {
+			return rm.MessageType.V() == pldapi.RMTPrivacyGroup
 		})).Return(nil).Run(func(args mock.Arguments) {
-			msg := args[2].(*components.ReliableMessage)
-			require.Equal(t, components.RMTPrivacyGroup, msg.MessageType.V())
+			msg := args[2].(*pldapi.ReliableMessage)
+			require.Equal(t, pldapi.RMTPrivacyGroup, msg.MessageType.V())
 			var sd *components.StateDistribution
 			err := json.Unmarshal(msg.Metadata, &sd)
 			require.NoError(t, err)
@@ -179,8 +179,8 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 			}).Once()
 
 		// Validate we also get a send reliable for the message
-		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm *components.ReliableMessage) bool {
-			return rm.MessageType.V() == components.RMTPrivacyGroupMessage
+		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm *pldapi.ReliableMessage) bool {
+			return rm.MessageType.V() == pldapi.RMTPrivacyGroupMessage
 		})).Return(nil)
 	})
 	defer done()

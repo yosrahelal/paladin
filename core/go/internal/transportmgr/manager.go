@@ -24,10 +24,14 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -74,6 +78,20 @@ type transportManager struct {
 	senderBufferLen         int
 	reliableMessageResend   time.Duration
 	reliableMessagePageSize int
+}
+
+var reliableMessageFilters = filters.FieldMap{
+	"sequence":    filters.Int64Field("sequence"),
+	"id":          filters.UUIDField("id"),
+	"created":     filters.TimestampField("created"),
+	"node":        filters.StringField("node"),
+	"messageType": filters.StringField("msg_type"),
+}
+
+var reliableMessageAckFilters = filters.FieldMap{
+	"messageId": filters.UUIDField("id"),
+	"time":      filters.TimestampField("time"),
+	"error":     filters.StringField("error"),
 }
 
 func NewTransportManager(bgCtx context.Context, conf *pldconf.TransportManagerConfig) components.TransportManager {
@@ -287,7 +305,7 @@ func (tm *transportManager) queueFireAndForget(ctx context.Context, nodeName str
 }
 
 // See docs in components package
-func (tm *transportManager) SendReliable(ctx context.Context, dbTX persistence.DBTX, msgs ...*components.ReliableMessage) (err error) {
+func (tm *transportManager) SendReliable(ctx context.Context, dbTX persistence.DBTX, msgs ...*pldapi.ReliableMessage) (err error) {
 
 	peers := make(map[string]*peer)
 	for _, msg := range msgs {
@@ -328,7 +346,7 @@ func (tm *transportManager) SendReliable(ctx context.Context, dbTX persistence.D
 
 }
 
-func (tm *transportManager) writeAcks(ctx context.Context, dbTX persistence.DBTX, acks ...*components.ReliableMessageAck) error {
+func (tm *transportManager) writeAcks(ctx context.Context, dbTX persistence.DBTX, acks ...*pldapi.ReliableMessageAck) error {
 	for _, ack := range acks {
 		log.L(ctx).Infof("ack received for message %s", ack.MessageID)
 		ack.Time = tktypes.TimestampNow()
@@ -340,8 +358,8 @@ func (tm *transportManager) writeAcks(ctx context.Context, dbTX persistence.DBTX
 		Error
 }
 
-func (tm *transportManager) getReliableMessageByID(ctx context.Context, dbTX persistence.DBTX, id uuid.UUID) (*components.ReliableMessage, error) {
-	var rms []*components.ReliableMessage
+func (tm *transportManager) getReliableMessageByID(ctx context.Context, dbTX persistence.DBTX, id uuid.UUID) (*pldapi.ReliableMessage, error) {
+	var rms []*pldapi.ReliableMessage
 	err := dbTX.DB().
 		WithContext(ctx).
 		Order("sequence ASC").
@@ -354,4 +372,33 @@ func (tm *transportManager) getReliableMessageByID(ctx context.Context, dbTX per
 		return nil, err
 	}
 	return rms[0], nil
+}
+
+func (tm *transportManager) QueryReliableMessages(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.ReliableMessage, error) {
+	qw := &filters.QueryWrapper[pldapi.ReliableMessage, pldapi.ReliableMessage]{
+		P:           tm.persistence,
+		DefaultSort: "-sequence",
+		Filters:     reliableMessageFilters,
+		Query:       jq,
+		Finalize: func(db *gorm.DB) *gorm.DB {
+			return db.Joins("Ack")
+		},
+		MapResult: func(msg *pldapi.ReliableMessage) (*pldapi.ReliableMessage, error) {
+			return msg, nil
+		},
+	}
+	return qw.Run(ctx, dbTX)
+}
+
+func (tm *transportManager) QueryReliableMessageAcks(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.ReliableMessageAck, error) {
+	qw := &filters.QueryWrapper[pldapi.ReliableMessageAck, pldapi.ReliableMessageAck]{
+		P:           tm.persistence,
+		DefaultSort: "-time",
+		Filters:     reliableMessageAckFilters,
+		Query:       jq,
+		MapResult: func(ack *pldapi.ReliableMessageAck) (*pldapi.ReliableMessageAck, error) {
+			return ack, nil
+		},
+	}
+	return qw.Run(ctx, dbTX)
 }

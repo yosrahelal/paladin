@@ -23,7 +23,7 @@ async function main(): Promise<boolean> {
   const penteFactory = new PenteFactory(paladinNode1, "pente");
   const memberPrivacyGroup = await penteFactory.newPrivacyGroup({
     domain: 'pente',
-    members: [verifierNode1, verifierNode2],
+    members: [verifierNode1.toString(), verifierNode2.toString()],
     properties: {
       pente: {
         evmVersion: "shanghai",

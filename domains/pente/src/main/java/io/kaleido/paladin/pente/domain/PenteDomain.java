@@ -612,7 +612,7 @@
                      JsonABI.newTuple("pente", "PentePrivacyGroupSettings", JsonABI.newParameters(
                              JsonABI.newParameter("evmVersion", "string"),
                              JsonABI.newParameter("endorsementType", "string"),
-                             JsonABI.newParameter("externalCallsEnabled", "boolean")
+                             JsonABI.newParameter("externalCallsEnabled", "bool")
                      ))
              ));
              var propertiesABI = mapper.readValue(request.getPropertiesAbiJson(), JsonABI.Parameters.class);
@@ -627,7 +627,7 @@
                          switch (penteProp.name()) {
                              case "evmVersion" -> validatePropType("pente.", penteProp, "string");
                              case "endorsementType" -> validatePropType("pente.", penteProp, "string");
-                             case "externalCallsEnabled" -> validatePropType("pente.", penteProp, "boolean");
+                             case "externalCallsEnabled" -> validatePropType("pente.", penteProp, "bool");
                              default -> throw new IllegalArgumentException("property 'pente.%s' is not a supported Pente setting".formatted(penteProp.name()));
                          }
                      }
@@ -677,7 +677,7 @@
                      )),
                      JsonABI.newParameter("evmVersion", "string"),
                      JsonABI.newParameter("endorsementType", "string"),
-                     JsonABI.newParameter("externalCallsEnabled", "boolean")
+                     JsonABI.newParameter("externalCallsEnabled", "bool")
              ));
 
              // We return the merged state schema and state, as well as the transaction with the inputs

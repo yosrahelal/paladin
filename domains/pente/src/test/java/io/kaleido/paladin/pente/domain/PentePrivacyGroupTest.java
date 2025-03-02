@@ -86,7 +86,7 @@ public class PentePrivacyGroupTest {
                            "components": [
                                {"name":"evmVersion", "type":"string"},
                                {"name":"endorsementType", "type":"string"},
-                               {"name":"externalCallsEnabled", "type":"boolean"}
+                               {"name":"externalCallsEnabled", "type":"bool"}
                            ]
                         },
                         { "name": "name", "type": "string", "indexed": true }
@@ -129,7 +129,7 @@ public class PentePrivacyGroupTest {
                         },
                         {"name":"evmVersion", "type":"string"},
                         {"name":"endorsementType", "type":"string"},
-                        {"name":"externalCallsEnabled", "type":"boolean"}
+                        {"name":"externalCallsEnabled", "type":"bool"}
                     ]
                 }
                 """, new TypeReference<>() {});
@@ -165,7 +165,7 @@ public class PentePrivacyGroupTest {
                            "components": [
                                {"name":"evmVersion", "type":"string"},
                                {"name":"endorsementType", "type":"string"},
-                               {"name":"externalCallsEnabled", "type":"boolean"}
+                               {"name":"externalCallsEnabled", "type":"bool"}
                            ]
                         },
                         { "name": "name", "type": "string", "indexed": true }
@@ -205,7 +205,7 @@ public class PentePrivacyGroupTest {
                            "components": [
                                {"name":"evmVersion", "type":"string"},
                                {"name":"endorsementType", "type":"string"},
-                               {"name":"externalCallsEnabled", "type":"boolean"}
+                               {"name":"externalCallsEnabled", "type":"bool"}
                            ]
                         },
                         { "name": "name", "type": "string", "indexed": true }
@@ -247,7 +247,7 @@ public class PentePrivacyGroupTest {
                         },
                         {"name":"evmVersion", "type":"string"},
                         {"name":"endorsementType", "type":"string"},
-                        {"name":"externalCallsEnabled", "type":"boolean"}
+                        {"name":"externalCallsEnabled", "type":"bool"}
                     ]
                 }
                 """, new TypeReference<>() {});
@@ -357,7 +357,7 @@ public class PentePrivacyGroupTest {
                         .setFrom("submitter.address")
                         .setTo("0x449984cefadce394740a410c7d832a5e2207c27a")
                         .setFunctionAbiJson("""
-                        {"type": "function", "name": "doAThing", "inputs": [ { "name": "thing", "type": "string" } ], "outputs":  [ { "name": "done", "type": "boolean" } ] }
+                        {"type": "function", "name": "doAThing", "inputs": [ { "name": "thing", "type": "string" } ], "outputs":  [ { "name": "done", "type": "bool" } ] }
                      """)
                         .setInputJson("""
                         {"thing":"one"}
@@ -412,7 +412,7 @@ public class PentePrivacyGroupTest {
                             ]
                        }
                     ],
-                    "outputs": [{ "name": "done", "type": "boolean" }]
+                    "outputs": [{ "name": "done", "type": "bool" }]
                 }
                 """, new TypeReference<Map<Object, Object>>() {});
         received = new ObjectMapper().readValue(resTx.getFunctionAbiJson(), new TypeReference<>() {});

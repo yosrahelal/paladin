@@ -35,11 +35,11 @@ import (
 const (
 	RMHMessageTypeAck                 = "ack"
 	RMHMessageTypeNack                = "nack"
-	RMHMessageTypeStateDistribution   = string(components.RMTState)
-	RMHMessageTypeReceipt             = string(components.RMTReceipt)
-	RMHMessageTypePreparedTransaction = string(components.RMTPreparedTransaction)
-	RMHMessageTypePrivacyGroup        = string(components.RMTPrivacyGroup)
-	RMHMessageTypePrivacyGroupMessage = string(components.RMTPrivacyGroupMessage)
+	RMHMessageTypeStateDistribution   = string(pldapi.RMTState)
+	RMHMessageTypeReceipt             = string(pldapi.RMTReceipt)
+	RMHMessageTypePreparedTransaction = string(pldapi.RMTPreparedTransaction)
+	RMHMessageTypePrivacyGroup        = string(pldapi.RMTPrivacyGroup)
+	RMHMessageTypePrivacyGroupMessage = string(pldapi.RMTPrivacyGroupMessage)
 )
 
 type reliableMsgOp struct {
@@ -66,7 +66,7 @@ type stateAndAck struct {
 
 func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX persistence.DBTX, values []*reliableMsgOp) ([]flushwriter.Result[*noResult], error) {
 
-	var acksToWrite []*components.ReliableMessageAck
+	var acksToWrite []*pldapi.ReliableMessageAck
 	var acksToSend []*ackInfo
 	statesToAdd := make(map[string][]*stateAndAck)
 	abisToAdd := make(map[string][]*abi.Parameter)
@@ -204,12 +204,12 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 		for i, a := range acksToWrite {
 			ackQuery[i] = a.MessageID
 		}
-		var matchedMsgs []*components.ReliableMessage
+		var matchedMsgs []*pldapi.ReliableMessage
 		err := dbTX.DB().WithContext(ctx).Select("id").Find(&matchedMsgs).Error
 		if err != nil {
 			return nil, err
 		}
-		validatedAcks := make([]*components.ReliableMessageAck, 0, len(acksToWrite))
+		validatedAcks := make([]*pldapi.ReliableMessageAck, 0, len(acksToWrite))
 		for _, a := range acksToWrite {
 			for _, mm := range matchedMsgs {
 				if mm.ID == a.MessageID {
@@ -284,7 +284,7 @@ func buildAck(msgID uuid.UUID, errString string) *prototk.PaladinMsg {
 	}
 }
 
-func (tm *transportManager) parseReceivedAckNack(ctx context.Context, msg *components.ReceivedMessage) *components.ReliableMessageAck {
+func (tm *transportManager) parseReceivedAckNack(ctx context.Context, msg *components.ReceivedMessage) *pldapi.ReliableMessageAck {
 	var info ackInfo
 	err := json.Unmarshal(msg.Payload, &info)
 	if msg.CorrelationID == nil {
@@ -294,7 +294,7 @@ func (tm *transportManager) parseReceivedAckNack(ctx context.Context, msg *compo
 		log.L(ctx).Errorf("Received invalid ack/nack: %s", msg.Payload)
 		return nil
 	}
-	ackNackToWrite := &components.ReliableMessageAck{
+	ackNackToWrite := &pldapi.ReliableMessageAck{
 		MessageID: *msg.CorrelationID,
 		Time:      tktypes.TimestampNow(),
 	}
@@ -307,7 +307,7 @@ func (tm *transportManager) parseReceivedAckNack(ctx context.Context, msg *compo
 	return ackNackToWrite
 }
 
-func (tm *transportManager) buildStateDistributionMsg(ctx context.Context, dbTX persistence.DBTX, rm *components.ReliableMessage) (*prototk.PaladinMsg, error, error) {
+func (tm *transportManager) buildStateDistributionMsg(ctx context.Context, dbTX persistence.DBTX, rm *pldapi.ReliableMessage) (*prototk.PaladinMsg, error, error) {
 
 	// Validate the message first (not retryable)
 	sd, parsed, parseErr := parseStateDistribution(ctx, rm.ID, rm.Metadata)
@@ -346,7 +346,7 @@ func parseStateDistribution(ctx context.Context, msgID uuid.UUID, data []byte) (
 	return
 }
 
-func (tm *transportManager) buildPrivacyGroupDistributionMsg(ctx context.Context, dbTX persistence.DBTX, rm *components.ReliableMessage) (*prototk.PaladinMsg, error, error) {
+func (tm *transportManager) buildPrivacyGroupDistributionMsg(ctx context.Context, dbTX persistence.DBTX, rm *pldapi.ReliableMessage) (*prototk.PaladinMsg, error, error) {
 
 	// Validate the message first (not retryable) - note the input is just a state distribution
 	sd, parsed, parseErr := parseStateDistribution(ctx, rm.ID, rm.Metadata)
@@ -409,7 +409,7 @@ func parsePrivacyGroupMessage(ctx context.Context, node string, msgID uuid.UUID,
 	return
 }
 
-func (tm *transportManager) buildPrivacyGroupMessageMsg(ctx context.Context, dbTX persistence.DBTX, rm *components.ReliableMessage) (*prototk.PaladinMsg, error, error) {
+func (tm *transportManager) buildPrivacyGroupMessageMsg(ctx context.Context, dbTX persistence.DBTX, rm *pldapi.ReliableMessage) (*prototk.PaladinMsg, error, error) {
 
 	// Validate the message first (not retryable)
 	pmd, parseErr := parsePrivacyGroupMessageDistribution(ctx, rm.ID, rm.Metadata)
