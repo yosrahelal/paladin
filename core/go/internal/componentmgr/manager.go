@@ -217,8 +217,8 @@ func (cm *componentManager) Init() (err error) {
 
 	if err == nil {
 		cm.groupManager = groupmgr.NewGroupManager(cm.bgCtx, &cm.conf.GroupManager)
-		cm.initResults["group_manager"], err = cm.txManager.PreInit(cm)
-		err = cm.wrapIfErr(err, msgs.MsgComponentTxManagerInitError)
+		cm.initResults["group_manager"], err = cm.groupManager.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentGroupManagerInitError)
 	}
 
 	if err == nil {
