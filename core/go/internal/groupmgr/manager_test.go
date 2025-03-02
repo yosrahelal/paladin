@@ -780,3 +780,127 @@ func TestSendTransactionSendPreparedTx(t *testing.T) {
 	require.Regexp(t, "pop", err)
 
 }
+
+func TestStoreReceivedGroupOk(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
+	defer done()
+
+	txID := uuid.New()
+	schema := &pldapi.Schema{
+		Signature: "signature1",
+		ID:        tktypes.RandBytes32(),
+	}
+	state := &pldapi.State{
+		StateBase: pldapi.StateBase{
+			ID:     tktypes.RandBytes(32),
+			Schema: schema.ID,
+		},
+	}
+
+	mc.db.Mock.ExpectBegin()
+	mc.domain.On("ValidatePrivacyGroup", mock.Anything, schema, state).Return([]string{"me@node1", "you@node2"}, nil)
+	mc.db.Mock.ExpectExec("INSERT.*privacy_groups").WillReturnResult(driver.ResultNoRows)
+	mc.db.Mock.ExpectExec("INSERT.*privacy_group_members").WillReturnResult(driver.ResultNoRows)
+	mc.db.Mock.ExpectCommit()
+
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		validationErr, err := gm.StoreReceivedGroup(ctx, dbTX, "domain1", txID, schema, state)
+		require.NoError(t, validationErr)
+		return err
+	})
+	require.NoError(t, err)
+
+}
+
+func TestStoreReceivedGroupFailInsert(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
+	defer done()
+
+	txID := uuid.New()
+	schema := &pldapi.Schema{
+		Signature: "signature1",
+		ID:        tktypes.RandBytes32(),
+	}
+	state := &pldapi.State{
+		StateBase: pldapi.StateBase{
+			ID:     tktypes.RandBytes(32),
+			Schema: schema.ID,
+		},
+	}
+
+	mc.db.Mock.ExpectBegin()
+	mc.domain.On("ValidatePrivacyGroup", mock.Anything, schema, state).Return([]string{"me@node1", "you@node2"}, nil)
+	mc.db.Mock.ExpectExec("INSERT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
+
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		validationErr, err := gm.StoreReceivedGroup(ctx, dbTX, "domain1", txID, schema, state)
+		require.NoError(t, validationErr)
+		return err
+	})
+	require.Regexp(t, "pop", err)
+
+}
+
+func TestStoreReceivedGroupFailUnknownDomain(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners,
+		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
+			mc.domainManager.On("GetDomainByName", mock.Anything, "domain2").Return(nil, fmt.Errorf("domain not found"))
+		})
+	defer done()
+
+	txID := uuid.New()
+	schema := &pldapi.Schema{
+		Signature: "signature1",
+		ID:        tktypes.RandBytes32(),
+	}
+	state := &pldapi.State{
+		StateBase: pldapi.StateBase{
+			ID:     tktypes.RandBytes(32),
+			Schema: schema.ID,
+		},
+	}
+
+	mc.db.Mock.ExpectBegin()
+	mc.db.Mock.ExpectCommit()
+
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		validationErr, err := gm.StoreReceivedGroup(ctx, dbTX, "domain2", txID, schema, state)
+		require.Regexp(t, "domain not found", validationErr)
+		return err
+	})
+	require.NoError(t, err)
+
+}
+
+func TestStoreReceivedGroupFailValidation(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
+	defer done()
+
+	txID := uuid.New()
+	schema := &pldapi.Schema{
+		Signature: "signature1",
+		ID:        tktypes.RandBytes32(),
+	}
+	state := &pldapi.State{
+		StateBase: pldapi.StateBase{
+			ID:     tktypes.RandBytes(32),
+			Schema: schema.ID,
+		},
+	}
+
+	mc.db.Mock.ExpectBegin()
+	mc.domain.On("ValidatePrivacyGroup", mock.Anything, schema, state).Return(nil, fmt.Errorf("wrong"))
+	mc.db.Mock.ExpectCommit()
+
+	err := gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		validationErr, err := gm.StoreReceivedGroup(ctx, dbTX, "domain1", txID, schema, state)
+		require.Regexp(t, "wrong", validationErr)
+		return err
+	})
+	require.NoError(t, err)
+
+}

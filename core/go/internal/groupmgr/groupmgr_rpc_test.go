@@ -118,12 +118,13 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 		})).Return(nil).Run(func(args mock.Arguments) {
 			msg := args[2].(*pldapi.ReliableMessage)
 			require.Equal(t, pldapi.RMTPrivacyGroup, msg.MessageType.V())
-			var sd *components.StateDistribution
-			err := json.Unmarshal(msg.Metadata, &sd)
+			var pgd *components.PrivacyGroupDistribution
+			err := json.Unmarshal(msg.Metadata, &pgd)
 			require.NoError(t, err)
-			require.Equal(t, "domain1", sd.Domain)
-			require.Empty(t, sd.ContractAddress)
-			require.Equal(t, "you@node2", sd.IdentityLocator)
+			require.Equal(t, "domain1", pgd.GenesisState.Domain)
+			require.Empty(t, pgd.GenesisState.ContractAddress)
+			require.Equal(t, "you@node2", pgd.GenesisState.IdentityLocator)
+			require.Equal(t, deployTXID, pgd.GenesisTransaction)
 		})
 
 		psc := componentmocks.NewDomainSmartContract(t)
