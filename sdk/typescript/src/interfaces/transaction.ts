@@ -1,3 +1,4 @@
+import { HexString } from "ethers/lib.commonjs/utils/data";
 import { NotoUnlockPublicParams } from "../domains/noto";
 import { IStateBase } from "./states";
 import { BigNumberish, ethers } from "ethers";
@@ -175,3 +176,4 @@ export interface IStoredABI {
   hash: string;
   abi: ethers.InterfaceAbi;
 }
+
