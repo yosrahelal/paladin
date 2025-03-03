@@ -983,9 +983,7 @@ func TestHandlePrivacyGroupMessageBad(t *testing.T) {
 
 	msg := testReceivedReliableMsg(
 		RMHMessageTypePrivacyGroupMessage,
-		&pldapi.PrivacyGroupMessage{
-			/* invalid */
-		})
+		"not an object")
 	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "PD012016")
 
 	p, err := tm.getPeer(ctx, "node2", false)

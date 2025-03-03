@@ -443,7 +443,7 @@ func (dbPG *persistedGroup) mapToAPI() *pldapi.PrivacyGroup {
 }
 
 func (gm *groupManager) GetGroupByID(ctx context.Context, dbTX persistence.DBTX, domainName string, groupID tktypes.HexBytes) (*pldapi.PrivacyGroupWithABI, error) {
-	groupIDStr := groupID.String()
+	groupIDStr := fmt.Sprintf("%s:%s", domainName, groupID.String())
 	pg, found := gm.deployedPGCache.Get(groupIDStr)
 	if found {
 		return pg, nil

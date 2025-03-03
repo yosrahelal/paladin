@@ -74,6 +74,12 @@ type receivedPrivacyGroup struct {
 	genesisState *components.StateUpsertOutsideContext
 }
 
+type receivedPrivacyGroupMessage struct {
+	rMsgID  uuid.UUID
+	node    string
+	message *pldapi.PrivacyGroupMessage
+}
+
 func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX persistence.DBTX, values []*reliableMsgOp) ([]flushwriter.Result[*noResult], error) {
 
 	var acksToWrite []*pldapi.ReliableMessageAck
@@ -83,12 +89,15 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 	nullifierUpserts := make(map[string][]*components.NullifierUpsert)
 	var preparedTxnToAdd []*components.PreparedTransactionWithRefs
 	var txReceiptsToFinalize []*components.ReceiptInput
-	var msgsToReceive []*pldapi.PrivacyGroupMessage
+	var msgsToReceive []*receivedPrivacyGroupMessage
 	var privacyGroupsToAdd []*receivedPrivacyGroup
 
 	dbTX.AddPostCommit(func(ctx context.Context) {
 		// We've committed the database work ok - send the acks/nacks to the other side
 		for _, a := range acksToSend {
+			if a.Error != "" {
+				log.L(ctx).Errorf("Sending nack to node '%s' for message %s: %s", a.node, a.id, a.Error)
+			}
 			_ = tm.queueFireAndForget(ctx, a.node, buildAck(a.id, a.Error))
 		}
 	})
@@ -137,7 +146,7 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 					&ackInfo{node: v.p.Name, id: v.msg.MessageID, Error: err.Error()}, // reject the message permanently
 				)
 			} else {
-				msgsToReceive = append(msgsToReceive, msg)
+				msgsToReceive = append(msgsToReceive, &receivedPrivacyGroupMessage{node: v.p.Name, rMsgID: v.msg.MessageID, message: msg})
 			}
 		case RMHMessageTypePreparedTransaction:
 			var pt components.PreparedTransactionWithRefs
@@ -307,17 +316,21 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 
 	// Write an received privacy group messages
 	if len(msgsToReceive) > 0 {
-		results, err := tm.groupManager.ReceiveMessages(ctx, dbTX, msgsToReceive)
+		msgs := make([]*pldapi.PrivacyGroupMessage, len(msgsToReceive))
+		for i, m := range msgsToReceive {
+			msgs[i] = m.message
+		}
+		results, err := tm.groupManager.ReceiveMessages(ctx, dbTX, msgs)
 		if err != nil {
 			return nil, err
 		}
 		for _, m := range msgsToReceive {
-			validateErr := results[m.ID]
+			validateErr := results[m.message.ID]
 			errStr := ""
 			if validateErr != nil {
 				errStr = validateErr.Error()
 			}
-			acksToSend = append(acksToSend, &ackInfo{node: m.Node, id: m.ID, Error: errStr})
+			acksToSend = append(acksToSend, &ackInfo{node: m.node, id: m.rMsgID, Error: errStr})
 		}
 	}
 
@@ -472,7 +485,7 @@ func parsePrivacyGroupMessageDistribution(ctx context.Context, msgID uuid.UUID, 
 
 func parsePrivacyGroupMessage(ctx context.Context, node string, msgID uuid.UUID, data []byte) (msg *pldapi.PrivacyGroupMessage, err error) {
 	err = json.Unmarshal(data, &msg)
-	if err != nil || msg.ID != msgID {
+	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTransportInvalidMessageData, msgID)
 	}
 	msg.Node = node
