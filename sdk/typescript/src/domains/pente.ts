@@ -6,6 +6,8 @@ import {
 } from "../interfaces";
 import { IPrivacyGroup, IPrivacyGroupEVMCall, IPrivacyGroupEVMTXInput, IPrivacyGroupInput } from "../interfaces/privacygroups";
 import PaladinClient from "../paladin";
+import { PaladinVerifier } from "../verifier";
+import * as penteJSON from "./abis/PentePrivacyGroup.json";
 
 const DEFAULT_POLL_TIMEOUT = 10000;
 
@@ -175,6 +177,8 @@ export class PenteFactory {
 export class PentePrivacyGroup {
   private options: Required<PenteOptions>;
   public readonly address: string;
+  public readonly salt: string;
+  public readonly members: string[];
 
   constructor(
     private paladin: PaladinClient,
@@ -185,6 +189,12 @@ export class PentePrivacyGroup {
       throw new Error(`Supplied group '${group.id}' is missing a contract address. Check transaction ${group.genesisTransaction}`);
     }
     this.address = group.contractAddress;
+    const salt = group.genesis?.salt;
+    if (salt == undefined) {
+      throw new Error(`Supplied group '${group.id}' is missing a "salt" property expected for Pente privacy group genesis config: ${JSON.stringify(group.genesis)}`);      
+    }
+    this.salt = salt;
+    this.members = group.members;
     this.options = {
       pollTimeout: DEFAULT_POLL_TIMEOUT,
       ...options,
@@ -210,6 +220,7 @@ export class PentePrivacyGroup {
       domain: this.group.domain,
       group: this.group.id,
       from: params.from,
+      input: params.inputs,
       bytecode: params.bytecode,
       function: constructor,      
     }
@@ -246,10 +257,26 @@ export class PentePrivacyGroup {
       ...txOptions,
       domain: this.group.domain,
       group: this.group.id,
-      from: transaction.from,
+      from: transaction.from || "sdk.default",
       to: transaction.to,
       input: transaction.data,
       function: transaction.methodAbi,
+    });
+  }
+
+  async approveTransition(
+    from: PaladinVerifier,
+    data: PenteApproveTransitionParams
+  ) {
+    const method = penteJSON.abi.find((entry) => entry.name === "approveTransition");
+    if (method === undefined) {
+      throw new Error(`Method 'approveTransition' not found`);
+    }
+    return this.sendTransaction({
+      methodAbi: method,
+      to: this.address,
+      from: from.lookup,
+      data,
     });
   }
 
@@ -260,7 +287,8 @@ export abstract class PentePrivateContract<ConstructorParams> {
     protected evm: PentePrivacyGroup,
     protected abi: ReadonlyArray<ethers.JsonFragment>,
     public readonly address: string
-  ) {}
+  ) {
+  }
 
   abstract using(
     paladin: PaladinClient

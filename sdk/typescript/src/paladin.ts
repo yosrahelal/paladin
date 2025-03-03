@@ -306,7 +306,7 @@ export default class PaladinClient {
     txi: IPrivacyGroupEVMCall,
   ) {
     const res = await this.post<JsonRpcResult<any>>(
-      "pgroup_sendTransaction",
+      "pgroup_call",
       [txi]
     );
     return res.data.result;

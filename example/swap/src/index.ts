@@ -63,14 +63,16 @@ async function main(): Promise<boolean> {
   // Create a Pente privacy group for the asset issuer only
   logger.log("Creating asset issuer privacy group...");
   const penteFactory = new PenteFactory(paladin1, "pente");
-  const issuerGroup = await penteFactory.newPrivacyGroup(assetIssuer, {
-    group: {
-      salt: newGroupSalt(),
-      members: [assetIssuer],
-    },
-    evmVersion: "shanghai",
-    endorsementType: "group_scoped_identities",
-    externalCallsEnabled: true,
+  const issuerGroup = await penteFactory.newPrivacyGroup({
+    domain: 'pente',
+    members: [assetIssuer.toString()],
+    properties: {
+      pente: {
+        evmVersion: "shanghai",
+        endorsementType: "group_scoped_identities",
+        externalCallsEnabled: true,    
+      }
+    }
   });
   if (!checkDeploy(issuerGroup)) return false;
 
@@ -90,7 +92,7 @@ async function main(): Promise<boolean> {
     notaryMode: "hooks",
     options: {
       hooks: {
-        privateGroup: issuerGroup.group,
+        privateGroup: issuerGroup,
         publicAddress: issuerGroup.address,
         privateAddress: tracker.address,
       },

@@ -635,6 +635,7 @@ func (gm *groupManager) Call(ctx context.Context, dbTX persistence.DBTX, result 
 	if err != nil {
 		return err
 	}
+	tx.From = call.From
 
 	return gm.txManager.CallTransaction(ctx, dbTX, result, &pldapi.TransactionCall{
 		TransactionInput:  *tx,
