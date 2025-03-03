@@ -22,15 +22,10 @@ async function main(): Promise<boolean> {
   logger.log("Creating a privacy group for Node1 and Node2...");
   const penteFactory = new PenteFactory(paladinNode1, "pente");
   const memberPrivacyGroup = await penteFactory.newPrivacyGroup({
-    domain: 'pente',
-    members: [verifierNode1.toString(), verifierNode2.toString()],
-    properties: {
-      pente: {
-        evmVersion: "shanghai",
-        endorsementType: "group_scoped_identities",
-        externalCallsEnabled: true,
-      }
-    }
+    members: [verifierNode1, verifierNode2],
+    evmVersion: "shanghai",
+    endorsementType: "group_scoped_identities",
+    externalCallsEnabled: true,
   });
 
   if (!checkDeploy(memberPrivacyGroup)) return false;

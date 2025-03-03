@@ -99,14 +99,13 @@ export const privateCallABI = (
   outputs: outputComponents,
 });
 
-export interface PentePrivacyGroupParams extends IPrivacyGroupInput {
-  properties: {
-    salt?: string;
-    pente?: {
-      evmVersion?: string;
-      endorsementType?: string;
-      externalCallsEnabled?: boolean;          
-    }
+export interface PentePrivacyGroupParams {
+  members: (string | PaladinVerifier)[]
+  salt?: string;
+  evmVersion?: string;
+  endorsementType?: string;
+  externalCallsEnabled?: boolean;          
+  additionalProperties: {
     [x: string]: unknown;
   }
 }
@@ -157,7 +156,16 @@ export class PenteFactory {
     
     const group = await this.paladin.createPrivacyGroup({
       domain: this.domain,
-      members: input.members,
+      members: input.members.map(m => m.toString()),
+      properties: {
+        pente: {
+          salt: input.salt,
+          evmVersion: input.evmVersion,
+          endorsementType: input.endorsementType,
+          externalCallsEnabled: input.externalCallsEnabled,    
+          ...input.additionalProperties,
+        }
+      }
     });
     const receipt = group.genesisTransaction ? await this.paladin.pollForReceipt(
       group.genesisTransaction,

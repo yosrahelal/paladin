@@ -57,14 +57,11 @@ allowed to do this.
 
 ```typescript
 const penteFactory = new PenteFactory(paladin1, "pente");
-const issuerCustodianGroup = await penteFactory.newPrivacyGroup(bondIssuer, {
-  group: {
-    salt: newGroupSalt(),
-    members: [bondIssuer, bondCustodian],
-  },
+const issuerCustodianGroup = await penteFactory.newPrivacyGroup({
+  members: [bondIssuer, bondCustodian],
   evmVersion: "shanghai",
   endorsementType: "group_scoped_identities",
-  externalCallsEnabled: true,
+  externalCallsEnabled: true,    
 });
 ```
 
@@ -207,14 +204,11 @@ between the issuer and custodian.
 ```typescript
 const investorCustodianGroup = await penteFactory
   .using(paladin3)
-  .newPrivacyGroup(investor, {
-    group: {
-      salt: newGroupSalt(),
-      members: [investor, bondCustodian],
-    },
+  .newPrivacyGroup({
+    members: [investor, bondCustodian],
     evmVersion: "shanghai",
     endorsementType: "group_scoped_identities",
-    externalCallsEnabled: true,
+    externalCallsEnabled: true,    
   });
 ```
 

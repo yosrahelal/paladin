@@ -64,15 +64,10 @@ async function main(): Promise<boolean> {
   logger.log("Creating asset issuer privacy group...");
   const penteFactory = new PenteFactory(paladin1, "pente");
   const issuerGroup = await penteFactory.newPrivacyGroup({
-    domain: 'pente',
-    members: [assetIssuer.toString()],
-    properties: {
-      pente: {
-        evmVersion: "shanghai",
-        endorsementType: "group_scoped_identities",
-        externalCallsEnabled: true,    
-      }
-    }
+    members: [assetIssuer],
+    evmVersion: "shanghai",
+    endorsementType: "group_scoped_identities",
+    externalCallsEnabled: true,
   });
   if (!checkDeploy(issuerGroup)) return false;
 

@@ -55,15 +55,10 @@ async function main(): Promise<boolean> {
   logger.log("Creating issuer+custodian privacy group...");
   const penteFactory = new PenteFactory(paladin1, "pente");
   const issuerCustodianGroup = await penteFactory.newPrivacyGroup({
-    domain: 'pente',
-    members: [bondIssuer.toString(), bondCustodian.toString()],
-    properties: {
-      pente: {
-        evmVersion: "shanghai",
-        endorsementType: "group_scoped_identities",
-        externalCallsEnabled: true,    
-      }      
-    }
+    members: [bondIssuer, bondCustodian],
+    evmVersion: "shanghai",
+    endorsementType: "group_scoped_identities",
+    externalCallsEnabled: true,    
   });
   if (!checkDeploy(issuerCustodianGroup)) return false;
 
@@ -164,15 +159,10 @@ async function main(): Promise<boolean> {
   const investorCustodianGroup = await penteFactory
     .using(paladin3)
     .newPrivacyGroup({
-      domain: 'pente',
-      members: [investor.toString(), bondCustodian.toString()],
-      properties: {
-        pente: {
-          evmVersion: "shanghai",
-          endorsementType: "group_scoped_identities",
-          externalCallsEnabled: true,    
-        }
-      }
+      members: [investor, bondCustodian],
+      evmVersion: "shanghai",
+      endorsementType: "group_scoped_identities",
+      externalCallsEnabled: true,    
     });
   if (investorCustodianGroup === undefined) {
     logger.error("Failed!");

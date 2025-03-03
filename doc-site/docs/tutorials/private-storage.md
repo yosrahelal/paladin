@@ -37,11 +37,8 @@ To **restrict contract access** to specific members, you first need to create a 
 ```typescript
 logger.log("Creating a privacy group for Node1 and Node2...");
 const penteFactory = new PenteFactory(paladinNode1, "pente");
-const memberPrivacyGroup = await penteFactory.newPrivacyGroup(verifierNode1, {
-  group: {
-    salt: newGroupSalt(), // Generate a unique salt for the group
-    members: [verifierNode1, verifierNode2], // Only Node1 & Node2 are members
-  },
+const memberPrivacyGroup = await penteFactory.newPrivacyGroup({
+  members: [verifierNode1, verifierNode2],
   evmVersion: "shanghai",
   endorsementType: "group_scoped_identities",
   externalCallsEnabled: true,
