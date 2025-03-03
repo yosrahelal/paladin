@@ -815,19 +815,20 @@
              }
 
              // Add the input data - setting appropriate ABI information
-             data.set("data", jsonValue);
              if (funcDef != null) {
                  // Add the inputs to the ABI
                  ptxInputsABI.add(JsonABI.newTuple("inputs", "Inputs", funcDef.inputs()));
                  if (funcDef.outputs() != null) {
                      privateABI.outputs().addAll(funcDef.outputs());
                  }
+                 data.set("inputs", jsonValue);
              } else if (jsonValue != null) {
                  // Any inputs (if this isn't just a simple base eth value transfer) must be hex string here
                  if (!jsonValue.isTextual()) {
                      throw new IllegalArgumentException("if a function ABI is not supplied, then the input must be a pre-encoded hex string");
                  }
                  ptxInputsABI.add(JsonABI.newParameter("data", "bytes"));
+                 data.set("data", jsonValue);
              }
 
              // Add the ethereum gas/value

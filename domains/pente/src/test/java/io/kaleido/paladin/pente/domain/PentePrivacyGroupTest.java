@@ -305,7 +305,7 @@ public class PentePrivacyGroupTest {
                         "members": [ "me@node1", "you@node2" ]
                     },
                     "from": "submitter.address",
-                    "data": { "input1": "value1" },
+                    "inputs": { "input1": "value1" },
                     "bytecode": "0xfeedbeef"
                  }
                 """, new TypeReference<Map<Object, Object>>() {});
@@ -389,7 +389,7 @@ public class PentePrivacyGroupTest {
                     },
                     "from": "submitter.address",
                     "to": "0x449984cefadce394740a410c7d832a5e2207c27a",
-                    "data": { "thing": "one" }
+                    "inputs": { "thing": "one" }
                  }
                 """, new TypeReference<Map<Object, Object>>() {});
         var received = new ObjectMapper().readValue(resTx.getParamsJson(), new TypeReference<Map<Object, Object>>() {});
@@ -468,7 +468,6 @@ public class PentePrivacyGroupTest {
                     },
                     "from": "submitter.address",
                     "to": "0x449984cefadce394740a410c7d832a5e2207c27a",
-                    "data": null,
                     "gas": "0x112233",
                     "value": "0x99999999999999999999"
                  }
