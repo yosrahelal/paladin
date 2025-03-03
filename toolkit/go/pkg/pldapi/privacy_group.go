@@ -45,16 +45,16 @@ type PrivacyGroupTXOptions struct {
 }
 
 type PrivacyGroupMessage struct {
+	ID            uuid.UUID         `docstruct:"PrivacyGroupMessage" json:"id"`
 	LocalSequence uint64            `docstruct:"PrivacyGroupMessage" json:"localSequence"`
 	Sent          tktypes.Timestamp `docstruct:"PrivacyGroupMessage" json:"sent"`
 	Received      tktypes.Timestamp `docstruct:"PrivacyGroupMessage" json:"received"`
 	Node          string            `docstruct:"PrivacyGroupMessage" json:"node"`
-	ID            uuid.UUID         `docstruct:"PrivacyGroupMessage" json:"id"`
 	PrivacyGroupMessageInput
 }
 
 type PrivacyGroupMessageInput struct {
-	CorrelationID *uuid.UUID       `docstruct:"PrivacyGroupMessage" json:"id,omitempty"`
+	CorrelationID *uuid.UUID       `docstruct:"PrivacyGroupMessage" json:"correlationId,omitempty"`
 	Domain        string           `docstruct:"PrivacyGroupMessage" json:"domain"`
 	Group         tktypes.HexBytes `docstruct:"PrivacyGroupMessage" json:"group"`
 	Topic         string           `docstruct:"PrivacyGroupMessage" json:"topic,omitempty"`
