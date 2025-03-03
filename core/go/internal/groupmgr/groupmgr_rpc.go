@@ -37,6 +37,7 @@ func (gm *groupManager) initRPC() {
 		Add("pgroup_getGroupById", gm.rpcGetGroupByID()).
 		Add("pgroup_getGroupByAddress", gm.rpcGetGroupByAddress()).
 		Add("pgroup_queryGroups", gm.rpcQueryGroups()).
+		Add("pgroup_queryGroupsWithMember", gm.rpcQueryGroupsWithMember()).
 		Add("pgroup_queryGroupsByProperties", gm.rpcQueryGroupsByProperties()).
 		Add("pgroup_sendTransaction", gm.rpcSendTransaction()).
 		Add("pgroup_call", gm.rpcCall()).
@@ -71,6 +72,12 @@ func (gm *groupManager) rpcGetGroupByAddress() rpcserver.RPCHandler {
 func (gm *groupManager) rpcQueryGroups() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
 		return gm.QueryGroups(ctx, gm.p.NOTX(), &jq)
+	})
+}
+
+func (gm *groupManager) rpcQueryGroupsWithMember() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context, member string, jq query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
+		return gm.QueryGroupsWithMember(ctx, gm.p.NOTX(), member, &jq)
 	})
 }
 

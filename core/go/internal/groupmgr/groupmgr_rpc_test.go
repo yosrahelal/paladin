@@ -239,6 +239,11 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, group)
 
+	// Get it by checking member
+	groupsWithMember, err := pgroupRPC.QueryGroupsWithMember(ctx, "you@node2", query.NewQueryBuilder().Limit(100).Query())
+	require.NoError(t, err)
+	require.Len(t, groupsWithMember, 1)
+
 	// Search for it by name
 	groups, err = pgroupRPC.QueryGroupsByProperties(ctx, "domain1", group.GenesisSchema,
 		query.NewQueryBuilder().Equal("name", "secret things").Equal("version", 200).Limit(1).Query())

@@ -480,7 +480,7 @@ func (gm *groupManager) GetGroupByAddress(ctx context.Context, dbTX persistence.
 }
 
 // This function queries the groups only using what's in the DB, without allowing properties of the group to be used to do the query
-func (gm *groupManager) QueryGroups(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
+func (gm *groupManager) queryGroupsCommon(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON, finalizers ...func(db *gorm.DB) *gorm.DB) ([]*pldapi.PrivacyGroup, error) {
 	qw := &filters.QueryWrapper[persistedGroup, pldapi.PrivacyGroup]{
 		P:           gm.p,
 		DefaultSort: "-created",
@@ -490,6 +490,9 @@ func (gm *groupManager) QueryGroups(ctx context.Context, dbTX persistence.DBTX, 
 			return dbPG.mapToAPI(), nil
 		},
 		Finalize: func(db *gorm.DB) *gorm.DB {
+			for _, fn := range finalizers {
+				db = fn(db)
+			}
 			return db.Joins("Receipt")
 		},
 	}
@@ -504,6 +507,16 @@ func (gm *groupManager) QueryGroups(ctx context.Context, dbTX persistence.DBTX, 
 		return nil, err
 	}
 	return pgs, nil
+}
+
+func (gm *groupManager) QueryGroups(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
+	return gm.queryGroupsCommon(ctx, dbTX, jq)
+}
+
+func (gm *groupManager) QueryGroupsWithMember(ctx context.Context, dbTX persistence.DBTX, member string, jq *query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
+	return gm.queryGroupsCommon(ctx, dbTX, jq, func(db *gorm.DB) *gorm.DB {
+		return db.Joins(`LEFT JOIN "privacy_group_members" AS "pgm" ON "pgm"."group" = "privacy_groups"."id"`).Where(`"pgm".identity = ?`, member)
+	})
 }
 
 // This function queries groups using their properties. Because that requires a schema to know the valid properties that can be queried
