@@ -11,6 +11,29 @@ import { PaladinVerifier } from "../verifier";
 
 const DEFAULT_POLL_TIMEOUT = 10000;
 
+export interface PenteGroupTransactionInput {
+  from: string;
+  methodAbi: ethers.JsonFragment;
+  to: string;
+  data: {
+    [key: string]: any;
+  };
+}
+
+export interface PenteContractTransactionInput {
+  from: string;
+  function: string;
+  data?: {
+    [key: string]: any;
+  };
+}
+
+export interface PenteDeploy {
+  abi: ReadonlyArray<ethers.JsonFragment>;
+  bytecode: string,
+  from: string;
+  inputs?: any;
+} 
 export interface PenteOptions {
   pollTimeout?: number;
 }
@@ -173,24 +196,30 @@ export class PentePrivacyGroup {
       this.options
     );
   }
+  
+  async deploy(params: PenteDeploy) {
 
-  async deploy<ConstructorParams>(
-    abi: ReadonlyArray<ethers.JsonFragment>,
-    bytecode: string,
-    from: PaladinVerifier,
-    inputs: ConstructorParams
-  ) {
-    const constructor = abi.find((entry) => entry.type === "constructor");
-    if (constructor === undefined) {
-      throw new Error("Constructor not found");
-    }
+      // Find the constructor in the ABI
+    const constructor = params.abi.find((entry) => entry.type === "constructor");
+
+    // Handle the absence of a constructor
+    const constructorInputs = constructor?.inputs ?? [];
+    const bytecode = params.bytecode;
+
+    // Prepare the data object
+    const data: Record<string, any> = {
+      group: this.group,
+      bytecode,
+      inputs: params.inputs ?? [], // Ensure `inputs` is always included, defaulting to an empty array
+    };
+
     const txID = await this.paladin.sendTransaction({
       type: TransactionType.PRIVATE,
-      abi: [privateDeployABI(constructor.inputs ?? [])],
+      abi: [privateDeployABI(constructorInputs ?? [])],
       function: "deploy",
       to: this.address,
-      from: from.lookup,
-      data: { group: this.group, bytecode, inputs },
+      from: params.from,
+      data: data
     });
     const receipt = await this.paladin.pollForReceipt(
       txID,
@@ -203,42 +232,38 @@ export class PentePrivacyGroup {
       : undefined;
   }
 
-  async invoke<Params>(
-    from: PaladinVerifier,
-    to: string,
-    methodAbi: ethers.JsonFragment,
-    inputs: Params
-  ) {
-    const txID = await this.paladin.sendTransaction({
-      type: TransactionType.PRIVATE,
-      abi: [privateInvokeABI(methodAbi.name ?? "", methodAbi.inputs ?? [])],
-      function: "",
-      to: this.address,
-      from: from.lookup,
-      data: { group: this.group, to, inputs },
-    });
-    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
+  // sendTransaction functions in the contract (write)
+  async sendTransaction(transaction: PenteGroupTransactionInput){ 
+    const inputs = transaction.data;  
+    const to = transaction.to;  
+      const txID = await this.paladin.sendTransaction({
+        type: TransactionType.PRIVATE,
+        abi: [privateInvokeABI(transaction.methodAbi.name ?? "", transaction.methodAbi.inputs ?? [])],
+        function: "",
+        to: this.address,
+        from: transaction.from,
+        data: { group: this.group, to, inputs },
+      });
+      return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 
-  async call<Params>(
-    from: PaladinVerifier,
-    to: string,
-    methodAbi: ethers.JsonFragment,
-    inputs: Params
-  ) {
+  // call functions in the contract (read-only)
+  async call(transaction: PenteGroupTransactionInput){ 
+    const to = transaction.to;
+    const inputs = transaction.data;
     return this.paladin.call({
       type: TransactionType.PRIVATE,
       abi: [
         privateCallABI(
-          methodAbi.name ?? "",
-          methodAbi.inputs ?? [],
-          methodAbi.outputs ?? []
+          transaction.methodAbi.name ?? "",
+          transaction.methodAbi.inputs ?? [],
+          transaction.methodAbi.outputs ?? []
         ),
       ],
       function: "",
       to: this.address,
-      from: from.lookup,
-      data: { group: this.group, to, inputs },
+      from: transaction.from,
+      data: { group: this.group, to, inputs }
     });
   }
 
@@ -269,27 +294,29 @@ export abstract class PentePrivateContract<ConstructorParams> {
     paladin: PaladinClient
   ): PentePrivateContract<ConstructorParams>;
 
-  async invoke<Params>(
-    from: PaladinVerifier,
-    methodName: string,
-    params: Params
-  ) {
-    const method = this.abi.find((entry) => entry.name === methodName);
+  async sendTransaction(transaction: PenteContractTransactionInput){ 
+    const method = this.abi.find((entry) => entry.name === transaction.function);
     if (method === undefined) {
-      throw new Error(`Method '${methodName}' not found`);
+      throw new Error(`Method '${transaction.function}' not found`);
     }
-    return this.evm.invoke(from, this.address, method, params);
+    return this.evm.sendTransaction({
+      from: transaction.from,
+      to: this.address,
+      methodAbi: method,
+      data: transaction.data ?? []
+    });
   }
 
-  async call<Params>(
-    from: PaladinVerifier,
-    methodName: string,
-    params: Params
-  ) {
-    const method = this.abi.find((entry) => entry.name === methodName);
+  async call(transaction: PenteContractTransactionInput){ 
+    const method = this.abi.find((entry) => entry.name === transaction.function);
     if (method === undefined) {
-      throw new Error(`Method '${methodName}' not found`);
+      throw new Error(`Method '${transaction.function}' not found`);
     }
-    return this.evm.call(from, this.address, method, params);
+    return this.evm.call({
+      from: transaction.from,
+      to: this.address,
+      methodAbi: method,
+      data: transaction.data ?? []
+    });
   }
 }

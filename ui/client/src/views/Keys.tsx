@@ -268,7 +268,7 @@ export const Keys: React.FC = () => {
       <Fade timeout={300} in={true}>
         <Box
           sx={{
-            padding: "30px",
+            padding: "20px",
             maxWidth: "1300px",
             marginLeft: "auto",
             marginRight: "auto",
