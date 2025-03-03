@@ -41,6 +41,13 @@ type PrivacyGroups interface {
 	GetMessageById(ctx context.Context, id uuid.UUID) (msg *pldapi.PrivacyGroupMessage, err error)
 	QueryMessages(ctx context.Context, q *query.QueryJSON) (msgs []*pldapi.PrivacyGroupMessage, err error)
 
+	CreateMessageListener(ctx context.Context, listener *pldapi.PrivacyGroupMessageListener) (success bool, err error)
+	QueryMessageListeners(ctx context.Context, jq *query.QueryJSON) (listeners []*pldapi.PrivacyGroupMessageListener, err error)
+	GetMessageListener(ctx context.Context, listenerName string) (listener *pldapi.PrivacyGroupMessageListener, err error)
+	StartMessageListener(ctx context.Context, listenerName string) (success bool, err error)
+	StopMessageListener(ctx context.Context, listenerName string) (success bool, err error)
+	DeleteMessageListener(ctx context.Context, listenerName string) (success bool, err error)
+
 	SubscribeMessages(ctx context.Context, listenerName string) (sub rpcclient.Subscription, err error)
 }
 
@@ -99,6 +106,30 @@ var privacyGroupsInfo = &rpcModuleInfo{
 		"pgroup_queryMessages": {
 			Inputs: []string{"query"},
 			Output: "msgs",
+		},
+		"pgroup_createMessageListener": {
+			Inputs: []string{"listener"},
+			Output: "success",
+		},
+		"pgroup_queryMessageListeners": {
+			Inputs: []string{"query"},
+			Output: "listeners",
+		},
+		"pgroup_getMessageListener": {
+			Inputs: []string{"listenerName"},
+			Output: "listener",
+		},
+		"pgroup_startMessageListener": {
+			Inputs: []string{"listenerName"},
+			Output: "success",
+		},
+		"pgroup_stopMessageListener": {
+			Inputs: []string{"listenerName"},
+			Output: "success",
+		},
+		"pgroup_deleteMessageListener": {
+			Inputs: []string{"listenerName"},
+			Output: "success",
 		},
 	},
 	subscriptions: []RPCSubscriptionInfo{
@@ -171,6 +202,36 @@ func (r *pgroup) GetMessageById(ctx context.Context, id uuid.UUID) (msg *pldapi.
 
 func (r *pgroup) QueryMessages(ctx context.Context, jq *query.QueryJSON) (msgs []*pldapi.PrivacyGroupMessage, err error) {
 	err = r.c.CallRPC(ctx, &msgs, "pgroup_queryMessages", jq)
+	return
+}
+
+func (r *pgroup) CreateMessageListener(ctx context.Context, listener *pldapi.PrivacyGroupMessageListener) (success bool, err error) {
+	err = r.c.CallRPC(ctx, &success, "pgroup_createMessageListener", listener)
+	return
+}
+
+func (r *pgroup) QueryMessageListeners(ctx context.Context, jq *query.QueryJSON) (listeners []*pldapi.PrivacyGroupMessageListener, err error) {
+	err = r.c.CallRPC(ctx, &listeners, "pgroup_queryMessageListeners", jq)
+	return
+}
+
+func (r *pgroup) GetMessageListener(ctx context.Context, listenerName string) (listener *pldapi.PrivacyGroupMessageListener, err error) {
+	err = r.c.CallRPC(ctx, &listener, "pgroup_getMessageListener", listenerName)
+	return
+}
+
+func (r *pgroup) StartMessageListener(ctx context.Context, listenerName string) (success bool, err error) {
+	err = r.c.CallRPC(ctx, &success, "pgroup_startMessageListener", listenerName)
+	return
+}
+
+func (r *pgroup) StopMessageListener(ctx context.Context, listenerName string) (success bool, err error) {
+	err = r.c.CallRPC(ctx, &success, "pgroup_stopMessageListener", listenerName)
+	return
+}
+
+func (r *pgroup) DeleteMessageListener(ctx context.Context, listenerName string) (success bool, err error) {
+	err = r.c.CallRPC(ctx, &success, "pgroup_deleteMessageListener", listenerName)
 	return
 }
 

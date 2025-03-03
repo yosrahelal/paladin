@@ -41,6 +41,12 @@ func (gm *groupManager) initRPC() {
 		Add("pgroup_queryGroupsByProperties", gm.rpcQueryGroupsByProperties()).
 		Add("pgroup_sendTransaction", gm.rpcSendTransaction()).
 		Add("pgroup_call", gm.rpcCall()).
+		Add("pgroup_createMessageListener", gm.rpcCreateMessageListener()).
+		Add("pgroup_queryMessageListeners", gm.rpcQueryMessageListeners()).
+		Add("pgroup_getMessageListener", gm.rpcGetMessageListener()).
+		Add("pgroup_startMessageListener", gm.rpcStartMessageListener()).
+		Add("pgroup_stopMessageListener", gm.rpcStopMessageListener()).
+		Add("pgroup_deleteMessageListener", gm.rpcDeleteMessageListener()).
 		Add("pgroup_sendMessage", gm.rpcSendMessage()).
 		Add("pgroup_getMessageById", gm.rpcGetMessageByID()).
 		Add("pgroup_queryMessages", gm.rpcQueryMessages()).
@@ -123,5 +129,54 @@ func (gm *groupManager) rpcGetMessageByID() rpcserver.RPCHandler {
 func (gm *groupManager) rpcQueryMessages() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) (msgs []*pldapi.PrivacyGroupMessage, err error) {
 		return gm.QueryMessages(ctx, gm.p.NOTX(), &jq)
+	})
+}
+
+func (gm *groupManager) rpcCreateMessageListener() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		listener *pldapi.PrivacyGroupMessageListener,
+	) (bool, error) {
+		err := gm.CreateMessageListener(ctx, listener)
+		return err == nil, err
+	})
+}
+
+func (gm *groupManager) rpcQueryMessageListeners() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		query query.QueryJSON,
+	) ([]*pldapi.PrivacyGroupMessageListener, error) {
+		return gm.QueryMessageListeners(ctx, gm.p.NOTX(), &query)
+	})
+}
+
+func (gm *groupManager) rpcGetMessageListener() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		name string,
+	) (*pldapi.PrivacyGroupMessageListener, error) {
+		return gm.GetMessageListener(ctx, name), nil
+	})
+}
+
+func (gm *groupManager) rpcStartMessageListener() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		name string,
+	) (bool, error) {
+		return true, gm.StartMessageListener(ctx, name)
+	})
+}
+
+func (gm *groupManager) rpcStopMessageListener() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		name string,
+	) (bool, error) {
+		return true, gm.StopMessageListener(ctx, name)
+	})
+}
+
+func (gm *groupManager) rpcDeleteMessageListener() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		name string,
+	) (bool, error) {
+		return true, gm.DeleteMessageListener(ctx, name)
 	})
 }

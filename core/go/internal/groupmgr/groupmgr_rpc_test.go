@@ -310,3 +310,103 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	require.Equal(t, msgID, msgByCID[0].ID)
 
 }
+
+func TestRCPMessageListenersCRUDRealDB(t *testing.T) {
+	ctx, gm, _, done := newTestGroupManager(t, true, &pldconf.GroupManagerConfig{})
+	defer done()
+
+	client := newTestRPCServer(t, ctx, gm)
+	pgroupRPC := pldclient.Wrap(client).PrivacyGroups()
+
+	// Create listener in default (started)
+	boolRes, err := pgroupRPC.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
+		Name: "listener1",
+	})
+	require.NoError(t, err)
+	require.True(t, boolRes)
+
+	// Duplpicate
+	_, err = pgroupRPC.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
+		Name: "listener1",
+	})
+	require.Regexp(t, "PD012507.*listener1", err)
+
+	// should be queryable
+	listeners, err := pgroupRPC.QueryMessageListeners(ctx, query.NewQueryBuilder().Limit(1).Query())
+	require.NoError(t, err)
+	require.Len(t, listeners, 1)
+	assert.Equal(t, listeners[0].Name, "listener1")
+
+	// should be started
+	l, err := pgroupRPC.GetMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+	require.NotNil(t, l)
+	assert.True(t, *l.Started)
+
+	// delete listener
+	_, err = pgroupRPC.DeleteMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+	l, err = pgroupRPC.GetMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+	require.Nil(t, l)
+
+	// Create listener stopped
+	boolRes, err = pgroupRPC.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
+		Name:    "listener1",
+		Started: confutil.P(false),
+	})
+	require.NoError(t, err)
+	require.True(t, boolRes)
+
+	// should be stopped
+	l, err = pgroupRPC.GetMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+	assert.False(t, *l.Started)
+
+	// start it
+	boolRes, err = pgroupRPC.StartMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+	require.True(t, boolRes)
+
+	// should be started
+	l, err = pgroupRPC.GetMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+	assert.True(t, *l.Started)
+
+	// stop it
+	boolRes, err = pgroupRPC.StopMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+	require.True(t, boolRes)
+
+	// should be stopped
+	l, err = pgroupRPC.GetMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+	assert.False(t, *l.Started)
+
+	// Simulate restart so we can do startup processing
+	gm.messagesInit()
+
+	// Force persistent state to be started
+	err = gm.p.DB().Model(&persistedMessageListener{}).
+		Where("name = ?", "listener1").Update("started", true).Error
+	require.NoError(t, err)
+
+	// Load the listeners
+	err = gm.loadMessageListeners()
+	require.NoError(t, err)
+
+	// Check it's not actually started (yet)
+	require.Nil(t, gm.messageListeners["listener1"].done)
+
+	// Do the startup
+	gm.startMessageListeners()
+
+	// Check it's started now
+	l, err = pgroupRPC.GetMessageListener(ctx, "listener1")
+	require.NoError(t, err)
+	assert.True(t, *l.Started)
+
+	// Check it's now actually started
+	require.NotNil(t, gm.messageListeners["listener1"].done)
+
+}

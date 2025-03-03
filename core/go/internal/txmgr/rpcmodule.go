@@ -338,7 +338,7 @@ func (tm *txManager) rpcCreateReceiptListener() rpcserver.RPCHandler {
 		listener *pldapi.TransactionReceiptListener,
 	) (bool, error) {
 		err := tm.CreateReceiptListener(ctx, listener)
-		return true, err
+		return err == nil, err
 	})
 }
 
