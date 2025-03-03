@@ -118,7 +118,7 @@ type PrivacyGroupMessageListenerFilters struct {
 }
 
 type PrivacyGroupMessageListenerOptions struct {
-	IncludeLocal bool `docstruct:"MessageListenerOptions" json:"includeLocal,omitempty"`
+	ExcludeLocal bool `docstruct:"MessageListenerOptions" json:"excludeLocal,omitempty"`
 }
 
 type PGroupEventType string

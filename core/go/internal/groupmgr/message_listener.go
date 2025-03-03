@@ -375,7 +375,7 @@ func (gm *groupManager) buildListenerDBQuery(spec *pldapi.PrivacyGroupMessageLis
 		q = q.Where(`"group" = ?`, spec.Filters.Group)
 	}
 
-	if !spec.Options.IncludeLocal {
+	if spec.Options.ExcludeLocal {
 		q = q.Where("node <> ?", gm.transportManager.LocalNodeName())
 	}
 
@@ -408,7 +408,7 @@ func (l *messageListener) checkMatch(r *persistedMessage) bool {
 	if l.topicMatch != nil {
 		matches = matches && (l.topicMatch.MatchString(r.Topic))
 	}
-	if !spec.Options.IncludeLocal {
+	if spec.Options.ExcludeLocal {
 		matches = matches && (l.gm.transportManager.LocalNodeName() != r.Node)
 	}
 
@@ -535,7 +535,7 @@ func (l *messageListener) loadCheckpoint() error {
 			l.checkpoint = l.spec.Filters.SequenceAbove
 			log.L(l.ctx).Infof("Started message listener with minSequence=%d", *l.checkpoint)
 		} else {
-			log.L(l.ctx).Infof("Started message listener from start of chain")
+			log.L(l.ctx).Infof("Started message listener from sequence 0")
 		}
 	} else {
 		cpSequence := checkpoints[0].Sequence

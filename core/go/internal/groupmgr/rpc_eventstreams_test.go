@@ -107,7 +107,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	err = gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
 		Name: "listener1",
 		Options: pldapi.PrivacyGroupMessageListenerOptions{
-			IncludeLocal: true,
+			ExcludeLocal: false,
 		},
 	})
 	require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 	err = gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
 		Name: "listener1",
 		Options: pldapi.PrivacyGroupMessageListenerOptions{
-			IncludeLocal: true,
+			ExcludeLocal: false,
 		},
 	})
 	require.NoError(t, err)

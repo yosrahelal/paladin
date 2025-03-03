@@ -153,14 +153,14 @@ func TestE2EMessageListenerDelivery(t *testing.T) {
 			Group:  groupIDs[0],
 			Topic:  "my\\/.*",
 		},
-		Options: pldapi.PrivacyGroupMessageListenerOptions{
-			IncludeLocal: true, // we'll get notified for all the messages we send locally
-		},
 	})
 	require.NoError(t, err)
 	// Create another listener (started) that doesn't include local
 	err = gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
 		Name: "listener2",
+		Options: pldapi.PrivacyGroupMessageListenerOptions{
+			ExcludeLocal: true, // we won't get notified for all the messages we send locally
+		},
 	})
 	require.NoError(t, err)
 
