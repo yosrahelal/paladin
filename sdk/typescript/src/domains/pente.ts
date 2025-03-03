@@ -2,7 +2,8 @@ import { randomBytes } from "crypto";
 import { ethers } from "ethers";
 import {
   IGroupInfo,
-  IGroupInfoUnresolved
+  IGroupInfoUnresolved,
+  TransactionType
 } from "../interfaces";
 import { IPrivacyGroup, IPrivacyGroupEVMCall, IPrivacyGroupEVMTXInput, IPrivacyGroupInput } from "../interfaces/privacygroups";
 import PaladinClient from "../paladin";
@@ -268,16 +269,15 @@ export class PentePrivacyGroup {
     from: PaladinVerifier,
     data: PenteApproveTransitionParams
   ) {
-    const method = penteJSON.abi.find((entry) => entry.name === "approveTransition");
-    if (method === undefined) {
-      throw new Error(`Method 'approveTransition' not found`);
-    }
-    return this.sendTransaction({
-      methodAbi: method,
+    const txID = await this.paladin.sendTransaction({
+      type: TransactionType.PUBLIC,
+      abi: penteJSON.abi,
+      function: "approveTransition",
       to: this.address,
       from: from.lookup,
       data,
     });
+    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
   }
 
 }
