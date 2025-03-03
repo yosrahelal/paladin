@@ -751,7 +751,7 @@
                      JsonABI.newParameter("salt", "bytes32"),
                      JsonABI.newParameter("members", "string[]")
              ));
-             var ptxInputsABI = JsonABI.newParameters(groupABI, JsonABI.newParameter("from", "string"));
+             var ptxInputsABI = JsonABI.newParameters(groupABI);
              var data = new ObjectNode(JsonNodeFactory.instance);
              var genesisSettings = mapper.readValue(request.getGenesisState().getStateDataJson(), MinimalGenesisConfig.class);
              var groupJSON = new ObjectNode(getInstance());
@@ -771,7 +771,6 @@
              JsonABI.Entry privateABI;
              JsonNode jsonValue = null;
              var inTxn = request.getTransaction();
-             data.put("from", inTxn.getFrom());
              if (inTxn.hasInputJson()) {
                  jsonValue = mapper.readValue(inTxn.getInputJson(), JsonNode.class);
              }
@@ -821,6 +820,9 @@
                  if (funcDef.outputs() != null) {
                      privateABI.outputs().addAll(funcDef.outputs());
                  }
+                 if (jsonValue == null || jsonValue.isNull()) {
+                     jsonValue = new ObjectNode(JsonNodeFactory.instance);
+                 }
                  data.set("inputs", jsonValue);
              } else if (jsonValue != null) {
                  // Any inputs (if this isn't just a simple base eth value transfer) must be hex string here
@@ -833,7 +835,7 @@
 
              // Add the ethereum gas/value
              if (inTxn.hasGas()) {
-                 ptxInputsABI.add(JsonABI.newParameter("gas", "uint64"));
+                 ptxInputsABI.add(JsonABI.newParameter("gas", "uint256"));
                  data.put("gas", inTxn.getGas());
              }
              if (inTxn.hasValue()) {

@@ -618,6 +618,7 @@ func (gm *groupManager) SendTransaction(ctx context.Context, dbTX persistence.DB
 	}
 	tx.IdempotencyKey = pgTX.IdempotencyKey
 	tx.PublicTxOptions = pgTX.PublicTxOptions
+	tx.From = pgTX.From
 
 	txIDs, err := gm.txManager.SendTransactions(ctx, dbTX, tx)
 	if err != nil {

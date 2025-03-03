@@ -304,7 +304,6 @@ public class PentePrivacyGroupTest {
                         "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
                         "members": [ "me@node1", "you@node2" ]
                     },
-                    "from": "submitter.address",
                     "inputs": { "input1": "value1" },
                     "bytecode": "0xfeedbeef"
                  }
@@ -327,7 +326,6 @@ public class PentePrivacyGroupTest {
                                { "name": "members", "type": "string[]" }
                            ]
                        },
-                       { "name": "from", "type": "string" },
                        { "name": "bytecode", "type": "bytes" },
                        {
                             "name": "inputs",
@@ -387,7 +385,6 @@ public class PentePrivacyGroupTest {
                         "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
                         "members": [ "me@node1", "you@node2" ]
                     },
-                    "from": "submitter.address",
                     "to": "0x449984cefadce394740a410c7d832a5e2207c27a",
                     "inputs": { "thing": "one" }
                  }
@@ -410,7 +407,6 @@ public class PentePrivacyGroupTest {
                                { "name": "members", "type": "string[]" }
                            ]
                        },
-                       { "name": "from", "type": "string" },
                        { "name": "to", "type": "address" },
                        {
                             "name": "inputs",
@@ -422,6 +418,82 @@ public class PentePrivacyGroupTest {
                        }
                     ],
                     "outputs": [{ "name": "done", "type": "bool" }]
+                }
+                """, new TypeReference<Map<Object, Object>>() {});
+        received = new ObjectMapper().readValue(resTx.getFunctionAbiJson(), new TypeReference<>() {});
+        assertEquals(expected, received);
+
+    }
+
+    @Test
+    void wrapPrivacyGroupInvokeWithNoInputs() throws Exception {
+
+        var pente = new PenteDomain("", "");
+
+        var reqBuilder = WrapPrivacyGroupEVMTXRequest.newBuilder()
+                .setGenesisState(EndorsableState.newBuilder().setStateDataJson("""
+                    {
+                        "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
+                        "pente": {
+                            "members": [ "me@node1", "you@node2" ]
+                        }
+                    }
+                """).build())
+                .setTransaction(PrivacyGroupEVMTX.newBuilder()
+                        .setContractInfo(ContractInfo.newBuilder().build() /* not currently used */)
+                        .setBytecode(ByteString.copyFrom(JsonHex.from("0xfeedbeef").getBytes()))
+                        .setFrom("submitter.address")
+                        .setTo("0x449984cefadce394740a410c7d832a5e2207c27a")
+                        .setFunctionAbiJson("""
+                        {"type": "function", "name": "doAThing" }
+                     """)
+                        .setInputJson("null")
+                        .build()
+                );
+
+        // Run it
+        var res = pente.wrapPrivacyGroupTransaction(reqBuilder.build()).get();
+        var resTx = res.getTransaction();
+
+        assertEquals(PreparedTransaction.TransactionType.PRIVATE, resTx.getType());
+
+        // Check the resulting transaction
+        var expected = new ObjectMapper().readValue("""
+                {
+                    "group": {
+                        "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
+                        "members": [ "me@node1", "you@node2" ]
+                    },
+                    "to": "0x449984cefadce394740a410c7d832a5e2207c27a",
+                    "inputs": { }
+                 }
+                """, new TypeReference<Map<Object, Object>>() {});
+        var received = new ObjectMapper().readValue(resTx.getParamsJson(), new TypeReference<Map<Object, Object>>() {});
+        assertEquals(expected, received);
+
+        // Check the resulting ABI for the TX
+        expected = new ObjectMapper().readValue("""
+                {
+                    "type": "function",
+                    "name": "doAThing",
+                    "inputs": [
+                       {
+                           "name": "group",
+                           "type": "tuple",
+                           "internalType": "struct Group",
+                           "components": [
+                               { "name": "salt", "type": "bytes32" },
+                               { "name": "members", "type": "string[]" }
+                           ]
+                       },
+                       { "name": "to", "type": "address" },
+                       {
+                            "name": "inputs",
+                            "type": "tuple",
+                            "internalType": "struct Inputs"
+                       }
+                    ],
+                    "outputs": []
                 }
                 """, new TypeReference<Map<Object, Object>>() {});
         received = new ObjectMapper().readValue(resTx.getFunctionAbiJson(), new TypeReference<>() {});
@@ -466,7 +538,6 @@ public class PentePrivacyGroupTest {
                         "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
                         "members": [ "me@node1", "you@node2" ]
                     },
-                    "from": "submitter.address",
                     "to": "0x449984cefadce394740a410c7d832a5e2207c27a",
                     "gas": "0x112233",
                     "value": "0x99999999999999999999"
@@ -490,9 +561,8 @@ public class PentePrivacyGroupTest {
                                { "name": "members", "type": "string[]" }
                            ]
                        },
-                       { "name": "from", "type": "string" },
                        { "name": "to", "type": "address" },
-                       { "name": "gas", "type": "uint64"},
+                       { "name": "gas", "type": "uint256"},
                        { "name": "value", "type":"uint256"}
                     ],
                     "outputs": []
@@ -539,7 +609,6 @@ public class PentePrivacyGroupTest {
                         "salt": "0x4b9aa1d78daa2853de4ab875393ce0008085882181e18b22ba73f0fa916c32d2",
                         "members": [ "me@node1", "you@node2" ]
                     },
-                    "from": "submitter.address",
                     "to": "0x449984cefadce394740a410c7d832a5e2207c27a",
                     "data": "0xfeedbeef"
                  }
@@ -562,7 +631,6 @@ public class PentePrivacyGroupTest {
                                { "name": "members", "type": "string[]" }
                            ]
                        },
-                       { "name": "from", "type": "string" },
                        { "name": "to", "type": "address" },
                        { "name": "data", "type":"bytes"}
                     ],

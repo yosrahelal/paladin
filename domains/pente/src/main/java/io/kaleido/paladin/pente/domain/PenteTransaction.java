@@ -41,14 +41,14 @@
   * <p>
   * We support pre-encoded "data", or a set of "inputs" in JSON format that are parsed according to the
   * supplied ABI description of the ABI of the function.
-  * // TODO: ensure that this feels consistent in naming between the external domain transaction interface, and the nested Pente TX description
   * <p>
   * You specify an ABI entry that can be one of:
   * - The special "invoke" function name combined with "data" param, which will be processed like the "data" of eth_sendTransaction
   * - The special "deploy" function name combined with "bytecode" + "inputs" params
   * - Any other function name _without_ "data" or "bytecode", and with a special input called "inputs" describing the function inputs to encode
   * All transaction must always have the following inputs:
-  *  // TODO: consider paladin providing privacy group storage to avoid needing the "group" parameter
+  * NOTE: We recommend you use the privacy group function of Paladin to manage this for you, by using
+  *       off-chain reliable messaging to distribute the group parameters as a state to all members.
   * - group:    { "name": "group",   "type": "tuple", "components": [ { "name": "salt", "type": "bytes32" }, { "members": "type": "string[]" } ] }
   * Optionally you can have these additional top-level fields:
   * - to:       { "name": "to",      "type": "address" } // exclude this for deployments
@@ -60,8 +60,6 @@
   * - bytecode: { "name": "bytecode", "type": "bytes" }
   * For invoking your own contract function (with the function name set to your own function name), or with the "bytecode" option, add your inputs:
   * - inputs:   { "name": "inputs",   "type": "tuple", "components": [ ... your function input definitions go here ] }
-  * If you are performing a call (rather than an invoke) of an existing function, then you can add "outputs" too:
-  * - outputs:  { "name": "outputs",  "type": "tuple", "components": [ ... your function output definitions go here ] }
   */
  class PenteTransaction {
      private static final Logger LOGGER = PaladinLogging.getLogger(PenteTransaction.class);
@@ -129,7 +127,6 @@
                  case "data" -> defs.data = checkABIMatch(param, "bytes");
                  case "bytecode" -> defs.bytecode = checkABIMatch(param, "bytes");
                  case "inputs" -> defs.inputs = checkABIMatch(param, "tuple");
-                 case "outputs" -> defs.outputs = checkABIMatch(param, "tuple");
                  default -> throw new IllegalArgumentException("ABI param '%s' is not in expected list".formatted(param.name()));
              }
          }
