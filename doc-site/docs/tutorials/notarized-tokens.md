@@ -16,7 +16,7 @@ This tutorial will guide you through issuing, transferring, and verifying tokens
 
 Before starting, ensure you have:
 
-1. Completed the [Private Storage Tutorial](./private-storage.md).
+1. Completed the [Private Smart Contract Tutorial](./private-storage.md).
 2. A **running Paladin network** with at least three nodes (**Node1, Node2, and Node3**).
 
 ---

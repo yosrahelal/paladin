@@ -1,4 +1,4 @@
-# Private Storage Contract
+# Private Smart Contract (SimpleStorage)
 
 In this tutorial, you'll learn how to deploy and interact with a **private storage contract** using **Paladin’s privacy groups**. Unlike the **public storage contract**, where data is visible to everyone, **private storage ensures that only authorized members** of a privacy group can interact with the contract.
 
@@ -10,7 +10,7 @@ If you're new to **Pente privacy groups** or want to dive deeper into their arch
 
 Before starting, make sure you have:
 
-1. Completed the [Public Storage Tutorial](./public-storage.md) and are familiar with:
+1. Completed the [Public Smart Contract Tutorial](./public-storage.md) and are familiar with:
    - Deploying and interacting with smart contracts.
    - Using the Paladin SDK for blockchain transactions.
 2. A **running Paladin network** with at least **three nodes** (Node1, Node2, Node3).
@@ -77,7 +77,7 @@ if (!contractAddress) {
   logger.error("Failed to deploy the private Storage contract.");
   return false;
 }
-logger.log(`Private Storage contract deployed! Address: ${contractAddress}`);
+logger.log(`Private smart contract deployed! Address: ${contractAddress}`);
 ```
 
 #### Key Points  
@@ -177,6 +177,6 @@ Congratulations! You’ve successfully:
 
 ## Next Steps
 
-After exploring Private Storage and learning how to keep contract data confidential within a privacy group, you’re ready to explore other Paladin domains. In the next tutorial, you’ll learn about **Notarized Tokens (Noto)** - a way to create, mint, and transfer tokens on the Paladin network. This will introduce concepts like notaries, restricted minting, and token transfers among multiple nodes.
+After exploring private smart contracts and learning how to keep contract data confidential within a privacy group, you’re ready to explore other Paladin domains. In the next tutorial, you’ll learn about **Notarized Tokens (Noto)** - a way to create, mint, and transfer tokens on the Paladin network. This will introduce concepts like notaries, restricted minting, and token transfers among multiple nodes.
 
 [Continue to the Notarized Tokens Tutorial →](./notarized-tokens.md)
