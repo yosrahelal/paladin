@@ -5,7 +5,7 @@ import {
   IGroupInfoUnresolved,
   TransactionType
 } from "../interfaces";
-import { IPrivacyGroup, IPrivacyGroupEVMCall, IPrivacyGroupEVMTXInput, IPrivacyGroupInput } from "../interfaces/privacygroups";
+import { IPrivacyGroup, IPrivacyGroupEVMCall, IPrivacyGroupEVMTXInput } from "../interfaces/privacygroups";
 import PaladinClient from "../paladin";
 import { PaladinVerifier } from "../verifier";
 import * as penteJSON from "./abis/PentePrivacyGroup.json";
@@ -105,7 +105,7 @@ export interface PentePrivacyGroupParams {
   evmVersion?: string;
   endorsementType?: string;
   externalCallsEnabled?: boolean;          
-  additionalProperties: {
+  additionalProperties?: {
     [x: string]: unknown;
   }
 }
