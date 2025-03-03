@@ -43,6 +43,7 @@ var groupDBOnlyFilters = filters.FieldMap{
 	"id":               filters.HexBytesField("id"),
 	"created":          filters.TimestampField("created"),
 	"domain":           filters.StringField(`"privacy_groups"."domain"`),
+	"contractAddress":  filters.HexBytesField(`"Receipt"."contract_address"`),
 	"genesisSchema":    filters.StringField("schema_id"),
 	"genesisSignature": filters.StringField("schema_signature"),
 }
@@ -448,7 +449,7 @@ func (gm *groupManager) GetGroupByID(ctx context.Context, dbTX persistence.DBTX,
 		return pg, nil
 	}
 
-	groups, err := gm.QueryGroups(ctx, dbTX, query.NewQueryBuilder().Equal("id", groupID).Limit(1).Query())
+	groups, err := gm.QueryGroups(ctx, dbTX, query.NewQueryBuilder().Equal("domain", domainName).Equal("id", groupID).Limit(1).Query())
 	if err != nil || len(groups) == 0 {
 		return nil, err
 	}
@@ -468,6 +469,14 @@ func (gm *groupManager) GetGroupByID(ctx context.Context, dbTX persistence.DBTX,
 		gm.deployedPGCache.Set(groupIDStr, pg)
 	}
 	return pg, nil
+}
+
+func (gm *groupManager) GetGroupByAddress(ctx context.Context, dbTX persistence.DBTX, addr *tktypes.EthAddress) (*pldapi.PrivacyGroup, error) {
+	groups, err := gm.QueryGroups(ctx, dbTX, query.NewQueryBuilder().Equal("contractAddress", addr).Limit(1).Query())
+	if err != nil || len(groups) == 0 {
+		return nil, err
+	}
+	return groups[0], nil
 }
 
 // This function queries the groups only using what's in the DB, without allowing properties of the group to be used to do the query

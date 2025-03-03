@@ -611,6 +611,17 @@ func TestGetGroupByIDFailDB(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 }
 
+func TestGetGroupByAddressFailDB(t *testing.T) {
+
+	ctx, gm, mc, done := newTestGroupManager(t, false, &pldconf.GroupManagerConfig{}, mockEmptyMessageListeners)
+	defer done()
+
+	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := gm.GetGroupByAddress(ctx, gm.p.NOTX(), tktypes.RandAddress())
+	assert.Regexp(t, "pop", err)
+}
+
 func mockDBPrivacyGroup(mc *mockComponents, schemaID tktypes.Bytes32, stateID tktypes.HexBytes, contractAddr *tktypes.EthAddress, members ...string) {
 	mc.db.Mock.ExpectQuery("SELECT.*privacy_groups").WillReturnRows(sqlmock.NewRows([]string{
 		"domain",

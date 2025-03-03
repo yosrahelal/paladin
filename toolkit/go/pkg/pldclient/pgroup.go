@@ -30,6 +30,7 @@ type PrivacyGroups interface {
 
 	CreateGroup(ctx context.Context, spec *pldapi.PrivacyGroupInput) (group pldapi.PrivacyGroup, err error)
 	GetGroupById(ctx context.Context, domainName string, id tktypes.HexBytes) (group *pldapi.PrivacyGroupWithABI, err error)
+	GetGroupByAddress(ctx context.Context, addr tktypes.EthAddress) (group *pldapi.PrivacyGroup, err error)
 	QueryGroups(ctx context.Context, jq *query.QueryJSON) (groups []*pldapi.PrivacyGroup, err error)
 	QueryGroupsByProperties(ctx context.Context, domainName string, schemaID tktypes.Bytes32, jq *query.QueryJSON) (groups []*pldapi.PrivacyGroup, err error)
 	SendTransaction(ctx context.Context, tx *pldapi.PrivacyGroupEVMTXInput) (txID uuid.UUID, err error)
@@ -60,6 +61,10 @@ var privacyGroupsInfo = &rpcModuleInfo{
 		},
 		"pgroup_getGroupById": {
 			Inputs: []string{"domainName", "id"},
+			Output: "pgroup",
+		},
+		"pgroup_getGroupByAddress": {
+			Inputs: []string{"address"},
 			Output: "pgroup",
 		},
 		"pgroup_queryGroups": {
@@ -116,6 +121,11 @@ func (r *pgroup) CreateGroup(ctx context.Context, spec *pldapi.PrivacyGroupInput
 
 func (r *pgroup) GetGroupById(ctx context.Context, domainName string, id tktypes.HexBytes) (group *pldapi.PrivacyGroupWithABI, err error) {
 	err = r.c.CallRPC(ctx, &group, "pgroup_getGroupById", domainName, id)
+	return
+}
+
+func (r *pgroup) GetGroupByAddress(ctx context.Context, addr tktypes.EthAddress) (group *pldapi.PrivacyGroup, err error) {
+	err = r.c.CallRPC(ctx, &group, "pgroup_getGroupByAddress", addr)
 	return
 }
 

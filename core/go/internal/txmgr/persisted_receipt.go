@@ -87,7 +87,7 @@ var transactionReceiptFilters = filters.FieldMap{
 	"indexed":         filters.TimestampField("indexed"),
 	"success":         filters.BooleanField("success"),
 	"domain":          filters.StringField("domain"),
-	"contractAddress": filters.StringField("contract_address"),
+	"contractAddress": filters.HexBytesField("contract_address"),
 	"source":          filters.StringField("source"),
 	"transactionHash": filters.HexBytesField("tx_hash"),
 	"blockNumber":     filters.Int64Field("block_number"),

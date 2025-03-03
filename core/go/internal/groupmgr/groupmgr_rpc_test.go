@@ -229,10 +229,15 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get it directly by ID
-	group, err := pgroupRPC.GetGroupById(ctx, "domain1", groupID)
+	fullGroup, err := pgroupRPC.GetGroupById(ctx, "domain1", groupID)
+	require.NoError(t, err)
+	require.NotNil(t, fullGroup)
+	require.Equal(t, contractAddr, fullGroup.ContractAddress)
+
+	// Get it by address
+	group, err := pgroupRPC.GetGroupByAddress(ctx, *contractAddr)
 	require.NoError(t, err)
 	require.NotNil(t, group)
-	require.Equal(t, contractAddr, group.ContractAddress)
 
 	// Search for it by name
 	groups, err = pgroupRPC.QueryGroupsByProperties(ctx, "domain1", group.GenesisSchema,

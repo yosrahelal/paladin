@@ -35,6 +35,7 @@ func (gm *groupManager) initRPC() {
 	gm.rpcModule = rpcserver.NewRPCModule("pgroup").
 		Add("pgroup_createGroup", gm.rpcCreateGroup()).
 		Add("pgroup_getGroupById", gm.rpcGetGroupByID()).
+		Add("pgroup_getGroupByAddress", gm.rpcGetGroupByAddress()).
 		Add("pgroup_queryGroups", gm.rpcQueryGroups()).
 		Add("pgroup_queryGroupsByProperties", gm.rpcQueryGroupsByProperties()).
 		Add("pgroup_sendTransaction", gm.rpcSendTransaction()).
@@ -58,6 +59,12 @@ func (gm *groupManager) rpcCreateGroup() rpcserver.RPCHandler {
 func (gm *groupManager) rpcGetGroupByID() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context, domainName string, id tktypes.HexBytes) (*pldapi.PrivacyGroupWithABI, error) {
 		return gm.GetGroupByID(ctx, gm.p.NOTX(), domainName, id)
+	})
+}
+
+func (gm *groupManager) rpcGetGroupByAddress() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context, addr tktypes.EthAddress) (*pldapi.PrivacyGroup, error) {
+		return gm.GetGroupByAddress(ctx, gm.p.NOTX(), &addr)
 	})
 }
 
