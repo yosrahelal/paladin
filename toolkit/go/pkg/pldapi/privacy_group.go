@@ -62,11 +62,11 @@ type PrivacyGroupMessageInput struct {
 }
 
 type PrivacyGroupInput struct {
-	Domain             string                 `docstruct:"PrivacyGroup" json:"domain"`
-	Members            []string               `docstruct:"PrivacyGroup" json:"members"`
-	Properties         tktypes.RawJSON        `docstruct:"PrivacyGroup" json:"properties"`              // properties that inform genesis state
-	PropertiesABI      abi.ParameterArray     `docstruct:"PrivacyGroup" json:"propertiesABI,omitempty"` // without this the property types will be inferred
-	TransactionOptions *PrivacyGroupTXOptions `docstruct:"PrivacyGroup" json:"transactionOptions,omitempty"`
+	Domain             string                 `docstruct:"PrivacyGroupInput" json:"domain"`
+	Members            []string               `docstruct:"PrivacyGroupInput" json:"members"`
+	Properties         tktypes.RawJSON        `docstruct:"PrivacyGroupInput" json:"properties"`              // properties that inform genesis state
+	PropertiesABI      abi.ParameterArray     `docstruct:"PrivacyGroupInput" json:"propertiesABI,omitempty"` // without this the property types will be inferred
+	TransactionOptions *PrivacyGroupTXOptions `docstruct:"PrivacyGroupInput" json:"transactionOptions,omitempty"`
 }
 
 type PrivacyGroupEVMTX struct {
@@ -98,11 +98,11 @@ type PrivacyGroupEVMCall struct {
 }
 
 type PrivacyGroupMessageListener struct {
-	Name    string                             `docstruct:"MessageListener" json:"name"`
-	Created tktypes.Timestamp                  `docstruct:"MessageListener" json:"created"`
-	Started *bool                              `docstruct:"MessageListener" json:"started"`
-	Filters PrivacyGroupMessageListenerFilters `docstruct:"MessageListener" json:"filters"`
-	Options PrivacyGroupMessageListenerOptions `docstruct:"MessageListener" json:"options"`
+	Name    string                             `docstruct:"PrivacyGroupMessageListener" json:"name"`
+	Created tktypes.Timestamp                  `docstruct:"PrivacyGroupMessageListener" json:"created"`
+	Started *bool                              `docstruct:"PrivacyGroupMessageListener" json:"started"`
+	Filters PrivacyGroupMessageListenerFilters `docstruct:"PrivacyGroupMessageListener" json:"filters"`
+	Options PrivacyGroupMessageListenerOptions `docstruct:"PrivacyGroupMessageListener" json:"options"`
 }
 
 type PrivacyGroupMessageBatch struct {

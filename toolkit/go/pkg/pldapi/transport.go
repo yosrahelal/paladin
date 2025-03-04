@@ -46,19 +46,19 @@ func (t ReliableMessageType) Options() []string {
 }
 
 type ReliableMessage struct {
-	Sequence    uint64                            `json:"sequence"        gorm:"column:sequence;primaryKey"`
-	ID          uuid.UUID                         `json:"id"              gorm:"column:id"`
-	Created     tktypes.Timestamp                 `json:"created"         gorm:"column:created;autoCreateTime:false"` // generated in our code
-	Node        string                            `json:"node"            gorm:"column:node"`                         // The node id to send the message to
-	MessageType tktypes.Enum[ReliableMessageType] `json:"messageType"     gorm:"column:msg_type"`
-	Metadata    tktypes.RawJSON                   `json:"metadata"        gorm:"column:metadata"`
-	Ack         *ReliableMessageAckNoMsgID        `json:"ack,omitempty"   gorm:"foreignKey:MessageID;references:ID;"`
+	Sequence    uint64                            `docstruct:"ReliableMessage" json:"sequence"        gorm:"column:sequence;primaryKey"`
+	ID          uuid.UUID                         `docstruct:"ReliableMessage" json:"id"              gorm:"column:id"`
+	Created     tktypes.Timestamp                 `docstruct:"ReliableMessage" json:"created"         gorm:"column:created;autoCreateTime:false"` // generated in our code
+	Node        string                            `docstruct:"ReliableMessage" json:"node"            gorm:"column:node"`                         // The node id to send the message to
+	MessageType tktypes.Enum[ReliableMessageType] `docstruct:"ReliableMessage" json:"messageType"     gorm:"column:msg_type"`
+	Metadata    tktypes.RawJSON                   `docstruct:"ReliableMessage" json:"metadata"        gorm:"column:metadata"`
+	Ack         *ReliableMessageAckNoMsgID        `docstruct:"ReliableMessage" json:"ack,omitempty"   gorm:"foreignKey:MessageID;references:ID;"`
 }
 
 type ReliableMessageAckNoMsgID struct {
-	MessageID uuid.UUID         `json:"-"                                gorm:"column:id;primaryKey"`
-	Time      tktypes.Timestamp `json:"time,omitempty"                   gorm:"column:time;autoCreateTime:false"` // generated in our code
-	Error     string            `json:"error,omitempty"                  gorm:"column:error"`
+	MessageID uuid.UUID         `docstruct:"ReliableMessageAck" json:"-"                                gorm:"column:id;primaryKey"`
+	Time      tktypes.Timestamp `docstruct:"ReliableMessageAck" json:"time,omitempty"                   gorm:"column:time;autoCreateTime:false"` // generated in our code
+	Error     string            `docstruct:"ReliableMessageAck" json:"error,omitempty"                  gorm:"column:error"`
 }
 
 func (rma ReliableMessageAckNoMsgID) TableName() string {
@@ -70,9 +70,9 @@ func (rm ReliableMessage) TableName() string {
 }
 
 type ReliableMessageAck struct {
-	MessageID uuid.UUID         `json:"messageId,omitempty"              gorm:"column:id;primaryKey"`
-	Time      tktypes.Timestamp `json:"time,omitempty"                   gorm:"column:time;autoCreateTime:false"` // generated in our code
-	Error     string            `json:"error,omitempty"                  gorm:"column:error"`
+	MessageID uuid.UUID         `docstruct:"ReliableMessageAck" json:"messageId,omitempty"              gorm:"column:id;primaryKey"`
+	Time      tktypes.Timestamp `docstruct:"ReliableMessageAck" json:"time,omitempty"                   gorm:"column:time;autoCreateTime:false"` // generated in our code
+	Error     string            `docstruct:"ReliableMessageAck" json:"error,omitempty"                  gorm:"column:error"`
 }
 
 func (rma ReliableMessageAck) TableName() string {

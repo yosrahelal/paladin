@@ -47,7 +47,7 @@ title: transport_*
 
 ### Returns
 
-0. `reliableMessageAcks`: `ReliableMessageAck[]`
+0. `reliableMessageAcks`: [`ReliableMessageAck[]`](../types/reliablemessageack.md#reliablemessageack)
 
 ## `transport_queryReliableMessages`
 
@@ -57,5 +57,5 @@ title: transport_*
 
 ### Returns
 
-0. `reliableMessages`: `ReliableMessage[]`
+0. `reliableMessages`: [`ReliableMessage[]`](../types/reliablemessage.md#reliablemessage)
 
