@@ -16,38 +16,38 @@ The tutorials on this page provide an introduction to building on the Paladin pl
 
 <div class="grid cards" markdown>
 
--   { .lg .middle } **[Hello World](hello-world.md)**  
+-   **[Hello World](hello-world.md)**  
     
     ---  
     
     Begin with a simple “Hello World” example to get familiar with some of the basics.
 
--   { .lg .middle } **[Public Storage](public-storage.md)**  
+-   **[Public Storage](public-storage.md)**  
 
     ---  
 
     Explore fundamental SDK functionality for deploying and interacting with a publicly visible contract.
 
--   { .lg .middle } **[Private Storage](private-storage.md)**  
+-   **[Private Storage](private-storage.md)**  
 
     ---  
 
     Discover how to use **Privacy Groups** and keep contract data confidential among authorized members.
 
--   { .lg .middle } **[Notarized Tokens](notarized-tokens.md)**  
+-   **[Notarized Tokens](notarized-tokens.md)**  
 
     ---  
 
     Learn how to issue, mint, and transfer tokens using Paladin’s **Notarized Tokens** domain.
 
 
--   { .lg .middle } **[Wholesale CBDC](zkp-cbdc.md)**  
+-   **[Wholesale CBDC](zkp-cbdc.md)**  
 
     ---  
 
     Implement a wholesale CBDC with **zero-knowledge proof** features for enhanced privacy and regulatory compliance.
 
--   { .lg .middle } **[Bond Issuance](bond-issuance.md)**  
+-   **[Bond Issuance](bond-issuance.md)**  
 
     ---  
 
