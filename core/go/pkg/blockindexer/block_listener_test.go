@@ -55,7 +55,7 @@ func newTestBlockListenerConf(t *testing.T, ctx context.Context, config *pldconf
 
 	mRPC := rpcclientmocks.NewWSClient(t)
 
-	subsChan := make(chan *rpcclient.RPCSubscriptionNotification)
+	subsChan := make(chan rpcclient.RPCSubscriptionNotification)
 	mSub := rpcclientmocks.NewSubscription(t)
 	mSub.On("Notifications").Return(subsChan).Maybe()
 
