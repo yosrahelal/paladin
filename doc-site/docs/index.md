@@ -2,7 +2,7 @@
 
 Paladin provides programmable privacy for EVM.
 
-![Paladin overview](./images/paladin_overview.svg)
+[![Paladin overview](./images/paladin_overview.svg)](./images/paladin_overview.svg)
 
 Paladin gives enterprises control of sensitive information without compromising transparency or scalability.
 
