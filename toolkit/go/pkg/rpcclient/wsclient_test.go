@@ -123,11 +123,11 @@ func TestWSRPCSubscribe(t *testing.T) {
 	newHead := <-s.Notifications()
 	assert.NotNil(t, newHead)
 
-	blockNumber, err := tktypes.ParseHexUint256(ctx, newHead.Result.ToMap()["number"].(string))
+	blockNumber, err := tktypes.ParseHexUint256(ctx, newHead.GetResult().ToMap()["number"].(string))
 	require.NoError(t, err)
 	assert.Equal(t, big.NewInt(1263817), blockNumber.Int())
 
-	hash := newHead.Result.ToMap()["hash"]
+	hash := newHead.GetResult().ToMap()["hash"]
 	assert.Equal(t, "0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378", hash)
 
 	go func() {
@@ -221,11 +221,11 @@ func TestWSRPCUnsubscribeError(t *testing.T) {
 	newHead := <-s.Notifications()
 	assert.NotNil(t, newHead)
 
-	blockNumber, err := tktypes.ParseHexUint256(ctx, newHead.Result.ToMap()["number"].(string))
+	blockNumber, err := tktypes.ParseHexUint256(ctx, newHead.GetResult().ToMap()["number"].(string))
 	require.NoError(t, err)
 	assert.Equal(t, big.NewInt(1263817), blockNumber.Int())
 
-	hash := newHead.Result.ToMap()["hash"]
+	hash := newHead.GetResult().ToMap()["hash"]
 	assert.Equal(t, "0xb3346685172db67de536d8765c43c31009d0eb3bd9c501c9be3229203f15f378", hash)
 
 	done()
@@ -481,13 +481,13 @@ func TestHandleAckNack(t *testing.T) {
 	require.NoError(t, err)
 
 	n1 := <-s.Notifications()
-	assert.Equal(t, "0x9ce59a13059e417087c02d3236a0b1cc", n1.CurrentSubID)
-	assert.Equal(t, "11111", n1.Result.StringValue())
+	assert.Equal(t, "0x9ce59a13059e417087c02d3236a0b1cc", n1.GetCurrentSubID())
+	assert.Equal(t, "11111", n1.GetResult().StringValue())
 	err = n1.Nack(ctx)
 	assert.NoError(t, err)
 	n2 := <-s.Notifications()
-	assert.Equal(t, "0x9ce59a13059e417087c02d3236a0b1cc", n2.CurrentSubID)
-	assert.Equal(t, "22222", n2.Result.StringValue())
+	assert.Equal(t, "0x9ce59a13059e417087c02d3236a0b1cc", n2.GetCurrentSubID())
+	assert.Equal(t, "22222", n2.GetResult().StringValue())
 	err = n1.Ack(ctx)
 	assert.NoError(t, err)
 

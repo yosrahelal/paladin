@@ -54,25 +54,40 @@ func NewWSClient(ctx context.Context, conf *pldconf.WSClientConfig) (WSClient, e
 
 type Subscription interface {
 	LocalID() uuid.UUID // does not change through reconnects
-	Notifications() chan *RPCSubscriptionNotification
+	Notifications() chan RPCSubscriptionNotification
 	Unsubscribe(ctx context.Context) ErrorRPC
 }
 
-type RPCSubscriptionNotification struct {
+type RPCSubscriptionNotification interface {
+	Ack(ctx context.Context) ErrorRPC
+	Nack(ctx context.Context) ErrorRPC
+	GetCurrentSubID() string
+	GetResult() tktypes.RawJSON
+}
+
+type rpcSubscriptionNotification struct {
 	wsc          *wsRPCClient
 	sub          *sub
 	CurrentSubID string // will change on each reconnect
 	Result       tktypes.RawJSON
 }
 
-func (n *RPCSubscriptionNotification) Ack(ctx context.Context) ErrorRPC {
+func (n *rpcSubscriptionNotification) Ack(ctx context.Context) ErrorRPC {
 	id, req := n.wsc.newAsyncReq(n.sub.AckMethod, tktypes.JSONString(n.CurrentSubID))
 	return n.wsc.sendRPC(ctx, id, req)
 }
 
-func (n *RPCSubscriptionNotification) Nack(ctx context.Context) ErrorRPC {
+func (n *rpcSubscriptionNotification) Nack(ctx context.Context) ErrorRPC {
 	id, req := n.wsc.newAsyncReq(n.sub.NackMethod, tktypes.JSONString(n.CurrentSubID))
 	return n.wsc.sendRPC(ctx, id, req)
+}
+
+func (n *rpcSubscriptionNotification) GetCurrentSubID() string {
+	return n.CurrentSubID
+}
+
+func (n *rpcSubscriptionNotification) GetResult() tktypes.RawJSON {
+	return n.Result
 }
 
 type wsRPCClient struct {
@@ -98,7 +113,7 @@ type sub struct {
 	pendingReqID   string
 	currentSubID   string
 	newSubResponse chan ErrorRPC
-	notifications  chan *RPCSubscriptionNotification
+	notifications  chan RPCSubscriptionNotification
 }
 
 func (rc *wsRPCClient) Connect(ctx context.Context) (err error) {
@@ -245,7 +260,7 @@ func (rc *wsRPCClient) addConfiguredSub(ctx context.Context, conf SubscriptionCo
 		localID:            uuid.New(),
 		params:             params,
 		newSubResponse:     make(chan ErrorRPC, 1),
-		notifications:      make(chan *RPCSubscriptionNotification), // blocking channel for these, but Unsubscribe will unblock by cancelling ctx
+		notifications:      make(chan RPCSubscriptionNotification), // blocking channel for these, but Unsubscribe will unblock by cancelling ctx
 	}
 	s.ctx, s.cancelCtx = context.WithCancel(ctx)
 	rc.configuredSubs[s.localID] = s
@@ -330,7 +345,7 @@ func (s *sub) LocalID() uuid.UUID {
 	return s.localID
 }
 
-func (s *sub) Notifications() chan *RPCSubscriptionNotification {
+func (s *sub) Notifications() chan RPCSubscriptionNotification {
 	return s.notifications
 }
 
@@ -446,7 +461,7 @@ func (rc *wsRPCClient) handleSubscriptionNotification(ctx context.Context, rpcRe
 	// This is a notification that should match an active subscription
 	log.L(ctx).Debugf("RPC[%s] <-- Notification for subscription %s (serverId=%s)", rpcRes.ID.StringValue(), s.localID, s.currentSubID)
 	select {
-	case s.notifications <- &RPCSubscriptionNotification{
+	case s.notifications <- &rpcSubscriptionNotification{
 		sub:          s,
 		wsc:          rc,
 		CurrentSubID: s.currentSubID,
