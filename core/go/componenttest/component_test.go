@@ -136,6 +136,12 @@ func TestUpdatePublicTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, success)
 
+	success, err = c.PTX().CreateReceiptListener(ctx, &pldapi.TransactionReceiptListener{
+		Name: "listener1",
+	})
+	require.NoError(t, err)
+	require.False(t, success)
+
 	wsClient, err := c.WebSocket(ctx, instance.wsConfig)
 	require.NoError(t, err)
 
