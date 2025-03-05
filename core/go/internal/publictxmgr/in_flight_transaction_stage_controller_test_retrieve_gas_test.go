@@ -159,7 +159,7 @@ func TestProduceLatestInFlightStageContextRetrieveGasFixedGasPricing(t *testing.
 	}
 
 	// trigger retrieve gas price
-	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
+	assert.Nil(t, it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: true,
@@ -168,8 +168,8 @@ func TestProduceLatestInFlightStageContextRetrieveGasFixedGasPricing(t *testing.
 		assert.Equal(t, int64(20000), tOut.Cost.Int64())
 	}
 
-	assert.NotNil(t, it.stateManager.GetRunningStageContext(ctx))
-	rsc := it.stateManager.GetRunningStageContext(ctx)
+	assert.NotNil(t, it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx))
+	rsc := it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx)
 
 	// skip the retrieve gas price stage
 	assert.Equal(t, InFlightTxStageSigning, rsc.Stage)
@@ -204,7 +204,7 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrements(t *testing.T) {
 	currentVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
 
 	// Set old gas price in memory
-	mTS.InMemoryTxStateManager.(*inMemoryTxState).mtx.GasPricing = &pldapi.PublicTxGasPricing{
+	mTS.InMemoryTxStateManager.(*inMemoryTxState).mtx.GasPricing = pldapi.PublicTxGasPricing{
 		GasPrice: tktypes.Int64ToInt256(20),
 	}
 

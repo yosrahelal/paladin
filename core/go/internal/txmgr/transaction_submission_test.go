@@ -1178,7 +1178,6 @@ func TestUpdateTransactionErrorQueryingPublicTX(t *testing.T) {
 
 	_, err := txm.UpdateTransaction(ctx, uuid.New(), &pldapi.TransactionInput{})
 	assert.ErrorContains(t, err, "pop")
-
 }
 
 func TestUpdateTransactionPublicTXNotFound(t *testing.T) {

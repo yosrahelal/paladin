@@ -685,9 +685,6 @@ func (tm *txManager) UpdateTransaction(ctx context.Context, id uuid.UUID, tx *pl
 		return id, i18n.NewError(ctx, msgs.MsgTxMgrUpdateInvalidType)
 	}
 
-	// TODO AM: validate the transitions between old and new
-	// just gas price changes need validataion I think
-
 	var pubTXID uint64
 	var publicTxData []byte
 	var validatedTransaction *components.ValidatedTransaction

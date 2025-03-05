@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
+	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -34,27 +36,28 @@ type managedTx struct {
 	unflushedSubmission *DBPubTxnSubmission
 
 	// In-memory state that we update as we process the transaction in an active orchestrator
-	InFlightStatus  InFlightStatus             // moves to pending/confirmed to cause the inflight to exit
-	GasPricing      *pldapi.PublicTxGasPricing // the most recently used gas pricing information
-	TransactionHash *tktypes.Bytes32           // the most recently submitted transaction hash (not guaranteed to be the one mined)
-	FirstSubmit     *tktypes.Timestamp         // the time this runtime instance first did a submit JSON/RPC call (for success or failure)
-	LastSubmit      *tktypes.Timestamp         // the last time runtime instance first did a submit JSON/RPC call (for success or failure)
+	InFlightStatus  InFlightStatus            // moves to pending/confirmed to cause the inflight to exit
+	GasPricing      pldapi.PublicTxGasPricing // the most recently used gas pricing information
+	TransactionHash *tktypes.Bytes32          // the most recently submitted transaction hash (not guaranteed to be the one mined)
+	FirstSubmit     *tktypes.Timestamp        // the time this runtime instance first did a submit JSON/RPC call (for success or failure)
+	LastSubmit      *tktypes.Timestamp        // the last time runtime instance first did a submit JSON/RPC call (for success or failure)
 }
 
 type inMemoryTxState struct {
 	mtx *managedTx
 }
 
+func gasPricingSet(gasPricing pldapi.PublicTxGasPricing) bool {
+	return gasPricing.GasPrice != nil || gasPricing.MaxFeePerGas != nil || gasPricing.MaxPriorityFeePerGas != nil
+}
+
 func NewInMemoryTxStateManager(ctx context.Context, ptx *DBPublicTxn) InMemoryTxStateManager {
 	imtxs := &inMemoryTxState{
-		mtx: &managedTx{ptx: ptx, InFlightStatus: InFlightStatusPending},
-	}
-
-	if ptx.FixedGasPricing != nil && ptx.FixedGasPricing.String() != "{}" {
-		// If the transaction has fixed gas pricing, recover this from the persisted transaction so that
-		// the gas price does not get recalculated later on
-		gasPricing := recoverGasPriceOptions(ptx.FixedGasPricing)
-		imtxs.mtx.GasPricing = &gasPricing
+		mtx: &managedTx{
+			ptx:            ptx,
+			InFlightStatus: InFlightStatusPending,
+			GasPricing:     recoverGasPriceOptions(ptx.FixedGasPricing),
+		},
 	}
 
 	// Initialize the ephemeral state from the most recent persisted submission if one exists
@@ -64,15 +67,58 @@ func NewInMemoryTxStateManager(ctx context.Context, ptx *DBPublicTxn) InMemoryTx
 		imtxs.mtx.LastSubmit = &lastSub.Created
 		firstSub := ptx.Submissions[len(ptx.Submissions)-1]
 		imtxs.mtx.FirstSubmit = &firstSub.Created
-		if imtxs.mtx.GasPricing == nil {
+		if imtxs.GetGasPriceObject() == nil {
 			lastGasPricing := recoverGasPriceOptions(lastSub.GasPricing)
-			imtxs.mtx.GasPricing = &lastGasPricing
+			imtxs.mtx.GasPricing = lastGasPricing
 		}
 	}
 	return imtxs
 }
 
+func (imtxs *inMemoryTxState) ValidateUpdate(ctx context.Context, newPtx *DBPublicTxn) error {
+	newFixedPricing := recoverGasPriceOptions(newPtx.FixedGasPricing)
+
+	// We can't allow a transition away from fixed gas pricing as if we've already submitted because
+	// the price that comes back from the client could be lower than the price we've already submitted.
+	// I'm not convinced we can safely say that we haven't submitted from here though because of stages
+	// being triggered asynchronously so we must always assume that we might have submitted.
+	if !gasPricingSet(newFixedPricing) {
+		oldFixedPricing := recoverGasPriceOptions(imtxs.mtx.ptx.FixedGasPricing)
+		if gasPricingSet(oldFixedPricing) {
+			return i18n.NewError(ctx, msgs.MsgUpdateNoFixedPricing)
+		}
+		// nothing more to validate
+		return nil
+	}
+
+	// check that new fixed pricing is not lowering the gas price either against a previous fixed price or
+	// a retrieved gas price
+	oldPricing := imtxs.mtx.GasPricing
+	if oldPricing.GasPrice != nil &&
+		newFixedPricing.GasPrice != nil &&
+		oldPricing.GasPrice.Int().Cmp(newFixedPricing.GasPrice.Int()) == 1 {
+		return i18n.NewError(ctx, msgs.MsgUpdateGasPriceLower, oldPricing.GasPrice, newFixedPricing.GasPrice)
+	}
+
+	if oldPricing.MaxFeePerGas != nil &&
+		newFixedPricing.MaxFeePerGas != nil &&
+		oldPricing.MaxFeePerGas.Int().Cmp(newFixedPricing.MaxFeePerGas.Int()) == 1 {
+		return i18n.NewError(ctx, msgs.MsgUpdateMaxFeePerGasLower, oldPricing.MaxFeePerGas, newFixedPricing.MaxFeePerGas)
+	}
+
+	return nil
+}
+
 func (imtxs *inMemoryTxState) UpdateTransaction(newPtx *DBPublicTxn) {
+	// We need to be really careful how we update this. If we have new user provided fixed values then there will
+	// have already been validation that the gas price isn't being lowered.
+	// If there are no fixed values then we cannot put the gas pricing back in an empty state because
+	// the gas price we retrieve could potentially be lower than a gas price already submitted
+	newFixedPricing := recoverGasPriceOptions(newPtx.FixedGasPricing)
+	if gasPricingSet(newFixedPricing) {
+		imtxs.mtx.GasPricing = newFixedPricing
+	} // else we have already validated that there wasn't previously fixed gas pricing- so we can keep using the same retrieved value
+
 	ptx := imtxs.mtx.ptx
 	ptx.To = newPtx.To
 	ptx.Data = newPtx.Data
@@ -89,7 +135,7 @@ func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdate
 	}
 
 	if txUpdates.GasPricing != nil {
-		mtx.GasPricing = txUpdates.GasPricing
+		mtx.GasPricing = *txUpdates.GasPricing
 	}
 
 	if txUpdates.NewSubmission != nil {
@@ -177,7 +223,7 @@ func (imtxs *inMemoryTxState) BuildEthTX() *ethsigner.Transaction {
 		&pldapi.PublicTxOptions{
 			Gas:                (*tktypes.HexUint64)(&ptx.Gas), // fixed in persisted TX
 			Value:              ptx.Value,
-			PublicTxGasPricing: *imtxs.mtx.GasPricing, // variable and calculated in memory
+			PublicTxGasPricing: imtxs.mtx.GasPricing, // variable and calculated in memory
 		},
 	)
 }
@@ -187,8 +233,11 @@ func (imtxs *inMemoryTxState) GetFirstSubmit() *tktypes.Timestamp {
 }
 
 func (imtxs *inMemoryTxState) GetGasPriceObject() *pldapi.PublicTxGasPricing {
+	if gasPricingSet(imtxs.mtx.GasPricing) {
+		return &imtxs.mtx.GasPricing
+	}
 	// no gas price set yet, return nil, down stream logic relies on `nil` to know a transaction has never been assigned any gas price.
-	return imtxs.mtx.GasPricing
+	return nil
 }
 
 func (imtxs *inMemoryTxState) GetLastSubmitTime() *tktypes.Timestamp {

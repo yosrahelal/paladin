@@ -167,7 +167,7 @@ func TestUpdatePublicTransaction(t *testing.T) {
 		case subNotification, ok := <-sub.Notifications():
 			if ok {
 				var batch pldapi.TransactionReceiptBatch
-				json.Unmarshal(subNotification.Result, &batch)
+				json.Unmarshal(subNotification.GetResult(), &batch)
 				for _, r := range batch.Receipts {
 					if *res.ID() == r.ID {
 						deployReceipt = r
@@ -214,7 +214,7 @@ func TestUpdatePublicTransaction(t *testing.T) {
 		case subNotification, ok := <-sub.Notifications():
 			if ok {
 				var batch pldapi.TransactionReceiptBatch
-				json.Unmarshal(subNotification.Result, &batch)
+				json.Unmarshal(subNotification.GetResult(), &batch)
 				for _, r := range batch.Receipts {
 					if *setRes.ID() == r.ID {
 						setReceipt = r

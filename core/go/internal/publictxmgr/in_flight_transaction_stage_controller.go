@@ -232,6 +232,8 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 		for _, update := range updates {
 			if it.stateManager.IsComplete() {
 				update.response <- i18n.NewError(ctx, msgs.MsgTransactionAlreadyCompleted)
+			} else if err := it.stateManager.ValidateUpdate(ctx, update.newPtx); err != nil {
+				update.response <- err
 			} else {
 				err := update.dbUpdate()
 				if err != nil {
@@ -370,7 +372,11 @@ func (it *inFlightTransactionStageController) processRetrieveGasPriceStageOutput
 		} else {
 			gpo := it.calculateNewGasPrice(ctx, rsc.InMemoryTx.GetGasPriceObject(), stageOutput.GasPriceOutput.GasPriceObject)
 			gpoJSON, _ := json.Marshal(gpo)
-			rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{GasPricing: gpo}
+			// only pass the gas price through to the in memory transaction if it's the current version - it happens
+			// on a different thread so it could overwrite the update
+			if version.IsCurrent(ctx) {
+				rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{GasPricing: gpo}
+			}
 			rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr(string(gpoJSON)), nil)
 		}
 		_ = it.TriggerPersistTxState(ctx, version.GetID(ctx))
