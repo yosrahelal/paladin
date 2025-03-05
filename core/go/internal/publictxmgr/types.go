@@ -411,6 +411,7 @@ type InFlightTransactionStateManager interface {
 	GetVersions(ctx context.Context) []InFlightTransactionStateVersion
 	GetVersion(ctx context.Context, id int) InFlightTransactionStateVersion
 	GetCurrentVersion(ctx context.Context) InFlightTransactionStateVersion
+	GetPreviousVersions(ctx context.Context) []InFlightTransactionStateVersion
 	NewVersion(ctx context.Context)
 }
 

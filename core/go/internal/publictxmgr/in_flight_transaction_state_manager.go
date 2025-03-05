@@ -49,6 +49,13 @@ func (iftxs *inFlightTransactionState) GetCurrentVersion(ctx context.Context) In
 	return iftxs.versions[len(iftxs.versions)-1]
 }
 
+func (iftxs *inFlightTransactionState) GetPreviousVersions(ctx context.Context) []InFlightTransactionStateVersion {
+	if len(iftxs.versions) < 2 {
+		return []InFlightTransactionStateVersion{}
+	}
+	return iftxs.versions[:len(iftxs.versions)-1]
+}
+
 func (iftxs *inFlightTransactionState) NewVersion(ctx context.Context) {
 	iftxs.versions[len(iftxs.versions)-1].SetCurrent(ctx, false)
 	iftxs.versions[len(iftxs.versions)-1].Cancel(ctx)

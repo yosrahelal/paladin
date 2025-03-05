@@ -744,7 +744,7 @@ func (tm *txManager) processUpdatedTransaction(ctx context.Context, dbTX persist
 		Where("id = ?", id).
 		Updates(&persistedTransaction{
 			ABIReference: validatedTransaction.Function.ABIReference,
-			Function:     notEmptyOrNull(validatedTransaction.Function.Signature),
+			Function:     notEmptyOrNull(validatedTransaction.Function.Signature), // TODO AM: test switch from call to deploy- does this get unset properly?
 			To:           validatedTransaction.Transaction.To,
 			Data:         validatedTransaction.Transaction.Data,
 		}).

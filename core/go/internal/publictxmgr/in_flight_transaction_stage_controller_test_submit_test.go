@@ -53,7 +53,7 @@ func TestProduceLatestInFlightStageContextSubmitPanic(t *testing.T) {
 	// switch to submit
 	currentVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
 	signedMsg := []byte("signedMessage")
-	it.TriggerNewStageRun(ctx, it.stateManager.GetCurrentVersion(ctx), InFlightTxStageSubmitting, BaseTxSubStatusReceived, signedMsg)
+	it.TriggerNewStageRun(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, signedMsg)
 	rsc := it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx)
 
 	// unexpected error
@@ -92,7 +92,7 @@ func TestProduceLatestInFlightStageContextSubmitComplete(t *testing.T) {
 	currentVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
 	signedMsg := []byte("signedMessage")
 	txHash := confutil.P(tktypes.Bytes32Keccak([]byte("0x000031")))
-	it.TriggerNewStageRun(ctx, it.stateManager.GetCurrentVersion(ctx), InFlightTxStageSubmitting, BaseTxSubStatusReceived, signedMsg)
+	it.TriggerNewStageRun(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, signedMsg)
 	rsc := it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx)
 	// submission attempt completed - new transaction submitted
 	currentVersion.bufferedStageOutputs = make([]*StageOutput, 0)
@@ -187,7 +187,7 @@ func TestProduceLatestInFlightStageContextSubmitCompleteAlreadyKnown(t *testing.
 	currentVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
 	signedMsg := []byte("signedMessage")
 	txHash := confutil.P(tktypes.Bytes32Keccak([]byte("0x000031")))
-	it.TriggerNewStageRun(ctx, it.stateManager.GetCurrentVersion(ctx), InFlightTxStageSubmitting, BaseTxSubStatusReceived, signedMsg)
+	it.TriggerNewStageRun(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, signedMsg)
 	rsc := it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx)
 	// submission attempt completed - new transaction submitted
 	currentVersion.bufferedStageOutputs = make([]*StageOutput, 0)
@@ -270,7 +270,7 @@ func TestProduceLatestInFlightStageContextSubmitErrors(t *testing.T) {
 	signedMsg := []byte("signedMessage")
 	txHash := confutil.P(tktypes.Bytes32Keccak([]byte("0x000001")))
 
-	it.TriggerNewStageRun(ctx, it.stateManager.GetCurrentVersion(ctx), InFlightTxStageSubmitting, BaseTxSubStatusReceived, signedMsg)
+	it.TriggerNewStageRun(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, signedMsg)
 	rsc := it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx)
 
 	submissionTime := confutil.P(tktypes.TimestampNow())
@@ -385,7 +385,7 @@ func TestProduceLatestInFlightStageContextSubmitRePrepare(t *testing.T) {
 	currentVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
 	signedMsg := []byte("signedMessage")
 
-	it.TriggerNewStageRun(ctx, it.stateManager.GetCurrentVersion(ctx), InFlightTxStageSubmitting, BaseTxSubStatusReceived, signedMsg)
+	it.TriggerNewStageRun(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, signedMsg)
 
 	// persisted stage error - require re-preparation
 	currentVersion.bufferedStageOutputs = make([]*StageOutput, 0)

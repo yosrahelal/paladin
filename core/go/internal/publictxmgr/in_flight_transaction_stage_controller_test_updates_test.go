@@ -130,9 +130,9 @@ func TestTXStageControllerUpdateRunningStagePersistance(t *testing.T) {
 
 	// set the existing version in a persistence stage
 	previousVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
-	previousVersion.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageRetrieveGasPrice, BaseTxSubStatusReceived, inMemoryTxState)
+	previousVersion.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, inMemoryTxState)
 	previousVersion.bufferedStageOutputs = []*StageOutput{{
-		Stage: InFlightTxStageRetrieveGasPrice,
+		Stage: InFlightTxStageSubmitting,
 		PersistenceOutput: &PersistenceOutput{
 			PersistenceError: errors.New("bang"),
 			Time:             tomorrow,
@@ -148,7 +148,7 @@ func TestTXStageControllerUpdateRunningStagePersistance(t *testing.T) {
 	// persistence hasn't yet reached the timeout- the stage output stays unprocessed
 	require.Len(t, previousVersion.bufferedStageOutputs, 1)
 	assert.Equal(t, &StageOutput{
-		Stage: InFlightTxStageRetrieveGasPrice,
+		Stage: InFlightTxStageSubmitting,
 		PersistenceOutput: &PersistenceOutput{
 			PersistenceError: errors.New("bang"),
 			Time:             tomorrow,
@@ -264,7 +264,7 @@ func TestTXStageControllerUpdateNoResubmit(t *testing.T) {
 	it.testOnlyNoActionMode = true
 	inMemoryTxState := it.stateManager.(*inFlightTransactionState).InMemoryTxStateManager
 
-	// set the existing version in a sign persisted stage
+	// set the existing version in a submit persisted stage
 	previousVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
 	previousVersion.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, inMemoryTxState)
 	previousVersion.runningStageContext.StageOutput = &StageOutput{

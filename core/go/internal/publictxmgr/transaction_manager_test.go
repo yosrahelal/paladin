@@ -675,8 +675,6 @@ func TestUpdateTransactionRealDB(t *testing.T) {
 
 	require.Error(t, err)
 
-	// gas estimation errors TODO AM
-
 	// gas estimate failure with revert data
 	sampleRevertData := tktypes.HexBytes("some data")
 	m.txManager.On("CalculateRevertError", mock.Anything, mock.Anything, sampleRevertData).Return(fmt.Errorf("mapped revert error"))
@@ -688,7 +686,7 @@ func TestUpdateTransactionRealDB(t *testing.T) {
 	err = ptm.UpdateTransaction(ctx, txID, *pubTx.LocalID, resolvedKey, &pldapi.TransactionInput{}, nil, func(dbTX persistence.DBTX) error { return errors.New("db write failed") })
 	require.EqualError(t, err, "mapped revert error")
 
-	// 	// gas estimate failure without revert data
+	// gas estimate failure without revert data
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
 		Return(ethclient.EstimateGasResult{}, fmt.Errorf("GasEstimate error")).Once()
 	err = ptm.UpdateTransaction(ctx, txID, *pubTx.LocalID, resolvedKey, &pldapi.TransactionInput{}, nil, func(dbTX persistence.DBTX) error { return errors.New("db write failed") })
