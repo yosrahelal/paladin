@@ -728,10 +728,10 @@ var _ = Describe("noto/pente - simple", Ordered, func() {
 			mintMatched := false
 			for !mintMatched {
 				var receiptBatch pldapi.TransactionReceiptBatch
-				var notification *rpcclient.RPCSubscriptionNotification
+				var notification rpcclient.RPCSubscriptionNotification
 				select {
 				case notification = <-receiptsSub.Notifications():
-					err := json.Unmarshal(notification.Result, &receiptBatch)
+					err := json.Unmarshal(notification.GetResult(), &receiptBatch)
 					Expect(err).To(BeNil())
 				case <-time.After(5 * time.Second):
 					Fail("Timed out waiting for ereceipt")
