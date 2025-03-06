@@ -245,23 +245,17 @@ func TestDomainRequestsOK(t *testing.T) {
 			}, nil
 		},
 		ConfigurePrivacyGroup: func(ctx context.Context, cpgr *prototk.ConfigurePrivacyGroupRequest) (*prototk.ConfigurePrivacyGroupResponse, error) {
-			assert.Equal(t, map[string]string{"input": "props"}, cpgr.InputProperties)
+			assert.Equal(t, map[string]string{"input": "props"}, cpgr.InputConfiguration)
 			return &prototk.ConfigurePrivacyGroupResponse{
-				Properties: map[string]string{"finalized": "props"},
+				Configuration: map[string]string{"finalized": "props"},
 			}, nil
 		},
 		InitPrivacyGroup: func(ctx context.Context, ipgr *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
-			assert.Equal(t, `{"some": "state"}`, ipgr.GenesisState.StateDataJson)
+			assert.Equal(t, `pg1`, ipgr.PrivacyGroup.Name)
 			return &prototk.InitPrivacyGroupResponse{
 				Transaction: &prototk.PreparedTransaction{
 					ParamsJson: `{"some":"params"}`,
 				},
-			}, nil
-		},
-		ValidatePrivacyGroup: func(ctx context.Context, vpgr *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error) {
-			assert.Equal(t, `{"some":"props"}`, vpgr.GenesisState.StateDataJson)
-			return &prototk.ValidatePrivacyGroupResponse{
-				Members: []string{"member1"},
 			}, nil
 		},
 		WrapPrivacyGroupEVMTX: func(ctx context.Context, wpgtr *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error) {
@@ -456,26 +450,18 @@ func TestDomainRequestsOK(t *testing.T) {
 	assert.Equal(t, `{"receipt":"data"}`, brr.ReceiptJson)
 
 	cpgr, err := domainAPI.ConfigurePrivacyGroup(ctx, &prototk.ConfigurePrivacyGroupRequest{
-		InputProperties: map[string]string{"input": "props"},
+		InputConfiguration: map[string]string{"input": "props"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"finalized": "props"}, cpgr.Properties)
+	assert.Equal(t, map[string]string{"finalized": "props"}, cpgr.Configuration)
 
 	ipgr, err := domainAPI.InitPrivacyGroup(ctx, &prototk.InitPrivacyGroupRequest{
-		GenesisState: &prototk.EndorsableState{
-			StateDataJson: `{"some": "state"}`,
+		PrivacyGroup: &prototk.PrivacyGroup{
+			Name: "pg1",
 		},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, `{"some":"params"}`, ipgr.Transaction.ParamsJson)
-
-	vpgr, err := domainAPI.ValidatePrivacyGroup(ctx, &prototk.ValidatePrivacyGroupRequest{
-		GenesisState: &prototk.EndorsableState{
-			StateDataJson: `{"some":"props"}`,
-		},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"member1"}, vpgr.Members)
 
 	wpgtr, err := domainAPI.WrapPrivacyGroupEVMTX(ctx, &prototk.WrapPrivacyGroupEVMTXRequest{
 		Transaction: &prototk.PrivacyGroupEVMTX{

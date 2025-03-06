@@ -70,7 +70,6 @@ type receivedPrivacyGroup struct {
 	node         string
 	domain       string
 	genesisTx    uuid.UUID
-	genesisABI   *abi.Parameter
 	genesisState *components.StateUpsertOutsideContext
 }
 
@@ -85,7 +84,7 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 	var acksToWrite []*pldapi.ReliableMessageAck
 	var acksToSend []*ackInfo
 	statesToAdd := make(map[string][]*stateAndAck)
-	abisToAdd := make(map[string][]*abi.Parameter)
+	domainsWithPrivacyGroups := make(map[string]bool)
 	nullifierUpserts := make(map[string][]*components.NullifierUpsert)
 	var preparedTxnToAdd []*components.PreparedTransactionWithRefs
 	var txReceiptsToFinalize []*components.ReceiptInput
@@ -133,7 +132,7 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 					&ackInfo{node: v.p.Name, id: v.msg.MessageID, Error: err.Error()}, // reject the message permanently
 				)
 			} else {
-				abisToAdd[receivedPG.domain] = append(abisToAdd[receivedPG.domain], receivedPG.genesisABI)
+				domainsWithPrivacyGroups[receivedPG.domain] = true
 				statesToAdd[receivedPG.domain] = append(statesToAdd[receivedPG.domain], &stateAndAck{
 					state: receivedPG.genesisState,
 				})
@@ -185,14 +184,13 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 		}
 	}
 
-	ensuredSchemas := make(map[string][]components.Schema)
-	for domain, abis := range abisToAdd {
-		schemas, err := tm.stateManager.EnsureABISchemas(ctx, dbTX, domain, abis)
+	for domain := range domainsWithPrivacyGroups {
+		_, err := tm.stateManager.EnsureABISchemas(ctx, dbTX, domain, []*abi.Parameter{pldapi.PrivacyGroupABISchema()})
 		if err != nil {
-			// We continue and fail on the associated state insertion
-			log.L(ctx).Errorf("ensure ABI failed (later state insert failure anticipated): %s", err)
+			// This is our built-in schema, it should not fail for any domain
+			log.L(ctx).Errorf("ensure ABI failed: %s", err)
+			return nil, err
 		}
-		ensuredSchemas[domain] = schemas
 	}
 
 	// Inserting the states is a performance critical activity that we ensure we batch as efficiently as possible,
@@ -281,28 +279,19 @@ func (tm *transportManager) handleReliableMsgBatch(ctx context.Context, dbTX per
 	// Write any privacy groups that are now complete
 	for _, pg := range privacyGroupsToAdd {
 		var state *pldapi.State
-		var schema components.Schema
 		for _, s := range writtenStates[pg.domain] {
 			if s.ID.Equals(pg.id) {
 				state = s
 				break
 			}
 		}
-		if state != nil {
-			for _, s := range ensuredSchemas[pg.domain] {
-				if s.ID() == state.Schema {
-					schema = s
-					break
-				}
-			}
-		}
 		var validationErr error
-		if state == nil || schema == nil {
+		if state == nil {
 			validationErr = i18n.NewError(ctx, msgs.MsgTransportPrivacyGroupStateStorageFailed, pg.msgID)
 		} else {
 			// We didn't hit an error above, we can create the PG
 			var persistErr error
-			validationErr, persistErr = tm.groupManager.StoreReceivedGroup(ctx, dbTX, pg.domain, pg.genesisTx, schema.Persisted(), state)
+			validationErr, persistErr = tm.groupManager.StoreReceivedGroup(ctx, dbTX, pg.domain, pg.genesisTx, state)
 			if persistErr != nil {
 				return nil, persistErr
 			}
@@ -436,21 +425,6 @@ func (tm *transportManager) buildPrivacyGroupDistributionMsg(ctx context.Context
 	}
 	domainName := pgd.GenesisState.Domain
 
-	// Get the ABI
-	abiSchema, findErr := tm.stateManager.GetSchemaByID(ctx, dbTX, domainName, parsed.SchemaID, false)
-	if findErr != nil {
-		return nil, nil, findErr // retryable
-	}
-	var abiDefinition abi.Parameter
-	if abiSchema != nil {
-		parseErr = json.Unmarshal(abiSchema.Definition, &abiDefinition)
-	}
-	if parseErr != nil || abiSchema == nil {
-		return nil,
-			i18n.WrapError(ctx, parseErr, msgs.MsgTransportStateSchemaNotAvailableLocally, domainName, parsed.SchemaID),
-			nil
-	}
-
 	// Get the state - distinguishing between not found, vs. a retryable error
 	states, err := tm.stateManager.GetStatesByID(ctx, dbTX, domainName, nil, []tktypes.HexBytes{parsed.ID}, false, false)
 	if err != nil {
@@ -467,10 +441,9 @@ func (tm *transportManager) buildPrivacyGroupDistributionMsg(ctx context.Context
 		MessageId:   rm.ID.String(),
 		Component:   prototk.PaladinMsg_RELIABLE_MESSAGE_HANDLER,
 		MessageType: RMHMessageTypePrivacyGroup,
-		Payload: tktypes.JSONString(components.PrivacyGroupGenesisWithABI{
+		Payload: tktypes.JSONString(components.PrivacyGroupGenesis{
 			GenesisTransaction: pgd.GenesisTransaction,
 			GenesisState:       pgd.GenesisState,
-			GenesisABI:         abiDefinition,
 		}),
 	}, nil, nil
 }
@@ -520,7 +493,7 @@ func (tm *transportManager) buildPrivacyGroupMessageMsg(ctx context.Context, dbT
 }
 
 func parsePrivacyGroupDistribution(ctx context.Context, msgID uuid.UUID, data []byte, node string) (receivedPG *receivedPrivacyGroup, err error) {
-	var pgInfo components.PrivacyGroupGenesisWithABI
+	var pgInfo components.PrivacyGroupGenesis
 	err = json.Unmarshal(data, &pgInfo)
 	var id tktypes.HexBytes
 	if err == nil {
@@ -528,12 +501,11 @@ func parsePrivacyGroupDistribution(ctx context.Context, msgID uuid.UUID, data []
 	}
 	if err == nil {
 		receivedPG = &receivedPrivacyGroup{
-			id:         id,
-			node:       node,
-			domain:     pgInfo.GenesisState.Domain,
-			msgID:      msgID,
-			genesisABI: &pgInfo.GenesisABI,
-			genesisTx:  pgInfo.GenesisTransaction,
+			id:        id,
+			node:      node,
+			domain:    pgInfo.GenesisState.Domain,
+			msgID:     msgID,
+			genesisTx: pgInfo.GenesisTransaction,
 		}
 		receivedPG.genesisState, err = parseState(ctx, &pgInfo.GenesisState)
 	}

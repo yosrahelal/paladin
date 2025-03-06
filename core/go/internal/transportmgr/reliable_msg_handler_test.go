@@ -23,7 +23,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -638,8 +637,6 @@ func TestHandlePrivacyGroupOK(t *testing.T) {
 	var stateID tktypes.HexBytes = tktypes.RandBytes(32)
 	schemaID := tktypes.RandBytes32()
 	schema := componentmocks.NewSchema(t)
-	schema.On("ID").Return(schemaID)
-	schema.On("Persisted").Return(&pldapi.Schema{})
 	ctx, tm, tp, done := newTestTransport(t, false,
 		mockGoodTransport,
 		mockEmptyReliableMsgs,
@@ -662,7 +659,7 @@ func TestHandlePrivacyGroupOK(t *testing.T) {
 	txID := uuid.New()
 	msg := testReceivedReliableMsg(
 		RMHMessageTypePrivacyGroup,
-		&components.PrivacyGroupGenesisWithABI{
+		&components.PrivacyGroupGenesis{
 			GenesisTransaction: txID,
 			GenesisState: components.StateDistributionWithData{
 				StateDistribution: components.StateDistribution{
@@ -672,13 +669,6 @@ func TestHandlePrivacyGroupOK(t *testing.T) {
 					StateID:         stateID.String(),
 				},
 				StateData: []byte(`{"some":"data"}`),
-			},
-			GenesisABI: abi.Parameter{
-				Type:         "tuple",
-				InternalType: "struct SaltedStruct;",
-				Components: abi.ParameterArray{
-					{Name: "salt", Type: "bytes32"},
-				},
 			},
 		})
 
@@ -699,12 +689,62 @@ func TestHandlePrivacyGroupOK(t *testing.T) {
 	ackNackCheck()
 }
 
+func TestHandlePrivacyGroupBadState(t *testing.T) {
+	var stateID tktypes.HexBytes = tktypes.RandBytes(32)
+	schemaID := tktypes.RandBytes32()
+	schema := componentmocks.NewSchema(t)
+	ctx, tm, tp, done := newTestTransport(t, false,
+		mockGoodTransport,
+		mockEmptyReliableMsgs,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).Return([]components.Schema{
+				schema,
+			}, nil).Once()
+			mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).Return(nil, fmt.Errorf("pop"))
+
+			mc.db.Mock.ExpectBegin()
+			mc.db.Mock.ExpectCommit()
+		},
+	)
+	defer done()
+
+	txID := uuid.New()
+	msg := testReceivedReliableMsg(
+		RMHMessageTypePrivacyGroup,
+		&components.PrivacyGroupGenesis{
+			GenesisTransaction: txID,
+			GenesisState: components.StateDistributionWithData{
+				StateDistribution: components.StateDistribution{
+					Domain:          "domain1",
+					ContractAddress: tktypes.RandAddress().String(),
+					SchemaID:        schemaID.String(),
+					StateID:         stateID.String(),
+				},
+				StateData: []byte(`{"some":"data"}`),
+			},
+		})
+
+	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "PD012022")
+
+	p, err := tm.getPeer(ctx, "node2", false)
+	require.NoError(t, err)
+
+	// Handle the batch - will fail to write the states
+	err = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := tm.handleReliableMsgBatch(ctx, dbTX, []*reliableMsgOp{
+			{p: p, msg: msg},
+		})
+		return err
+	})
+	require.NoError(t, err)
+
+	ackNackCheck()
+}
+
 func TestHandlePrivacyGroupGroupFail(t *testing.T) {
 	var stateID tktypes.HexBytes = tktypes.RandBytes(32)
 	schemaID := tktypes.RandBytes32()
 	schema := componentmocks.NewSchema(t)
-	schema.On("ID").Return(schemaID)
-	schema.On("Persisted").Return(&pldapi.Schema{})
 	ctx, tm, _, done := newTestTransport(t, false,
 		mockEmptyReliableMsgs,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
@@ -727,7 +767,7 @@ func TestHandlePrivacyGroupGroupFail(t *testing.T) {
 	txID := uuid.New()
 	msg := testReceivedReliableMsg(
 		RMHMessageTypePrivacyGroup,
-		&components.PrivacyGroupGenesisWithABI{
+		&components.PrivacyGroupGenesis{
 			GenesisTransaction: txID,
 			GenesisState: components.StateDistributionWithData{
 				StateDistribution: components.StateDistribution{
@@ -737,13 +777,6 @@ func TestHandlePrivacyGroupGroupFail(t *testing.T) {
 					StateID:         stateID.String(),
 				},
 				StateData: []byte(`{"some":"data"}`),
-			},
-			GenesisABI: abi.Parameter{
-				Type:         "tuple",
-				InternalType: "struct SaltedStruct;",
-				Components: abi.ParameterArray{
-					{Name: "salt", Type: "bytes32"},
-				},
 			},
 		})
 
@@ -760,14 +793,11 @@ func TestHandlePrivacyGroupGroupFail(t *testing.T) {
 	require.Regexp(t, "pop", err)
 }
 
-func TestHandlePrivacyGroupABIsFail(t *testing.T) {
-	ctx, tm, tp, done := newTestTransport(t, false,
-		mockGoodTransport,
+func TestHandlePrivacyGroupBuiltInABIFail(t *testing.T) {
+	ctx, tm, _, done := newTestTransport(t, false,
 		mockEmptyReliableMsgs,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
 			mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).Return(nil, fmt.Errorf("pop"))
-			mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
-				Return(nil, fmt.Errorf("bad data"))
 			mc.db.Mock.ExpectBegin()
 			mc.db.Mock.ExpectCommit()
 		},
@@ -776,7 +806,7 @@ func TestHandlePrivacyGroupABIsFail(t *testing.T) {
 
 	msg := testReceivedReliableMsg(
 		RMHMessageTypePrivacyGroup,
-		&components.PrivacyGroupGenesisWithABI{
+		&components.PrivacyGroupGenesis{
 			GenesisState: components.StateDistributionWithData{
 				StateDistribution: components.StateDistribution{
 					Domain:          "domain1",
@@ -786,15 +816,7 @@ func TestHandlePrivacyGroupABIsFail(t *testing.T) {
 				},
 				StateData: []byte(`{"some":"data"}`),
 			},
-			GenesisABI: abi.Parameter{
-				Type:         "tuple",
-				InternalType: "struct SaltedStruct;",
-				Components: abi.ParameterArray{
-					{Name: "salt", Type: "bytes32"},
-				},
-			},
 		})
-	ackNackCheck := setupAckOrNackCheck(t, tp, msg.MessageID, "PD012022")
 
 	p, err := tm.getPeer(ctx, "node2", false)
 	require.NoError(t, err)
@@ -806,9 +828,8 @@ func TestHandlePrivacyGroupABIsFail(t *testing.T) {
 		})
 		return err
 	})
-	require.NoError(t, err)
+	require.Regexp(t, "pop", err)
 
-	ackNackCheck()
 }
 
 func TestHandlePrivacyGroupInvalid(t *testing.T) {
@@ -824,7 +845,7 @@ func TestHandlePrivacyGroupInvalid(t *testing.T) {
 
 	msg := testReceivedReliableMsg(
 		RMHMessageTypePrivacyGroup,
-		&components.PrivacyGroupGenesisWithABI{
+		&components.PrivacyGroupGenesis{
 			/* invalid */
 		})
 
@@ -1017,80 +1038,10 @@ func TestBuildPrivacyGroupDistributionMsgBadMsg(t *testing.T) {
 
 }
 
-func TestBuildPrivacyGroupDistributionMsgSchemaError(t *testing.T) {
-
-	ctx, tm, _, done := newTestTransport(t, false,
-		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-			mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", mock.Anything, false).
-				Return(nil, fmt.Errorf("schema error"))
-
-			mc.db.Mock.ExpectBegin()
-			mc.db.Mock.ExpectCommit()
-		},
-	)
-	defer done()
-
-	distroID := uuid.New()
-	_, parseErr, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &pldapi.ReliableMessage{
-		ID:          distroID,
-		MessageType: pldapi.RMTPrivacyGroup.Enum(),
-		Metadata: tktypes.JSONString(&components.PrivacyGroupDistribution{
-			GenesisTransaction: uuid.New(),
-			GenesisState: components.StateDistributionWithData{
-				StateDistribution: components.StateDistribution{
-					Domain:          "domain1",
-					ContractAddress: tktypes.RandAddress().String(),
-					SchemaID:        tktypes.RandHex(32),
-					StateID:         tktypes.RandHex(32),
-				},
-			},
-		}),
-	})
-	require.NoError(t, parseErr)
-	require.Regexp(t, "schema error", err)
-
-}
-
-func TestBuildPrivacyGroupDistributionMsgSchemaInvalidABI(t *testing.T) {
-
-	ctx, tm, _, done := newTestTransport(t, false,
-		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-			mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", mock.Anything, false).
-				Return(&pldapi.Schema{}, nil)
-
-			mc.db.Mock.ExpectBegin()
-			mc.db.Mock.ExpectCommit()
-		},
-	)
-	defer done()
-
-	distroID := uuid.New()
-	_, parseErr, err := tm.buildPrivacyGroupDistributionMsg(ctx, tm.persistence.NOTX(), &pldapi.ReliableMessage{
-		ID:          distroID,
-		MessageType: pldapi.RMTPrivacyGroup.Enum(),
-		Metadata: tktypes.JSONString(&components.PrivacyGroupDistribution{
-			GenesisTransaction: uuid.New(),
-			GenesisState: components.StateDistributionWithData{
-				StateDistribution: components.StateDistribution{
-					Domain:          "domain1",
-					ContractAddress: tktypes.RandAddress().String(),
-					SchemaID:        tktypes.RandHex(32),
-					StateID:         tktypes.RandHex(32),
-				},
-			},
-		}),
-	})
-	require.NoError(t, err)
-	require.Regexp(t, "PD012020", parseErr)
-
-}
-
 func TestBuildPrivacyGroupDistributionMsgGetStatesError(t *testing.T) {
 
 	ctx, tm, _, done := newTestTransport(t, false,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-			mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", mock.Anything, false).
-				Return(&pldapi.Schema{Definition: tktypes.JSONString(&abi.Parameter{Type: "tuple", InternalType: "struct EmptyStruct;"})}, nil)
 			mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
 				Return(nil, fmt.Errorf("pop")).Once()
 
@@ -1124,8 +1075,6 @@ func TestBuildPrivacyGroupDistributionMsgGetStatesNotFound(t *testing.T) {
 
 	ctx, tm, _, done := newTestTransport(t, false,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-			mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", mock.Anything, false).
-				Return(&pldapi.Schema{Definition: tktypes.JSONString(&abi.Parameter{Type: "tuple", InternalType: "struct EmptyStruct;"})}, nil)
 			mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
 				Return(nil, nil).Once()
 

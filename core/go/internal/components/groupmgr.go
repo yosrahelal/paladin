@@ -19,17 +19,15 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-type PrivacyGroupGenesisWithABI struct {
+type PrivacyGroupGenesis struct {
 	GenesisTransaction uuid.UUID                 `json:"genesisTransaction"`
 	GenesisState       StateDistributionWithData `json:"genesisState"`
-	GenesisABI         abi.Parameter             `json:"genesisABI"`
 }
 
 type PrivacyGroupMessageDistribution struct {

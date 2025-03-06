@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -507,16 +506,10 @@ func TestProcessReliableMsgPageInsertFail(t *testing.T) {
 
 func TestProcessReliableMsgPagePrivacyGroup(t *testing.T) {
 
-	simpleABI := &abi.Parameter{
-		Type: "tuple", InternalType: "struct EmptyType;",
-	}
 	schemaID := tktypes.RandBytes32()
 	ctx, tm, tp, done := newTestTransport(t, false,
 		mockGetStateOk,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-			mc.stateManager.On("GetSchemaByID", mock.Anything, mock.Anything, "domain1", schemaID, false).
-				Return(&pldapi.Schema{ID: schemaID, Definition: tktypes.JSONString(simpleABI)}, nil)
-
 			mc.db.Mock.ExpectExec("INSERT.*reliable_msgs").WillReturnResult(driver.ResultNoRows)
 		})
 	defer done()
@@ -567,7 +560,6 @@ func TestProcessReliableMsgPagePrivacyGroup(t *testing.T) {
 	rpg, err := parsePrivacyGroupDistribution(ctx, rMsg.MessageID, rMsg.Payload, "node2")
 	require.NoError(t, err)
 	require.Equal(t, "domain1", rpg.domain)
-	require.Equal(t, simpleABI, rpg.genesisABI)
 	require.JSONEq(t, fmt.Sprintf(`{"dataFor": "%s"}`, rpg.genesisState.ID.HexString()), rpg.genesisState.Data.Pretty())
 	require.Equal(t, pgd.GenesisTransaction, rpg.genesisTx)
 	require.Equal(t, "node2", rpg.node)
