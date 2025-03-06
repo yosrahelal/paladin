@@ -1,7 +1,6 @@
-import { HexString } from "ethers/lib.commonjs/utils/data";
+import { BigNumberish, ethers } from "ethers";
 import { NotoUnlockPublicParams } from "../domains/noto";
 import { IStateBase } from "./states";
-import { BigNumberish, ethers } from "ethers";
 
 export interface IBlock {
   number: number;

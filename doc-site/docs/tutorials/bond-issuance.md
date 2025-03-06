@@ -60,8 +60,7 @@ const penteFactory = new PenteFactory(paladin1, "pente");
 const issuerCustodianGroup = await penteFactory.newPrivacyGroup({
   members: [bondIssuer, bondCustodian],
   evmVersion: "shanghai",
-  endorsementType: "group_scoped_identities",
-  externalCallsEnabled: true,    
+  externalCallsEnabled: true,
 });
 ```
 
@@ -207,8 +206,7 @@ const investorCustodianGroup = await penteFactory
   .newPrivacyGroup({
     members: [investor, bondCustodian],
     evmVersion: "shanghai",
-    endorsementType: "group_scoped_identities",
-    externalCallsEnabled: true,    
+    externalCallsEnabled: true,
   });
 ```
 

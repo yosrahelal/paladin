@@ -113,7 +113,7 @@ The recommended way to submit transactions is to:
     - You can add properties to your privacy group to allow all members to find it (a business transaction identifier for example)
 2. Wait for a receipt to the transaction returned in the [PrivacyGroup](../../reference/types/privacygroup/)
     - This means that the blockchain has confirmed creation of the privacy group
-3. Submit transactions using the [pgroup_sendtransaction](../../reference/apis/pgroup/#pgroup_sendtransaction) JSON/RPC API
+3. Submit transactions using the [pgroup_sendTransaction](../../reference/apis/pgroup/#pgroup_sendtransaction) JSON/RPC API
     - The [PrivacyGroupEVMTXInput](../../reference/types/privacygroupevmtxinput/#privacygroupevmtxinput) payload is as similar to a normal `eth_sendTransaction` payload as possible
     - Deployment of smart contracts is performed by omitting the `to` address, and supplying `bytecode`
 4. Use WebSockets combined with [TransactionReceiptListener](../../reference/types/transactionreceiptlistener/) to detect transaction completion
@@ -133,7 +133,7 @@ without the latency (and gas) overhead of mining a blockchain transaction.
 > There are no ordering or non-repudiation guarantees when doing this, as the shared ordering context
 > and transaction signature (+execution) verification of a full EVM blockchain transaction are bypassed.
 
-See [pgroup_sendmessage](../../reference/apis/pgroup/#pgroup_sendmessage) for more details of sending messages.
+See [pgroup_sendMessage](../../reference/apis/pgroup/#pgroup_sendmessage) for more details of sending messages.
 
 Use WebSockets combined with [PrivacyGroupMessageListener](../../reference/types/privacygroupmessagelistener/) to
 listen for messages.

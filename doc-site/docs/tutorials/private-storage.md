@@ -40,7 +40,6 @@ const penteFactory = new PenteFactory(paladinNode1, "pente");
 const memberPrivacyGroup = await penteFactory.newPrivacyGroup({
   members: [verifierNode1, verifierNode2],
   evmVersion: "shanghai",
-  endorsementType: "group_scoped_identities",
   externalCallsEnabled: true,
 });
 

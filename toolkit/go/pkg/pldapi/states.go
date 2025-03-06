@@ -95,7 +95,7 @@ type StateBase struct {
 	Created         tktypes.Timestamp   `docstruct:"State" json:"created"             gorm:"autoCreateTime:nano"`
 	DomainName      string              `docstruct:"State" json:"domain"              gorm:"primaryKey"`
 	Schema          tktypes.Bytes32     `docstruct:"State" json:"schema"`
-	ContractAddress *tktypes.EthAddress `docstruct:"State" json:"contractAddress"`
+	ContractAddress *tktypes.EthAddress `docstruct:"State" json:"contractAddress"` // nil used for states like privacy group genesis that exists before state creation
 	Data            tktypes.RawJSON     `docstruct:"State" json:"data"`
 }
 

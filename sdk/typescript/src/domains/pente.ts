@@ -49,56 +49,6 @@ export const penteGroupABI = {
   ],
 };
 
-export const penteConstructorABI = {
-  type: "constructor",
-  inputs: [
-    penteGroupABI,
-    { name: "evmVersion", type: "string" },
-    { name: "endorsementType", type: "string" },
-    { name: "externalCallsEnabled", type: "bool" },
-  ],
-};
-
-export const privateDeployABI = (
-  inputComponents: ReadonlyArray<ethers.JsonFragmentType>
-): ethers.JsonFragment => ({
-  name: "deploy",
-  type: "function",
-  inputs: [
-    penteGroupABI,
-    { name: "bytecode", type: "bytes" },
-    { name: "inputs", type: "tuple", components: inputComponents },
-  ],
-});
-
-export const privateInvokeABI = (
-  name: string,
-  inputComponents: ReadonlyArray<ethers.JsonFragmentType>
-): ethers.JsonFragment => ({
-  name,
-  type: "function",
-  inputs: [
-    penteGroupABI,
-    { name: "to", type: "address" },
-    { name: "inputs", type: "tuple", components: inputComponents },
-  ],
-});
-
-export const privateCallABI = (
-  name: string,
-  inputComponents: ReadonlyArray<ethers.JsonFragmentType>,
-  outputComponents: ReadonlyArray<ethers.JsonFragmentType>
-): ethers.JsonFragment => ({
-  name,
-  type: "function",
-  inputs: [
-    penteGroupABI,
-    { name: "to", type: "address" },
-    { name: "inputs", type: "tuple", components: inputComponents },
-  ],
-  outputs: outputComponents,
-});
-
 export interface PentePrivacyGroupParams {
   members: (string | PaladinVerifier)[]
   salt?: string;

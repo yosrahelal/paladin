@@ -66,7 +66,6 @@ async function main(): Promise<boolean> {
   const issuerGroup = await penteFactory.newPrivacyGroup({
     members: [assetIssuer],
     evmVersion: "shanghai",
-    endorsementType: "group_scoped_identities",
     externalCallsEnabled: true,
   });
   if (!checkDeploy(issuerGroup)) return false;

@@ -57,8 +57,7 @@ async function main(): Promise<boolean> {
   const issuerCustodianGroup = await penteFactory.newPrivacyGroup({
     members: [bondIssuer, bondCustodian],
     evmVersion: "shanghai",
-    endorsementType: "group_scoped_identities",
-    externalCallsEnabled: true,    
+    externalCallsEnabled: true,
   });
   if (!checkDeploy(issuerCustodianGroup)) return false;
 
@@ -161,8 +160,7 @@ async function main(): Promise<boolean> {
     .newPrivacyGroup({
       members: [investor, bondCustodian],
       evmVersion: "shanghai",
-      endorsementType: "group_scoped_identities",
-      externalCallsEnabled: true,    
+      externalCallsEnabled: true,
     });
   if (investorCustodianGroup === undefined) {
     logger.error("Failed!");
