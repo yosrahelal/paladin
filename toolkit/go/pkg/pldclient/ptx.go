@@ -98,7 +98,7 @@ var ptxInfo = &rpcModuleInfo{
 			Output: "transactionIds",
 		},
 		"ptx_updateTransaction": {
-			Inputs: []string{"transactionUpdate"},
+			Inputs: []string{"transactionId", "transaction"},
 			Output: "transactionId",
 		},
 		"ptx_call": {
