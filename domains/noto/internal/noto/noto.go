@@ -367,7 +367,6 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 		deployData.RestrictMint = true
 		deployData.AllowBurn = true
 		deployData.AllowLock = true
-		deployData.RestrictUnlock = true
 		if params.Options.Basic != nil {
 			if params.Options.Basic.RestrictMint != nil {
 				deployData.RestrictMint = *params.Options.Basic.RestrictMint
@@ -377,9 +376,6 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 			}
 			if params.Options.Basic.AllowLock != nil {
 				deployData.AllowLock = *params.Options.Basic.AllowLock
-			}
-			if params.Options.Basic.RestrictUnlock != nil {
-				deployData.RestrictUnlock = *params.Options.Basic.RestrictUnlock
 			}
 		}
 	case types.NotaryModeHooks:
@@ -453,10 +449,9 @@ func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractReques
 		}
 	} else {
 		parsedConfig.Options.Basic = &types.NotoBasicOptions{
-			RestrictMint:   &decodedData.RestrictMint,
-			AllowBurn:      &decodedData.AllowBurn,
-			AllowLock:      &decodedData.AllowLock,
-			RestrictUnlock: &decodedData.RestrictUnlock,
+			RestrictMint: &decodedData.RestrictMint,
+			AllowBurn:    &decodedData.AllowBurn,
+			AllowLock:    &decodedData.AllowLock,
 		}
 	}
 
