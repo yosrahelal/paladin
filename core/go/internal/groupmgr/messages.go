@@ -108,7 +108,7 @@ func (gm *groupManager) SendMessage(ctx context.Context, dbTX persistence.DBTX, 
 	}
 
 	// Create the reliable message delivery to the other parties
-	remoteMembers, err := gm.validateMembers(ctx, pg.Members)
+	remoteMembers, err := gm.validateMembers(ctx, pg.Members, true)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (gm *groupManager) ReceiveMessages(ctx context.Context, dbTX persistence.DB
 	results = make(map[uuid.UUID]error)
 	now := tktypes.TimestampNow()
 	pMsgs := make([]*persistedMessage, 0, len(messages))
-	validatedGroups := make(map[string]*pldapi.PrivacyGroupWithABI)
+	validatedGroups := make(map[string]*pldapi.PrivacyGroup)
 	for _, msg := range messages {
 		pm := &persistedMessage{
 			Domain:   msg.Domain,

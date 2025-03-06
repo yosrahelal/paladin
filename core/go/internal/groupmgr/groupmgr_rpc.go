@@ -38,7 +38,6 @@ func (gm *groupManager) initRPC() {
 		Add("pgroup_getGroupByAddress", gm.rpcGetGroupByAddress()).
 		Add("pgroup_queryGroups", gm.rpcQueryGroups()).
 		Add("pgroup_queryGroupsWithMember", gm.rpcQueryGroupsWithMember()).
-		Add("pgroup_queryGroupsByProperties", gm.rpcQueryGroupsByProperties()).
 		Add("pgroup_sendTransaction", gm.rpcSendTransaction()).
 		Add("pgroup_call", gm.rpcCall()).
 		Add("pgroup_createMessageListener", gm.rpcCreateMessageListener()).
@@ -64,7 +63,7 @@ func (gm *groupManager) rpcCreateGroup() rpcserver.RPCHandler {
 }
 
 func (gm *groupManager) rpcGetGroupByID() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context, domainName string, id tktypes.HexBytes) (*pldapi.PrivacyGroupWithABI, error) {
+	return rpcserver.RPCMethod2(func(ctx context.Context, domainName string, id tktypes.HexBytes) (*pldapi.PrivacyGroup, error) {
 		return gm.GetGroupByID(ctx, gm.p.NOTX(), domainName, id)
 	})
 }
@@ -84,12 +83,6 @@ func (gm *groupManager) rpcQueryGroups() rpcserver.RPCHandler {
 func (gm *groupManager) rpcQueryGroupsWithMember() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context, member string, jq query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
 		return gm.QueryGroupsWithMember(ctx, gm.p.NOTX(), member, &jq)
-	})
-}
-
-func (gm *groupManager) rpcQueryGroupsByProperties() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod3(func(ctx context.Context, domainName string, schemaID tktypes.Bytes32, jq query.QueryJSON) ([]*pldapi.PrivacyGroup, error) {
-		return gm.QueryGroupsByProperties(ctx, gm.p.NOTX(), domainName, schemaID, &jq)
 	})
 }
 

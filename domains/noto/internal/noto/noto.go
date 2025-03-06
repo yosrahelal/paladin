@@ -765,11 +765,11 @@ func (n *Noto) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (*pro
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
 
-func (n *Noto) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
+func (n *Noto) ConfigurePrivacyGroup(ctx context.Context, req *prototk.ConfigurePrivacyGroupRequest) (*prototk.ConfigurePrivacyGroupResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
 
-func (n *Noto) ValidatePrivacyGroup(ctx context.Context, req *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error) {
+func (n *Noto) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
 

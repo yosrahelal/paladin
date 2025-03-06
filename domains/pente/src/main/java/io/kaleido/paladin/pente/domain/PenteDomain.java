@@ -697,19 +697,6 @@
 
      }
 
-     @Override
-     protected CompletableFuture<ValidatePrivacyGroupResponse> validatePrivacyGroup(ValidatePrivacyGroupRequest request) {
-         try {
-                final var mapper = new ObjectMapper();
-                var genesisSettings = mapper.readValue(request.getGenesisState().getStateDataJson(), MinimalGenesisConfig.class);
-                return CompletableFuture.completedFuture(ValidatePrivacyGroupResponse.newBuilder()
-                        .addAllMembers(Arrays.asList(genesisSettings.pente.members))
-                        .build());
-         } catch (Exception e) {
-             return CompletableFuture.failedFuture(e);
-         }
-     }
-
      @JsonIgnoreProperties(ignoreUnknown = true)
      record MinimalGenesisPenteConfig(
              @JsonProperty(required = true)

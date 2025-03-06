@@ -125,7 +125,6 @@ var allTypes = []interface{}{
 	pldapi.PrivacyGroupEVMTXInput{},
 	pldapi.PrivacyGroupInput{},
 	pldapi.PrivacyGroupMessageListener{},
-	pldapi.PrivacyGroupWithABI{},
 	pldapi.PrivacyGroupMessage{},
 	pldapi.PrivacyGroupMessageInput{},
 	tktypes.JSONFormatOptions(""),

@@ -62,40 +62,27 @@ func newTestRPCServer(t *testing.T, ctx context.Context, gm *groupManager) rpccl
 
 func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 
-	mergedGenesis := `{
-		"name": "secret things",
-		"version": "200"
-	}`
 	contractAddr := tktypes.RandAddress()
 	ctx, gm, _, done := newTestGroupManager(t, true, &pldconf.GroupManagerConfig{}, func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").
 			Return([]*components.RegistryNodeTransportEntry{ /* contents not checked */ }, nil)
 
 		// Validate the init gets the correct data
+		cpg := mc.domain.On("ConfigurePrivacyGroup", mock.Anything, mock.Anything)
+		cpg.Run(func(args mock.Arguments) {
+			inputconf := args[1].(map[string]string)
+			inputconf["extra"] = "extra1"
+			cpg.Return(inputconf, nil)
+		})
 		ipg := mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything)
 		ipg.Run(func(args mock.Arguments) {
-			spec := args[1].(*pldapi.PrivacyGroupInput)
-			require.Equal(t, "domain1", spec.Domain)
-			require.JSONEq(t, `{"name": "secret things"}`, spec.Properties.Pretty())
+			spec := args[1].(*pldapi.PrivacyGroupGenesisState)
+			require.Equal(t, map[string]string{"name": "secret things"}, spec.Properties.Map())
 			require.Len(t, spec.Members, 2)
 			ipg.Return(
-				&components.PreparedGroupInitTransaction{
-					TX: &pldapi.TransactionInput{
-						TransactionBase: pldapi.TransactionBase{
-							Type: pldapi.TransactionTypePrivate.Enum(),
-						},
-					},
-					GenesisState: tktypes.RawJSON(mergedGenesis),
-					GenesisSchema: &abi.Parameter{
-						Name:         "TestPrivacyGroup",
-						Type:         "tuple",
-						InternalType: "struct TestPrivacyGroup;",
-						Indexed:      true,
-						Components: append(spec.PropertiesABI, &abi.Parameter{
-							Name:    "version",
-							Type:    "uint256",
-							Indexed: true,
-						}),
+				&pldapi.TransactionInput{
+					TransactionBase: pldapi.TransactionBase{
+						Type: pldapi.TransactionTypePrivate.Enum(),
 					},
 				},
 				nil,
@@ -132,14 +119,11 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 
 		mwpgt1 := psc.On("WrapPrivacyGroupEVMTX", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Once()
 		mwpgt1.Run(func(args mock.Arguments) {
-			pg := args[1].(*pldapi.PrivacyGroupWithABI)
-			require.NotNil(t, pg.GenesisABI)
 			mwpgt1.Return(&pldapi.TransactionInput{
 				TransactionBase: pldapi.TransactionBase{
-					Domain: pg.Domain,
-					Type:   pldapi.TransactionTypePrivate.Enum(),
-					From:   `my.key`,
-					Data:   tktypes.RawJSON(`{"wrapped":"transaction"}`),
+					Type: pldapi.TransactionTypePrivate.Enum(),
+					From: `my.key`,
+					Data: tktypes.RawJSON(`{"wrapped":"transaction"}`),
 				},
 			}, nil)
 		})
@@ -156,14 +140,11 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 
 		mwpgt2 := psc.On("WrapPrivacyGroupEVMTX", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 		mwpgt2.Run(func(args mock.Arguments) {
-			pg := args[1].(*pldapi.PrivacyGroupWithABI)
-			require.NotNil(t, pg.GenesisABI)
 			mwpgt2.Return(&pldapi.TransactionInput{
 				TransactionBase: pldapi.TransactionBase{
-					Domain: pg.Domain,
-					To:     tktypes.RandAddress(),
-					Type:   pldapi.TransactionTypePrivate.Enum(),
-					Data:   tktypes.RawJSON(`{"wrapped":"call"}`),
+					To:   tktypes.RandAddress(),
+					Type: pldapi.TransactionTypePrivate.Enum(),
+					Data: tktypes.RawJSON(`{"wrapped":"call"}`),
 				},
 			}, nil)
 		})
@@ -190,11 +171,10 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	pgroupRPC := pldclient.Wrap(client).PrivacyGroups()
 
 	group1, err := pgroupRPC.CreateGroup(ctx, &pldapi.PrivacyGroupInput{
-		Domain:  "domain1",
-		Members: []string{"me@node1", "you@node2"},
-		Properties: tktypes.RawJSON(`{
-			  "name": "secret things"
-			}`),
+		Domain:     "domain1",
+		Name:       "secret.things",
+		Members:    []string{"me@node1", "you@node2"},
+		Properties: map[string]string{"name": "secret things"},
 		TransactionOptions: &pldapi.PrivacyGroupTXOptions{
 			IdempotencyKey: "tx_1",
 			PublicTxOptions: pldapi.PublicTxOptions{
@@ -206,7 +186,6 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	require.NotNil(t, group1)
 	groupID := group1.ID
 	require.Equal(t, []string{"me@node1", "you@node2"}, group1.Members)
-	require.NotNil(t, group1.Genesis)
 
 	// Query it back - should be the only one
 	groups, err := pgroupRPC.QueryGroups(ctx, query.NewQueryBuilder().Equal("domain", "domain1").Limit(1).Query())
@@ -214,8 +193,6 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	require.Len(t, groups, 1)
 	require.Equal(t, "domain1", groups[0].Domain)
 	require.Equal(t, groupID, groups[0].ID)
-	require.NotNil(t, groups[0].Genesis)
-	require.JSONEq(t, mergedGenesis, string(groups[0].Genesis))            // enriched from state store
 	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members) // enriched from members table
 
 	// Simulate completion of the transaction so we have the contract address
@@ -245,15 +222,12 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 	require.Len(t, groupsWithMember, 1)
 
 	// Search for it by name
-	groups, err = pgroupRPC.QueryGroupsByProperties(ctx, "domain1", group.GenesisSchema,
-		query.NewQueryBuilder().Equal("name", "secret things").Equal("version", 200).Limit(1).Query())
+	groups, err = pgroupRPC.QueryGroups(ctx, query.NewQueryBuilder().Equal("name", "secret.things").Limit(1).Query())
 	require.NoError(t, err)
 	require.Len(t, groups, 1)
 	require.Equal(t, contractAddr, groups[0].ContractAddress)
 	require.Equal(t, "domain1", groups[0].Domain)
 	require.Equal(t, groupID, groups[0].ID)
-	require.NotNil(t, groups[0].Genesis)
-	require.JSONEq(t, mergedGenesis, string(groups[0].Genesis))
 	require.Equal(t, []string{"me@node1", "you@node2"}, groups[0].Members)
 
 	// Send a transaction to it

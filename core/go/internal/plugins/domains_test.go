@@ -244,10 +244,18 @@ func TestDomainRequestsOK(t *testing.T) {
 				ReceiptJson: `{"receipt":"data"}`,
 			}, nil
 		},
+		ConfigurePrivacyGroup: func(ctx context.Context, cpgr *prototk.ConfigurePrivacyGroupRequest) (*prototk.ConfigurePrivacyGroupResponse, error) {
+			assert.Equal(t, map[string]string{"input": "props"}, cpgr.InputProperties)
+			return &prototk.ConfigurePrivacyGroupResponse{
+				Properties: map[string]string{"finalized": "props"},
+			}, nil
+		},
 		InitPrivacyGroup: func(ctx context.Context, ipgr *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
-			assert.Equal(t, `{"some":"props"}`, ipgr.PropertiesJson)
+			assert.Equal(t, `{"some": "state"}`, ipgr.GenesisState.StateDataJson)
 			return &prototk.InitPrivacyGroupResponse{
-				GenesisStateJson: `{"full":"props"}`,
+				Transaction: &prototk.PreparedTransaction{
+					ParamsJson: `{"some":"params"}`,
+				},
 			}, nil
 		},
 		ValidatePrivacyGroup: func(ctx context.Context, vpgr *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error) {
@@ -447,11 +455,19 @@ func TestDomainRequestsOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, `{"receipt":"data"}`, brr.ReceiptJson)
 
-	ipgr, err := domainAPI.InitPrivacyGroup(ctx, &prototk.InitPrivacyGroupRequest{
-		PropertiesJson: `{"some":"props"}`,
+	cpgr, err := domainAPI.ConfigurePrivacyGroup(ctx, &prototk.ConfigurePrivacyGroupRequest{
+		InputProperties: map[string]string{"input": "props"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, `{"full":"props"}`, ipgr.GenesisStateJson)
+	assert.Equal(t, map[string]string{"finalized": "props"}, cpgr.Properties)
+
+	ipgr, err := domainAPI.InitPrivacyGroup(ctx, &prototk.InitPrivacyGroupRequest{
+		GenesisState: &prototk.EndorsableState{
+			StateDataJson: `{"some": "state"}`,
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, `{"some":"params"}`, ipgr.Transaction.ParamsJson)
 
 	vpgr, err := domainAPI.ValidatePrivacyGroup(ctx, &prototk.ValidatePrivacyGroupRequest{
 		GenesisState: &prototk.EndorsableState{

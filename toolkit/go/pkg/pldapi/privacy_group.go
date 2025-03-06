@@ -17,26 +17,25 @@
 package pldapi
 
 import (
+	"sort"
+
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-type PrivacyGroupWithABI struct {
-	*PrivacyGroup
-	GenesisABI *abi.Parameter `docstruct:"PrivacyGroup" json:"genesisABI"`
-}
-
 type PrivacyGroup struct {
 	ID                 tktypes.HexBytes    `docstruct:"PrivacyGroup" json:"id"`
 	Domain             string              `docstruct:"PrivacyGroup" json:"domain"`
 	Created            tktypes.Timestamp   `docstruct:"PrivacyGroup" json:"created"`
+	Name               string              `docstruct:"PrivacyGroup" json:"name"`
 	Members            []string            `docstruct:"PrivacyGroup" json:"members"`
-	ContractAddress    *tktypes.EthAddress `docstruct:"PrivacyGroup" json:"contractAddress"`
-	Genesis            tktypes.RawJSON     `docstruct:"PrivacyGroup" json:"genesis,omitempty"` // full genesis state
-	GenesisTransaction uuid.UUID           `docstruct:"PrivacyGroup" json:"genesisTransaction"`
+	Properties         map[string]string   `docstruct:"PrivacyGroup" json:"properties"`
+	Configuration      map[string]string   `docstruct:"PrivacyGroup" json:"configuration"`
+	GenesisSalt        tktypes.Bytes32     `docstruct:"PrivacyGroup" json:"genesisSalt"`
 	GenesisSchema      tktypes.Bytes32     `docstruct:"PrivacyGroup" json:"genesisSchema"`
-	GenesisSignature   string              `docstruct:"PrivacyGroup" json:"genesisSignature"`
+	GenesisTransaction uuid.UUID           `docstruct:"PrivacyGroup" json:"genesisTransaction"`
+	ContractAddress    *tktypes.EthAddress `docstruct:"PrivacyGroup" json:"contractAddress"`
 }
 
 type PrivacyGroupTXOptions struct {
@@ -64,8 +63,9 @@ type PrivacyGroupMessageInput struct {
 type PrivacyGroupInput struct {
 	Domain             string                 `docstruct:"PrivacyGroupInput" json:"domain"`
 	Members            []string               `docstruct:"PrivacyGroupInput" json:"members"`
-	Properties         tktypes.RawJSON        `docstruct:"PrivacyGroupInput" json:"properties"`              // properties that inform genesis state
-	PropertiesABI      abi.ParameterArray     `docstruct:"PrivacyGroupInput" json:"propertiesABI,omitempty"` // without this the property types will be inferred
+	Name               string                 `docstruct:"PrivacyGroupInput" json:"name"`
+	Properties         map[string]string      `docstruct:"PrivacyGroupInput" json:"properties,omitempty"`
+	Configuration      map[string]string      `docstruct:"PrivacyGroupInput" json:"configuration,omitempty"`
 	TransactionOptions *PrivacyGroupTXOptions `docstruct:"PrivacyGroupInput" json:"transactionOptions,omitempty"`
 }
 
@@ -134,5 +134,72 @@ func (tt PGroupEventType) Enum() tktypes.Enum[PGroupEventType] {
 func (tt PGroupEventType) Options() []string {
 	return []string{
 		string(PGroupEventTypeMessages),
+	}
+}
+
+func PrivacyGroupABISchema() *abi.Parameter {
+	return &abi.Parameter{
+		Name:         "PrivacyGroup",
+		Type:         "tuple",
+		InternalType: "struct PrivacyGroup",
+		Components: abi.ParameterArray{
+			{Name: "genesisSalt", Type: "bytes32"},
+			{Name: "name", Type: "string", Indexed: true},
+			{Name: "members", Type: "string[]"},
+			{Name: "properties", Type: "tuple[]", InternalType: "struct Properties", Components: abi.ParameterArray{
+				{Name: "key", Type: "string"},
+				{Name: "value", Type: "string"},
+			}},
+			{Name: "configuration", Type: "tuple[]", InternalType: "struct Configuration", Components: abi.ParameterArray{
+				{Name: "key", Type: "string"},
+				{Name: "value", Type: "string"},
+			}},
+		},
+	}
+}
+
+type KeyValueStringProperties []KeyValueStringProperty
+
+func (p KeyValueStringProperties) Len() int           { return len(p) }
+func (p KeyValueStringProperties) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p KeyValueStringProperties) Less(i, j int) bool { return p[i].Key < p[j].Key }
+
+func (p KeyValueStringProperties) Map() map[string]string {
+	m := make(map[string]string, len(p))
+	for _, p := range p {
+		m[p.Key] = p.Value
+	}
+	return m
+}
+
+func NewKeyValueStringProperties(m map[string]string) KeyValueStringProperties {
+	p := make(KeyValueStringProperties, 0, len(m))
+	for k, v := range m {
+		p = append(p, KeyValueStringProperty{Key: k, Value: v})
+	}
+	sort.Sort(p)
+	return p
+}
+
+type KeyValueStringProperty struct {
+	Key   string `docstruct:"KeyValueProperty" json:"key"`
+	Value string `docstruct:"KeyValueProperty" json:"value"`
+}
+
+type PrivacyGroupGenesisState struct {
+	GenesisSalt   tktypes.Bytes32          `docstruct:"PrivacyGroupGenesisState" json:"genesisSalt"`
+	Name          string                   `docstruct:"PrivacyGroupGenesisState" json:"name"`
+	Members       []string                 `docstruct:"PrivacyGroupGenesisState" json:"members"`
+	Properties    KeyValueStringProperties `docstruct:"PrivacyGroupGenesisState" json:"properties"`
+	Configuration KeyValueStringProperties `docstruct:"PrivacyGroupGenesisState" json:"configuration"`
+}
+
+func (pg *PrivacyGroup) GenesisStateData() *PrivacyGroupGenesisState {
+	return &PrivacyGroupGenesisState{
+		GenesisSalt:   pg.GenesisSalt,
+		Name:          pg.Name,
+		Members:       pg.Members,
+		Properties:    NewKeyValueStringProperties(pg.Properties),
+		Configuration: NewKeyValueStringProperties(pg.Configuration),
 	}
 }

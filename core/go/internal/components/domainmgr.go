@@ -57,8 +57,8 @@ type Domain interface {
 
 	// Specific to domains that support privacy groups (domain should return error if it does not).
 	// Validates the input properties, and turns it into the full genesis configuration for a group
-	InitPrivacyGroup(ctx context.Context, pgInput *pldapi.PrivacyGroupInput) (tx *PreparedGroupInitTransaction, err error)
-	ValidatePrivacyGroup(ctx context.Context, schema *pldapi.Schema, state *pldapi.State) (members []string, err error)
+	ConfigurePrivacyGroup(ctx context.Context, inputConfiguration map[string]string) (configuration map[string]string, err error)
+	InitPrivacyGroup(ctx context.Context, genesis *pldapi.PrivacyGroupGenesisState) (tx *pldapi.TransactionInput, err error)
 
 	InitDeploy(ctx context.Context, tx *PrivateContractDeploy) error
 	PrepareDeploy(ctx context.Context, tx *PrivateContractDeploy) error
@@ -87,7 +87,7 @@ type DomainSmartContract interface {
 	InitCall(ctx context.Context, tx *ResolvedTransaction) ([]*prototk.ResolveVerifierRequest, error)
 	ExecCall(dCtx DomainContext, readTX persistence.DBTX, tx *ResolvedTransaction, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
 
-	WrapPrivacyGroupEVMTX(context.Context, *pldapi.PrivacyGroupWithABI, *pldapi.PrivacyGroupEVMTX) (*pldapi.TransactionInput, error)
+	WrapPrivacyGroupEVMTX(context.Context, *pldapi.PrivacyGroup, *pldapi.PrivacyGroupEVMTX) (*pldapi.TransactionInput, error)
 }
 
 type DomainPrivacyGroupConfig struct {

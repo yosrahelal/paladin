@@ -42,8 +42,8 @@
      protected abstract CompletableFuture<InitCallResponse> initCall(InitCallRequest request);
      protected abstract CompletableFuture<ExecCallResponse> execCall(ExecCallRequest request);
      protected abstract CompletableFuture<BuildReceiptResponse> buildReceipt(BuildReceiptRequest request);
+     protected abstract CompletableFuture<ConfigurePrivacyGroupResponse> configurePrivacyGroup(ConfigurePrivacyGroupRequest request);
      protected abstract CompletableFuture<InitPrivacyGroupResponse> initPrivacyGroup(InitPrivacyGroupRequest request);
-     protected abstract CompletableFuture<ValidatePrivacyGroupResponse> validatePrivacyGroup(ValidatePrivacyGroupRequest request);
      protected abstract CompletableFuture<WrapPrivacyGroupEVMTXResponse> wrapPrivacyGroupTransaction(WrapPrivacyGroupEVMTXRequest request);
 
      protected DomainInstance(String grpcTarget, String instanceId) {
@@ -120,8 +120,8 @@
                  case INIT_CALL -> initCall(request.getInitCall()).thenApply(response::setInitCallRes);
                  case EXEC_CALL -> execCall(request.getExecCall()).thenApply(response::setExecCallRes);
                  case BUILD_RECEIPT -> buildReceipt(request.getBuildReceipt()).thenApply(response::setBuildReceiptRes);
+                 case CONFIGURE_PRIVACY_GROUP -> configurePrivacyGroup(request.getConfigurePrivacyGroup()).thenApply(response::setConfigurePrivacyGroupRes);
                  case INIT_PRIVACY_GROUP -> initPrivacyGroup(request.getInitPrivacyGroup()).thenApply(response::setInitPrivacyGroupRes);
-                 case VALIDATE_PRIVACY_GROUP -> validatePrivacyGroup(request.getValidatePrivacyGroup()).thenApply(response::setValidatePrivacyGroupRes);
                  case WRAP_PRIVACY_GROUP_EVMTX -> wrapPrivacyGroupTransaction(request.getWrapPrivacyGroupEvmtx()).thenApply(response::setWrapPrivacyGroupEvmtxRes);
                  default -> throw new IllegalArgumentException("unknown request: %s".formatted(request.getRequestToDomainCase()));
              };

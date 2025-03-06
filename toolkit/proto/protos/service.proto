@@ -62,8 +62,8 @@ message DomainMessage {
     GetVerifierRequest            get_verifier =                 1140;
     ValidateStateHashesRequest    validate_state_hashes =        1150;
     BuildReceiptRequest           build_receipt =                1160;
-    InitPrivacyGroupRequest       init_privacy_group =           1170;
-    ValidatePrivacyGroupRequest   validate_privacy_group =       1180;
+    ConfigurePrivacyGroupRequest  configure_privacy_group =      1170;
+    InitPrivacyGroupRequest       init_privacy_group =           1180;
     WrapPrivacyGroupEVMTXRequest  wrap_privacy_group_evmtx =     1190;
   }
 
@@ -84,8 +84,8 @@ message DomainMessage {
     GetVerifierResponse           get_verifier_res =             1141;
     ValidateStateHashesResponse   validate_state_hashes_res =    1151;
     BuildReceiptResponse          build_receipt_res =            1161;
-    InitPrivacyGroupResponse      init_privacy_group_res =       1171;
-    ValidatePrivacyGroupResponse  validate_privacy_group_res =   1181;
+    ConfigurePrivacyGroupResponse configure_privacy_group_res =  1171;
+    InitPrivacyGroupResponse      init_privacy_group_res =       1181;
     WrapPrivacyGroupEVMTXResponse wrap_privacy_group_evmtx_res = 1191;
   }
 

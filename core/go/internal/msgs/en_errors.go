@@ -450,7 +450,6 @@ var (
 	MsgStateDistributorNullifierFail     = pde("PD012401", "Failed to generate nullifier for state %s")
 
 	// Privacy group manager PD0125XX
-	MsgPGroupsDataDoesNotMatchSchema        = pde("PD012500", "Supplied properties could not be parsed against the ABI schema (generated=%t)")
 	MsgPGroupsNoMembers                     = pde("PD012501", "The privacy group must have at least one member")
 	MsgPGroupsGroupNotFound                 = pde("PD012502", "Privacy group '%s' not found")
 	MsgPGroupsNotReady                      = pde("PD012503", "Privacy group '%s' is not ready (check transaction '%s' has been confirmed on-chain)")
@@ -472,4 +471,6 @@ var (
 	MsgPGroupsListenerNameRequired          = pde("PD012519", "Receipt listener name is required")
 	MsgPGroupsJSONRPCSubscriptionClosed     = pde("PD012520", "JSON/RPC subscription '%s' closed")
 	MsgPGroupsJSONRPCSubscriptionNack       = pde("PD012521", "JSON/RPC subscription '%s' returned nack for message batch")
+	MsgPGroupsGenesisSaltUnset              = pde("PD012522", "Genesis salt must be set")
+	MsgPGroupsReceivedGenesisInvalid        = pde("PD012523", "Received genesis state is invalid")
 )

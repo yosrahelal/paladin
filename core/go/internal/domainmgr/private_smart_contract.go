@@ -696,7 +696,17 @@ func (dc *domainContract) loadStatesFromContext(dCtx components.DomainContext, r
 
 }
 
-func (dc *domainContract) WrapPrivacyGroupEVMTX(ctx context.Context, pg *pldapi.PrivacyGroupWithABI, pgTX *pldapi.PrivacyGroupEVMTX) (ptx *pldapi.TransactionInput, err error) {
+func mapPrivacyGroupToProto(pg *pldapi.PrivacyGroupGenesisState) *prototk.PrivacyGroup {
+	return &prototk.PrivacyGroup{
+		GenesisSalt:   pg.GenesisSalt.String(),
+		Name:          pg.Name,
+		Members:       pg.Members,
+		Properties:    pg.Properties.Map(),
+		Configuration: pg.Configuration.Map(),
+	}
+}
+
+func (dc *domainContract) WrapPrivacyGroupEVMTX(ctx context.Context, pg *pldapi.PrivacyGroup, pgTX *pldapi.PrivacyGroupEVMTX) (ptx *pldapi.TransactionInput, err error) {
 
 	// We do nothing apart from type conversion here, as the domain is going to wrap this call
 	// and return the private transaction, such that it can be validated fully there.
@@ -729,12 +739,7 @@ func (dc *domainContract) WrapPrivacyGroupEVMTX(ctx context.Context, pg *pldapi.
 
 	// Call the domain to do the work
 	res, err := dc.api.WrapPrivacyGroupEVMTX(ctx, &prototk.WrapPrivacyGroupEVMTXRequest{
-		GenesisState: &prototk.EndorsableState{
-			Id:            pg.ID.String(),
-			SchemaId:      pg.GenesisSchema.String(),
-			StateDataJson: pg.Genesis.String(),
-		},
-		GenesisAbiJson: tktypes.JSONString(pg.GenesisABI).Pretty(),
+		PrivacyGroup: mapPrivacyGroupToProto(pg.GenesisStateData()),
 		Transaction: &prototk.PrivacyGroupEVMTX{
 			ContractInfo: &prototk.ContractInfo{
 				ContractAddress:    dc.info.Address.String(),

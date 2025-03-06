@@ -25,7 +25,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -70,28 +69,13 @@ func newTestMessageReceiver(err error) *testMessageReceiver {
 func createTestGroups(t *testing.T, ctx context.Context, mc *mockComponents, gm *groupManager, groups ...*pldapi.PrivacyGroupInput) []tktypes.HexBytes {
 
 	// Validate the init gets the correct data
+	mc.domain.On("ConfigurePrivacyGroup", mock.Anything, mock.Anything).Return(map[string]string{"conf1": "value1"}, nil)
 	ipg := mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything)
 	ipg.Run(func(args mock.Arguments) {
-		spec := args[1].(*pldapi.PrivacyGroupInput)
-		require.Equal(t, "domain1", spec.Domain)
 		ipg.Return(
-			&components.PreparedGroupInitTransaction{
-				TX: &pldapi.TransactionInput{
-					TransactionBase: pldapi.TransactionBase{
-						Type: pldapi.TransactionTypePrivate.Enum(),
-					},
-				},
-				GenesisState: tktypes.RawJSON(fmt.Sprintf(`{"salt": "%s"}`, tktypes.RandBytes32())),
-				GenesisSchema: &abi.Parameter{
-					Name:         "TestPrivacyGroup",
-					Type:         "tuple",
-					InternalType: "struct TestPrivacyGroup;",
-					Indexed:      true,
-					Components: append(spec.PropertiesABI, &abi.Parameter{
-						Name:    "salt",
-						Type:    "bytes32",
-						Indexed: true,
-					}),
+			&pldapi.TransactionInput{
+				TransactionBase: pldapi.TransactionBase{
+					Type: pldapi.TransactionTypePrivate.Enum(),
 				},
 			},
 			nil,

@@ -231,31 +231,25 @@ message ValidateStateHashesResponse {
   repeated string state_ids = 1; // the validates ids in the same order as the states supplied (if any states were invalid, return an error instead)
 }
 
+message ConfigurePrivacyGroupRequest {
+  map<string, string> input_configuration = 1; // User supplied options to inform the configuration of the domain
+}
+
+message ConfigurePrivacyGroupResponse {
+  map<string, string> configuration = 1; // The calculated final set of configuration for the domain to store in the state (informed by any user-supplied options)
+}
+
 message InitPrivacyGroupRequest {
-  string properties_json = 1; // The JSON encoded properties that conform to the properties schema provided
-  string properties_abi_json = 2; // ABI parameter array that specifies the user-supplied properties that go into the creation of the group
-  repeated string members = 3; // Array of members for the privacy group
+  PrivacyGroup privacy_group = 1; // the configured privacy group
 }
 
 message InitPrivacyGroupResponse {
-  string genesis_state_json = 1; // The full definition of the group, encoding the properties, the members, and any needed configuration for all members
-  string genesis_abi_state_schema_json = 2; // The ABI definition that must be distributed alongside the state to decode and index it in the state store
-  PreparedTransaction transaction = 3; // The transaction that will result from this against the domain
-}
-
-message ValidatePrivacyGroupRequest {
-  EndorsableState genesis_state = 1; // the full genesis state of the transaction
-  string genesis_abi_json = 2; // the full ABI of the genesis state
-}
-
-message ValidatePrivacyGroupResponse {
-  repeated string members = 1; // the member list is processed out of the state
+  PreparedTransaction transaction = 1; // The transaction that will result from this against the domain
 }
 
 message WrapPrivacyGroupEVMTXRequest {
-  EndorsableState genesis_state = 1; // the full genesis state of the transaction
-  string genesis_abi_json = 2; // the full ABI of the genesis state
-  PrivacyGroupEVMTX transaction = 3; // the transaction to wrap
+  PrivacyGroup privacy_group = 1; // the configured privacy group
+  PrivacyGroupEVMTX transaction = 2; // the transaction to wrap
 }
 
 message WrapPrivacyGroupEVMTXResponse {
@@ -446,4 +440,12 @@ message DomainAPIError {
 message CompletedTransaction {
   string transaction_id = 1; // The ID of the transaction that has completed (opaque 32 byte identifier)
   OnChainEventLocation location = 2; // the locator information on the blockchain to point at as the source of the confirmation
+}
+
+message PrivacyGroup {
+  string genesis_salt = 1;
+  string name = 2;
+  repeated string members = 3;
+  map<string, string> properties = 4;
+  map<string, string> configuration = 5;
 }

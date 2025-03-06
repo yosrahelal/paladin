@@ -841,22 +841,25 @@ func (d *domain) GetStatesByID(ctx context.Context, req *prototk.GetStatesByIDRe
 	}, err
 }
 
-func (d *domain) InitPrivacyGroup(ctx context.Context, pgInput *pldapi.PrivacyGroupInput) (tx *components.PreparedGroupInitTransaction, err error) {
-
-	// This one is a straight forward pass-through to the domain - the Privacy Group manager does the
-	// hard work in validating the data returned against the genesis ABI spec returned.
-	res, err := d.api.InitPrivacyGroup(ctx, &prototk.InitPrivacyGroupRequest{
-		PropertiesJson:    pgInput.Properties.String(),
-		PropertiesAbiJson: tktypes.JSONString(pgInput.PropertiesABI).String(),
-		Members:           pgInput.Members,
+func (d *domain) ConfigurePrivacyGroup(ctx context.Context, inputConfiguration map[string]string) (configuration map[string]string, err error) {
+	res, err := d.api.ConfigurePrivacyGroup(ctx, &prototk.ConfigurePrivacyGroupRequest{
+		InputConfiguration: inputConfiguration,
 	})
 	if err != nil {
 		return nil, err
 	}
+	return res.Configuration, nil
+}
 
-	var abiSchema abi.Parameter
-	if err := json.Unmarshal([]byte(res.GenesisAbiStateSchemaJson), &abiSchema); err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidPGroupGenesisABI)
+func (d *domain) InitPrivacyGroup(ctx context.Context, genesis *pldapi.PrivacyGroupGenesisState) (tx *pldapi.TransactionInput, err error) {
+
+	// This one is a straight forward pass-through to the domain - the Privacy Group manager does the
+	// hard work in validating the data returned against the genesis ABI spec returned.
+	res, err := d.api.InitPrivacyGroup(ctx, &prototk.InitPrivacyGroupRequest{
+		PrivacyGroup: mapPrivacyGroupToProto(genesis),
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	signer := ""
@@ -880,34 +883,15 @@ func (d *domain) InitPrivacyGroup(ctx context.Context, pgInput *pldapi.PrivacyGr
 		}
 	}
 
-	return &components.PreparedGroupInitTransaction{
-		TX: &pldapi.TransactionInput{
-			TransactionBase: pldapi.TransactionBase{
-				From:   signer,
-				To:     optionalContractAddr,
-				Type:   txType,
-				Data:   tktypes.RawJSON(res.Transaction.ParamsJson),
-				Domain: d.name,
-			},
-			ABI: abi.ABI{&functionABI},
+	return &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:   signer,
+			To:     optionalContractAddr,
+			Type:   txType,
+			Data:   tktypes.RawJSON(res.Transaction.ParamsJson),
+			Domain: d.name,
 		},
-		GenesisState:  tktypes.RawJSON(res.GenesisStateJson),
-		GenesisSchema: &abiSchema,
+		ABI: abi.ABI{&functionABI},
 	}, nil
 
-}
-
-func (d *domain) ValidatePrivacyGroup(ctx context.Context, schema *pldapi.Schema, state *pldapi.State) (members []string, err error) {
-	res, err := d.api.ValidatePrivacyGroup(ctx, &prototk.ValidatePrivacyGroupRequest{
-		GenesisState: &prototk.EndorsableState{
-			Id:            state.ID.String(),
-			SchemaId:      state.Schema.String(),
-			StateDataJson: state.Data.Pretty(),
-		},
-		GenesisAbiJson: schema.Definition.Pretty(),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return res.Members, nil
 }

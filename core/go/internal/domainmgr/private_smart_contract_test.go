@@ -1590,23 +1590,9 @@ func goodWrapPGTxCall(psc *domainContract, salt tktypes.Bytes32) (*pldapi.Transa
 			},
 		},
 	}
-	return psc.WrapPrivacyGroupEVMTX(context.Background(), &pldapi.PrivacyGroupWithABI{
-		PrivacyGroup: &pldapi.PrivacyGroup{
-			ID: tktypes.RandBytes(32),
-			Genesis: tktypes.JSONString(map[string]any{
-				"name": "pg1",
-				"salt": salt,
-			}),
-		},
-		GenesisABI: &abi.Parameter{
-			Type:         "tuple",
-			Name:         "MyPrivacyGroup",
-			InternalType: "struct MyPrivacyGroup;",
-			Components: abi.ParameterArray{
-				{Type: "string", Name: "name"},
-				{Type: "bytes32", Name: "salt"},
-			},
-		},
+	return psc.WrapPrivacyGroupEVMTX(context.Background(), &pldapi.PrivacyGroup{
+		GenesisSalt: salt,
+		Name:        "pg1",
 	}, tx)
 }
 
@@ -1618,16 +1604,16 @@ func TestWrapPGTxOk(t *testing.T) {
 	psc := goodPSC(t, td)
 
 	td.tp.Functions.WrapPrivacyGroupEVMTX = func(ctx context.Context, wpgtr *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error) {
-		var genesisABI abi.Parameter
-		err := json.Unmarshal([]byte(wpgtr.GenesisAbiJson), &genesisABI)
-		require.NoError(t, err)
-		var genesisData map[string]interface{}
-		err = json.Unmarshal([]byte(wpgtr.GenesisState.StateDataJson), &genesisData)
-		require.NoError(t, err)
-		genesisABI.Name = "pgDetails"
+		require.Equal(t, "pg1", wpgtr.PrivacyGroup.Name)
 		var fnDef abi.Entry
-		err = json.Unmarshal([]byte(*wpgtr.Transaction.FunctionAbiJson), &fnDef)
+		err := json.Unmarshal([]byte(*wpgtr.Transaction.FunctionAbiJson), &fnDef)
 		require.NoError(t, err)
+		paramsJson := tktypes.JSONString(map[string]any{
+			"pgName":            wpgtr.PrivacyGroup.Name,
+			"gas":               wpgtr.Transaction.Gas,
+			"value":             wpgtr.Transaction.Value,
+			"wrappedParamsJSON": tktypes.RawJSON(*wpgtr.Transaction.InputJson),
+		}).Pretty()
 		return &prototk.WrapPrivacyGroupEVMTXResponse{
 			Transaction: &prototk.PreparedTransaction{
 				ContractAddress: confutil.P(psc.Address().String()),
@@ -1637,18 +1623,13 @@ func TestWrapPGTxOk(t *testing.T) {
 					Type: abi.Function,
 					Name: "wrappedDoThing",
 					Inputs: abi.ParameterArray{
-						&genesisABI,
+						{Name: "pgName", Type: "string"},
 						{Name: "gas", Type: "uint64"},
 						{Name: "value", Type: "uint256"},
 						{Name: "wrappedParamsJSON", Type: "tuple", Components: fnDef.Inputs},
 					},
 				}).Pretty(),
-				ParamsJson: tktypes.JSONString(map[string]any{
-					"pgDetails":         tktypes.RawJSON(wpgtr.GenesisState.StateDataJson),
-					"gas":               wpgtr.Transaction.Gas,
-					"value":             wpgtr.Transaction.Value,
-					"wrappedParamsJSON": tktypes.RawJSON(*wpgtr.Transaction.InputJson),
-				}).Pretty(),
+				ParamsJson: paramsJson,
 			},
 		}, nil
 	}
@@ -1664,10 +1645,7 @@ func TestWrapPGTxOk(t *testing.T) {
 		"from":           "pgroup.signer",
 		"to":             "%s",
 		"data": {
-			"pgDetails": {
-				"name": "pg1",
-				"salt": "%s"
-			},
+			"pgName": "pg1",
 			"gas": "0x3039",
 			"value": "0x02540be400",
 			"wrappedParamsJSON": {
@@ -1679,21 +1657,7 @@ func TestWrapPGTxOk(t *testing.T) {
 			"type": "function",
 			"name": "wrappedDoThing",
 			"inputs": [
-				{
-					"components": [
-						{
-							"name": "name",
-							"type": "string"
-						},
-						{
-							"name": "salt",
-							"type": "bytes32"
-						}
-					],
-					"internalType": "struct MyPrivacyGroup;",
-					"name": "pgDetails",
-					"type": "tuple"
-				},
+				{ "name": "pgName", "type": "string" },
 				{ "name": "gas", "type": "uint64" },
 				{ "name": "value", "type": "uint256" },
 				{
@@ -1713,7 +1677,7 @@ func TestWrapPGTxOk(t *testing.T) {
 			],
 			"outputs": null
 		}]
-	}`, psc.Address(), salt), tktypes.JSONString(tx).Pretty())
+	}`, psc.Address()), tktypes.JSONString(tx).Pretty())
 }
 
 func TestWrapPGFail(t *testing.T) {

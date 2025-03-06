@@ -111,12 +111,12 @@ public class TestDomain extends DomainInstance {
     }
 
     @Override
-    protected CompletableFuture<InitPrivacyGroupResponse> initPrivacyGroup(InitPrivacyGroupRequest request) {
+    protected CompletableFuture<ConfigurePrivacyGroupResponse> configurePrivacyGroup(ConfigurePrivacyGroupRequest request) {
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
 
     @Override
-    protected CompletableFuture<ValidatePrivacyGroupResponse> validatePrivacyGroup(ValidatePrivacyGroupRequest request) {
+    protected CompletableFuture<InitPrivacyGroupResponse> initPrivacyGroup(InitPrivacyGroupRequest request) {
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
 

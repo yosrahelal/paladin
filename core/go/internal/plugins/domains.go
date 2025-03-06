@@ -370,6 +370,21 @@ func (br *domainBridge) BuildReceipt(ctx context.Context, req *prototk.BuildRece
 	return
 }
 
+func (br *domainBridge) ConfigurePrivacyGroup(ctx context.Context, req *prototk.ConfigurePrivacyGroupRequest) (res *prototk.ConfigurePrivacyGroupResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_ConfigurePrivacyGroup{ConfigurePrivacyGroup: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_ConfigurePrivacyGroupRes); ok {
+				res = r.ConfigurePrivacyGroupRes
+			}
+			return res != nil
+		},
+	)
+	return
+}
+
 func (br *domainBridge) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGroupRequest) (res *prototk.InitPrivacyGroupResponse, err error) {
 	err = br.toPlugin.RequestReply(ctx,
 		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
@@ -378,21 +393,6 @@ func (br *domainBridge) InitPrivacyGroup(ctx context.Context, req *prototk.InitP
 		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
 			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_InitPrivacyGroupRes); ok {
 				res = r.InitPrivacyGroupRes
-			}
-			return res != nil
-		},
-	)
-	return
-}
-
-func (br *domainBridge) ValidatePrivacyGroup(ctx context.Context, req *prototk.ValidatePrivacyGroupRequest) (res *prototk.ValidatePrivacyGroupResponse, err error) {
-	err = br.toPlugin.RequestReply(ctx,
-		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
-			dm.Message().RequestToDomain = &prototk.DomainMessage_ValidatePrivacyGroup{ValidatePrivacyGroup: req}
-		},
-		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
-			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_ValidatePrivacyGroupRes); ok {
-				res = r.ValidatePrivacyGroupRes
 			}
 			return res != nil
 		},

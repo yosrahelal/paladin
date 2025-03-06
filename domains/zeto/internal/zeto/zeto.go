@@ -559,11 +559,11 @@ func (z *Zeto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptReques
 	return nil, i18n.NewError(ctx, msgs.MsgNoDomainReceipt)
 }
 
-func (z *Zeto) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
+func (z *Zeto) ConfigurePrivacyGroup(ctx context.Context, req *prototk.ConfigurePrivacyGroupRequest) (*prototk.ConfigurePrivacyGroupResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
 
-func (z *Zeto) ValidatePrivacyGroup(ctx context.Context, req *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error) {
+func (z *Zeto) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
 

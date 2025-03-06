@@ -41,8 +41,8 @@ type DomainAPI interface {
 	InitCall(context.Context, *prototk.InitCallRequest) (*prototk.InitCallResponse, error)
 	ExecCall(context.Context, *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error)
 	BuildReceipt(context.Context, *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error)
+	ConfigurePrivacyGroup(context.Context, *prototk.ConfigurePrivacyGroupRequest) (*prototk.ConfigurePrivacyGroupResponse, error)
 	InitPrivacyGroup(context.Context, *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error)
-	ValidatePrivacyGroup(context.Context, *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error)
 	WrapPrivacyGroupEVMTX(context.Context, *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error)
 }
 
@@ -201,13 +201,13 @@ func (dp *domainHandler) RequestToPlugin(ctx context.Context, iReq PluginMessage
 		resMsg := &prototk.DomainMessage_BuildReceiptRes{}
 		resMsg.BuildReceiptRes, err = dp.api.BuildReceipt(ctx, input.BuildReceipt)
 		res.ResponseFromDomain = resMsg
+	case *prototk.DomainMessage_ConfigurePrivacyGroup:
+		resMsg := &prototk.DomainMessage_ConfigurePrivacyGroupRes{}
+		resMsg.ConfigurePrivacyGroupRes, err = dp.api.ConfigurePrivacyGroup(ctx, input.ConfigurePrivacyGroup)
+		res.ResponseFromDomain = resMsg
 	case *prototk.DomainMessage_InitPrivacyGroup:
 		resMsg := &prototk.DomainMessage_InitPrivacyGroupRes{}
 		resMsg.InitPrivacyGroupRes, err = dp.api.InitPrivacyGroup(ctx, input.InitPrivacyGroup)
-		res.ResponseFromDomain = resMsg
-	case *prototk.DomainMessage_ValidatePrivacyGroup:
-		resMsg := &prototk.DomainMessage_ValidatePrivacyGroupRes{}
-		resMsg.ValidatePrivacyGroupRes, err = dp.api.ValidatePrivacyGroup(ctx, input.ValidatePrivacyGroup)
 		res.ResponseFromDomain = resMsg
 	case *prototk.DomainMessage_WrapPrivacyGroupEvmtx:
 		resMsg := &prototk.DomainMessage_WrapPrivacyGroupEvmtxRes{}
@@ -313,8 +313,8 @@ type DomainAPIFunctions struct {
 	InitCall              func(context.Context, *prototk.InitCallRequest) (*prototk.InitCallResponse, error)
 	ExecCall              func(context.Context, *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error)
 	BuildReceipt          func(context.Context, *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error)
+	ConfigurePrivacyGroup func(context.Context, *prototk.ConfigurePrivacyGroupRequest) (*prototk.ConfigurePrivacyGroupResponse, error)
 	InitPrivacyGroup      func(context.Context, *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error)
-	ValidatePrivacyGroup  func(context.Context, *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error)
 	WrapPrivacyGroupEVMTX func(context.Context, *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error)
 }
 
@@ -386,12 +386,12 @@ func (db *DomainAPIBase) BuildReceipt(ctx context.Context, req *prototk.BuildRec
 	return callPluginImpl(ctx, req, db.Functions.BuildReceipt)
 }
 
-func (db *DomainAPIBase) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
-	return callPluginImpl(ctx, req, db.Functions.InitPrivacyGroup)
+func (db *DomainAPIBase) ConfigurePrivacyGroup(ctx context.Context, req *prototk.ConfigurePrivacyGroupRequest) (*prototk.ConfigurePrivacyGroupResponse, error) {
+	return callPluginImpl(ctx, req, db.Functions.ConfigurePrivacyGroup)
 }
 
-func (db *DomainAPIBase) ValidatePrivacyGroup(ctx context.Context, req *prototk.ValidatePrivacyGroupRequest) (*prototk.ValidatePrivacyGroupResponse, error) {
-	return callPluginImpl(ctx, req, db.Functions.ValidatePrivacyGroup)
+func (db *DomainAPIBase) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
+	return callPluginImpl(ctx, req, db.Functions.InitPrivacyGroup)
 }
 
 func (db *DomainAPIBase) WrapPrivacyGroupEVMTX(ctx context.Context, req *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error) {

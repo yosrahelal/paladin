@@ -120,7 +120,6 @@ func TestSendMessageWriteFail(t *testing.T) {
 	schemaID := tktypes.RandBytes32()
 	groupID := tktypes.RandBytes(32)
 	mockDBPrivacyGroup(mc, schemaID, groupID, nil)
-	mockPrivacyGroupState(mc, schemaID, groupID)
 
 	mc.db.Mock.ExpectExec("INSERT.*pgroup_msgs").WillReturnError(fmt.Errorf("pop"))
 
@@ -140,7 +139,6 @@ func TestSendMessageBadMembers(t *testing.T) {
 	schemaID := tktypes.RandBytes32()
 	groupID := tktypes.RandBytes(32)
 	mockDBPrivacyGroup(mc, schemaID, groupID, nil, "!!!! badness")
-	mockPrivacyGroupState(mc, schemaID, groupID)
 
 	mc.db.Mock.ExpectQuery("INSERT.*pgroup_msgs").WillReturnRows(sqlmock.NewRows([]string{}))
 
@@ -166,7 +164,6 @@ func TestSendMessageSendMessageFail(t *testing.T) {
 	schemaID := tktypes.RandBytes32()
 	groupID := tktypes.RandBytes(32)
 	mockDBPrivacyGroup(mc, schemaID, groupID, nil, "me@node1", "me@node2")
-	mockPrivacyGroupState(mc, schemaID, groupID)
 
 	mc.db.Mock.ExpectQuery("INSERT.*pgroup_msgs").WillReturnRows(sqlmock.NewRows([]string{}))
 	mc.db.Mock.ExpectRollback()
@@ -250,7 +247,6 @@ func TestReceiveMessagesFailInsert(t *testing.T) {
 	schemaID := tktypes.RandBytes32()
 	groupID := tktypes.RandBytes(32)
 	mockDBPrivacyGroup(mc, schemaID, groupID, nil, "me@node1", "me@node2")
-	mockPrivacyGroupState(mc, schemaID, groupID)
 	mc.db.Mock.ExpectQuery("INSERT.*pgroup_msgs").WillReturnError(fmt.Errorf("pop"))
 	mc.db.Mock.ExpectRollback()
 
