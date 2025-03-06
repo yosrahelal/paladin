@@ -751,9 +751,6 @@ func TestUpdateTransactionRealDB(t *testing.T) {
 	require.Len(t, txs[txID], 1)
 	tx := txs[txID][0]
 	require.Len(t, tx.Submissions, 2)
-	for _, activity := range tx.Activity {
-		assert.NotContains(t, activity.Message, "ERROR")
-	}
 }
 
 func TestGasEstimateFactor(t *testing.T) {

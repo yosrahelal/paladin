@@ -331,10 +331,8 @@ func (v *inFlightTransactionStateVersion) PersistTxState(ctx context.Context) (s
 			v.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusSuccess))
 		}
 
-		// update the in memory state if the current version
-		if v.IsCurrent(ctx) {
-			v.ApplyInMemoryUpdates(ctx, rsc.StageOutputsToBePersisted.TxUpdates)
-		}
+		// update the in memory state
+		v.ApplyInMemoryUpdates(ctx, rsc.StageOutputsToBePersisted.TxUpdates)
 	}
 	return rsc.Stage, time.Now(), nil
 }

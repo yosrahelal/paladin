@@ -134,6 +134,8 @@ func mockInsertABIAndTransactionOK(commit bool) func(conf *pldconf.TxManagerConf
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*transaction_history").WillReturnResult(driver.ResultNoRows)
+
 		if commit {
 			mc.db.ExpectCommit()
 		}
@@ -698,6 +700,7 @@ func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
 			mockResolveKeyOKThenFail(t, mc, "sender1", tktypes.RandAddress())
 			mc.publicTxMgr.On("ValidateTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
+			mc.db.ExpectExec("INSERT.*transaction_history").WillReturnResult(driver.ResultNoRows)
 			mc.publicTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 		})
 	defer done()
@@ -1078,6 +1081,7 @@ func TestUpsertInternalPrivateTxsIdempotencyKeyFail(t *testing.T) {
 			mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows) // empty result when we expect one
+			mc.db.ExpectExec("INSERT.*transaction_history").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectQuery("SELECT.*transactions").WillReturnError(fmt.Errorf("pop"))
 		})
 	defer done()
@@ -1100,7 +1104,8 @@ func TestUpsertInternalPrivateTxsIdempotencyMisMatch(t *testing.T) {
 			mc.db.ExpectBegin()
 			mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectExec("INSERT.*abi_entries").WillReturnResult(driver.ResultNoRows)
-			mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)      // empty result when we expect one
+			mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows) // empty result when we expect one
+			mc.db.ExpectExec("INSERT.*transaction_history").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(mc.db.NewRows([]string{})) // definitely should get one
 		})
 	defer done()
@@ -1353,6 +1358,7 @@ func TestUpdateTransactionCallPublicTXUpdate(t *testing.T) {
 			mc.db.ExpectExec("UPDATE \"transactions\" SET \"abi_ref\"=\\$1,\"function\"=\\$2,\"to\"=\\$3,\"data\"=\\$4 WHERE id = \\$5").
 				WithArgs(abiRef, function, to, data, id).
 				WillReturnResult(driver.ResultNoRows)
+			mc.db.ExpectExec("INSERT.*transaction_history").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectCommit()
 
 		},
@@ -1409,7 +1415,7 @@ func TestResolveUpdatedTransactionResolveFunctionError(t *testing.T) {
 		ABI: abi.ABI{},
 	}
 
-	_, err := txm.resolveUpdatedTransaction(ctx, nil, uuid.New(), tx)
+	_, err := txm.resolveUpdatedTransaction(ctx, nil, uuid.New(), tx, nil)
 	assert.ErrorContains(t, err, "PD012218")
 }
 
@@ -1435,7 +1441,7 @@ func TestResolveUpdatedTransactionParseInputError(t *testing.T) {
 	}
 
 	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		_, err := txm.resolveUpdatedTransaction(ctx, dbTX, uuid.New(), tx)
+		_, err := txm.resolveUpdatedTransaction(ctx, dbTX, uuid.New(), tx, nil)
 		return err
 	})
 	assert.ErrorContains(t, err, "PD012208")
@@ -1443,6 +1449,7 @@ func TestResolveUpdatedTransactionParseInputError(t *testing.T) {
 
 func TestResolveUpdatedTransactionSuccess(t *testing.T) {
 	to := tktypes.MustEthAddress(tktypes.RandHex(20))
+	from := tktypes.MustEthAddress(tktypes.RandHex(20))
 	tx := &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
 			To:       to,
@@ -1467,13 +1474,22 @@ func TestResolveUpdatedTransactionSuccess(t *testing.T) {
 	var validatedTransaction *components.ValidatedTransaction
 	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		var err error
-		validatedTransaction, err = txm.resolveUpdatedTransaction(ctx, dbTX, uuid.New(), tx)
+		validatedTransaction, err = txm.resolveUpdatedTransaction(ctx, dbTX, uuid.New(), tx, &pldapi.Transaction{
+			TransactionBase: pldapi.TransactionBase{
+				Type:           pldapi.TransactionTypePublic.Enum(),
+				From:           from.String(),
+				IdempotencyKey: "idempotencyKey",
+			},
+		})
 		return err
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, validatedTransaction)
 	assert.Equal(t, to, validatedTransaction.Transaction.To)
+	assert.Equal(t, from.String(), validatedTransaction.Transaction.From)
+	assert.Equal(t, pldapi.TransactionTypePublic.Enum(), validatedTransaction.Transaction.Type)
+	assert.Equal(t, "idempotencyKey", validatedTransaction.Transaction.IdempotencyKey)
 	assert.Equal(t, "set(uint256)", validatedTransaction.ResolvedTransaction.Function.Signature)
 	assert.Equal(t, "0x76458e36bbb1e4f5e5742aa62b3122eb2e4622e19489dd2eb4c7370858085511", validatedTransaction.ResolvedTransaction.Function.ABIReference.HexString0xPrefix())
 	assert.Equal(t, `{"value":"46"}`, validatedTransaction.Transaction.Data.String())

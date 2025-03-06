@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
@@ -44,7 +45,8 @@ type managedTx struct {
 }
 
 type inMemoryTxState struct {
-	mtx *managedTx
+	managedTxMux sync.Mutex
+	mtx          *managedTx
 }
 
 func gasPricingSet(gasPricing pldapi.PublicTxGasPricing) bool {
@@ -110,6 +112,8 @@ func (imtxs *inMemoryTxState) ValidateUpdate(ctx context.Context, newPtx *DBPubl
 }
 
 func (imtxs *inMemoryTxState) UpdateTransaction(newPtx *DBPublicTxn) {
+	imtxs.managedTxMux.Lock()
+	defer imtxs.managedTxMux.Unlock()
 	// We need to be really careful how we update this. If we have new user provided fixed values then there will
 	// have already been validation that the gas price isn't being lowered.
 	// If there are no fixed values then we cannot put the gas pricing back in an empty state because
@@ -128,6 +132,9 @@ func (imtxs *inMemoryTxState) UpdateTransaction(newPtx *DBPublicTxn) {
 }
 
 func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdates *BaseTXUpdates) {
+	imtxs.managedTxMux.Lock()
+	defer imtxs.managedTxMux.Unlock()
+
 	mtx := imtxs.mtx
 
 	if txUpdates.FirstSubmit != nil {

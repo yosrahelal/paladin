@@ -136,12 +136,6 @@ func TestUpdatePublicTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, success)
 
-	success, err = c.PTX().CreateReceiptListener(ctx, &pldapi.TransactionReceiptListener{
-		Name: "listener1",
-	})
-	require.NoError(t, err)
-	require.False(t, success)
-
 	wsClient, err := c.WebSocket(ctx, instance.wsConfig)
 	require.NoError(t, err)
 
@@ -188,11 +182,20 @@ func TestUpdatePublicTransaction(t *testing.T) {
 		Inputs(`{"_x":99887766}`).
 		PublicTxOptions(pldapi.PublicTxOptions{
 			// gas is set below instrinsic limit
-			Gas: confutil.P(tktypes.HexUint64(100)),
+			Gas: confutil.P(tktypes.HexUint64(1)),
 		}).
 		Send()
 	require.NoError(t, setRes.Error())
 	require.NotNil(t, setRes.ID())
+
+	// wait for the submission to be tried and to fail
+	time.Sleep(2 * time.Second)
+
+	tx, err = c.PTX().GetTransactionFull(ctx, *setRes.ID())
+	require.NoError(t, err)
+	require.Len(t, tx.Public, 1)
+	require.NotNil(t, tx.Public[0].Activity[0])
+	assert.Regexp(t, "ERROR.*Intrinsic", tx.Public[0].Activity[0])
 
 	_, err = c.PTX().UpdateTransaction(ctx, *setRes.ID(), &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
@@ -231,6 +234,7 @@ func TestUpdatePublicTransaction(t *testing.T) {
 	require.True(t, tx.Receipt.Success)
 	require.Len(t, tx.Public, 1)
 	assert.Equal(t, tx.Public[0].Submissions[0].TransactionHash.HexString(), setReceipt.TransactionHash.HexString())
+	assert.Len(t, tx.History, 2)
 }
 
 func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
