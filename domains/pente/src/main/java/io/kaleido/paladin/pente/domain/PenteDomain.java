@@ -601,6 +601,38 @@
      }
 
      @Override
+     protected CompletableFuture<ConfigurePrivacyGroupResponse> configurePrivacyGroup(ConfigurePrivacyGroupRequest request) {
+         try {
+
+             var resBuilder = ConfigurePrivacyGroupResponse.newBuilder();
+
+             var inputConf = request.getInputConfigurationMap();
+             var evmVersion = inputConf.get("evmVersion");
+             if (evmVersion == null || evmVersion.isEmpty()) {
+                 evmVersion = PenteConfiguration.DEFAULT_EVM_VERSION;
+             }
+             resBuilder.putConfiguration("evmVersion", evmVersion);
+
+             var endorsementType = inputConf.get("endorsementType");
+             if (endorsementType == null || endorsementType.isEmpty()) {
+                 endorsementType = PenteConfiguration.DEFAULT_ENDORSEMENT_TYPE;
+             }
+             resBuilder.putConfiguration("endorsementType", endorsementType);
+
+             var externalCallsEnabled = inputConf.get("externalCallsEnabled");
+             if (externalCallsEnabled == null || externalCallsEnabled.isEmpty()) {
+                 externalCallsEnabled = "false";
+             }
+             resBuilder.putConfiguration("externalCallsEnabled", externalCallsEnabled);
+
+             return CompletableFuture.completedFuture(resBuilder.build());
+
+         } catch (Exception e) {
+             return CompletableFuture.failedFuture(e);
+         }
+     }
+
+     @Override
      protected CompletableFuture<InitPrivacyGroupResponse> initPrivacyGroup(InitPrivacyGroupRequest request) {
 
          try {
@@ -616,60 +648,19 @@
                              JsonABI.newParameter("externalCallsEnabled", "bool")
                      ))
              ));
-             var propertiesABI = mapper.readValue(request.getPropertiesAbiJson(), JsonABI.Parameters.class);
-             for ( var prop : propertiesABI ) {
-                 if (prop.name().equals("salt")) {
-                     validatePropType("", prop, "bytes32");
-                 } else if (prop.name().equals("pente")) {
-                     if (!prop.type().equals("tuple")) {
-                         throw new IllegalArgumentException("if you supply a 'pente' property, it must be a tuple of known Pente settings (type=%s)".formatted(prop.type()));
-                     }
-                     for (var penteProp : prop.components()) {
-                         switch (penteProp.name()) {
-                             case "evmVersion" -> validatePropType("pente.", penteProp, "string");
-                             case "endorsementType" -> validatePropType("pente.", penteProp, "string");
-                             case "externalCallsEnabled" -> validatePropType("pente.", penteProp, "bool");
-                             default -> throw new IllegalArgumentException("property 'pente.%s' is not a supported Pente setting".formatted(penteProp.name()));
-                         }
-                     }
-                 } else {
-                     // Add the property to the final ABI properties without modification
-                     finalABI.components().add(prop);
-                 }
-             }
 
              // Read the supplied properties into a generic map structure,
-             var jsonProps = (ObjectNode)(mapper.readValue(request.getPropertiesJson(), JsonNode.class));
-
-             // Setting the defaults for any required fields in our ABI that haven't been set in the input properties
-             if (!jsonProps.has("salt")) {
-                 jsonProps.put("salt", JsonHex.randomBytes32().toString());
-             }
-             var penteProps = (ObjectNode)jsonProps.get("pente");
-             if (penteProps == null) {
-                 penteProps = new ObjectNode(JsonNodeFactory.instance);
-                 jsonProps.set("pente", penteProps);
-             }
-             penteProps.set("members", new ArrayNode(JsonNodeFactory.instance, request.getMembersList().stream().map(m -> (JsonNode)(new TextNode(m))).toList()));
-             if (!penteProps.has("evmVersion")) {
-                 penteProps.put("evmVersion", PenteConfiguration.DEFAULT_EVM_VERSION );
-             }
-             if (!penteProps.has("endorsementType")) {
-                 penteProps.put("endorsementType", PenteConfiguration.DEFAULT_ENDORSEMENT_TYPE );
-             }
-             if (!penteProps.has("externalCallsEnabled")) {
-                 penteProps.put("externalCallsEnabled", false);
-             }
+             var pgConfig = request.getPrivacyGroup().getConfigurationMap();
 
              // Now we build the inputs for the Pente deployment private transaction (as if we'd not been using a managed privacy group)
              var constructorParams = new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
                      new PenteConfiguration.GroupTupleJSON(
-                             new JsonHex.Bytes32(jsonProps.get("salt").asText()),
-                             request.getMembersList().toArray(new String[0])
+                             new JsonHex.Bytes32(request.getPrivacyGroup().getId()),
+                             request.getPrivacyGroup().getMembersList().toArray(new String[0])
                      ),
-                     penteProps.get("evmVersion").asText(),
-                     penteProps.get("endorsementType").asText(),
-                     penteProps.get("externalCallsEnabled").asBoolean()
+                     pgConfig.get("evmVersion"),
+                     pgConfig.get("endorsementType"),
+                     Boolean.parseBoolean(pgConfig.get("externalCallsEnabled"))
              );
              var constructorABI = JsonABI.newConstructor(JsonABI.newParameters(
                      JsonABI.newTuple("group", "Group", JsonABI.newParameters(
@@ -688,8 +679,6 @@
                              .setFunctionAbiJson(mapper.writeValueAsString(constructorABI))
                              .setParamsJson(mapper.writeValueAsString(constructorParams))
                              .build())
-                     .setGenesisStateJson(mapper.writeValueAsString(jsonProps))
-                     .setGenesisAbiStateSchemaJson(mapper.writeValueAsString(finalABI))
                      .build());
          } catch (Exception e) {
              return CompletableFuture.failedFuture(e);
@@ -740,11 +729,11 @@
              ));
              var ptxInputsABI = JsonABI.newParameters(groupABI);
              var data = new ObjectNode(JsonNodeFactory.instance);
-             var genesisSettings = mapper.readValue(request.getGenesisState().getStateDataJson(), MinimalGenesisConfig.class);
              var groupJSON = new ObjectNode(getInstance());
-             groupJSON.put("salt", genesisSettings.salt.toString());
-             var membersJSON = new ArrayNode(JsonNodeFactory.instance, genesisSettings.pente.members.length);
-             for (var member : genesisSettings.pente.members) {
+             groupJSON.put("salt", request.getPrivacyGroup().getId());
+             var members = request.getPrivacyGroup().getMembersList();
+             var membersJSON = new ArrayNode(JsonNodeFactory.instance, members.size());
+             for (var member : members) {
                  membersJSON.add(member);
              }
              groupJSON.set("members", membersJSON);

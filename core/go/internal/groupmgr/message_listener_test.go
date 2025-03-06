@@ -70,7 +70,7 @@ func createTestGroups(t *testing.T, ctx context.Context, mc *mockComponents, gm 
 
 	// Validate the init gets the correct data
 	mc.domain.On("ConfigurePrivacyGroup", mock.Anything, mock.Anything).Return(map[string]string{"conf1": "value1"}, nil)
-	ipg := mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything)
+	ipg := mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything, mock.Anything)
 	ipg.Run(func(args mock.Arguments) {
 		ipg.Return(
 			&pldapi.TransactionInput{

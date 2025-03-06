@@ -696,8 +696,9 @@ func (dc *domainContract) loadStatesFromContext(dCtx components.DomainContext, r
 
 }
 
-func mapPrivacyGroupToProto(pg *pldapi.PrivacyGroupGenesisState) *prototk.PrivacyGroup {
+func mapPrivacyGroupToProto(stateID tktypes.HexBytes, pg *pldapi.PrivacyGroupGenesisState) *prototk.PrivacyGroup {
 	return &prototk.PrivacyGroup{
+		Id:            stateID.String(),
 		GenesisSalt:   pg.GenesisSalt.String(),
 		Name:          pg.Name,
 		Members:       pg.Members,
@@ -739,7 +740,7 @@ func (dc *domainContract) WrapPrivacyGroupEVMTX(ctx context.Context, pg *pldapi.
 
 	// Call the domain to do the work
 	res, err := dc.api.WrapPrivacyGroupEVMTX(ctx, &prototk.WrapPrivacyGroupEVMTXRequest{
-		PrivacyGroup: mapPrivacyGroupToProto(pg.GenesisStateData()),
+		PrivacyGroup: mapPrivacyGroupToProto(pg.ID, pg.GenesisStateData()),
 		Transaction: &prototk.PrivacyGroupEVMTX{
 			ContractInfo: &prototk.ContractInfo{
 				ContractAddress:    dc.info.Address.String(),

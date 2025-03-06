@@ -1386,6 +1386,7 @@ func TestDomainInitPrivacyGroupOk(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
+	pgID := tktypes.RandBytes(32)
 	pgGenesis := &pldapi.PrivacyGroupGenesisState{
 		Name:        "pg1",
 		GenesisSalt: tktypes.RandBytes32(),
@@ -1418,7 +1419,7 @@ func TestDomainInitPrivacyGroupOk(t *testing.T) {
 	}
 
 	domain := td.d
-	tx, err := domain.InitPrivacyGroup(td.ctx, pgGenesis)
+	tx, err := domain.InitPrivacyGroup(td.ctx, pgID, pgGenesis)
 	require.NoError(t, err)
 	require.Equal(t, &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
@@ -1442,7 +1443,7 @@ func TestDomainInitPrivacyGroupError(t *testing.T) {
 	}
 
 	domain := td.d
-	_, err := domain.InitPrivacyGroup(td.ctx, &pldapi.PrivacyGroupGenesisState{})
+	_, err := domain.InitPrivacyGroup(td.ctx, tktypes.RandBytes(32), &pldapi.PrivacyGroupGenesisState{})
 	assert.Regexp(t, "pop", err)
 
 }
@@ -1459,7 +1460,7 @@ func TestDomainInitPrivacyGroupBadResFunctionABI(t *testing.T) {
 	}
 
 	domain := td.d
-	_, err := domain.InitPrivacyGroup(td.ctx, &pldapi.PrivacyGroupGenesisState{})
+	_, err := domain.InitPrivacyGroup(td.ctx, tktypes.RandBytes(32), &pldapi.PrivacyGroupGenesisState{})
 	assert.Regexp(t, "PD011607", err)
 
 }
@@ -1479,7 +1480,7 @@ func TestDomainInitPrivacyGroupBadResFromAddr(t *testing.T) {
 	}
 
 	domain := td.d
-	_, err := domain.InitPrivacyGroup(td.ctx, &pldapi.PrivacyGroupGenesisState{})
+	_, err := domain.InitPrivacyGroup(td.ctx, tktypes.RandBytes(32), &pldapi.PrivacyGroupGenesisState{})
 	assert.Regexp(t, "bad address", err)
 
 }

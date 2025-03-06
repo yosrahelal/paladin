@@ -851,12 +851,12 @@ func (d *domain) ConfigurePrivacyGroup(ctx context.Context, inputConfiguration m
 	return res.Configuration, nil
 }
 
-func (d *domain) InitPrivacyGroup(ctx context.Context, genesis *pldapi.PrivacyGroupGenesisState) (tx *pldapi.TransactionInput, err error) {
+func (d *domain) InitPrivacyGroup(ctx context.Context, id tktypes.HexBytes, genesis *pldapi.PrivacyGroupGenesisState) (tx *pldapi.TransactionInput, err error) {
 
 	// This one is a straight forward pass-through to the domain - the Privacy Group manager does the
 	// hard work in validating the data returned against the genesis ABI spec returned.
 	res, err := d.api.InitPrivacyGroup(ctx, &prototk.InitPrivacyGroupRequest{
-		PrivacyGroup: mapPrivacyGroupToProto(genesis),
+		PrivacyGroup: mapPrivacyGroupToProto(id, genesis),
 	})
 	if err != nil {
 		return nil, err

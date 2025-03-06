@@ -74,9 +74,9 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 			inputconf["extra"] = "extra1"
 			cpg.Return(inputconf, nil)
 		})
-		ipg := mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything)
+		ipg := mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything, mock.Anything)
 		ipg.Run(func(args mock.Arguments) {
-			spec := args[1].(*pldapi.PrivacyGroupGenesisState)
+			spec := args[2].(*pldapi.PrivacyGroupGenesisState)
 			require.Equal(t, map[string]string{"name": "secret things"}, spec.Properties.Map())
 			require.Len(t, spec.Members, 2)
 			ipg.Return(

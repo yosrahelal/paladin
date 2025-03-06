@@ -279,7 +279,7 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 
 	// Now we can ask the domain code to take the input properties, and validated members, and come back with the
 	// complete genesis state object for the group
-	tx, err := domain.InitPrivacyGroup(ctx, pgGenesis)
+	tx, err := domain.InitPrivacyGroup(ctx, id, pgGenesis)
 	if err != nil {
 		return nil, err
 	}

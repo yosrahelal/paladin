@@ -269,7 +269,7 @@ func TestPrivacyGroupDomainInitFail(t *testing.T) {
 			mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
 				Return([]components.Schema{ms}, nil)
 			mc.domain.On("ConfigurePrivacyGroup", mock.Anything, mock.Anything).Return(map[string]string{}, nil)
-			mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+			mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 		})
 	defer done()
 
@@ -335,7 +335,7 @@ func mockReadyToSendTransaction(t *testing.T) func(mc *mockComponents, conf *pld
 	return func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 		mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
 		mc.domain.On("ConfigurePrivacyGroup", mock.Anything, mock.Anything).Return(map[string]string{}, nil)
-		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything).
+		mc.domain.On("InitPrivacyGroup", mock.Anything, mock.Anything, mock.Anything).
 			Return(&pldapi.TransactionInput{
 				TransactionBase: pldapi.TransactionBase{
 					Domain: "domain1",

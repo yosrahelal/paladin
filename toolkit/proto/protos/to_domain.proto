@@ -443,9 +443,10 @@ message CompletedTransaction {
 }
 
 message PrivacyGroup {
-  string genesis_salt = 1;
-  string name = 2;
-  repeated string members = 3;
-  map<string, string> properties = 4;
-  map<string, string> configuration = 5;
+  string id = 1;
+  string genesis_salt = 2;
+  string name = 3;
+  repeated string members = 4;
+  map<string, string> properties = 5;
+  map<string, string> configuration = 6;
 }
