@@ -142,8 +142,7 @@ func TestNotoDomainDeployDefaults(t *testing.T) {
 		"privateGroup": null,
 		"restrictMint": true,
 		"allowBurn": true,
-		"allowLock": true,
-		"restrictUnlock": true
+		"allowLock": true
 	}`, string(deployData))
 
 	initContractRes, err := n.InitContract(ctx, &prototk.InitContractRequest{
@@ -167,8 +166,7 @@ func TestNotoDomainDeployBasicConfig(t *testing.T) {
 				"basic": {
 					"restrictMint": false,
 					"allowBurn": false,
-					"allowLock": false,
-					"restrictUnlock": false
+					"allowLock": false
 				}
 			}
 		}`,
@@ -207,8 +205,7 @@ func TestNotoDomainDeployBasicConfig(t *testing.T) {
 		"privateGroup": null,
 		"restrictMint": false,
 		"allowBurn": false,
-		"allowLock": false,
-		"restrictUnlock": false
+		"allowLock": false
 	}`, string(deployData))
 
 	initContractRes, err := n.InitContract(ctx, &prototk.InitContractRequest{
@@ -278,8 +275,7 @@ func TestNotoDomainDeployHooksConfig(t *testing.T) {
 		},
 		"restrictMint": false,
 		"allowBurn": false,
-		"allowLock": false,
-		"restrictUnlock": false
+		"allowLock": false
 	}`, groupSalt), string(deployData))
 
 	initContractRes, err := n.InitContract(ctx, &prototk.InitContractRequest{

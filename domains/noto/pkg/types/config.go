@@ -43,7 +43,6 @@ type NotoConfigData_V0 struct {
 	RestrictMint   bool                `json:"restrictMint"`
 	AllowBurn      bool                `json:"allowBurn"`
 	AllowLock      bool                `json:"allowLock"`
-	RestrictUnlock bool                `json:"restrictUnlock"`
 }
 
 // This is the structure we parse the config into in InitConfig and gets passed back to us on every call
@@ -61,10 +60,9 @@ type NotoOptions struct {
 }
 
 type NotoBasicOptions struct {
-	RestrictMint   *bool `json:"restrictMint"`   // Only allow notary to mint (default: true)
-	AllowBurn      *bool `json:"allowBurn"`      // Allow token holders to burn their tokens (default: true)
-	AllowLock      *bool `json:"allowLock"`      // Allow token holders to lock their tokens (default: true)
-	RestrictUnlock *bool `json:"restrictUnlock"` // Only allow lock creator to unlock tokens (default: true)
+	RestrictMint *bool `json:"restrictMint"` // Only allow notary to mint (default: true)
+	AllowBurn    *bool `json:"allowBurn"`    // Allow token holders to burn their tokens (default: true)
+	AllowLock    *bool `json:"allowLock"`    // Allow token holders to lock their tokens (default: true)
 }
 
 type NotoHooksOptions struct {

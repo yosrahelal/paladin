@@ -29,7 +29,7 @@ title: PrivacyGroup
 | `domain` | The domain of the privacy group | `string` |
 | `created` | The creation time | [`Timestamp`](simpletypes.md#timestamp) |
 | `name` | Optional name for the privacy group, which is indexed for efficient query | `string` |
-| `members` | The member list, validated by the domain to match the genesis state on creation/receipt | `string[]` |
+| `members` | The member list must be a set of fully qualified identity locators 'some.identity@node.name' | `string[]` |
 | `properties` | Application specific properties for the privacy group | `` |
 | `configuration` | Domain specific configuration options that define the behavior of the privacy group | `` |
 | `genesisSalt` | The salt used in the genesis state to ensure uniqueness of the resulting state ID | [`Bytes32`](simpletypes.md#bytes32) |

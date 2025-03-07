@@ -199,7 +199,7 @@ func TestWebSocketEthSubscribeUnsubscribe(t *testing.T) {
 
 	notification := <-sub1.Notifications()
 	assert.NotNil(t, notification)
-	assert.JSONEq(t, `{"some": "thing"}`, notification.Result.String())
+	assert.JSONEq(t, `{"some": "thing"}`, notification.GetResult().String())
 
 	rpcErr = sub1.Unsubscribe(context.Background())
 	assert.Nil(t, rpcErr)
