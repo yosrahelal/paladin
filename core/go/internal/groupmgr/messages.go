@@ -113,7 +113,7 @@ func (gm *groupManager) SendMessage(ctx context.Context, dbTX persistence.DBTX, 
 		return nil, err
 	}
 
-	// We also need to create a reliable send the state to all the remote members
+	// We also need to create a reliable message to send the state to all the remote members
 	msgs := make([]*pldapi.ReliableMessage, 0, len(remoteMembers))
 	for node := range remoteMembers {
 		// Each node gets a single copy (not one per identity)

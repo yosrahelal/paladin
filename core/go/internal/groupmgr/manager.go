@@ -183,8 +183,8 @@ func (gm *groupManager) insertGroup(ctx context.Context, dbTX persistence.DBTX, 
 		Name:          pgGenesis.Name,
 		GenesisSchema: genesisSchemaID,
 		GenesisSalt:   pgGenesis.GenesisSalt,
-		Properties:    tktypes.JSONString(pgGenesis.Properties),
-		Configuration: tktypes.JSONString(pgGenesis.Configuration),
+		Properties:    tktypes.JSONString(pgGenesis.Properties.Map()),
+		Configuration: tktypes.JSONString(pgGenesis.Configuration.Map()),
 		GenesisTX:     genesisTx,
 	}
 	err := dbTX.DB().WithContext(ctx).Create(pg).Error
@@ -308,7 +308,7 @@ func (gm *groupManager) CreateGroup(ctx context.Context, dbTX persistence.DBTX, 
 	group = dbPG.mapToAPI()
 	group.Members = spec.Members
 
-	// We also need to create a reliable send the state to all the remote members
+	// We also need to create a reliable message to send the state to all the remote members
 	msgs := make([]*pldapi.ReliableMessage, 0, len(remoteMembers))
 	for node, members := range remoteMembers {
 		for _, identity := range members {
@@ -367,7 +367,7 @@ func (gm *groupManager) enrichMembers(ctx context.Context, dbTX persistence.DBTX
 	}
 	var dbMembers []*persistedGroupMember
 	err := dbTX.DB().WithContext(ctx).
-		Where(`"group" IN ( ? )`, groupIDs).
+		Where(`"group" IN ?`, groupIDs).
 		Order("domain").
 		Order(`"group"`).
 		Order("idx").

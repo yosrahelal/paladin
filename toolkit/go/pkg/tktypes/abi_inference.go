@@ -36,7 +36,7 @@ import (
 // Current capability set:
 // - Requires top-level JSON to be an object
 // - Does NOT preserve order of properties in a JSON object
-//   - This would require much more complex json.Token based code, or a swap-in library like
+// (Preserving JSON order in Go requires much more complex json.Token based code, or a swap-in library)
 //
 // - Supports simple types, objects, and arrays of same-typed values
 // - Maps:

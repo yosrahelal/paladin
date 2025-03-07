@@ -308,7 +308,7 @@ var (
 	PrivacyGroupName               = pdm("PrivacyGroup.name", "Optional name for the privacy group, which is indexed for efficient query")
 	PrivacyGroupProperties         = pdm("PrivacyGroup.properties", "Application specific properties for the privacy group")
 	PrivacyGroupConfiguration      = pdm("PrivacyGroup.configuration", "Domain specific configuration options that define the behavior of the privacy group")
-	PrivacyGroupMembers            = pdm("PrivacyGroup.members", "The member list, validated by the domain to match the genesis state on creation/receipt")
+	PrivacyGroupMembers            = pdm("PrivacyGroup.members", "The member list must be a set of fully qualified identity locators 'some.identity@node.name'")
 	PrivacyGroupContractAddress    = pdm("PrivacyGroup.contractAddress", "Returns the deployed contract address from the receipt associated with the transaction. Unset until the transaction is confirmed")
 	PrivacyGroupGenesis            = pdm("PrivacyGroup.genesis", "The genesis state data (as stored in the state manager)")
 	PrivacyGroupGenesisTransaction = pdm("PrivacyGroup.genesisTransaction", "The ID of the genesis transaction for the privacy group, correlated with the receipt")

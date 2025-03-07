@@ -191,7 +191,7 @@ func (ss *stateManager) GetStatesByID(ctx context.Context, dbTX persistence.DBTX
 	var states []*pldapi.State
 	q = q.
 		Where("domain_name = ?", domainName).
-		Where("id IN ( ? )", stateIDs)
+		Where("id IN ?", stateIDs)
 	if contractAddress != nil {
 		q = q.Where("contract_address = ?", contractAddress)
 	}
