@@ -5,8 +5,8 @@ import { PublicTxOptions } from ".";
 export interface IPrivacyGroupInput {
   domain: string;
   members: string[];
-  properties?: Record<string, any>;
-  propertiesABI?: string;
+  configuration?: Record<string, string | undefined>;
+  properties?: Record<string, string | undefined>;
   transactionOptions?: IPrivacyGroupTXOptions;
 }
 
@@ -20,10 +20,9 @@ export interface IPrivacyGroup {
   created: string;
   members: string[];
   contractAddress?: string;
-  genesis?: any;
   genesisTransaction?: string;
   genesisSchema?: string;
-  genesisSignature?: string;
+  genesisSalt?: string;
 }
 
 export interface IPrivacyGroupEVMTX {

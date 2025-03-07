@@ -107,14 +107,10 @@ export class PenteFactory {
     const group = await this.paladin.createPrivacyGroup({
       domain: this.domain,
       members: input.members.map(m => m.toString()),
-      properties: {
-        pente: {
-          salt: input.salt,
-          evmVersion: input.evmVersion,
-          endorsementType: input.endorsementType,
-          externalCallsEnabled: input.externalCallsEnabled,    
-          ...input.additionalProperties,
-        }
+      configuration: {
+        evmVersion: input.evmVersion,
+        endorsementType: input.endorsementType,
+        externalCallsEnabled: input.externalCallsEnabled === true ? 'true' : input.externalCallsEnabled === false ? 'false' : undefined,
       }
     });
     const receipt = group.genesisTransaction ? await this.paladin.pollForReceipt(
@@ -148,11 +144,7 @@ export class PentePrivacyGroup {
       throw new Error(`Supplied group '${group.id}' is missing a contract address. Check transaction ${group.genesisTransaction}`);
     }
     this.address = group.contractAddress;
-    const salt = group.genesis?.salt;
-    if (salt == undefined) {
-      throw new Error(`Supplied group '${group.id}' is missing a "salt" property expected for Pente privacy group genesis config: ${JSON.stringify(group.genesis)}`);      
-    }
-    this.salt = salt;
+    this.salt = group.id; // when bypassing privacy group helper functionality, and directly building Pente private transactions
     this.members = group.members;
     this.options = {
       pollTimeout: DEFAULT_POLL_TIMEOUT,
