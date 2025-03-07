@@ -304,6 +304,7 @@ func (p *peer) reliableMessageScan(checkNew bool) error {
 			Order("sequence ASC").
 			Joins("Ack").
 			Where(`"Ack"."time" IS NULL`).
+			Where("node", p.Name).
 			Limit(pageSize)
 		if lastPageEnd != nil {
 			query = query.Where("sequence > ?", *lastPageEnd)

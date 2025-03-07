@@ -67,6 +67,14 @@ func TestReliableMessageResendRealDB(t *testing.T) {
 	ctx, tm, tp, done := newTestTransport(t, true,
 		mockGoodTransport,
 		mockGetStateRetryThenOk,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.registryManager.On("GetNodeTransports", mock.Anything, "node3").Return([]*components.RegistryNodeTransportEntry{
+				{
+					Node:      "node3",
+					Transport: "test1",
+				},
+			}, nil)
+		},
 	)
 	defer done()
 
@@ -83,26 +91,39 @@ func TestReliableMessageResendRealDB(t *testing.T) {
 
 	mockActivateDeactivateOk(tp)
 
-	sentMessages := make(chan *prototk.PaladinMsg)
+	sentMessagesNode2 := make(chan *prototk.PaladinMsg)
+	sentMessagesNode3 := make(chan *prototk.PaladinMsg)
 	tp.Functions.SendMessage = func(ctx context.Context, req *prototk.SendMessageRequest) (*prototk.SendMessageResponse, error) {
 		sent := req.Message
-		sentMessages <- sent
+		if req.Node == "node2" {
+			sentMessagesNode2 <- sent
+		} else {
+			sentMessagesNode3 <- sent
+		}
 		return nil, nil
 	}
 
-	sds := make([]*components.StateDistribution, 2)
-	_ = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		for i := 0; i < len(sds); i++ {
-			sds[i] = &components.StateDistribution{
-				Domain:          "domain1",
-				ContractAddress: tktypes.RandAddress().String(),
-				SchemaID:        tktypes.RandHex(32),
-				StateID:         tktypes.RandHex(32),
-			}
+	sds := make([]*components.StateDistribution, 4)
+	for i := range sds {
+		sds[i] = &components.StateDistribution{
+			Domain:          "domain1",
+			ContractAddress: tktypes.RandAddress().String(),
+			SchemaID:        tktypes.RandHex(32),
+			StateID:         tktypes.RandHex(32),
+		}
+	}
 
+	_ = tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		for i := range sds {
+			var node string
+			if i%2 == 0 {
+				node = "node2"
+			} else {
+				node = "node3"
+			}
 			err := tm.SendReliable(ctx, dbTX, &pldapi.ReliableMessage{
 				MessageType: pldapi.RMTState.Enum(),
-				Node:        "node2",
+				Node:        node,
 				Metadata:    tktypes.JSONString(sds[i]),
 			})
 			require.NoError(t, err)
@@ -110,10 +131,15 @@ func TestReliableMessageResendRealDB(t *testing.T) {
 		return nil
 	})
 
-	// Check we get the two messages twice, with the send retry kicking in
-	for i := 0; i < 2; i++ {
-		for iSD := 0; iSD < len(sds); iSD++ {
-			msg := <-sentMessages
+	// Check each peer dispatches two messages twice (with the send retry kicking in)
+	for range 2 {
+		for iSD := range sds {
+			var msg *prototk.PaladinMsg
+			if iSD%2 == 0 {
+				msg = <-sentMessagesNode2
+			} else {
+				msg = <-sentMessagesNode3
+			}
 			var receivedSD components.StateDistributionWithData
 			err := json.Unmarshal(msg.Payload, &receivedSD)
 			require.NoError(t, err)
@@ -127,15 +153,19 @@ func TestReliableMessageResendRealDB(t *testing.T) {
 
 	// From this point on we just drain
 	go func() {
-		for range sentMessages {
+		for range sentMessagesNode2 {
+		}
+		for range sentMessagesNode3 {
 		}
 	}()
 
 	// Close the peer
 	tm.peers["node2"].close()
+	tm.peers["node3"].close()
 
 	// Clean up the routine
-	close(sentMessages)
+	close(sentMessagesNode2)
+	close(sentMessagesNode3)
 
 }
 
