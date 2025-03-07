@@ -9,7 +9,7 @@ title: PrivacyGroupInput
 {
     "domain": "",
     "members": null,
-    "properties": null
+    "name": ""
 }
 ```
 
@@ -17,14 +17,12 @@ title: PrivacyGroupInput
 
 | Field Name | Description | Type |
 |------------|-------------|------|
-| `domain` | The domain that will manages the privacy group | `string` |
-| `members` | The fully qualified identities of each member of the privacy group | `string[]` |
-| `properties` | Properties to supply to the domain that will be included in the final genesis state of the group. Domains specify well known properties can override behavior. Indexed properties are queryable and should be used for lookup | [`RawJSON`](simpletypes.md#rawjson) |
-| `propertiesABI` | Optional ABI for the supplied properties. If omitted then an ABI will be auto-generated based on the types of input, with the top-level properties automatically indexed | [`Parameter[]`](#parameter) |
+| `domain` | The domain of the privacy group | `string` |
+| `members` | The member list, validated by the domain to match the genesis state on creation/receipt | `string[]` |
+| `name` | Optional name for the privacy group, which is indexed for efficient query | `string` |
+| `properties` | Application specific properties for the privacy group | `` |
+| `configuration` | Domain specific configuration options that define the behavior of the privacy group | `` |
 | `transactionOptions` | Options that will be propagated to the final private transaction that is submitted after the domain has validated the input properties and generated the base private transaction | [`PrivacyGroupTXOptions`](#privacygrouptxoptions) |
-
-## Parameter
-
 
 ## PrivacyGroupTXOptions
 

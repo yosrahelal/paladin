@@ -60,7 +60,7 @@ title: pgroup_*
 
 ### Returns
 
-0. `pgroup`: [`PrivacyGroupWithABI`](../types/privacygroupwithabi.md#privacygroupwithabi)
+0. `pgroup`: [`PrivacyGroup`](../types/privacygroup.md#privacygroup)
 
 ## `pgroup_getMessageById`
 
@@ -87,18 +87,6 @@ title: pgroup_*
 ### Parameters
 
 0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
-
-### Returns
-
-0. `pgroups`: [`PrivacyGroup[]`](../types/privacygroup.md#privacygroup)
-
-## `pgroup_queryGroupsByProperties`
-
-### Parameters
-
-0. `domainName`: `string`
-1. `schemaId`: [`Bytes32`](../types/simpletypes.md#bytes32)
-2. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
 
 ### Returns
 

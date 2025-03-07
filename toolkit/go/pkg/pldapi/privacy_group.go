@@ -61,11 +61,11 @@ type PrivacyGroupMessageInput struct {
 }
 
 type PrivacyGroupInput struct {
-	Domain             string                 `docstruct:"PrivacyGroupInput" json:"domain"`
-	Members            []string               `docstruct:"PrivacyGroupInput" json:"members"`
-	Name               string                 `docstruct:"PrivacyGroupInput" json:"name"`
-	Properties         map[string]string      `docstruct:"PrivacyGroupInput" json:"properties,omitempty"`
-	Configuration      map[string]string      `docstruct:"PrivacyGroupInput" json:"configuration,omitempty"`
+	Domain             string                 `docstruct:"PrivacyGroup" json:"domain"`
+	Members            []string               `docstruct:"PrivacyGroup" json:"members"`
+	Name               string                 `docstruct:"PrivacyGroup" json:"name"`
+	Properties         map[string]string      `docstruct:"PrivacyGroup" json:"properties,omitempty"`
+	Configuration      map[string]string      `docstruct:"PrivacyGroup" json:"configuration,omitempty"`
 	TransactionOptions *PrivacyGroupTXOptions `docstruct:"PrivacyGroupInput" json:"transactionOptions,omitempty"`
 }
 
