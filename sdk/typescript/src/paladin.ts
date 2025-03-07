@@ -26,6 +26,7 @@ import {
 } from "./interfaces";
 import { ethers, InterfaceAbi } from "ethers";
 import { PaladinVerifier } from "./verifier";
+import { IPrivacyGroup, IPrivacyGroupEVMCall, IPrivacyGroupEVMTXInput, IPrivacyGroupInput } from "./interfaces/privacygroups";
 
 const POLL_INTERVAL_MS = 100;
 
@@ -277,6 +278,36 @@ export default class PaladinClient {
     const res = await this.post<JsonRpcResult<IState[]>>(
       "pstate_queryContractStates",
       [domain, contractAddress, schema, query, status]
+    );
+    return res.data.result;
+  }
+
+  async createPrivacyGroup(
+    pgroup: IPrivacyGroupInput,
+  ) {
+    const res = await this.post<JsonRpcResult<IPrivacyGroup>>(
+      "pgroup_createGroup",
+      [pgroup]
+    );
+    return res.data.result;
+  }
+
+  async sendPrivacyGroupTransaction(
+    txi: IPrivacyGroupEVMTXInput,
+  ) {
+    const res = await this.post<JsonRpcResult<string>>(
+      "pgroup_sendTransaction",
+      [txi]
+    );
+    return res.data.result;
+  }
+
+  async callPrivacyGroup(
+    txi: IPrivacyGroupEVMCall,
+  ) {
+    const res = await this.post<JsonRpcResult<any>>(
+      "pgroup_call",
+      [txi]
     );
     return res.data.result;
   }

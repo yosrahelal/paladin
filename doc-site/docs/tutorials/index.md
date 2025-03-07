@@ -22,13 +22,13 @@ The tutorials on this page provide an introduction to building on the Paladin pl
     
     Begin with a simple “Hello World” example to get familiar with some of the basics.
 
--   **[Public Storage](public-storage.md)**  
+-   **[Public Smart Contract](public-storage.md)**  
 
     ---  
 
     Explore fundamental SDK functionality for deploying and interacting with a publicly visible contract.
 
--   **[Private Storage](private-storage.md)**  
+-   **[Private  Smart Contract](private-storage.md)**  
 
     ---  
 

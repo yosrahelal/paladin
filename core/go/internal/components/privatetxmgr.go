@@ -65,9 +65,9 @@ type StateDistribution struct {
 	Domain                string  `json:"domain"`
 	ContractAddress       string  `json:"contractAddress"`
 	SchemaID              string  `json:"schemaId"`
-	NullifierAlgorithm    *string `json:"nullifierAlgorithm"`
-	NullifierVerifierType *string `json:"nullifierVerifierType"`
-	NullifierPayloadType  *string `json:"nullifierPayloadType"`
+	NullifierAlgorithm    *string `json:"nullifierAlgorithm,omitempty"`
+	NullifierVerifierType *string `json:"nullifierVerifierType,omitempty"`
+	NullifierPayloadType  *string `json:"nullifierPayloadType,omitempty"`
 }
 
 // A StateDistributionWithData is an intent to send private data for a given state to a remote party

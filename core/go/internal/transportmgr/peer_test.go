@@ -40,20 +40,23 @@ import (
 )
 
 func mockGetStateRetryThenOk(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-	mc.stateManager.On("GetState", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
+	mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
 		Return(nil, fmt.Errorf("pop")).Once()
 	mockGetStateOk(mc, conf)
 }
 
 func mockGetStateOk(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
-	mGS := mc.stateManager.On("GetState", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false)
+	mGS := mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false)
 	mGS.Run(func(args mock.Arguments) {
-		mGS.Return(&pldapi.State{
-			StateBase: pldapi.StateBase{
-				DomainName:      args[2].(string),
-				ContractAddress: args[3].(tktypes.EthAddress),
-				ID:              args[4].(tktypes.HexBytes),
-				Data:            []byte(fmt.Sprintf(`{"dataFor": "%s"}`, args[4].(tktypes.HexBytes).HexString())),
+		id := (args[4].([]tktypes.HexBytes))[0]
+		mGS.Return([]*pldapi.State{
+			{
+				StateBase: pldapi.StateBase{
+					DomainName:      args[2].(string),
+					ContractAddress: args[3].(*tktypes.EthAddress),
+					ID:              id,
+					Data:            []byte(fmt.Sprintf(`{"dataFor": "%s"}`, id.HexString())),
+				},
 			},
 		}, nil)
 	})
@@ -118,8 +121,8 @@ func TestReliableMessageResendRealDB(t *testing.T) {
 			} else {
 				node = "node3"
 			}
-			err := tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
-				MessageType: components.RMTState.Enum(),
+			err := tm.SendReliable(ctx, dbTX, &pldapi.ReliableMessage{
+				MessageType: pldapi.RMTState.Enum(),
 				Node:        node,
 				Metadata:    tktypes.JSONString(sds[i]),
 			})
@@ -206,8 +209,8 @@ func TestReliableMessageSendSendQuiesceRealDB(t *testing.T) {
 		}
 
 		err := tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-			return tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
-				MessageType: components.RMTState.Enum(),
+			return tm.SendReliable(ctx, dbTX, &pldapi.ReliableMessage{
+				MessageType: pldapi.RMTState.Enum(),
 				Node:        "node2",
 				Metadata:    tktypes.JSONString(sd),
 			})
@@ -249,7 +252,7 @@ func TestSendBadReliableMessageMarkedFailRealDB(t *testing.T) {
 		mockGoodTransport,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
 			// missing state
-			mc.stateManager.On("GetState", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
+			mc.stateManager.On("GetStatesByID", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false, false).
 				Return(nil, nil).Once()
 		},
 	)
@@ -265,8 +268,8 @@ func TestSendBadReliableMessageMarkedFailRealDB(t *testing.T) {
 	mockActivateDeactivateOk(tp)
 
 	// First with missing metadata
-	rm := &components.ReliableMessage{
-		MessageType: components.RMTState.Enum(),
+	rm := &pldapi.ReliableMessage{
+		MessageType: pldapi.RMTState.Enum(),
 		Node:        "node2",
 	}
 	err := tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -275,8 +278,8 @@ func TestSendBadReliableMessageMarkedFailRealDB(t *testing.T) {
 	require.NoError(t, err)
 
 	// Second with missing state
-	rm2 := &components.ReliableMessage{
-		MessageType: components.RMTState.Enum(),
+	rm2 := &pldapi.ReliableMessage{
+		MessageType: pldapi.RMTState.Enum(),
 		Node:        "node2",
 		Metadata: tktypes.JSONString(&components.StateDistribution{
 			Domain:          "domain1",
@@ -291,7 +294,7 @@ func TestSendBadReliableMessageMarkedFailRealDB(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait for nack
-	var rmWithAck *components.ReliableMessage
+	var rmWithAck *pldapi.ReliableMessage
 	for (rmWithAck == nil || rmWithAck.Ack == nil) && !t.Failed() {
 		time.Sleep(10 * time.Millisecond)
 		rmWithAck, err = tm.getReliableMessageByID(ctx, tm.persistence.NOTX(), rm.ID)
@@ -460,7 +463,7 @@ func TestProcessReliableMsgPageIgnoreBeforeHWM(t *testing.T) {
 		lastDrainHWM: confutil.P(uint64(100)),
 	}
 
-	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*components.ReliableMessage{
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*pldapi.ReliableMessage{
 		{
 			ID:       uuid.New(),
 			Sequence: 50,
@@ -483,12 +486,12 @@ func TestProcessReliableMsgPageIgnoreUnsupported(t *testing.T) {
 		tm:  tm,
 	}
 
-	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*components.ReliableMessage{
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*pldapi.ReliableMessage{
 		{
 			ID:          uuid.New(),
 			Sequence:    50,
 			Created:     tktypes.TimestampNow(),
-			MessageType: components.RMTReceipt.Enum(),
+			MessageType: pldapi.RMTReceipt.Enum(),
 		},
 	})
 	require.Regexp(t, "pop", err)
@@ -517,16 +520,142 @@ func TestProcessReliableMsgPageInsertFail(t *testing.T) {
 		StateID:         tktypes.RandHex(32),
 	}
 
-	rm := &components.ReliableMessage{
+	rm := &pldapi.ReliableMessage{
 		ID:          uuid.New(),
 		Sequence:    50,
-		MessageType: components.RMTState.Enum(),
+		MessageType: pldapi.RMTState.Enum(),
 		Node:        "node2",
 		Metadata:    tktypes.JSONString(sd),
 		Created:     tktypes.TimestampNow(),
 	}
 
-	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*components.ReliableMessage{rm})
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*pldapi.ReliableMessage{rm})
 	require.Regexp(t, "PD020302", err)
 
+}
+
+func TestProcessReliableMsgPagePrivacyGroup(t *testing.T) {
+
+	schemaID := tktypes.RandBytes32()
+	ctx, tm, tp, done := newTestTransport(t, false,
+		mockGetStateOk,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.db.Mock.ExpectExec("INSERT.*reliable_msgs").WillReturnResult(driver.ResultNoRows)
+		})
+	defer done()
+
+	p := &peer{
+		ctx:       ctx,
+		tm:        tm,
+		transport: tp.t,
+	}
+
+	pgd := &components.PrivacyGroupDistribution{
+		GenesisTransaction: uuid.New(),
+		GenesisState: components.StateDistributionWithData{
+			StateDistribution: components.StateDistribution{
+				Domain:          "domain1",
+				ContractAddress: tktypes.RandAddress().String(),
+				SchemaID:        schemaID.String(),
+				StateID:         tktypes.RandHex(32),
+			},
+		},
+	}
+
+	rm := &pldapi.ReliableMessage{
+		ID:          uuid.New(),
+		Sequence:    50,
+		MessageType: pldapi.RMTPrivacyGroup.Enum(),
+		Node:        "node2",
+		Metadata:    tktypes.JSONString(pgd),
+		Created:     tktypes.TimestampNow(),
+	}
+
+	sentMessages := make(chan *prototk.PaladinMsg, 1)
+	tp.Functions.SendMessage = func(ctx context.Context, req *prototk.SendMessageRequest) (*prototk.SendMessageResponse, error) {
+		sent := req.Message
+		sentMessages <- sent
+		return nil, nil
+	}
+
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*pldapi.ReliableMessage{rm})
+	require.NoError(t, err)
+
+	sentMsg := <-sentMessages
+
+	rMsg, err := parseReceivedMessage(ctx, "node2", sentMsg)
+	require.NoError(t, err)
+	require.Equal(t, RMHMessageTypePrivacyGroup, rMsg.MessageType)
+
+	rpg, err := parsePrivacyGroupDistribution(ctx, rMsg.MessageID, rMsg.Payload, "node2")
+	require.NoError(t, err)
+	require.Equal(t, "domain1", rpg.domain)
+	require.JSONEq(t, fmt.Sprintf(`{"dataFor": "%s"}`, rpg.genesisState.ID.HexString()), rpg.genesisState.Data.Pretty())
+	require.Equal(t, pgd.GenesisTransaction, rpg.genesisTx)
+	require.Equal(t, "node2", rpg.node)
+}
+
+func TestProcessReliableMsgPagePrivacyGroupMessage(t *testing.T) {
+
+	origMsg := &pldapi.PrivacyGroupMessage{
+		ID:   uuid.New(),
+		Sent: tktypes.TimestampNow(),
+		PrivacyGroupMessageInput: pldapi.PrivacyGroupMessageInput{
+			Domain: "domain1",
+			Group:  tktypes.RandBytes(32),
+			Topic:  "topic1",
+			Data:   tktypes.JSONString("some data"),
+		},
+	}
+	ctx, tm, tp, done := newTestTransport(t, false,
+		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
+			mc.groupManager.On("GetMessageByID", mock.Anything, mock.Anything, origMsg.ID, false).
+				Return(origMsg, nil)
+
+			mc.db.Mock.ExpectExec("INSERT.*reliable_msgs").WillReturnResult(driver.ResultNoRows)
+		})
+	defer done()
+
+	p := &peer{
+		ctx:       ctx,
+		tm:        tm,
+		transport: tp.t,
+	}
+
+	pmd := &components.PrivacyGroupMessageDistribution{
+		Domain: "domain1",
+		Group:  tktypes.RandBytes(32),
+		ID:     origMsg.ID,
+	}
+
+	rm := &pldapi.ReliableMessage{
+		ID:          origMsg.ID,
+		Sequence:    50,
+		MessageType: pldapi.RMTPrivacyGroupMessage.Enum(),
+		Node:        "node2",
+		Metadata:    tktypes.JSONString(pmd),
+		Created:     tktypes.TimestampNow(),
+	}
+
+	sentMessages := make(chan *prototk.PaladinMsg, 1)
+	tp.Functions.SendMessage = func(ctx context.Context, req *prototk.SendMessageRequest) (*prototk.SendMessageResponse, error) {
+		sent := req.Message
+		sentMessages <- sent
+		return nil, nil
+	}
+
+	err := p.processReliableMsgPage(tm.persistence.NOTX(), []*pldapi.ReliableMessage{rm})
+	require.NoError(t, err)
+
+	sentMsg := <-sentMessages
+
+	rMsg, err := parseReceivedMessage(ctx, "node2", sentMsg)
+	require.NoError(t, err)
+	require.Equal(t, RMHMessageTypePrivacyGroupMessage, rMsg.MessageType)
+
+	receivedMsg, err := parsePrivacyGroupMessage(ctx, rMsg.FromNode, rMsg.MessageID, rMsg.Payload)
+	require.NoError(t, err)
+	origMsg.Received = receivedMsg.Received // expect to be changed on incoming message
+	origMsg.Node = receivedMsg.Node         // expect to be changed on incoming message
+	require.Equal(t, origMsg, receivedMsg)
 }

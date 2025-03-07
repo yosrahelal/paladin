@@ -1341,3 +1341,146 @@ func TestGetDomainReceiptLookupError(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 
 }
+
+func TestDomainConfigurePrivacyGroupOk(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.tp.Functions.ConfigurePrivacyGroup = func(ctx context.Context, cpgr *prototk.ConfigurePrivacyGroupRequest) (*prototk.ConfigurePrivacyGroupResponse, error) {
+		require.Equal(t, map[string]string{"prop1": "value1"}, cpgr.InputConfiguration)
+		return &prototk.ConfigurePrivacyGroupResponse{
+			Configuration: map[string]string{
+				"prop1": "value1",
+				"prop2": "value2",
+			},
+		}, nil
+	}
+
+	domain := td.d
+	props, err := domain.ConfigurePrivacyGroup(td.ctx, map[string]string{"prop1": "value1"})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		"prop1": "value1",
+		"prop2": "value2",
+	}, props)
+
+}
+
+func TestDomainConfigurePrivacyGroupFail(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.tp.Functions.ConfigurePrivacyGroup = func(ctx context.Context, cpgr *prototk.ConfigurePrivacyGroupRequest) (*prototk.ConfigurePrivacyGroupResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	domain := td.d
+	_, err := domain.ConfigurePrivacyGroup(td.ctx, map[string]string{"prop1": "value1"})
+	require.Regexp(t, "pop", err)
+}
+
+func TestDomainInitPrivacyGroupOk(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	pgID := tktypes.RandBytes(32)
+	pgGenesis := &pldapi.PrivacyGroupGenesisState{
+		Name:        "pg1",
+		GenesisSalt: tktypes.RandBytes32(),
+		Members:     []string{"me@node1", "you@node2"},
+		Properties: pldapi.KeyValueStringProperties{
+			{Key: "prop1", Value: "value1"},
+		},
+		Configuration: pldapi.KeyValueStringProperties{
+			{Key: "confA", Value: "valueA"},
+		},
+	}
+
+	functionABI := &abi.Entry{Type: abi.Function, Name: "initPrivacyGroup"}
+	addr := tktypes.RandAddress()
+	td.tp.Functions.InitPrivacyGroup = func(ctx context.Context, ipgr *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
+		require.Equal(t, "pg1", ipgr.PrivacyGroup.Name)
+		require.Equal(t, pgGenesis.GenesisSalt.String(), ipgr.PrivacyGroup.GenesisSalt)
+		require.Equal(t, pgGenesis.Members, ipgr.PrivacyGroup.Members)
+		require.Equal(t, pgGenesis.Properties.Map(), ipgr.PrivacyGroup.Properties)
+		require.Equal(t, pgGenesis.Configuration.Map(), ipgr.PrivacyGroup.Configuration)
+		return &prototk.InitPrivacyGroupResponse{
+			Transaction: &prototk.PreparedTransaction{
+				Type:            prototk.PreparedTransaction_PUBLIC, // less likely than private
+				ContractAddress: confutil.P(addr.String()),          // less likely than deploy
+				RequiredSigner:  confutil.P("some.signer"),          // less likely than rndom assignment
+				ParamsJson:      `{"tx": "input"}`,
+				FunctionAbiJson: tktypes.JSONString(functionABI).Pretty(),
+			},
+		}, nil
+	}
+
+	domain := td.d
+	tx, err := domain.InitPrivacyGroup(td.ctx, pgID, pgGenesis)
+	require.NoError(t, err)
+	require.Equal(t, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:   "some.signer",
+			To:     addr,
+			Type:   pldapi.TransactionTypePublic.Enum(),
+			Data:   tktypes.RawJSON(`{"tx": "input"}`),
+			Domain: "test1",
+		},
+		ABI: abi.ABI{functionABI},
+	}, tx)
+}
+
+func TestDomainInitPrivacyGroupError(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.tp.Functions.InitPrivacyGroup = func(ctx context.Context, ipgr *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	domain := td.d
+	_, err := domain.InitPrivacyGroup(td.ctx, tktypes.RandBytes(32), &pldapi.PrivacyGroupGenesisState{})
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestDomainInitPrivacyGroupBadResFunctionABI(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.tp.Functions.InitPrivacyGroup = func(ctx context.Context, ipgr *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
+		return &prototk.InitPrivacyGroupResponse{
+			Transaction: &prototk.PreparedTransaction{},
+		}, nil
+	}
+
+	domain := td.d
+	_, err := domain.InitPrivacyGroup(td.ctx, tktypes.RandBytes(32), &pldapi.PrivacyGroupGenesisState{})
+	assert.Regexp(t, "PD011607", err)
+
+}
+
+func TestDomainInitPrivacyGroupBadResFromAddr(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.tp.Functions.InitPrivacyGroup = func(ctx context.Context, ipgr *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
+		return &prototk.InitPrivacyGroupResponse{
+			Transaction: &prototk.PreparedTransaction{
+				FunctionAbiJson: tktypes.JSONString(&abi.Entry{Type: abi.Function, Name: "initPrivacyGroup"}).Pretty(),
+				ContractAddress: confutil.P("wrong"),
+			},
+		}, nil
+	}
+
+	domain := td.d
+	_, err := domain.InitPrivacyGroup(td.ctx, tktypes.RandBytes(32), &pldapi.PrivacyGroupGenesisState{})
+	assert.Regexp(t, "bad address", err)
+
+}
