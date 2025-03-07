@@ -594,12 +594,6 @@
          }
      }
 
-     void validatePropType(String subSection, JsonABI.Parameter prop, String requiredType) throws IllegalArgumentException {
-         if (!prop.type().equals(requiredType)) {
-             throw new IllegalArgumentException("if you supply a '%s%s' property it must be a '%s' value (type=%s)".formatted(subSection, prop.name(), requiredType, prop.type()));
-         }
-     }
-
      @Override
      protected CompletableFuture<ConfigurePrivacyGroupResponse> configurePrivacyGroup(ConfigurePrivacyGroupRequest request) {
          try {
@@ -607,24 +601,18 @@
              var resBuilder = ConfigurePrivacyGroupResponse.newBuilder();
 
              var inputConf = request.getInputConfigurationMap();
-             var evmVersion = inputConf.get("evmVersion");
-             if (evmVersion == null || evmVersion.isEmpty()) {
-                 evmVersion = PenteConfiguration.DEFAULT_EVM_VERSION;
+             resBuilder.putConfiguration("evmVersion", PenteConfiguration.DEFAULT_EVM_VERSION);
+             resBuilder.putConfiguration("endorsementType", PenteConfiguration.DEFAULT_ENDORSEMENT_TYPE);
+             resBuilder.putConfiguration("externalCallsEnabled", "false");
+             for (var key : inputConf.keySet()) {
+                 var val = inputConf.get(key);
+                 switch (key) {
+                     case "evmVersion" -> resBuilder.putConfiguration("evmVersion", val);
+                     case "endorsementType" -> resBuilder.putConfiguration("endorsementType", val);
+                     case "externalCallsEnabled" -> resBuilder.putConfiguration("externalCallsEnabled", Boolean.valueOf(val).toString());
+                     default -> throw new IllegalArgumentException("Unknown configuration option '%s'".formatted(key));
+                 }
              }
-             resBuilder.putConfiguration("evmVersion", evmVersion);
-
-             var endorsementType = inputConf.get("endorsementType");
-             if (endorsementType == null || endorsementType.isEmpty()) {
-                 endorsementType = PenteConfiguration.DEFAULT_ENDORSEMENT_TYPE;
-             }
-             resBuilder.putConfiguration("endorsementType", endorsementType);
-
-             var externalCallsEnabled = inputConf.get("externalCallsEnabled");
-             if (externalCallsEnabled == null || externalCallsEnabled.isEmpty()) {
-                 externalCallsEnabled = "false";
-             }
-             resBuilder.putConfiguration("externalCallsEnabled", externalCallsEnabled);
-
              return CompletableFuture.completedFuture(resBuilder.build());
 
          } catch (Exception e) {
@@ -637,17 +625,6 @@
 
          try {
              final var mapper = new ObjectMapper();
-
-             // Process the well-known property names that could be supplied externally
-             var finalABI = JsonABI.newTuple("PentePrivacyGroup", "PentePrivacyGroup", JsonABI.newParameters(
-                     JsonABI.newIndexedParameter("salt", "bytes32"),
-                     JsonABI.newTuple("pente", "PentePrivacyGroupSettings", JsonABI.newParameters(
-                             JsonABI.newParameter("members", "string[]"),
-                             JsonABI.newParameter("evmVersion", "string"),
-                             JsonABI.newParameter("endorsementType", "string"),
-                             JsonABI.newParameter("externalCallsEnabled", "bool")
-                     ))
-             ));
 
              // Read the supplied properties into a generic map structure,
              var pgConfig = request.getPrivacyGroup().getConfigurationMap();

@@ -59,7 +59,7 @@ public class PentePrivacyGroupTest {
     }
 
     @Test
-    void tetConfigurePrivacyGroupCustom() throws Exception {
+    void testConfigurePrivacyGroupCustom() throws Exception {
 
         var pente = new PenteDomain("", "");
 
@@ -81,6 +81,17 @@ public class PentePrivacyGroupTest {
                 """, new TypeReference<Map<String, String>>() {});
         assertEquals(expected, res.getConfigurationMap());
 
+    }
+
+    @Test
+    void testConfigurePrivacyGroupBadOption() throws Exception {
+
+        var pente = new PenteDomain("", "");
+
+        var reqBuilder = ConfigurePrivacyGroupRequest.newBuilder()
+                .putInputConfiguration("evmversion", "mis-spelled");
+
+        assertThrows(ExecutionException.class, () -> pente.configurePrivacyGroup(reqBuilder.build()).get());
     }
 
     @Test
