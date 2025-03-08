@@ -97,9 +97,12 @@ async function main(): Promise<boolean> {
     async (sender, event) => {
       if (event.method === "ptx_subscription") {
         for (const receipt of event.params.result.receipts) {
+          // Process each transaction receipt
           await processReceipt(receipt);
-          sender.ack(event.params.subscription);
         }
+
+        // Ack the receipt batch
+        sender.ack(event.params.subscription);
       }
     }
   );

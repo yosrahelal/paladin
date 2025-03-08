@@ -18,7 +18,7 @@ export interface WebSocketEventCallback {
 
 export interface WebSocketClientOptions {
   url: string;
-  subscriptions: string[];
+  subscriptions?: string[];
   username?: string;
   password?: string;
   logger?: Logger;

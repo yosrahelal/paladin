@@ -54,13 +54,9 @@ export class PaladinWebSocketClient {
           this.logger.log("Connected");
         }
         this.schedulePing();
-        for (const name of this.options.subscriptions) {
-          this.send({
-            jsonrpc: "2.0",
-            id: this.counter++,
-            method: "ptx_subscribe",
-            params: ["receipts", name],
-          });
+        for (const name of this.options.subscriptions ?? []) {
+          // Automatically connect subscriptions
+          this.subscribe("receipts", name);
           this.logger.log(`Started listening on subscription ${name}`);
         }
         if (this.options?.afterConnect !== undefined) {
@@ -152,13 +148,21 @@ export class PaladinWebSocketClient {
     }
   }
 
-  ack(subscription: string) {
+  sendRpc(method: string, params: any[]) {
     this.send({
       jsonrpc: "2.0",
       id: this.counter++,
-      method: "ptx_ack",
-      params: [subscription],
+      method,
+      params,
     });
+  }
+
+  subscribe(type: string, name: string) {
+    this.sendRpc("ptx_subscribe", [type, name]);
+  }
+
+  ack(subscription: string) {
+    this.sendRpc("ptx_ack", [subscription]);
   }
 
   async close(wait?: boolean): Promise<void> {
