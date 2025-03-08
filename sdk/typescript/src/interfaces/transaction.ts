@@ -65,6 +65,7 @@ export interface ITransactionCall extends ITransactionInput {}
 export interface ITransactionReceipt {
   blockNumber: number;
   id: string;
+  sequence: number;
   success: boolean;
   transactionHash: string;
   source: string;
@@ -176,3 +177,15 @@ export interface IStoredABI {
   abi: ethers.InterfaceAbi;
 }
 
+export interface ITransactionReceiptListener {
+  name: string;
+  filters?: {
+    sequenceAbove?: number;
+    type?: TransactionType;
+    domain?: string;
+  };
+  options?: {
+    domainReceipts?: boolean;
+    incompleteStateReceiptBehavior?: "block_contract" | "process";
+  };
+}
