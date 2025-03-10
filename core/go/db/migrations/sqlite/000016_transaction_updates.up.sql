@@ -10,7 +10,7 @@ CREATE TABLE transaction_history (
   "from"                      VARCHAR         NOT NULL,
   "to"                        VARCHAR,
   "data"                      VARCHAR,
-  "gas"                       VARCHAR,
+  "gas"                       BIGINT,
   "value"                     VARCHAR,
   "gas_price"                 VARCHAR,
   "max_fee_per_gas"           VARCHAR,

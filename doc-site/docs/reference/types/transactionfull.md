@@ -8,8 +8,7 @@ title: TransactionFull
 ```json
 {
     "receipt": null,
-    "public": null,
-    "history": null
+    "public": null
 }
 ```
 
@@ -36,7 +35,7 @@ title: TransactionFull
 | `dependsOn` | Transactions registered as dependencies when the transaction was created | [`UUID[]`](simpletypes.md#uuid) |
 | `receipt` | Transaction receipt data - available if the transaction has reached a final state | [`TransactionReceiptData`](#transactionreceiptdata) |
 | `public` | List of public transactions associated with this transaction | [`PublicTx[]`](publictx.md#publictx) |
-| `history` | List transaction values that have previously been provided for this transaction | [`TransactionHistory[]`](#transactionhistory) |
+| `history` | List of values that have previously been provided for this transaction | [`TransactionHistory[]`](#transactionhistory) |
 
 ## TransactionReceiptData
 

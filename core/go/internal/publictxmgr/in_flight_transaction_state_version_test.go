@@ -82,8 +82,9 @@ func TestStateVersionTransactionFromRetrieveGasPriceToTracking(t *testing.T) {
 	assert.Nil(t, version.GetStageTriggerError(ctx))
 
 	var nilBytes []byte
+	var nilHash *tktypes.Bytes32
 	// scenario A: no signer configured, do submission
-	mockActionTriggers.On("TriggerSubmitTx", mock.Anything, 0, nilBytes).Return(nil).Once()
+	mockActionTriggers.On("TriggerSubmitTx", mock.Anything, 0, nilBytes, nilHash).Return(nil).Once()
 
 	version.StartNewStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived)
 	assert.Nil(t, version.GetStageTriggerError(ctx))
@@ -94,11 +95,13 @@ func TestStateVersionTransactionFromRetrieveGasPriceToTracking(t *testing.T) {
 	assert.Nil(t, version.GetStageTriggerError(ctx))
 	// persist the signed data as transient output
 	testSignedData := []byte("test signed data")
+	testHash := confutil.P(tktypes.RandBytes32())
 	version.SetTransientPreviousStageOutputs(&TransientPreviousStageOutputs{
-		SignedMessage: testSignedData,
+		SignedMessage:   testSignedData,
+		TransactionHash: testHash,
 	})
 	// do the submission
-	mockActionTriggers.On("TriggerSubmitTx", mock.Anything, 0, testSignedData).Return(nil)
+	mockActionTriggers.On("TriggerSubmitTx", mock.Anything, 0, testSignedData, testHash).Return(nil)
 	version.StartNewStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived)
 	assert.Nil(t, version.GetStageTriggerError(ctx))
 

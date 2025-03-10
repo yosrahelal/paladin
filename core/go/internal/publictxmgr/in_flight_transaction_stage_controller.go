@@ -199,13 +199,8 @@ func (it *inFlightTransactionStageController) PrintTimeline() string {
 func (pot *PointOfTime) String() string {
 	return fmt.Sprintf("Event: %s, start: %s, duration: %s", pot.name, pot.timestamp.Format(time.RFC3339Nano), pot.tillNextEvent.String())
 }
-func (it *inFlightTransactionStageController) TriggerNewStageRun(ctx context.Context, stage InFlightTxStage, substatus BaseTxSubStatus, signedMessage []byte) {
+func (it *inFlightTransactionStageController) TriggerNewStageRun(ctx context.Context, stage InFlightTxStage, substatus BaseTxSubStatus) {
 	it.MarkTime(fmt.Sprintf("stage_%s_wait_to_trigger_async_execution", string(stage)))
-	if signedMessage != nil {
-		it.stateManager.GetCurrentVersion(ctx).SetTransientPreviousStageOutputs(&TransientPreviousStageOutputs{
-			SignedMessage: signedMessage,
-		})
-	}
 	it.stateManager.GetCurrentVersion(ctx).StartNewStageContext(ctx, stage, substatus)
 }
 
@@ -283,6 +278,7 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 		// be read within this goroutine so that we know that they haven't been changed by an update part way through.
 		it.startNewStage(ctx, tOut.Cost)
 	}
+	// TODO: this says that the transaction has been signed, not that it has been submitted
 	tOut.TransactionSubmitted = it.stateManager.GetTransactionHash() != nil
 
 	return tOut
@@ -435,7 +431,11 @@ func (it *inFlightTransactionStageController) processSigningStageOutput(ctx cont
 		if rsIn.PersistenceOutput.PersistenceError == nil && !rsc.StageErrored {
 			// we've persisted successfully, move to the next stage inline as signed message is not persisted
 			log.L(ctx).Debugf("Signed message is not nil: %t", rsc.StageOutput.SignOutput.SignedMessage != nil)
-			it.TriggerNewStageRun(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, rsc.StageOutput.SignOutput.SignedMessage)
+			version.SetTransientPreviousStageOutputs(&TransientPreviousStageOutputs{
+				SignedMessage:   rsc.StageOutput.SignOutput.SignedMessage,
+				TransactionHash: rsc.StageOutput.SignOutput.TxHash,
+			})
+			it.TriggerNewStageRun(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived)
 		}
 	} else if rsIn.SignOutput == nil {
 		log.L(ctx).Errorf("signOutput should not be nil for transaction with ID: %s, in the stage output object: %+v.", rsc.InMemoryTx.GetSignerNonce(), rsIn)
@@ -515,6 +515,7 @@ func (it *inFlightTransactionStageController) processSubmittingStageOutput(ctx c
 				ErrorMessage: &errMsg,
 			}
 			rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(stageOutput.SubmitOutput.ErrorReason)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+stageOutput.SubmitOutput.Err.Error()+`"}`))
+			// TODO: this should be set from the signing stage- it doesn't tell us anything about whether this is a resubmission or not
 			if rsc.InMemoryTx.GetTransactionHash() != nil {
 				// did a re-submission, no matter the result, update the last warn time to avoid another retry
 				rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit = confutil.P(tktypes.TimestampNow())
@@ -527,7 +528,6 @@ func (it *inFlightTransactionStageController) processSubmittingStageOutput(ctx c
 					LastSubmit: stageOutput.SubmitOutput.SubmissionTime,
 				}
 				log.L(ctx).Debugf("Transaction submitted for tx %s (hash=%s)", rsc.InMemoryTx.GetSignerNonce(), rsc.InMemoryTx.GetTransactionHash())
-				rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash = rsc.StageOutput.SubmitOutput.TxHash
 			} else if stageOutput.SubmitOutput.SubmissionOutcome == SubmissionOutcomeNonceTooLow {
 				log.L(ctx).Debugf("Nonce too low for tx %s (hash=%s)", rsc.InMemoryTx.GetSignerNonce(), rsc.InMemoryTx.GetTransactionHash())
 				rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+stageOutput.SubmitOutput.TxHash.String()+`"}`), nil)
@@ -584,7 +584,7 @@ func (it *inFlightTransactionStageController) startNewStage(ctx context.Context,
 	// first check whether the current transaction is before the confirmed nonce
 	if it.newStatus != nil && !it.stateManager.IsReadyToExit() && *it.newStatus != it.stateManager.GetInFlightStatus() { // first apply any status update that's required
 		log.L(ctx).Debugf("Transaction with ID %s entering status update, current status: %s, target status: %s", it.stateManager.GetSignerNonce(), it.stateManager.GetInFlightStatus(), *it.newStatus)
-		it.TriggerNewStageRun(ctx, InFlightTxStageStatusUpdate, BaseTxSubStatusReceived, nil)
+		it.TriggerNewStageRun(ctx, InFlightTxStageStatusUpdate, BaseTxSubStatusReceived)
 	} else if it.stateManager.IsReadyToExit() {
 		// then calculate the latest stage based on the managed transaction to kick off the next stage
 		// if there isn't any running context and the transaction status is no longer in pending
@@ -593,12 +593,12 @@ func (it *inFlightTransactionStageController) startNewStage(ctx context.Context,
 	} else if it.stateManager.GetGasPriceObject() == nil {
 		// no gas price fetched, go and fetch gas price
 		log.L(ctx).Debugf("Transaction with ID %s entering retrieve gas price as no gas price available.", it.stateManager.GetSignerNonce())
-		it.TriggerNewStageRun(ctx, InFlightTxStageRetrieveGasPrice, BaseTxSubStatusReceived, nil)
+		it.TriggerNewStageRun(ctx, InFlightTxStageRetrieveGasPrice, BaseTxSubStatusReceived)
 	} else if it.stateManager.GetTransactionHash() == nil {
 		if it.stateManager.CanSubmit(ctx, cost) {
 			// no transaction hash, do signing and submission
 			log.L(ctx).Debugf("Transaction with ID %s entering signing stage as no transaction hash recorded.", it.stateManager.GetSignerNonce())
-			it.TriggerNewStageRun(ctx, InFlightTxStageSigning, BaseTxSubStatusReceived, nil)
+			it.TriggerNewStageRun(ctx, InFlightTxStageSigning, BaseTxSubStatusReceived)
 		} else {
 			log.L(ctx).Debugf("Transaction with ID %s no op, as cannot submit.", it.stateManager.GetSignerNonce())
 		}
@@ -608,7 +608,7 @@ func (it *inFlightTransactionStageController) startNewStage(ctx context.Context,
 		if !it.stateManager.GetCurrentVersion(ctx).ValidatedTransactionHashMatchState(ctx) {
 			if it.stateManager.CanSubmit(ctx, cost) {
 				log.L(ctx).Debugf("Transaction with ID %s entering signing stage as current state hasn't been validated.", it.stateManager.GetSignerNonce())
-				it.TriggerNewStageRun(ctx, InFlightTxStageSigning, BaseTxSubStatusReceived, nil)
+				it.TriggerNewStageRun(ctx, InFlightTxStageSigning, BaseTxSubStatusReceived)
 			} else {
 				log.L(ctx).Debugf("Transaction with ID %s no op, as cannot submit, state not validated.", it.stateManager.GetSignerNonce())
 			}
@@ -618,7 +618,7 @@ func (it *inFlightTransactionStageController) startNewStage(ctx context.Context,
 			if lastSubmitTime != nil && time.Since(lastSubmitTime.Time()) > it.resubmitInterval {
 				// do a resubmission when exceeded the resubmit interval
 				log.L(ctx).Debugf("Transaction with ID %s entering retrieve gas price as exceeded resubmit interval of %s.", it.stateManager.GetSignerNonce(), it.resubmitInterval.String())
-				it.TriggerNewStageRun(ctx, InFlightTxStageRetrieveGasPrice, BaseTxSubStatusStale, nil)
+				it.TriggerNewStageRun(ctx, InFlightTxStageRetrieveGasPrice, BaseTxSubStatusStale)
 			} else {
 				// check and track the existing transaction hash
 				// ... this is the "nil" stage
@@ -750,12 +750,12 @@ func (it *inFlightTransactionStageController) TriggerSignTx(ctx context.Context,
 	return nil
 }
 
-func (it *inFlightTransactionStageController) TriggerSubmitTx(ctx context.Context, versionID int, signedMessage []byte) error {
+func (it *inFlightTransactionStageController) TriggerSubmitTx(ctx context.Context, versionID int, signedMessage []byte, calculatedHash *tktypes.Bytes32) error {
 	// the version ID is passed in so that this function doesn't cause a type import from this package when it is mocked
 	version := it.stateManager.GetVersion(ctx, versionID)
-	calculatedHash := it.stateManager.GetTransactionHash()
 	signerNonce := it.stateManager.GetSignerNonce()
 	lastSubmitTime := it.stateManager.GetLastSubmitTime()
+
 	it.executeAsync(func() {
 		txHash, submissionTime, errReason, submissionOutcome, err := it.submitTX(ctx, signedMessage, calculatedHash, signerNonce, lastSubmitTime, version.IsCancelled)
 		version.AddSubmitOutput(ctx, txHash, submissionTime, submissionOutcome, errReason, err)

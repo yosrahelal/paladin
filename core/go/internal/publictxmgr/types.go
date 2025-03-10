@@ -329,7 +329,7 @@ type PersistenceOutput struct {
 type InFlightStageActionTriggers interface {
 	TriggerRetrieveGasPrice(ctx context.Context, versionID int) error
 	TriggerSignTx(ctx context.Context, versionID int) error
-	TriggerSubmitTx(ctx context.Context, versionID int, signedMessage []byte) error
+	TriggerSubmitTx(ctx context.Context, versionID int, signedMessage []byte, calculatedTxHash *tktypes.Bytes32) error
 	TriggerStatusUpdate(ctx context.Context, versionID int) error
 }
 
@@ -394,7 +394,8 @@ type OrchestratorContext struct {
 // output of some stages doesn't get written into the database
 // so it needs to be carried over to next stages
 type TransientPreviousStageOutputs struct {
-	SignedMessage []byte // NB: if the value is nil when triggering submitTx , node signer will be used to sign the transaction instead, don't use this to judge whether a transaction can be submitted or not.
+	SignedMessage   []byte // NB: if the value is nil when triggering submitTx , node signer will be used to sign the transaction instead, don't use this to judge whether a transaction can be submitted or not.
+	TransactionHash *tktypes.Bytes32
 }
 
 type InFlightTransactionStateManager interface {
