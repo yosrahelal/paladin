@@ -142,7 +142,7 @@ jobs:
             -PoperatorImageTag=${{ inputs.images_tag }} \
             -PpaladinImageName=${{ env.IMG_PALADIN }} \
             -PpaladinImageTag=${{ inputs.images_tag }} \
-            -PdeleteCluster=true
+            -PdeleteCluster=false
 
       # set CR_TOKEN env with the GitHub token secret when it is workflow_dispatch action
       - name: Set CR_TOKEN
@@ -157,7 +157,7 @@ jobs:
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         with:
-          mark_as_latest: false # the release is marked as latest in the next step
+          mark_as_latest: false # the release job is marked as latest
           charts_dir: "operator/charts"
           skip_existing: true
         env: 
@@ -165,15 +165,13 @@ jobs:
 
       - name: Prepare CRs artifacts
         run: ./gradlew prepareArtifacts -PartifactDir=${{ github.workspace }}/artifacts
-      - name: Release
-        uses: softprops/action-gh-release@v2
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ inputs.chart_tag }}
-          body: "Release ${{ inputs.chart_tag }}"
-          generate_release_notes: true
-          make_latest: ${{ inputs.latest }}
-          files: |
-            ${{ github.workspace }}/artifacts/basenet.yaml
-            ${{ github.workspace }}/artifacts/devnet.yaml
-            ${{ github.workspace }}/artifacts/artifacts.tar.gz
+          name: helm-artifacts
+          path: |
+              ${{ github.workspace }}/artifacts/basenet.yaml
+              ${{ github.workspace }}/artifacts/devnet.yaml
+              ${{ github.workspace }}/artifacts/artifacts.tar.gz
  

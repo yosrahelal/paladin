@@ -14,15 +14,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Breadcrumbs, Button, Fade, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Breadcrumbs, Button, Fade, Grid2, IconButton, Link, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useTheme } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { t } from "i18next";
 import { useEffect, useState } from "react";
 import { fetchKeys } from "../queries/keys";
 import { Hash } from "../components/Hash";
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import { IKeyEntry, IVerifier } from "../interfaces";
+import { IFilter, IKeyEntry, IVerifier } from "../interfaces";
 import { useSearchParams } from "react-router-dom";
 import { Captions, Signature } from "lucide-react";
 import { constants } from "../components/config";
@@ -30,6 +29,11 @@ import SearchIcon from '@mui/icons-material/Search';
 import { ReverseKeyLookupDialog } from "../dialogs/ReverseKeyLookup";
 import RemoveIcon from '@mui/icons-material/Remove';
 import { VerifiersDialog } from "../dialogs/Verifiers";
+import { useTranslation } from "react-i18next";
+import { Filters } from "../components/Filters";
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import ViewListIcon from '@mui/icons-material/ViewList';
+import { getAltModeScrollBarStyle } from "../themes/default";
 
 export const Keys: React.FC = () => {
 
@@ -41,6 +45,14 @@ export const Keys: React.FC = () => {
     return 10;
   };
 
+  const getDefaultMode = () => {
+    const valueFromStorage = window.localStorage.getItem(constants.KEYS_MODE);
+    if (valueFromStorage === 'explorer' || valueFromStorage === 'list') {
+      return valueFromStorage;
+    }
+    return 'explorer';
+  };
+
   const getDefaultSortBy = () => {
     return window.localStorage.getItem(constants.KEYS_SORT_BY_STORAGE_KEY) ?? 'index';
   };
@@ -49,31 +61,43 @@ export const Keys: React.FC = () => {
     return window.localStorage.getItem(constants.KEYS_SORT_ORDER_STORAGE_KEY) as 'asc' | 'desc' ?? 'asc';
   };
 
+  const getFiltersFromStorage = () => {
+    const value = window.localStorage.getItem(constants.KEYS_FILTERS_KEY);
+    if (value !== null) {
+      try {
+        return JSON.parse(value);
+      } catch (_err) { }
+    }
+    return [];
+  };
+
   const [searchParams, setSearchParams] = useSearchParams();
   const [refEntries, setRefEntries] = useState<IKeyEntry[]>([]);
-  const [filter, setFilter] = useState<string | undefined>(searchParams.get('filter') ?? undefined);
   const [page, setPage] = useState(0);
   const [count, setCount] = useState(-1);
   const [rowsPerPage, setRowsPerPage] = useState(getDefaultRowsPerPage());
   const [parent, setParent] = useState(searchParams.get('path') ?? '');
   const [reverseLookupDialogOpen, setReverseLookupDialogOpen] = useState(false);
-  const [sortBy, setSortBy] = useState(getDefaultSortBy());
+  const [sortByPathFirst, setSortByPathFirst] = useState(getDefaultSortBy() === 'path');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(getDefaultSortOrder);
   const [selectedVerifiers, setSelectedVerifiers] = useState<IVerifier[]>();
   const [verifiersDialogOpen, setVerifiersDialogOpen] = useState(false);
+  const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
+  const [mode, setMode] = useState<'explorer' | 'list'>(getDefaultMode());
+  const { t } = useTranslation();
+  const theme = useTheme();
 
   useEffect(() => {
-    setFilter(searchParams.get('filter') ?? undefined);
     setParent(searchParams.get('path') ?? '');
   }, [searchParams]);
 
   const { data: keys, error } = useQuery({
-    queryKey: ["keys", parent, sortBy, sortOrder, refEntries, rowsPerPage, filter],
-    queryFn: () => fetchKeys(parent, rowsPerPage, sortBy, sortOrder, filter, refEntries[refEntries.length - 1])
+    queryKey: ["keys", parent, sortByPathFirst, sortOrder, refEntries, rowsPerPage, filters, mode],
+    queryFn: () => fetchKeys(mode === 'explorer' ? parent : undefined, rowsPerPage, sortByPathFirst, sortOrder, filters, refEntries[refEntries.length - 1])
   });
 
   useEffect(() => {
-    if (count !== -1 && (page * rowsPerPage === count)) {
+    if (count !== -1 && (page !== 0 && page * rowsPerPage === count)) {
       handleChangePage(null, page - 1);
     }
   }, [count, rowsPerPage, page]);
@@ -87,8 +111,8 @@ export const Keys: React.FC = () => {
   }, [keys, rowsPerPage, page]);
 
   useEffect(() => {
-    setCount(-1);
     setPage(0);
+    setCount(-1);
     setRefEntries([]);
   }, [parent]);
 
@@ -97,30 +121,30 @@ export const Keys: React.FC = () => {
     if (parent !== '') {
       value.path = parent;
     }
-    if (filter !== undefined) {
-      value.filter = filter;
-    }
     setSearchParams(value);
-  }, [parent, page, filter]);
+  }, [parent, page]);
+
+  useEffect(() => {
+    window.localStorage.setItem(constants.KEYS_FILTERS_KEY, JSON.stringify(filters));
+    setCount(-1);
+  }, [filters]);
+
+  useEffect(() => {
+    if (mode === 'list') {
+      setParent('');
+    }
+    setPage(0);
+    setCount(-1);
+    setRefEntries([]);
+    window.localStorage.setItem(constants.KEYS_MODE, mode);
+  }, [mode]);
 
   if (error) {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error.message}</Alert>
   }
 
-  if (keys === undefined) {
-    return <></>;
-  }
-
-  const removeParentFromPath = (path: string) => {
-    let index = parent.length;
-    if (index > 0) {
-      index++;
-    }
-    return path.substring(index);
-  }
-
   const handleSortChange = (column: string) => {
-    if (column === sortBy) {
+    if ((column === 'path' && sortByPathFirst) || (column === 'index' && !sortByPathFirst)) {
       const order = sortOrder === 'asc' ? 'desc' : 'asc';
       setSortOrder(order);
       window.localStorage.setItem(constants.KEYS_SORT_ORDER_STORAGE_KEY, order);
@@ -130,8 +154,10 @@ export const Keys: React.FC = () => {
         window.localStorage.setItem(constants.KEYS_SORT_ORDER_STORAGE_KEY, 'asc');
         setSortOrder('asc');
       }
-      setSortBy(column);
+      setSortByPathFirst(column === 'path');
     }
+    setPage(0);
+    setRefEntries([]);
   };
 
   let breadcrumbContent: JSX.Element[] = [];
@@ -145,24 +171,14 @@ export const Keys: React.FC = () => {
         <Link underline="none"
           key={segment}
           href=""
-          sx={{ textTransform: 'none' }}
           onClick={event => {
             event.preventDefault();
-            setFilter(undefined);
             setParent(target);
           }}>
           {segment === '' ? t('root') : segment}
         </Link>
       )
     }
-  }
-  if (filter !== undefined) {
-    breadcrumbContent.push(
-      <Link underline="none"
-        key={filter}
-        sx={{ textTransform: 'none' }}>
-        {filter}
-      </Link>);
   }
 
   const getEthAddress = (key: IKeyEntry) => {
@@ -193,7 +209,7 @@ export const Keys: React.FC = () => {
             disableElevation
             color="primary"
             size="small"
-            sx={{ minWidth: '110px', paddingTop: 0, paddingBottom: 0, textTransform: 'none', fontWeight: '400', whiteSpace: 'nowrap' }}
+            sx={{ minWidth: '110px', paddingTop: 0, paddingBottom: 0, fontWeight: '400', whiteSpace: 'nowrap' }}
             onClick={() => { setSelectedVerifiers(entries); setVerifiersDialogOpen(true) }}
           >
             {t('manyN', { n: entries.length })}
@@ -204,6 +220,14 @@ export const Keys: React.FC = () => {
     return <RemoveIcon color="disabled" />;
   };
 
+  const removeParentFromPath = (path: string) => {
+    let index = parent.length;
+    if (index > 0) {
+      index++;
+    }
+    return path.substring(index);
+  }
+
   const handleChangePage = (
     _event: React.MouseEvent<HTMLButtonElement> | null,
     newPage: number
@@ -211,7 +235,9 @@ export const Keys: React.FC = () => {
     if (newPage === 0) {
       setRefEntries([]);
     } else if (newPage > page) {
-      refEntries.push(keys[keys.length - 1]);
+      if(keys !== undefined) {
+        refEntries.push(keys[keys.length - 1]);
+      }
     } else {
       refEntries.pop();
     }
@@ -237,61 +263,120 @@ export const Keys: React.FC = () => {
     left: '2px'
   }} />;
 
-
   return (
     <>
       <Fade timeout={300} in={true}>
         <Box
           sx={{
-            padding: "30px",
+            padding: "20px",
             maxWidth: "1300px",
             marginLeft: "auto",
             marginRight: "auto",
-            position: 'relative'
           }}
         >
-          <Typography align="center" variant="h5" sx={{ marginBottom: '20px' }}>
-            {t("localKeys")}
-          </Typography>
-          <Button
-            size="large"
-            variant="outlined"
-            startIcon={<SearchIcon />}
-            sx={{ position: 'absolute', right: '46px', top: '23px', textTransform: 'none', borderRadius: '20px' }}
-            onClick={() => setReverseLookupDialogOpen(true)}
-          >
-            {t('reverseLookup')}
-          </Button>
-          <Breadcrumbs
-            separator={<NavigateNextIcon fontSize="small" />}
-            sx={{ marginLeft: '10px', marginBottom: '10px' }}>
-            <Link underline="none"
-              href=""
-              sx={{ textTransform: 'none' }}
-              onClick={event => { event.preventDefault(); setFilter(undefined); setParent('') }}>
-              {t('root')}
-            </Link>
-            {breadcrumbContent}
-          </Breadcrumbs>
-
-          <TableContainer component={Paper} >
-            <Table>
+          <Grid2 container alignItems="center" spacing={2}>
+            <Grid2 sx={{ display: { xs: 'none', sm: 'none', md: 'block' } }} size={{ md: 4 }} />
+            <Grid2 size={{ xs: 12, md: 4 }}>
+              <Typography align="center" variant="h5">
+                {t("localKeys")}
+              </Typography>
+            </Grid2>
+            <Grid2 size={{ xs: 12, md: 4 }} container justifyContent="right">
+              <Grid2>
+                <Button
+                  size="large"
+                  variant="outlined"
+                  startIcon={<SearchIcon />}
+                  sx={{ borderRadius: '20px' }}
+                  onClick={() => setReverseLookupDialogOpen(true)}
+                >
+                  {t('reverseLookup')}
+                </Button>
+              </Grid2>
+            </Grid2>
+          </Grid2>
+          <Box sx={{ height: '10px' }} />
+          <Filters
+            filterFields={[
+              {
+                label: t('path'),
+                name: 'path',
+                type: 'string'
+              },
+              {
+                label: t('index'),
+                name: 'index',
+                type: 'number'
+              },
+              {
+                label: t('wallet'),
+                name: 'wallet',
+                type: 'string'
+              },
+              {
+                label: t('handle'),
+                name: 'keyHandle',
+                type: 'string'
+              },
+              {
+                label: t('isFolder'),
+                name: 'hasChildren',
+                type: 'boolean'
+              },
+              {
+                label: t('isKey'),
+                name: 'isKey',
+                type: 'boolean'
+              }
+            ]}
+            filters={filters}
+            setFilters={setFilters}
+          />
+          <Box sx={{ display: 'flex', marginBottom: '15px', alignItems: 'center' }}>
+            <ToggleButtonGroup exclusive onChange={(_event, value) => setMode(value)} value={mode}>
+              <Tooltip arrow title={t('listView')}>
+                <ToggleButton color="primary" value="list">
+                  <ViewListIcon fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+              <Tooltip arrow title={t('explorerView')}>
+                <ToggleButton color="primary" value="explorer">
+                  <AccountTreeIcon fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+            </ToggleButtonGroup>
+            {mode === 'explorer' &&
+              <Breadcrumbs
+                separator={<NavigateNextIcon fontSize="small" />}
+                sx={{ marginLeft: '10px' }}>
+                <Link underline="none"
+                  href=""
+                  onClick={event => { event.preventDefault(); setParent('') }}>
+                  {t('root')}
+                </Link>
+                {breadcrumbContent}
+              </Breadcrumbs>}
+          </Box>
+          <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', ...getAltModeScrollBarStyle(theme.palette.mode) }}>
+            <Table stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell width={1} />
-                  <TableCell sx={{ position: 'relative' }}>
+                  {mode === 'explorer' &&
+                    <TableCell width={1} sx={{ minWidth: '70px', backgroundColor: theme => theme.palette.background.paper }} />
+                  }
+                  <TableCell sx={{ backgroundColor: theme => theme.palette.background.paper }}>
                     <TableSortLabel
-                      active={sortBy === 'path'}
+                      active={sortByPathFirst}
                       direction={sortOrder}
                       onClick={() => handleSortChange('path')}
                     >
-                      {t('name')}
+                      {t(mode === 'explorer' ? 'pathSegment' : 'path')}
                     </TableSortLabel>
-                    {headerDivider}
+                    {mode === 'explorer' && headerDivider}
                   </TableCell>
-                  <TableCell width={1} sx={{ position: 'relative' }}>
+                  <TableCell width={1} sx={{ backgroundColor: theme => theme.palette.background.paper }}>
                     <TableSortLabel
-                      active={sortBy === 'index'}
+                      active={!sortByPathFirst}
                       direction={sortOrder}
                       onClick={() => handleSortChange('index')}
                     >
@@ -299,23 +384,24 @@ export const Keys: React.FC = () => {
                     </TableSortLabel>
                     {headerDivider}
                   </TableCell>
-                  <TableCell width={1} sx={{ position: 'relative' }}>{t('address')}{headerDivider}</TableCell>
-                  <TableCell width={1} sx={{ whiteSpace: 'nowrap', position: 'relative' }}>{t('otherVerifiers')}{headerDivider}</TableCell>
-                  <TableCell sx={{ position: 'relative' }}>{t('wallet')}{headerDivider}</TableCell>
-                  <TableCell width={1} sx={{ position: 'relative' }}>{t('handle')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper }} width={1} >{t('address')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper, whiteSpace: 'nowrap' }} width={1} >{t('otherVerifiers')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper }} width={1}>{t('wallet')}{headerDivider}</TableCell>
+                  <TableCell sx={{ minWidth: '160px', backgroundColor: theme => theme.palette.background.paper }} width={1} >{t('handle')}{headerDivider}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {keys.map(key =>
+                {keys?.map(key =>
                   <TableRow sx={{ height: '70px' }} key={`${key.path}${key.index}`}>
-                    <TableCell>{key.hasChildren &&
-                      <Tooltip arrow title={t('openFolder')}>
-                        <IconButton onClick={() => { setFilter(undefined); setParent(key.path) }}>
-                          <FolderOpenIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    }</TableCell>
-                    <TableCell>{removeParentFromPath(key.path)}</TableCell>
+                    {mode === 'explorer' &&
+                      <TableCell>{key.hasChildren &&
+                        <Tooltip arrow title={t('openFolder')}>
+                          <IconButton onClick={() => { setParent(key.path) }}>
+                            <FolderOpenIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      }</TableCell>}
+                    <TableCell sx={{ wordBreak: 'break-all' }}>{mode === 'explorer' ? removeParentFromPath(key.path) : key.path}</TableCell>
                     <TableCell>{key.index}</TableCell>
                     <TableCell>
                       {getEthAddress(key)}
@@ -331,31 +417,32 @@ export const Keys: React.FC = () => {
                 )}
               </TableBody>
             </Table>
-            <TablePagination
-              slotProps={{
-                actions: {
-                  lastButton: {
-                    disabled: true
-                  }
-                }
-              }}
-              component="div"
-              showFirstButton
-              showLastButton
-              count={count}
-              page={page}
-              onPageChange={handleChangePage}
-              rowsPerPage={rowsPerPage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-            />
           </TableContainer>
+          <TablePagination
+            slotProps={{
+              actions: {
+                lastButton: {
+                  disabled: true
+                }
+              }
+            }}
+            component="div"
+            showFirstButton
+            showLastButton
+            count={count}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
         </Box>
       </Fade>
       <ReverseKeyLookupDialog
         dialogOpen={reverseLookupDialogOpen}
         setDialogOpen={setReverseLookupDialogOpen}
+        mode={mode}
         setParent={setParent}
-        setFilter={setFilter}
+        setFilters={setFilters}
       />
       {selectedVerifiers &&
         <VerifiersDialog
@@ -363,6 +450,7 @@ export const Keys: React.FC = () => {
           setDialogOpen={setVerifiersDialogOpen}
           verifiers={selectedVerifiers}
         />}
+
     </>
   );
 }

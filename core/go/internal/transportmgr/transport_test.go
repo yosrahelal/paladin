@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
@@ -519,9 +520,9 @@ func TestSendReliableOk(t *testing.T) {
 
 	mockActivateDeactivateOk(tp)
 	err := tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		return tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
+		return tm.SendReliable(ctx, dbTX, &pldapi.ReliableMessage{
 			Node:        "node2",
-			MessageType: components.RMTState.Enum(),
+			MessageType: pldapi.RMTState.Enum(),
 			Metadata:    []byte(`{"some":"data"}`),
 		})
 	})
@@ -541,9 +542,9 @@ func TestSendReliableFail(t *testing.T) {
 
 	mockActivateDeactivateOk(tp)
 	err := tm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		return tm.SendReliable(ctx, dbTX, &components.ReliableMessage{
+		return tm.SendReliable(ctx, dbTX, &pldapi.ReliableMessage{
 			Node:        "node2",
-			MessageType: components.RMTState.Enum(),
+			MessageType: pldapi.RMTState.Enum(),
 			Metadata:    []byte(`{"some":"data"}`),
 		})
 	})

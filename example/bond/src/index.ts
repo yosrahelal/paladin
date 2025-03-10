@@ -54,13 +54,9 @@ async function main(): Promise<boolean> {
   // Create a Pente privacy group between the bond issuer and bond custodian
   logger.log("Creating issuer+custodian privacy group...");
   const penteFactory = new PenteFactory(paladin1, "pente");
-  const issuerCustodianGroup = await penteFactory.newPrivacyGroup(bondIssuer, {
-    group: {
-      salt: newGroupSalt(),
-      members: [bondIssuer, bondCustodian],
-    },
+  const issuerCustodianGroup = await penteFactory.newPrivacyGroup({
+    members: [bondIssuer, bondCustodian],
     evmVersion: "shanghai",
-    endorsementType: "group_scoped_identities",
     externalCallsEnabled: true,
   });
   if (!checkDeploy(issuerCustodianGroup)) return false;
@@ -108,7 +104,7 @@ async function main(): Promise<boolean> {
     notaryMode: "hooks",
     options: {
       hooks: {
-        privateGroup: issuerCustodianGroup.group,
+        privateGroup: issuerCustodianGroup,
         publicAddress: issuerCustodianGroup.address,
         privateAddress: bondTracker.address,
       },
@@ -161,13 +157,9 @@ async function main(): Promise<boolean> {
   logger.log("Creating investor+custodian privacy group...");
   const investorCustodianGroup = await penteFactory
     .using(paladin3)
-    .newPrivacyGroup(investor, {
-      group: {
-        salt: newGroupSalt(),
-        members: [investor, bondCustodian],
-      },
+    .newPrivacyGroup({
+      members: [investor, bondCustodian],
       evmVersion: "shanghai",
-      endorsementType: "group_scoped_identities",
       externalCallsEnabled: true,
     });
   if (investorCustodianGroup === undefined) {
@@ -243,7 +235,7 @@ async function main(): Promise<boolean> {
     logger.error("Prepared bond transfer had no 'to' address");
     return false;
   }
-  if (!bondTransfer2.transaction.function.startsWith("transition(")) {
+  if (!bondTransfer2.transaction.function?.startsWith("transition(")) {
     logger.error(
       `Prepared bond transfer did not seem to be a Pente transition: ${bondTransfer2.transaction}`
     );
