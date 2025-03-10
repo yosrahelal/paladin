@@ -244,6 +244,28 @@ func TestDomainRequestsOK(t *testing.T) {
 				ReceiptJson: `{"receipt":"data"}`,
 			}, nil
 		},
+		ConfigurePrivacyGroup: func(ctx context.Context, cpgr *prototk.ConfigurePrivacyGroupRequest) (*prototk.ConfigurePrivacyGroupResponse, error) {
+			assert.Equal(t, map[string]string{"input": "props"}, cpgr.InputConfiguration)
+			return &prototk.ConfigurePrivacyGroupResponse{
+				Configuration: map[string]string{"finalized": "props"},
+			}, nil
+		},
+		InitPrivacyGroup: func(ctx context.Context, ipgr *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
+			assert.Equal(t, `pg1`, ipgr.PrivacyGroup.Name)
+			return &prototk.InitPrivacyGroupResponse{
+				Transaction: &prototk.PreparedTransaction{
+					ParamsJson: `{"some":"params"}`,
+				},
+			}, nil
+		},
+		WrapPrivacyGroupEVMTX: func(ctx context.Context, wpgtr *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error) {
+			assert.Equal(t, `{"orig":"params"}`, *wpgtr.Transaction.InputJson)
+			return &prototk.WrapPrivacyGroupEVMTXResponse{
+				Transaction: &prototk.PreparedTransaction{
+					ParamsJson: `{"wrapped":"params"}`,
+				},
+			}, nil
+		},
 	}
 
 	tdm := &testDomainManager{
@@ -426,6 +448,28 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, `{"receipt":"data"}`, brr.ReceiptJson)
+
+	cpgr, err := domainAPI.ConfigurePrivacyGroup(ctx, &prototk.ConfigurePrivacyGroupRequest{
+		InputConfiguration: map[string]string{"input": "props"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"finalized": "props"}, cpgr.Configuration)
+
+	ipgr, err := domainAPI.InitPrivacyGroup(ctx, &prototk.InitPrivacyGroupRequest{
+		PrivacyGroup: &prototk.PrivacyGroup{
+			Name: "pg1",
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, `{"some":"params"}`, ipgr.Transaction.ParamsJson)
+
+	wpgtr, err := domainAPI.WrapPrivacyGroupEVMTX(ctx, &prototk.WrapPrivacyGroupEVMTXRequest{
+		Transaction: &prototk.PrivacyGroupEVMTX{
+			InputJson: confutil.P(`{"orig":"params"}`),
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, `{"wrapped":"params"}`, wpgtr.Transaction.ParamsJson)
 
 	callbacks := <-waitForCallbacks
 

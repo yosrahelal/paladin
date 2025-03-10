@@ -16,14 +16,13 @@
  package io.kaleido.paladin.pente.domain;
 
  import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+ import com.fasterxml.jackson.annotation.JsonInclude;
  import com.fasterxml.jackson.annotation.JsonProperty;
  import com.fasterxml.jackson.databind.JsonNode;
  import io.kaleido.paladin.logging.PaladinLogging;
- import io.kaleido.paladin.toolkit.JsonABI;
- import io.kaleido.paladin.toolkit.JsonHex;
+ import io.kaleido.paladin.toolkit.*;
  import io.kaleido.paladin.toolkit.JsonHex.Address;
  import io.kaleido.paladin.toolkit.JsonHex.Bytes32;
- import io.kaleido.paladin.toolkit.ToDomain;
  import org.apache.logging.log4j.Logger;
  import org.web3j.abi.TypeDecoder;
  import org.web3j.abi.TypeEncoder;
@@ -45,7 +44,11 @@
   **/
  public class PenteConfiguration {
      private static final Logger LOGGER = PaladinLogging.getLogger(PenteConfiguration.class);
- 
+
+     public static String ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES = "group_scoped_identities";
+     public static final String DEFAULT_EVM_VERSION = "shanghai";
+     public static final String DEFAULT_ENDORSEMENT_TYPE = ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES;
+
      public static final String transferSignature = "event PenteTransition(bytes32 txId, bytes32[] inputs, bytes32[] reads, bytes32[] outputs, bytes32[] info)";
      public static final String approvalSignature = "event PenteApproved(bytes32 txId, address delegate, bytes32 transitionHash)";
  
@@ -101,10 +104,14 @@
              String[] members
      ) {
      }
- 
+
+     /** JSON decoding for the parameters that can be supplied directly to a transaction initializing a group,
+      *  and also used for JSON decoding of the "pente" input properties that can be optionally supplied
+      *  when using the privacy group feature of Paladin to manage group genesis state distribution. */
      @JsonIgnoreProperties(ignoreUnknown = true)
      public record PrivacyGroupConstructorParamsJSON(
              @JsonProperty
+             @JsonInclude(JsonInclude.Include.NON_NULL) // so we do not serialize when un-used in pente group settings
              GroupTupleJSON group,
              @JsonProperty
              String evmVersion,
@@ -114,7 +121,7 @@
              boolean externalCallsEnabled
      ) {
      }
- 
+
      @JsonIgnoreProperties(ignoreUnknown = true)
      record PenteTransitionParams(
              @JsonProperty
@@ -154,10 +161,7 @@
              PentePublicTransaction transitionWithApproval
      ) {
      }
- 
-     public static String ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES =
-             "group_scoped_identities";
- 
+
      public static final String FUNCTION_NAME_INVOKE = "invoke";
  
      public static final String FUNCTION_NAME_DEPLOY = "deploy";
@@ -256,7 +260,7 @@
              return evmVersion.getValue();
          }
      }
- 
+
      public static JsonHex.Bytes abiEncoder_Config_V0(String evmVersion, int threshold, List<JsonHex.Address> endorsers, boolean externalCallsEnabled) {
          var w3Addresses = new ArrayList<org.web3j.abi.datatypes.Address>(endorsers.size());
          for (var addr : endorsers) {
@@ -309,7 +313,7 @@
          return domainName;
      }
  
-     synchronized void initFromConfig(ToDomain.ConfigureDomainRequest configReq) {
+     synchronized void initFromConfig(ConfigureDomainRequest configReq) {
          this.domainName = configReq.getName();
          this.chainId = configReq.getChainId();
      }
@@ -321,7 +325,7 @@
          );
      }
  
-     synchronized void schemasInitialized(List<ToDomain.StateSchema> schemas) {
+     synchronized void schemasInitialized(List<StateSchema> schemas) {
          var schemaDefs = allPenteSchemas();
          if (schemas.size() != schemaDefs.size()) {
              throw new IllegalStateException("expected %d schemas, received %d".formatted(schemaDefs.size(), schemas.size()));

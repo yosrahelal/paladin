@@ -55,13 +55,7 @@ func (h *delegateLockHandler) ValidateParams(ctx context.Context, config *types.
 
 func (h *delegateLockHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	return &prototk.InitTransactionResponse{
-		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
-			{
-				Lookup:       tx.Transaction.From,
-				Algorithm:    algorithms.ECDSA_SECP256K1,
-				VerifierType: verifiers.ETH_ADDRESS,
-			},
-		},
+		RequiredVerifiers: h.noto.ethAddressVerifiers(tx.Transaction.From),
 	}, nil
 }
 

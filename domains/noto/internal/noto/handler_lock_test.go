@@ -72,10 +72,8 @@ func TestLock(t *testing.T) {
 		TransactionId: "0x015e1881f2ba769c22d05c841f06949ec6e1bd573f5e1e0328885494212f077d",
 		From:          "sender@node1",
 		ContractInfo: &prototk.ContractInfo{
-			ContractAddress: contractAddress,
-			ContractConfigJson: mustParseJSON(&types.NotoParsedConfig{
-				NotaryLookup: "notary@node1",
-			}),
+			ContractAddress:    contractAddress,
+			ContractConfigJson: mustParseJSON(notoBasicConfig),
 		},
 		FunctionAbiJson:   mustParseJSON(fn),
 		FunctionSignature: fn.SolString(),
@@ -119,17 +117,23 @@ func TestLock(t *testing.T) {
 	require.Len(t, assembleRes.AssembledTransaction.ReadStates, 0)
 	require.Len(t, assembleRes.AssembledTransaction.InfoStates, 2)
 	assert.Equal(t, inputCoin.ID.String(), assembleRes.AssembledTransaction.InputStates[0].Id)
+
 	outputCoin, err := n.unmarshalLockedCoin(assembleRes.AssembledTransaction.OutputStates[0].StateDataJson)
 	require.NoError(t, err)
 	assert.Equal(t, senderKey.Address.String(), outputCoin.Owner.String())
 	assert.Equal(t, "100", outputCoin.Amount.Int().String())
+	assert.Equal(t, []string{"notary@node1", "sender@node1"}, assembleRes.AssembledTransaction.OutputStates[0].DistributionList)
+
 	outputInfo, err := n.unmarshalInfo(assembleRes.AssembledTransaction.InfoStates[0].StateDataJson)
 	require.NoError(t, err)
 	assert.Equal(t, "0x1234", outputInfo.Data.String())
+	assert.Equal(t, []string{"notary@node1", "sender@node1"}, assembleRes.AssembledTransaction.InfoStates[0].DistributionList)
+
 	lockInfo, err := n.unmarshalLock(assembleRes.AssembledTransaction.InfoStates[1].StateDataJson)
 	require.NoError(t, err)
 	assert.Equal(t, senderKey.Address.String(), lockInfo.Owner.String())
 	assert.Equal(t, lockInfo.LockID, outputCoin.LockID)
+	assert.Equal(t, []string{"notary@node1", "sender@node1"}, assembleRes.AssembledTransaction.InfoStates[1].DistributionList)
 
 	encodedLock, err := n.encodeLock(ctx, ethtypes.MustNewAddress(contractAddress), []*types.NotoCoin{&inputCoin.Data}, []*types.NotoCoin{}, []*types.NotoLockedCoin{outputCoin})
 	require.NoError(t, err)

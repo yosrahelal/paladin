@@ -63,9 +63,6 @@ func (h *unlockCommon) checkAllowed(ctx context.Context, tx *types.ParsedTransac
 	if tx.DomainConfig.NotaryMode != types.NotaryModeBasic.Enum() {
 		return nil
 	}
-	if !*tx.DomainConfig.Options.Basic.RestrictUnlock {
-		return nil
-	}
 
 	localNodeName, _ := h.noto.Callbacks.LocalNodeName(ctx, &prototk.LocalNodeNameRequest{})
 	fromQualified, err := tktypes.PrivateIdentityLocator(from).FullyQualified(ctx, localNodeName.Name)

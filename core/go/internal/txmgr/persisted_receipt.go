@@ -87,7 +87,7 @@ var transactionReceiptFilters = filters.FieldMap{
 	"indexed":         filters.TimestampField("indexed"),
 	"success":         filters.BooleanField("success"),
 	"domain":          filters.StringField("domain"),
-	"contractAddress": filters.StringField("contract_address"),
+	"contractAddress": filters.HexBytesField("contract_address"),
 	"source":          filters.StringField("source"),
 	"transactionHash": filters.HexBytesField("tx_hash"),
 	"blockNumber":     filters.Int64Field("block_number"),
@@ -322,20 +322,20 @@ func (tm *txManager) DecodeEvent(ctx context.Context, dbTX persistence.DBTX, top
 }
 
 func (tm *txManager) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.TransactionReceipt, error) {
-	qw := &queryWrapper[transactionReceipt, pldapi.TransactionReceipt]{
-		p:           tm.p,
-		table:       "transaction_receipts",
-		defaultSort: "-sequence",
-		filters:     transactionReceiptFilters,
-		query:       jq,
-		mapResult: func(pt *transactionReceipt) (*pldapi.TransactionReceipt, error) {
+	qw := &filters.QueryWrapper[transactionReceipt, pldapi.TransactionReceipt]{
+		P:           tm.p,
+		Table:       "transaction_receipts",
+		DefaultSort: "-sequence",
+		Filters:     transactionReceiptFilters,
+		Query:       jq,
+		MapResult: func(pt *transactionReceipt) (*pldapi.TransactionReceipt, error) {
 			return &pldapi.TransactionReceipt{
 				ID:                     pt.TransactionID,
 				TransactionReceiptData: *mapPersistedReceipt(pt),
 			}, nil
 		},
 	}
-	return qw.run(ctx, nil)
+	return qw.Run(ctx, nil)
 }
 
 func (tm *txManager) GetTransactionReceiptByID(ctx context.Context, id uuid.UUID) (*pldapi.TransactionReceipt, error) {
