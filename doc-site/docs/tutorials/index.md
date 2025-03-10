@@ -18,38 +18,38 @@ The tutorials on this page provide an introduction to building on the Paladin pl
 
 <div class="grid cards" markdown>
 
--   :fontawesome-solid-rocket:{ .lg .middle } **[Hello World](hello-world.md)**  
+-   **[Hello World](hello-world.md)**  
     
     ---  
     
     Begin with a simple “Hello World” example to get familiar with some of the basics.
 
--   :fontawesome-solid-rocket:{ .lg .middle } **[Public Storage](public-storage.md)**  
+-   **[Public Smart Contract](public-storage.md)**  
 
     ---  
 
     Explore fundamental SDK functionality for deploying and interacting with a publicly visible contract.
 
--   :fontawesome-solid-rocket:{ .lg .middle } **[Private Storage](private-storage.md)**  
+-   **[Private  Smart Contract](private-storage.md)**  
 
     ---  
 
     Discover how to use **Privacy Groups** and keep contract data confidential among authorized members.
 
--   :fontawesome-solid-rocket:{ .lg .middle } **[Notarized Tokens](notarized-tokens.md)**  
+-   **[Notarized Tokens](notarized-tokens.md)**  
 
     ---  
 
     Learn how to issue, mint, and transfer tokens using Paladin’s **Notarized Tokens** domain.
 
 
--   :fontawesome-solid-stamp:{ .lg .middle } **[Wholesale CBDC](zkp-cbdc.md)**  
+-   **[Wholesale CBDC](zkp-cbdc.md)**  
 
     ---  
 
     Implement a wholesale CBDC with **zero-knowledge proof** features for enhanced privacy and regulatory compliance.
 
--   :fontawesome-solid-stamp:{ .lg .middle } **[Bond Issuance](bond-issuance.md)**  
+-   **[Bond Issuance](bond-issuance.md)**  
 
     ---  
 

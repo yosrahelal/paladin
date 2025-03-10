@@ -117,6 +117,16 @@ var allTypes = []interface{}{
 	pldapi.EventWithData{},
 	pldapi.ABIDecodedData{},
 	pldapi.PeerInfo{},
+	pldapi.KeyMappingAndVerifier{},
+	pldapi.ReliableMessageAck{},
+	pldapi.ReliableMessage{},
+	pldapi.PrivacyGroup{},
+	pldapi.PrivacyGroupEVMCall{},
+	pldapi.PrivacyGroupEVMTXInput{},
+	pldapi.PrivacyGroupInput{},
+	pldapi.PrivacyGroupMessageListener{},
+	pldapi.PrivacyGroupMessage{},
+	pldapi.PrivacyGroupMessageInput{},
 	tktypes.JSONFormatOptions(""),
 	pldapi.StateStatusQualifier(""),
 	query.QueryJSON{
@@ -224,6 +234,7 @@ var allAPITypes = []pldclient.RPCModule{
 	pldclient.New().Transport(),
 	pldclient.New().StateStore(),
 	pldclient.New().BlockIndex(),
+	pldclient.New().PrivacyGroups(),
 }
 
 var allSimpleTypes = []interface{}{
@@ -504,6 +515,10 @@ func (d *docGenerator) extractParams(funcType reflect.Type, methodInfo *pldclien
 		typeName := paramType.Name()
 		if isEnum(paramType) {
 			typeName = generateEnumList(paramType)
+		} else if paramType.Kind() == reflect.Struct {
+			if _, ok := d.typeToPage[strings.ToLower(typeName)]; !ok {
+				panic(fmt.Sprintf("Missing documentation example for '%s' - add to allTypes", typeName))
+			}
 		}
 
 		// Store the parameter metadata.

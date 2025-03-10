@@ -18,6 +18,7 @@ package rpcserver
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -84,4 +85,13 @@ func (m *RPCModule) AddAsync(handler RPCAsyncHandler) *RPCModule {
 		}
 	}
 	return m
+}
+
+func (m *RPCModule) MethodNames() []string {
+	names := make([]string, 0, len(m.methods))
+	for n := range m.methods {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }

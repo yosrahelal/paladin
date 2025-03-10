@@ -1,30 +1,39 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
+import { ethers, InterfaceAbi } from "ethers";
+import {
+  Algorithms,
+  ISchema,
+  IState,
+  ITransactionReceiptListener,
+  StateStatus,
+  Verifiers,
+} from "./interfaces";
+import { Logger } from "./interfaces/logger";
 import {
   JsonRpcResult,
   PaladinConfig,
   PaladinErrorHandler,
 } from "./interfaces/paladin";
-import { Logger } from "./interfaces/logger";
+import {
+  IPrivacyGroup,
+  IPrivacyGroupEVMCall,
+  IPrivacyGroupEVMTXInput,
+  IPrivacyGroupInput,
+} from "./interfaces/privacygroups";
 import { IQuery } from "./interfaces/query";
 import {
-  ITransactionInput,
-  ITransactionCall,
-  ITransaction,
-  IPreparedTransaction,
-  ITransactionReceipt,
-  ITransactionStates,
   IDecodedEvent,
   IEventWithData,
+  INotoDomainReceipt,
+  IPenteDomainReceipt,
+  IPreparedTransaction,
   IStoredABI,
+  ITransaction,
+  ITransactionCall,
+  ITransactionInput,
+  ITransactionReceipt,
+  ITransactionStates,
 } from "./interfaces/transaction";
-import {
-  Algorithms,
-  ISchema,
-  IState,
-  StateStatus,
-  Verifiers,
-} from "./interfaces";
-import { ethers, InterfaceAbi } from "ethers";
 import { PaladinVerifier } from "./verifier";
 
 const POLL_INTERVAL_MS = 100;
@@ -192,6 +201,15 @@ export default class PaladinClient {
     return res.status === 404 ? undefined : res.data.result;
   }
 
+  async getDomainReceipt(domain: string, txID: string) {
+    const res = await this.post<
+      JsonRpcResult<INotoDomainReceipt | IPenteDomainReceipt>
+    >("ptx_getDomainReceipt", [domain, txID], {
+      validateStatus: (status) => status < 300 || status === 404,
+    });
+    return res.status === 404 ? undefined : res.data.result;
+  }
+
   async resolveVerifier(
     lookup: string,
     algorithm: Algorithms,
@@ -277,6 +295,43 @@ export default class PaladinClient {
     const res = await this.post<JsonRpcResult<IState[]>>(
       "pstate_queryContractStates",
       [domain, contractAddress, schema, query, status]
+    );
+    return res.data.result;
+  }
+
+  async createPrivacyGroup(pgroup: IPrivacyGroupInput) {
+    const res = await this.post<JsonRpcResult<IPrivacyGroup>>(
+      "pgroup_createGroup",
+      [pgroup]
+    );
+    return res.data.result;
+  }
+
+  async sendPrivacyGroupTransaction(txi: IPrivacyGroupEVMTXInput) {
+    const res = await this.post<JsonRpcResult<string>>(
+      "pgroup_sendTransaction",
+      [txi]
+    );
+    return res.data.result;
+  }
+
+  async callPrivacyGroup(txi: IPrivacyGroupEVMCall) {
+    const res = await this.post<JsonRpcResult<any>>("pgroup_call", [txi]);
+    return res.data.result;
+  }
+
+  async createReceiptListener(listener: ITransactionReceiptListener) {
+    const res = await this.post<JsonRpcResult<boolean>>(
+      "ptx_createReceiptListener",
+      [listener]
+    );
+    return res.data.result;
+  }
+
+  async deleteReceiptListener(name: string) {
+    const res = await this.post<JsonRpcResult<boolean>>(
+      "ptx_deleteReceiptListener",
+      [name]
     );
     return res.data.result;
   }

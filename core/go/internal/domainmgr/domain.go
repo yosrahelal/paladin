@@ -840,3 +840,58 @@ func (d *domain) GetStatesByID(ctx context.Context, req *prototk.GetStatesByIDRe
 		States: toProtoStates(states),
 	}, err
 }
+
+func (d *domain) ConfigurePrivacyGroup(ctx context.Context, inputConfiguration map[string]string) (configuration map[string]string, err error) {
+	res, err := d.api.ConfigurePrivacyGroup(ctx, &prototk.ConfigurePrivacyGroupRequest{
+		InputConfiguration: inputConfiguration,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res.Configuration, nil
+}
+
+func (d *domain) InitPrivacyGroup(ctx context.Context, id tktypes.HexBytes, genesis *pldapi.PrivacyGroupGenesisState) (tx *pldapi.TransactionInput, err error) {
+
+	// This one is a straight forward pass-through to the domain - the Privacy Group manager does the
+	// hard work in validating the data returned against the genesis ABI spec returned.
+	res, err := d.api.InitPrivacyGroup(ctx, &prototk.InitPrivacyGroupRequest{
+		PrivacyGroup: mapPrivacyGroupToProto(id, genesis),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	signer := ""
+	if res.Transaction.RequiredSigner != nil {
+		signer = *res.Transaction.RequiredSigner
+	}
+	txType := pldapi.TransactionTypePrivate.Enum()
+	if res.Transaction.Type == prototk.PreparedTransaction_PUBLIC {
+		txType = pldapi.TransactionTypePublic.Enum()
+	}
+
+	var functionABI abi.Entry
+	if err := json.Unmarshal(([]byte)(res.Transaction.FunctionAbiJson), &functionABI); err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainPrivateAbiJsonInvalid)
+	}
+	var optionalContractAddr *tktypes.EthAddress
+	if res.Transaction.ContractAddress != nil {
+		optionalContractAddr, err = tktypes.ParseEthAddress(*res.Transaction.ContractAddress)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:   signer,
+			To:     optionalContractAddr,
+			Type:   txType,
+			Data:   tktypes.RawJSON(res.Transaction.ParamsJson),
+			Domain: d.name,
+		},
+		ABI: abi.ABI{&functionABI},
+	}, nil
+
+}

@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
@@ -305,6 +304,7 @@ func (p *peer) reliableMessageScan(checkNew bool) error {
 			Order("sequence ASC").
 			Joins("Ack").
 			Where(`"Ack"."time" IS NULL`).
+			Where("node", p.Name).
 			Limit(pageSize)
 		if lastPageEnd != nil {
 			query = query.Where("sequence > ?", *lastPageEnd)
@@ -312,7 +312,7 @@ func (p *peer) reliableMessageScan(checkNew bool) error {
 			query = query.Where("sequence > ?", *p.lastDrainHWM)
 		}
 
-		var page []*components.ReliableMessage
+		var page []*pldapi.ReliableMessage
 		err := query.Find(&page).Error
 		if err != nil {
 			return err
@@ -357,7 +357,7 @@ func (p *peer) reliableMessageScan(checkNew bool) error {
 	return nil
 }
 
-func (p *peer) processReliableMsgPage(dbTX persistence.DBTX, page []*components.ReliableMessage) (err error) {
+func (p *peer) processReliableMsgPage(dbTX persistence.DBTX, page []*pldapi.ReliableMessage) (err error) {
 
 	type paladinMsgWithSeq struct {
 		*prototk.PaladinMsg
@@ -366,7 +366,7 @@ func (p *peer) processReliableMsgPage(dbTX persistence.DBTX, page []*components.
 
 	// Build the messages
 	msgsToSend := make([]paladinMsgWithSeq, 0, len(page))
-	var errorAcks []*components.ReliableMessageAck
+	var errorAcks []*pldapi.ReliableMessageAck
 	for _, rm := range page {
 
 		// Check it's either after our HWM, or eligible for re-send
@@ -380,9 +380,13 @@ func (p *peer) processReliableMsgPage(dbTX persistence.DBTX, page []*components.
 		var msg *prototk.PaladinMsg
 		var errorAck error
 		switch rm.MessageType.V() {
-		case components.RMTState:
+		case pldapi.RMTState:
 			msg, errorAck, err = p.tm.buildStateDistributionMsg(p.ctx, dbTX, rm)
-		case components.RMTReceipt:
+		case pldapi.RMTPrivacyGroup:
+			msg, errorAck, err = p.tm.buildPrivacyGroupDistributionMsg(p.ctx, dbTX, rm)
+		case pldapi.RMTPrivacyGroupMessage:
+			msg, errorAck, err = p.tm.buildPrivacyGroupMessageMsg(p.ctx, dbTX, rm)
+		case pldapi.RMTReceipt:
 			// TODO: Implement for receipt distribution
 			fallthrough
 		default:
@@ -393,7 +397,7 @@ func (p *peer) processReliableMsgPage(dbTX persistence.DBTX, page []*components.
 			return err
 		case errorAck != nil:
 			log.L(p.ctx).Errorf("Unable to send reliable message %s - writing persistent error: %s", rm.ID, errorAck)
-			errorAcks = append(errorAcks, &components.ReliableMessageAck{
+			errorAcks = append(errorAcks, &pldapi.ReliableMessageAck{
 				MessageID: rm.ID,
 				Time:      tktypes.TimestampNow(),
 				Error:     errorAck.Error(),
