@@ -368,11 +368,15 @@ func (it *inFlightTransactionStageController) processPreviousVersionsStateOutput
 								unprocessedStageOutputs = append(unprocessedStageOutputs, stageOutput)
 							}
 						} else {
+							var err error
 							switch stageOutput.Stage {
 							case InFlightTxStageSubmitting:
-								it.processSubmittingStageOutput(ctx, version, version.GetRunningStageContext(ctx), stageOutput)
+								err = it.processSubmittingStageOutput(ctx, version, version.GetRunningStageContext(ctx), stageOutput)
 							case InFlightTxStageStatusUpdate:
-								it.processSubmittingStageOutput(ctx, version, version.GetRunningStageContext(ctx), stageOutput)
+								err = it.processSubmittingStageOutput(ctx, version, version.GetRunningStageContext(ctx), stageOutput)
+							}
+							if err != nil {
+								log.L(ctx).Warnf("Error processing previous version stage output: %s", err.Error())
 							}
 							if version.GetRunningStageContext(ctx).StageErrored {
 								version.ClearRunningStageContext(ctx)

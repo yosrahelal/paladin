@@ -157,18 +157,17 @@ func TestUpdatePublicTransaction(t *testing.T) {
 	var deployReceipt *pldapi.TransactionReceiptFull
 
 	for deployReceipt == nil {
-		select {
-		case subNotification, ok := <-sub.Notifications():
-			if ok {
-				var batch pldapi.TransactionReceiptBatch
-				json.Unmarshal(subNotification.GetResult(), &batch)
-				for _, r := range batch.Receipts {
-					if *res.ID() == r.ID {
-						deployReceipt = r
-					}
+		subNotification, ok := <-sub.Notifications()
+		if ok {
+			var batch pldapi.TransactionReceiptBatch
+			_ = json.Unmarshal(subNotification.GetResult(), &batch)
+			for _, r := range batch.Receipts {
+				if *res.ID() == r.ID {
+					deployReceipt = r
 				}
-				subNotification.Ack(ctx)
 			}
+			err := subNotification.Ack(ctx)
+			require.NoError(t, err)
 		}
 	}
 
@@ -213,19 +212,19 @@ func TestUpdatePublicTransaction(t *testing.T) {
 
 	var setReceipt *pldapi.TransactionReceiptFull
 	for setReceipt == nil {
-		select {
-		case subNotification, ok := <-sub.Notifications():
-			if ok {
-				var batch pldapi.TransactionReceiptBatch
-				json.Unmarshal(subNotification.GetResult(), &batch)
-				for _, r := range batch.Receipts {
-					if *setRes.ID() == r.ID {
-						setReceipt = r
-					}
+		subNotification, ok := <-sub.Notifications()
+		if ok {
+			var batch pldapi.TransactionReceiptBatch
+			_ = json.Unmarshal(subNotification.GetResult(), &batch)
+			for _, r := range batch.Receipts {
+				if *setRes.ID() == r.ID {
+					setReceipt = r
 				}
-				subNotification.Ack(ctx)
 			}
+			err := subNotification.Ack(ctx)
+			require.NoError(t, err)
 		}
+
 	}
 
 	tx, err = c.PTX().GetTransactionFull(ctx, *setRes.ID())
