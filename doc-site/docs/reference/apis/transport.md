@@ -39,3 +39,23 @@ title: transport_*
 
 0. `peers`: [`PeerInfo[]`](../types/peerinfo.md#peerinfo)
 
+## `transport_queryReliableMessageAcks`
+
+### Parameters
+
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+
+### Returns
+
+0. `reliableMessageAcks`: [`ReliableMessageAck[]`](../types/reliablemessageack.md#reliablemessageack)
+
+## `transport_queryReliableMessages`
+
+### Parameters
+
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+
+### Returns
+
+0. `reliableMessages`: [`ReliableMessage[]`](../types/reliablemessage.md#reliablemessage)
+

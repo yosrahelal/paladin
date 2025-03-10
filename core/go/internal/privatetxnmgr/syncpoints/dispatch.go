@@ -23,6 +23,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm/clause"
 )
@@ -31,7 +32,7 @@ type dispatchOperation struct {
 	publicDispatches     []*PublicDispatch
 	privateDispatches    []*components.ValidatedTransaction
 	localPreparedTxns    []*components.PreparedTransactionWithRefs
-	preparedReliableMsgs []*components.ReliableMessage
+	preparedReliableMsgs []*pldapi.ReliableMessage
 }
 
 type DispatchPersisted struct {
@@ -59,16 +60,16 @@ type DispatchBatch struct {
 // to submit public transactions.
 func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*components.StateDistribution, preparedTxnDistributions []*components.PreparedTransactionWithRefs) error {
 
-	preparedReliableMsgs := make([]*components.ReliableMessage, 0,
+	preparedReliableMsgs := make([]*pldapi.ReliableMessage, 0,
 		len(dispatchBatch.PreparedTransactions)+len(stateDistributions))
 
 	var localPreparedTxns []*components.PreparedTransactionWithRefs
 	for _, preparedTxnDistribution := range preparedTxnDistributions {
 		node, _ := tktypes.PrivateIdentityLocator(preparedTxnDistribution.Transaction.From).Node(dCtx.Ctx(), false)
 		if node != s.transportMgr.LocalNodeName() {
-			preparedReliableMsgs = append(preparedReliableMsgs, &components.ReliableMessage{
+			preparedReliableMsgs = append(preparedReliableMsgs, &pldapi.ReliableMessage{
 				Node:        node,
-				MessageType: components.RMTPreparedTransaction.Enum(),
+				MessageType: pldapi.RMTPreparedTransaction.Enum(),
 				Metadata:    tktypes.JSONString(preparedTxnDistribution),
 			})
 		} else {
@@ -78,9 +79,9 @@ func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contrac
 
 	for _, stateDistribution := range stateDistributions {
 		node, _ := tktypes.PrivateIdentityLocator(stateDistribution.IdentityLocator).Node(dCtx.Ctx(), false)
-		preparedReliableMsgs = append(preparedReliableMsgs, &components.ReliableMessage{
+		preparedReliableMsgs = append(preparedReliableMsgs, &pldapi.ReliableMessage{
 			Node:        node,
-			MessageType: components.RMTState.Enum(),
+			MessageType: pldapi.RMTState.Enum(),
 			Metadata:    tktypes.JSONString(stateDistribution),
 		})
 	}

@@ -117,7 +117,7 @@ func (tm *txManager) rpcCall() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		tx *pldapi.TransactionCall,
 	) (result tktypes.RawJSON, err error) {
-		err = tm.CallTransaction(ctx, &result, tx)
+		err = tm.CallTransaction(ctx, tm.p.NOTX(), &result, tx)
 		return
 	})
 }
@@ -348,7 +348,7 @@ func (tm *txManager) rpcCreateReceiptListener() rpcserver.RPCHandler {
 		listener *pldapi.TransactionReceiptListener,
 	) (bool, error) {
 		err := tm.CreateReceiptListener(ctx, listener)
-		return true, err
+		return err == nil, err
 	})
 }
 
