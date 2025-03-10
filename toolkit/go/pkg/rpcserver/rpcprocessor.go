@@ -19,10 +19,8 @@ package rpcserver
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 )
@@ -47,8 +45,6 @@ func (s *rpcServer) processRPC(ctx context.Context, rpcReq *rpcclient.RPCRequest
 		return rpcclient.NewRPCErrorResponse(err, rpcReq.ID, rpcclient.RPCCodeInvalidRequest), false
 	}
 
-	startTime := time.Now()
-	log.L(ctx).Debugf("RPC-> %s", rpcReq.Method)
 	var rpcRes *rpcclient.RPCResponse
 	if mh.methodType == rpcMethodTypeMethod {
 		rpcRes = mh.handler.Handle(ctx, rpcReq)
@@ -65,12 +61,6 @@ func (s *rpcServer) processRPC(ctx context.Context, rpcReq *rpcclient.RPCRequest
 	isOK := true
 	if rpcRes != nil {
 		isOK = rpcRes.Error == nil
-		durationMS := float64(time.Since(startTime)) / float64(time.Millisecond)
-		if rpcRes.Error != nil {
-			log.L(ctx).Errorf("<!RPC[Server] %s (%.2fms): %s", rpcReq.Method, durationMS, rpcRes.Error.Message)
-		} else {
-			log.L(ctx).Debugf("<-RPC[Server] %s (%.2fms)", rpcReq.Method, durationMS)
-		}
 	}
 	return rpcRes, isOK
 }

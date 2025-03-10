@@ -425,6 +425,57 @@ func TestDomainFunction_BuildReceipt(t *testing.T) {
 	})
 }
 
+func TestDomainFunction_ConfigurePrivacyGroup(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// ConfigurePrivacyGroup - paladin to domain
+	funcs.ConfigurePrivacyGroup = func(ctx context.Context, cdr *prototk.ConfigurePrivacyGroupRequest) (*prototk.ConfigurePrivacyGroupResponse, error) {
+		return &prototk.ConfigurePrivacyGroupResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_ConfigurePrivacyGroup{
+			ConfigurePrivacyGroup: &prototk.ConfigurePrivacyGroupRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_ConfigurePrivacyGroupRes{}, res.ResponseFromDomain)
+	})
+}
+
+func TestDomainFunction_InitPrivacyGroup(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// InitPrivacyGroup - paladin to domain
+	funcs.InitPrivacyGroup = func(ctx context.Context, cdr *prototk.InitPrivacyGroupRequest) (*prototk.InitPrivacyGroupResponse, error) {
+		return &prototk.InitPrivacyGroupResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_InitPrivacyGroup{
+			InitPrivacyGroup: &prototk.InitPrivacyGroupRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_InitPrivacyGroupRes{}, res.ResponseFromDomain)
+	})
+}
+
+func TestDomainFunction_WrapPrivacyGroupEVMTX(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// WrapPrivacyGroupEVMTX - paladin to domain
+	funcs.WrapPrivacyGroupEVMTX = func(ctx context.Context, cdr *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error) {
+		return &prototk.WrapPrivacyGroupEVMTXResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_WrapPrivacyGroupEvmtx{
+			WrapPrivacyGroupEvmtx: &prototk.WrapPrivacyGroupEVMTXRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_WrapPrivacyGroupEvmtxRes{}, res.ResponseFromDomain)
+	})
+}
+
 func TestDomainRequestError(t *testing.T) {
 	_, exerciser, _, _, _, done := setupDomainTests(t)
 	defer done()

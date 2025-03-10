@@ -31,7 +31,6 @@ Creates a new Noto token, with a new address on the base ledger.
                 {"name": "restrictMint", "type": "boolean"},
                 {"name": "allowBurn", "type": "boolean"},
                 {"name": "allowLock", "type": "boolean"},
-                {"name": "restrictUnlock", "type": "boolean"},
             ]},
             {"name": "hooks", "type": "tuple", "components": [
                 {"name": "privateGroup", "type": "tuple", "components": [
@@ -512,7 +511,10 @@ When a Noto contract is constructed with notary mode `basic`, the following nota
 | restrictMint   | true    | _True:_ only the notary may mint<br>_False:_ any party may mint |
 | allowBurn      | true    | _True:_ token owners may burn their tokens<br>_False:_ tokens cannot be burned |
 | allowLock      | true    | _True:_ token owners may lock tokens (for purposes such as preparing or delegating transfers)<br>_False:_ tokens cannot be locked (not recommended, as it restricts the ability to incorporate tokens into swaps and other workflows) |
-| restrictUnlock | true    | _True:_ only the creator of a lock may unlock it<br>_False:_ any party may unlock (not recommended, as it allows anyone to claim locked tokens)
+
+In addition, the following restrictions will always be enforced, and cannot be disabled in `basic` mode:
+
+- **Unlock:** Only the creator of a lock may unlock it.
 
 ### Notary mode: hooks
 
@@ -539,7 +541,7 @@ receive a `sender` parameter representing the resolved and verified party that s
 !!! important
     Note that none of the `basic` notary constraints described in the previous section will be active when hooks are
     configured. It is the responsibility of the hooks to enforce policies, such as which senders are allowed to mint,
-    burn, etc.
+    burn, lock, unlock, etc.
 
 ## Transaction walkthrough
 
@@ -574,5 +576,3 @@ No information is leaked to Party C, that allows them to infer that Party A and 
     - a) Receives the private data for `#7` to allow it to store `S7` in its wallet
     - b) Receives the confirmation from the blockchain that `TX2` created `#7`
     - Now `Party C` has `S7` confirmed in its wallet and ready to spend
-
-> TODO: Fill in significantly more detail on how Noto operates (Lead: Andrew Richardson)

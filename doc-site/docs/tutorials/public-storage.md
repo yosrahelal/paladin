@@ -1,4 +1,4 @@
-# Public Storage Contract
+# Public Smart Contract (SimpleStorage)
 
 In the [previous tutorial](./hello-world.md), we deployed and interacted with a **HelloWorld** contract that emitted an event. Now, we will go a step further and deploy a **Storage** contract that:
 
@@ -159,4 +159,4 @@ Now that you've learned how to deploy a **public storage contract**, it's time t
 
 🔒 In the next tutorial, you’ll explore **Storage with Privacy**, where you will **restrict access to stored values using privacy groups**
 
-[Continue to the Private Storage Contract Tutorial →](./private-storage.md)
+[Continue to the Private Smart Contract Tutorial →](./private-storage.md)

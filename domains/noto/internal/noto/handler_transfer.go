@@ -54,23 +54,7 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 	notary := tx.DomainConfig.NotaryLookup
 
 	return &prototk.InitTransactionResponse{
-		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
-			{
-				Lookup:       notary,
-				Algorithm:    algorithms.ECDSA_SECP256K1,
-				VerifierType: verifiers.ETH_ADDRESS,
-			},
-			{
-				Lookup:       tx.Transaction.From,
-				Algorithm:    algorithms.ECDSA_SECP256K1,
-				VerifierType: verifiers.ETH_ADDRESS,
-			},
-			{
-				Lookup:       params.To,
-				Algorithm:    algorithms.ECDSA_SECP256K1,
-				VerifierType: verifiers.ETH_ADDRESS,
-			},
-		},
+		RequiredVerifiers: h.noto.ethAddressVerifiers(notary, tx.Transaction.From, params.To),
 	}, nil
 }
 
