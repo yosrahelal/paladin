@@ -1,13 +1,13 @@
 contracts:
   factory:
     abiAndBytecode:
-      path: ./abis/ZetoFactory.json
+      path: ./helpers/abis/ZetoFactory.json
   # the Zeto factory is a CloneFactory, which needs implementation
   # contracts to be set
   implementations:
     - name: Groth16Verifier_NfAnon
       abiAndBytecode:
-        path: ./abis/Groth16Verifier_NfAnon.json
+        path: ./helpers/abis/Groth16Verifier_NfAnon.json
     - name: Zeto_NfAnon
       verifier: Groth16Verifier_NfAnon
       circuits:
@@ -21,4 +21,4 @@ contracts:
           name: not_implemented
       cloneable: true
       abiAndBytecode:
-        path: ./abis/Zeto_NfAnon.json
+        path: ./helpers/abis/Zeto_NfAnon.json

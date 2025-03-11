@@ -212,27 +212,6 @@ task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, generateP
     includeEmptyDirs = false
 }
 
-task testE2E(type: Exec, dependsOn: [protoc, copySolidity, copyPkgSolidity, copySolidityForTest, ':testinfra:startTestInfra', ":core:go:makeMocks"]) {
-    inputs.files(configurations.toolkitGo)
-    inputs.files(configurations.coreGo)
-    inputs.files(goFiles)
-    inputs.files(goFilesE2E)
-    inputs.file('./integration-test/config-for-deploy-fungible.yaml')
-    inputs.file('./integration-test/config-for-deploy-non-fungible.yaml')
-    outputs.dir('coverage')
-
-    workingDir '.'
-    executable 'go'
-    args 'test'
-    args '-timeout=300s'
-    args './integration-test'
-    if (project.findProperty('verboseTests') == 'true') {
-        args '-v'
-    }
-
-    helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
-}
-
 task unitTests(type: Exec, dependsOn: [
         protoc,
         ":core:go:makeMocks",
@@ -285,7 +264,6 @@ task buildGo(type: GoLib, dependsOn: [":toolkit:go:protoc", copySolidity, copyPk
 
 task build {
     dependsOn test
-    dependsOn testE2E
 }
 
 task clean(type: Delete) {
