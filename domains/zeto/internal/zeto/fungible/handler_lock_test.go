@@ -276,11 +276,7 @@ func TestLockPrepare(t *testing.T) {
 
 	req.InputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}"
 	_, err = h.Prepare(ctx, tx, req)
-	assert.ErrorContains(t, err, "PD210131: Failed to parse info states.")
-
-	req.InfoStates[0].StateDataJson = "{\"size\":\"1\"}"
-	_, err = h.Prepare(ctx, tx, req)
-	assert.ErrorContains(t, err, "PD210047: Failed to parse output states.")
+	assert.ErrorContains(t, err, "PD210087: Failed to unmarshal state data")
 
 	req.OutputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}"
 	_, err = h.Prepare(ctx, tx, req)

@@ -43,10 +43,6 @@ type lockHandler struct {
 	callbacks plugintk.DomainCallbacks
 }
 
-type lockedStatesInfo struct {
-	Size *tktypes.HexUint64 `json:"size"`
-}
-
 var lockABI = &abi.Entry{
 	Type: abi.Function,
 	Name: types.METHOD_LOCK,
@@ -158,9 +154,6 @@ func (h *lockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 	}
 	outputStates = append(outputStates, lockedOutputStates...)
 
-	// use the info states to record the sizes of the unlocked vs. locked states
-	infoStates := h.newInfoStates(lockedOutputStates)
-
 	contractAddress, err := tktypes.ParseEthAddress(req.Transaction.ContractInfo.ContractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
@@ -177,7 +170,6 @@ func (h *lockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 		AssembledTransaction: &prototk.AssembledTransaction{
 			InputStates:  inputStates,
 			OutputStates: outputStates,
-			InfoStates:   infoStates,
 			ReadStates:   inputStates,
 		},
 		AttestationPlan: []*prototk.AttestationRequest{
@@ -214,12 +206,19 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		return nil, err
 	}
 
-	lockedInfo, err := parseInfoStatesJson(req.InfoStates[0].StateDataJson)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorParseInfoStates, err)
+	var unlockedOutputStates []*pb.EndorsableState
+	var lockedOutputStates []*pb.EndorsableState
+	for _, state := range req.OutputStates {
+		var coin types.ZetoCoin
+		if err := json.Unmarshal([]byte(state.StateDataJson), &coin); err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalStateData, err)
+		}
+		if coin.Locked {
+			lockedOutputStates = append(lockedOutputStates, state)
+		} else {
+			unlockedOutputStates = append(unlockedOutputStates, state)
+		}
 	}
-	unlockedOutputStates := req.OutputStates[:len(req.OutputStates)-int(lockedInfo.Size.Uint64())]
-	lockedOutputStates := req.OutputStates[len(req.OutputStates)-int(lockedInfo.Size.Uint64()):]
 
 	outputs, err := utxosFromOutputStates(ctx, unlockedOutputStates, inputSize)
 	if err != nil {
@@ -267,20 +266,6 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		},
 	}, nil
 }
-func (h *lockHandler) newInfoStates(lockedOutputStates []*pb.NewState) []*pb.NewState {
-	size := tktypes.HexUint64(uint64(len(lockedOutputStates)))
-	lockedStatesInfoBytes, _ := json.Marshal(&lockedStatesInfo{
-		Size: &size,
-	})
-	randId := (tktypes.RandHex(32))
-	return []*pb.NewState{
-		{
-			SchemaId:      h.stateSchemas.LockInfoSchema.Id,
-			Id:            &randId,
-			StateDataJson: string(lockedStatesInfoBytes),
-		},
-	}
-}
 
 func getLockABI(tokenName string) *abi.Entry {
 	transferFunction := lockABI
@@ -288,12 +273,4 @@ func getLockABI(tokenName string) *abi.Entry {
 		transferFunction = lockABINullifiers
 	}
 	return transferFunction
-}
-
-func parseInfoStatesJson(statesJson string) (*lockedStatesInfo, error) {
-	var info lockedStatesInfo
-	if err := json.Unmarshal([]byte(statesJson), &info); err != nil {
-		return nil, err
-	}
-	return &info, nil
 }

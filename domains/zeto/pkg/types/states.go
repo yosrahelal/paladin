@@ -81,16 +81,6 @@ func (z *ZetoCoin) Hash(ctx context.Context) (*tktypes.HexUint256, error) {
 	return z.hash, nil
 }
 
-var ZetoLockInfoABI = &abi.Parameter{
-	Name:         "ZetoLockInfo",
-	Indexed:      true,
-	Type:         "tuple",
-	InternalType: "struct ZetoLockInfo",
-	Components: abi.ParameterArray{
-		{Name: "size", Type: "uint64"},
-	},
-}
-
 var ZetoNFTokenABI = &abi.Parameter{
 	Name:         "ZetoNFToken",
 	Indexed:      true,
@@ -247,7 +237,6 @@ func GetStateSchemas() ([]string, error) {
 	nftJSON, _ := json.Marshal(ZetoNFTokenABI)
 	smtRootJSON, _ := json.Marshal(MerkleTreeRootABI)
 	smtNodeJSON, _ := json.Marshal(MerkleTreeNodeABI)
-	lockInfoJSON, _ := json.Marshal(ZetoLockInfoABI)
 
-	return []string{string(coinJSON), string(nftJSON), string(smtRootJSON), string(smtNodeJSON), string(lockInfoJSON)}, nil
+	return []string{string(coinJSON), string(nftJSON), string(smtRootJSON), string(smtNodeJSON)}, nil
 }
