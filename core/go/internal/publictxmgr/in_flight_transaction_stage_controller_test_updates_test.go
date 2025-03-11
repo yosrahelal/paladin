@@ -30,71 +30,18 @@ import (
 // add updates to the array and check how they get handled - cover all the cases where the way that
 // a previous version is handled is different to if it is the current version
 
-func TestTXStageControllerUpdateValidationError(t *testing.T) {
-	ctx, o, _, done := newTestOrchestrator(t)
-	defer done()
-	it, _ := newInflightTransaction(o, 1, func(tx *DBPublicTxn) {
-		tx.FixedGasPricing = tktypes.JSONString(pldapi.PublicTxGasPricing{
-			GasPrice: tktypes.Uint64ToUint256(10),
-		})
-	})
-	it.testOnlyNoActionMode = true
-
-	response := make(chan error, 1)
-	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000}, func() error { return nil }, response)
-
-	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
-
-	require.Len(t, it.stateManager.GetVersions(ctx), 1)
-
-	// the response should be available on the channel before ProduceLatestInFlightStageContext returns
-	select {
-	case err := <-response:
-		require.ErrorContains(t, err, "PD011940")
-	default:
-		t.Fail()
-	}
-}
-
-func TestTXStageControllerUpdateDBError(t *testing.T) {
-	ctx, o, _, done := newTestOrchestrator(t)
-	defer done()
-	it, _ := newInflightTransaction(o, 1)
-	it.testOnlyNoActionMode = true
-
-	response := make(chan error, 1)
-	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000}, func() error { return errors.New("bang") }, response)
-
-	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
-
-	require.Len(t, it.stateManager.GetVersions(ctx), 1)
-
-	rsc := it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx)
-	require.NotNil(t, rsc)
-	assert.Equal(t, InFlightTxStageRetrieveGasPrice, rsc.Stage)
-
-	// the response should be available on the channel before ProduceLatestInFlightStageContext returns
-	select {
-	case err := <-response:
-		require.EqualError(t, err, "bang")
-	default:
-		t.Fail()
-	}
-}
-
 func TestTXStageControllerUpdateNoRunningStageContext(t *testing.T) {
 	ctx, o, _, done := newTestOrchestrator(t)
 	defer done()
 	it, _ := newInflightTransaction(o, 1)
 	it.testOnlyNoActionMode = true
 
-	response := make(chan error, 1)
 	it.UpdateTransaction(ctx, &DBPublicTxn{
 		Gas: 1000,
 		FixedGasPricing: tktypes.JSONString(pldapi.PublicTxGasPricing{
 			GasPrice: tktypes.Uint64ToUint256(10),
 		}),
-	}, func() error { return nil }, response)
+	})
 
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
@@ -105,15 +52,6 @@ func TestTXStageControllerUpdateNoRunningStageContext(t *testing.T) {
 	rsc := it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx)
 	require.NotNil(t, rsc)
 	assert.Equal(t, InFlightTxStageSigning, rsc.Stage)
-
-	// the response should be available on the channel before ProduceLatestInFlightStageContext returns
-	select {
-	case err := <-response:
-		require.NoError(t, err)
-	default:
-		t.Fail()
-	}
-
 }
 
 func TestTXStageControllerUpdateRunningStagePersistance(t *testing.T) {
@@ -139,8 +77,7 @@ func TestTXStageControllerUpdateRunningStagePersistance(t *testing.T) {
 		},
 	}}
 
-	response := make(chan error, 1)
-	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000}, func() error { return nil }, response)
+	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000})
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
 	require.Len(t, it.stateManager.GetVersions(ctx), 2)
@@ -155,28 +92,12 @@ func TestTXStageControllerUpdateRunningStagePersistance(t *testing.T) {
 		},
 	}, previousVersion.bufferedStageOutputs[0])
 
-	// the response should be available on the channel before ProduceLatestInFlightStageContext returns
-	select {
-	case err := <-response:
-		require.NoError(t, err)
-	default:
-		t.Fail()
-	}
-
 	// change the time to be past the timeout- the persistence is triggered again and removed
 	previousVersion.bufferedStageOutputs[0].PersistenceOutput.Time = yesterday
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
 	require.Len(t, it.stateManager.GetVersions(ctx), 2)
 	require.Len(t, previousVersion.bufferedStageOutputs, 0)
-
-	// updates should have been cleared- we're not expecting anything on the channel
-	select {
-	case <-response:
-		t.Fail()
-	default:
-	}
-
 }
 
 func TestTXStageControllerUpdateIgnoreSigningErrorAfterPersisted(t *testing.T) {
@@ -199,22 +120,13 @@ func TestTXStageControllerUpdateIgnoreSigningErrorAfterPersisted(t *testing.T) {
 		PersistenceOutput: &PersistenceOutput{},
 	}}
 
-	response := make(chan error, 1)
-	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000}, func() error { return nil }, response)
+	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000})
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
 	require.Len(t, it.stateManager.GetVersions(ctx), 2)
 	assert.Len(t, previousVersion.bufferedStageOutputs, 0)
 	assert.Nil(t, previousVersion.GetRunningStageContext(ctx))
 	assert.False(t, it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx).StageErrored)
-
-	// the response should be available on the channel before ProduceLatestInFlightStageContext returns
-	select {
-	case err := <-response:
-		require.NoError(t, err)
-	default:
-		t.Fail()
-	}
 }
 
 func TestTXStageControllerUpdateNoSubmit(t *testing.T) {
@@ -240,21 +152,12 @@ func TestTXStageControllerUpdateNoSubmit(t *testing.T) {
 	// assigning the mocks is enough to check that no action gets called
 	previousVersion.InFlightStageActionTriggers = publictxmocks.NewInFlightStageActionTriggers(t)
 
-	response := make(chan error, 1)
-	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000}, func() error { return nil }, response)
+	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000})
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
 	require.Len(t, it.stateManager.GetVersions(ctx), 2)
 	assert.Len(t, previousVersion.bufferedStageOutputs, 0)
 	assert.Nil(t, previousVersion.GetRunningStageContext(ctx))
-
-	// the response should be available on the channel before ProduceLatestInFlightStageContext returns
-	select {
-	case err := <-response:
-		require.NoError(t, err)
-	default:
-		t.Fail()
-	}
 }
 
 func TestTXStageControllerUpdateNoResubmit(t *testing.T) {
@@ -277,43 +180,11 @@ func TestTXStageControllerUpdateNoResubmit(t *testing.T) {
 		PersistenceOutput: &PersistenceOutput{},
 	}}
 
-	response := make(chan error, 1)
-	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000}, func() error { return nil }, response)
+	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000})
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
 	require.Len(t, it.stateManager.GetVersions(ctx), 2)
 	assert.Len(t, previousVersion.bufferedStageOutputs, 0)
 	assert.Nil(t, previousVersion.GetRunningStageContext(ctx))
 	assert.False(t, it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx).StageErrored)
-
-	// the response should be available on the channel before ProduceLatestInFlightStageContext returns
-	select {
-	case err := <-response:
-		require.NoError(t, err)
-	default:
-		t.Fail()
-	}
-}
-
-func TestTXStageControllerComplete(t *testing.T) {
-	ctx, o, _, done := newTestOrchestrator(t)
-	defer done()
-	it, _ := newInflightTransaction(o, 1)
-	it.testOnlyNoActionMode = true
-
-	mtx := it.stateManager.(*inFlightTransactionState).InMemoryTxStateManager.(*inMemoryTxState).mtx
-	mtx.InFlightStatus = InFlightStatusConfirmReceived
-
-	response := make(chan error, 1)
-	it.UpdateTransaction(ctx, nil, nil, response)
-
-	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
-
-	// the response should be available on the channel before ProduceLatestInFlightStageContext returns
-	select {
-	case err := <-response:
-		require.ErrorContains(t, err, "PD011937")
-	default:
-		t.Fail()
-	}
 }

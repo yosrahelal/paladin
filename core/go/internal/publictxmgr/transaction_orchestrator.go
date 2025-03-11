@@ -143,6 +143,10 @@ type orchestrator struct {
 
 	lastNonceAlloc time.Time
 	nextNonce      *uint64
+
+	// updates
+	updates   []*transactionUpdate
+	updateMux sync.Mutex
 }
 
 const veryShortMinimum = 50 * time.Millisecond
@@ -213,10 +217,31 @@ func (oc *orchestrator) orchestratorLoop() {
 			oc.MarkInFlightOrchestratorsStale() // trigger engine loop for removal
 			return
 		}
+		oc.handleUpdates(ctx)
 		polled, total := oc.pollAndProcess(ctx)
 		log.L(ctx).Debugf("Orchestrator loop polled %d txs, there are %d txs in total", polled, total)
 	}
 
+}
+
+func (oc *orchestrator) handleUpdates(ctx context.Context) {
+	oc.updateMux.Lock()
+	updates := oc.updates
+	oc.updates = nil
+	oc.updateMux.Unlock()
+
+	oc.inFlightTxsMux.Lock()
+	defer oc.inFlightTxsMux.Unlock()
+
+	for _, update := range updates {
+		for _, inflight := range oc.inFlightTxs {
+			if inflight.stateManager.GetPubTxnID() == update.pubTXID {
+				inflight.UpdateTransaction(ctx, update.newPtx)
+				oc.MarkInFlightTxStale()
+				break
+			}
+		}
+	}
 }
 
 // Used in unit tests

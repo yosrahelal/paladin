@@ -361,7 +361,7 @@ var (
 	MsgInvalidAutoFuelSource           = pde("PD011934", "Invalid auto-fueling source '%s'")
 	MsgInvalidStateMissingTXHash       = pde("PD011935", "Invalid state - missing transaction hash from previous sign stage")
 	MsgInvalidTXMissingFromAddr        = pde("PD011936", "From address missing for transaction")
-	MsgTransactionAlreadyCompleted     = pde("PD011937", "Transaction cannot be updated as it is already complete")
+	MsgTransactionAlreadyComplete      = pde("PD011937", "Transaction cannot be updated as it is already complete")
 	MsgUpdateGasPriceLower             = pde("PD011938", "Gas price cannot be lowered for transaction (current=%s requested=%s)")
 	MsgUpdateMaxFeePerGasLower         = pde("PD011939", "Max fee per gas cannot be lowered for transaction (current=%s requested=%s)")
 	MsgUpdateNoFixedPricing            = pde("PD011940", "Cannot unset gas price for transaction with fixed gas pricing")

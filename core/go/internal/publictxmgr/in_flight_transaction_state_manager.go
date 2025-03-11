@@ -73,11 +73,7 @@ func (iftxs *inFlightTransactionState) NewVersion(ctx context.Context) {
 
 // I think the answer is to look at all the stage outputs and if they're gone then it can be removed
 func (iftxs *inFlightTransactionState) CanBeRemoved(ctx context.Context) bool {
-	runningStages := false
-	for _, version := range iftxs.versions {
-		runningStages = runningStages || version.GetRunningStageContext(ctx) != nil
-	}
-	return iftxs.IsReadyToExit() && !runningStages
+	return iftxs.IsReadyToExit()
 }
 
 func (iftxs *inFlightTransactionState) CanSubmit(ctx context.Context, cost *big.Int) bool {

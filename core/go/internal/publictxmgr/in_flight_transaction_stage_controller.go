@@ -72,7 +72,7 @@ type inFlightTransactionStageController struct {
 
 	newStatus *InFlightStatus
 
-	updates   []transactionUpdate
+	updates   []*DBPublicTxn
 	updateMux sync.Mutex
 
 	// deleteRequested bool // figure out what's the reliable approach for deletion
@@ -82,12 +82,6 @@ type PointOfTime struct {
 	name          string
 	timestamp     time.Time
 	tillNextEvent time.Duration
-}
-
-type transactionUpdate struct {
-	response chan error
-	newPtx   *DBPublicTxn
-	dbUpdate func() error
 }
 
 type GenericStatus string
@@ -148,7 +142,7 @@ func NewInFlightTransactionStageController(
 	return ift
 }
 
-func (it *inFlightTransactionStageController) UpdateTransaction(ctx context.Context, newPtx *DBPublicTxn, dbUpdate func() error, response chan error) {
+func (it *inFlightTransactionStageController) UpdateTransaction(ctx context.Context, newPtx *DBPublicTxn) {
 	it.updateMux.Lock()
 	defer it.updateMux.Unlock()
 
@@ -156,11 +150,7 @@ func (it *inFlightTransactionStageController) UpdateTransaction(ctx context.Cont
 	// values is in the same goroutine. There is some risk deferring the response to a synchronous API call to an asynchronous loop
 	// function; however, that function starts any action with higher latency in separate go routines meaning that we can expect
 	// ProduceLatestInFlightStageContext to run with an acceptable frequency for the response.
-	it.updates = append(it.updates, transactionUpdate{
-		response,
-		newPtx,
-		dbUpdate,
-	})
+	it.updates = append(it.updates, newPtx)
 }
 
 func (it *inFlightTransactionStageController) MarkTime(eventName string) {
@@ -225,20 +215,8 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 		// Process each update in order. If there are multiple updates they will all be recorded in the database, but only the
 		// last one will be acted on
 		for _, update := range updates {
-			if it.stateManager.IsComplete() {
-				update.response <- i18n.NewError(ctx, msgs.MsgTransactionAlreadyCompleted)
-			} else if err := it.stateManager.ValidateUpdate(ctx, update.newPtx); err != nil {
-				update.response <- err
-			} else {
-				err := update.dbUpdate()
-				if err != nil {
-					update.response <- err
-				} else {
-					it.stateManager.UpdateTransaction(update.newPtx)
-					update.response <- nil
-					madeUpdate = true
-				}
-			}
+			it.stateManager.UpdateTransaction(update)
+			madeUpdate = true
 		}
 	}
 
@@ -278,7 +256,6 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 		// be read within this goroutine so that we know that they haven't been changed by an update part way through.
 		it.startNewStage(ctx, tOut.Cost)
 	}
-	// TODO: this says that the transaction has been signed, not that it has been submitted
 	tOut.TransactionSubmitted = it.stateManager.GetTransactionHash() != nil
 
 	return tOut
@@ -373,7 +350,7 @@ func (it *inFlightTransactionStageController) processPreviousVersionsStateOutput
 							case InFlightTxStageSubmitting:
 								err = it.processSubmittingStageOutput(ctx, version, version.GetRunningStageContext(ctx), stageOutput)
 							case InFlightTxStageStatusUpdate:
-								err = it.processSubmittingStageOutput(ctx, version, version.GetRunningStageContext(ctx), stageOutput)
+								err = it.processStatusUpdateStageOutput(ctx, version, version.GetRunningStageContext(ctx), stageOutput)
 							}
 							if err != nil {
 								log.L(ctx).Warnf("Error processing previous version stage output: %s", err.Error())

@@ -271,9 +271,8 @@ type InMemoryTxStateReadOnly interface {
 	GetSignerNonce() string
 	GetGasLimit() uint64
 	IsReadyToExit() bool
-	IsComplete() bool
-	ValidateUpdate(ctx context.Context, newPtx *DBPublicTxn) error
 }
+
 type InMemoryTxStateManager interface {
 	InMemoryTxStateReadOnly
 	InMemoryTxStateSetters

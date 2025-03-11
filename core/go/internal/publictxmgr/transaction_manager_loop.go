@@ -59,6 +59,7 @@ func (ptm *pubTxManager) engineLoop() {
 			return
 		}
 
+		ptm.handleUpdates(ctx)
 		polled, total := ptm.poll(ctx)
 		log.L(ctx).Debugf("Engine polling complete: %d transaction orchestrators were created, there are %d transaction orchestrators in flight", polled, total)
 	}
@@ -195,6 +196,23 @@ func (ptm *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 	ptm.thMetrics.RecordInFlightOrchestratorPoolMetrics(ctx, stateCounts, ptm.maxInflight-len(ptm.inFlightOrchestrators))
 	log.L(ctx).Debugf("Engine poll loop took %s", time.Since(pollStart))
 	return polled, total
+}
+
+func (ptm *pubTxManager) handleUpdates(ctx context.Context) {
+	ptm.updateMux.Lock()
+	updates := ptm.updates
+	ptm.updates = nil
+	ptm.updateMux.Unlock()
+
+	ptm.inFlightOrchestratorMux.Lock()
+	defer ptm.inFlightOrchestratorMux.Unlock()
+
+	for _, update := range updates {
+		inFlightOrchestrator, orchestratorInFlight := ptm.inFlightOrchestrators[*update.from]
+		if orchestratorInFlight {
+			inFlightOrchestrator.dispatchUpdate(ctx, update)
+		}
+	}
 }
 
 func (ptm *pubTxManager) MarkInFlightOrchestratorsStale() {

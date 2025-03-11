@@ -23,8 +23,6 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -77,51 +75,17 @@ func NewInMemoryTxStateManager(ctx context.Context, ptx *DBPublicTxn) InMemoryTx
 	return imtxs
 }
 
-func (imtxs *inMemoryTxState) ValidateUpdate(ctx context.Context, newPtx *DBPublicTxn) error {
-	newFixedPricing := recoverGasPriceOptions(newPtx.FixedGasPricing)
-
-	// We can't allow a transition away from fixed gas pricing as if we've already submitted because
-	// the price that comes back from the client could be lower than the price we've already submitted.
-	// I'm not convinced we can safely say that we haven't submitted from here though because of stages
-	// being triggered asynchronously so we must always assume that we might have submitted.
-	if !gasPricingSet(newFixedPricing) {
-		oldFixedPricing := recoverGasPriceOptions(imtxs.mtx.ptx.FixedGasPricing)
-		if gasPricingSet(oldFixedPricing) {
-			return i18n.NewError(ctx, msgs.MsgUpdateNoFixedPricing)
-		}
-		// nothing more to validate
-		return nil
-	}
-
-	// check that new fixed pricing is not lowering the gas price either against a previous fixed price or
-	// a retrieved gas price
-	oldPricing := imtxs.mtx.GasPricing
-	if oldPricing.GasPrice != nil &&
-		newFixedPricing.GasPrice != nil &&
-		oldPricing.GasPrice.Int().Cmp(newFixedPricing.GasPrice.Int()) == 1 {
-		return i18n.NewError(ctx, msgs.MsgUpdateGasPriceLower, oldPricing.GasPrice, newFixedPricing.GasPrice)
-	}
-
-	if oldPricing.MaxFeePerGas != nil &&
-		newFixedPricing.MaxFeePerGas != nil &&
-		oldPricing.MaxFeePerGas.Int().Cmp(newFixedPricing.MaxFeePerGas.Int()) == 1 {
-		return i18n.NewError(ctx, msgs.MsgUpdateMaxFeePerGasLower, oldPricing.MaxFeePerGas, newFixedPricing.MaxFeePerGas)
-	}
-
-	return nil
-}
-
 func (imtxs *inMemoryTxState) UpdateTransaction(newPtx *DBPublicTxn) {
 	imtxs.managedTxMux.Lock()
 	defer imtxs.managedTxMux.Unlock()
-	// We need to be really careful how we update this. If we have new user provided fixed values then there will
-	// have already been validation that the gas price isn't being lowered.
-	// If there are no fixed values then we cannot put the gas pricing back in an empty state because
-	// the gas price we retrieve could potentially be lower than a gas price already submitted
+	// If this update didn't involve a change to how fixed gas pricing is set (i.e. it wasn't set before
+	// and it isn't set now) then we don't want to change the gas pricing back to empty because
+	// it could result in us retrieving a gas price that is lower than one we've already submitted
 	newFixedPricing := recoverGasPriceOptions(newPtx.FixedGasPricing)
-	if gasPricingSet(newFixedPricing) {
+	oldFixedPricing := recoverGasPriceOptions(imtxs.mtx.ptx.FixedGasPricing)
+	if gasPricingSet(newFixedPricing) || gasPricingSet(oldFixedPricing) {
 		imtxs.mtx.GasPricing = newFixedPricing
-	} // else we have already validated that there wasn't previously fixed gas pricing- so we can keep using the same retrieved value
+	}
 
 	ptx := imtxs.mtx.ptx
 	ptx.To = newPtx.To
@@ -265,10 +229,6 @@ func (imtxs *inMemoryTxState) GetInFlightStatus() InFlightStatus {
 
 func (imtxs *inMemoryTxState) IsReadyToExit() bool {
 	return imtxs.mtx.InFlightStatus != InFlightStatusPending
-}
-
-func (imtxs *inMemoryTxState) IsComplete() bool {
-	return imtxs.mtx.InFlightStatus == InFlightStatusConfirmReceived
 }
 
 func NewRunningStageContext(ctx context.Context, stage InFlightTxStage, substatus BaseTxSubStatus, imtxs InMemoryTxStateManager) *RunningStageContext {

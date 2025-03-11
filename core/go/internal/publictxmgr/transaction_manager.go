@@ -60,6 +60,12 @@ const (
 	UpdateDelete                   // Instructs that the transaction should be removed completely from persistence - generally only returned when TX status is TxStatusDeleteRequested
 )
 
+type transactionUpdate struct {
+	newPtx  *DBPublicTxn
+	pubTXID uint64
+	from    *tktypes.EthAddress
+}
+
 // Public Tx Engine:
 // - It offers two ways of calculating gas price: use a fixed number, use the built-in API of a ethereum connector
 // - It resubmits the transaction based on a configured interval until it succeed or fail
@@ -114,6 +120,10 @@ type pubTxManager struct {
 
 	// gas limit config
 	gasEstimateFactor float64
+
+	// updates
+	updates   []*transactionUpdate
+	updateMux sync.Mutex
 }
 
 type txActivityRecords struct {
@@ -616,6 +626,12 @@ func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, id uuid.UUID, pu
 		return i18n.NewError(ctx, msgs.MsgPublicTransactionNotFound, id)
 	}
 
+	// error if the transaction is already completed
+	if ptxs[0].Completed != nil {
+		log.L(ctx).Warnf("UpdateTransaction: Public transaction already completed: %d (%+v)", pubTXID, id)
+		return i18n.NewError(ctx, msgs.MsgTransactionAlreadyComplete, id)
+	}
+
 	if tx.Gas == nil || *tx.Gas == 0 {
 		ethTx := buildEthTX(*from, nil, tx.To, publicTxData, &tx.PublicTxOptions)
 		gasEstimateResult, err := ptm.ethClient.EstimateGasNoResolve(ctx, ethTx)
@@ -643,19 +659,28 @@ func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, id uuid.UUID, pu
 		FixedGasPricing: tktypes.JSONString(tx.PublicTxOptions.PublicTxGasPricing),
 	}
 
-	dbUpdate := func() error {
-		return ptm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-			if err := txmgrDBUpdate(dbTX); err != nil {
-				return err
-			}
-			return ptm.writeUpdatedTransaction(ctx, dbTX, pubTXID, *from, newPtx)
-		})
-	}
-
-	if err = ptm.dispatchUpdate(ctx, pubTXID, from, newPtx, dbUpdate); err != nil {
+	err = ptm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		err := txmgrDBUpdate(dbTX)
+		if err == nil {
+			err = ptm.writeUpdatedTransaction(ctx, dbTX, pubTXID, *from, newPtx)
+		}
+		if err == nil {
+			// calling a function that takes a lock in a DB transaction is generally not ideal, but we want to make sure that if
+			// multiple concurrent updates come in for the same transaction that they are processed in the
+			// same order that they are persisted to the DB. This lock is only ever taken to write a single
+			// element to the updates array, or to clear it to nil so it should not result in the DB transaction
+			// being held open for too long
+			ptm.dispatchUpdate(ctx, &transactionUpdate{
+				pubTXID: pubTXID,
+				from:    from,
+				newPtx:  newPtx,
+			})
+		}
 		return err
-	}
-	return nil
+	})
+
+	return err
+
 }
 
 func (ptm *pubTxManager) UpdateSubStatus(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {

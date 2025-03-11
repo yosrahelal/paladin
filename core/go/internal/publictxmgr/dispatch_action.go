@@ -17,10 +17,7 @@ package publictxmgr
 
 import (
 	"context"
-	"time"
 
-	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -107,46 +104,16 @@ func (oc *orchestrator) dispatchAction(ctx context.Context, nonce uint64, action
 	return err
 }
 
-func (ptm *pubTxManager) dispatchUpdate(ctx context.Context, pubTXID uint64, from *tktypes.EthAddress, newPtx *DBPublicTxn, dbUpdate func() error) error {
-	response := make(chan error, 1)
-	startTime := time.Now()
-	go func() {
-		ptm.inFlightOrchestratorMux.Lock()
-		defer ptm.inFlightOrchestratorMux.Unlock()
-		inFlightOrchestrator, orchestratorInFlight := ptm.inFlightOrchestrators[*from]
-		if !orchestratorInFlight {
-			// no in-flight orchestrator for the signing address, it's OK to update the DB directly
-			// the postcommit hook on the dbUpdate will handle an orchestrator being scheduled for this signer
-			response <- dbUpdate()
-		} else {
-			inFlightOrchestrator.dispatchUpdate(ctx, pubTXID, newPtx, dbUpdate, response)
-		}
-	}()
-
-	select {
-	case err := <-response:
-		return err
-	case <-ctx.Done():
-		return i18n.NewError(ctx, msgs.MsgTransactionEngineRequestTimeout, time.Since(startTime).Seconds())
-	}
+func (ptm *pubTxManager) dispatchUpdate(ctx context.Context, update *transactionUpdate) {
+	ptm.updateMux.Lock()
+	defer ptm.updateMux.Unlock()
+	ptm.updates = append(ptm.updates, update)
+	ptm.MarkInFlightOrchestratorsStale()
 }
 
-func (oc *orchestrator) dispatchUpdate(ctx context.Context, pubTXID uint64, newPtx *DBPublicTxn, dbUpdate func() error, response chan error) {
-	oc.inFlightTxsMux.Lock()
-	defer oc.inFlightTxsMux.Unlock()
-	var pending *inFlightTransactionStageController
-	for _, inflight := range oc.inFlightTxs {
-		if inflight.stateManager.GetPubTxnID() == pubTXID {
-			pending = inflight
-			break
-		}
-	}
-	if pending != nil {
-		pending.UpdateTransaction(ctx, newPtx, dbUpdate, response)
-		oc.MarkInFlightTxStale()
-	} else {
-		// make the update straight to the db
-		response <- dbUpdate()
-	}
-
+func (oc *orchestrator) dispatchUpdate(ctx context.Context, update *transactionUpdate) {
+	oc.updateMux.Lock()
+	defer oc.updateMux.Unlock()
+	oc.updates = append(oc.updates, update)
+	oc.MarkInFlightTxStale()
 }

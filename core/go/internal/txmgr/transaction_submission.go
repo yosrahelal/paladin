@@ -843,7 +843,7 @@ func (tm *txManager) resolveUpdatedTransaction(ctx context.Context, dbTX persist
 	}
 
 	var publicTxData []byte
-	cv, normalizedJSON, err := tm.parseInputs(ctx, fn.Definition, pldapi.TransactionTypePublic.Enum(), txi.Data, nil)
+	cv, normalizedJSON, err := tm.parseInputs(ctx, fn.Definition, pldapi.TransactionTypePublic.Enum(), txi.Data, txi.Bytecode)
 	if err == nil {
 		publicTxData, err = tm.getPublicTxData(ctx, fn.Definition, nil, cv)
 	}
