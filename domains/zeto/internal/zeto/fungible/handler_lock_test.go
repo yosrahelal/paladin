@@ -124,9 +124,6 @@ func TestLockAssemble(t *testing.T) {
 				CoinSchema: &prototk.StateSchema{
 					Id: "coin",
 				},
-				LockInfoSchema: &prototk.StateSchema{
-					Id: "locked",
-				},
 			},
 		},
 		callbacks: testCallbacks,

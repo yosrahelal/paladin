@@ -70,7 +70,7 @@ var lockABINullifiers = &abi.Entry{
 	},
 }
 
-func NewLockHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema, infoSchema *pb.StateSchema) *lockHandler {
+func NewLockHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema *pb.StateSchema) *lockHandler {
 	return &lockHandler{
 		baseHandler: baseHandler{
 			name: name,
@@ -78,7 +78,6 @@ func NewLockHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema,
 				CoinSchema:           coinSchema,
 				MerkleTreeRootSchema: merkleTreeRootSchema,
 				MerkleTreeNodeSchema: merkleTreeNodeSchema,
-				LockInfoSchema:       infoSchema,
 			},
 		},
 		callbacks: callbacks,

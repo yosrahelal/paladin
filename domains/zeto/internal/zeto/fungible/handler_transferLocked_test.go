@@ -121,9 +121,6 @@ func TestTransferLockedAssemble(t *testing.T) {
 				MerkleTreeNodeSchema: &prototk.StateSchema{
 					Id: "merkle_tree_node",
 				},
-				LockInfoSchema: &prototk.StateSchema{
-					Id: "locked_info",
-				},
 			},
 		},
 	}
@@ -488,9 +485,6 @@ func TestGenerateMerkleProofsForLockedStates(t *testing.T) {
 				},
 				MerkleTreeNodeSchema: &prototk.StateSchema{
 					Id: "merkle_tree_node",
-				},
-				LockInfoSchema: &prototk.StateSchema{
-					Id: "locked_info",
 				},
 			},
 		},
