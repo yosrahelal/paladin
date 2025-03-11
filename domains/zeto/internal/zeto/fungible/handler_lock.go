@@ -237,7 +237,6 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}
 	params := map[string]any{
-		"inputs":        inputs,
 		"outputs":       outputs,
 		"lockedOutputs": lockedOutputs,
 		"proof":         common.EncodeProof(proofRes.Proof),
@@ -246,9 +245,10 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 	}
 	transferFunction := getLockABI(tx.DomainConfig.TokenName)
 	if common.IsNullifiersToken(tx.DomainConfig.TokenName) {
-		delete(params, "inputs")
 		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
 		params["root"] = proofRes.PublicInputs["root"]
+	} else {
+		params["inputs"] = inputs
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
