@@ -21,6 +21,6 @@ await copyFile(
 );
 
 await copyFile(
-  "../../domains/zeto/integration-test/abis/Zeto_Anon.json",
+  "../../domains/integration-test/helpers/abis/Zeto_Anon.json",
   "src/domains/abis/Zeto_Anon.json"
 );
