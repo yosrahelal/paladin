@@ -19,10 +19,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-project:
     uses: ./.github/workflows/build.yaml
    
-  image-release:
+  release-image:
     # run only on pushes to main or manual triggers
     uses: ./.github/workflows/cross-build-images.yaml
     with:

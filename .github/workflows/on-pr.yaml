@@ -13,10 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-project:
     uses: ./.github/workflows/build.yaml
 
-  core-image-build:
+  build-core-image:
     uses: ./.github/workflows/build-image.yaml
     with:
       dockerfile: ./Dockerfile
@@ -28,7 +28,7 @@ jobs:
       platforms: linux/amd64
       runs-on: ubuntu-latest
 
-  operator-image-build:
+  build-operator-image:
     uses: ./.github/workflows/build-image.yaml
     with:
       dockerfile: ./operator/Dockerfile
@@ -41,7 +41,7 @@ jobs:
       runs-on: ubuntu-latest
 
   chart-build:
-    needs: [core-image-build, operator-image-build]
+    needs: [build-core-image, build-operator-image]
     uses: ./.github/workflows/build-chart.yaml
     with:
       paladin-image: paladin.io/paladin
