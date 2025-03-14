@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
   build-project:
     uses: ./.github/workflows/build.yaml
 
@@ -48,3 +49,12 @@ jobs:
       paladin-image-tag: ${{ github.sha }}
       operator-image: paladin.io/paladin-operator
       operator-image-tag: ${{ github.sha }}
+  
+  # Mock job to ensure PR restriction on "build" passes
+  build:
+    needs: [build-project, chart-build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print PR number
+        run: echo "${{ github.workflow }}-${{ github.event.pull_request.number }}"
+    
