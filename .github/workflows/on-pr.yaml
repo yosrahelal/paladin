@@ -54,7 +54,12 @@ jobs:
   build:
     needs: [build-project, chart-build]
     runs-on: ubuntu-latest
+    if: always()  # This ensures the job runs even if previous jobs fail
     steps:
-      - name: Print PR number
-        run: echo "${{ github.workflow }}-${{ github.event.pull_request.number }}"
+      - name: Check if all dependencies succeeded
+        run: |
+          if [[ "${{ needs.build-project.result }}" != "success" || "${{ needs.chart-build.result }}" != "success" ]]; then
+            echo "A dependent job has failed. Marking this job as failed."
+            exit 1
+          fi
     
