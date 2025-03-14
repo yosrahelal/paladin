@@ -1,20 +1,14 @@
-name: Build
+name: Build Project
 permissions:
   contents: write
   packages: write
   id-token: write
 
 on:
-  workflow_dispatch:
   workflow_call:
 
-# Ensure this workflow only runs for the most recent commit of a pull-request
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  build:
+  build-core-project:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
