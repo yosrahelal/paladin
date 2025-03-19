@@ -28,7 +28,7 @@ type inFlightTransactionState struct {
 	InMemoryTxStateManager
 
 	orchestratorContext *OrchestratorContext
-	versions            []InFlightTransactionStateVersion
+	generations         []InFlightTransactionStateGeneration
 
 	// not used by this struct but passed down into versions
 	testOnlyNoEventMode bool
@@ -37,30 +37,30 @@ type inFlightTransactionState struct {
 	submissionWriter *submissionWriter
 }
 
-func (iftxs *inFlightTransactionState) GetVersions(ctx context.Context) []InFlightTransactionStateVersion {
-	return iftxs.versions
+func (iftxs *inFlightTransactionState) GetGenerations(ctx context.Context) []InFlightTransactionStateGeneration {
+	return iftxs.generations
 }
 
-func (iftxs *inFlightTransactionState) GetVersion(ctx context.Context, id int) InFlightTransactionStateVersion {
-	return iftxs.versions[id]
+func (iftxs *inFlightTransactionState) GetGeneration(ctx context.Context, id int) InFlightTransactionStateGeneration {
+	return iftxs.generations[id]
 }
 
-func (iftxs *inFlightTransactionState) GetCurrentVersion(ctx context.Context) InFlightTransactionStateVersion {
-	return iftxs.versions[len(iftxs.versions)-1]
+func (iftxs *inFlightTransactionState) GetCurrentGeneration(ctx context.Context) InFlightTransactionStateGeneration {
+	return iftxs.generations[len(iftxs.generations)-1]
 }
 
-func (iftxs *inFlightTransactionState) GetPreviousVersions(ctx context.Context) []InFlightTransactionStateVersion {
-	if len(iftxs.versions) < 2 {
-		return []InFlightTransactionStateVersion{}
+func (iftxs *inFlightTransactionState) GetPreviousGenerations(ctx context.Context) []InFlightTransactionStateGeneration {
+	if len(iftxs.generations) < 2 {
+		return []InFlightTransactionStateGeneration{}
 	}
-	return iftxs.versions[:len(iftxs.versions)-1]
+	return iftxs.generations[:len(iftxs.generations)-1]
 }
 
-func (iftxs *inFlightTransactionState) NewVersion(ctx context.Context) {
-	iftxs.versions[len(iftxs.versions)-1].SetCurrent(ctx, false)
-	iftxs.versions[len(iftxs.versions)-1].Cancel(ctx)
-	iftxs.versions = append(iftxs.versions, NewInFlightTransactionStateVersion(
-		len(iftxs.versions),
+func (iftxs *inFlightTransactionState) NewGeneration(ctx context.Context) {
+	iftxs.generations[len(iftxs.generations)-1].SetCurrent(ctx, false)
+	iftxs.generations[len(iftxs.generations)-1].Cancel(ctx)
+	iftxs.generations = append(iftxs.generations, NewInFlightTransactionStateGeneration(
+		len(iftxs.generations),
 		iftxs.PublicTxManagerMetricsManager,
 		iftxs.BalanceManager,
 		iftxs.InFlightStageActionTriggers,
@@ -94,7 +94,7 @@ func (iftxs *inFlightTransactionState) SetOrchestratorContext(ctx context.Contex
 }
 
 func (iftxs *inFlightTransactionState) GetStage(ctx context.Context) InFlightTxStage {
-	return iftxs.GetCurrentVersion(ctx).GetStage(ctx)
+	return iftxs.GetCurrentGeneration(ctx).GetStage(ctx)
 }
 
 func NewInFlightTransactionStateManager(thm PublicTxManagerMetricsManager,
@@ -108,8 +108,8 @@ func NewInFlightTransactionStateManager(thm PublicTxManagerMetricsManager,
 	return &inFlightTransactionState{
 		PublicTxManagerMetricsManager: thm,
 		BalanceManager:                bm,
-		versions: []InFlightTransactionStateVersion{
-			NewInFlightTransactionStateVersion(0, thm, bm, ifsat, imtxs, statusUpdater, submissionWriter, noEventMode),
+		generations: []InFlightTransactionStateGeneration{
+			NewInFlightTransactionStateGeneration(0, thm, bm, ifsat, imtxs, statusUpdater, submissionWriter, noEventMode),
 		},
 		InMemoryTxStateManager:      imtxs,
 		InFlightStageActionTriggers: ifsat,

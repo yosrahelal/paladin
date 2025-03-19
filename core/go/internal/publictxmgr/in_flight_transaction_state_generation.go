@@ -28,11 +28,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-type inFlightTransactionStateVersion struct {
-	// This id is never persisted in the database it only exists in memory so that we can pass around a reference
-	// to the version id in some functions rather than passing the reference to the version struct itself. This
-	// is because having any types imported from this package into mocks files results in circular dependencies
-	id int
+type inFlightTransactionStateGeneration struct {
+	index int
 
 	current             bool
 	testOnlyNoEventMode bool
@@ -46,9 +43,9 @@ type inFlightTransactionStateVersion struct {
 
 	// the current in-flight stage
 	// this is the core of in-flight transaction processing.
-	// only 1 stage context can exist at any given time for a specific transaction version.
-	// in the case there are multiple versions, only the current version is allowed to progress,
-	// previous versions may persist what they have done so far but no more
+	// only 1 stage context can exist at any given time for a specific transaction generation.
+	// in the case there are multiple generations, only the current generation is allowed to progress,
+	// previous generations may persist what they have done so far but no more
 	// in flight transaction contains the logic to process each stage to its completion,
 	// any stage will have at least 1 asynchronous action, in-flight transaction relies on transaction orchestrator
 	// to give it signal to collect result of those async actions.
@@ -72,7 +69,7 @@ type inFlightTransactionStateVersion struct {
 	statusUpdater    StatusUpdater
 }
 
-func NewInFlightTransactionStateVersion(
+func NewInFlightTransactionStateGeneration(
 	id int,
 	thm PublicTxManagerMetricsManager,
 	bm BalanceManager,
@@ -80,9 +77,9 @@ func NewInFlightTransactionStateVersion(
 	imtxs InMemoryTxStateManager,
 	statusUpdater StatusUpdater,
 	submissionWriter *submissionWriter,
-	noEventMode bool) InFlightTransactionStateVersion {
-	return &inFlightTransactionStateVersion{
-		id:                            id,
+	noEventMode bool) InFlightTransactionStateGeneration {
+	return &inFlightTransactionStateGeneration{
+		index:                         id,
 		current:                       true,
 		bufferedStageOutputs:          make([]*StageOutput, 0),
 		cancel:                        make(chan bool, 1),
@@ -96,11 +93,11 @@ func NewInFlightTransactionStateVersion(
 	}
 }
 
-func (v *inFlightTransactionStateVersion) GetID(ctx context.Context) int {
-	return v.id
+func (v *inFlightTransactionStateGeneration) GetID(ctx context.Context) int {
+	return v.index
 }
 
-func (v *inFlightTransactionStateVersion) Cancel(ctx context.Context) {
+func (v *inFlightTransactionStateGeneration) Cancel(ctx context.Context) {
 	select {
 	case v.cancel <- true:
 	default:
@@ -109,7 +106,7 @@ func (v *inFlightTransactionStateVersion) Cancel(ctx context.Context) {
 
 // IsCancelled is intended to be used by async actions to check if there is a now a new version and they should stop work.
 // There should only ever be 1 async action running at a time for a given version
-func (v *inFlightTransactionStateVersion) IsCancelled(ctx context.Context) bool {
+func (v *inFlightTransactionStateGeneration) IsCancelled(ctx context.Context) bool {
 	select {
 	case <-v.cancel:
 		return true
@@ -118,43 +115,43 @@ func (v *inFlightTransactionStateVersion) IsCancelled(ctx context.Context) bool 
 	}
 }
 
-func (v *inFlightTransactionStateVersion) SetCurrent(ctx context.Context, current bool) {
+func (v *inFlightTransactionStateGeneration) SetCurrent(ctx context.Context, current bool) {
 	v.current = current
 }
 
-func (v *inFlightTransactionStateVersion) IsCurrent(ctx context.Context) bool {
+func (v *inFlightTransactionStateGeneration) IsCurrent(ctx context.Context) bool {
 	return v.current
 }
 
-func (v *inFlightTransactionStateVersion) GetStage(ctx context.Context) InFlightTxStage {
+func (v *inFlightTransactionStateGeneration) GetStage(ctx context.Context) InFlightTxStage {
 	return v.stage
 }
 
-func (v *inFlightTransactionStateVersion) GetStageStartTime(ctx context.Context) time.Time {
+func (v *inFlightTransactionStateGeneration) GetStageStartTime(ctx context.Context) time.Time {
 	return v.txLevelStageStartTime
 }
 
-func (v *inFlightTransactionStateVersion) SetValidatedTransactionHashMatchState(ctx context.Context, validatedTransactionHashMatchState bool) {
+func (v *inFlightTransactionStateGeneration) SetValidatedTransactionHashMatchState(ctx context.Context, validatedTransactionHashMatchState bool) {
 	v.validatedTransactionHashMatchState = validatedTransactionHashMatchState
 }
 
-func (v *inFlightTransactionStateVersion) ValidatedTransactionHashMatchState(ctx context.Context) bool {
+func (v *inFlightTransactionStateGeneration) ValidatedTransactionHashMatchState(ctx context.Context) bool {
 	return v.validatedTransactionHashMatchState
 }
 
-func (v *inFlightTransactionStateVersion) SetTransientPreviousStageOutputs(tpso *TransientPreviousStageOutputs) {
+func (v *inFlightTransactionStateGeneration) SetTransientPreviousStageOutputs(tpso *TransientPreviousStageOutputs) {
 	v.TransientPreviousStageOutputs = tpso
 }
 
-func (v *inFlightTransactionStateVersion) GetRunningStageContext(ctx context.Context) *RunningStageContext {
+func (v *inFlightTransactionStateGeneration) GetRunningStageContext(ctx context.Context) *RunningStageContext {
 	return v.runningStageContext
 }
 
-func (v *inFlightTransactionStateVersion) GetStageTriggerError(ctx context.Context) error {
+func (v *inFlightTransactionStateGeneration) GetStageTriggerError(ctx context.Context) error {
 	return v.stageTriggerError
 }
 
-func (v *inFlightTransactionStateVersion) StartNewStageContext(ctx context.Context, stage InFlightTxStage, substatus BaseTxSubStatus) {
+func (v *inFlightTransactionStateGeneration) StartNewStageContext(ctx context.Context, stage InFlightTxStage, substatus BaseTxSubStatus) {
 	nowTime := time.Now() // pin the now time
 	rsc := NewRunningStageContext(ctx, stage, substatus, v.InMemoryTxStateManager)
 	if rsc.Stage != v.stage {
@@ -195,7 +192,7 @@ func (v *inFlightTransactionStateVersion) StartNewStageContext(ctx context.Conte
 	}
 }
 
-func (v *inFlightTransactionStateVersion) ClearRunningStageContext(ctx context.Context) {
+func (v *inFlightTransactionStateGeneration) ClearRunningStageContext(ctx context.Context) {
 	if v.runningStageContext != nil {
 		rsc := v.runningStageContext
 		log.L(ctx).Debugf("Transaction with ID %s clearing stage context for stage: %s after %s, total time spent on this stage so far: %s, txHash: %s", rsc.InMemoryTx.GetSignerNonce(), rsc.Stage, time.Since(rsc.StageStartTime), time.Since(v.txLevelStageStartTime), rsc.InMemoryTx.GetTransactionHash())
@@ -206,7 +203,7 @@ func (v *inFlightTransactionStateVersion) ClearRunningStageContext(ctx context.C
 	v.stageTriggerError = nil
 }
 
-func (v *inFlightTransactionStateVersion) AddPersistenceOutput(ctx context.Context, stage InFlightTxStage, persistenceTime time.Time, err error) {
+func (v *inFlightTransactionStateGeneration) AddPersistenceOutput(ctx context.Context, stage InFlightTxStage, persistenceTime time.Time, err error) {
 	start := time.Now()
 	v.AddStageOutputs(ctx, &StageOutput{
 		Stage: stage,
@@ -218,7 +215,7 @@ func (v *inFlightTransactionStateVersion) AddPersistenceOutput(ctx context.Conte
 	log.L(ctx).Debugf("%s AddPersistenceOutput took %s to write the result", v.GetSignerNonce(), time.Since(start))
 }
 
-func (v *inFlightTransactionStateVersion) AddSubmitOutput(ctx context.Context, txHash *tktypes.Bytes32, submissionTime *tktypes.Timestamp, submissionOutcome SubmissionOutcome, errorReason ethclient.ErrorReason, err error) {
+func (v *inFlightTransactionStateGeneration) AddSubmitOutput(ctx context.Context, txHash *tktypes.Bytes32, submissionTime *tktypes.Timestamp, submissionOutcome SubmissionOutcome, errorReason ethclient.ErrorReason, err error) {
 	start := time.Now()
 	log.L(ctx).Debugf("%s Setting submit output, submissionOutcome: %s, errReason: %s, err %+v", v.GetSignerNonce(), submissionOutcome, errorReason, err)
 	v.AddStageOutputs(ctx, &StageOutput{
@@ -234,13 +231,13 @@ func (v *inFlightTransactionStateVersion) AddSubmitOutput(ctx context.Context, t
 	log.L(ctx).Debugf("%s AddSubmitOutput took %s to write the result", v.GetSignerNonce(), time.Since(start))
 }
 
-func (v *inFlightTransactionStateVersion) ProcessStageOutputs(ctx context.Context, processFunction func(stageOutputs []*StageOutput) (unprocessedStageOutputs []*StageOutput)) {
+func (v *inFlightTransactionStateGeneration) ProcessStageOutputs(ctx context.Context, processFunction func(stageOutputs []*StageOutput) (unprocessedStageOutputs []*StageOutput)) {
 	v.bufferedStageOutputsMux.Lock()
 	defer v.bufferedStageOutputsMux.Unlock()
 	v.bufferedStageOutputs = processFunction(v.bufferedStageOutputs)
 }
 
-func (v *inFlightTransactionStateVersion) AddStageOutputs(ctx context.Context, stageOutput *StageOutput) {
+func (v *inFlightTransactionStateGeneration) AddStageOutputs(ctx context.Context, stageOutput *StageOutput) {
 	if v.testOnlyNoEventMode {
 		return
 	}
@@ -249,7 +246,7 @@ func (v *inFlightTransactionStateVersion) AddStageOutputs(ctx context.Context, s
 	v.bufferedStageOutputs = append(v.bufferedStageOutputs, stageOutput)
 }
 
-func (v *inFlightTransactionStateVersion) AddSignOutput(ctx context.Context, signedMessage []byte, txHash *tktypes.Bytes32, err error) {
+func (v *inFlightTransactionStateGeneration) AddSignOutput(ctx context.Context, signedMessage []byte, txHash *tktypes.Bytes32, err error) {
 	start := time.Now()
 	log.L(ctx).Debugf("%s Setting signed message, hash %s, signed message not nil %t, err %+v", v.GetSignerNonce(), txHash, signedMessage != nil, err)
 	v.AddStageOutputs(ctx, &StageOutput{
@@ -263,7 +260,7 @@ func (v *inFlightTransactionStateVersion) AddSignOutput(ctx context.Context, sig
 	log.L(ctx).Debugf("%s AddSignOutput took %s to write the result", v.GetSignerNonce(), time.Since(start))
 }
 
-func (v *inFlightTransactionStateVersion) AddGasPriceOutput(ctx context.Context, gasPriceObject *pldapi.PublicTxGasPricing, err error) {
+func (v *inFlightTransactionStateGeneration) AddGasPriceOutput(ctx context.Context, gasPriceObject *pldapi.PublicTxGasPricing, err error) {
 	start := time.Now()
 	v.AddStageOutputs(ctx, &StageOutput{
 		Stage: InFlightTxStageRetrieveGasPrice,
@@ -275,7 +272,7 @@ func (v *inFlightTransactionStateVersion) AddGasPriceOutput(ctx context.Context,
 	log.L(ctx).Debugf("%s AddGasPriceOutput took %s to write the result", v.GetSignerNonce(), time.Since(start))
 }
 
-func (v *inFlightTransactionStateVersion) AddConfirmationsOutput(ctx context.Context, confirmedTx *pldapi.IndexedTransaction) {
+func (v *inFlightTransactionStateGeneration) AddConfirmationsOutput(ctx context.Context, confirmedTx *pldapi.IndexedTransaction) {
 	panic("unused")
 	// start := time.Now()
 	// v.AddStageOutputs(ctx, &StageOutput{
@@ -285,7 +282,7 @@ func (v *inFlightTransactionStateVersion) AddConfirmationsOutput(ctx context.Con
 	// log.L(ctx).Debugf("%s AddConfirmationsOutput took %s to write the result", v.InMemoryTxStateManager.GetSignerNonce(), time.Since(start))
 }
 
-func (v *inFlightTransactionStateVersion) AddPanicOutput(ctx context.Context, stage InFlightTxStage) {
+func (v *inFlightTransactionStateGeneration) AddPanicOutput(ctx context.Context, stage InFlightTxStage) {
 	start := time.Now()
 	// unexpected error, set an empty input for the stage
 	// so that the stage handler will handle this as unexpected error
@@ -295,7 +292,7 @@ func (v *inFlightTransactionStateVersion) AddPanicOutput(ctx context.Context, st
 	log.L(ctx).Debugf("%s AddPanicOutput took %s to write the result", v.GetSignerNonce(), time.Since(start))
 }
 
-func (v *inFlightTransactionStateVersion) PersistTxState(ctx context.Context) (stage InFlightTxStage, persistenceTime time.Time, err error) {
+func (v *inFlightTransactionStateGeneration) PersistTxState(ctx context.Context) (stage InFlightTxStage, persistenceTime time.Time, err error) {
 	rsc := v.runningStageContext
 	if rsc == nil || rsc.StageOutputsToBePersisted == nil {
 		log.L(ctx).Error("Cannot persist transaction state, no running context or stageOutputsToBePersisted")

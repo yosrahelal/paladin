@@ -30,7 +30,7 @@ import (
 )
 
 type testInFlightTransactionStateVersionWithMocks struct {
-	version InFlightTransactionStateVersion
+	version InFlightTransactionStateGeneration
 	mAT     *publictxmocks.InFlightStageActionTriggers
 }
 
@@ -40,7 +40,7 @@ func newTestInFlightTransactionStateVersion(t *testing.T) (*testInFlightTransact
 	mockInMemoryState := NewTestInMemoryTxState(t)
 	mockActionTriggers := publictxmocks.NewInFlightStageActionTriggers(t)
 
-	v := NewInFlightTransactionStateVersion(0, &publicTxEngineMetrics{}, balanceManager, mockActionTriggers, mockInMemoryState, ptm, ptm.submissionWriter, false)
+	v := NewInFlightTransactionStateGeneration(0, &publicTxEngineMetrics{}, balanceManager, mockActionTriggers, mockInMemoryState, ptm, ptm.submissionWriter, false)
 	return &testInFlightTransactionStateVersionWithMocks{
 		v,
 		mockActionTriggers,

@@ -28,7 +28,8 @@ import (
 )
 
 // add updates to the array and check how they get handled - cover all the cases where the way that
-// a previous version is handled is different to if it is the current version
+// a previous generation is handled is different to if it is the current generation
+// TODO AM: are these tests still relevant once I look at what is actually persisted
 
 func TestTXStageControllerUpdateNoRunningStageContext(t *testing.T) {
 	ctx, o, _, done := newTestOrchestrator(t)
@@ -45,11 +46,11 @@ func TestTXStageControllerUpdateNoRunningStageContext(t *testing.T) {
 
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
-	require.Len(t, it.stateManager.GetVersions(ctx), 2)
+	require.Len(t, it.stateManager.GetGenerations(ctx), 2)
 
-	assert.Nil(t, it.stateManager.GetVersion(ctx, 0).GetRunningStageContext(ctx))
+	assert.Nil(t, it.stateManager.GetGeneration(ctx, 0).GetRunningStageContext(ctx))
 
-	rsc := it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx)
+	rsc := it.stateManager.GetCurrentGeneration(ctx).GetRunningStageContext(ctx)
 	require.NotNil(t, rsc)
 	assert.Equal(t, InFlightTxStageSigning, rsc.Stage)
 }
@@ -66,10 +67,10 @@ func TestTXStageControllerUpdateRunningStagePersistance(t *testing.T) {
 	yesterday := now.AddDate(0, 0, -1)
 	tomorrow := now.AddDate(0, 0, 1)
 
-	// set the existing version in a persistence stage
-	previousVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
-	previousVersion.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, inMemoryTxState)
-	previousVersion.bufferedStageOutputs = []*StageOutput{{
+	// set the existing generation in a persistence stage
+	previousGeneration := it.stateManager.GetCurrentGeneration(ctx).(*inFlightTransactionStateGeneration)
+	previousGeneration.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, inMemoryTxState)
+	previousGeneration.bufferedStageOutputs = []*StageOutput{{
 		Stage: InFlightTxStageSubmitting,
 		PersistenceOutput: &PersistenceOutput{
 			PersistenceError: errors.New("bang"),
@@ -80,24 +81,24 @@ func TestTXStageControllerUpdateRunningStagePersistance(t *testing.T) {
 	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000})
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
-	require.Len(t, it.stateManager.GetVersions(ctx), 2)
+	require.Len(t, it.stateManager.GetGenerations(ctx), 2)
 
 	// persistence hasn't yet reached the timeout- the stage output stays unprocessed
-	require.Len(t, previousVersion.bufferedStageOutputs, 1)
+	require.Len(t, previousGeneration.bufferedStageOutputs, 1)
 	assert.Equal(t, &StageOutput{
 		Stage: InFlightTxStageSubmitting,
 		PersistenceOutput: &PersistenceOutput{
 			PersistenceError: errors.New("bang"),
 			Time:             tomorrow,
 		},
-	}, previousVersion.bufferedStageOutputs[0])
+	}, previousGeneration.bufferedStageOutputs[0])
 
 	// change the time to be past the timeout- the persistence is triggered again and removed
-	previousVersion.bufferedStageOutputs[0].PersistenceOutput.Time = yesterday
+	previousGeneration.bufferedStageOutputs[0].PersistenceOutput.Time = yesterday
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
-	require.Len(t, it.stateManager.GetVersions(ctx), 2)
-	require.Len(t, previousVersion.bufferedStageOutputs, 0)
+	require.Len(t, it.stateManager.GetGenerations(ctx), 2)
+	require.Len(t, previousGeneration.bufferedStageOutputs, 0)
 }
 
 func TestTXStageControllerUpdateIgnoreSigningErrorAfterPersisted(t *testing.T) {
@@ -107,15 +108,15 @@ func TestTXStageControllerUpdateIgnoreSigningErrorAfterPersisted(t *testing.T) {
 	it.testOnlyNoActionMode = true
 	inMemoryTxState := it.stateManager.(*inFlightTransactionState).InMemoryTxStateManager
 
-	// set the existing version in a persistence stage
-	previousVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
-	previousVersion.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSigning, BaseTxSubStatusReceived, inMemoryTxState)
-	previousVersion.runningStageContext.StageOutput = &StageOutput{
+	// set the existing generation in a persistence stage
+	previousGeneration := it.stateManager.GetCurrentGeneration(ctx).(*inFlightTransactionStateGeneration)
+	previousGeneration.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSigning, BaseTxSubStatusReceived, inMemoryTxState)
+	previousGeneration.runningStageContext.StageOutput = &StageOutput{
 		SignOutput: &SignOutputs{
 			Err: errors.New("bang"),
 		},
 	}
-	previousVersion.bufferedStageOutputs = []*StageOutput{{
+	previousGeneration.bufferedStageOutputs = []*StageOutput{{
 		Stage:             InFlightTxStageSigning,
 		PersistenceOutput: &PersistenceOutput{},
 	}}
@@ -123,10 +124,10 @@ func TestTXStageControllerUpdateIgnoreSigningErrorAfterPersisted(t *testing.T) {
 	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000})
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
-	require.Len(t, it.stateManager.GetVersions(ctx), 2)
-	assert.Len(t, previousVersion.bufferedStageOutputs, 0)
-	assert.Nil(t, previousVersion.GetRunningStageContext(ctx))
-	assert.False(t, it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx).StageErrored)
+	require.Len(t, it.stateManager.GetGenerations(ctx), 2)
+	assert.Len(t, previousGeneration.bufferedStageOutputs, 0)
+	assert.Nil(t, previousGeneration.GetRunningStageContext(ctx))
+	assert.False(t, it.stateManager.GetCurrentGeneration(ctx).GetRunningStageContext(ctx).StageErrored)
 }
 
 func TestTXStageControllerUpdateNoSubmit(t *testing.T) {
@@ -136,28 +137,28 @@ func TestTXStageControllerUpdateNoSubmit(t *testing.T) {
 	it.testOnlyNoActionMode = true
 	inMemoryTxState := it.stateManager.(*inFlightTransactionState).InMemoryTxStateManager
 
-	// set the existing version in a sign persisted stage
-	previousVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
-	previousVersion.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSigning, BaseTxSubStatusReceived, inMemoryTxState)
-	previousVersion.runningStageContext.StageOutput = &StageOutput{
+	// set the existing generation in a sign persisted stage
+	previousGeneration := it.stateManager.GetCurrentGeneration(ctx).(*inFlightTransactionStateGeneration)
+	previousGeneration.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSigning, BaseTxSubStatusReceived, inMemoryTxState)
+	previousGeneration.runningStageContext.StageOutput = &StageOutput{
 		SignOutput: &SignOutputs{
 			SignedMessage: []byte("signed message"),
 		},
 	}
-	previousVersion.bufferedStageOutputs = []*StageOutput{{
+	previousGeneration.bufferedStageOutputs = []*StageOutput{{
 		Stage:             InFlightTxStageSigning,
 		PersistenceOutput: &PersistenceOutput{},
 	}}
 
 	// assigning the mocks is enough to check that no action gets called
-	previousVersion.InFlightStageActionTriggers = publictxmocks.NewInFlightStageActionTriggers(t)
+	previousGeneration.InFlightStageActionTriggers = publictxmocks.NewInFlightStageActionTriggers(t)
 
 	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000})
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
-	require.Len(t, it.stateManager.GetVersions(ctx), 2)
-	assert.Len(t, previousVersion.bufferedStageOutputs, 0)
-	assert.Nil(t, previousVersion.GetRunningStageContext(ctx))
+	require.Len(t, it.stateManager.GetGenerations(ctx), 2)
+	assert.Len(t, previousGeneration.bufferedStageOutputs, 0)
+	assert.Nil(t, previousGeneration.GetRunningStageContext(ctx))
 }
 
 func TestTXStageControllerUpdateNoResubmit(t *testing.T) {
@@ -167,15 +168,15 @@ func TestTXStageControllerUpdateNoResubmit(t *testing.T) {
 	it.testOnlyNoActionMode = true
 	inMemoryTxState := it.stateManager.(*inFlightTransactionState).InMemoryTxStateManager
 
-	// set the existing version in a submit persisted stage
-	previousVersion := it.stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
-	previousVersion.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, inMemoryTxState)
-	previousVersion.runningStageContext.StageOutput = &StageOutput{
+	// set the existing generation in a submit persisted stage
+	previousGeneration := it.stateManager.GetCurrentGeneration(ctx).(*inFlightTransactionStateGeneration)
+	previousGeneration.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, inMemoryTxState)
+	previousGeneration.runningStageContext.StageOutput = &StageOutput{
 		SubmitOutput: &SubmitOutputs{
 			Err: errors.New("bang"),
 		},
 	}
-	previousVersion.bufferedStageOutputs = []*StageOutput{{
+	previousGeneration.bufferedStageOutputs = []*StageOutput{{
 		Stage:             InFlightTxStageSubmitting,
 		PersistenceOutput: &PersistenceOutput{},
 	}}
@@ -183,8 +184,8 @@ func TestTXStageControllerUpdateNoResubmit(t *testing.T) {
 	it.UpdateTransaction(ctx, &DBPublicTxn{Gas: 1000})
 	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{})
 
-	require.Len(t, it.stateManager.GetVersions(ctx), 2)
-	assert.Len(t, previousVersion.bufferedStageOutputs, 0)
-	assert.Nil(t, previousVersion.GetRunningStageContext(ctx))
-	assert.False(t, it.stateManager.GetCurrentVersion(ctx).GetRunningStageContext(ctx).StageErrored)
+	require.Len(t, it.stateManager.GetGenerations(ctx), 2)
+	assert.Len(t, previousGeneration.bufferedStageOutputs, 0)
+	assert.Nil(t, previousGeneration.GetRunningStageContext(ctx))
+	assert.False(t, it.stateManager.GetCurrentGeneration(ctx).GetRunningStageContext(ctx).StageErrored)
 }

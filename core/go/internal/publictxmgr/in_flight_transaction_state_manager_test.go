@@ -41,24 +41,24 @@ func TestStateManagerBasicLifecycle(t *testing.T) {
 	defer done()
 	stateManager.SetOrchestratorContext(ctx, &OrchestratorContext{})
 
-	// check it has one version which is current
-	require.Len(t, stateManager.GetVersions(ctx), 1)
-	assert.True(t, stateManager.GetVersion(ctx, 0).IsCurrent(ctx))
+	// check it has one generation which is current
+	require.Len(t, stateManager.GetGenerations(ctx), 1)
+	assert.True(t, stateManager.GetGeneration(ctx, 0).IsCurrent(ctx))
 
-	// add a new version, check that one becomes current and the previous one is not
-	stateManager.NewVersion(ctx)
-	require.Len(t, stateManager.GetVersions(ctx), 2)
-	assert.False(t, stateManager.GetVersion(ctx, 0).IsCurrent(ctx))
-	assert.True(t, stateManager.GetVersion(ctx, 1).IsCurrent(ctx))
+	// add a new generation, check that one becomes current and the previous one is not
+	stateManager.NewGeneration(ctx)
+	require.Len(t, stateManager.GetGenerations(ctx), 2)
+	assert.False(t, stateManager.GetGeneration(ctx, 0).IsCurrent(ctx))
+	assert.True(t, stateManager.GetGeneration(ctx, 1).IsCurrent(ctx))
 
 	// check removal conditions
 	mtx := stateManager.(*inFlightTransactionState).InMemoryTxStateManager.(*inMemoryTxState).mtx
 	mtx.InFlightStatus = InFlightStatusPending
-	currentVersion := stateManager.GetCurrentVersion(ctx).(*inFlightTransactionStateVersion)
-	currentVersion.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, stateManager.(*inFlightTransactionState).InMemoryTxStateManager)
+	currentGeneration := stateManager.GetCurrentGeneration(ctx).(*inFlightTransactionStateGeneration)
+	currentGeneration.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, stateManager.(*inFlightTransactionState).InMemoryTxStateManager)
 	assert.False(t, stateManager.CanBeRemoved(ctx))
 
-	stateManager.GetCurrentVersion(ctx).ClearRunningStageContext(ctx)
+	stateManager.GetCurrentGeneration(ctx).ClearRunningStageContext(ctx)
 	assert.False(t, stateManager.CanBeRemoved(ctx))
 
 	mtx.InFlightStatus = InFlightStatusConfirmReceived

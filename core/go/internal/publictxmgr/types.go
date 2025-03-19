@@ -326,10 +326,10 @@ type PersistenceOutput struct {
 }
 
 type InFlightStageActionTriggers interface {
-	TriggerRetrieveGasPrice(ctx context.Context, versionID int) error
-	TriggerSignTx(ctx context.Context, versionID int) error
-	TriggerSubmitTx(ctx context.Context, versionID int, signedMessage []byte, calculatedTxHash *tktypes.Bytes32) error
-	TriggerStatusUpdate(ctx context.Context, versionID int) error
+	TriggerRetrieveGasPrice(ctx context.Context, generation int) error
+	TriggerSignTx(ctx context.Context, generation int) error
+	TriggerSubmitTx(ctx context.Context, generation int, signedMessage []byte, calculatedTxHash *tktypes.Bytes32) error
+	TriggerStatusUpdate(ctx context.Context, generation int) error
 }
 
 // RunningStageContext is the context for an individual run of the transaction process
@@ -407,15 +407,15 @@ type InFlightTransactionStateManager interface {
 	SetOrchestratorContext(ctx context.Context, tec *OrchestratorContext)
 	GetStage(ctx context.Context) InFlightTxStage
 
-	// version management
-	GetVersions(ctx context.Context) []InFlightTransactionStateVersion
-	GetVersion(ctx context.Context, id int) InFlightTransactionStateVersion
-	GetCurrentVersion(ctx context.Context) InFlightTransactionStateVersion
-	GetPreviousVersions(ctx context.Context) []InFlightTransactionStateVersion
-	NewVersion(ctx context.Context)
+	// genereation management
+	GetGenerations(ctx context.Context) []InFlightTransactionStateGeneration
+	GetGeneration(ctx context.Context, id int) InFlightTransactionStateGeneration
+	GetCurrentGeneration(ctx context.Context) InFlightTransactionStateGeneration
+	GetPreviousGenerations(ctx context.Context) []InFlightTransactionStateGeneration
+	NewGeneration(ctx context.Context)
 }
 
-type InFlightTransactionStateVersion interface {
+type InFlightTransactionStateGeneration interface {
 	GetID(ctx context.Context) int
 	Cancel(ctx context.Context)
 	IsCancelled(ctx context.Context) bool
