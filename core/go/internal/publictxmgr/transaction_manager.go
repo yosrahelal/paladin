@@ -663,27 +663,26 @@ func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, id uuid.UUID, pu
 		FixedGasPricing: tktypes.JSONString(tx.PublicTxOptions.PublicTxGasPricing),
 	}
 
+	ptm.updateMux.Lock()
+	defer ptm.updateMux.Unlock()
+
 	err = ptm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		err := txmgrDBUpdate(dbTX)
 		if err == nil {
 			err = ptm.writeUpdatedTransaction(ctx, dbTX, pubTXID, *from, newPtx)
 		}
-		if err == nil {
-			// calling a function that takes a lock in a DB transaction is generally not ideal, but we want to make sure that if
-			// multiple concurrent updates come in for the same transaction that they are processed in the
-			// same order that they are persisted to the DB. This lock is only ever taken to write a single
-			// element to the updates array so it should not result in the DB transaction being held open for too long
-			ptm.dispatchUpdate(ctx, &transactionUpdate{
-				pubTXID: pubTXID,
-				from:    from,
-				newPtx:  newPtx,
-			})
-		}
 		return err
 	})
 
-	return err
+	if err == nil {
+		ptm.dispatchUpdate(&transactionUpdate{
+			pubTXID: pubTXID,
+			from:    from,
+			newPtx:  newPtx,
+		})
+	}
 
+	return err
 }
 
 func (ptm *pubTxManager) UpdateSubStatus(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {

@@ -104,14 +104,13 @@ func (oc *orchestrator) dispatchAction(ctx context.Context, nonce uint64, action
 	return err
 }
 
-func (ptm *pubTxManager) dispatchUpdate(ctx context.Context, update *transactionUpdate) {
-	ptm.updateMux.Lock()
-	defer ptm.updateMux.Unlock()
+func (ptm *pubTxManager) dispatchUpdate(update *transactionUpdate) {
+	// updateMux must be locked by the called
 	ptm.updates = append(ptm.updates, update)
 	ptm.MarkInFlightOrchestratorsStale()
 }
 
-func (oc *orchestrator) dispatchUpdate(ctx context.Context, update *transactionUpdate) {
+func (oc *orchestrator) dispatchUpdate(update *transactionUpdate) {
 	oc.updateMux.Lock()
 	defer oc.updateMux.Unlock()
 	oc.updates = append(oc.updates, update)
