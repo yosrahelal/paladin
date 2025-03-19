@@ -29,8 +29,6 @@ import (
 )
 
 type inFlightTransactionStateGeneration struct {
-	index int
-
 	current             bool
 	testOnlyNoEventMode bool
 
@@ -70,7 +68,6 @@ type inFlightTransactionStateGeneration struct {
 }
 
 func NewInFlightTransactionStateGeneration(
-	id int,
 	thm PublicTxManagerMetricsManager,
 	bm BalanceManager,
 	ifsat InFlightStageActionTriggers,
@@ -79,7 +76,6 @@ func NewInFlightTransactionStateGeneration(
 	submissionWriter *submissionWriter,
 	noEventMode bool) InFlightTransactionStateGeneration {
 	return &inFlightTransactionStateGeneration{
-		index:                         id,
 		current:                       true,
 		bufferedStageOutputs:          make([]*StageOutput, 0),
 		cancel:                        make(chan bool, 1),
@@ -93,10 +89,6 @@ func NewInFlightTransactionStateGeneration(
 	}
 }
 
-func (v *inFlightTransactionStateGeneration) GetID(ctx context.Context) int {
-	return v.index
-}
-
 func (v *inFlightTransactionStateGeneration) Cancel(ctx context.Context) {
 	select {
 	case v.cancel <- true:
@@ -104,8 +96,8 @@ func (v *inFlightTransactionStateGeneration) Cancel(ctx context.Context) {
 	}
 }
 
-// IsCancelled is intended to be used by async actions to check if there is a now a new version and they should stop work.
-// There should only ever be 1 async action running at a time for a given version
+// IsCancelled is intended to be used by async actions to check if there is a now a new generation and they should stop work.
+// There should only ever be 1 async action running at a time for a given generation
 func (v *inFlightTransactionStateGeneration) IsCancelled(ctx context.Context) bool {
 	select {
 	case <-v.cancel:
@@ -171,10 +163,10 @@ func (v *inFlightTransactionStateGeneration) StartNewStageContext(ctx context.Co
 	switch stage {
 	case InFlightTxStageRetrieveGasPrice:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering retrieve gas price", rsc.InMemoryTx.GetSignerNonce())
-		v.stageTriggerError = v.TriggerRetrieveGasPrice(ctx, v.GetID(ctx))
+		v.stageTriggerError = v.TriggerRetrieveGasPrice(ctx)
 	case InFlightTxStageSigning:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering sign tx", rsc.InMemoryTx.GetSignerNonce())
-		v.stageTriggerError = v.TriggerSignTx(ctx, v.GetID(ctx))
+		v.stageTriggerError = v.TriggerSignTx(ctx)
 	case InFlightTxStageSubmitting:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering submission, signed message not nil: %t", rsc.InMemoryTx.GetSignerNonce(), v.TransientPreviousStageOutputs != nil && v.TransientPreviousStageOutputs.SignedMessage != nil)
 		var signedMessage []byte
@@ -183,10 +175,10 @@ func (v *inFlightTransactionStateGeneration) StartNewStageContext(ctx context.Co
 			signedMessage = v.TransientPreviousStageOutputs.SignedMessage
 			calculatedTxHash = v.TransientPreviousStageOutputs.TransactionHash
 		}
-		v.stageTriggerError = v.TriggerSubmitTx(ctx, v.GetID(ctx), signedMessage, calculatedTxHash)
+		v.stageTriggerError = v.TriggerSubmitTx(ctx, signedMessage, calculatedTxHash)
 	case InFlightTxStageStatusUpdate:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering status update", rsc.InMemoryTx.GetSignerNonce())
-		v.stageTriggerError = v.TriggerStatusUpdate(ctx, v.GetID(ctx))
+		v.stageTriggerError = v.TriggerStatusUpdate(ctx)
 	default:
 		log.L(ctx).Tracef("Transaction with ID %s, didn't trigger any action for new stage: %s", rsc.InMemoryTx.GetSignerNonce(), stage)
 	}

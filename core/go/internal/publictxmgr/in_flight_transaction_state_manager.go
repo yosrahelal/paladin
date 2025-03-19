@@ -60,7 +60,6 @@ func (iftxs *inFlightTransactionState) NewGeneration(ctx context.Context) {
 	iftxs.generations[len(iftxs.generations)-1].SetCurrent(ctx, false)
 	iftxs.generations[len(iftxs.generations)-1].Cancel(ctx)
 	iftxs.generations = append(iftxs.generations, NewInFlightTransactionStateGeneration(
-		len(iftxs.generations),
 		iftxs.PublicTxManagerMetricsManager,
 		iftxs.BalanceManager,
 		iftxs.InFlightStageActionTriggers,
@@ -109,7 +108,7 @@ func NewInFlightTransactionStateManager(thm PublicTxManagerMetricsManager,
 		PublicTxManagerMetricsManager: thm,
 		BalanceManager:                bm,
 		generations: []InFlightTransactionStateGeneration{
-			NewInFlightTransactionStateGeneration(0, thm, bm, ifsat, imtxs, statusUpdater, submissionWriter, noEventMode),
+			NewInFlightTransactionStateGeneration(thm, bm, ifsat, imtxs, statusUpdater, submissionWriter, noEventMode),
 		},
 		InMemoryTxStateManager:      imtxs,
 		InFlightStageActionTriggers: ifsat,

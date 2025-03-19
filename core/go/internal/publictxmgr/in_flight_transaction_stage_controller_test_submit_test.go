@@ -451,7 +451,7 @@ func TestProduceLatestInFlightStageContextTriggerSubmit(t *testing.T) {
 		sendRawTransactionMock.Return(nil, fmt.Errorf("pop"))
 		close(called)
 	}).Once()
-	err := it.TriggerSubmitTx(ctx, 0, nil, confutil.P(tktypes.Bytes32Keccak([]byte("0x000001"))))
+	err := it.TriggerSubmitTx(ctx, nil, confutil.P(tktypes.Bytes32Keccak([]byte("0x000001"))))
 	require.NoError(t, err)
 	<-called
 	currentGeneration := it.stateManager.GetCurrentGeneration(ctx).(*inFlightTransactionStateGeneration)

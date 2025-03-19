@@ -234,6 +234,18 @@ func TestUpdatePublicTransaction(t *testing.T) {
 	require.Len(t, tx.Public, 1)
 	assert.Equal(t, tx.Public[0].Submissions[0].TransactionHash.HexString(), setReceipt.TransactionHash.HexString())
 	assert.Len(t, tx.History, 2)
+
+	// try to update the transaction again- it should fail now it is complete
+	_, err = c.PTX().UpdateTransaction(ctx, *setRes.ID(), &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			From:         "key1",
+			Function:     "set",
+			Data:         tktypes.RawJSON(`{"_x":99887765}`),
+			To:           contractAddr,
+			ABIReference: tx.ABIReference,
+		},
+	})
+	assert.ErrorContains(t, err, "PD011937")
 }
 
 func TestPrivateTransactionsDeployAndExecute(t *testing.T) {

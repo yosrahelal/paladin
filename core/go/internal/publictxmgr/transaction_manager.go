@@ -472,7 +472,7 @@ func (ptm *pubTxManager) CheckTransactionCompleted(ctx context.Context, pubTxnID
 	err := ptm.p.DB().
 		WithContext(ctx).
 		Table("public_txns").
-		Where(`"pub_txn_id" = ?`, pubTxnID).
+		Where(`"public_txns"."pub_txn_id" = ?`, pubTxnID).
 		Joins("Completed").
 		Select(`"Completed"."tx_hash"`).
 		Limit(1).
@@ -622,12 +622,16 @@ func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, id uuid.UUID, pu
 		return err
 	}
 	if len(ptxs) == 0 {
-		log.L(ctx).Warnf("UpdateTransaction: Public transaction local if not found: %d (%+v)", pubTXID, id)
+		log.L(ctx).Warnf("UpdateTransaction: Public transaction local id not found: %d (%+v)", pubTXID, id)
 		return i18n.NewError(ctx, msgs.MsgPublicTransactionNotFound, id)
 	}
 
 	// error if the transaction is already completed
-	if ptxs[0].Completed != nil {
+	complete, err := ptm.CheckTransactionCompleted(ctx, pubTXID)
+	if err != nil {
+		return err
+	}
+	if complete {
 		log.L(ctx).Warnf("UpdateTransaction: Public transaction already completed: %d (%+v)", pubTXID, id)
 		return i18n.NewError(ctx, msgs.MsgTransactionAlreadyComplete, id)
 	}
@@ -668,8 +672,7 @@ func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, id uuid.UUID, pu
 			// calling a function that takes a lock in a DB transaction is generally not ideal, but we want to make sure that if
 			// multiple concurrent updates come in for the same transaction that they are processed in the
 			// same order that they are persisted to the DB. This lock is only ever taken to write a single
-			// element to the updates array, or to clear it to nil so it should not result in the DB transaction
-			// being held open for too long
+			// element to the updates array so it should not result in the DB transaction being held open for too long
 			ptm.dispatchUpdate(ctx, &transactionUpdate{
 				pubTXID: pubTXID,
 				from:    from,

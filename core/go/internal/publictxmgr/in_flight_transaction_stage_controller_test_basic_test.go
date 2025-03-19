@@ -113,7 +113,7 @@ func TestProduceLatestInFlightStageContextTriggerStatusUpdate(t *testing.T) {
 	it.testOnlyNoEventMode = false
 	// trigger signing
 	assert.Nil(t, it.stateManager.GetCurrentGeneration(ctx).GetRunningStageContext(ctx))
-	err := it.TriggerStatusUpdate(ctx, 0)
+	err := it.TriggerStatusUpdate(ctx)
 	require.NoError(t, err)
 	currentGeneration := it.stateManager.GetCurrentGeneration(ctx).(*inFlightTransactionStateGeneration)
 	for len(currentGeneration.bufferedStageOutputs) == 0 {

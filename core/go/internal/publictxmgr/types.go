@@ -326,10 +326,10 @@ type PersistenceOutput struct {
 }
 
 type InFlightStageActionTriggers interface {
-	TriggerRetrieveGasPrice(ctx context.Context, generation int) error
-	TriggerSignTx(ctx context.Context, generation int) error
-	TriggerSubmitTx(ctx context.Context, generation int, signedMessage []byte, calculatedTxHash *tktypes.Bytes32) error
-	TriggerStatusUpdate(ctx context.Context, generation int) error
+	TriggerRetrieveGasPrice(ctx context.Context) error
+	TriggerSignTx(ctx context.Context) error
+	TriggerSubmitTx(ctx context.Context, signedMessage []byte, calculatedTxHash *tktypes.Bytes32) error
+	TriggerStatusUpdate(ctx context.Context) error
 }
 
 // RunningStageContext is the context for an individual run of the transaction process
@@ -416,7 +416,6 @@ type InFlightTransactionStateManager interface {
 }
 
 type InFlightTransactionStateGeneration interface {
-	GetID(ctx context.Context) int
 	Cancel(ctx context.Context)
 	IsCancelled(ctx context.Context) bool
 	SetCurrent(ctx context.Context, current bool)

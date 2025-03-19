@@ -40,7 +40,7 @@ func newTestInFlightTransactionStateVersion(t *testing.T) (*testInFlightTransact
 	mockInMemoryState := NewTestInMemoryTxState(t)
 	mockActionTriggers := publictxmocks.NewInFlightStageActionTriggers(t)
 
-	v := NewInFlightTransactionStateGeneration(0, &publicTxEngineMetrics{}, balanceManager, mockActionTriggers, mockInMemoryState, ptm, ptm.submissionWriter, false)
+	v := NewInFlightTransactionStateGeneration(&publicTxEngineMetrics{}, balanceManager, mockActionTriggers, mockInMemoryState, ptm, ptm.submissionWriter, false)
 	return &testInFlightTransactionStateVersionWithMocks{
 		v,
 		mockActionTriggers,
@@ -73,24 +73,24 @@ func TestStateVersionTransactionFromRetrieveGasPriceToTracking(t *testing.T) {
 	mockActionTriggers := testStateVersionWithMocks.mAT
 	defer mockActionTriggers.AssertExpectations(t)
 	// retrieve gas price errored
-	mockActionTriggers.On("TriggerRetrieveGasPrice", mock.Anything, 0).Return(fmt.Errorf("gasPriceError")).Once()
+	mockActionTriggers.On("TriggerRetrieveGasPrice", mock.Anything).Return(fmt.Errorf("gasPriceError")).Once()
 	version.StartNewStageContext(ctx, InFlightTxStageRetrieveGasPrice, BaseTxSubStatusReceived)
 	assert.Regexp(t, "gasPriceError", version.GetStageTriggerError(ctx))
 	// retrieve gas price success
-	mockActionTriggers.On("TriggerRetrieveGasPrice", mock.Anything, 0).Return(nil).Once()
+	mockActionTriggers.On("TriggerRetrieveGasPrice", mock.Anything).Return(nil).Once()
 	version.StartNewStageContext(ctx, InFlightTxStageRetrieveGasPrice, BaseTxSubStatusReceived)
 	assert.Nil(t, version.GetStageTriggerError(ctx))
 
 	var nilBytes []byte
 	var nilHash *tktypes.Bytes32
 	// scenario A: no signer configured, do submission
-	mockActionTriggers.On("TriggerSubmitTx", mock.Anything, 0, nilBytes, nilHash).Return(nil).Once()
+	mockActionTriggers.On("TriggerSubmitTx", mock.Anything, nilBytes, nilHash).Return(nil).Once()
 
 	version.StartNewStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived)
 	assert.Nil(t, version.GetStageTriggerError(ctx))
 
 	// scenario B: signer configured sign the data
-	mockActionTriggers.On("TriggerSignTx", mock.Anything, 0, mock.Anything, mock.Anything).Return(nil).Once()
+	mockActionTriggers.On("TriggerSignTx", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	version.StartNewStageContext(ctx, InFlightTxStageSigning, BaseTxSubStatusReceived)
 	assert.Nil(t, version.GetStageTriggerError(ctx))
 	// persist the signed data as transient output
@@ -101,7 +101,7 @@ func TestStateVersionTransactionFromRetrieveGasPriceToTracking(t *testing.T) {
 		TransactionHash: testHash,
 	})
 	// do the submission
-	mockActionTriggers.On("TriggerSubmitTx", mock.Anything, 0, testSignedData, testHash).Return(nil)
+	mockActionTriggers.On("TriggerSubmitTx", mock.Anything, testSignedData, testHash).Return(nil)
 	version.StartNewStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived)
 	assert.Nil(t, version.GetStageTriggerError(ctx))
 
