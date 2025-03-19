@@ -534,13 +534,9 @@ func (r *BesuReconciler) createPDB(ctx context.Context, node *corev1alpha1.Besu,
 		setCondition(&node.Status.Conditions, corev1alpha1.ConditionPDB, metav1.ConditionTrue, corev1alpha1.ReasonPDBCreated, fmt.Sprintf("Name: %s", name))
 		log.FromContext(ctx).Info("Created Besu pod disruption budget", "Name", name)
 	} else if err != nil {
-  	  return nil, err
+		return nil, err
 	}
 
-	if err := r.Create(ctx, pdb); err != nil {
-		return pdb, err
-	}
-	setCondition(&node.Status.Conditions, corev1alpha1.ConditionPDB, metav1.ConditionTrue, corev1alpha1.ReasonPDBCreated, fmt.Sprintf("Name: %s", name))
 	return pdb, nil
 }
 

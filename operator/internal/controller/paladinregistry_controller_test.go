@@ -165,7 +165,7 @@ func TestPaladinRegistryReconcile_WithContractAddress(t *testing.T) {
 	// Run the reconcile function
 	result, err := reconciler.Reconcile(ctx, req)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated registry
 	updatedReg := &corev1alpha1.PaladinRegistry{}
@@ -215,7 +215,7 @@ func TestPaladinRegistryReconcile_WithSmartContractDeployment(t *testing.T) {
 	// First reconcile: status should be set to Pending
 	result, err := reconciler.Reconcile(ctx, req)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated registry
 	updatedReg := &corev1alpha1.PaladinRegistry{}
@@ -226,7 +226,7 @@ func TestPaladinRegistryReconcile_WithSmartContractDeployment(t *testing.T) {
 	// Second reconcile: should update status to Available
 	result, err = reconciler.Reconcile(ctx, req)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated registry
 	err = reconciler.Get(ctx, req.NamespacedName, updatedReg)
@@ -379,7 +379,7 @@ func TestPaladinRegistryTrackContractDeploymentAndRequeue_SuccessfulDeployment(t
 
 	result, err := reconciler.trackContractDeploymentAndRequeue(ctx, reg)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated registry
 	updatedReg := &corev1alpha1.PaladinRegistry{}
@@ -468,7 +468,7 @@ func TestUpdatePaladinRegistryStatusAndRequeue(t *testing.T) {
 	reg.Status.ContractAddress = "0xabcdef1234567890"
 	result, err := reconciler.updateStatusAndRequeue(ctx, reg)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated registry
 	updatedReg := &corev1alpha1.PaladinRegistry{}
@@ -554,7 +554,7 @@ func TestPaladinRegistryTrackContractDeploymentAndRequeueSuccessfulDeployment(t 
 
 	result, err := reconciler.trackContractDeploymentAndRequeue(ctx, reg)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated registry
 	updatedReg := &corev1alpha1.PaladinRegistry{}

@@ -147,7 +147,7 @@ func TestPaladinDomainReconcile_NewResource(t *testing.T) {
 
 	result, err := r.Reconcile(ctx, req)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated domain
 	updatedDomain := &corev1alpha1.PaladinDomain{}
@@ -190,7 +190,7 @@ func TestPaladinDomainReconcile_WithRegistryAddress(t *testing.T) {
 	// First reconcile: set status to Pending
 	result, err := r.Reconcile(ctx, req)
 	require.NoError(t, err)
-	require.Equal(t, ctrl.Result{Requeue: true}, result)
+	require.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated domain
 	updatedDomain := &corev1alpha1.PaladinDomain{}
@@ -201,7 +201,7 @@ func TestPaladinDomainReconcile_WithRegistryAddress(t *testing.T) {
 	// Second reconcile: set status to Available
 	result, err = r.Reconcile(ctx, req)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated domain
 	err = r.Get(ctx, req.NamespacedName, updatedDomain)
@@ -229,7 +229,7 @@ func TestUpdateStatusAndRequeue(t *testing.T) {
 	domain.Status.Status = corev1alpha1.DomainStatusAvailable
 	result, err := r.updateStatusAndRequeue(ctx, domain)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated domain
 	updatedDomain := &corev1alpha1.PaladinDomain{}
@@ -317,7 +317,7 @@ func TestTrackContractDeploymentAndRequeue_SuccessfulDeployment(t *testing.T) {
 
 	result, err := r.trackContractDeploymentAndRequeue(ctx, domain)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated domain
 	updatedDomain := &corev1alpha1.PaladinDomain{}
@@ -359,10 +359,10 @@ func TestPaladinDomainReconcile_MissingFields(t *testing.T) {
 	// First reconcile: set status to Pending
 	result, err := r.Reconcile(ctx, req)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Second reconcile: should return error due to missing fields
-	result, err = r.Reconcile(ctx, req)
+	_, err = r.Reconcile(ctx, req)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "missing registryAddress or smartContractDeployment")
 }

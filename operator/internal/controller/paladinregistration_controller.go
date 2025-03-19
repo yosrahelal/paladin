@@ -151,23 +151,23 @@ func (r *PaladinRegistrationReconciler) Reconcile(ctx context.Context, req ctrl.
 			// log.Info(err, "Failed to reconcile transport transaction", "transport", transportName)
 			requeueAfter = 100 * time.Millisecond // retry
 			continue
-		} else if regTx.statusChanged {
+		} else if regTx.isStatusChanged() {
 			reg.Status.PublishTxs[transportName] = transportPublishStatus
 			if transportPublishStatus.TransactionStatus == corev1alpha1.TransactionStatusSuccess {
 				log.Info("Transaction succeeded", "transport", transportName)
 				publishCount++
 			}
 			changed = true
-		} else if regTx.failed {
+		} else if regTx.isFailed() {
 			// what if one transaction failed and the other succeeded?
 			// continue to try the other transactions
 			log.Error(fmt.Errorf("transaction failed"), "transport", transportName)
 			// if transaction failed do not requeue
 			continue
-		} else if !regTx.succeeded {
+		} else if !regTx.isSucceeded() {
 			// wait before requeueing
 			requeueAfter = 5 * time.Second
-		} else if regTx.succeeded {
+		} else if regTx.isSucceeded() {
 			log.Info("Transaction succeeded", "transport", transportName)
 		}
 	}

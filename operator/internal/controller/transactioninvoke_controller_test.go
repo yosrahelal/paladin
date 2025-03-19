@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -160,7 +161,7 @@ func TestTransactionInvokeReconcile_Success(t *testing.T) {
 	}
 
 	// Mock transaction reconcile
-	reconciler.newTransactionReconcileFunc = func(_ client.Client, _ string, _ string, _ string, pStatus *corev1alpha1.TransactionSubmission, txFactory func() (bool, *pldapi.TransactionInput, error)) transactionReconcileInterface {
+	reconciler.newTransactionReconcileFunc = func(c client.Client, idempotencyKeyPrefix string, nodeName string, namespace string, pStatus *corev1alpha1.TransactionSubmission, timeout string, txFactory func() (bool, *pldapi.TransactionInput, error)) transactionReconcileInterface {
 		return &mockTransactionReconcile{
 			pStatus:           pStatus,
 			statusChangedFlag: true,
@@ -178,7 +179,7 @@ func TestTransactionInvokeReconcile_Success(t *testing.T) {
 
 	result, err := reconciler.Reconcile(ctx, req)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated TransactionInvoke
 	updatedTxi := &corev1alpha1.TransactionInvoke{}

@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewInFlight(t *testing.T) {
-	inflight := NewInFlight()
+	inflight := NewInFlight(30 * time.Second)
 	require.NotNil(t, inflight)
 	require.NotNil(t, inflight.mux)
 	require.NotNil(t, inflight.inFlight)
@@ -18,7 +18,7 @@ func TestNewInFlight(t *testing.T) {
 }
 
 func TestInFlight_Insert(t *testing.T) {
-	inflight := NewInFlight()
+	inflight := NewInFlight(1 * time.Second)
 	key := "testKey"
 
 	// Insert a new key
@@ -31,7 +31,7 @@ func TestInFlight_Insert(t *testing.T) {
 }
 
 func TestInFlight_IsQueued(t *testing.T) {
-	inflight := NewInFlight()
+	inflight := NewInFlight(1 * time.Second)
 	key := "testKey"
 
 	// Key should not be queued initially
@@ -47,7 +47,7 @@ func TestInFlight_IsQueued(t *testing.T) {
 }
 
 func TestInFlight_IsReady(t *testing.T) {
-	inflight := NewInFlight()
+	inflight := NewInFlight(1 * time.Second)
 	key := "testKey"
 	inflight.changeWaitDuration = 1 * time.Second
 
@@ -78,7 +78,7 @@ func TestInFlight_IsReady(t *testing.T) {
 }
 
 func TestInFlight_Delete(t *testing.T) {
-	inflight := NewInFlight()
+	inflight := NewInFlight(1 * time.Second)
 	key := "testKey"
 
 	// Insert the key
@@ -97,7 +97,7 @@ func TestInFlight_Delete(t *testing.T) {
 }
 
 func TestInFlight_Delete_NonExistentKey(t *testing.T) {
-	inflight := NewInFlight()
+	inflight := NewInFlight(1 * time.Second)
 	key := "nonExistentKey"
 
 	// Delete a non-existent key (should not cause panic)
@@ -109,7 +109,7 @@ func TestInFlight_Delete_NonExistentKey(t *testing.T) {
 }
 
 func TestInFlight_ConcurrentAccess(t *testing.T) {
-	inflight := NewInFlight()
+	inflight := NewInFlight(1 * time.Second)
 	key := "testKey"
 	var wg sync.WaitGroup
 
@@ -159,7 +159,7 @@ func TestInFlight_ConcurrentAccess(t *testing.T) {
 }
 
 func TestInFlight_InsertMultipleKeys(t *testing.T) {
-	inflight := NewInFlight()
+	inflight := NewInFlight(1 * time.Second)
 	keys := []string{"key1", "key2", "key3"}
 	inflight.changeWaitDuration = 1 * time.Second
 
@@ -186,7 +186,7 @@ func TestInFlight_InsertMultipleKeys(t *testing.T) {
 }
 
 func TestInFlight_IsReady_NoEntries(t *testing.T) {
-	inflight := NewInFlight()
+	inflight := NewInFlight(1 * time.Second)
 	key := "nonExistentKey"
 
 	// IsReady should return false for a key that was never inserted
@@ -195,7 +195,7 @@ func TestInFlight_IsReady_NoEntries(t *testing.T) {
 }
 
 func TestInFlight_IsQueued_NoEntries(t *testing.T) {
-	inflight := NewInFlight()
+	inflight := NewInFlight(1 * time.Second)
 	key := "nonExistentKey"
 
 	// IsQueued should return false for a key that was never inserted

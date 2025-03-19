@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -151,7 +152,7 @@ func TestSmartContractDeploymentReconcile_Success(t *testing.T) {
 	}
 
 	// Mock transaction reconcile
-	reconciler.newTransactionReconcileFunc = func(_ client.Client, _ string, _ string, _ string, pStatus *corev1alpha1.TransactionSubmission, _ func() (bool, *pldapi.TransactionInput, error)) transactionReconcileInterface {
+	reconciler.newTransactionReconcileFunc = func(c client.Client, idempotencyKeyPrefix string, nodeName string, namespace string, pStatus *corev1alpha1.TransactionSubmission, timeout string, txFactory func() (bool, *pldapi.TransactionInput, error)) transactionReconcileInterface {
 		return &mockTransactionReconcile{
 			pStatus:           pStatus,
 			statusChangedFlag: true,
@@ -174,7 +175,7 @@ func TestSmartContractDeploymentReconcile_Success(t *testing.T) {
 
 	result, err := reconciler.Reconcile(ctx, req)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated SmartContractDeployment
 	updatedScd := &corev1alpha1.SmartContractDeployment{}
@@ -206,7 +207,7 @@ func TestSmartcontractDeploymentUpdateStatusAndRequeue(t *testing.T) {
 	scd.Status.ContractAddress = "0xabcdef1234567890"
 	result, err := reconciler.updateStatusAndRequeue(ctx, scd)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated SmartContractDeployment
 	updatedScd := &corev1alpha1.SmartContractDeployment{}

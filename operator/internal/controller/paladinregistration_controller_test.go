@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -203,7 +204,7 @@ func TestUpdateRegistrationStatusAndRequeue(t *testing.T) {
 	reg.Status.PublishCount = 2
 	result, err := reconciler.updateStatusAndRequeue(ctx, reg, reg.Status.PublishCount)
 	require.NoError(t, err)
-	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	assert.Equal(t, ctrl.Result{Requeue: false, RequeueAfter: 50 * time.Millisecond}, result)
 
 	// Fetch the updated registration
 	updatedReg := &corev1alpha1.PaladinRegistration{}

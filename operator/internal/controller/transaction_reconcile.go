@@ -59,7 +59,7 @@ type transactionReconcile struct {
 	statusChanged        bool
 	succeeded            bool
 	failed               bool
-	getPaladinRPCFunc    func(ctx context.Context, c client.Client, nodeName, namespace string) (pldclient.PaladinClient, error)
+	getPaladinRPCFunc    func(ctx context.Context, c client.Client, nodeName string, namespace string, timeout string) (pldclient.PaladinClient, error)
 	timeout              string
 }
 

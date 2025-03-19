@@ -48,7 +48,7 @@ type TransactionInvokeReconciler struct {
 
 	// Injected dependencies for testing
 	checkDepsFunc               func(ctx context.Context, c client.Client, namespace string, requiredContractDeployments []string, pStatus *corev1alpha1.ContactDependenciesStatus) (bool, bool, error)
-	newTransactionReconcileFunc func(client.Client, string, string, string, *corev1alpha1.TransactionSubmission, func() (bool, *pldapi.TransactionInput, error)) transactionReconcileInterface
+	newTransactionReconcileFunc func(c client.Client, idempotencyKeyPrefix string, nodeName string, namespace string, pStatus *corev1alpha1.TransactionSubmission, timeout string, txFactory func() (bool, *pldapi.TransactionInput, error)) transactionReconcileInterface
 }
 
 // allows generic functions by giving a mapping between the types and interfaces for the CR

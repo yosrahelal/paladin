@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -412,7 +413,7 @@ func setupTestReconciler(objs ...client.Object) (*PaladinReconciler, client.Clie
 		Client:  client,
 		Scheme:  scheme,
 		config:  cfg,
-		Changes: NewInFlight(),
+		Changes: NewInFlight(1 * time.Second),
 	}
 
 	return reconciler, client, nil

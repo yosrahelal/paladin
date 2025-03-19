@@ -15,6 +15,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -69,6 +70,11 @@ func (m *mockTransactionReconcile) getReceipt() *pldapi.TransactionReceipt {
 func setupTestTransactionReconcile(objs ...runtime.Object) (*transactionReconcile, client.Client, error) {
 	scheme := runtime.NewScheme()
 	err := corev1.AddToScheme(scheme)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = appsv1.AddToScheme(scheme)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -147,7 +153,7 @@ func TestTransactionReconcile_PaladinNodeNotReady(t *testing.T) {
 	err = fakeClient.Create(context.Background(), paladin)
 	require.NoError(t, err)
 
-	tr.getPaladinRPCFunc = func(ctx context.Context, c client.Client, nodeName, namespace string) (pldclient.PaladinClient, error) {
+	tr.getPaladinRPCFunc = func(ctx context.Context, c client.Client, nodeName string, namespace string, timeout string) (pldclient.PaladinClient, error) {
 		return nil, nil // Node not ready
 	}
 
@@ -388,7 +394,7 @@ func TestGetPaladinRPC_NodeNotFound(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().Build()
 	ctx := context.Background()
 
-	paladinRPC, err := getPaladinRPC(ctx, fakeClient, "non-existent-node", "default")
+	paladinRPC, err := getPaladinRPC(ctx, fakeClient, "non-existent-node", "default", "1s")
 	require.NoError(t, err)
 	assert.Nil(t, paladinRPC)
 }
@@ -406,7 +412,7 @@ func TestGetPaladinRPC_NodeNotReady(t *testing.T) {
 
 	ctx := context.Background()
 
-	paladinRPC, err := getPaladinRPC(ctx, fakeClient, "test-node", "default")
+	paladinRPC, err := getPaladinRPC(ctx, fakeClient, "test-node", "default", "1s")
 	require.NoError(t, err)
 	assert.Nil(t, paladinRPC)
 }
@@ -421,8 +427,18 @@ func TestGetPaladinRPC_Success(t *testing.T) {
 			Phase: corev1alpha1.StatusPhaseReady,
 		},
 	}
+	sfs := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "paladin-test-node",
+			Namespace: "default",
+		},
+		Status: appsv1.StatefulSetStatus{
+			ReadyReplicas: 1,
+			Replicas:      1,
+		},
+	}
 
-	_, fakeClient, _ := setupTestTransactionReconcile(paladin)
+	_, fakeClient, _ := setupTestTransactionReconcile(paladin, sfs)
 	ctx := context.Background()
 
 	// Mock getPaladinURLEndpointFunc
@@ -433,9 +449,9 @@ func TestGetPaladinRPC_Success(t *testing.T) {
 		getPaladinURLEndpointFunc = getPaladinURLEndpoint // Reset after test
 	}()
 
-	paladinClient, err := getPaladinRPC(ctx, fakeClient, "test-node", "default")
+	paladinClient, err := getPaladinRPC(ctx, fakeClient, "test-node", "default", "1s")
 	require.NoError(t, err)
-	require.NotNil(t, paladinClient)
+	assert.NotNil(t, paladinClient)
 }
 
 type mockRPCClient struct {

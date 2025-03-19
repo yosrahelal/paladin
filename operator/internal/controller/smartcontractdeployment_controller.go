@@ -45,7 +45,7 @@ type SmartContractDeploymentReconciler struct {
 	Scheme *runtime.Scheme
 
 	checkDepsFunc               func(ctx context.Context, c client.Client, namespace string, requiredContractDeployments []string, pStatus *corev1alpha1.ContactDependenciesStatus) (bool, bool, error)
-	newTransactionReconcileFunc func(client.Client, string, string, string, *corev1alpha1.TransactionSubmission, func() (bool, *pldapi.TransactionInput, error)) transactionReconcileInterface
+	newTransactionReconcileFunc func(c client.Client, idempotencyKeyPrefix string, nodeName string, namespace string, pStatus *corev1alpha1.TransactionSubmission, timeout string, txFactory func() (bool, *pldapi.TransactionInput, error)) transactionReconcileInterface
 }
 
 func NewSmartContractDeploymentReconciler(c client.Client, scheme *runtime.Scheme) *SmartContractDeploymentReconciler {
