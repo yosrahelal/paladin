@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 )
 
 type Transport interface {
@@ -29,6 +30,8 @@ type Transport interface {
 	LocalTransportDetails(ctx context.Context, transportName string) (transportDetailsStr string, err error)
 	Peers(ctx context.Context) (peers []*pldapi.PeerInfo, err error)
 	PeerInfo(ctx context.Context, nodeName string) (peer *pldapi.PeerInfo, err error)
+	QueryReliableMessages(ctx context.Context, query *query.QueryJSON) (reliableMessages []*pldapi.ReliableMessage, err error)
+	QueryReliableMessageAcks(ctx context.Context, query *query.QueryJSON) (reliableMessageAcks []*pldapi.ReliableMessageAck, err error)
 }
 
 // This is necessary because there's no way to introspect function parameter names via reflection
@@ -54,6 +57,14 @@ var transportInfo = &rpcModuleInfo{
 		"transport_peerInfo": {
 			Inputs: []string{"nodeName"},
 			Output: "peer",
+		},
+		"transport_queryReliableMessages": {
+			Inputs: []string{"query"},
+			Output: "reliableMessages",
+		},
+		"transport_queryReliableMessageAcks": {
+			Inputs: []string{"query"},
+			Output: "reliableMessageAcks",
 		},
 	},
 }
@@ -91,5 +102,15 @@ func (t *transport) Peers(ctx context.Context) (peers []*pldapi.PeerInfo, err er
 
 func (t *transport) PeerInfo(ctx context.Context, nodeName string) (peer *pldapi.PeerInfo, err error) {
 	err = t.c.CallRPC(ctx, &peer, "transport_peerInfo", nodeName)
+	return
+}
+
+func (t *transport) QueryReliableMessages(ctx context.Context, query *query.QueryJSON) (reliableMessages []*pldapi.ReliableMessage, err error) {
+	err = t.c.CallRPC(ctx, &reliableMessages, "transport_queryReliableMessages", query)
+	return
+}
+
+func (t *transport) QueryReliableMessageAcks(ctx context.Context, query *query.QueryJSON) (reliableMessageAcks []*pldapi.ReliableMessageAck, err error) {
+	err = t.c.CallRPC(ctx, &reliableMessageAcks, "transport_queryReliableMessageAcks", query)
 	return
 }

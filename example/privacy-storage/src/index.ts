@@ -1,10 +1,9 @@
 import PaladinClient, {
-  PenteFactory,
-  newGroupSalt,
+  PenteFactory
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import storageJson from "./abis/Storage.json";
-import { checkDeploy } from "./util";
 import { PrivateStorage } from "./helpers/storage";
+import { checkDeploy } from "./util";
 
 const logger = console;
 
@@ -22,13 +21,9 @@ async function main(): Promise<boolean> {
   // Step 1: Create a privacy group for members
   logger.log("Creating a privacy group for Node1 and Node2...");
   const penteFactory = new PenteFactory(paladinNode1, "pente");
-  const memberPrivacyGroup = await penteFactory.newPrivacyGroup(verifierNode1, {
-    group: {
-      salt: newGroupSalt(),
-      members: [verifierNode1, verifierNode2],
-    },
+  const memberPrivacyGroup = await penteFactory.newPrivacyGroup({
+    members: [verifierNode1, verifierNode2],
     evmVersion: "shanghai",
-    endorsementType: "group_scoped_identities",
     externalCallsEnabled: true,
   });
 

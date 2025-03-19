@@ -117,8 +117,9 @@ nav:
   - Tutorials:
     - Introduction: tutorials/index.md
     - Hello World: tutorials/hello-world.md
-    - Public Storage: tutorials/public-storage.md
-    - Private Storage: tutorials/private-storage.md
+    - Public Smart Contract: tutorials/public-storage.md
+    - Private Smart Contract: tutorials/private-storage.md
+    - Notarized Tokens: tutorials/notarized-tokens.md
     - Bond Issuance: tutorials/bond-issuance.md
     - Wholesale CBDC: tutorials/zkp-cbdc.md
   - Reference:

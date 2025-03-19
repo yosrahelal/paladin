@@ -60,7 +60,7 @@ export const Nodes: React.FC = () => {
       <Fade timeout={600} in={true}>
         <Box
           sx={{
-            padding: "30px",
+            padding: "20px",
             maxWidth: "1300px",
             marginLeft: "auto",
             marginRight: "auto",

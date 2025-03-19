@@ -1,6 +1,6 @@
+import { BigNumberish, ethers } from "ethers";
 import { NotoUnlockPublicParams } from "../domains/noto";
 import { IStateBase } from "./states";
-import { ethers } from "ethers";
 
 export interface IBlock {
   number: number;
@@ -11,6 +11,14 @@ export interface IBlock {
 export enum TransactionType {
   PUBLIC = "public",
   PRIVATE = "private",
+}
+
+export interface PublicTxOptions {
+  gas?: BigNumberish;
+  value?: BigNumberish;
+  maxPriorityFeePerGas?: BigNumberish;
+  maxFeePerGas?: BigNumberish;
+  gasPrice?: BigNumberish;
 }
 
 export interface ITransactionBase {
@@ -57,6 +65,7 @@ export interface ITransactionCall extends ITransactionInput {}
 export interface ITransactionReceipt {
   blockNumber: number;
   id: string;
+  sequence: number;
   success: boolean;
   transactionHash: string;
   source: string;
@@ -166,4 +175,17 @@ export interface IEventWithData {
 export interface IStoredABI {
   hash: string;
   abi: ethers.InterfaceAbi;
+}
+
+export interface ITransactionReceiptListener {
+  name: string;
+  filters?: {
+    sequenceAbove?: number;
+    type?: TransactionType;
+    domain?: string;
+  };
+  options?: {
+    domainReceipts?: boolean;
+    incompleteStateReceiptBehavior?: "block_contract" | "process";
+  };
 }

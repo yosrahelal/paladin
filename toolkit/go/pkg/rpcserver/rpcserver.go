@@ -102,6 +102,7 @@ type rpcServer struct {
 }
 
 func (s *rpcServer) Register(module *RPCModule) {
+	log.L(s.bgCtx).Debugf("RPC module %s registered: %v", module.group, module.MethodNames())
 	s.rpcModules[module.group] = module
 }
 

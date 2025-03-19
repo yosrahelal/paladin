@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"time"
 	"unicode"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
@@ -42,7 +43,9 @@ func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketC
 		return s.replyRPCParseError(ctx, b, err)
 	}
 
-	log.L(ctx).Infof("RPC[Server] --> %s", b)
+	if log.IsTraceEnabled() {
+		log.L(ctx).Tracef("RPC[Server] --> %s", b)
+	}
 
 	if s.sniffFirstByte(b) == '[' {
 		var rpcArray []*rpcclient.RPCRequest
@@ -60,7 +63,18 @@ func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketC
 	if err != nil {
 		return s.replyRPCParseError(ctx, b, err)
 	}
+	startTime := time.Now()
+	log.L(ctx).Debugf("RPC-server[%s] --> %s", rpcRequest.ID, rpcRequest.Method)
 	res, isOK := s.processRPC(ctx, &rpcRequest, wsc)
+	durationMS := float64(time.Since(startTime)) / float64(time.Millisecond)
+	if res != nil && res.Error != nil {
+		log.L(ctx).Errorf("RPC-server[%s] <-- %s [%.2fms]: %s", rpcRequest.ID.StringValue(), rpcRequest.Method, durationMS, res.Error.Message)
+	} else {
+		log.L(ctx).Debugf("RPC-server[%s] <-- %s [%.2fms]", rpcRequest.ID.StringValue(), rpcRequest.Method, durationMS)
+	}
+	if log.IsTraceEnabled() {
+		log.L(ctx).Tracef("RPC-server[%s] <-- %s", rpcRequest.ID.StringValue(), tktypes.JSONString(res))
+	}
 	return handlerResult{isOK: isOK, sendRes: res != nil, res: res}
 
 }
@@ -98,10 +112,22 @@ func (s *rpcServer) handleRPCBatch(ctx context.Context, rpcArray []*rpcclient.RP
 	results := make(chan bool)
 	for i, r := range rpcArray {
 		responseNumber := i
-		rpcReq := r
+		rpcRequest := r
 		go func() {
 			var ok bool
-			rpcResponses[responseNumber], ok = s.processRPC(ctx, rpcReq, wsc)
+			startTime := time.Now()
+			log.L(ctx).Debugf("RPC-server[%v] (b=%d) --> %s", rpcRequest.ID.StringValue(), i, rpcRequest.Method)
+			res, ok := s.processRPC(ctx, rpcRequest, wsc)
+			durationMS := float64(time.Since(startTime)) / float64(time.Millisecond)
+			if res != nil && res.Error != nil {
+				log.L(ctx).Errorf("RPC-server[%s] (b=%d) <-- %s [%.2fms]: %s", rpcRequest.ID.StringValue(), i, rpcRequest.Method, durationMS, res.Error.Message)
+			} else {
+				log.L(ctx).Debugf("RPC-server[%s] (b=%d) <-- %s [%.2fms]", rpcRequest.ID.StringValue(), i, rpcRequest.Method, durationMS)
+			}
+			if log.IsTraceEnabled() {
+				log.L(ctx).Tracef("RPC-server[%s] (b=%d) <-- %s", rpcRequest.ID.StringValue(), i, tktypes.JSONString(res))
+			}
+			rpcResponses[responseNumber] = res
 			results <- ok
 		}()
 	}

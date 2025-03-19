@@ -55,7 +55,7 @@ func newTestBlockListenerConf(t *testing.T, ctx context.Context, config *pldconf
 
 	mRPC := rpcclientmocks.NewWSClient(t)
 
-	subsChan := make(chan *rpcclient.RPCSubscriptionNotification)
+	subsChan := make(chan rpcclient.RPCSubscriptionNotification)
 	mSub := rpcclientmocks.NewSubscription(t)
 	mSub.On("Notifications").Return(subsChan).Maybe()
 
@@ -256,10 +256,7 @@ func TestBlockListenerWSShoulderTap(t *testing.T) {
 							for !complete {
 								time.Sleep(100 * time.Microsecond)
 								if bl.newHeadsSub != nil {
-									bl.newHeadsSub.Notifications() <- &rpcclient.RPCSubscriptionNotification{
-										CurrentSubID: bl.newHeadsSub.LocalID().String(),
-										Result:       tktypes.JSONString("anything"),
-									}
+									bl.newHeadsSub.Notifications() <- rpcclientmocks.NewRPCSubscriptionNotification(t)
 								}
 							}
 						}()

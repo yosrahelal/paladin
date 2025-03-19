@@ -47,7 +47,6 @@ export const notoConstructorABI = (
                   { name: "restrictMint", type: "bool" },
                   { name: "allowBurn", type: "bool" },
                   { name: "allowLock", type: "bool" },
-                  { name: "restrictUnlock", type: "bool" },
                 ],
               },
             ]),
@@ -64,7 +63,6 @@ export interface NotoConstructorParams {
       restrictMint: boolean;
       allowBurn: boolean;
       allowLock: boolean;
-      restrictUnlock: boolean;
     };
     hooks?: {
       publicAddress: string;
@@ -163,7 +161,6 @@ export class NotoFactory {
             restrictMint: true,
             allowBurn: true,
             allowLock: true,
-            restrictUnlock: true,
             ...data.options?.basic,
           },
           ...data.options,

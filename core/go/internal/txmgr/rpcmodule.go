@@ -33,6 +33,7 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_sendTransactions", tm.rpcSendTransactions()).
 		Add("ptx_prepareTransaction", tm.rpcPrepareTransaction()).
 		Add("ptx_prepareTransactions", tm.rpcPrepareTransactions()).
+		Add("ptx_updateTransaction", tm.rpcUpdateTransaction()).
 		Add("ptx_call", tm.rpcCall()).
 		Add("ptx_getTransaction", tm.rpcGetTransaction()).
 		Add("ptx_getTransactionFull", tm.rpcGetTransactionFull()).
@@ -103,11 +104,20 @@ func (tm *txManager) rpcPrepareTransactions() rpcserver.RPCHandler {
 	})
 }
 
+func (tm *txManager) rpcUpdateTransaction() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		id uuid.UUID,
+		tx *pldapi.TransactionInput,
+	) (uuid.UUID, error) {
+		return tm.UpdateTransaction(ctx, id, tx)
+	})
+}
+
 func (tm *txManager) rpcCall() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		tx *pldapi.TransactionCall,
 	) (result tktypes.RawJSON, err error) {
-		err = tm.CallTransaction(ctx, &result, tx)
+		err = tm.CallTransaction(ctx, tm.p.NOTX(), &result, tx)
 		return
 	})
 }
@@ -338,7 +348,7 @@ func (tm *txManager) rpcCreateReceiptListener() rpcserver.RPCHandler {
 		listener *pldapi.TransactionReceiptListener,
 	) (bool, error) {
 		err := tm.CreateReceiptListener(ctx, listener)
-		return true, err
+		return err == nil, err
 	})
 }
 

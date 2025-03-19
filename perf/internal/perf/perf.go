@@ -417,10 +417,10 @@ func (pr *perfRunner) batchEventLoop(sub rpcclient.Subscription) (err error) {
 
 			// Handle websocket event
 			var batch pldapi.TransactionReceiptBatch
-			json.Unmarshal(subNotification.Result, &batch)
+			json.Unmarshal(subNotification.GetResult(), &batch)
 
 			if pr.cfg.LogEvents {
-				log.Info("Batch: ", string(subNotification.Result))
+				log.Info("Batch: ", string(subNotification.GetResult()))
 			}
 
 			g, _ := errgroup.WithContext(pr.ctx)

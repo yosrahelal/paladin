@@ -37,9 +37,10 @@ var transactionFilters = filters.FieldMap{
 	"created":        filters.TimestampField("created"),
 	"abiReference":   filters.TimestampField("abi_ref"),
 	"functionName":   filters.StringField("fn_name"),
-	"domain":         filters.StringField("domain"),
-	"from":           filters.StringField("from"),
-	"to":             filters.HexBytesField("to"),
+	"domain":         filters.StringField(`"transactions"."domain"`),
+	"from":           filters.StringField(`"from"`),
+	"to":             filters.HexBytesField(`"to"`),
+	"type":           filters.StringField(`"type"`),
 }
 
 func (tm *txManager) mapPersistedTXBase(pt *persistedTransaction) *pldapi.Transaction {
@@ -76,6 +77,31 @@ func (tm *txManager) mapPersistedTXFull(pt *persistedTransaction) *pldapi.Transa
 	return res
 }
 
+func (tm *txManager) mapPersistedTXHistory(pth *persistedTransactionHistory) *pldapi.TransactionHistory {
+	return &pldapi.TransactionHistory{
+		Created: pth.Created,
+		TransactionBase: pldapi.TransactionBase{
+			IdempotencyKey: stringOrEmpty(pth.IdempotencyKey),
+			Type:           pth.Type,
+			Domain:         stringOrEmpty(pth.Domain),
+			Function:       stringOrEmpty(pth.Function),
+			ABIReference:   pth.ABIReference,
+			From:           pth.From,
+			To:             pth.To,
+			Data:           pth.Data,
+			PublicTxOptions: pldapi.PublicTxOptions{
+				Value: pth.Value,
+				Gas:   pth.Gas,
+				PublicTxGasPricing: pldapi.PublicTxGasPricing{
+					GasPrice:             pth.GasPrice,
+					MaxFeePerGas:         pth.MaxFeePerGas,
+					MaxPriorityFeePerGas: pth.MaxPriorityFeePerGas,
+				},
+			},
+		},
+	}
+}
+
 func (tm *txManager) mapPersistedTXResolved(pt *persistedTransaction) *components.ResolvedTransaction {
 	res := &components.ResolvedTransaction{
 		Transaction: tm.mapPersistedTXBase(pt),
@@ -87,24 +113,24 @@ func (tm *txManager) mapPersistedTXResolved(pt *persistedTransaction) *component
 }
 
 func (tm *txManager) QueryTransactions(ctx context.Context, jq *query.QueryJSON, dbTX persistence.DBTX, pending bool) ([]*pldapi.Transaction, error) {
-	qw := &queryWrapper[persistedTransaction, pldapi.Transaction]{
-		p:           tm.p,
-		table:       "transactions",
-		defaultSort: "-created",
-		filters:     transactionFilters,
-		query:       jq,
-		finalize: func(q *gorm.DB) *gorm.DB {
+	qw := &filters.QueryWrapper[persistedTransaction, pldapi.Transaction]{
+		P:           tm.p,
+		Table:       "transactions",
+		DefaultSort: "-created",
+		Filters:     transactionFilters,
+		Query:       jq,
+		Finalize: func(q *gorm.DB) *gorm.DB {
 			if pending {
 				q = q.Joins("TransactionReceipt").
 					Where(`"TransactionReceipt"."transaction" IS NULL`)
 			}
 			return q
 		},
-		mapResult: func(pt *persistedTransaction) (*pldapi.Transaction, error) {
+		MapResult: func(pt *persistedTransaction) (*pldapi.Transaction, error) {
 			return tm.mapPersistedTXBase(pt), nil
 		},
 	}
-	return qw.run(ctx, dbTX)
+	return qw.Run(ctx, dbTX)
 }
 
 func (tm *txManager) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON, dbTX persistence.DBTX, pending bool) (results []*pldapi.TransactionFull, err error) {
@@ -112,13 +138,13 @@ func (tm *txManager) QueryTransactionsFull(ctx context.Context, jq *query.QueryJ
 }
 
 func (tm *txManager) QueryTransactionsResolved(ctx context.Context, jq *query.QueryJSON, dbTX persistence.DBTX, pending bool) ([]*components.ResolvedTransaction, error) {
-	qw := &queryWrapper[persistedTransaction, components.ResolvedTransaction]{
-		p:           tm.p,
-		table:       "transactions",
-		defaultSort: "-created",
-		filters:     transactionFilters,
-		query:       jq,
-		finalize: func(q *gorm.DB) *gorm.DB {
+	qw := &filters.QueryWrapper[persistedTransaction, components.ResolvedTransaction]{
+		P:           tm.p,
+		Table:       "transactions",
+		DefaultSort: "-created",
+		Filters:     transactionFilters,
+		Query:       jq,
+		Finalize: func(q *gorm.DB) *gorm.DB {
 			q = q.
 				Preload("TransactionDeps").
 				Joins("TransactionReceipt")
@@ -128,11 +154,11 @@ func (tm *txManager) QueryTransactionsResolved(ctx context.Context, jq *query.Qu
 			}
 			return q
 		},
-		mapResult: func(pt *persistedTransaction) (*components.ResolvedTransaction, error) {
+		MapResult: func(pt *persistedTransaction) (*components.ResolvedTransaction, error) {
 			return tm.mapPersistedTXResolved(pt), nil
 		},
 	}
-	ptxs, err := qw.run(ctx, dbTX)
+	ptxs, err := qw.Run(ctx, dbTX)
 	if err != nil {
 		return nil, err
 	}
@@ -140,13 +166,13 @@ func (tm *txManager) QueryTransactionsResolved(ctx context.Context, jq *query.Qu
 }
 
 func (tm *txManager) QueryTransactionsFullTx(ctx context.Context, jq *query.QueryJSON, dbTX persistence.DBTX, pending bool) ([]*pldapi.TransactionFull, error) {
-	qw := &queryWrapper[persistedTransaction, pldapi.TransactionFull]{
-		p:           tm.p,
-		table:       "transactions",
-		defaultSort: "-created",
-		filters:     transactionFilters,
-		query:       jq,
-		finalize: func(q *gorm.DB) *gorm.DB {
+	qw := &filters.QueryWrapper[persistedTransaction, pldapi.TransactionFull]{
+		P:           tm.p,
+		Table:       "transactions",
+		DefaultSort: "-created",
+		Filters:     transactionFilters,
+		Query:       jq,
+		Finalize: func(q *gorm.DB) *gorm.DB {
 			q = q.
 				Preload("TransactionDeps").
 				Joins("TransactionReceipt")
@@ -156,22 +182,57 @@ func (tm *txManager) QueryTransactionsFullTx(ctx context.Context, jq *query.Quer
 			}
 			return q
 		},
-		mapResult: func(pt *persistedTransaction) (*pldapi.TransactionFull, error) {
+		MapResult: func(pt *persistedTransaction) (*pldapi.TransactionFull, error) {
 			return tm.mapPersistedTXFull(pt), nil
 		},
 	}
-	ptxs, err := qw.run(ctx, dbTX)
+	ptxs, err := qw.Run(ctx, dbTX)
 	if err != nil {
 		return nil, err
 	}
-	return tm.mergePublicTransactions(ctx, dbTX, ptxs)
-}
 
-func (tm *txManager) mergePublicTransactions(ctx context.Context, dbTX persistence.DBTX, txs []*pldapi.TransactionFull) ([]*pldapi.TransactionFull, error) {
-	txIDs := make([]uuid.UUID, len(txs))
-	for i, tx := range txs {
+	txIDs := make([]uuid.UUID, len(ptxs))
+	for i, tx := range ptxs {
 		txIDs[i] = *tx.ID
 	}
+
+	ptxs, err = tm.AddTransactionHistory(ctx, dbTX, txIDs, ptxs)
+	if err != nil {
+		return nil, err
+	}
+
+	return tm.mergePublicTransactions(ctx, dbTX, txIDs, ptxs)
+}
+
+func (tm *txManager) AddTransactionHistory(ctx context.Context, dbTX persistence.DBTX, txIDs []uuid.UUID, ptxs []*pldapi.TransactionFull) ([]*pldapi.TransactionFull, error) {
+	txhs := []*persistedTransactionHistory{}
+	err := dbTX.DB().Table("transaction_history").
+		WithContext(ctx).
+		Order(`"created" DESC`).
+		Where(`"tx_id" IN (?)`, txIDs).
+		Find(&txhs).
+		Error
+	if err != nil {
+		return nil, err
+	}
+	// group by txID
+	txhMap := make(map[uuid.UUID][]*persistedTransactionHistory, len(txhs))
+	for _, txh := range txhs {
+		txhMap[txh.TXID] = append(txhMap[txh.TXID], txh)
+	}
+	// only add history if there are 2 or more entries
+	for _, tx := range ptxs {
+		if txhs, ok := txhMap[*tx.ID]; ok && len(txhs) > 1 {
+			tx.History = make([]*pldapi.TransactionHistory, len(txhs))
+			for i, txh := range txhs {
+				tx.History[i] = tm.mapPersistedTXHistory(txh)
+			}
+		}
+	}
+	return ptxs, nil
+}
+
+func (tm *txManager) mergePublicTransactions(ctx context.Context, dbTX persistence.DBTX, txIDs []uuid.UUID, txs []*pldapi.TransactionFull) ([]*pldapi.TransactionFull, error) {
 	pubTxByTX, err := tm.publicTxMgr.QueryPublicTxForTransactions(ctx, dbTX, txIDs, nil)
 	if err != nil {
 		return nil, err
@@ -272,7 +333,7 @@ func (tm *txManager) GetTransactionDependencies(ctx context.Context, id uuid.UUI
 }
 
 func (tm *txManager) queryPublicTransactions(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error) {
-	if err := checkLimitSet(ctx, jq); err != nil {
+	if err := filters.CheckLimitSet(ctx, jq); err != nil {
 		return nil, err
 	}
 	return tm.publicTxMgr.QueryPublicTxWithBindings(ctx, tm.p.NOTX(), jq)
