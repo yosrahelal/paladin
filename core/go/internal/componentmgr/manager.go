@@ -315,6 +315,9 @@ func (cm *componentManager) startBlockIndexer() (err error) {
 		_, err = cm.blockIndexer.GetBlockListenerHeight(cm.bgCtx)
 		err = cm.wrapIfErr(err, msgs.MsgComponentBlockIndexerStartError)
 	}
+	if err == nil {
+		err = cm.txManager.LoadBlockchainEventListeners()
+	}
 	return err
 }
 
