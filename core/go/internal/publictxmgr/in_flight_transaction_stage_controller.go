@@ -25,13 +25,13 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
+	"github.com/kaleido-io/paladin/common/go/pkg/log"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/sirupsen/logrus"
 )
 
@@ -393,7 +393,7 @@ func (it *inFlightTransactionStageController) processSigningStageOutput(ctx cont
 			rsc.StageOutputsToBePersisted.TxUpdates.NewSubmission = &DBPubTxnSubmission{
 				from:            rsc.InMemoryTx.GetFrom().String(),
 				PublicTxnID:     rsc.InMemoryTx.GetPubTxnID(),
-				Created:         tktypes.TimestampNow(),
+				Created:         pldtypes.TimestampNow(),
 				TransactionHash: *rsc.StageOutput.SignOutput.TxHash,
 				GasPricing:      gasPriceJSON,
 			}
@@ -438,7 +438,7 @@ func (it *inFlightTransactionStageController) processSubmittingStageOutput(ctx c
 			// TODO: this should be set from the signing stage- it doesn't tell us anything about whether this is a resubmission or not
 			if rsc.InMemoryTx.GetTransactionHash() != nil {
 				// did a re-submission, no matter the result, update the last warn time to avoid another retry
-				rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit = confutil.P(tktypes.TimestampNow())
+				rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit = confutil.P(pldtypes.TimestampNow())
 			}
 		} else {
 			if stageOutput.SubmitOutput.SubmissionOutcome == SubmissionOutcomeSubmittedNew {
@@ -569,7 +569,7 @@ func (it *inFlightTransactionStageController) calculateNewGasPrice(ctx context.C
 			newGasPrice.Set(it.gasPriceIncreaseMax)
 		}
 		newGpo = &pldapi.PublicTxGasPricing{
-			GasPrice:             (*tktypes.HexUint256)(newGasPrice),
+			GasPrice:             (*pldtypes.HexUint256)(newGasPrice),
 			MaxFeePerGas:         existingGpo.MaxFeePerGas,         // copy over unchanged (although expected to be unset)
 			MaxPriorityFeePerGas: existingGpo.MaxPriorityFeePerGas, //   "
 		}
@@ -585,7 +585,7 @@ func (it *inFlightTransactionStageController) calculateNewGasPrice(ctx context.C
 		}
 		newGpo = &pldapi.PublicTxGasPricing{
 			GasPrice:             existingGpo.GasPrice, // copy over unchanged (although expected to be unset)
-			MaxFeePerGas:         (*tktypes.HexUint256)(newMaxFeePerGas),
+			MaxFeePerGas:         (*pldtypes.HexUint256)(newMaxFeePerGas),
 			MaxPriorityFeePerGas: existingGpo.MaxPriorityFeePerGas,
 		}
 	}
@@ -667,7 +667,7 @@ func (it *inFlightTransactionStageController) TriggerSignTx(ctx context.Context)
 	return nil
 }
 
-func (it *inFlightTransactionStageController) TriggerSubmitTx(ctx context.Context, signedMessage []byte, calculatedHash *tktypes.Bytes32) error {
+func (it *inFlightTransactionStageController) TriggerSubmitTx(ctx context.Context, signedMessage []byte, calculatedHash *pldtypes.Bytes32) error {
 	generation := it.stateManager.GetCurrentGeneration(ctx)
 	signerNonce := it.stateManager.GetSignerNonce()
 	lastSubmitTime := it.stateManager.GetLastSubmitTime()

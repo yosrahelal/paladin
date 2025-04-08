@@ -27,18 +27,18 @@ import (
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func NewTXManager(ctx context.Context, conf *pldconf.TxManagerConfig) components.TXManager {
 	tm := &txManager{
 		bgCtx:    ctx,
 		conf:     conf,
-		abiCache: cache.NewCache[tktypes.Bytes32, *pldapi.StoredABI](&conf.ABI.Cache, &pldconf.TxManagerDefaults.ABI.Cache),
+		abiCache: cache.NewCache[pldtypes.Bytes32, *pldapi.StoredABI](&conf.ABI.Cache, &pldconf.TxManagerDefaults.ABI.Cache),
 		txCache:  cache.NewCache[uuid.UUID, *components.ResolvedTransaction](&conf.Transactions.Cache, &pldconf.TxManagerDefaults.Transactions.Cache),
 	}
 	tm.receiptsInit()
@@ -60,7 +60,7 @@ type txManager struct {
 	identityResolver    components.IdentityResolver
 	rpcEventStreams     *rpcEventStreams
 	txCache             cache.Cache[uuid.UUID, *components.ResolvedTransaction]
-	abiCache            cache.Cache[tktypes.Bytes32, *pldapi.StoredABI]
+	abiCache            cache.Cache[pldtypes.Bytes32, *pldapi.StoredABI]
 	rpcModule           *rpcserver.RPCModule
 	debugRpcModule      *rpcserver.RPCModule
 	lastStateUpdateTime atomic.Int64

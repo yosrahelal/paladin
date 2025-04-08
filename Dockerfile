@@ -99,6 +99,8 @@ RUN gradle --no-daemon --parallel :buildSrc:jar
 # Copy in a set of thing before the first gradle command that are less likely to change
 COPY solidity solidity
 COPY config config
+COPY common/go common/go
+COPY sdk/go sdk/go
 COPY toolkit/proto toolkit/proto
 COPY toolkit toolkit
 COPY go.work.sum ./

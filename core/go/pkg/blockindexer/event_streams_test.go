@@ -32,9 +32,9 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/rpcclientmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/rpcclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -136,7 +136,7 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 	_, bi, mRPC, blDone := newTestBlockIndexer(t)
 	defer blDone()
 
-	sourceContractAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
+	sourceContractAddress := pldtypes.MustEthAddress(pldtypes.RandHex(20))
 
 	// Mock up the block calls to the blockchain for 15 blocks
 	blocks, receipts := testBlockArray(t, 15, *sourceContractAddress.Address0xHex())
@@ -414,8 +414,8 @@ func TestTestNotifyEventStreamDoesNotBlock(t *testing.T) {
 		blocks: make(chan *eventStreamBlock),
 	}
 
-	blockHash := ethtypes.MustNewHexBytes0xPrefix(tktypes.RandHex(32))
-	txHash := ethtypes.MustNewHexBytes0xPrefix(tktypes.RandHex(32))
+	blockHash := ethtypes.MustNewHexBytes0xPrefix(pldtypes.RandHex(32))
+	txHash := ethtypes.MustNewHexBytes0xPrefix(pldtypes.RandHex(32))
 	bi.notifyEventStreams(ctx, &blockWriterBatch{
 		blocks: []*BlockInfoJSONRPC{
 			{
@@ -492,7 +492,7 @@ func TestUpsertInternalEventStreamMismatchExistingSourceAddress(t *testing.T) {
 			Name: "testing",
 			Sources: []EventStreamSource{{
 				ABI:     a,
-				Address: tktypes.MustEthAddress(tktypes.RandHex(20)),
+				Address: pldtypes.MustEthAddress(pldtypes.RandHex(20)),
 			}},
 		},
 	})
@@ -645,7 +645,7 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 		blocks:       make(chan *eventStreamBlock),
 		dispatch:     make(chan *eventDispatch),
 		detectorDone: make(chan struct{}),
-		serializer:   tktypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
+		serializer:   pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
 	}
 	go func() {
 		assert.NotPanics(t, func() { es.detector() })
@@ -659,8 +659,8 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 		blockNumber: 10,
 		events: []*LogJSONRPC{
 			{
-				BlockHash:        ethtypes.MustNewHexBytes0xPrefix(tktypes.RandHex(32)),
-				TransactionHash:  ethtypes.MustNewHexBytes0xPrefix(tktypes.RandHex(32)),
+				BlockHash:        ethtypes.MustNewHexBytes0xPrefix(pldtypes.RandHex(32)),
+				TransactionHash:  ethtypes.MustNewHexBytes0xPrefix(pldtypes.RandHex(32)),
 				BlockNumber:      10,
 				TransactionIndex: 0,
 				LogIndex:         0,
@@ -769,7 +769,7 @@ func TestProcessCatchupEventPageFailRPC(t *testing.T) {
 	ctx, bi, mRPC, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
-	txHash := tktypes.MustParseBytes32(tktypes.RandHex(32))
+	txHash := pldtypes.MustParseBytes32(pldtypes.RandHex(32))
 
 	bi.retry.UTSetMaxAttempts(2)
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.MustNewHexBytes0xPrefix(txHash.String())).
@@ -802,25 +802,25 @@ func TestProcessCatchupEventMultiPageRealDB(t *testing.T) {
 	ctx, bi, mRPC, done := newTestBlockIndexer(t)
 	defer done()
 
-	eventSig := tktypes.Bytes32(testABI.Events()["EventA"].SignatureHashBytes())
+	eventSig := pldtypes.Bytes32(testABI.Events()["EventA"].SignatureHashBytes())
 
 	allBlocks := []*pldapi.IndexedBlock{}
 	allTransactions := []*pldapi.IndexedTransaction{}
 	allEvents := []*pldapi.IndexedEvent{}
 	for b := 1; b < 14; b++ {
-		blockHash := tktypes.RandBytes32()
+		blockHash := pldtypes.RandBytes32()
 		allBlocks = append(allBlocks, &pldapi.IndexedBlock{
 			Number: int64(b),
 			Hash:   blockHash,
 		})
 		for tx := 0; tx < 8; tx++ {
-			txHash := tktypes.RandBytes32()
+			txHash := pldtypes.RandBytes32()
 			allTransactions = append(allTransactions, &pldapi.IndexedTransaction{
 				Hash:             txHash,
 				BlockNumber:      int64(b),
 				TransactionIndex: int64(tx),
-				From:             tktypes.RandAddress(),
-				To:               tktypes.RandAddress(),
+				From:             pldtypes.RandAddress(),
+				To:               pldtypes.RandAddress(),
 				Nonce:            0,
 				Result:           pldapi.TXResult_SUCCESS.Enum(),
 			})
@@ -863,7 +863,7 @@ func TestProcessCatchupEventMultiPageRealDB(t *testing.T) {
 	es := &eventStream{
 		bi:            bi,
 		ctx:           ctx,
-		signatureList: []tktypes.Bytes32{eventSig},
+		signatureList: []pldtypes.Bytes32{eventSig},
 		dispatch:      make(chan *eventDispatch, len(allEvents)),
 		definition: &EventStream{
 			ID: uuid.New(),
@@ -871,7 +871,7 @@ func TestProcessCatchupEventMultiPageRealDB(t *testing.T) {
 				ABI: testABI,
 			}},
 		},
-		serializer: tktypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
+		serializer: pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
 	}
 
 	go func() {
@@ -920,8 +920,8 @@ func TestEventSourcesHashing(t *testing.T) {
 		Name:   "goPurple",
 		Inputs: abi.ParameterArray{},
 	}
-	address1 := tktypes.RandAddress()
-	address2 := tktypes.RandAddress()
+	address1 := pldtypes.RandAddress()
+	address2 := pldtypes.RandAddress()
 
 	mustHash := func(ess EventSources) string {
 		hash, err := ess.Hash(context.Background())
