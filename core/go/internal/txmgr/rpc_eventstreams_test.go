@@ -28,9 +28,9 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/rpcclient"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,17 +38,17 @@ var nextReq atomic.Uint64
 
 func rpcTestRequest(method string, params ...any) (uint64, []byte) {
 	reqID := nextReq.Add(1)
-	jsonParams := make([]tktypes.RawJSON, len(params))
+	jsonParams := make([]pldtypes.RawJSON, len(params))
 	for i, p := range params {
-		jsonParams[i] = tktypes.JSONString(p)
+		jsonParams[i] = pldtypes.JSONString(p)
 	}
 	req := &rpcclient.RPCRequest{
 		JSONRpc: "2.0",
-		ID:      tktypes.RawJSON(fmt.Sprintf("%d", reqID)),
+		ID:      pldtypes.RawJSON(fmt.Sprintf("%d", reqID)),
 		Method:  method,
 		Params:  jsonParams,
 	}
-	return reqID, []byte(tktypes.JSONString((req)).Pretty())
+	return reqID, []byte(pldtypes.JSONString((req)).Pretty())
 }
 
 func TestRPCEventListenerE2E(t *testing.T) {
@@ -129,7 +129,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 		txs[i] = &components.ReceiptInput{
 			ReceiptType:   components.RT_Success,
 			TransactionID: uuid.New(),
-			OnChain:       randOnChain(tktypes.RandAddress()),
+			OnChain:       randOnChain(pldtypes.RandAddress()),
 		}
 	}
 
@@ -254,7 +254,7 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 			{
 				ReceiptType:   components.RT_Success,
 				TransactionID: uuid.New(),
-				OnChain:       randOnChain(tktypes.RandAddress()),
+				OnChain:       randOnChain(pldtypes.RandAddress()),
 			},
 		})
 	})
@@ -414,7 +414,7 @@ func TestHandleLifecycleUnkonwn(t *testing.T) {
 
 	res := txm.rpcEventStreams.HandleLifecycle(ctx, &rpcclient.RPCRequest{
 		Method: "wrong",
-		Params: []tktypes.RawJSON{tktypes.RawJSON(`"any"`)},
+		Params: []pldtypes.RawJSON{pldtypes.RawJSON(`"any"`)},
 	})
 	require.Regexp(t, "PD012239", res.Error.Error())
 
@@ -441,9 +441,9 @@ func TestHandleLifecycleNoBlockNack(t *testing.T) {
 
 	res := es.HandleLifecycle(ctx, &rpcclient.RPCRequest{
 		JSONRpc: "2.0",
-		ID:      tktypes.RawJSON("12345"),
+		ID:      pldtypes.RawJSON("12345"),
 		Method:  "ptx_nack",
-		Params:  []tktypes.RawJSON{tktypes.RawJSON(`"sub1"`)},
+		Params:  []pldtypes.RawJSON{pldtypes.RawJSON(`"sub1"`)},
 	})
 	require.Nil(t, res)
 

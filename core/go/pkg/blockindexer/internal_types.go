@@ -18,8 +18,8 @@ package blockindexer
 
 import (
 	"github.com/kaleido-io/paladin/core/internal/filters"
-	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 )
 
 var IndexedBlockFilters filters.FieldSet = filters.FieldMap{
@@ -49,5 +49,5 @@ var IndexedEventFilters filters.FieldSet = filters.FieldMap{
 // and persist during PreCommitHandlers and PostCommitHandlers (no JSON serialization for these)
 type IndexedTransactionNotify struct {
 	pldapi.IndexedTransaction
-	RevertReason tktypes.HexBytes
+	RevertReason pldtypes.HexBytes
 }
