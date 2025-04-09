@@ -459,7 +459,8 @@ func (ec *ethClient) SendRawTransaction(ctx context.Context, rawTX pldtypes.HexB
 		if err != nil {
 			log.L(ctx).Errorf("Invalid transaction build during signing: %s", err)
 		} else {
-			log.L(ctx).Errorf("Rejected TX (from=%s): %+v", addr, logJSON(decodedTX.Transaction))
+			log.L(ctx).Errorf("Rejected TX (from=%s, nonce=%+v)", addr, decodedTX.Nonce)
+			log.L(ctx).Tracef("Rejected TX (from=%s): %+v", addr, logJSON(decodedTX.Transaction))
 		}
 		return nil, fmt.Errorf("eth_sendRawTransaction failed: %+v", rpcErr)
 	}
