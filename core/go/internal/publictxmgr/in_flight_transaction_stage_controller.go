@@ -32,7 +32,6 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
-	"github.com/sirupsen/logrus"
 )
 
 type InFlightStatus int
@@ -133,7 +132,7 @@ func NewInFlightTransactionStageController(
 				timestamp: ptx.Created.Time(),
 			},
 		},
-		timeLineLoggingEnabled: logrus.IsLevelEnabled(logrus.DebugLevel),
+		timeLineLoggingEnabled: oc.timeLineLoggingEnabled,
 	}
 
 	ift.MarkTime("wait_in_inflight_queue")

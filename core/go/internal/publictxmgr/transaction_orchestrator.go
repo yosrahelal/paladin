@@ -147,6 +147,8 @@ type orchestrator struct {
 	// updates
 	updates   []*transactionUpdate
 	updateMux sync.Mutex
+
+	timeLineLoggingEnabled bool
 }
 
 const veryShortMinimum = 50 * time.Millisecond
@@ -182,6 +184,7 @@ func NewOrchestrator(
 		stopProcess:                make(chan bool, 1),
 		ethClient:                  ptm.ethClient,
 		bIndexer:                   ptm.bIndexer,
+		timeLineLoggingEnabled:     conf.Orchestrator.TimeLineLoggingEnabled,
 	}
 
 	log.L(ctx).Debugf("NewOrchestrator for signing address %s created: %+v", newOrchestrator.signingAddress, newOrchestrator)
@@ -376,6 +379,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			oc.totalCompleted = oc.totalCompleted + 1
 			queueUpdated = true
 			log.L(ctx).Debugf("Orchestrator poll and process, marking %s as complete after: %s", p.stateManager.GetSignerNonce(), time.Since(p.stateManager.GetCreatedTime().Time()))
+			p.PrintTimeline()
 		} else {
 			log.L(ctx).Debugf("Orchestrator poll and process, continuing tx %s after: %s", p.stateManager.GetSignerNonce(), time.Since(p.stateManager.GetCreatedTime().Time()))
 			oc.inFlightTxs = append(oc.inFlightTxs, p)
