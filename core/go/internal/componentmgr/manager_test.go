@@ -201,6 +201,7 @@ func TestStartOK(t *testing.T) {
 	mockTxManager := componentmocks.NewTXManager(t)
 	mockTxManager.On("Start").Return(nil)
 	mockTxManager.On("Stop").Return()
+	mockTxManager.On("LoadBlockchainEventListeners").Return(nil)
 
 	mockGroupManager := componentmocks.NewGroupManager(t)
 	mockGroupManager.On("Start").Return(nil)

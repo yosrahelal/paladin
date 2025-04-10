@@ -635,7 +635,7 @@ func TestDeleteReceiptListenerFail(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = txm.loadListener(ctx, &persistedReceiptListener{Name: "test1", Filters: pldtypes.RawJSON(`{}`), Options: pldtypes.RawJSON(`{}`)})
+	_, err = txm.loadReceiptListener(ctx, &persistedReceiptListener{Name: "test1", Filters: pldtypes.RawJSON(`{}`), Options: pldtypes.RawJSON(`{}`)})
 	assert.Regexp(t, "PD012235", err)
 
 	err = txm.DeleteReceiptListener(ctx, "test1")
@@ -697,12 +697,12 @@ func TestCreateListenerBadOptions(t *testing.T) {
 	)
 	defer done()
 
-	_, err := txm.loadListener(ctx, &persistedReceiptListener{
+	_, err := txm.loadReceiptListener(ctx, &persistedReceiptListener{
 		Filters: pldtypes.RawJSON(`{ !badness`),
 	})
 	assert.Regexp(t, "PD012233", err)
 
-	_, err = txm.loadListener(ctx, &persistedReceiptListener{
+	_, err = txm.loadReceiptListener(ctx, &persistedReceiptListener{
 		Filters: pldtypes.RawJSON(`{}`),
 		Options: pldtypes.RawJSON(`{ !badness`),
 	})
