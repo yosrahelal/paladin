@@ -148,7 +148,7 @@ type orchestrator struct {
 	updates   []*transactionUpdate
 	updateMux sync.Mutex
 
-	timeLineLoggingEnabled bool
+	timeLineLoggingMaxEntries int
 }
 
 const veryShortMinimum = 50 * time.Millisecond
@@ -184,7 +184,7 @@ func NewOrchestrator(
 		stopProcess:                make(chan bool, 1),
 		ethClient:                  ptm.ethClient,
 		bIndexer:                   ptm.bIndexer,
-		timeLineLoggingEnabled:     conf.Orchestrator.TimeLineLoggingEnabled,
+		timeLineLoggingMaxEntries:  conf.Orchestrator.TimeLineLoggingMaxEntries,
 	}
 
 	log.L(ctx).Debugf("NewOrchestrator for signing address %s created: %+v", newOrchestrator.signingAddress, newOrchestrator)

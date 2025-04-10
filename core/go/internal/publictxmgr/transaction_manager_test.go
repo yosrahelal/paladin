@@ -98,7 +98,7 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 			SubmissionRetry: pldconf.RetryConfigWithMax{
 				MaxAttempts: confutil.P(1),
 			},
-			TimeLineLoggingEnabled: true,
+			TimeLineLoggingMaxEntries: 10,
 		},
 		GasPrice: pldconf.GasPriceConfig{
 			FixedGasPrice: 0,

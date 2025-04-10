@@ -59,10 +59,9 @@ type inFlightTransactionStageController struct {
 
 	// a reference to the transaction orchestrator
 	*orchestrator
-	txInflightTime         time.Time
-	txInDBTime             time.Time
-	txTimeline             []PointOfTime
-	timeLineLoggingEnabled bool
+	txInflightTime time.Time
+	txInDBTime     time.Time
+	txTimeline     []PointOfTime
 
 	// this transaction mutex is used for transaction inflight stage context control
 	transactionMux sync.Mutex
@@ -121,18 +120,20 @@ func NewInFlightTransactionStageController(
 	oc *orchestrator,
 	ptx *DBPublicTxn,
 ) *inFlightTransactionStageController {
+	var txTimeline []PointOfTime
+	if oc.timeLineLoggingMaxEntries > 0 {
+		txTimeline = make([]PointOfTime, 0, oc.timeLineLoggingMaxEntries)
+		txTimeline = append(txTimeline, PointOfTime{
+			name:      "wait_in_db",
+			timestamp: ptx.Created.Time(),
+		})
+	}
 
 	ift := &inFlightTransactionStageController{
 		orchestrator:   oc,
 		txInflightTime: time.Now(),
 		txInDBTime:     ptx.Created.Time(),
-		txTimeline: []PointOfTime{
-			{
-				name:      "wait_in_db",
-				timestamp: ptx.Created.Time(),
-			},
-		},
-		timeLineLoggingEnabled: oc.timeLineLoggingEnabled,
+		txTimeline:     txTimeline,
 	}
 
 	ift.MarkTime("wait_in_inflight_queue")
@@ -148,27 +149,23 @@ func (it *inFlightTransactionStageController) UpdateTransaction(ctx context.Cont
 }
 
 func (it *inFlightTransactionStageController) MarkTime(eventName string) {
-	if it.timeLineLoggingEnabled {
+	if it.timeLineLoggingMaxEntries > 0 {
 		it.txTimeline[len(it.txTimeline)-1].tillNextEvent = time.Since(it.txTimeline[len(it.txTimeline)-1].timestamp)
+		if len(it.txTimeline) == it.timeLineLoggingMaxEntries {
+			// the array is full, we need to print the timeline and reset it
+			it.PrintTimeline()
+			it.txTimeline = make([]PointOfTime, 0, it.timeLineLoggingMaxEntries)
+		}
 		it.txTimeline = append(it.txTimeline, PointOfTime{
 			name:      eventName,
 			timestamp: time.Now(),
 		})
 	}
 }
-func (it *inFlightTransactionStageController) MarkHistoricalTime(eventName string, t time.Time) {
-	if it.timeLineLoggingEnabled {
-		it.txTimeline[len(it.txTimeline)-1].tillNextEvent = t.Sub(it.txTimeline[len(it.txTimeline)-1].timestamp)
-		it.txTimeline = append(it.txTimeline, PointOfTime{
-			name:      eventName,
-			timestamp: t,
-		})
-	}
-}
 
 func (it *inFlightTransactionStageController) PrintTimeline() string {
 	ptString := ""
-	if it.timeLineLoggingEnabled {
+	if it.timeLineLoggingMaxEntries > 0 {
 		for index, tl := range it.txTimeline {
 			if index == len(it.txTimeline)-1 {
 				tl.tillNextEvent = time.Since(tl.timestamp)
