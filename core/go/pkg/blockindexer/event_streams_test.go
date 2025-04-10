@@ -1091,10 +1091,7 @@ func TestNOTXHandler(t *testing.T) {
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(p.Mock.NewRows([]string{}))
 	p.Mock.ExpectExec("INSERT.*event_streams").WillReturnResult(sqlmock.NewResult(1, 1))
-	p.Mock.ExpectBegin()
-	p.Mock.ExpectBegin()
 	p.Mock.ExpectExec("INSERT.*event_stream_checkpoints").WillReturnResult(driver.ResultNoRows)
-	p.Mock.ExpectCommit()
 	returnErr := true
 
 	definition, err := bi.AddEventStream(ctx, bi.persistence.NOTX(), &InternalEventStream{

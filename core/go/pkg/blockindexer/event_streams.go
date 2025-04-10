@@ -614,42 +614,41 @@ func (es *eventStream) dispatcher() {
 	}
 }
 
-func (es *eventStream) runBatch(batch *eventBatch) error {
+func (es *eventStream) updateCheckpoint(ctx context.Context, dbTX persistence.DBTX, blockNumber int64) error {
+	return dbTX.DB().
+		WithContext(ctx).
+		Table("event_stream_checkpoints").
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "stream"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"block_number",
+			}),
+		}).
+		Create(&EventStreamCheckpoint{
+			Stream:      es.definition.ID,
+			BlockNumber: blockNumber,
+		}).
+		Error
+}
 
-	// We start a database transaction, run the callback function
+func (es *eventStream) runBatch(batch *eventBatch) error {
 	return es.bi.retry.Do(es.ctx, func(attempt int) (retryable bool, err error) {
 		if es.useNOTXHandler {
 			err = es.handlerNOTX(es.ctx, &batch.EventDeliveryBatch)
-			if err != nil {
-				return true, err
+			if err == nil {
+				err = es.updateCheckpoint(es.ctx, es.bi.persistence.NOTX(), int64(batch.checkpointAfterBatch))
 			}
+			return true, err
 		}
 		err = es.bi.persistence.Transaction(es.ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
-			if !es.useNOTXHandler {
-				err = es.handlerDBTX(ctx, dbTX, &batch.EventDeliveryBatch)
-				if err != nil {
-					return err
-				}
+			err = es.handlerDBTX(ctx, dbTX, &batch.EventDeliveryBatch)
+			if err == nil {
+				err = es.updateCheckpoint(ctx, dbTX, int64(batch.checkpointAfterBatch))
 			}
-			// commit the checkpoint
-			return dbTX.DB().
-				WithContext(ctx).
-				Table("event_stream_checkpoints").
-				Clauses(clause.OnConflict{
-					Columns: []clause.Column{{Name: "stream"}},
-					DoUpdates: clause.AssignmentColumns([]string{
-						"block_number",
-					}),
-				}).
-				Create(&EventStreamCheckpoint{
-					Stream:      es.definition.ID,
-					BlockNumber: int64(batch.checkpointAfterBatch),
-				}).
-				Error
+			return err
 		})
 		return true, err
 	})
-
 }
 
 func (es *eventStream) processCatchupEventPage(lastCatchupEvent *pldapi.IndexedEvent, checkpointBlock int64, catchUpToBlockNumber int64) (caughtUp bool, lastEvent *pldapi.IndexedEvent, err error) {
