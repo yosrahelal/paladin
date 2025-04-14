@@ -437,12 +437,14 @@ func (it *inFlightTransactionStageController) processSubmittingStageOutput(ctx c
 				rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit = confutil.P(pldtypes.TimestampNow())
 			}
 		} else {
+			if rsc.StageOutputsToBePersisted.TxUpdates == nil {
+				rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{}
+			}
+			rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit = stageOutput.SubmitOutput.SubmissionTime
+
 			if stageOutput.SubmitOutput.SubmissionOutcome == SubmissionOutcomeSubmittedNew {
 				// new transaction submitted successfully
 				rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(fmt.Sprintf(`{"hash":"%s"}`, stageOutput.SubmitOutput.TxHash)), nil)
-				rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{
-					LastSubmit: stageOutput.SubmitOutput.SubmissionTime,
-				}
 				log.L(ctx).Debugf("Transaction submitted for tx %s (hash=%s)", rsc.InMemoryTx.GetSignerNonce(), rsc.InMemoryTx.GetTransactionHash())
 			} else if stageOutput.SubmitOutput.SubmissionOutcome == SubmissionOutcomeNonceTooLow {
 				log.L(ctx).Debugf("Nonce too low for tx %s (hash=%s)", rsc.InMemoryTx.GetSignerNonce(), rsc.InMemoryTx.GetTransactionHash())
@@ -451,22 +453,16 @@ func (it *inFlightTransactionStageController) processSubmittingStageOutput(ctx c
 				// nothing to add for persistence, go to the tracking stage
 				log.L(ctx).Debugf("Transaction already known for tx %s (hash=%s)", rsc.InMemoryTx.GetSignerNonce(), rsc.InMemoryTx.GetTransactionHash())
 			}
+
 			// did the first submit
 			if rsc.InMemoryTx.GetFirstSubmit() == nil {
 				log.L(ctx).Debugf("Recorded the first submission for transaction %s", rsc.InMemoryTx.GetSignerNonce())
-				if rsc.StageOutputsToBePersisted.TxUpdates == nil {
-					rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{}
-				}
 				rsc.StageOutputsToBePersisted.TxUpdates.FirstSubmit = stageOutput.SubmitOutput.SubmissionTime
 			}
 
 			if rsc.InMemoryTx.GetTransactionHash() == nil {
-				if rsc.StageOutputsToBePersisted.TxUpdates == nil {
-					rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{}
-				}
 				log.L(ctx).Debugf("Recorded the tx hash %s for transaction %s", rsc.StageOutput.SubmitOutput.TxHash, rsc.InMemoryTx.GetSignerNonce())
 				rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash = rsc.StageOutput.SubmitOutput.TxHash
-				rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit = stageOutput.SubmitOutput.SubmissionTime
 			}
 		}
 

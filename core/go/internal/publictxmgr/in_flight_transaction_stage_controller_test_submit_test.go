@@ -422,7 +422,47 @@ func TestProduceLatestInFlightStageContextSubmitRePrepare(t *testing.T) {
 	assert.Equal(t, InFlightTxStageSubmitting, currentGeneration.stage)
 }
 
-func TestProduceLatestInFlightStageContextTriggerSubmit(t *testing.T) {
+func TestProduceLatestInFlightStageContextResubmission(t *testing.T) {
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	mTS.statusUpdater = &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *pldtypes.Timestamp) error {
+			return nil
+		},
+	}
+	// the transaction already has details of a last submission
+	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		GasPricing: &pldapi.PublicTxGasPricing{
+			GasPrice: pldtypes.Uint64ToUint256(10),
+		},
+		TransactionHash: confutil.P(pldtypes.Bytes32Keccak([]byte("0x000001"))),
+		LastSubmit:      confutil.P(pldtypes.TimestampNow()),
+	})
+
+	currentGeneration := it.stateManager.GetCurrentGeneration(ctx).(*inFlightTransactionStateGeneration)
+	rsc := NewRunningStageContext(ctx, InFlightTxStageSubmitting, BaseTxSubStatusReceived, currentGeneration.InMemoryTxStateManager)
+	currentGeneration.runningStageContext = rsc
+
+	currentGeneration.bufferedStageOutputs = make([]*StageOutput, 0)
+	// make sure this time is different
+	newLastSubmit := pldtypes.TimestampFromUnix(time.Now().Add(5 * time.Second).Unix())
+	it.stateManager.GetCurrentGeneration(ctx).AddSubmitOutput(ctx,
+		confutil.P(pldtypes.Bytes32Keccak([]byte("0x000001"))),
+		&newLastSubmit,
+		SubmissionOutcomeNonceTooLow,
+		"",
+		nil,
+	)
+	it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
+		AvailableToSpend:         nil,
+		PreviousNonceCostUnknown: false,
+	})
+	assert.Equal(t, newLastSubmit, *rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit)
+}
+
+func TestTriggerSubmitTx(t *testing.T) {
 	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		conf.Orchestrator.SubmissionRetry.MaxAttempts = confutil.P(1)
 	})
