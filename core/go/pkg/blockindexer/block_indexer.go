@@ -338,9 +338,11 @@ func (bi *blockIndexer) notificationProcessor(ctx context.Context) {
 // Then we update the state the dispatcher uses to walk forwards from and see what
 // is confirmed and ready to dispatch
 func (bi *blockIndexer) processBlockNotification(ctx context.Context, block *BlockInfoJSONRPC) {
-
 	bi.stateLock.Lock()
 	defer bi.stateLock.Unlock()
+
+	log.L(ctx).Tracef("<processBlockNotification> block.Number:%d, bi.nextBlock:%d, len(bi.newHeadToAdd):%d, len(bi.blocksSinceCheckpoint):%d",
+		block.Number, *bi.nextBlock, len(bi.newHeadToAdd), len(bi.blocksSinceCheckpoint))
 
 	// If the block is before our checkpoint, we ignore it completely
 	if block.Number < *bi.nextBlock {
@@ -362,8 +364,16 @@ func (bi *blockIndexer) processBlockNotification(ctx context.Context, block *Blo
 		}
 	}
 	if dispatchHead == nil && len(bi.blocksSinceCheckpoint) > 0 {
+		log.L(ctx).Debugf("Setting dispatch head to %d blocks since checkpoint", len(bi.blocksSinceCheckpoint))
 		dispatchHead = bi.blocksSinceCheckpoint[len(bi.blocksSinceCheckpoint)-1]
 	}
+	if dispatchHead == nil {
+		log.L(ctx).Trace("<processBlockNotification> dispatchHead is nil")
+	} else {
+		log.L(ctx).Tracef("<processBlockNotification> dispatchHead.Number:%d, dispatchHead.Hash:%s, block.ParentHash:%s",
+			dispatchHead.Number, dispatchHead.Hash, block.ParentHash)
+	}
+
 	switch {
 	case dispatchHead != nil && block.Number == dispatchHead.Number+1 && block.ParentHash.Equals(dispatchHead.Hash):
 		// Ok - we just need to pop it onto the list, and ensure we wake the dispatcher routine
@@ -438,32 +448,27 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 	defer close(bi.dispatcherDone)
 
 	var batch *blockWriterBatch
-	var pendingDispatch []*BlockInfoJSONRPC
 	var timedOut bool
+
+	timeoutContext := ctx
+	lastFromNotification := false
+
 	for {
-		timeoutContext := ctx
+		var pendingDispatch *BlockInfoJSONRPC
 
-		if len(pendingDispatch) == 0 {
-			pendingDispatch = nil // ensure we clear the memory if we just looped through a set with pendingDispatch[1:] below
-
-			// spin getting blocks until we it looks like we need to wait for a notification
-			lastFromNotification := false
-			for bi.readNextBlock(ctx, &lastFromNotification) {
-				toDispatch := bi.getNextConfirmed(ctx)
-				if toDispatch != nil {
-					pendingDispatch = append(pendingDispatch, toDispatch)
-				}
-			}
+		found := bi.readNextBlock(ctx, &lastFromNotification)
+		if found {
+			pendingDispatch = bi.getNextConfirmed(ctx)
 		}
-		if len(pendingDispatch) > 0 {
-			toDispatch := pendingDispatch[0]
-			pendingDispatch = pendingDispatch[1:]
+
+		if pendingDispatch != nil {
 			if batch == nil {
 				batch = &blockWriterBatch{opened: time.Now()}
 				batch.timeoutContext, batch.timeoutCancel = context.WithTimeout(ctx, bi.batchTimeout)
 			}
 			timeoutContext = batch.timeoutContext
-			bi.dispatchEnrich(ctx, batch, toDispatch)
+			log.L(ctx).Tracef("Dispatching enrich for block %d/%s", pendingDispatch.Number, pendingDispatch.Hash)
+			bi.dispatchEnrich(ctx, batch, pendingDispatch)
 		}
 
 		if batch != nil && (timedOut || (len(batch.blocks) >= bi.batchSize)) {
@@ -485,11 +490,13 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 		}
 
 		timedOut = false
-		if len(pendingDispatch) == 0 {
+		if !found {
+			lastFromNotification = false
 			select {
 			case <-bi.dispatcherTap:
 			case <-timeoutContext.Done():
 				timedOut = true
+				timeoutContext = ctx
 				select {
 				case <-ctx.Done():
 					log.L(ctx).Debugf("Confirmed block dispatcher stopping")
