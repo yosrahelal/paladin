@@ -338,9 +338,11 @@ func (bi *blockIndexer) notificationProcessor(ctx context.Context) {
 // Then we update the state the dispatcher uses to walk forwards from and see what
 // is confirmed and ready to dispatch
 func (bi *blockIndexer) processBlockNotification(ctx context.Context, block *BlockInfoJSONRPC) {
-
 	bi.stateLock.Lock()
 	defer bi.stateLock.Unlock()
+
+	log.L(ctx).Tracef("<processBlockNotification> block.Number:%d, bi.nextBlock:%d, len(bi.newHeadToAdd):%d, len(bi.blocksSinceCheckpoint):%d",
+		block.Number, *bi.nextBlock, len(bi.newHeadToAdd), len(bi.blocksSinceCheckpoint))
 
 	// If the block is before our checkpoint, we ignore it completely
 	if block.Number < *bi.nextBlock {
@@ -362,8 +364,16 @@ func (bi *blockIndexer) processBlockNotification(ctx context.Context, block *Blo
 		}
 	}
 	if dispatchHead == nil && len(bi.blocksSinceCheckpoint) > 0 {
+		log.L(ctx).Debugf("Setting dispatch head to %d blocks since checkpoint", len(bi.blocksSinceCheckpoint))
 		dispatchHead = bi.blocksSinceCheckpoint[len(bi.blocksSinceCheckpoint)-1]
 	}
+	if dispatchHead == nil {
+		log.L(ctx).Trace("<processBlockNotification> dispatchHead is nil")
+	} else {
+		log.L(ctx).Tracef("<processBlockNotification> dispatchHead.Number:%d, dispatchHead.Hash:%s, block.ParentHash:%s",
+			dispatchHead.Number, dispatchHead.Hash, block.ParentHash)
+	}
+
 	switch {
 	case dispatchHead != nil && block.Number == dispatchHead.Number+1 && block.ParentHash.Equals(dispatchHead.Hash):
 		// Ok - we just need to pop it onto the list, and ensure we wake the dispatcher routine
@@ -438,32 +448,26 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 	defer close(bi.dispatcherDone)
 
 	var batch *blockWriterBatch
-	var pendingDispatch []*BlockInfoJSONRPC
 	var timedOut bool
+
+	timeoutContext := ctx
+
 	for {
-		timeoutContext := ctx
+		var pendingDispatch *BlockInfoJSONRPC
 
-		if len(pendingDispatch) == 0 {
-			pendingDispatch = nil // ensure we clear the memory if we just looped through a set with pendingDispatch[1:] below
-
-			// spin getting blocks until we it looks like we need to wait for a notification
-			lastFromNotification := false
-			for bi.readNextBlock(ctx, &lastFromNotification) {
-				toDispatch := bi.getNextConfirmed(ctx)
-				if toDispatch != nil {
-					pendingDispatch = append(pendingDispatch, toDispatch)
-				}
-			}
+		found := bi.readNextBlock(ctx)
+		if found {
+			pendingDispatch = bi.getNextConfirmed(ctx)
 		}
-		if len(pendingDispatch) > 0 {
-			toDispatch := pendingDispatch[0]
-			pendingDispatch = pendingDispatch[1:]
+
+		if pendingDispatch != nil {
 			if batch == nil {
 				batch = &blockWriterBatch{opened: time.Now()}
 				batch.timeoutContext, batch.timeoutCancel = context.WithTimeout(ctx, bi.batchTimeout)
 			}
 			timeoutContext = batch.timeoutContext
-			bi.dispatchEnrich(ctx, batch, toDispatch)
+			log.L(ctx).Tracef("Dispatching enrich for block %d/%s", pendingDispatch.Number, pendingDispatch.Hash)
+			bi.dispatchEnrich(ctx, batch, pendingDispatch)
 		}
 
 		if batch != nil && (timedOut || (len(batch.blocks) >= bi.batchSize)) {
@@ -485,11 +489,12 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 		}
 
 		timedOut = false
-		if len(pendingDispatch) == 0 {
+		if !found {
 			select {
 			case <-bi.dispatcherTap:
 			case <-timeoutContext.Done():
 				timedOut = true
+				timeoutContext = ctx
 				select {
 				case <-ctx.Done():
 					log.L(ctx).Debugf("Confirmed block dispatcher stopping")
@@ -671,17 +676,13 @@ func (bi *blockIndexer) notifyEventStreams(ctx context.Context, batch *blockWrit
 }
 
 // MUST be called under lock
-func (bi *blockIndexer) popDispatchedIfAvailable(lastFromNotification *bool) (blockNumberToFetch ethtypes.HexUint64, found bool) {
+func (bi *blockIndexer) popDispatchedIfAvailable() (blockNumberToFetch ethtypes.HexUint64, found bool) {
 
 	if len(bi.newHeadToAdd) > 0 {
 		// If we find one in the lock, it must be ready for us to append
 		nextBlock := bi.newHeadToAdd[0]
 		bi.newHeadToAdd = append([]*BlockInfoJSONRPC{}, bi.newHeadToAdd[1:]...)
 		bi.blocksSinceCheckpoint = append(bi.blocksSinceCheckpoint, nextBlock)
-
-		// We track that we've done this, so we know if we run out going round the loop later,
-		// there's no point in doing a get-by-number
-		*lastFromNotification = true
 		return 0, true
 	}
 
@@ -692,7 +693,7 @@ func (bi *blockIndexer) popDispatchedIfAvailable(lastFromNotification *bool) (bl
 	return blockNumberToFetch, false
 }
 
-func (bi *blockIndexer) readNextBlock(ctx context.Context, lastFromNotification *bool) (found bool) {
+func (bi *blockIndexer) readNextBlock(ctx context.Context) (found bool) {
 
 	var nextBlock *BlockInfoJSONRPC
 	var blockNumberToFetch ethtypes.HexUint64
@@ -700,9 +701,9 @@ func (bi *blockIndexer) readNextBlock(ctx context.Context, lastFromNotification 
 	err := bi.retry.Do(ctx, func(_ int) (retry bool, err error) {
 		// If the notifier has lined up a block for us grab it before
 		bi.stateLock.Lock()
-		blockNumberToFetch, dispatchedPopped = bi.popDispatchedIfAvailable(lastFromNotification)
+		blockNumberToFetch, dispatchedPopped = bi.popDispatchedIfAvailable()
 		bi.stateLock.Unlock()
-		if dispatchedPopped || *lastFromNotification {
+		if dispatchedPopped {
 			// We processed a dispatch this time, or last time.
 			// Either way we're tracking at the head and there's no point doing a query
 			// we expect to return nothing - as we should get another notification.
@@ -724,7 +725,7 @@ func (bi *blockIndexer) readNextBlock(ctx context.Context, lastFromNotification 
 
 	// We have to check because we unlocked, that we weren't beaten to the punch while we queried
 	// by the dispatcher.
-	if _, dispatchedPopped = bi.popDispatchedIfAvailable(lastFromNotification); !dispatchedPopped {
+	if _, dispatchedPopped = bi.popDispatchedIfAvailable(); !dispatchedPopped {
 
 		// It's possible that while we were off at the node querying this, a notification came in
 		// that affected our state. We need to check this still matches, or go round again
