@@ -278,13 +278,13 @@ func (oc *orchestrator) initNextNonceFromDB(ctx context.Context) error {
 	}
 	nextNonce := *txns[0].Nonce + 1
 	oc.nextNonce = &nextNonce
-	log.L(ctx).Infof("Next nonce initialized from DB fro %s: %d", oc.signingAddress, nextNonce)
+	log.L(ctx).Infof("Next nonce initialized from DB from %s: %d", oc.signingAddress, nextNonce)
 	return nil
 }
 
 func (oc *orchestrator) allocateNonces(ctx context.Context, txns []*DBPublicTxn) error {
 
-	// Of the the transactions might have nonces already
+	// Some of the the transactions might have nonces already
 	toAlloc := make([]*DBPublicTxn, 0, len(txns))
 	for _, tx := range txns {
 		if tx.Nonce == nil {
