@@ -41,15 +41,17 @@ var _ types.DomainHandler = &mintHandler{}
 
 type mintHandler struct {
 	baseHandler
-	coinSchema *pb.StateSchema
 }
 
-func NewMintHandler(name string, coinSchema *pb.StateSchema) *mintHandler {
+func NewMintHandler(name string, coinSchema, dataSchema *pb.StateSchema) *mintHandler {
 	return &mintHandler{
 		baseHandler: baseHandler{
 			name: name,
+			stateSchemas: &common.StateSchemas{
+				CoinSchema: coinSchema,
+				DataSchema: dataSchema,
+			},
 		},
-		coinSchema: coinSchema,
 	}
 }
 
@@ -88,14 +90,25 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 	params := tx.Params.([]*types.FungibleTransferParamEntry)
 
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	_, outputStates, err := prepareOutputsForTransfer(ctx, useNullifiers, params, req.ResolvedVerifiers, h.coinSchema, h.name)
+	_, outputStates, err := prepareOutputsForTransfer(ctx, useNullifiers, params, req.ResolvedVerifiers, h.stateSchemas.CoinSchema, h.name)
 	if err != nil {
 		return nil, err
 	}
+
+	infoStates := make([]*pb.NewState, 0, len(params))
+	for _, param := range params {
+		info, err := prepareTransactionInfoStates(ctx, param.Data, []string{tx.Transaction.From, param.To}, h.stateSchemas.DataSchema)
+		if err != nil {
+			return nil, err
+		}
+		infoStates = append(infoStates, info...)
+	}
+
 	return &pb.AssembleTransactionResponse{
 		AssemblyResult: pb.AssembleTransactionResponse_OK,
 		AssembledTransaction: &pb.AssembledTransaction{
 			OutputStates: outputStates,
+			InfoStates:   infoStates,
 		},
 		AttestationPlan: []*pb.AttestationRequest{},
 	}, nil
@@ -119,7 +132,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		outputs[i] = hash.String()
 	}
 
-	data, err := common.EncodeTransactionData(ctx, req.Transaction)
+	data, err := common.EncodeTransactionData(ctx, req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}

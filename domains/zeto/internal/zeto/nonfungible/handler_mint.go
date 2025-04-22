@@ -137,7 +137,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		outputs[i] = hash.String()
 	}
 
-	data, err := encodeTransactionDataFunc(ctx, req.Transaction)
+	data, err := encodeTransactionDataFunc(ctx, req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}

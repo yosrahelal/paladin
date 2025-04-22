@@ -277,9 +277,9 @@ func TestLockPrepare(t *testing.T) {
 
 	req.OutputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}"
 	_, err = h.Prepare(ctx, tx, req)
-	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id.")
+	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD020008: Failed to parse value as 32 byte hex string")
 
-	req.Transaction.TransactionId = "0x1234567890123456789012345678901234567890"
+	req.Transaction.TransactionId = "0x87229d205a0f48bcf0da37542fc140a9bdfc3b4a55c0beffcb62efe25a770a7f"
 	req.AttestationResult[0].Payload = []byte("bad json")
 	_, err = h.Prepare(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210044: Failed to unmarshal proving response.", "cannot parse invalid wire-format data")
@@ -289,6 +289,7 @@ func TestLockPrepare(t *testing.T) {
 		Delegate: pldtypes.RandAddress(),
 	}
 	req.AttestationResult[0].Payload = payload
+	req.InfoStates = nil
 	_, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
 

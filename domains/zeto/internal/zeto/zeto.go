@@ -56,6 +56,7 @@ type Zeto struct {
 	nftSchema                *prototk.StateSchema
 	merkleTreeRootSchema     *prototk.StateSchema
 	merkleTreeNodeSchema     *prototk.StateSchema
+	dataSchema               *prototk.StateSchema
 	mintSignature            string
 	transferSignature        string
 	transferWithEncSignature string
@@ -193,6 +194,7 @@ func (z *Zeto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (
 	z.nftSchema = req.AbiStateSchemas[1]
 	z.merkleTreeRootSchema = req.AbiStateSchemas[2]
 	z.merkleTreeNodeSchema = req.AbiStateSchemas[3]
+	z.dataSchema = req.AbiStateSchemas[4]
 
 	return &prototk.InitDomainResponse{}, nil
 }
@@ -327,11 +329,11 @@ func (z *Zeto) GetHandler(method, tokenName string) types.DomainHandler {
 	}
 	switch method {
 	case types.METHOD_MINT:
-		return fungible.NewMintHandler(z.name, z.coinSchema)
+		return fungible.NewMintHandler(z.name, z.coinSchema, z.dataSchema)
 	case types.METHOD_TRANSFER:
-		return fungible.NewTransferHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
+		return fungible.NewTransferHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema, z.dataSchema)
 	case types.METHOD_TRANSFER_LOCKED:
-		return fungible.NewTransferLockedHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
+		return fungible.NewTransferLockedHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema, z.dataSchema)
 	case types.METHOD_LOCK:
 		return fungible.NewLockHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
 	case types.METHOD_DEPOSIT:
