@@ -1,7 +1,6 @@
 import PaladinClient, {
   INotoDomainReceipt,
   IPreparedTransaction,
-  newGroupSalt,
   NotoFactory,
   PenteFactory,
   ZetoFactory,
@@ -110,6 +109,7 @@ async function main(): Promise<boolean> {
       {
         to: investor2,
         amount: 10000,
+        data: "0x",
       },
     ],
   });
@@ -175,7 +175,13 @@ async function main(): Promise<boolean> {
   const txID = await zetoCash.using(paladin3).prepareTransferLocked(investor2, {
     lockedInputs: [lockedStateId],
     delegate: investor2.lookup,
-    transfers: [{ to: investor1, amount: 10 }],
+    transfers: [
+      {
+        to: investor1,
+        amount: 10,
+        data: "0x",
+      },
+    ],
   });
   if (!checkReceipt(receipt)) return false;
   const preparedCashTransfer = await paladin3.pollForPreparedTransaction(
