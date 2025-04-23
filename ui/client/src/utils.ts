@@ -96,7 +96,8 @@ export const getBasePath = () => {
   const pathSegments = pathname.split('/');
   for (let i = 0; i < pathSegments.length; i++) {
     if (pathSegments[i] === 'ui') {
-      return '/' + pathSegments.slice(0, i).join('/');
+      // pathSegments[0] is the empty string, so we need to avoid ending up with //something
+      return ('/' + pathSegments.slice(0, i).join('/')).replace(/^\/\/+/, '/');
     }
   }
   return '/';
