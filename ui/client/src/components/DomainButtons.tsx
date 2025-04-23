@@ -17,9 +17,12 @@
 import { Button, Grid2 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ZetoMintDialog } from '../dialogs/ZetoMint';
+import { ZetoTransferDialog } from '../dialogs/ZetoTransfer';
 
 type Props = {
-  domain: string;
+  domainName: string;
+  contractAddress: string;
 };
 
 interface DomainButton {
@@ -27,41 +30,60 @@ interface DomainButton {
   action: () => void;
 }
 
-export const DomainButtons: React.FC<Props> = ({ domain }) => {
+export const DomainButtons: React.FC<Props> = ({
+  domainName,
+  contractAddress,
+}) => {
   const { t } = useTranslation();
   const [buttons, setButtons] = useState<DomainButton[]>([]);
+  const [zetoMintDialogOpen, setZetoMintDialogOpen] = useState(false);
+  const [zetoTransferDialogOpen, setZetoTransferDialogOpen] = useState(false);
 
   useEffect(() => {
     const tmpButtons: DomainButton[] = [];
 
     // TODO: should key off of the domain "type" instead of expecting a specific name
-    // if (domain === 'zeto') {
-    //   tmpButtons.push({
-    //     name: 'mint',
-    //     action: () => {},
-    //   });
-    //   tmpButtons.push({
-    //     name: 'transfer',
-    //     action: () => {},
-    //   });
-    // }
+    if (domainName === 'zeto') {
+      tmpButtons.push({
+        name: 'mint',
+        action: () => setZetoMintDialogOpen(true),
+      });
+      tmpButtons.push({
+        name: 'transfer',
+        action: () => setZetoTransferDialogOpen(true),
+      });
+    }
 
     setButtons(tmpButtons);
-  }, [domain]);
+  }, [domainName]);
 
   return (
-    <Grid2>
-      {buttons.map((button) => (
-        <Button
-          key={button.name}
-          sx={{ fontWeight: '400' }}
-          size="small"
-          onClick={button.action}
-        >
-          {t(button.name)}
-        </Button>
-      ))}
-      {buttons.length === 0 && ( t('noActions') )}
-    </Grid2>
+    <>
+      <Grid2>
+        {buttons.map((button) => (
+          <Button
+            key={button.name}
+            sx={{ fontWeight: '400' }}
+            size="small"
+            onClick={button.action}
+          >
+            {t(button.name)}
+          </Button>
+        ))}
+        {buttons.length === 0 && t('noActions')}
+      </Grid2>
+
+      <ZetoMintDialog
+        dialogOpen={zetoMintDialogOpen}
+        setDialogOpen={setZetoMintDialogOpen}
+        contractAddress={contractAddress}
+      />
+
+      <ZetoTransferDialog
+        dialogOpen={zetoTransferDialogOpen}
+        setDialogOpen={setZetoTransferDialogOpen}
+        contractAddress={contractAddress}
+      />
+    </>
   );
 };

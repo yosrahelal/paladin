@@ -15,14 +15,15 @@
 // limitations under the License.
 
 import {
-    Paper,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    useTheme,
+  Alert,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  useTheme,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -47,6 +48,18 @@ export const SmartContractsTable: React.FC<Props> = ({ domainAddress }) => {
     queryKey: ['contracts', domainAddress],
     queryFn: () => querySmartContractsByDomain(domainAddress),
   });
+
+  if (isFetching) {
+    return <></>;
+  }
+
+  if (error) {
+    return (
+      <Alert sx={{ margin: '30px' }} severity="error" variant="filled">
+        {error.message}
+      </Alert>
+    );
+  }
 
   return (
     <TableContainer
@@ -82,7 +95,10 @@ export const SmartContractsTable: React.FC<Props> = ({ domainAddress }) => {
                 <Hash title={t('address')} hash={contract.address} />
               </TableCell>
               <TableCell>
-                <DomainButtons domain={contract.domainName} />
+                <DomainButtons
+                  domainName={contract.domainName}
+                  contractAddress={contract.address}
+                />
               </TableCell>
             </TableRow>
           ))}
