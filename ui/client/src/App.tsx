@@ -22,18 +22,19 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { constants } from "./components/config";
 import { Header } from "./components/Header";
 import { ApplicationContextProvider } from "./contexts/ApplicationContext";
+import { AppRoutes } from "./routes";
 import { darkThemeOptions, lightThemeOptions } from "./themes/default";
 import { Activity } from "./views/Activity";
+import { Domains } from "./views/Domains";
+import { Keys } from "./views/Keys";
+import { Nodes } from "./views/Peers";
 import { Registries } from "./views/Registries";
 import { Submissions } from "./views/Submissions";
-import { useEffect, useMemo, useState } from "react";
-import { constants } from "./components/config";
-import { AppRoutes } from "./routes";
-import { Nodes } from "./views/Peers";
-import { Keys } from "./views/Keys";
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({}),
@@ -102,6 +103,7 @@ function App() {
                 <Route path={AppRoutes.Peers} element={<Nodes />} />
                 <Route path={AppRoutes.Keys} element={<Keys />} />
                 <Route path={AppRoutes.Registry} element={<Registries />} />
+                <Route path={AppRoutes.Domains} element={<Domains />} />
                 <Route path="*" element={<Navigate to={AppRoutes.Activity} replace />} />
               </Routes>
             </BrowserRouter>
