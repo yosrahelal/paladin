@@ -22,6 +22,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 )
 
@@ -30,6 +31,7 @@ func (dm *domainManager) buildRPCModule() {
 		Add("domain_listDomains", dm.rpcQueryTransactions()).
 		Add("domain_getDomain", dm.rpcGetDomain()).
 		Add("domain_getDomainByAddress", dm.rpcGetDomainByAddress()).
+		Add("domain_querySmartContracts", dm.rpcQuerySmartContracts()).
 		Add("domain_getSmartContractByAddress", dm.rpcGetSmartContractByAddress())
 }
 
@@ -69,6 +71,14 @@ func (dm *domainManager) rpcGetDomainByAddress() rpcserver.RPCHandler {
 	})
 }
 
+func (dm *domainManager) rpcQuerySmartContracts() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		query query.QueryJSON,
+	) ([]*pldapi.DomainSmartContract, error) {
+		return dm.querySmartContracts(ctx, &query)
+	})
+}
+
 func (dm *domainManager) rpcGetSmartContractByAddress() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, address pldtypes.EthAddress) (*pldapi.DomainSmartContract, error) {
 		var sc components.DomainSmartContract
@@ -78,8 +88,9 @@ func (dm *domainManager) rpcGetSmartContractByAddress() rpcserver.RPCHandler {
 			return err
 		})
 		return &pldapi.DomainSmartContract{
-			Domain:  sc.Domain().Name(),
-			Address: sc.Address(),
+			DomainName:    sc.Domain().Name(),
+			DomainAddress: sc.Domain().RegistryAddress(),
+			Address:       sc.Address(),
 		}, nil
 	})
 }

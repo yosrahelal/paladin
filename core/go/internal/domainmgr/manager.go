@@ -27,13 +27,16 @@ import (
 	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
 	"github.com/kaleido-io/paladin/common/go/pkg/log"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -51,6 +54,11 @@ var eventSig_PaladinRegisterSmartContract_V0 = mustParseEventSignatureHash(iPala
 var eventSolSig_PaladinRegisterSmartContract_V0 = mustParseEventSoliditySignature(iPaladinContractRegistryABI, "PaladinRegisterSmartContract_V0")
 
 // var eventSig_PaladinPrivateTransaction_V0 = mustParseEventSignature(iPaladinContractABI, "PaladinPrivateTransaction_V0")
+
+var smartContractFilters = filters.FieldMap{
+	"domainAddress": filters.HexBytesField("domain_address"),
+	"address":       filters.HexBytesField("address"),
+}
 
 func NewDomainManager(bgCtx context.Context, conf *pldconf.DomainManagerConfig) components.DomainManager {
 	allDomains := []string{}
@@ -312,6 +320,31 @@ func (dm *domainManager) getSmartContractCached(ctx context.Context, dbTX persis
 	}
 	// Updating the cache deferred down to initSmartContract (under enrichContractWithDomain)
 	return dm.dbGetSmartContract(ctx, dbTX, func(db *gorm.DB) *gorm.DB { return db.Where("address = ?", addr) })
+}
+
+func (dm *domainManager) querySmartContracts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.DomainSmartContract, error) {
+	qw := &filters.QueryWrapper[PrivateSmartContract, pldapi.DomainSmartContract]{
+		P:           dm.persistence,
+		Table:       "private_smart_contracts",
+		DefaultSort: "domainAddress",
+		Filters:     smartContractFilters,
+		Query:       jq,
+		MapResult: func(pt *PrivateSmartContract) (*pldapi.DomainSmartContract, error) {
+			_, dc, err := dm.enrichContractWithDomain(ctx, pt)
+			if err != nil {
+				return nil, err
+			}
+			result := &pldapi.DomainSmartContract{
+				DomainAddress: &pt.RegistryAddress,
+				Address:       pt.Address,
+			}
+			if dc != nil {
+				result.DomainName = dc.Domain().Name()
+			}
+			return result, nil
+		},
+	}
+	return qw.Run(ctx, nil)
 }
 
 func (dm *domainManager) dbGetSmartContract(ctx context.Context, dbTX persistence.DBTX, setWhere func(db *gorm.DB) *gorm.DB) (pscLoadResult, *domainContract, error) {

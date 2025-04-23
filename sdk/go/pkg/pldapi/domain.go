@@ -26,6 +26,7 @@ type Domain struct {
 }
 
 type DomainSmartContract struct {
-	Domain  string              `docstruct:"SmartContract" json:"domain"`
-	Address pldtypes.EthAddress `docstruct:"SmartContract" json:"address"`
+	DomainName    string               `docstruct:"SmartContract" json:"domainName"`
+	DomainAddress *pldtypes.EthAddress `docstruct:"SmartContract" json:"domainAddress"`
+	Address       pldtypes.EthAddress  `docstruct:"SmartContract" json:"address"`
 }
