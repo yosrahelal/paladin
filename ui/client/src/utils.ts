@@ -88,3 +88,16 @@ export const encodeHex = (str: string) =>
   [...new TextEncoder().encode(str)]
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+
+// Infer the base path from the current URL
+// Assume that the base path is the part of the URL up to the "/ui" segment
+export const getBasePath = () => {
+  const pathname = window.location.pathname;
+  const pathSegments = pathname.split('/');
+  for (let i = 0; i < pathSegments.length; i++) {
+    if (pathSegments[i] === 'ui') {
+      return '/' + pathSegments.slice(0, i).join('/');
+    }
+  }
+  return '/';
+};
