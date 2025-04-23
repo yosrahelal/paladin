@@ -17,6 +17,7 @@ package txmgr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -220,6 +221,7 @@ func TestCreateBlockchainEventListener(t *testing.T) {
 		assert.Equal(t, "bel1", def.Name)
 		assert.Equal(t, blockindexer.EventStreamTypePTXBlockchainEventListener.Enum(), def.Type)
 		assert.Equal(t, "1m", *def.Config.BatchTimeout)
+		assert.Equal(t, json.RawMessage(`4`), *&def.Config.FromBlock)
 		assert.Equal(t, mockABI, def.Sources[0].ABI)
 		assert.Equal(t, mockAddress, def.Sources[0].Address)
 	})
@@ -227,6 +229,7 @@ func TestCreateBlockchainEventListener(t *testing.T) {
 		Name: "bel1",
 		Options: pldapi.BlockchainEventListenerOptions{
 			BatchTimeout: confutil.P("1m"),
+			FromBlock:    json.RawMessage(`4`),
 		},
 		Sources: []pldapi.BlockchainEventListenerSource{{
 			ABI:     mockABI,
@@ -260,6 +263,7 @@ func TestQueryBlockchainEventListeners(t *testing.T) {
 			Config: blockindexer.EventStreamConfig{
 				BatchTimeout: confutil.P("1m"),
 				BatchSize:    confutil.P(100),
+				FromBlock:    json.RawMessage(`"latest"`),
 			},
 			Sources: blockindexer.EventSources{{
 				ABI:     mockABI,
@@ -278,6 +282,7 @@ func TestQueryBlockchainEventListeners(t *testing.T) {
 	assert.True(t, *listeners[0].Started)
 	assert.Equal(t, "1m", *listeners[0].Options.BatchTimeout)
 	assert.Equal(t, 100, *listeners[0].Options.BatchSize)
+	assert.Equal(t, "\"latest\"", string(listeners[0].Options.FromBlock))
 	assert.Equal(t, mockABI, listeners[0].Sources[0].ABI)
 	assert.Equal(t, mockAddress, listeners[0].Sources[0].Address)
 

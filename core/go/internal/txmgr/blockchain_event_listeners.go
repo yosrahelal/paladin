@@ -241,6 +241,7 @@ func (tm *txManager) mapEventStream(el *pldapi.BlockchainEventListener) *blockin
 		Config: blockindexer.EventStreamConfig{
 			BatchSize:    el.Options.BatchSize,
 			BatchTimeout: el.Options.BatchTimeout,
+			FromBlock:    el.Options.FromBlock,
 		},
 	}
 
@@ -262,6 +263,7 @@ func (tm *txManager) mapBlockchainEventListener(es *blockindexer.EventStream) *p
 		Options: pldapi.BlockchainEventListenerOptions{
 			BatchSize:    es.Config.BatchSize,
 			BatchTimeout: es.Config.BatchTimeout,
+			FromBlock:    es.Config.FromBlock,
 		},
 	}
 	for _, source := range es.Sources {

@@ -174,6 +174,7 @@ var (
 	BlockchainEventListenerOptions                          = pdm("BlockchainEventListener.options", "Options for the event listener")
 	BlockchainEventListenerOptionsBatchSize                 = pdm("BlockchainEventListenerOptions.batchSize", "The maximum number of events to deliver in each batch")
 	BlockchainEventListenerOptionsBatchTimeout              = pdm("BlockchainEventListenerOptions.batchTimeout", "The maximum time to wait for a batch to fill before delivering")
+	BlockchainEventListenerOptionsFromBlock                 = pdm("BlockchainEventListenerOptions.fromBlock", "The block number from which to start listenening for events, or 'latest' to start from the latest block")
 	BlockchainEventListenerSourceABI                        = pdm("BlockchainEventListenerSource.abi", "The ABI containing events to listen for")
 	BlockchainEventListenerSourceAddress                    = pdm("BlockchainEventListenerSource.address", "The address to listen for events from")
 )
