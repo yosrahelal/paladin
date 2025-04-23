@@ -14,15 +14,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import MenuIcon from '@mui/icons-material/Menu';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { AppBar, Box, Button, Grid2, IconButton, Tab, Tabs, Toolbar, useMediaQuery, useTheme } from "@mui/material";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApplicationContext } from "../contexts/ApplicationContext";
-import RefreshIcon from '@mui/icons-material/Refresh';
 import { SettingsMenu } from "../menus/Settings";
-import MenuIcon from '@mui/icons-material/Menu';
 import { AppRoutes } from "../routes";
+
+enum HeaderTab {
+  Activity = 0,
+  Submissions = 1,
+  Peers = 2,
+  Keys = 3,
+  Registry = 4,
+  Domains = 5
+}
 
 export const Header: React.FC = () => {
 
@@ -36,17 +45,19 @@ export const Header: React.FC = () => {
 
   const getTabFromPath = (path: string) => {
     if (path.startsWith(AppRoutes.Activity)) {
-      return 0;
+      return HeaderTab.Activity
     } else if (path.startsWith(AppRoutes.Submissions)) {
-      return 1;
+      return HeaderTab.Submissions
     } else if (path.startsWith(AppRoutes.Peers)) {
-      return 2;  
+      return HeaderTab.Peers
     } else if (path.startsWith(AppRoutes.Keys)) {
-      return 3;
-    }else if (path.startsWith(AppRoutes.Registry)) {
-      return 4;
+      return HeaderTab.Keys
+    } else if (path.startsWith(AppRoutes.Registry)) {
+      return HeaderTab.Registry
+    } else if (path.startsWith(AppRoutes.Domains)) {
+      return HeaderTab.Domains
     }
-    return 0;
+    return HeaderTab.Activity
   };
 
   const [tab, setTab] = useState(getTabFromPath(pathname));
@@ -54,11 +65,12 @@ export const Header: React.FC = () => {
   const handleNavigation = (tab: number) => {
     setTab(tab);
     switch (tab) {
-      case 0: navigate(AppRoutes.Activity); break;
-      case 1: navigate(AppRoutes.Submissions); break;
-      case 2: navigate(AppRoutes.Peers); break;
-      case 3: navigate(AppRoutes.Keys); break;
-      case 4: navigate(AppRoutes.Registry); break;
+      case HeaderTab.Activity: navigate(AppRoutes.Activity); break;
+      case HeaderTab.Submissions: navigate(AppRoutes.Submissions); break;
+      case HeaderTab.Peers: navigate(AppRoutes.Peers); break;
+      case HeaderTab.Keys: navigate(AppRoutes.Keys); break;
+      case HeaderTab.Registry: navigate(AppRoutes.Registry); break;
+      case HeaderTab.Domains: navigate(AppRoutes.Domains); break;
     }
   };
 
@@ -82,6 +94,7 @@ export const Header: React.FC = () => {
                   <Tab label={t('peers')} />
                   <Tab label={t('keys')} />
                   <Tab label={t('registry')} />
+                  <Tab label={t('domains')} />
                 </Tabs>
               </Grid2>
               <Grid2 size={{ xs: 12, sm: 12, md: 3 }}>
