@@ -37,6 +37,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"gorm.io/gorm"
 )
@@ -81,6 +82,7 @@ type domainManager struct {
 	keyManager       components.KeyManager
 	ethClientFactory ethclient.EthClientFactory
 	domainSigner     *domainSigner
+	rpcModule        *rpcserver.RPCModule
 
 	domainsByName    map[string]*domain
 	domainsByAddress map[pldtypes.EthAddress]*domain
@@ -96,8 +98,11 @@ type event_PaladinRegisterSmartContract_V0 struct {
 	Config   pldtypes.HexBytes   `json:"config"`
 }
 
-func (dm *domainManager) PreInit(pic components.PreInitComponents) (*components.ManagerInitResult, error) {
-	return &components.ManagerInitResult{}, nil
+func (dm *domainManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
+	dm.buildRPCModule()
+	return &components.ManagerInitResult{
+		RPCModules: []*rpcserver.RPCModule{dm.rpcModule},
+	}, nil
 }
 
 func (dm *domainManager) PostInit(c components.AllComponents) error {
@@ -323,7 +328,7 @@ func (dm *domainManager) dbGetSmartContract(ctx context.Context, dbTX persistenc
 	}
 
 	// At this point it's possible we have a matching smart contract in our DB, for which we
-	// no longer recognize the domain registry (as it's not one that is configured an longer)
+	// no longer recognize the domain registry (as it's not one that is configured any longer)
 	loadResult, dc, err := dm.enrichContractWithDomain(ctx, contracts[0])
 	if err != nil {
 		return loadResult, nil, err
