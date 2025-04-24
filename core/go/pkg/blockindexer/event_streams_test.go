@@ -700,7 +700,7 @@ func TestStartStopEventStream(t *testing.T) {
 			return nil
 		},
 		bi:        bi,
-		fromBlock: confutil.P(int64(0)),
+		fromBlock: confutil.P(ethtypes.HexUint64(0)),
 	}
 
 	bi.eventStreams[esID] = eventStream
@@ -766,7 +766,7 @@ func TestProcessCheckpointFail(t *testing.T) {
 		ctx:          ctx,
 		definition:   &EventStream{ID: uuid.New()},
 		detectorDone: make(chan struct{}),
-		fromBlock:    confutil.P(int64(0)),
+		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
 	}
 	es.detector()
 
@@ -786,7 +786,7 @@ func TestGetHighestIndexedBlockFail(t *testing.T) {
 		ctx:          ctx,
 		definition:   &EventStream{ID: uuid.New()},
 		detectorDone: make(chan struct{}),
-		fromBlock:    confutil.P(int64(0)),
+		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
 	}
 	es.detector()
 
@@ -831,7 +831,7 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 		dispatch:     make(chan *eventDispatch),
 		detectorDone: make(chan struct{}),
 		serializer:   pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
-		fromBlock:    confutil.P(int64(0)),
+		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
 	}
 	go func() {
 		assert.NotPanics(t, func() { es.detector() })
@@ -884,7 +884,7 @@ func TestExitInCatchupPhase(t *testing.T) {
 		},
 		blocks:       make(chan *eventStreamBlock),
 		detectorDone: make(chan struct{}),
-		fromBlock:    confutil.P(int64(0)),
+		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
 	}
 	go func() {
 		assert.NotPanics(t, func() { es.detector() })
@@ -1255,45 +1255,4 @@ func TestNOTXHandler(t *testing.T) {
 	err = es.runBatch(&eventBatch{})
 	assert.NoError(t, err)
 	assert.False(t, returnErr)
-}
-
-func TestGetFromBlock(t *testing.T) {
-	ctx, _, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
-	defer done()
-	// decode error
-	_, err := getFromBlock(ctx, &EventStreamConfig{
-		FromBlock: json.RawMessage(`one`),
-	})
-	require.Error(t, err)
-
-	// invalid type error
-	_, err = getFromBlock(ctx, &EventStreamConfig{
-		FromBlock: json.RawMessage(`{}`),
-	})
-	require.Error(t, err)
-
-	// int parse error
-	_, err = getFromBlock(ctx, &EventStreamConfig{
-		FromBlock: json.RawMessage(`"one"`),
-	})
-	require.Error(t, err)
-
-	// success - latest
-	v, err := getFromBlock(ctx, &EventStreamConfig{
-		FromBlock: json.RawMessage(`"latest"`),
-	})
-	require.NoError(t, err)
-	assert.Nil(t, v)
-
-	// success - number
-	v, err = getFromBlock(ctx, &EventStreamConfig{
-		FromBlock: json.RawMessage(`"25"`),
-	})
-	require.NoError(t, err)
-	assert.Equal(t, int64(25), *v)
-
-	// success - use default
-	v, err = getFromBlock(ctx, &EventStreamConfig{})
-	require.NoError(t, err)
-	assert.Equal(t, int64(0), *v)
 }

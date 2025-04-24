@@ -139,7 +139,8 @@ func newBlockIndexer(ctx context.Context, conf *pldconf.BlockIndexerConfig, pers
 		dispatcherTap:              make(chan struct{}, 1),
 	}
 	bi.highestConfirmedBlock.Store(-1)
-	if err := bi.setFromBlock(ctx, conf); err != nil {
+	bi.fromBlock, err = bi.getFromBlock(ctx, conf.FromBlock, pldconf.BlockIndexerDefaults.FromBlock)
+	if err != nil {
 		return nil, err
 	}
 	if err := bi.loadEventStreams(ctx); err != nil {
@@ -256,39 +257,36 @@ func (bi *blockIndexer) GetBlockListenerHeight(ctx context.Context) (confirmed u
 	return bi.blockListener.getHighestBlock(ctx)
 }
 
-func (bi *blockIndexer) setFromBlock(ctx context.Context, conf *pldconf.BlockIndexerConfig) error {
+func (bi *blockIndexer) getFromBlock(ctx context.Context, fromBlock json.RawMessage, defaultValue json.RawMessage) (*ethtypes.HexUint64, error) {
 	var vUntyped interface{}
-	fromBlock := conf.FromBlock
 	if fromBlock == nil {
-		fromBlock = pldconf.BlockIndexerDefaults.FromBlock
+		fromBlock = defaultValue
 	}
 	dec := json.NewDecoder(bytes.NewReader(fromBlock))
 	dec.UseNumber()
 	if err := dec.Decode(&vUntyped); err != nil {
-		return i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, fromBlock)
 	}
 	switch vTyped := vUntyped.(type) {
 	case string:
-		return bi.setFromBlockStr(ctx, vTyped)
+		return bi.getFromBlockStr(ctx, vTyped)
 	case json.Number:
-		return bi.setFromBlockStr(ctx, vTyped.String())
+		return bi.getFromBlockStr(ctx, vTyped.String())
 	default:
-		return i18n.NewError(ctx, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
+		return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerInvalidFromBlock, fromBlock)
 	}
 }
 
-func (bi *blockIndexer) setFromBlockStr(ctx context.Context, fromBlock string) error {
+func (bi *blockIndexer) getFromBlockStr(ctx context.Context, fromBlock string) (*ethtypes.HexUint64, error) {
 	log.L(ctx).Infof("From block: %s", fromBlock)
 	if strings.EqualFold(fromBlock, "latest") {
-		bi.fromBlock = nil
-		return nil
+		return nil, nil
 	}
 	uint64Val, err := strconv.ParseUint(fromBlock, 0, 64)
 	if err != nil {
-		return i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, fromBlock)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, fromBlock)
 	}
-	bi.fromBlock = (*ethtypes.HexUint64)(&uint64Val)
-	return nil
+	return (*ethtypes.HexUint64)(&uint64Val), nil
 }
 
 func (bi *blockIndexer) restoreCheckpoint() error {

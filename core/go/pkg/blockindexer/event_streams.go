@@ -17,16 +17,13 @@
 package blockindexer
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -57,8 +54,8 @@ type eventStream struct {
 	serializer     *abi.Serializer
 	detectorDone   chan struct{}
 	dispatcherDone chan struct{}
-	fromBlock      *int64       // nil == latest
-	checkpoint     atomic.Int64 // set after we persist checkpoint
+	fromBlock      *ethtypes.HexUint64 // nil == latest
+	checkpoint     atomic.Int64        // set after we persist checkpoint
 }
 
 type eventBatch struct {
@@ -140,7 +137,7 @@ func (bi *blockIndexer) upsertInternalEventStream(ctx context.Context, dbTX pers
 	}
 
 	// Validate the fromBlock
-	if _, err := getFromBlock(ctx, &def.Config); err != nil {
+	if _, err := bi.getFromBlock(ctx, def.Config.FromBlock, EventStreamDefaults.FromBlock); err != nil {
 		return nil, err
 	}
 
@@ -250,7 +247,7 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 	es.batchSize = batchSize
 	es.batchTimeout = confutil.DurationMin(definition.Config.BatchTimeout, 0, *EventStreamDefaults.BatchTimeout)
 	// The error is already checked before writing to the DB
-	es.fromBlock, _ = getFromBlock(ctx, &definition.Config)
+	es.fromBlock, _ = es.bi.getFromBlock(ctx, definition.Config.FromBlock, EventStreamDefaults.FromBlock)
 	es.checkpoint.Store(-1)
 
 	// Calculate all the signatures we require
@@ -445,7 +442,7 @@ func (es *eventStream) readDBCheckpoint() (*int64, error) {
 			return nil, nil
 		}
 		log.L(es.ctx).Infof("Using event stream config '%d' minus 1 as initial checkpoint", *es.fromBlock)
-		return confutil.P(*es.fromBlock - 1), nil
+		return confutil.P(int64(*es.fromBlock) - 1), nil
 	}
 
 	baseBlock := checkpoints[0].BlockNumber
@@ -812,37 +809,4 @@ func (es *eventStream) processCatchupEventPage(lastCatchupEvent *pldapi.IndexedE
 	}
 	return caughtUp, lastEvent, nil
 
-}
-
-func getFromBlock(ctx context.Context, conf *EventStreamConfig) (*int64, error) {
-	var vUntyped interface{}
-	fromBlock := conf.FromBlock
-	if fromBlock == nil {
-		fromBlock = EventStreamDefaults.FromBlock
-	}
-	dec := json.NewDecoder(bytes.NewReader(fromBlock))
-	dec.UseNumber()
-	if err := dec.Decode(&vUntyped); err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
-	}
-	switch vTyped := vUntyped.(type) {
-	case string:
-		return getFromBlockStr(ctx, vTyped)
-	case json.Number:
-		return getFromBlockStr(ctx, vTyped.String())
-	default:
-		return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
-	}
-}
-
-func getFromBlockStr(ctx context.Context, fromBlock string) (*int64, error) {
-	log.L(ctx).Infof("From block: %s", fromBlock)
-	if strings.EqualFold(fromBlock, "latest") {
-		return nil, nil
-	}
-	int64Val, err := strconv.ParseInt(fromBlock, 0, 64)
-	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, fromBlock)
-	}
-	return (*int64)(&int64Val), nil
 }
