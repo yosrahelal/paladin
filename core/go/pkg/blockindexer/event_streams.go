@@ -97,8 +97,7 @@ func (bi *blockIndexer) loadEventStreams(ctx context.Context) error {
 	}
 
 	for _, esDefinition := range eventStreams {
-		// there will not be an error as all event streams are validated before being written to the database
-		_, _ = bi.initEventStream(ctx, esDefinition)
+		bi.initEventStream(ctx, esDefinition)
 	}
 	return nil
 }
@@ -202,36 +201,34 @@ func (bi *blockIndexer) upsertInternalEventStream(ctx context.Context, dbTX pers
 	}
 
 	if ies.Type == IESTypeEventStreamDBTX {
-		return bi.initEventStreamDBTX(ctx, def, ies.HandlerDBTX)
+		return bi.initEventStreamDBTX(ctx, def, ies.HandlerDBTX), nil
 	}
-	return bi.initEventStreamNOTX(ctx, def, ies.HandlerNOTX)
+	return bi.initEventStreamNOTX(ctx, def, ies.HandlerNOTX), nil
 }
 
-func (bi *blockIndexer) initEventStreamNOTX(ctx context.Context, definition *EventStream, handlerNOTX InternalStreamCallbackNOTX) (*eventStream, error) {
+func (bi *blockIndexer) initEventStreamNOTX(ctx context.Context, definition *EventStream, handlerNOTX InternalStreamCallbackNOTX) *eventStream {
 	bi.eventStreamsLock.Lock()
 	defer bi.eventStreamsLock.Unlock()
 
-	es, err := bi.initEventStream(ctx, definition)
-	if err == nil {
-		es.useNOTXHandler = true
-		es.handlerNOTX = handlerNOTX
-	}
-	return es, err
+	es := bi.initEventStream(ctx, definition)
+	es.useNOTXHandler = true
+	es.handlerNOTX = handlerNOTX
+
+	return es
 }
 
-func (bi *blockIndexer) initEventStreamDBTX(ctx context.Context, definition *EventStream, handlerDBTX InternalStreamCallbackDBTX) (*eventStream, error) {
+func (bi *blockIndexer) initEventStreamDBTX(ctx context.Context, definition *EventStream, handlerDBTX InternalStreamCallbackDBTX) *eventStream {
 	bi.eventStreamsLock.Lock()
 	defer bi.eventStreamsLock.Unlock()
 
-	es, err := bi.initEventStream(ctx, definition)
-	if err == nil {
-		es.handlerDBTX = handlerDBTX
-	}
-	return es, err
+	es := bi.initEventStream(ctx, definition)
+	es.handlerDBTX = handlerDBTX
+
+	return es
 }
 
 // Note that the event stream must be stopped when this is called
-func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventStream) (*eventStream, error) {
+func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventStream) *eventStream {
 	es := bi.eventStreams[definition.ID]
 	batchSize := confutil.IntMin(definition.Config.BatchSize, 1, *EventStreamDefaults.BatchSize)
 	if es != nil {
@@ -281,7 +278,7 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 
 	// ok - all looks good, put ourselves in the blockindexer list
 	bi.eventStreams[definition.ID] = es
-	return es, nil
+	return es
 }
 
 func (bi *blockIndexer) RemoveEventStream(ctx context.Context, id uuid.UUID) error {

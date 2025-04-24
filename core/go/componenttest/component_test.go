@@ -141,6 +141,7 @@ func TestBlockchainEventListeners(t *testing.T) {
 		Send().Wait(5 * time.Second)
 	require.NoError(t, res.Error())
 	contractAddr := res.Receipt().ContractAddress
+	deployBlock := res.Receipt().BlockNumber
 
 	// set up the event listener
 	_, err = c.PTX().CreateBlockchainEventListener(ctx, &pldapi.BlockchainEventListener{
@@ -187,9 +188,11 @@ func TestBlockchainEventListeners(t *testing.T) {
 
 	assert.JSONEq(t, `{"x":"2"}`, <-listener1)
 
+	// making this check immediately after receiving the event results in a race condition where the ack might not have been processed
+	// and the checkpoint updated, so check that it is either equal to the block number of the deploy or the block number of the invoke
 	status, err = c.PTX().GetBlockchainEventListenerStatus(ctx, "listener1")
 	require.NoError(t, err)
-	assert.Equal(t, res.Receipt().BlockNumber, status.Checkpoint.BlockNumber)
+	assert.True(t, status.Checkpoint.BlockNumber == deployBlock || status.Checkpoint.BlockNumber == res.Receipt().BlockNumber)
 
 	// stop the event listener
 	_, err = c.PTX().StopBlockchainEventListener(ctx, "listener1")

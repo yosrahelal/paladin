@@ -203,7 +203,6 @@ var (
 	MsgBlockIndexerConfirmedBlockNotFound   = pde("PD011310", "Block %s (%d) not found on retrieval after detection and requested number of confirmations")
 	MsgBlockIndexerLimitRequired            = pde("PD011311", "limit is required on all queries")
 	MsgBlockIndexerEventStreamNotFound      = pde("PD011312", "Event stream not found: %s")
-	MsgBlockIndexerEventStreamNoCheckpoint  = pde("PD011313", "Event stream does not have a checkpoint yet")
 
 	// EthClient module PD0115XX
 	MsgEthClientInvalidInput            = pde("PD011500", "Unable to convert to ABI function input (func=%s)")

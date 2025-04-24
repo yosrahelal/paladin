@@ -74,7 +74,7 @@ type BlockIndexer interface {
 
 // Processes blocks from a configure baseline block (0 for example), up until it
 // reaches the head of the chain. Then processes blocks that come from the listener
-// against hte required number of confirmations.
+// against the required number of confirmations.
 //
 // Note that this builds upon the block listener, which likely itself has detailed handling
 // of re-orgs at the front of the chain
