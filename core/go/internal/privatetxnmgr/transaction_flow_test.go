@@ -1801,6 +1801,45 @@ func TestGetTxStatusPendingEndorsements(t *testing.T) {
 	// Endorsements []PrivateTxEndorsementStatus `json:"endorsements"`
 }
 
+func TestDedupResolveVerifierRequests(t *testing.T) {
+	// construct an array of resolve verifier requests
+	// with duplicates
+	// and check that we only send the unique ones
+	requests := []*prototk.ResolveVerifierRequest{
+		{
+			Lookup:       "alice@node1",
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+		},
+		{
+			Lookup:       "bob@node2",
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+		},
+		{
+			Lookup:       "bob@node2",
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+		},
+		{
+			Lookup:       "carol@node3",
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.HEX_ECDSA_PUBKEY_UNCOMPRESSED,
+		},
+		{
+			Lookup:       "carol@node3",
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+		},
+	}
+	dedup := dedupResolveVerifierRequests(requests)
+	assert.Len(t, dedup, 4)
+	assert.Equal(t, requests[0], dedup[0])
+	assert.Equal(t, requests[1], dedup[1])
+	assert.Equal(t, requests[3], dedup[2])
+	assert.Equal(t, requests[4], dedup[3])
+}
+
 type fakeClock struct {
 	timePassed time.Duration
 }
