@@ -72,6 +72,7 @@ type PTX interface {
 	StartBlockchainEventListener(ctx context.Context, listenerName string) (success bool, err error)
 	StopBlockchainEventListener(ctx context.Context, listenerName string) (success bool, err error)
 	DeleteBlockchainEventListener(ctx context.Context, listenerName string) (success bool, err error)
+	GetBlockchainEventListenerStatus(ctx context.Context, name string) (*pldapi.BlockchainEventListenerStatus, error)
 
 	SubscribeReceipts(ctx context.Context, listenerName string) (sub rpcclient.Subscription, err error)
 	SubscribeBlockchainEvents(ctx context.Context, listenerName string) (sub rpcclient.Subscription, err error)
@@ -236,6 +237,10 @@ var ptxInfo = &rpcModuleInfo{
 		"ptx_deleteBlockchainEventListener": {
 			Inputs: []string{"listenerName"},
 			Output: "success",
+		},
+		"ptx_getBlockchainEventListenerStatus": {
+			Inputs: []string{"listenerName"},
+			Output: "listenerStatus",
 		},
 	},
 	subscriptions: []RPCSubscriptionInfo{
@@ -443,6 +448,11 @@ func (p *ptx) StopBlockchainEventListener(ctx context.Context, listenerName stri
 
 func (p *ptx) DeleteBlockchainEventListener(ctx context.Context, listenerName string) (success bool, err error) {
 	err = p.c.CallRPC(ctx, &success, "ptx_deleteBlockchainEventListener", listenerName)
+	return
+}
+
+func (p *ptx) GetBlockchainEventListenerStatus(ctx context.Context, listenerName string) (listener *pldapi.BlockchainEventListenerStatus, err error) {
+	err = p.c.CallRPC(ctx, &listener, "ptx_getBlockchainEventListenerStatus", listenerName)
 	return
 }
 
