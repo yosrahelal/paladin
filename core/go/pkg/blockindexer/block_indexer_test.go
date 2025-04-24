@@ -1155,10 +1155,33 @@ func TestQueryNoLimit(t *testing.T) {
 	assert.Regexp(t, "PD011311", err)
 }
 
-func TestAddEventStreamBadName(t *testing.T) {
-	ctx, bi, _, mp, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+func TestGetFromBlock(t *testing.T) {
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
+	// decode error
+	_, err := bi.getFromBlock(ctx, json.RawMessage(`one`), pldconf.BlockIndexerDefaults.FromBlock)
+	require.Error(t, err)
 
-	_, err := bi.AddEventStream(ctx, mp.P.NOTX(), &InternalEventStream{})
-	assert.Regexp(t, "PD020005", err)
+	// invalid type error
+	_, err = bi.getFromBlock(ctx, json.RawMessage(`{}`), pldconf.BlockIndexerDefaults.FromBlock)
+	require.Error(t, err)
+
+	// int parse error
+	_, err = bi.getFromBlock(ctx, json.RawMessage(`"one"`), pldconf.BlockIndexerDefaults.FromBlock)
+	require.Error(t, err)
+
+	// success - latest
+	v, err := bi.getFromBlock(ctx, json.RawMessage(`"latest"`), pldconf.BlockIndexerDefaults.FromBlock)
+	require.NoError(t, err)
+	assert.Nil(t, v)
+
+	// success - number
+	v, err = bi.getFromBlock(ctx, json.RawMessage(`"25"`), pldconf.BlockIndexerDefaults.FromBlock)
+	require.NoError(t, err)
+	assert.Equal(t, ethtypes.HexUint64(25), *v)
+
+	// success - use default
+	v, err = bi.getFromBlock(ctx, nil, pldconf.BlockIndexerDefaults.FromBlock)
+	require.NoError(t, err)
+	assert.Equal(t, ethtypes.HexUint64(0), *v)
 }

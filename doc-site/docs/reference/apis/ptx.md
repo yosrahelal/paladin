@@ -95,6 +95,16 @@ title: ptx_*
 
 0. `listener`: [`BlockchainEventListener`](../types/blockchaineventlistener.md#blockchaineventlistener)
 
+## `ptx_getBlockchainEventListenerStatus`
+
+### Parameters
+
+0. `listenerName`: `string`
+
+### Returns
+
+0. `listenerStatus`: [`BlockchainEventListenerStatus`](../types/blockchaineventlistenerstatus.md#blockchaineventlistenerstatus)
+
 ## `ptx_getDomainReceipt`
 
 ### Parameters
