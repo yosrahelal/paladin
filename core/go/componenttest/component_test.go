@@ -153,6 +153,10 @@ func TestBlockchainEventListeners(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	status, err := c.PTX().GetBlockchainEventListenerStatus(ctx, "listener1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(-1), status.Checkpoint.BlockNumber)
+
 	wsClient, err := c.WebSocket(ctx, instance.wsConfig)
 	require.NoError(t, err)
 
@@ -182,6 +186,10 @@ func TestBlockchainEventListeners(t *testing.T) {
 	require.NoError(t, res.Error())
 
 	assert.JSONEq(t, `{"x":"2"}`, <-listener1)
+
+	status, err = c.PTX().GetBlockchainEventListenerStatus(ctx, "listener1")
+	require.NoError(t, err)
+	assert.Equal(t, res.Receipt().BlockNumber, status.Checkpoint.BlockNumber)
 
 	// stop the event listener
 	_, err = c.PTX().StopBlockchainEventListener(ctx, "listener1")

@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,7 +57,8 @@ type eventStream struct {
 	serializer     *abi.Serializer
 	detectorDone   chan struct{}
 	dispatcherDone chan struct{}
-	fromBlock      *int64 // nil == latest
+	fromBlock      *int64       // nil == latest
+	checkpoint     atomic.Int64 // set after we persist checkpoint
 }
 
 type eventBatch struct {
@@ -252,6 +254,7 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 	es.batchTimeout = confutil.DurationMin(definition.Config.BatchTimeout, 0, *EventStreamDefaults.BatchTimeout)
 	// The error is already checked before writing to the DB
 	es.fromBlock, _ = getFromBlock(ctx, &definition.Config)
+	es.checkpoint.Store(-1)
 
 	// Calculate all the signatures we require
 	for _, source := range definition.Sources {
@@ -338,6 +341,16 @@ func (bi *blockIndexer) StopEventStream(ctx context.Context, id uuid.UUID) error
 		return i18n.NewError(ctx, msgs.MsgBlockIndexerEventStreamNotFound, id)
 	}
 	return bi.eventStreams[id].stop(true)
+}
+
+func (bi *blockIndexer) GetEventStreamCheckpointBlock(ctx context.Context, id uuid.UUID) (int64, error) {
+	bi.eventStreamsLock.Lock()
+	defer bi.eventStreamsLock.Unlock()
+
+	if bi.eventStreams[id] == nil {
+		return 0, i18n.NewError(ctx, msgs.MsgBlockIndexerEventStreamNotFound, id)
+	}
+	return bi.eventStreams[id].checkpoint.Load(), nil
 }
 
 func (bi *blockIndexer) getStreamList() []*eventStream {
@@ -439,6 +452,7 @@ func (es *eventStream) readDBCheckpoint() (*int64, error) {
 	}
 
 	baseBlock := checkpoints[0].BlockNumber
+	es.checkpoint.Store(baseBlock)
 	log.L(es.ctx).Infof("read persisted checkpoint block %d", baseBlock)
 	return &baseBlock, nil
 }
@@ -659,7 +673,7 @@ func (es *eventStream) dispatcher() {
 }
 
 func (es *eventStream) updateCheckpoint(ctx context.Context, dbTX persistence.DBTX, blockNumber int64) error {
-	return dbTX.DB().
+	err := dbTX.DB().
 		WithContext(ctx).
 		Table("event_stream_checkpoints").
 		Clauses(clause.OnConflict{
@@ -673,6 +687,10 @@ func (es *eventStream) updateCheckpoint(ctx context.Context, dbTX persistence.DB
 			BlockNumber: blockNumber,
 		}).
 		Error
+	if err == nil {
+		es.checkpoint.Store(blockNumber)
+	}
+	return err
 }
 
 func (es *eventStream) runBatch(batch *eventBatch) error {

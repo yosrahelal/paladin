@@ -177,6 +177,8 @@ var (
 	BlockchainEventListenerOptionsFromBlock                 = pdm("BlockchainEventListenerOptions.fromBlock", "The block number from which to start listenening for events, or 'latest' to start from the latest block")
 	BlockchainEventListenerSourceABI                        = pdm("BlockchainEventListenerSource.abi", "The ABI containing events to listen for")
 	BlockchainEventListenerSourceAddress                    = pdm("BlockchainEventListenerSource.address", "The address to listen for events from")
+	BlockcgainEventListenerStatusCheckpoint                 = pdm("BlockchainEventListenerStatus.checkpoint", "The checkpoint for the event listener")
+	BlockchainEventListenerCheckpointBlockNumber            = pdm("BlockchainEventListenerCheckpoint.blockNumber", "The last block fully processed by the event listener")
 )
 
 // query/query_json.go

@@ -229,6 +229,8 @@ var allTypes = []interface{}{
 	pldapi.BlockchainEventListener{},
 	pldapi.BlockchainEventListenerOptions{},
 	pldapi.BlockchainEventListenerSource{},
+	pldapi.BlockchainEventListenerStatus{},
+	pldapi.BlockchainEventListenerCheckpoint{},
 }
 var allAPITypes = []pldclient.RPCModule{
 	pldclient.New().PTX(),

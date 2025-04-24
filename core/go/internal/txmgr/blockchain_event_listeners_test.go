@@ -374,6 +374,33 @@ func TestDeleteBlockchainEventListener(t *testing.T) {
 	assert.NotContains(t, txm.blockchainEventListeners, "bel1")
 }
 
+func TestGetBlockchainEventListenerStatus(t *testing.T) {
+	id := uuid.New()
+	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.blockIndexer.On("GetEventStreamCheckpointBlock", mock.Anything, id).Return(int64(0), errors.New("pop")).Once()
+		mc.blockIndexer.On("GetEventStreamCheckpointBlock", mock.Anything, id).Return(int64(25), nil).Once()
+		mc.blockIndexer.On("StopEventStream", mock.Anything, mock.Anything).Return(nil)
+	})
+	defer done()
+
+	_, err := txm.GetBlockchainEventListenerStatus(ctx, "bel1")
+	assert.ErrorContains(t, err, "PD012248")
+
+	txm.blockchainEventListeners["bel1"] = &blockchainEventListener{
+		definition: &blockindexer.EventStream{
+			Name: "bel1",
+			ID:   id,
+		},
+	}
+
+	_, err = txm.GetBlockchainEventListenerStatus(ctx, "bel1")
+	require.ErrorContains(t, err, "pop")
+
+	status, err := txm.GetBlockchainEventListenerStatus(ctx, "bel1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(25), status.Checkpoint.BlockNumber)
+}
+
 type testBlockchainEventReceiver struct {
 	index          int
 	checkArguments func(batchID uuid.UUID, receipts []*pldapi.EventWithData)

@@ -68,15 +68,16 @@ type BlockIndexer interface {
 	WaitForTransactionAnyResult(ctx context.Context, hash pldtypes.Bytes32) (*pldapi.IndexedTransaction, error)
 	GetBlockListenerHeight(ctx context.Context) (highest uint64, err error)
 	GetConfirmedBlockHeight(ctx context.Context) (confirmed pldtypes.HexUint64, err error)
+	GetEventStreamCheckpointBlock(ctx context.Context, id uuid.UUID) (int64, error)
 	RPCModule() *rpcserver.RPCModule
 }
 
 // Processes blocks from a configure baseline block (0 for example), up until it
 // reaches the head of the chain. Then processes blocks that come from the listener
-// against he required number of confirmations.
+// against hte required number of confirmations.
 //
-// Note that this builds upon the lock listener, which likely itself has detailed handling
-// of re-orgs at the front of the chian
+// Note that this builds upon the block listener, which likely itself has detailed handling
+// of re-orgs at the front of the chain
 //
 // This implementation is thus deliberately simple assuming that when instability is found
 // in the notifications it can simply wipe out its view and start again.

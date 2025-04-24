@@ -206,6 +206,26 @@ func (tm *txManager) DeleteBlockchainEventListener(ctx context.Context, name str
 	return err
 }
 
+func (tm *txManager) GetBlockchainEventListenerStatus(ctx context.Context, name string) (*pldapi.BlockchainEventListenerStatus, error) {
+	tm.blockchainEventListenerLock.Lock()
+	defer tm.blockchainEventListenerLock.Unlock()
+	el := tm.blockchainEventListeners[name]
+	if el == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrBlockchainEventListenerNotLoaded, name)
+	}
+
+	l := tm.blockchainEventListeners[name]
+	checkpoint, err := tm.blockIndexer.GetEventStreamCheckpointBlock(ctx, l.definition.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &pldapi.BlockchainEventListenerStatus{
+		Checkpoint: pldapi.BlockchainEventListenerCheckpoint{
+			BlockNumber: checkpoint,
+		},
+	}, nil
+}
+
 func (tm *txManager) validateBlockchainEventListenerSpec(ctx context.Context, spec *pldapi.BlockchainEventListener) error {
 	if err := pldtypes.ValidateSafeCharsStartEndAlphaNum(ctx, spec.Name, pldtypes.DefaultNameMaxLen, "name"); err != nil {
 		return err

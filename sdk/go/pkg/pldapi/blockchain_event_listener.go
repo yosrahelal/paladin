@@ -41,3 +41,11 @@ type BlockchainEventListenerSource struct {
 	ABI     abi.ABI              `docstruct:"BlockchainEventListenerSource" json:"abi"`
 	Address *pldtypes.EthAddress `docstruct:"BlockchainEventListenerSource" json:"address,omitempty"`
 }
+
+type BlockchainEventListenerStatus struct {
+	Checkpoint BlockchainEventListenerCheckpoint `docstruct:"BlockchainEventListenerStatus" json:"checkpoint"`
+}
+
+type BlockchainEventListenerCheckpoint struct {
+	BlockNumber int64 `docstruct:"BlockchainEventListenerCheckpoint" json:"blockNumber"`
+}
