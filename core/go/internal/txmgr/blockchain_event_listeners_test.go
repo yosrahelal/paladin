@@ -221,7 +221,7 @@ func TestCreateBlockchainEventListener(t *testing.T) {
 		assert.Equal(t, "bel1", def.Name)
 		assert.Equal(t, blockindexer.EventStreamTypePTXBlockchainEventListener.Enum(), def.Type)
 		assert.Equal(t, "1m", *def.Config.BatchTimeout)
-		assert.Equal(t, json.RawMessage(`4`), *&def.Config.FromBlock)
+		assert.Equal(t, json.RawMessage(`4`), def.Config.FromBlock)
 		assert.Equal(t, mockABI, def.Sources[0].ABI)
 		assert.Equal(t, mockAddress, def.Sources[0].Address)
 	})
