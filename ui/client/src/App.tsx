@@ -29,6 +29,7 @@ import { Header } from "./components/Header";
 import { ApplicationContextProvider } from "./contexts/ApplicationContext";
 import { AppRoutes } from "./routes";
 import { darkThemeOptions, lightThemeOptions } from "./themes/default";
+import { getBasePath } from "./utils";
 import { Activity } from "./views/Activity";
 import { Domains } from "./views/Domains";
 import { Keys } from "./views/Keys";
@@ -89,13 +90,15 @@ function App() {
     []
   );
 
+  const basePath = getBasePath();
+
   return (
     <>
       <QueryClientProvider client={queryClient}>
         <ApplicationContextProvider colorMode={colorMode}>
           <ThemeProvider theme={theme}>
             <CssBaseline />
-            <BrowserRouter>
+            <BrowserRouter basename={basePath}>
               <Header />
               <Routes>
                 <Route path={AppRoutes.Activity} element={<Activity />} />

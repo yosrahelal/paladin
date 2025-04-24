@@ -14,7 +14,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export const RpcEndpoint = '/';
+import { getBasePath } from '../utils';
+
+export const RpcEndpoint = getBasePath();
 
 export const RpcMethods = {
   bidx_QueryIndexedEvents: 'bidx_queryIndexedEvents',
