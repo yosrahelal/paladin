@@ -18,10 +18,12 @@ package blockindexer
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -52,6 +54,8 @@ type eventStream struct {
 	serializer     *abi.Serializer
 	detectorDone   chan struct{}
 	dispatcherDone chan struct{}
+	fromBlock      *ethtypes.HexUint64 // nil == latest
+	checkpoint     atomic.Int64        // set after we persist checkpoint
 }
 
 type eventBatch struct {
@@ -129,6 +133,11 @@ func (bi *blockIndexer) upsertInternalEventStream(ctx context.Context, dbTX pers
 
 	// Validate the name
 	if err := pldtypes.ValidateSafeCharsStartEndAlphaNum(ctx, def.Name, pldtypes.DefaultNameMaxLen, "name"); err != nil {
+		return nil, err
+	}
+
+	// Validate the fromBlock
+	if _, err := bi.getFromBlock(ctx, def.Config.FromBlock, EventStreamDefaults.FromBlock); err != nil {
 		return nil, err
 	}
 
@@ -237,6 +246,9 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 	// Set the batch config
 	es.batchSize = batchSize
 	es.batchTimeout = confutil.DurationMin(definition.Config.BatchTimeout, 0, *EventStreamDefaults.BatchTimeout)
+	// The error is already checked before writing to the DB
+	es.fromBlock, _ = es.bi.getFromBlock(ctx, definition.Config.FromBlock, EventStreamDefaults.FromBlock)
+	es.checkpoint.Store(-1)
 
 	// Calculate all the signatures we require
 	for _, source := range definition.Sources {
@@ -325,6 +337,16 @@ func (bi *blockIndexer) StopEventStream(ctx context.Context, id uuid.UUID) error
 	return bi.eventStreams[id].stop(true)
 }
 
+func (bi *blockIndexer) GetEventStreamCheckpointBlock(ctx context.Context, id uuid.UUID) (int64, error) {
+	bi.eventStreamsLock.Lock()
+	defer bi.eventStreamsLock.Unlock()
+
+	if bi.eventStreams[id] == nil {
+		return 0, i18n.NewError(ctx, msgs.MsgBlockIndexerEventStreamNotFound, id)
+	}
+	return bi.eventStreams[id].checkpoint.Load(), nil
+}
+
 func (bi *blockIndexer) getStreamList() []*eventStream {
 	bi.eventStreamsLock.Lock()
 	defer bi.eventStreamsLock.Unlock()
@@ -400,7 +422,7 @@ func (es *eventStream) stop(updateDB bool) error {
 	return nil
 }
 
-func (es *eventStream) readDBCheckpoint() (int64, error) {
+func (es *eventStream) readDBCheckpoint() (*int64, error) {
 	var checkpoints []*EventStreamCheckpoint
 	err := es.bi.persistence.DB().
 		Table("event_stream_checkpoints").
@@ -408,15 +430,28 @@ func (es *eventStream) readDBCheckpoint() (int64, error) {
 		WithContext(es.ctx).
 		Find(&checkpoints).
 		Error
-	if err != nil || len(checkpoints) < 1 {
-		return -1, err
+	if err != nil {
+		return nil, err
 	}
+
+	if len(checkpoints) < 1 {
+		// this is the case where we are starting up for the first time so we need to look
+		// at the value of fromBlock to decide what to do here
+		if es.fromBlock == nil {
+			log.L(es.ctx).Info("Using event stream config 'latest' as initial checkpoint")
+			return nil, nil
+		}
+		log.L(es.ctx).Infof("Using event stream config '%d' minus 1 as initial checkpoint", *es.fromBlock)
+		return confutil.P(int64(*es.fromBlock) - 1), nil
+	}
+
 	baseBlock := checkpoints[0].BlockNumber
+	es.checkpoint.Store(baseBlock)
 	log.L(es.ctx).Infof("read persisted checkpoint block %d", baseBlock)
-	return baseBlock, nil
+	return &baseBlock, nil
 }
 
-func (es *eventStream) processCheckpoint() (baseBlock int64, err error) {
+func (es *eventStream) processCheckpoint() (baseBlock *int64, err error) {
 	err = es.bi.retry.Do(es.ctx, func(attempt int) (retryable bool, err error) {
 		baseBlock, err = es.readDBCheckpoint()
 		return true, err
@@ -459,18 +494,35 @@ func (es *eventStream) detector() {
 		return
 	}
 
-	// Find the highest block of the chain that's been persisted so far on startup,
-	// so we don't need to wait for a block to be mined (which feasibly might be
-	// mine-on-demand) to kick off our catchup.
-	// Note startupBlock might be nil, and that's fine
-	startupBlock, err := es.bi.getHighestIndexedBlock(es.ctx)
-	if err != nil {
-		log.L(es.ctx).Debugf("exiting before retrieving highest block")
-		return
-	}
-
+	// var checkpointBlock int64
+	var startupBlock *int64
 	var lastCatchupEvent *pldapi.IndexedEvent
 	var catchUpToBlock *eventStreamBlock
+
+	if checkpointBlock == nil {
+		// the event stream is starting from the latest block
+		// wait here for the first block to be read and processed so that we have a checkpoint to
+		// use in later logic for understanding whether we are in catchup mode or not
+		select {
+		case block := <-es.blocks:
+			checkpointBlock = confutil.P(int64(block.blockNumber))
+			es.processNotifiedBlock(block, true)
+		case <-es.ctx.Done():
+			log.L(es.ctx).Debugf("exiting")
+			return
+		}
+	} else {
+		// Find the highest block of the chain that's been persisted so far on startup,
+		// so we don't need to wait for a block to be mined (which feasibly might be
+		// mine-on-demand) to kick off our catchup.
+		// Note startupBlock might be nil, and that's fine
+		startupBlock, err = es.bi.getHighestIndexedBlock(es.ctx)
+		if err != nil {
+			log.L(es.ctx).Debugf("exiting before retrieving highest block")
+			return
+		}
+	}
+
 	for {
 		// we wait to be told about a block from the chain, to see whether that is a block that
 		// slots directly after our checkpoint. Under normal operation when we're caught up
@@ -480,13 +532,13 @@ func (es *eventStream) detector() {
 		if startupBlock == nil && catchUpToBlock == nil {
 			select {
 			case block := <-es.blocks:
-				if int64(block.blockNumber) <= checkpointBlock {
+				if int64(block.blockNumber) <= *checkpointBlock {
 					log.L(es.ctx).Debugf("notified of block %d at or behind checkpoint %d", block.blockNumber, checkpointBlock)
 					continue
 				}
-				if block.blockNumber == uint64(checkpointBlock+1) {
+				if block.blockNumber == uint64(*checkpointBlock+1) {
 					// Happy place
-					checkpointBlock = int64(block.blockNumber)
+					checkpointBlock = confutil.P(int64(block.blockNumber))
 					es.processNotifiedBlock(block, true)
 				} else {
 					// Entering catchup - defer processing of this block until catchup complete,
@@ -506,7 +558,7 @@ func (es *eventStream) detector() {
 				catchUpToBlockNumber = int64(catchUpToBlock.blockNumber)
 			}
 			var caughtUp bool
-			caughtUp, lastCatchupEvent, err = es.processCatchupEventPage(lastCatchupEvent, checkpointBlock, catchUpToBlockNumber)
+			caughtUp, lastCatchupEvent, err = es.processCatchupEventPage(lastCatchupEvent, *checkpointBlock, catchUpToBlockNumber)
 			if err != nil {
 				log.L(es.ctx).Debugf("exiting during catchup phase")
 				return
@@ -516,11 +568,11 @@ func (es *eventStream) detector() {
 				if startupBlock == nil {
 					// Process the deferred notified block, and back to normal operation
 					es.processNotifiedBlock(catchUpToBlock, true)
-					checkpointBlock = int64(catchUpToBlock.blockNumber)
+					checkpointBlock = confutil.P(int64(catchUpToBlock.blockNumber))
 					catchUpToBlock = nil
 				} else {
 					// We've now started
-					checkpointBlock = *startupBlock
+					checkpointBlock = startupBlock
 					startupBlock = nil
 				}
 			}
@@ -615,7 +667,7 @@ func (es *eventStream) dispatcher() {
 }
 
 func (es *eventStream) updateCheckpoint(ctx context.Context, dbTX persistence.DBTX, blockNumber int64) error {
-	return dbTX.DB().
+	err := dbTX.DB().
 		WithContext(ctx).
 		Table("event_stream_checkpoints").
 		Clauses(clause.OnConflict{
@@ -629,6 +681,10 @@ func (es *eventStream) updateCheckpoint(ctx context.Context, dbTX persistence.DB
 			BlockNumber: blockNumber,
 		}).
 		Error
+	if err == nil {
+		es.checkpoint.Store(blockNumber)
+	}
+	return err
 }
 
 func (es *eventStream) runBatch(batch *eventBatch) error {

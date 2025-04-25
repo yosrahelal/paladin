@@ -18,6 +18,7 @@ package blockindexer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -32,13 +33,15 @@ import (
 )
 
 type EventStreamConfig struct {
-	BatchSize    *int    `json:"batchSize,omitempty"`
-	BatchTimeout *string `json:"batchTimeout,omitempty"`
+	BatchSize    *int            `json:"batchSize,omitempty"`
+	BatchTimeout *string         `json:"batchTimeout,omitempty"`
+	FromBlock    json.RawMessage `json:"fromBlock,omitempty"`
 }
 
 var EventStreamDefaults = &EventStreamConfig{
 	BatchSize:    confutil.P(50),
 	BatchTimeout: confutil.P("75ms"),
+	FromBlock:    json.RawMessage(`0`),
 }
 
 type EventStreamType string
