@@ -215,13 +215,14 @@ func (tm *txManager) GetBlockchainEventListenerStatus(ctx context.Context, name 
 	}
 
 	l := tm.blockchainEventListeners[name]
-	checkpoint, err := tm.blockIndexer.GetEventStreamCheckpointBlock(ctx, l.definition.ID)
+	status, err := tm.blockIndexer.GetEventStreamStatus(ctx, l.definition.ID)
 	if err != nil {
 		return nil, err
 	}
 	return &pldapi.BlockchainEventListenerStatus{
+		Catchup: status.Catchup,
 		Checkpoint: pldapi.BlockchainEventListenerCheckpoint{
-			BlockNumber: checkpoint,
+			BlockNumber: status.CheckpointBlock,
 		},
 	}, nil
 }

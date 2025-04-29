@@ -43,6 +43,7 @@ type BlockchainEventListenerSource struct {
 }
 
 type BlockchainEventListenerStatus struct {
+	Catchup    bool                              `docstruct:"BlockchainEventListenerStatus" json:"catchup"`
 	Checkpoint BlockchainEventListenerCheckpoint `docstruct:"BlockchainEventListenerStatus" json:"checkpoint"`
 }
 

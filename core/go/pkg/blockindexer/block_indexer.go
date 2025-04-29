@@ -68,7 +68,7 @@ type BlockIndexer interface {
 	WaitForTransactionAnyResult(ctx context.Context, hash pldtypes.Bytes32) (*pldapi.IndexedTransaction, error)
 	GetBlockListenerHeight(ctx context.Context) (highest uint64, err error)
 	GetConfirmedBlockHeight(ctx context.Context) (confirmed pldtypes.HexUint64, err error)
-	GetEventStreamCheckpointBlock(ctx context.Context, id uuid.UUID) (int64, error)
+	GetEventStreamStatus(ctx context.Context, id uuid.UUID) (*EventStreamStatus, error)
 	RPCModule() *rpcserver.RPCModule
 }
 

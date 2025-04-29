@@ -118,6 +118,11 @@ type EventStreamSignature struct {
 	SignatureHash pldtypes.Bytes32 `json:"signatureHash"          gorm:"primaryKey"`
 }
 
+type EventStreamStatus struct {
+	CheckpointBlock int64
+	Catchup         bool
+}
+
 type EventDeliveryBatch struct {
 	StreamID   uuid.UUID               `json:"streamId"`
 	StreamName string                  `json:"streamName"`

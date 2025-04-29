@@ -377,8 +377,11 @@ func TestDeleteBlockchainEventListener(t *testing.T) {
 func TestGetBlockchainEventListenerStatus(t *testing.T) {
 	id := uuid.New()
 	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-		mc.blockIndexer.On("GetEventStreamCheckpointBlock", mock.Anything, id).Return(int64(0), errors.New("pop")).Once()
-		mc.blockIndexer.On("GetEventStreamCheckpointBlock", mock.Anything, id).Return(int64(25), nil).Once()
+		mc.blockIndexer.On("GetEventStreamStatus", mock.Anything, id).Return(nil, errors.New("pop")).Once()
+		mc.blockIndexer.On("GetEventStreamStatus", mock.Anything, id).Return(&blockindexer.EventStreamStatus{
+			Catchup:         false,
+			CheckpointBlock: 25,
+		}, nil).Once()
 		mc.blockIndexer.On("StopEventStream", mock.Anything, mock.Anything).Return(nil)
 	})
 	defer done()
@@ -399,6 +402,7 @@ func TestGetBlockchainEventListenerStatus(t *testing.T) {
 	status, err := txm.GetBlockchainEventListenerStatus(ctx, "bel1")
 	require.NoError(t, err)
 	assert.Equal(t, int64(25), status.Checkpoint.BlockNumber)
+	assert.False(t, status.Catchup)
 }
 
 type testBlockchainEventReceiver struct {
