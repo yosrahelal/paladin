@@ -22,18 +22,18 @@ import (
 	"math/rand/v2"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
+	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
-	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 var MAX_INPUT_COUNT = 10
@@ -80,10 +80,10 @@ func prepareInputsForTransfer(ctx context.Context, callbacks plugintk.DomainCall
 		expectedTotal = expectedTotal.Add(expectedTotal, param.Amount.Int())
 	}
 
-	return buildInputsForExpectedTotal(ctx, callbacks, coinSchema, useNullifiers, stateQueryContext, senderKey, expectedTotal)
+	return buildInputsForExpectedTotal(ctx, callbacks, coinSchema, useNullifiers, stateQueryContext, senderKey, expectedTotal, false)
 }
 
-func buildInputsForExpectedTotal(ctx context.Context, callbacks plugintk.DomainCallbacks, coinSchema *pb.StateSchema, useNullifiers bool, stateQueryContext, senderKey string, expectedTotal *big.Int) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
+func buildInputsForExpectedTotal(ctx context.Context, callbacks plugintk.DomainCallbacks, coinSchema *pb.StateSchema, useNullifiers bool, stateQueryContext, senderKey string, expectedTotal *big.Int, locked bool) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
@@ -92,7 +92,8 @@ func buildInputsForExpectedTotal(ctx context.Context, callbacks plugintk.DomainC
 		queryBuilder := query.NewQueryBuilder().
 			Limit(10).
 			Sort(".created").
-			Equal("owner", senderKey)
+			Equal("owner", senderKey).
+			Equal("locked", locked)
 
 		if lastStateTimestamp > 0 {
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)
@@ -127,9 +128,10 @@ func buildInputsForExpectedTotal(ctx context.Context, callbacks plugintk.DomainC
 	}
 }
 
-func prepareOutputsForTransfer(ctx context.Context, useNullifiers bool, params []*types.FungibleTransferParamEntry, resolvedVerifiers []*pb.ResolvedVerifier, coinSchema *prototk.StateSchema, name string) ([]*types.ZetoCoin, []*pb.NewState, error) {
+func prepareOutputsForTransfer(ctx context.Context, useNullifiers bool, params []*types.FungibleTransferParamEntry, resolvedVerifiers []*pb.ResolvedVerifier, coinSchema *prototk.StateSchema, name string, locked ...bool) ([]*types.ZetoCoin, []*pb.NewState, error) {
 	var coins []*types.ZetoCoin
 	var newStates []*pb.NewState
+	isLocked := len(locked) > 0 && locked[0]
 	for _, param := range params {
 		resolvedRecipient := domain.FindVerifier(param.To, getAlgoZetoSnarkBJJ(name), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, resolvedVerifiers)
 		if resolvedRecipient == nil {
@@ -143,9 +145,10 @@ func prepareOutputsForTransfer(ctx context.Context, useNullifiers bool, params [
 		salt := crypto.NewSalt()
 		compressedKeyStr := zetosigner.EncodeBabyJubJubPublicKey(recipientKey)
 		newCoin := &types.ZetoCoin{
-			Salt:   (*tktypes.HexUint256)(salt),
-			Owner:  tktypes.MustParseHexBytes(compressedKeyStr),
+			Salt:   (*pldtypes.HexUint256)(salt),
+			Owner:  pldtypes.MustParseHexBytes(compressedKeyStr),
 			Amount: param.Amount,
+			Locked: isLocked,
 		}
 
 		newState, err := makeNewState(ctx, coinSchema, useNullifiers, newCoin, name, param.To)

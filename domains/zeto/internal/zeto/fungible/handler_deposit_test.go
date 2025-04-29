@@ -4,12 +4,13 @@ import (
 	"context"
 	"testing"
 
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -21,7 +22,7 @@ func TestDepositValidateParams(t *testing.T) {
 	config := &types.DomainInstanceConfig{}
 	v, err := h.ValidateParams(ctx, config, "{\"amount\":100}")
 	require.NoError(t, err)
-	require.Equal(t, "0x64", v.(*tktypes.HexUint256).String())
+	require.Equal(t, "0x64", v.(*pldtypes.HexUint256).String())
 
 	_, err = h.ValidateParams(ctx, config, "bad json")
 	require.ErrorContains(t, err, "PD210105: Failed to decode the deposit call.")
@@ -55,9 +56,11 @@ func TestDepositAssemble(t *testing.T) {
 	h := depositHandler{
 		baseHandler: baseHandler{
 			name: "test1",
-		},
-		coinSchema: &prototk.StateSchema{
-			Id: "coin",
+			stateSchemas: &common.StateSchemas{
+				CoinSchema: &prototk.StateSchema{
+					Id: "coin",
+				},
+			},
 		},
 	}
 	ctx := context.Background()
@@ -68,11 +71,13 @@ func TestDepositAssemble(t *testing.T) {
 		},
 	}
 	tx := &types.ParsedTransaction{
-		Params:      tktypes.MustParseHexUint256("100"),
+		Params:      pldtypes.MustParseHexUint256("100"),
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{
 			TokenName: "tokenContract1",
-			CircuitId: "circuit1",
+			Circuits: &zetosignerapi.Circuits{
+				"deposit": &zetosignerapi.Circuit{Name: "circuit-deposit"},
+			},
 		},
 	}
 	req := &prototk.AssembleTransactionRequest{
@@ -125,7 +130,7 @@ func TestDepositPrepare(t *testing.T) {
 		From:          "Bob",
 	}
 	tx := &types.ParsedTransaction{
-		Params:      tktypes.MustParseHexUint256("100"),
+		Params:      pldtypes.MustParseHexUint256("100"),
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{
 			TokenName: constants.TOKEN_ANON_ENC,
@@ -207,5 +212,5 @@ func TestNewDepositHandler(t *testing.T) {
 
 	assert.NotNil(t, handler)
 	assert.Equal(t, name, handler.name)
-	assert.Equal(t, coinSchema, handler.coinSchema)
+	assert.Equal(t, coinSchema, handler.stateSchemas.CoinSchema)
 }

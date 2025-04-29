@@ -7,17 +7,17 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
+	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
+	"github.com/kaleido-io/paladin/common/go/pkg/log"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
-	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func (z *Zeto) handleMintEvent(ctx context.Context, tree core.SparseMerkleTree, storage smt.StatesStorage, ev *prototk.OnChainEvent, tokenName string, res *prototk.HandleEventBatchResponse) error {
+func (z *Zeto) handleMintEvent(ctx context.Context, smtTree *merkleTreeSpec, ev *prototk.OnChainEvent, tokenName string, res *prototk.HandleEventBatchResponse) error {
 	var mint MintEvent
 	if err := json.Unmarshal([]byte(ev.DataJson), &mint); err == nil {
 		txID := decodeTransactionData(mint.Data)
@@ -31,7 +31,7 @@ func (z *Zeto) handleMintEvent(ctx context.Context, tree core.SparseMerkleTree, 
 		})
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, mint.Outputs)...)
 		if common.IsNullifiersToken(tokenName) {
-			err := z.updateMerkleTree(ctx, tree, storage, txID, mint.Outputs)
+			err := z.updateMerkleTree(ctx, smtTree.tree, smtTree.storage, txID, mint.Outputs)
 			if err != nil {
 				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOMint", err)
 			}
@@ -42,7 +42,7 @@ func (z *Zeto) handleMintEvent(ctx context.Context, tree core.SparseMerkleTree, 
 	return nil
 }
 
-func (z *Zeto) handleTransferEvent(ctx context.Context, tree core.SparseMerkleTree, storage smt.StatesStorage, ev *prototk.OnChainEvent, tokenName string, res *prototk.HandleEventBatchResponse) error {
+func (z *Zeto) handleTransferEvent(ctx context.Context, smtTree *merkleTreeSpec, ev *prototk.OnChainEvent, tokenName string, res *prototk.HandleEventBatchResponse) error {
 	var transfer TransferEvent
 	if err := json.Unmarshal([]byte(ev.DataJson), &transfer); err == nil {
 		txID := decodeTransactionData(transfer.Data)
@@ -57,7 +57,7 @@ func (z *Zeto) handleTransferEvent(ctx context.Context, tree core.SparseMerkleTr
 		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
 		if common.IsNullifiersToken(tokenName) {
-			err := z.updateMerkleTree(ctx, tree, storage, txID, transfer.Outputs)
+			err := z.updateMerkleTree(ctx, smtTree.tree, smtTree.storage, txID, transfer.Outputs)
 			if err != nil {
 				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOTransfer", err)
 			}
@@ -68,7 +68,7 @@ func (z *Zeto) handleTransferEvent(ctx context.Context, tree core.SparseMerkleTr
 	return nil
 }
 
-func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, tree core.SparseMerkleTree, storage smt.StatesStorage, ev *prototk.OnChainEvent, tokenName string, res *prototk.HandleEventBatchResponse) error {
+func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, smtTree *merkleTreeSpec, ev *prototk.OnChainEvent, tokenName string, res *prototk.HandleEventBatchResponse) error {
 	var transfer TransferWithEncryptedValuesEvent
 	if err := json.Unmarshal([]byte(ev.DataJson), &transfer); err == nil {
 		txID := decodeTransactionData(transfer.Data)
@@ -83,7 +83,7 @@ func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, tree core.
 		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
 		if common.IsNullifiersToken(tokenName) {
-			err := z.updateMerkleTree(ctx, tree, storage, txID, transfer.Outputs)
+			err := z.updateMerkleTree(ctx, smtTree.tree, smtTree.storage, txID, transfer.Outputs)
 			if err != nil {
 				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOTransferWithEncryptedValues", err)
 			}
@@ -94,7 +94,7 @@ func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, tree core.
 	return nil
 }
 
-func (z *Zeto) handleWithdrawEvent(ctx context.Context, tree core.SparseMerkleTree, storage smt.StatesStorage, ev *prototk.OnChainEvent, tokenName string, res *prototk.HandleEventBatchResponse) error {
+func (z *Zeto) handleWithdrawEvent(ctx context.Context, smtTree *merkleTreeSpec, ev *prototk.OnChainEvent, tokenName string, res *prototk.HandleEventBatchResponse) error {
 	var withdraw WithdrawEvent
 	if err := json.Unmarshal([]byte(ev.DataJson), &withdraw); err == nil {
 		txID := decodeTransactionData(withdraw.Data)
@@ -107,9 +107,9 @@ func (z *Zeto) handleWithdrawEvent(ctx context.Context, tree core.SparseMerkleTr
 			Location:      ev.Location,
 		})
 		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, withdraw.Inputs)...)
-		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, []tktypes.HexUint256{withdraw.Output})...)
+		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, []pldtypes.HexUint256{withdraw.Output})...)
 		if common.IsNullifiersToken(tokenName) {
-			err := z.updateMerkleTree(ctx, tree, storage, txID, []tktypes.HexUint256{withdraw.Output})
+			err := z.updateMerkleTree(ctx, smtTree.tree, smtTree.storage, txID, []pldtypes.HexUint256{withdraw.Output})
 			if err != nil {
 				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOWithdraw", err)
 			}
@@ -120,7 +120,7 @@ func (z *Zeto) handleWithdrawEvent(ctx context.Context, tree core.SparseMerkleTr
 	return nil
 }
 
-func (z *Zeto) handleLockedEvent(ctx context.Context, ev *prototk.OnChainEvent, res *prototk.HandleEventBatchResponse) error {
+func (z *Zeto) handleLockedEvent(ctx context.Context, smtTree *merkleTreeSpec, smtTreeForLocked *merkleTreeSpec, ev *prototk.OnChainEvent, tokenName string, res *prototk.HandleEventBatchResponse) error {
 	var lock LockedEvent
 	if err := json.Unmarshal([]byte(ev.DataJson), &lock); err == nil {
 		txID := decodeTransactionData(lock.Data)
@@ -132,13 +132,26 @@ func (z *Zeto) handleLockedEvent(ctx context.Context, ev *prototk.OnChainEvent, 
 			TransactionId: txID.String(),
 			Location:      ev.Location,
 		})
+		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, lock.Inputs)...)
+		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, lock.Outputs)...)
+		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, lock.LockedOutputs)...)
+		if common.IsNullifiersToken(tokenName) {
+			err := z.updateMerkleTree(ctx, smtTree.tree, smtTree.storage, txID, lock.Outputs)
+			if err != nil {
+				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOsLocked", err)
+			}
+			err = z.updateMerkleTree(ctx, smtTreeForLocked.tree, smtTreeForLocked.storage, txID, lock.LockedOutputs)
+			if err != nil {
+				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOsLocked", err)
+			}
+		}
 	} else {
 		log.L(ctx).Errorf("Failed to unmarshal lock event: %s", err)
 	}
 	return nil
 }
 
-func (z *Zeto) updateMerkleTree(ctx context.Context, tree core.SparseMerkleTree, storage smt.StatesStorage, txID tktypes.HexBytes, outputs []tktypes.HexUint256) error {
+func (z *Zeto) updateMerkleTree(ctx context.Context, tree core.SparseMerkleTree, storage smt.StatesStorage, txID pldtypes.HexBytes, outputs []pldtypes.HexUint256) error {
 	storage.SetTransactionId(txID.HexString0xPrefix())
 	for _, out := range outputs {
 		if out.NilOrZero() {
@@ -152,7 +165,7 @@ func (z *Zeto) updateMerkleTree(ctx context.Context, tree core.SparseMerkleTree,
 	return nil
 }
 
-func (z *Zeto) addOutputToMerkleTree(ctx context.Context, tree core.SparseMerkleTree, output tktypes.HexUint256) error {
+func (z *Zeto) addOutputToMerkleTree(ctx context.Context, tree core.SparseMerkleTree, output pldtypes.HexUint256) error {
 	idx, err := node.NewNodeIndexFromBigInt(output.Int())
 	if err != nil {
 		return i18n.NewError(ctx, msgs.MsgErrorNewNodeIndex, output.String(), err)
@@ -169,7 +182,7 @@ func (z *Zeto) addOutputToMerkleTree(ctx context.Context, tree core.SparseMerkle
 	return nil
 }
 
-func parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.HexUint256) []*prototk.StateUpdate {
+func parseStatesFromEvent(txID pldtypes.HexBytes, states []pldtypes.HexUint256) []*prototk.StateUpdate {
 	refs := make([]*prototk.StateUpdate, len(states))
 	for i, state := range states {
 		refs[i] = &prototk.StateUpdate{
@@ -187,7 +200,7 @@ func formatErrors(errors []string) string {
 	}
 	return msg
 }
-func decodeTransactionData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
+func decodeTransactionData(data pldtypes.HexBytes) (txID pldtypes.HexBytes) {
 	if len(data) < 4 {
 		return nil
 	}
