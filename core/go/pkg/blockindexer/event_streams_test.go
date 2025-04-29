@@ -727,13 +727,13 @@ func TestStartStopEventStream(t *testing.T) {
 	assert.Nil(t, eventStream.dispatcherDone)
 }
 
-func TestGetEventStreamCheckpointBlock(t *testing.T) {
+func TestGetEventStreamStatus(t *testing.T) {
 	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 	esID := uuid.New()
 
 	// doesn't exist
-	_, err := bi.GetEventStreamCheckpointBlock(ctx, esID)
+	_, err := bi.GetEventStreamStatus(ctx, esID)
 	require.ErrorContains(t, err, "PD011312")
 
 	eventStream := &eventStream{
@@ -746,12 +746,14 @@ func TestGetEventStreamCheckpointBlock(t *testing.T) {
 		bi: bi,
 	}
 	eventStream.checkpoint.Store(25)
+	eventStream.catchup.Store(true)
 	bi.eventStreams[esID] = eventStream
 
 	// success
-	checkpoint, err := bi.GetEventStreamCheckpointBlock(ctx, esID)
+	status, err := bi.GetEventStreamStatus(ctx, esID)
 	require.NoError(t, err)
-	assert.Equal(t, int64(25), checkpoint)
+	assert.Equal(t, int64(25), status.CheckpointBlock)
+	assert.True(t, status.Catchup)
 }
 
 func TestProcessCheckpointFail(t *testing.T) {

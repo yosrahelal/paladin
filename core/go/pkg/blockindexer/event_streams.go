@@ -56,6 +56,7 @@ type eventStream struct {
 	dispatcherDone chan struct{}
 	fromBlock      *ethtypes.HexUint64 // nil == latest
 	checkpoint     atomic.Int64        // set after we persist checkpoint
+	catchup        atomic.Bool
 }
 
 type eventBatch struct {
@@ -249,6 +250,7 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 	// The error is already checked before writing to the DB
 	es.fromBlock, _ = es.bi.getFromBlock(ctx, definition.Config.FromBlock, EventStreamDefaults.FromBlock)
 	es.checkpoint.Store(-1)
+	es.catchup.Store(true)
 
 	// Calculate all the signatures we require
 	for _, source := range definition.Sources {
@@ -337,14 +339,17 @@ func (bi *blockIndexer) StopEventStream(ctx context.Context, id uuid.UUID) error
 	return bi.eventStreams[id].stop(true)
 }
 
-func (bi *blockIndexer) GetEventStreamCheckpointBlock(ctx context.Context, id uuid.UUID) (int64, error) {
+func (bi *blockIndexer) GetEventStreamStatus(ctx context.Context, id uuid.UUID) (*EventStreamStatus, error) {
 	bi.eventStreamsLock.Lock()
 	defer bi.eventStreamsLock.Unlock()
 
 	if bi.eventStreams[id] == nil {
-		return 0, i18n.NewError(ctx, msgs.MsgBlockIndexerEventStreamNotFound, id)
+		return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerEventStreamNotFound, id)
 	}
-	return bi.eventStreams[id].checkpoint.Load(), nil
+	return &EventStreamStatus{
+		CheckpointBlock: bi.eventStreams[id].checkpoint.Load(),
+		Catchup:         bi.eventStreams[id].catchup.Load(),
+	}, nil
 }
 
 func (bi *blockIndexer) getStreamList() []*eventStream {
@@ -503,6 +508,7 @@ func (es *eventStream) detector() {
 		// the event stream is starting from the latest block
 		// wait here for the first block to be read and processed so that we have a checkpoint to
 		// use in later logic for understanding whether we are in catchup mode or not
+		es.catchup.Store(false)
 		select {
 		case block := <-es.blocks:
 			checkpointBlock = confutil.P(int64(block.blockNumber))
@@ -550,6 +556,7 @@ func (es *eventStream) detector() {
 				return
 			}
 		} else {
+			es.catchup.Store(true)
 			// Get a page of events from the DB
 			var catchUpToBlockNumber int64
 			if startupBlock != nil {
@@ -564,6 +571,7 @@ func (es *eventStream) detector() {
 				return
 			}
 			if caughtUp {
+				es.catchup.Store(false)
 				lastCatchupEvent = nil
 				if startupBlock == nil {
 					// Process the deferred notified block, and back to normal operation

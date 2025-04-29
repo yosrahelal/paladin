@@ -7,6 +7,7 @@ title: BlockchainEventListenerStatus
 
 ```json
 {
+    "catchup": false,
     "checkpoint": {
         "blockNumber": 0
     }
@@ -17,5 +18,6 @@ title: BlockchainEventListenerStatus
 
 | Field Name | Description | Type |
 |------------|-------------|------|
+| `catchup` | Whether the event listener is catching up to the latest block | `bool` |
 | `checkpoint` | The checkpoint for the event listener | [`BlockchainEventListenerCheckpoint`](blockchaineventlistenercheckpoint.md#blockchaineventlistenercheckpoint) |
 
