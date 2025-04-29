@@ -3,7 +3,7 @@ ARG JAVA_VERSION=21.0.4+7
 ARG NODE_VERSION=20.17.0
 ARG PROTO_VERSION=28.2
 ARG GO_VERSION=1.22.7
-ARG GO_MIGRATE_VERSION=4.18.1
+ARG GO_MIGRATE_VERSION=4.18.3
 ARG GRADLE_VERSION=8.5
 ARG WASMER_VERSION=4.3.7
 
@@ -169,7 +169,7 @@ RUN JAVA_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "aarch64"; else ec
 
 # Install DB migration tool
 RUN GO_MIRGATE_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "arm64"; else echo -n "amd64"; fi ) && \
-    curl -sLo - https://github.com/golang-migrate/migrate/releases/download/v$GO_MIGRATE_VERSION/migrate.${TARGETOS}-${GO_MIRGATE_ARCH}.tar.gz | \
+    curl -sLo - https://github.com/golang-migrate/migrate/releases/download/v$/migrate.${TARGETOS}-${GO_MIRGATE_ARCH}.tar.gz | \
     tar -C /usr/local/bin -xzf - migrate
 
 
