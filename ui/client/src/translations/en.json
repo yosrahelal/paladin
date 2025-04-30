@@ -191,6 +191,7 @@
 	"thisNode": "(this node)",
 	"timestamp": "Timestamp",
 	"to": "To",
+	"tokenName": "Token name",
 	"topic": "Topic",
 	"transaction": "Transaction",
 	"transactionHash": "Tx Hash",
