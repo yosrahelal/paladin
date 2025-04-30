@@ -17,8 +17,10 @@
 import { Button, Grid2 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ZetoMintDialog } from '../dialogs/ZetoMint';
-import { ZetoTransferDialog } from '../dialogs/ZetoTransfer';
+import { NotoMintDialog } from '../dialogs/domains/noto/NotoMint';
+import { NotoTransferDialog } from '../dialogs/domains/noto/NotoTransfer';
+import { ZetoMintDialog } from '../dialogs/domains/zeto/ZetoMint';
+import { ZetoTransferDialog } from '../dialogs/domains/zeto/ZetoTransfer';
 
 type Props = {
   domainName: string;
@@ -36,6 +38,8 @@ export const DomainButtons: React.FC<Props> = ({
 }) => {
   const { t } = useTranslation();
   const [buttons, setButtons] = useState<DomainButton[]>([]);
+  const [notoMintDialogOpen, setNotoMintDialogOpen] = useState(false);
+  const [notoTransferDialogOpen, setNotoTransferDialogOpen] = useState(false);
   const [zetoMintDialogOpen, setZetoMintDialogOpen] = useState(false);
   const [zetoTransferDialogOpen, setZetoTransferDialogOpen] = useState(false);
 
@@ -43,15 +47,29 @@ export const DomainButtons: React.FC<Props> = ({
     const tmpButtons: DomainButton[] = [];
 
     // TODO: should key off of the domain "type" instead of expecting a specific name
-    if (domainName === 'zeto') {
-      tmpButtons.push({
-        name: 'mint',
-        action: () => setZetoMintDialogOpen(true),
-      });
-      tmpButtons.push({
-        name: 'transfer',
-        action: () => setZetoTransferDialogOpen(true),
-      });
+    switch (domainName) {
+      case 'noto': {
+        tmpButtons.push({
+          name: 'mint',
+          action: () => setNotoMintDialogOpen(true),
+        });
+        tmpButtons.push({
+          name: 'transfer',
+          action: () => setNotoTransferDialogOpen(true),
+        });
+        break;
+      }
+      case 'zeto': {
+        tmpButtons.push({
+          name: 'mint',
+          action: () => setZetoMintDialogOpen(true),
+        });
+        tmpButtons.push({
+          name: 'transfer',
+          action: () => setZetoTransferDialogOpen(true),
+        });
+        break;
+      }
     }
 
     setButtons(tmpButtons);
@@ -72,6 +90,18 @@ export const DomainButtons: React.FC<Props> = ({
         ))}
         {buttons.length === 0 && t('noActions')}
       </Grid2>
+
+      <NotoMintDialog
+        dialogOpen={notoMintDialogOpen}
+        setDialogOpen={setNotoMintDialogOpen}
+        contractAddress={contractAddress}
+      />
+
+      <NotoTransferDialog
+        dialogOpen={notoTransferDialogOpen}
+        setDialogOpen={setNotoTransferDialogOpen}
+        contractAddress={contractAddress}
+      />
 
       <ZetoMintDialog
         dialogOpen={zetoMintDialogOpen}
