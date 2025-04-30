@@ -306,7 +306,7 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 		es := bi.eventStreams[uuid.MustParse(esID)]
 		baseBlock, err := es.readDBCheckpoint()
 		require.NoError(t, err)
-		if baseBlock >= 14 {
+		if baseBlock != nil && *baseBlock >= 14 {
 			break
 		}
 		require.False(t, t.Failed())
@@ -331,7 +331,8 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	es := bi.eventStreams[uuid.MustParse(esID)]
 	cp, err := es.processCheckpoint()
 	require.NoError(t, err)
-	assert.Equal(t, int64(14), cp)
+	require.NotNil(t, cp)
+	assert.Equal(t, int64(14), *cp)
 
 	// And check we don't get any events
 	select {
@@ -443,6 +444,29 @@ func TestTestNotifyEventStreamDoesNotBlock(t *testing.T) {
 		},
 	})
 
+}
+
+func TestAddEventStreamBadName(t *testing.T) {
+	ctx, bi, _, mp, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	_, err := bi.AddEventStream(ctx, mp.P.NOTX(), &InternalEventStream{})
+	assert.Regexp(t, "PD020005", err)
+}
+
+func TestAddEventStreamBadFromBlockConfiguration(t *testing.T) {
+	ctx, bi, _, mp, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	_, err := bi.AddEventStream(ctx, mp.P.NOTX(), &InternalEventStream{
+		Definition: &EventStream{
+			Name: "testing",
+			Config: EventStreamConfig{
+				FromBlock: json.RawMessage(`"one"`),
+			},
+		},
+	})
+	assert.Regexp(t, "PD011300", err)
 }
 
 func TestUpsertInternalEventQueryExistingStreamFail(t *testing.T) {
@@ -675,7 +699,8 @@ func TestStartStopEventStream(t *testing.T) {
 		handlerDBTX: func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) error {
 			return nil
 		},
-		bi: bi,
+		bi:        bi,
+		fromBlock: confutil.P(ethtypes.HexUint64(0)),
 	}
 
 	bi.eventStreams[esID] = eventStream
@@ -702,6 +727,35 @@ func TestStartStopEventStream(t *testing.T) {
 	assert.Nil(t, eventStream.dispatcherDone)
 }
 
+func TestGetEventStreamStatus(t *testing.T) {
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+	esID := uuid.New()
+
+	// doesn't exist
+	_, err := bi.GetEventStreamStatus(ctx, esID)
+	require.ErrorContains(t, err, "PD011312")
+
+	eventStream := &eventStream{
+		definition: &EventStream{
+			ID: esID,
+		},
+		handlerDBTX: func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) error {
+			return nil
+		},
+		bi: bi,
+	}
+	eventStream.checkpoint.Store(25)
+	eventStream.catchup.Store(true)
+	bi.eventStreams[esID] = eventStream
+
+	// success
+	status, err := bi.GetEventStreamStatus(ctx, esID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(25), status.CheckpointBlock)
+	assert.True(t, status.Catchup)
+}
+
 func TestProcessCheckpointFail(t *testing.T) {
 	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
@@ -714,6 +768,7 @@ func TestProcessCheckpointFail(t *testing.T) {
 		ctx:          ctx,
 		definition:   &EventStream{ID: uuid.New()},
 		detectorDone: make(chan struct{}),
+		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
 	}
 	es.detector()
 
@@ -733,6 +788,7 @@ func TestGetHighestIndexedBlockFail(t *testing.T) {
 		ctx:          ctx,
 		definition:   &EventStream{ID: uuid.New()},
 		detectorDone: make(chan struct{}),
+		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
 	}
 	es.detector()
 
@@ -777,6 +833,7 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 		dispatch:     make(chan *eventDispatch),
 		detectorDone: make(chan struct{}),
 		serializer:   pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
+		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
 	}
 	go func() {
 		assert.NotPanics(t, func() { es.detector() })
@@ -829,10 +886,90 @@ func TestExitInCatchupPhase(t *testing.T) {
 		},
 		blocks:       make(chan *eventStreamBlock),
 		detectorDone: make(chan struct{}),
+		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
 	}
 	go func() {
 		assert.NotPanics(t, func() { es.detector() })
 	}()
+	<-es.detectorDone
+
+	require.NoError(t, p.Mock.ExpectationsWereMet())
+}
+
+func TestStartFromLatest(t *testing.T) {
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	p.Mock.ExpectQuery("SELECT.*event_stream_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
+
+	cancellableCtx, cancelCtx := context.WithCancel(ctx)
+	es := &eventStream{
+		bi:  bi,
+		ctx: cancellableCtx,
+		definition: &EventStream{
+			ID: uuid.New(),
+			Sources: []EventStreamSource{{
+				ABI: testABI,
+			}},
+		},
+		blocks:       make(chan *eventStreamBlock),
+		dispatch:     make(chan *eventDispatch),
+		detectorDone: make(chan struct{}),
+		serializer:   pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
+	}
+	go func() {
+		assert.NotPanics(t, func() { es.detector() })
+	}()
+
+	es.blocks <- &eventStreamBlock{
+		blockNumber: 5,
+		events: []*LogJSONRPC{
+			{
+				BlockHash:        ethtypes.MustNewHexBytes0xPrefix(pldtypes.RandHex(32)),
+				TransactionHash:  ethtypes.MustNewHexBytes0xPrefix(pldtypes.RandHex(32)),
+				BlockNumber:      5,
+				TransactionIndex: 0,
+				LogIndex:         0,
+			},
+		}}
+	d := <-es.dispatch
+	assert.Equal(t, int64(5), d.event.BlockNumber)
+
+	cancelCtx()
+	<-es.detectorDone
+
+	require.NoError(t, p.Mock.ExpectationsWereMet())
+}
+
+func TestExitStartFromLatest(t *testing.T) {
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	p.Mock.ExpectQuery("SELECT.*event_stream_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
+
+	cancellableCtx, cancelCtx := context.WithCancel(ctx)
+	es := &eventStream{
+		bi:  bi,
+		ctx: cancellableCtx,
+		definition: &EventStream{
+			ID: uuid.New(),
+			Sources: []EventStreamSource{{
+				ABI: testABI,
+			}},
+		},
+		blocks:       make(chan *eventStreamBlock),
+		dispatch:     make(chan *eventDispatch),
+		detectorDone: make(chan struct{}),
+		serializer:   pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
+	}
+	go func() {
+		assert.NotPanics(t, func() { es.detector() })
+	}()
+
+	// brief pause otherwise the detector may not start
+	time.Sleep(10 * time.Millisecond)
+
+	cancelCtx()
 	<-es.detectorDone
 
 	require.NoError(t, p.Mock.ExpectationsWereMet())

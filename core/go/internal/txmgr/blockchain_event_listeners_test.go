@@ -17,6 +17,7 @@ package txmgr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -220,6 +221,7 @@ func TestCreateBlockchainEventListener(t *testing.T) {
 		assert.Equal(t, "bel1", def.Name)
 		assert.Equal(t, blockindexer.EventStreamTypePTXBlockchainEventListener.Enum(), def.Type)
 		assert.Equal(t, "1m", *def.Config.BatchTimeout)
+		assert.Equal(t, json.RawMessage(`4`), def.Config.FromBlock)
 		assert.Equal(t, mockABI, def.Sources[0].ABI)
 		assert.Equal(t, mockAddress, def.Sources[0].Address)
 	})
@@ -227,6 +229,7 @@ func TestCreateBlockchainEventListener(t *testing.T) {
 		Name: "bel1",
 		Options: pldapi.BlockchainEventListenerOptions{
 			BatchTimeout: confutil.P("1m"),
+			FromBlock:    json.RawMessage(`4`),
 		},
 		Sources: []pldapi.BlockchainEventListenerSource{{
 			ABI:     mockABI,
@@ -260,6 +263,7 @@ func TestQueryBlockchainEventListeners(t *testing.T) {
 			Config: blockindexer.EventStreamConfig{
 				BatchTimeout: confutil.P("1m"),
 				BatchSize:    confutil.P(100),
+				FromBlock:    json.RawMessage(`"latest"`),
 			},
 			Sources: blockindexer.EventSources{{
 				ABI:     mockABI,
@@ -278,6 +282,7 @@ func TestQueryBlockchainEventListeners(t *testing.T) {
 	assert.True(t, *listeners[0].Started)
 	assert.Equal(t, "1m", *listeners[0].Options.BatchTimeout)
 	assert.Equal(t, 100, *listeners[0].Options.BatchSize)
+	assert.Equal(t, "\"latest\"", string(listeners[0].Options.FromBlock))
 	assert.Equal(t, mockABI, listeners[0].Sources[0].ABI)
 	assert.Equal(t, mockAddress, listeners[0].Sources[0].Address)
 
@@ -367,6 +372,37 @@ func TestDeleteBlockchainEventListener(t *testing.T) {
 	err = txm.DeleteBlockchainEventListener(ctx, "bel1")
 	assert.NoError(t, err)
 	assert.NotContains(t, txm.blockchainEventListeners, "bel1")
+}
+
+func TestGetBlockchainEventListenerStatus(t *testing.T) {
+	id := uuid.New()
+	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.blockIndexer.On("GetEventStreamStatus", mock.Anything, id).Return(nil, errors.New("pop")).Once()
+		mc.blockIndexer.On("GetEventStreamStatus", mock.Anything, id).Return(&blockindexer.EventStreamStatus{
+			Catchup:         false,
+			CheckpointBlock: 25,
+		}, nil).Once()
+		mc.blockIndexer.On("StopEventStream", mock.Anything, mock.Anything).Return(nil)
+	})
+	defer done()
+
+	_, err := txm.GetBlockchainEventListenerStatus(ctx, "bel1")
+	assert.ErrorContains(t, err, "PD012248")
+
+	txm.blockchainEventListeners["bel1"] = &blockchainEventListener{
+		definition: &blockindexer.EventStream{
+			Name: "bel1",
+			ID:   id,
+		},
+	}
+
+	_, err = txm.GetBlockchainEventListenerStatus(ctx, "bel1")
+	require.ErrorContains(t, err, "pop")
+
+	status, err := txm.GetBlockchainEventListenerStatus(ctx, "bel1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(25), status.Checkpoint.BlockNumber)
+	assert.False(t, status.Catchup)
 }
 
 type testBlockchainEventReceiver struct {

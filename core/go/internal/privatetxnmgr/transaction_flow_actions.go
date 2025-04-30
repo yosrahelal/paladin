@@ -653,7 +653,12 @@ func (tf *transactionFlow) requestVerifierResolution(ctx context.Context) {
 	if tf.transaction.PreAssembly.Verifiers == nil {
 		tf.transaction.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, 0, len(tf.transaction.PreAssembly.RequiredVerifiers))
 	}
-	for _, v := range tf.transaction.PreAssembly.RequiredVerifiers {
+	// having duplicate requests for the same verifier can cause the same transaction to be sent multiple times
+	// note that we leave the duplicates, if any, alone in the transaction object
+	// and only dedup the requests that we send to the identity resolver
+	requiredVerifiers := dedupResolveVerifierRequests(tf.transaction.PreAssembly.RequiredVerifiers)
+
+	for _, v := range requiredVerifiers {
 		tf.logActionDebugf(ctx, "Resolving verifier %s", v.Lookup)
 		tf.identityResolver.ResolveVerifierAsync(
 			ctx,
@@ -671,4 +676,17 @@ func (tf *transactionFlow) requestVerifierResolution(ctx context.Context) {
 	}
 	//TODO this needs to be more precise (like which verifiers have been sent / pending / stale  etc)
 	tf.requestedVerifierResolution = true
+}
+
+func dedupResolveVerifierRequests(requests []*prototk.ResolveVerifierRequest) []*prototk.ResolveVerifierRequest {
+	seen := make(map[string]struct{})
+	var dedupedRequests []*prototk.ResolveVerifierRequest
+	for _, request := range requests {
+		key := fmt.Sprintf("%s:%s:%s", request.Lookup, request.VerifierType, request.Algorithm)
+		if _, ok := seen[key]; !ok {
+			seen[key] = struct{}{}
+			dedupedRequests = append(dedupedRequests, request)
+		}
+	}
+	return dedupedRequests
 }

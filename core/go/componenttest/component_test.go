@@ -45,7 +45,9 @@ import (
 )
 
 func TestRunSimpleStorageEthTransaction(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+
 	logrus.SetLevel(logrus.DebugLevel)
 
 	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil, true)
@@ -66,8 +68,7 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 
 	// set up the event listener
 	success, err := c.PTX().CreateBlockchainEventListener(ctx, &pldapi.BlockchainEventListener{
-		Name:    "listener1",
-		Started: confutil.P(false),
+		Name: "listener1",
 		Sources: []pldapi.BlockchainEventListenerSource{{
 			ABI:     abi.ABI{build.ABI.Events()["Changed"]},
 			Address: contractAddr,
@@ -79,35 +80,8 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	wsClient, err := c.WebSocket(ctx, instance.wsConfig)
 	require.NoError(t, err)
 
-	sub, err := wsClient.PTX().SubscribeBlockchainEvents(ctx, "listener1")
-	require.NoError(t, err)
-
 	eventData := make(chan string)
-
-	go func() {
-		for {
-			subNotification, ok := <-sub.Notifications()
-			if ok {
-				var batch pldapi.TransactionEventBatch
-				_ = json.Unmarshal(subNotification.GetResult(), &batch)
-				for _, e := range batch.Events {
-					eventData <- e.Data.String()
-				}
-			}
-			err = subNotification.Ack(ctx)
-			require.NoError(t, err)
-		}
-	}()
-
-	// pause to make sure that if an event was going to be received, it would have been
-	ticker1 := time.NewTicker(10 * time.Millisecond)
-	defer ticker1.Stop()
-
-	select {
-	case <-eventData:
-		t.FailNow()
-	case <-ticker1.C:
-	}
+	subscribeAndSendDataToChannel(ctx, t, wsClient, "listener1", eventData)
 
 	success, err = c.PTX().StartBlockchainEventListener(ctx, "listener1")
 	require.NoError(t, err)
@@ -116,14 +90,14 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	data := <-eventData
 	assert.JSONEq(t, `{"x":"11223344"}`, data)
 
-	var getX1 pldtypes.RawJSON
+	var getX pldtypes.RawJSON
 	err = simpleStorage.Clone().
 		Function("get").
 		To(contractAddr).
-		Outputs(&getX1).
+		Outputs(&getX).
 		Call()
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"x":"11223344"}`, getX1.Pretty())
+	assert.JSONEq(t, `{"x":"11223344"}`, getX.Pretty())
 
 	res = simpleStorage.Clone().
 		Function("set").
@@ -135,24 +109,99 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	data = <-eventData
 	assert.JSONEq(t, `{"x":"99887766"}`, data)
 
-	var getX2 pldtypes.RawJSON
-	err = simpleStorage.Clone().
-		Function("get").
-		To(contractAddr).
-		Outputs(&getX2).
-		Call()
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"x":"99887766"}`, getX2.Pretty())
-
-	// stop the event listener
-	success, err = c.PTX().StopBlockchainEventListener(ctx, "listener1")
-	require.NoError(t, err)
-	require.True(t, success)
-
 	res = simpleStorage.Clone().
 		Function("set").
 		To(contractAddr).
 		Inputs(`{"_x":1234}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
+
+	data = <-eventData
+	assert.JSONEq(t, `{"x":"1234"}`, data)
+}
+
+func TestBlockchainEventListeners(t *testing.T) {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+
+	logrus.SetLevel(logrus.DebugLevel)
+
+	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil, true)
+	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(250 * time.Millisecond)
+
+	build, err := solutils.LoadBuild(ctx, simpleStorageBuildJSON)
+	require.NoError(t, err)
+
+	simpleStorage := c.ForABI(ctx, build.ABI).Public().From("key1")
+
+	res := simpleStorage.Clone().
+		Constructor().
+		Bytecode(build.Bytecode).
+		Inputs(`{"x":1}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
+	contractAddr := res.Receipt().ContractAddress
+	deployBlock := res.Receipt().BlockNumber
+
+	// set up the event listener
+	_, err = c.PTX().CreateBlockchainEventListener(ctx, &pldapi.BlockchainEventListener{
+		Name:    "listener1",
+		Started: confutil.P(false),
+		Sources: []pldapi.BlockchainEventListenerSource{{
+			ABI:     abi.ABI{build.ABI.Events()["Changed"]},
+			Address: contractAddr,
+		}},
+	})
+	require.NoError(t, err)
+
+	status, err := c.PTX().GetBlockchainEventListenerStatus(ctx, "listener1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(-1), status.Checkpoint.BlockNumber)
+
+	wsClient, err := c.WebSocket(ctx, instance.wsConfig)
+	require.NoError(t, err)
+
+	listener1 := make(chan string)
+	subscribeAndSendDataToChannel(ctx, t, wsClient, "listener1", listener1)
+
+	// pause to make sure that if an event was going to be received, it would have been
+	ticker1 := time.NewTicker(10 * time.Millisecond)
+	defer ticker1.Stop()
+
+	select {
+	case <-listener1:
+		t.FailNow()
+	case <-ticker1.C:
+	}
+
+	_, err = c.PTX().StartBlockchainEventListener(ctx, "listener1")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"x":"1"}`, <-listener1)
+
+	res = simpleStorage.Clone().
+		Function("set").
+		To(contractAddr).
+		Inputs(`{"_x":2}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
+
+	assert.JSONEq(t, `{"x":"2"}`, <-listener1)
+
+	// making this check immediately after receiving the event results in a race condition where the ack might not have been processed
+	// and the checkpoint updated, so check that it is either equal to the block number of the deploy or the block number of the invoke
+	status, err = c.PTX().GetBlockchainEventListenerStatus(ctx, "listener1")
+	require.NoError(t, err)
+	assert.True(t, status.Checkpoint.BlockNumber == deployBlock || status.Checkpoint.BlockNumber == res.Receipt().BlockNumber)
+
+	// stop the event listener
+	_, err = c.PTX().StopBlockchainEventListener(ctx, "listener1")
+	require.NoError(t, err)
+
+	res = simpleStorage.Clone().
+		Function("set").
+		To(contractAddr).
+		Inputs(`{"_x":3}`).
 		Send().Wait(5 * time.Second)
 	require.NoError(t, res.Error())
 
@@ -161,17 +210,89 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	defer ticker2.Stop()
 
 	select {
-	case <-eventData:
+	case <-listener1:
 		t.FailNow()
 	case <-ticker2.C:
 	}
 
-	success, err = c.PTX().StartBlockchainEventListener(ctx, "listener1")
+	_, err = c.PTX().StartBlockchainEventListener(ctx, "listener1")
 	require.NoError(t, err)
-	require.True(t, success)
 
-	data = <-eventData
-	assert.JSONEq(t, `{"x":"1234"}`, data)
+	assert.JSONEq(t, `{"x":"3"}`, <-listener1)
+
+	// create a second listener with default fromBlock settings, it should receive all the events
+	_, err = c.PTX().CreateBlockchainEventListener(ctx, &pldapi.BlockchainEventListener{
+		Name: "listener2",
+		Sources: []pldapi.BlockchainEventListenerSource{{
+			ABI:     abi.ABI{build.ABI.Events()["Changed"]},
+			Address: contractAddr,
+		}},
+	})
+	require.NoError(t, err)
+
+	listener2 := make(chan string)
+	subscribeAndSendDataToChannel(ctx, t, wsClient, "listener2", listener2)
+
+	assert.JSONEq(t, `{"x":"1"}`, <-listener2)
+	assert.JSONEq(t, `{"x":"2"}`, <-listener2)
+	assert.JSONEq(t, `{"x":"3"}`, <-listener2)
+
+	// create a third listener that listeners from latest
+	_, err = c.PTX().CreateBlockchainEventListener(ctx, &pldapi.BlockchainEventListener{
+		Name: "listener3",
+		Sources: []pldapi.BlockchainEventListenerSource{{
+			ABI:     abi.ABI{build.ABI.Events()["Changed"]},
+			Address: contractAddr,
+		}},
+		Options: pldapi.BlockchainEventListenerOptions{
+			FromBlock: json.RawMessage(`"latest"`),
+		},
+	})
+	require.NoError(t, err)
+
+	listener3 := make(chan string)
+	subscribeAndSendDataToChannel(ctx, t, wsClient, "listener3", listener3)
+
+	// submit another transaction- this should be the next event that all the listeners receive
+	res = simpleStorage.Clone().
+		Function("set").
+		To(contractAddr).
+		Inputs(`{"_x":4}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
+
+	assert.JSONEq(t, `{"x":"4"}`, <-listener1)
+	assert.JSONEq(t, `{"x":"4"}`, <-listener2)
+	assert.JSONEq(t, `{"x":"4"}`, <-listener3)
+}
+
+func subscribeAndSendDataToChannel(ctx context.Context, t *testing.T, wsClient pldclient.PaladinWSClient, listenerName string, data chan string) {
+	sub, err := wsClient.PTX().SubscribeBlockchainEvents(ctx, listenerName)
+	require.NoError(t, err)
+	go func() {
+		for {
+			select {
+			case subNotification, ok := <-sub.Notifications():
+				if ok {
+					eventData := make([]string, 0)
+					var batch pldapi.TransactionEventBatch
+					_ = json.Unmarshal(subNotification.GetResult(), &batch)
+					for _, e := range batch.Events {
+						t.Logf("Received event on %s from %d/%d/%d : %s", listenerName, e.BlockNumber, e.TransactionIndex, e.LogIndex, e.Data.String())
+						eventData = append(eventData, e.Data.String())
+					}
+					require.NoError(t, subNotification.Ack(ctx))
+					// send after the ack otherwise the main test can complete when it receives the last values and the websocket is closed before the ack
+					// can be sent
+					for _, d := range eventData {
+						data <- d
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
 func TestUpdatePublicTransaction(t *testing.T) {

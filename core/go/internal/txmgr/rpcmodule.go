@@ -72,6 +72,7 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_startBlockchainEventListener", tm.rpcStartBlockchainEventListener()).
 		Add("ptx_stopBlockchainEventListener", tm.rpcStopBlockchainEventListener()).
 		Add("ptx_deleteBlockchainEventListener", tm.rpcDeleteBlockchainEventListener()).
+		Add("ptx_getBlockchainEventListenerStatus", tm.rpcGetBlockchainEventListenerStatus()).
 		AddAsync(tm.rpcEventStreams)
 
 	tm.debugRpcModule = rpcserver.NewRPCModule("debug").
@@ -444,5 +445,13 @@ func (tm *txManager) rpcDeleteBlockchainEventListener() rpcserver.RPCHandler {
 		name string,
 	) (bool, error) {
 		return true, tm.DeleteBlockchainEventListener(ctx, name)
+	})
+}
+
+func (tm *txManager) rpcGetBlockchainEventListenerStatus() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		name string,
+	) (*pldapi.BlockchainEventListenerStatus, error) {
+		return tm.GetBlockchainEventListenerStatus(ctx, name)
 	})
 }

@@ -18,6 +18,7 @@ package blockindexer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -32,13 +33,15 @@ import (
 )
 
 type EventStreamConfig struct {
-	BatchSize    *int    `json:"batchSize,omitempty"`
-	BatchTimeout *string `json:"batchTimeout,omitempty"`
+	BatchSize    *int            `json:"batchSize,omitempty"`
+	BatchTimeout *string         `json:"batchTimeout,omitempty"`
+	FromBlock    json.RawMessage `json:"fromBlock,omitempty"`
 }
 
 var EventStreamDefaults = &EventStreamConfig{
 	BatchSize:    confutil.P(50),
 	BatchTimeout: confutil.P("75ms"),
+	FromBlock:    json.RawMessage(`0`),
 }
 
 type EventStreamType string
@@ -113,6 +116,11 @@ type EventStreamCheckpoint struct {
 type EventStreamSignature struct {
 	Stream        uuid.UUID        `json:"stream"                 gorm:"primaryKey"`
 	SignatureHash pldtypes.Bytes32 `json:"signatureHash"          gorm:"primaryKey"`
+}
+
+type EventStreamStatus struct {
+	CheckpointBlock int64
+	Catchup         bool
 }
 
 type EventDeliveryBatch struct {

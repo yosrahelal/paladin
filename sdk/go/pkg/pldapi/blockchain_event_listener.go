@@ -17,6 +17,8 @@
 package pldapi
 
 import (
+	"encoding/json"
+
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 )
@@ -30,11 +32,21 @@ type BlockchainEventListener struct {
 }
 
 type BlockchainEventListenerOptions struct {
-	BatchSize    *int    `docstruct:"BlockchainEventListenerOptions" json:"batchSize,omitempty"`
-	BatchTimeout *string `docstruct:"BlockchainEventListenerOptions" json:"batchTimeout,omitempty"`
+	BatchSize    *int            `docstruct:"BlockchainEventListenerOptions" json:"batchSize,omitempty"`
+	BatchTimeout *string         `docstruct:"BlockchainEventListenerOptions" json:"batchTimeout,omitempty"`
+	FromBlock    json.RawMessage `docstruct:"BlockchainEventListenerOptions" json:"fromBlock,omitempty"`
 }
 
 type BlockchainEventListenerSource struct {
 	ABI     abi.ABI              `docstruct:"BlockchainEventListenerSource" json:"abi"`
 	Address *pldtypes.EthAddress `docstruct:"BlockchainEventListenerSource" json:"address,omitempty"`
+}
+
+type BlockchainEventListenerStatus struct {
+	Catchup    bool                              `docstruct:"BlockchainEventListenerStatus" json:"catchup"`
+	Checkpoint BlockchainEventListenerCheckpoint `docstruct:"BlockchainEventListenerStatus" json:"checkpoint"`
+}
+
+type BlockchainEventListenerCheckpoint struct {
+	BlockNumber int64 `docstruct:"BlockchainEventListenerCheckpoint" json:"blockNumber"`
 }
