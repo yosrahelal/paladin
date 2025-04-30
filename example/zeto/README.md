@@ -8,12 +8,7 @@ See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/tu
 
 ### Local Paladin network
 
-This sample requires a local 3-node Paladin network running on `localhost:31548`, `localhost:31648`, and `localhost:31748`. You can get one setup by running the operator build:
-
-```console
-(from the paladin root folder)
-$ ./gradlew :operator:deploy
-```
+This sample requires a local 3-node Paladin network running on `localhost:31548`, `localhost:31648`, and `localhost:31748`. You can get one setup by referring to the [Getting Started](https://lf-decentralized-trust-labs.github.io/paladin/head/getting-started/installation/) guide.
 
 This should provision a local kubernetes (based on Kind) cluster and provision a Besu and Paladin network including these pods:
 
