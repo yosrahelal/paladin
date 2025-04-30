@@ -248,7 +248,6 @@ func testBlockArrayWithTXType(t *testing.T, l int, transactionType string, known
 			},
 		})
 		require.NoError(t, err)
-		// Default TX receipt for most tests
 		receipts[blocks[i].Hash.String()] = []*TXReceiptJSONRPC{
 			{
 				TransactionHash: txHash,
@@ -1483,6 +1482,7 @@ func TestBlockIndexerManyEventsWaitForTransactionSuccess(t *testing.T) {
 	ctx, bi, mRPC, blDone := newTestBlockIndexer(t)
 	defer blDone()
 
+	// 20000 events in a single tx
 	blocks, receipts := testBlockWithManyTXAndEvents(t, 1, 20000)
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
