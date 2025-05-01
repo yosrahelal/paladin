@@ -518,6 +518,9 @@ func newTestZeto() (*Zeto, *domain.MockDomainCallbacks) {
 	z.merkleTreeNodeSchema = &pb.StateSchema{
 		Id: "merkle_tree_node",
 	}
+	z.dataSchema = &pb.StateSchema{
+		Id: "data",
+	}
 	z.mintSignature = "event UTXOMint(uint256[] outputs, address indexed submitter, bytes data)"
 	z.transferSignature = "event UTXOTransfer(uint256[] inputs, uint256[] outputs, address indexed submitter, bytes data)"
 	z.transferWithEncSignature = "event UTXOTransferWithEncryptedValues(uint256[] inputs, uint256[] outputs, uint256 encryptionNonce, uint256[2] ecdhPublicKey, uint256[] encryptedValues, address indexed submitter, bytes data)"
@@ -761,6 +764,42 @@ func TestValidateStateHashes(t *testing.T) {
 	assert.ErrorContains(t, err, "PD210086: State hash mismatch (hashed vs. received): 0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f != 0x1234")
 
 	req.States[0].Id = "0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f"
+	res, err = z.ValidateStateHashes(ctx, req)
+	assert.NoError(t, err)
+	assert.Len(t, res.StateIds, 1)
+}
+
+func TestValidateStateHashesDataState(t *testing.T) {
+	z, _ := newTestZeto()
+	ctx := context.Background()
+
+	req := &pb.ValidateStateHashesRequest{
+		States: []*pb.EndorsableState{
+			{
+				SchemaId:      z.DataSchemaID(),
+				StateDataJson: "bad json",
+			},
+		},
+	}
+	_, err := z.ValidateStateHashes(ctx, req)
+	assert.ErrorContains(t, err, "PD210087: Failed to unmarshal state data. invalid character 'b' looking for beginning of value")
+
+	// Test case: Valid data state with no ID
+	req.States[0].StateDataJson = `{
+		"salt": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+		"data": "0xabcdef"
+	}`
+	res, err := z.ValidateStateHashes(ctx, req)
+	assert.NoError(t, err)
+	assert.Len(t, res.StateIds, 1)
+
+	// Test case: State hash mismatch
+	req.States[0].Id = "0x1234"
+	_, err = z.ValidateStateHashes(ctx, req)
+	assert.ErrorContains(t, err, "PD210086: State hash mismatch (hashed vs. received)")
+
+	// Test case: Matching state hash
+	req.States[0].Id = "0x90a5df696783c409e262a20766584d6c90faf92c2851eed119d8b56704b90335"
 	res, err = z.ValidateStateHashes(ctx, req)
 	assert.NoError(t, err)
 	assert.Len(t, res.StateIds, 1)

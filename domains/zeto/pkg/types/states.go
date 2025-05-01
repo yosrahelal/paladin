@@ -110,7 +110,6 @@ var TransactionDataABI = &abi.Parameter{
 	},
 }
 
-// TODO: is this an appropriate hashing method for this state data?
 func (z *TransactionData) Hash(ctx context.Context) (*pldtypes.HexUint256, error) {
 	if z.hash == nil {
 		hash := sha256.New()

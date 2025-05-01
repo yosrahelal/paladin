@@ -583,8 +583,8 @@ func (z *Zeto) validateStateHash(ctx context.Context, hash *pldtypes.HexUint256,
 		return hashString, nil
 	}
 	// if the requested state ID is set, we compare it with the calculated hash
-	stateId := pldtypes.MustParseHexUint256(state.Id)
-	if hash.Int().Cmp(stateId.Int()) != 0 {
+	stateId, _ := pldtypes.ParseHexUint256(ctx, state.Id)
+	if stateId == nil || hash.Int().Cmp(stateId.Int()) != 0 {
 		log.L(ctx).Errorf("State hash mismatch (hashed vs. received): %s != %s", hash.String(), state.Id)
 		return "", i18n.NewError(ctx, msgs.MsgErrorStateHashMismatch, hash.String(), state.Id)
 	}

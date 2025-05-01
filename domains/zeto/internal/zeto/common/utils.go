@@ -110,19 +110,20 @@ func EncodeTransactionData(ctx context.Context, transaction *prototk.Transaction
 		TransactionID: transactionID,
 		InfoStates:    stateIDs,
 	}
-	dataJSON, err := json.Marshal(dataValues)
-	if err != nil {
-		return nil, err
-	}
-	dataABI, err := types.ZetoTransactionDataABI_V0.EncodeABIDataJSONCtx(ctx, dataJSON)
-	if err != nil {
-		return nil, err
+
+	var dataJSON []byte
+	var dataABI []byte
+	var data []byte
+	dataJSON, err = json.Marshal(dataValues)
+	if err == nil {
+		dataABI, err = types.ZetoTransactionDataABI_V0.EncodeABIDataJSONCtx(ctx, dataJSON)
+		if err == nil {
+			data = append(data, types.ZetoTransactionDataID_V0...)
+			data = append(data, dataABI...)
+		}
 	}
 
-	var data []byte
-	data = append(data, types.ZetoTransactionDataID_V0...)
-	data = append(data, dataABI...)
-	return data, nil
+	return data, err
 }
 
 func EncodeProof(proof *corepb.SnarkProof) map[string]interface{} {

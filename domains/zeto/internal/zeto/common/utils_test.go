@@ -110,6 +110,29 @@ func TestEncodeTransactionData(t *testing.T) {
 	}
 }
 
+func TestEncodeTransactionData_InvalidTransactionId(t *testing.T) {
+	ctx := context.Background()
+	txn := &prototk.TransactionSpecification{
+		TransactionId: "invalid",
+	}
+	result, err := EncodeTransactionData(ctx, txn, nil)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestEncodeTransactionData_InvalidInfoStateId(t *testing.T) {
+	ctx := context.Background()
+	txn := &prototk.TransactionSpecification{
+		TransactionId: "0x8572b34655888710ea27adbda526c5789576b7072cb0494dab3c8c7891549934",
+	}
+	infoStates := []*prototk.EndorsableState{
+		{Id: "invalid"},
+	}
+	result, err := EncodeTransactionData(ctx, txn, infoStates)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
 func TestLoadBabyJubKey(t *testing.T) {
 	var validComp babyjub.PublicKeyComp
 	for i := range validComp {
