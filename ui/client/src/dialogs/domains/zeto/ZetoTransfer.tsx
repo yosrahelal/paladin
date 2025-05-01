@@ -27,9 +27,9 @@ import {
 import { useMutation } from '@tanstack/react-query';
 import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { TransactionType } from '../interfaces';
-import { sendTransaction } from '../queries/transactions';
-import { encodeHex } from '../utils';
+import { TransactionType } from '../../../interfaces';
+import { sendTransaction } from '../../../queries/transactions';
+import { encodeHex } from '../../../utils';
 
 type Props = {
   contractAddress: string;
@@ -37,7 +37,7 @@ type Props = {
   setDialogOpen: Dispatch<SetStateAction<boolean>>;
 };
 
-const mintAbi = {
+const transferAbi = {
   inputs: [
     {
       components: [
@@ -58,17 +58,17 @@ const mintAbi = {
         },
       ],
       internalType: 'struct IZetoFungible.TransferParam[]',
-      name: 'mints',
+      name: 'transfers',
       type: 'tuple[]',
     },
   ],
-  name: 'mint',
+  name: 'transfer',
   outputs: [],
   stateMutability: 'nonpayable',
   type: 'function',
 };
 
-export const ZetoMintDialog: React.FC<Props> = ({
+export const ZetoTransferDialog: React.FC<Props> = ({
   contractAddress,
   dialogOpen,
   setDialogOpen,
@@ -96,10 +96,10 @@ export const ZetoMintDialog: React.FC<Props> = ({
         type: TransactionType.PRIVATE,
         from: sender,
         to: contractAddress,
-        abi: [mintAbi],
-        function: 'mint',
+        abi: [transferAbi],
+        function: 'transfer',
         data: {
-          mints: [
+          transfers: [
             {
               to: recipient,
               amount,
@@ -113,12 +113,15 @@ export const ZetoMintDialog: React.FC<Props> = ({
 
   useEffect(() => {
     if (error !== null) {
-      setErrorMessage(t('mintFailed'));
+      setErrorMessage(t('transferFailed'));
     }
   }, [error]);
 
   const canSubmit =
-    recipient.length > 0 && amount.length > 0 && !isNaN(parseInt(amount));
+    sender.length > 0 &&
+    recipient.length > 0 &&
+    amount.length > 0 &&
+    !isNaN(parseInt(amount));
 
   return (
     <Dialog
@@ -134,7 +137,7 @@ export const ZetoMintDialog: React.FC<Props> = ({
         }}
       >
         <DialogTitle sx={{ textAlign: 'center' }}>
-          {t('mint')}
+          {t('transfer')}
           <Box sx={{ marginTop: '10px' }}>
             {errorMessage !== undefined && (
               <Alert variant="filled" severity="error">
@@ -199,7 +202,7 @@ export const ZetoMintDialog: React.FC<Props> = ({
             disabled={!canSubmit}
             type="submit"
           >
-            {t('mint')}
+            {t('transfer')}
           </Button>
           <Button
             sx={{ minWidth: '100px' }}
