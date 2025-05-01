@@ -32,6 +32,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/lib/pq"
 
 	"github.com/LF-Decentralized-Trust-labs/paladin/common/go/pkg/log"
 	"github.com/LF-Decentralized-Trust-labs/paladin/core/pkg/ethclient"
@@ -759,7 +760,7 @@ func (ptm *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 		Table("public_txn_bindings").
 		Select(`"transaction"`, "sender", "contract_address", `"tx_type"`, `"Submission"."pub_txn_id"`, `"Submission"."tx_hash"`).
 		Joins("Submission").
-		Where(`"Submission"."tx_hash" IN (?)`, txHashes).
+		Where(`"Submission"."tx_hash" = ANY (?)`, pq.Array(txHashes)).
 		Find(&lookups).
 		Error
 	if err != nil {
