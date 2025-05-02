@@ -214,6 +214,7 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		AssembledTransaction: &pb.AssembledTransaction{
 			InputStates:  inputStates,
 			OutputStates: outputStates,
+			InfoStates:   infoStates,
 		},
 		AttestationPlan: []*pb.AttestationRequest{
 			{
