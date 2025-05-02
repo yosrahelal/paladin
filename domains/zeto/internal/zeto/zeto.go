@@ -56,6 +56,7 @@ type Zeto struct {
 	nftSchema                *prototk.StateSchema
 	merkleTreeRootSchema     *prototk.StateSchema
 	merkleTreeNodeSchema     *prototk.StateSchema
+	dataSchema               *prototk.StateSchema
 	mintSignature            string
 	transferSignature        string
 	transferWithEncSignature string
@@ -131,6 +132,10 @@ func (z *Zeto) CoinSchemaID() string {
 	return z.coinSchema.Id
 }
 
+func (z *Zeto) DataSchemaID() string {
+	return z.dataSchema.Id
+}
+
 func (z *Zeto) NFTSchemaID() string {
 	return z.nftSchema.Id
 }
@@ -193,6 +198,7 @@ func (z *Zeto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (
 	z.nftSchema = req.AbiStateSchemas[1]
 	z.merkleTreeRootSchema = req.AbiStateSchemas[2]
 	z.merkleTreeNodeSchema = req.AbiStateSchemas[3]
+	z.dataSchema = req.AbiStateSchemas[4]
 
 	return &prototk.InitDomainResponse{}, nil
 }
@@ -327,11 +333,11 @@ func (z *Zeto) GetHandler(method, tokenName string) types.DomainHandler {
 	}
 	switch method {
 	case types.METHOD_MINT:
-		return fungible.NewMintHandler(z.name, z.coinSchema)
+		return fungible.NewMintHandler(z.name, z.coinSchema, z.dataSchema)
 	case types.METHOD_TRANSFER:
-		return fungible.NewTransferHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
+		return fungible.NewTransferHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema, z.dataSchema)
 	case types.METHOD_TRANSFER_LOCKED:
-		return fungible.NewTransferLockedHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
+		return fungible.NewTransferLockedHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema, z.dataSchema)
 	case types.METHOD_LOCK:
 		return fungible.NewLockHandler(z.name, z.Callbacks, z.coinSchema, z.merkleTreeRootSchema, z.merkleTreeNodeSchema)
 	case types.METHOD_DEPOSIT:
@@ -538,34 +544,69 @@ func (z *Zeto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.Sig
 	}
 }
 
-func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+func (z *Zeto) validateCoinState(ctx context.Context, state *prototk.EndorsableState) (string, error) {
+	log.L(ctx).Debugf("validating coin state hash: %+v\n", state)
+	var coin types.ZetoCoin
+	err := json.Unmarshal([]byte(state.StateDataJson), &coin)
+	if err != nil {
+		log.L(ctx).Errorf("Error unmarshalling coin state data: %s", err)
+		return "", i18n.NewError(ctx, msgs.MsgErrorUnmarshalStateData, err)
+	}
+	hash, err := coin.Hash(ctx)
+	if err != nil {
+		log.L(ctx).Errorf("Error hashing coin state data: %s", err)
+		return "", i18n.NewError(ctx, msgs.MsgErrorHashOutputState, err)
+	}
+	return z.validateStateHash(ctx, hash, state)
+}
+
+func (z *Zeto) validateDataState(ctx context.Context, state *prototk.EndorsableState) (string, error) {
+	log.L(ctx).Debugf("validating data state hash: %+v\n", state)
+	var info types.TransactionData
+	err := json.Unmarshal([]byte(state.StateDataJson), &info)
+	if err != nil {
+		log.L(ctx).Errorf("Error unmarshalling data state data: %s", err)
+		return "", i18n.NewError(ctx, msgs.MsgErrorUnmarshalStateData, err)
+	}
+	hash, err := info.Hash(ctx)
+	if err != nil {
+		log.L(ctx).Errorf("Error hashing data state data: %s", err)
+		return "", i18n.NewError(ctx, msgs.MsgErrorHashOutputState, err)
+	}
+	return z.validateStateHash(ctx, hash, state)
+}
+
+func (z *Zeto) validateStateHash(ctx context.Context, hash *pldtypes.HexUint256, state *prototk.EndorsableState) (string, error) {
+	hashString := common.HexUint256To32ByteHexString(hash)
+	if state.Id == "" {
+		// if the requested state ID is empty, we simply set it
+		return hashString, nil
+	}
+	// if the requested state ID is set, we compare it with the calculated hash
+	stateId, _ := pldtypes.ParseHexUint256(ctx, state.Id)
+	if stateId == nil || hash.Int().Cmp(stateId.Int()) != 0 {
+		log.L(ctx).Errorf("State hash mismatch (hashed vs. received): %s != %s", hash.String(), state.Id)
+		return "", i18n.NewError(ctx, msgs.MsgErrorStateHashMismatch, hash.String(), state.Id)
+	}
+	return state.Id, nil
+}
+
+func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (_ *prototk.ValidateStateHashesResponse, err error) {
 	var res prototk.ValidateStateHashesResponse
 	for _, state := range req.States {
-		log.L(ctx).Debugf("validating state hashes: %+v\n", state)
-		var coin types.ZetoCoin
-		err := json.Unmarshal([]byte(state.StateDataJson), &coin)
-		if err != nil {
-			log.L(ctx).Errorf("Error unmarshalling state data: %s", err)
-			return nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalStateData, err)
-		}
-		hash, err := coin.Hash(ctx)
-		if err != nil {
-			log.L(ctx).Errorf("Error hashing state data: %s", err)
-			return nil, i18n.NewError(ctx, msgs.MsgErrorHashOutputState, err)
-		}
-		hashString := common.HexUint256To32ByteHexString(hash)
-		if state.Id == "" {
-			// if the requested state ID is empty, we simply set it
-			res.StateIds = append(res.StateIds, hashString)
-		} else {
-			// if the requested state ID is set, we compare it with the calculated hash
-			stateId := pldtypes.MustParseHexUint256(state.Id)
-			if hash.Int().Cmp(stateId.Int()) != 0 {
-				log.L(ctx).Errorf("State hash mismatch (hashed vs. received): %s != %s", hash.String(), state.Id)
-				return nil, i18n.NewError(ctx, msgs.MsgErrorStateHashMismatch, hash.String(), state.Id)
+		var id string
+		switch state.SchemaId {
+		case z.CoinSchemaID():
+			if id, err = z.validateCoinState(ctx, state); err != nil {
+				return nil, err
 			}
-			res.StateIds = append(res.StateIds, state.Id)
+		case z.DataSchemaID():
+			if id, err = z.validateDataState(ctx, state); err != nil {
+				return nil, err
+			}
 		}
+		res.StateIds = append(res.StateIds, id)
+
 	}
 	return &res, nil
 }

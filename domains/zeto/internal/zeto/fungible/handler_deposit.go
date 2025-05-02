@@ -197,7 +197,7 @@ func (h *depositHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 		}
 	}
 
-	data, err := common.EncodeTransactionData(ctx, req.Transaction)
+	data, err := common.EncodeTransactionData(ctx, req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}

@@ -77,19 +77,17 @@ func TestEncodeProof(t *testing.T) {
 func TestEncodeTransactionData(t *testing.T) {
 	tests := map[string]struct {
 		transactionId string
-		expected      pldtypes.HexBytes
+		expected      string
 		expectError   bool
 	}{
 		"valid": {
-			transactionId: "0x1234",
-			// Expected: transactionData appended with the parsed TransactionId.
-			// "0x1234" → []byte{0x12, 0x34} so the expected result is {0xab, 0xcd, 0x12, 0x34}
-			expected:    []byte{0x0, 0x1, 0x0, 0x0, 0x12, 0x34},
-			expectError: false,
+			transactionId: "0x8572b34655888710ea27adbda526c5789576b7072cb0494dab3c8c7891549934",
+			expected:      "0x000100008572b34655888710ea27adbda526c5789576b7072cb0494dab3c8c789154993400000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000",
+			expectError:   false,
 		},
 		"invalid TransactionId": {
 			transactionId: "invalid",
-			expected:      nil,
+			expected:      "",
 			expectError:   true,
 		},
 	}
@@ -100,16 +98,39 @@ func TestEncodeTransactionData(t *testing.T) {
 			txn := &prototk.TransactionSpecification{
 				TransactionId: tc.transactionId,
 			}
-			result, err := EncodeTransactionData(ctx, txn)
+			result, err := EncodeTransactionData(ctx, txn, nil)
 			if tc.expectError {
 				assert.Error(t, err, "expected an error when transactionId is invalid")
 				assert.Nil(t, result)
 			} else {
 				assert.NoError(t, err, "expected no error for valid transactionId")
-				assert.Equal(t, tc.expected, result, "result should equal the expected concatenation")
+				assert.Equal(t, tc.expected, result.String(), "result should equal the expected concatenation")
 			}
 		})
 	}
+}
+
+func TestEncodeTransactionData_InvalidTransactionId(t *testing.T) {
+	ctx := context.Background()
+	txn := &prototk.TransactionSpecification{
+		TransactionId: "invalid",
+	}
+	result, err := EncodeTransactionData(ctx, txn, nil)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestEncodeTransactionData_InvalidInfoStateId(t *testing.T) {
+	ctx := context.Background()
+	txn := &prototk.TransactionSpecification{
+		TransactionId: "0x8572b34655888710ea27adbda526c5789576b7072cb0494dab3c8c7891549934",
+	}
+	infoStates := []*prototk.EndorsableState{
+		{Id: "invalid"},
+	}
+	result, err := EncodeTransactionData(ctx, txn, infoStates)
+	assert.Error(t, err)
+	assert.Nil(t, result)
 }
 
 func TestLoadBabyJubKey(t *testing.T) {

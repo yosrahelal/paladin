@@ -11,6 +11,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func TestMintHandler_Prepare(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		encodeFunc   func(context.Context, *pb.TransactionSpecification) (pldtypes.HexBytes, error)
+		encodeFunc   func(context.Context, *pb.TransactionSpecification, []*prototk.EndorsableState) (pldtypes.HexBytes, error)
 		outputStates []*pb.EndorsableState
 		expectErr    bool
 		errContains  string
@@ -75,7 +76,7 @@ func TestMintHandler_Prepare(t *testing.T) {
 					StateDataJson: `{"owner":"0x638e6824da3eb00687eefdeefb17dc646ba9f00fae6020f1b6d640487b07fdac","salt":"3949625438621963838695705020414673764457825239260453211443343787973144679466","tokenID":"12889917038846740459390665944266706251653790785225711651704434901540173766845","uri":"https://example.com/token/name2"}`,
 				},
 			},
-			encodeFunc: func(context.Context, *pb.TransactionSpecification) (pldtypes.HexBytes, error) {
+			encodeFunc: func(context.Context, *pb.TransactionSpecification, []*prototk.EndorsableState) (pldtypes.HexBytes, error) {
 				return nil, assert.AnError
 			},
 			expectErr:   true,
@@ -86,7 +87,8 @@ func TestMintHandler_Prepare(t *testing.T) {
 	// Create a dummy PrepareTransactionRequest.
 	req := &pb.PrepareTransactionRequest{
 		Transaction: &pb.TransactionSpecification{
-			From: "minterAddress",
+			TransactionId: "0x87229d205a0f48bcf0da37542fc140a9bdfc3b4a55c0beffcb62efe25a770a7f",
+			From:          "minterAddress",
 		},
 		OutputStates: []*pb.EndorsableState{
 			{
@@ -97,9 +99,7 @@ func TestMintHandler_Prepare(t *testing.T) {
 
 	// Create a dummy parsed transaction.
 	tx := &types.ParsedTransaction{
-		Transaction: &pb.TransactionSpecification{
-			From: "minterAddress",
-		},
+		Transaction:  req.Transaction,
 		DomainConfig: &types.DomainInstanceConfig{},
 	}
 
@@ -130,7 +130,9 @@ func TestMintHandler_Prepare(t *testing.T) {
 				utxos, ok := paramsMap["utxos"].([]interface{})
 				require.True(t, ok, "utxos should be an array")
 				require.Len(t, utxos, len(tc.outputStates), "unexpected number of utxos")
-				assert.Equal(t, "0x00010000", paramsMap["data"], "data mismatch")
+				assert.Equal(t,
+					"0x0001000087229d205a0f48bcf0da37542fc140a9bdfc3b4a55c0beffcb62efe25a770a7f00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000",
+					paramsMap["data"], "data mismatch")
 				assert.Equal(t, "minterAddress", *resp.Transaction.RequiredSigner, "RequiredSigner mismatch")
 			}
 		})
