@@ -61,6 +61,7 @@ type NonFungibleMintParams struct {
 type FungibleMintParams struct {
 	Mints []*FungibleTransferParamEntry `json:"mints"`
 }
+
 type FungibleTransferParams struct {
 	Transfers []*FungibleTransferParamEntry `json:"transfers"`
 }
@@ -68,6 +69,7 @@ type FungibleTransferParams struct {
 type FungibleTransferParamEntry struct {
 	To     string               `json:"to"`
 	Amount *pldtypes.HexUint256 `json:"amount"`
+	Data   pldtypes.HexBytes    `json:"data"`
 }
 
 type FungibleTransferLockedParams struct {

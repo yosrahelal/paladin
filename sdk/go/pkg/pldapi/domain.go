@@ -14,11 +14,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export const AppRoutes = {
-  Activity: '/ui/activity',
-  Submissions: '/ui/submissions',
-  Peers: '/ui/peers',
-  Keys: '/ui/keys',
-  Registry: '/ui/registry',
-  Domains: '/ui/domains',
-};
+package pldapi
+
+import (
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+)
+
+type Domain struct {
+	Name            string               `docstruct:"Domain" json:"name"`
+	RegistryAddress *pldtypes.EthAddress `docstruct:"Domain" json:"registryAddress"`
+}
+
+type DomainSmartContract struct {
+	DomainName    string               `docstruct:"SmartContract" json:"domainName"`
+	DomainAddress *pldtypes.EthAddress `docstruct:"SmartContract" json:"domainAddress"`
+	Address       pldtypes.EthAddress  `docstruct:"SmartContract" json:"address"`
+}

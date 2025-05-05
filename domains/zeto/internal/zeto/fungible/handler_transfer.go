@@ -79,7 +79,7 @@ var transferABI_withEncryption = &abi.Entry{
 	},
 }
 
-func NewTransferHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema *pb.StateSchema) *transferHandler {
+func NewTransferHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema, dataSchema *pb.StateSchema) *transferHandler {
 	return &transferHandler{
 		baseHandler: baseHandler{
 			name: name,
@@ -87,6 +87,7 @@ func NewTransferHandler(name string, callbacks plugintk.DomainCallbacks, coinSch
 				CoinSchema:           coinSchema,
 				MerkleTreeRootSchema: merkleTreeRootSchema,
 				MerkleTreeNodeSchema: merkleTreeNodeSchema,
+				DataSchema:           dataSchema,
 			},
 		},
 		callbacks: callbacks,
@@ -163,6 +164,15 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		outputStates = append(outputStates, returnedStates...)
 	}
 
+	infoStates := make([]*pb.NewState, 0, len(params))
+	for _, param := range params {
+		info, err := prepareTransactionInfoStates(ctx, param.Data, []string{tx.Transaction.From, param.To}, h.stateSchemas.DataSchema)
+		if err != nil {
+			return nil, err
+		}
+		infoStates = append(infoStates, info...)
+	}
+
 	contractAddress, err := pldtypes.ParseEthAddress(req.Transaction.ContractInfo.ContractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
@@ -177,6 +187,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		AssembledTransaction: &pb.AssembledTransaction{
 			InputStates:  inputStates,
 			OutputStates: outputStates,
+			InfoStates:   infoStates,
 		},
 		AttestationPlan: []*pb.AttestationRequest{
 			{
@@ -216,12 +227,11 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		return nil, err
 	}
 
-	data, err := common.EncodeTransactionData(ctx, req.Transaction)
+	data, err := common.EncodeTransactionData(ctx, req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}
 	params := map[string]any{
-		"inputs":  inputs,
 		"outputs": outputs,
 		"proof":   common.EncodeProof(proofRes.Proof),
 		"data":    data,
@@ -233,9 +243,10 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		params["encryptedValues"] = strings.Split(proofRes.PublicInputs["encryptedValues"], ",")
 	}
 	if common.IsNullifiersToken(tx.DomainConfig.TokenName) {
-		delete(params, "inputs")
 		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
 		params["root"] = proofRes.PublicInputs["root"]
+	} else {
+		params["inputs"] = inputs
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {

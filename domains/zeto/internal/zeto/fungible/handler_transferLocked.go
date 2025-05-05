@@ -67,7 +67,7 @@ var transferLockedABINullifiers = &abi.Entry{
 	},
 }
 
-func NewTransferLockedHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema *pb.StateSchema) *transferLockedHandler {
+func NewTransferLockedHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema, dataSchema *pb.StateSchema) *transferLockedHandler {
 	return &transferLockedHandler{
 		baseHandler: baseHandler{
 			name: name,
@@ -75,6 +75,7 @@ func NewTransferLockedHandler(name string, callbacks plugintk.DomainCallbacks, c
 				CoinSchema:           coinSchema,
 				MerkleTreeRootSchema: merkleTreeRootSchema,
 				MerkleTreeNodeSchema: merkleTreeNodeSchema,
+				DataSchema:           dataSchema,
 			},
 		},
 		callbacks: callbacks,
@@ -190,6 +191,15 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		outputStates = append(outputStates, returnedStates...)
 	}
 
+	infoStates := make([]*pb.NewState, 0, len(params.Transfers))
+	for _, param := range params.Transfers {
+		info, err := prepareTransactionInfoStates(ctx, param.Data, []string{tx.Transaction.From, param.To}, h.stateSchemas.DataSchema)
+		if err != nil {
+			return nil, err
+		}
+		infoStates = append(infoStates, info...)
+	}
+
 	contractAddress, err := pldtypes.ParseEthAddress(req.Transaction.ContractInfo.ContractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
@@ -204,6 +214,7 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		AssembledTransaction: &pb.AssembledTransaction{
 			InputStates:  inputStates,
 			OutputStates: outputStates,
+			InfoStates:   infoStates,
 		},
 		AttestationPlan: []*pb.AttestationRequest{
 			{
@@ -243,7 +254,7 @@ func (h *transferLockedHandler) Prepare(ctx context.Context, tx *types.ParsedTra
 		return nil, err
 	}
 
-	data, err := common.EncodeTransactionData(ctx, req.Transaction)
+	data, err := common.EncodeTransactionData(ctx, req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}

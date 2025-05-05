@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -36,6 +37,7 @@ import (
 type StateSchemas struct {
 	CoinSchema           *prototk.StateSchema
 	NftSchema            *prototk.StateSchema
+	DataSchema           *prototk.StateSchema
 	MerkleTreeRootSchema *prototk.StateSchema
 	MerkleTreeNodeSchema *prototk.StateSchema
 }
@@ -89,15 +91,39 @@ func LoadBabyJubKey(payload []byte) (*babyjub.PublicKey, error) {
 	}
 	return keyCompressed.Decompress()
 }
-func EncodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (pldtypes.HexBytes, error) {
-	txID, err := pldtypes.ParseHexBytes(ctx, transaction.TransactionId)
+
+func EncodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification, infoStates []*prototk.EndorsableState) (pldtypes.HexBytes, error) {
+	var err error
+	stateIDs := make([]pldtypes.Bytes32, len(infoStates))
+	for i, state := range infoStates {
+		stateIDs[i], err = pldtypes.ParseBytes32Ctx(ctx, state.Id)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	transactionID, err := pldtypes.ParseBytes32Ctx(ctx, transaction.TransactionId)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorParseTxId, err)
 	}
+	dataValues := &types.ZetoTransactionData_V0{
+		TransactionID: transactionID,
+		InfoStates:    stateIDs,
+	}
+
+	var dataJSON []byte
+	var dataABI []byte
 	var data []byte
-	data = append(data, types.ZetoTransactionData_V0...)
-	data = append(data, txID...)
-	return data, nil
+	dataJSON, err = json.Marshal(dataValues)
+	if err == nil {
+		dataABI, err = types.ZetoTransactionDataABI_V0.EncodeABIDataJSONCtx(ctx, dataJSON)
+		if err == nil {
+			data = append(data, types.ZetoTransactionDataID_V0...)
+			data = append(data, dataABI...)
+		}
+	}
+
+	return data, err
 }
 
 func EncodeProof(proof *corepb.SnarkProof) map[string]interface{} {
