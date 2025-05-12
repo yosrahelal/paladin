@@ -6,7 +6,7 @@ toolchain go1.23.7
 
 require (
 	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20241004174307-aa3c1fdf0966
-	github.com/hyperledger/firefly-signer v1.1.19
+	github.com/hyperledger/firefly-signer v1.1.21
 	github.com/iden3/go-iden3-crypto v0.0.17
 	github.com/iden3/go-rapidsnark/prover v0.0.12
 	github.com/iden3/go-rapidsnark/types v0.0.3
@@ -33,7 +33,7 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hyperledger/firefly-common v1.4.14 // indirect
+	github.com/hyperledger/firefly-common v1.5.4 // indirect
 	github.com/iden3/wasmer-go v0.0.1 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect

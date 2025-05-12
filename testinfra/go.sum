@@ -15,10 +15,10 @@ github.com/fsnotify/fsnotify v1.7.0 h1:8JEhPFa5W2WU7YfeZzPNqzMP6Lwt7L2715Ggo0nos
 github.com/fsnotify/fsnotify v1.7.0/go.mod h1:40Bi/Hjc2AVfZrqy+aj+yEI+/bRxZnMJyTJwOpGvigM=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
-github.com/hyperledger/firefly-common v1.4.14 h1:G1x7jKBM2MmbGAo+Hwu/9w3F4cyGuWvYViEZGPLWlic=
-github.com/hyperledger/firefly-common v1.4.14/go.mod h1:tYTzTbVODv/gx0TJ3TkEb+gUieQiAbqLfj/yFNrlDV4=
-github.com/hyperledger/firefly-signer v1.1.19 h1:Gq5HqUp9/7egLrahJY9WMk4Y9dZVPIl99aSIged93HM=
-github.com/hyperledger/firefly-signer v1.1.19/go.mod h1:XTwaPRkAfVxk2G3PQOYHLbuvMOiBs0px/4vwXTsUtsA=
+github.com/hyperledger/firefly-common v1.5.4 h1:UFnN+4tzGIqHnAPh1Q9zw9sKrxwlgG7R1QFP2AIxg8g=
+github.com/hyperledger/firefly-common v1.5.4/go.mod h1:1Xawm5PUhxT7k+CL/Kr3i1LE3cTTzoQwZMLimvlW8rs=
+github.com/hyperledger/firefly-signer v1.1.21 h1:r7cTOw6e/6AtiXLf84wZy6Z7zppzlc191HokW2hv4N4=
+github.com/hyperledger/firefly-signer v1.1.21/go.mod h1:axrlSQeKrd124UdHF5L3MkTjb5DeTcbJxJNCZ3JmcWM=
 github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
 github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
 github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
