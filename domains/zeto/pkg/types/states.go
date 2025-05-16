@@ -94,6 +94,37 @@ var ZetoNFTokenABI = &abi.Parameter{
 	},
 }
 
+type TransactionData struct {
+	Salt *pldtypes.HexUint256 `json:"salt"`
+	Data pldtypes.HexBytes    `json:"data"`
+	hash *pldtypes.HexUint256
+}
+
+var TransactionDataABI = &abi.Parameter{
+	Name:         "TransactionData",
+	Type:         "tuple",
+	InternalType: "struct TransactionData",
+	Components: abi.ParameterArray{
+		{Name: "salt", Type: "bytes32"},
+		{Name: "data", Type: "bytes"},
+	},
+}
+
+func (z *TransactionData) Hash(ctx context.Context) (*pldtypes.HexUint256, error) {
+	if z.hash == nil {
+		hash := sha256.New()
+		hash.Write(z.Salt.Int().Bytes())
+		hash.Write(z.Data)
+		hashBytes := pldtypes.HexBytes(hash.Sum(nil))
+		hashInt, err := pldtypes.ParseHexUint256(ctx, hashBytes.String())
+		if err != nil {
+			return nil, err
+		}
+		z.hash = hashInt
+	}
+	return z.hash, nil
+}
+
 // ZetoNFTState represents the overall state of an NFT.
 type ZetoNFTState struct {
 	ID              pldtypes.HexUint256 `json:"id"`
@@ -237,6 +268,13 @@ func GetStateSchemas() ([]string, error) {
 	nftJSON, _ := json.Marshal(ZetoNFTokenABI)
 	smtRootJSON, _ := json.Marshal(MerkleTreeRootABI)
 	smtNodeJSON, _ := json.Marshal(MerkleTreeNodeABI)
+	infoJSON, _ := json.Marshal(TransactionDataABI)
 
-	return []string{string(coinJSON), string(nftJSON), string(smtRootJSON), string(smtNodeJSON)}, nil
+	return []string{
+		string(coinJSON),
+		string(nftJSON),
+		string(smtRootJSON),
+		string(smtNodeJSON),
+		string(infoJSON),
+	}, nil
 }

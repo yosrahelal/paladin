@@ -27,16 +27,20 @@ import (
 	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
 	"github.com/kaleido-io/paladin/common/go/pkg/log"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"gorm.io/gorm"
 )
@@ -50,6 +54,11 @@ var eventSig_PaladinRegisterSmartContract_V0 = mustParseEventSignatureHash(iPala
 var eventSolSig_PaladinRegisterSmartContract_V0 = mustParseEventSoliditySignature(iPaladinContractRegistryABI, "PaladinRegisterSmartContract_V0")
 
 // var eventSig_PaladinPrivateTransaction_V0 = mustParseEventSignature(iPaladinContractABI, "PaladinPrivateTransaction_V0")
+
+var smartContractFilters = filters.FieldMap{
+	"domainAddress": filters.HexBytesField("domain_address"),
+	"address":       filters.HexBytesField("address"),
+}
 
 func NewDomainManager(bgCtx context.Context, conf *pldconf.DomainManagerConfig) components.DomainManager {
 	allDomains := []string{}
@@ -81,6 +90,7 @@ type domainManager struct {
 	keyManager       components.KeyManager
 	ethClientFactory ethclient.EthClientFactory
 	domainSigner     *domainSigner
+	rpcModule        *rpcserver.RPCModule
 
 	domainsByName    map[string]*domain
 	domainsByAddress map[pldtypes.EthAddress]*domain
@@ -96,8 +106,11 @@ type event_PaladinRegisterSmartContract_V0 struct {
 	Config   pldtypes.HexBytes   `json:"config"`
 }
 
-func (dm *domainManager) PreInit(pic components.PreInitComponents) (*components.ManagerInitResult, error) {
-	return &components.ManagerInitResult{}, nil
+func (dm *domainManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
+	dm.buildRPCModule()
+	return &components.ManagerInitResult{
+		RPCModules: []*rpcserver.RPCModule{dm.rpcModule},
+	}, nil
 }
 
 func (dm *domainManager) PostInit(c components.AllComponents) error {
@@ -309,6 +322,31 @@ func (dm *domainManager) getSmartContractCached(ctx context.Context, dbTX persis
 	return dm.dbGetSmartContract(ctx, dbTX, func(db *gorm.DB) *gorm.DB { return db.Where("address = ?", addr) })
 }
 
+func (dm *domainManager) querySmartContracts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.DomainSmartContract, error) {
+	qw := &filters.QueryWrapper[PrivateSmartContract, pldapi.DomainSmartContract]{
+		P:           dm.persistence,
+		Table:       "private_smart_contracts",
+		DefaultSort: "domainAddress",
+		Filters:     smartContractFilters,
+		Query:       jq,
+		MapResult: func(pt *PrivateSmartContract) (*pldapi.DomainSmartContract, error) {
+			_, dc, err := dm.enrichContractWithDomain(ctx, pt)
+			if err != nil {
+				return nil, err
+			}
+			result := &pldapi.DomainSmartContract{
+				DomainAddress: &pt.RegistryAddress,
+				Address:       pt.Address,
+			}
+			if dc != nil {
+				result.DomainName = dc.Domain().Name()
+			}
+			return result, nil
+		},
+	}
+	return qw.Run(ctx, nil)
+}
+
 func (dm *domainManager) dbGetSmartContract(ctx context.Context, dbTX persistence.DBTX, setWhere func(db *gorm.DB) *gorm.DB) (pscLoadResult, *domainContract, error) {
 	var contracts []*PrivateSmartContract
 	query := dbTX.DB().Table("private_smart_contracts")
@@ -323,7 +361,7 @@ func (dm *domainManager) dbGetSmartContract(ctx context.Context, dbTX persistenc
 	}
 
 	// At this point it's possible we have a matching smart contract in our DB, for which we
-	// no longer recognize the domain registry (as it's not one that is configured an longer)
+	// no longer recognize the domain registry (as it's not one that is configured any longer)
 	loadResult, dc, err := dm.enrichContractWithDomain(ctx, contracts[0])
 	if err != nil {
 		return loadResult, nil, err

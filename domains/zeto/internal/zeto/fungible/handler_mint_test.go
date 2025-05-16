@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/iden3/go-iden3-crypto/babyjub"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
@@ -87,9 +88,14 @@ func TestMintAssemble(t *testing.T) {
 	h := mintHandler{
 		baseHandler: baseHandler{
 			name: "test1",
-		},
-		coinSchema: &prototk.StateSchema{
-			Id: "coin",
+			stateSchemas: &common.StateSchemas{
+				CoinSchema: &prototk.StateSchema{
+					Id: "coin",
+				},
+				DataSchema: &prototk.StateSchema{
+					Id: "data",
+				},
+			},
 		},
 	}
 	ctx := context.Background()
@@ -193,7 +199,7 @@ func TestMintPrepare(t *testing.T) {
 	_, err = h.Prepare(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id. PD020007: Invalid hex")
 
-	txSpec.TransactionId = "0x1234567890123456789012345678901234567890"
+	txSpec.TransactionId = "0x87229d205a0f48bcf0da37542fc140a9bdfc3b4a55c0beffcb62efe25a770a7f"
 	_, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
 }

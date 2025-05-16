@@ -14,6 +14,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -411,12 +412,12 @@ func dummyFindAttestationBadPayload(string, []*pb.AttestationResult) *pb.Attesta
 }
 
 // dummyEncodeTxData returns fixed transaction data.
-func dummyEncodeTxData(ctx context.Context, transaction *pb.TransactionSpecification) (pldtypes.HexBytes, error) {
+func dummyEncodeTxData(ctx context.Context, transaction *pb.TransactionSpecification, infoStates []*prototk.EndorsableState) (pldtypes.HexBytes, error) {
 	return []byte("txdata"), nil
 }
 
 // dummyEncodeTxDataFailed returns an error
-func dummyEncodeTxDataFailed(context.Context, *pb.TransactionSpecification) (pldtypes.HexBytes, error) {
+func dummyEncodeTxDataFailed(context.Context, *pb.TransactionSpecification, []*prototk.EndorsableState) (pldtypes.HexBytes, error) {
 	return nil, fmt.Errorf("dummyEncodeTxDataFailed")
 }
 
@@ -463,7 +464,7 @@ func TestPrepare(t *testing.T) {
 		errContains   string
 		nullifiers    bool
 		assertionFunc func(string, []*pb.AttestationResult) *pb.AttestationResult
-		encodeTxFunc  func(context.Context, *pb.TransactionSpecification) (pldtypes.HexBytes, error)
+		encodeTxFunc  func(context.Context, *pb.TransactionSpecification, []*prototk.EndorsableState) (pldtypes.HexBytes, error)
 	}{
 		{
 			name: "success non-nullifier",
