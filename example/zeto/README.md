@@ -12,7 +12,7 @@ This sample requires a local 3-node Paladin network running on `localhost:31548`
 
 This should provision a local kubernetes (based on Kind) cluster and provision a Besu and Paladin network including these pods:
 
-```console
+```shell
 $ kubectl get po
 NAME                               READY   STATUS    RESTARTS   AGE
 besu-node1-0                       1/1     Running   0          19m
@@ -32,18 +32,67 @@ The sample uses the following ABIs to accomplish the end to end flow:
 - Zeto_Anon.json: public transaction ABI for the Zeto token implementation, to conduct public transactions "delegateLock`
 - SampleERC20.json: public transaction ABI for a sample ERC20 token, to conduct public transactions to mint ERC20 tokens
 
-These dependency resources can be obtained by running the following builds:
+These dependency resources can be obtained by one of the following ways.
 
-```console
-$ ./gradlew :sdk:typescript:build
+#### Running The Gradle Build
+
+The following build will set up all the dependency artifacts.
+
+```shell
 $ ./gradlew :example:zeto:build
+```
+
+You can verify that the dependent ABIs have been successfully put in place by the build:
+
+```shell
+$ ls sdk/typescript/build/domains/abis/
+INoto.json		INotoPrivate.json	IZetoFungible.json	PentePrivacyGroup.json	Zeto_Anon.json
+$ ls example/zeto/src/abis/
+SampleERC20.json
+```
+
+#### Manually Building and Copying
+
+You can also perform the setup without having to run Gradle builds.
+
+Compile [Solidity contracts](../../solidity):
+
+```shell
+cd ../../solidity
+npm install
+npm run compile
+```
+
+Build [TypeScript SDK](../../sdk/typescript):
+
+```shell
+cd ../../sdk/typescript
+npm install
+npm run abi
+npm run build
+```
+
+Copy the ABIs needed by the example:
+
+```shell
+cd ../../example/zeto
+npm run abi
+```
+
+You can verify that the dependent ABIs have been successfully put in place by the build:
+
+```shell
+$ ls sdk/typescript/build/domains/abis/
+INoto.json		INotoPrivate.json	IZetoFungible.json	PentePrivacyGroup.json	Zeto_Anon.json
+$ ls example/zeto/src/abis/
+SampleERC20.json
 ```
 
 ## Run the example
 
 Run the example with the following command from inside the `example/zeto` folder:
 
-```console
+```shell
 cd example/zeto
 npm install
 npm run start
