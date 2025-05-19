@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024 Kaleido, Inc.
+ * Copyright © 2025 Kaleido, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -23,7 +23,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/signermocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -55,6 +55,19 @@ func TestNewWalletConfigErrors(t *testing.T) {
 		},
 	})
 	assert.Regexp(t, "PD010507", err)
+
+	_, err = km.newWallet(ctx, &pldconf.WalletConfig{
+		Name:       "wallet1",
+		SignerType: pldconf.WalletSignerTypePlugin,
+	})
+	assert.Regexp(t, "PD010516", err)
+
+	_, err = km.newWallet(ctx, &pldconf.WalletConfig{
+		Name:             "wallet1",
+		SignerType:       pldconf.WalletSignerTypePlugin,
+		SignerPluginName: "test1",
+	})
+	assert.Regexp(t, "PD010515", err)
 
 	_, err = km.selectWallet(ctx, "anything")
 	assert.Regexp(t, "PD010501", err)
@@ -91,7 +104,7 @@ func TestResolveBadSignerResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	ms := signermocks.NewSigningModule(t)
-	ms.On("Resolve", mock.Anything, mock.Anything).Return(&signerapi.ResolveKeyResponse{
+	ms.On("Resolve", mock.Anything, mock.Anything).Return(&prototk.ResolveKeyResponse{
 		KeyHandle: "some.handle",
 	}, nil)
 	w.signingModule = ms

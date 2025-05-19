@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024 Kaleido, Inc.
+ * Copyright © 2025 Kaleido, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -52,18 +53,25 @@ func (km *keyManager) newWallet(ctx context.Context, walletConf *pldconf.WalletC
 	}
 
 	signerType := confutil.StringNotEmpty(&walletConf.SignerType, pldconf.WalletDefaults.SignerType)
-	if signerType != pldconf.WalletSignerTypeEmbedded {
-		// Until we support remoting of the signer API over HTTP/WebSockets etc.
+	if signerType == pldconf.WalletSignerTypeEmbedded {
+		w.signingModule, err = signer.NewSigningModule(ctx, (*signerapi.ConfigNoExt)(walletConf.Signer))
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerEmbeddedSignerFailInit, w.name)
+		}
+	} else if signerType == pldconf.WalletSignerTypePlugin {
+		if walletConf.SignerPluginName == "" {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerPluginSignerEmptyName)
+		}
+		smp, err := km.GetSigningModule(ctx, walletConf.SignerPluginName)
+		if err != nil {
+			return nil, err
+		}
+		w.signingModule = smp
+	} else {
 		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerInvalidWalletSignerType, signerType, w.name)
 	}
 
-	w.signingModule, err = signer.NewSigningModule(ctx, (*signerapi.ConfigNoExt)(walletConf.Signer))
-	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerEmbeddedSignerFailInit, w.name)
-	}
-
 	return w, nil
-
 }
 
 func (km *keyManager) selectWallet(ctx context.Context, identifier string) (*wallet, error) {
@@ -97,16 +105,16 @@ func (km *keyManager) getWalletList() []*pldapi.WalletInfo {
 
 func (w *wallet) resolveKeyAndVerifier(ctx context.Context, mapping *pldapi.KeyMappingWithPath, algorithm, verifierType string) (*pldapi.KeyMappingAndVerifier, error) {
 
-	req := &signerapi.ResolveKeyRequest{
+	req := &prototk.ResolveKeyRequest{
 		Attributes: map[string]string{},
-		RequiredIdentifiers: []*signerapi.PublicKeyIdentifierType{
+		RequiredIdentifiers: []*prototk.PublicKeyIdentifierType{
 			{Algorithm: algorithm, VerifierType: verifierType},
 		},
-		Path: []*signerapi.ResolveKeyPathSegment{},
+		Path: []*prototk.ResolveKeyPathSegment{},
 	}
 
 	for i := 0; i < (len(mapping.Path) - 1); i++ {
-		req.Path = append(req.Path, &signerapi.ResolveKeyPathSegment{
+		req.Path = append(req.Path, &prototk.ResolveKeyPathSegment{
 			Name:  mapping.Path[i].Name,
 			Index: uint64(mapping.Path[i].Index),
 		})
@@ -145,7 +153,7 @@ func (w *wallet) resolveKeyAndVerifier(ctx context.Context, mapping *pldapi.KeyM
 
 func (w *wallet) sign(ctx context.Context, mapping *pldapi.KeyMappingAndVerifier, payloadType string, payload []byte) ([]byte, error) {
 	log.L(ctx).Infof("Wallet '%s' signing %d bytes with keyIdentifier=%s keyHandle=%s algorithm=%s payloadType=%s", w.name, len(payload), mapping.Identifier, mapping.KeyHandle, mapping.Verifier.Algorithm, payloadType)
-	res, err := w.signingModule.Sign(ctx, &signerapi.SignRequest{
+	res, err := w.signingModule.Sign(ctx, &prototk.SignWithKeyRequest{
 		KeyHandle:   mapping.KeyHandle,
 		Algorithm:   mapping.Verifier.Algorithm,
 		PayloadType: payloadType,

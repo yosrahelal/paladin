@@ -19,6 +19,9 @@ def transports = [
     'transports/grpc/build/libs',
 ]
 
+// Add location to your signing module implementation here
+def signingmodules = []
+
 def uiClient = [
     'ui/client/dist',
 ]
@@ -145,6 +148,25 @@ task copyRegistries(type: Copy) {
     }
 }
 
+task copySigningModules(type: Copy) {
+    def signingModulesDir = file("${buildDir}/signingmodules")
+
+    doFirst {
+        signingModulesDir.mkdirs()
+    }
+
+    signingmodules.each { dir ->
+        from dir
+    }
+    into signingModulesDir
+
+    outputs.upToDateWhen { false }
+
+    doLast {
+        println "Copied signing modules to ${signingModulesDir}"
+    }
+}
+
 task copyTransports(type: Copy) {
     def transportsDir = file("${buildDir}/transports")
 
@@ -250,7 +272,7 @@ task assemble {
     }
 }
 
-assemble.finalizedBy(copyLibraries, copyDomains, copyRegistries, copyTransports, copyUIFiles, copyZetoZKPFiles)
+assemble.finalizedBy(copyLibraries, copyDomains, copyRegistries, copySigningModules, copyTransports, copyUIFiles, copyZetoZKPFiles)
 
 defaultTasks 'build'
 
