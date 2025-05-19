@@ -232,6 +232,39 @@ func TestGetSigningModuleNotFound(t *testing.T) {
 	assert.Regexp(t, "PD010515", err)
 }
 
+func TestConfiguredSigningModulesInvalidWallet(t *testing.T) {
+	tp := newTestPlugin(nil)
+	tp.Functions = &plugintk.SigningModuleAPIFunctions{
+		ConfigureSigningModule: func(ctx context.Context, csmr *prototk.ConfigureSigningModuleRequest) (*prototk.ConfigureSigningModuleResponse, error) {
+			return &prototk.ConfigureSigningModuleResponse{}, nil
+		},
+	}
+
+	_, km, _, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
+		SigningModules: map[string]*pldconf.SigningModuleConfig{
+			"test1": {
+				Config: map[string]any{"some": "conf"},
+			},
+		},
+		Wallets: []*pldconf.WalletConfig{{
+			Name:             "**badname!!!",
+			KeySelector:      "",
+			SignerType:       pldconf.WalletSignerTypePlugin,
+			SignerPluginName: "test1",
+		}},
+	})
+	defer done()
+
+	registerTestSigningModule(t, km, tp)
+
+	configuredSigningModules := km.ConfiguredSigningModules()
+
+	assert.Equal(t, 1, len(configuredSigningModules))
+	assert.NotNil(t, configuredSigningModules["test1"])
+
+	assert.Equal(t, 0, len(km.walletsByName))
+}
+
 func TestE2ESigningHDWalletRealDB(t *testing.T) {
 	ctx, km, _, done := newTestDBKeyManagerWithWallets(t,
 		hdWalletConfig("hdwallet1", ""),
