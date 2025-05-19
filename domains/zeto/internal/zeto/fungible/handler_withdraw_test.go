@@ -10,9 +10,9 @@ import (
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -24,7 +24,7 @@ func TestWithdrawValidateParams(t *testing.T) {
 	config := &types.DomainInstanceConfig{}
 	v, err := h.ValidateParams(ctx, config, "{\"amount\":100}")
 	require.NoError(t, err)
-	require.Equal(t, "0x64", v.(*tktypes.HexUint256).String())
+	require.Equal(t, "0x64", v.(*pldtypes.HexUint256).String())
 
 	_, err = h.ValidateParams(ctx, config, "bad json")
 	require.ErrorContains(t, err, "PD210106: Failed to decode the withdraw call.")
@@ -79,7 +79,7 @@ func TestWithdrawAssemble(t *testing.T) {
 		},
 	}
 	tx := &types.ParsedTransaction{
-		Params:      tktypes.MustParseHexUint256("100"),
+		Params:      pldtypes.MustParseHexUint256("100"),
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{
 			TokenName: "tokenContract1",
@@ -230,7 +230,7 @@ func TestWithdrawPrepare(t *testing.T) {
 		From:          "Bob",
 	}
 	tx := &types.ParsedTransaction{
-		Params:      tktypes.MustParseHexUint256("100"),
+		Params:      pldtypes.MustParseHexUint256("100"),
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{
 			TokenName: constants.TOKEN_ANON_ENC,
@@ -315,7 +315,7 @@ func TestWithdrawPrepare(t *testing.T) {
 	txSpec.TransactionId = "0x1234567890123456789012345678901234567890123456789012345678901234"
 	res, err := h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "{\"amount\":\"100\",\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"inputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"output\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)
+	assert.Equal(t, "{\"amount\":\"100\",\"data\":\"0x00010000123456789012345678901234567890123456789012345678901234567890123400000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000\",\"inputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"output\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)
 
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
 	(*tx.DomainConfig.Circuits)["deposit"] = &zetosignerapi.Circuit{Name: "circuit-deposit"}
@@ -328,7 +328,7 @@ func TestWithdrawPrepare(t *testing.T) {
 	req.AttestationResult[0].Payload = payload
 	res, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "{\"amount\":\"100\",\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"nullifiers\":[\"0x1234567890\",\"0x1234567890\"],\"output\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]},\"root\":\"0x1234567890\"}", res.Transaction.ParamsJson)
+	assert.Equal(t, "{\"amount\":\"100\",\"data\":\"0x00010000123456789012345678901234567890123456789012345678901234567890123400000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000\",\"nullifiers\":[\"0x1234567890\",\"0x1234567890\"],\"output\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]},\"root\":\"0x1234567890\"}", res.Transaction.ParamsJson)
 }
 func TestNewWithdrawHandler(t *testing.T) {
 	name := "testHandler"

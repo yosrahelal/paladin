@@ -25,9 +25,9 @@ import (
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
 )
@@ -89,7 +89,7 @@ func TestLocktInit(t *testing.T) {
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
 		Params: &types.LockParams{
-			Delegate: tktypes.RandAddress(),
+			Delegate: pldtypes.RandAddress(),
 		},
 		Transaction: &prototk.TransactionSpecification{
 			From: "Alice",
@@ -140,8 +140,8 @@ func TestLockAssemble(t *testing.T) {
 
 	tx := &types.ParsedTransaction{
 		Params: &types.LockParams{
-			Amount:   tktypes.Uint64ToUint256(100),
-			Delegate: tktypes.RandAddress(),
+			Amount:   pldtypes.Uint64ToUint256(100),
+			Delegate: pldtypes.RandAddress(),
 		},
 		DomainConfig: config,
 		Transaction: &prototk.TransactionSpecification{
@@ -209,7 +209,7 @@ func TestLockPrepare(t *testing.T) {
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
 		Params: &types.LockParams{
-			Delegate: tktypes.RandAddress(),
+			Delegate: pldtypes.RandAddress(),
 		},
 		DomainConfig: &types.DomainInstanceConfig{
 			TokenName: "test1",
@@ -277,18 +277,19 @@ func TestLockPrepare(t *testing.T) {
 
 	req.OutputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}"
 	_, err = h.Prepare(ctx, tx, req)
-	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id.")
+	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD020008: Failed to parse value as 32 byte hex string")
 
-	req.Transaction.TransactionId = "0x1234567890123456789012345678901234567890"
+	req.Transaction.TransactionId = "0x87229d205a0f48bcf0da37542fc140a9bdfc3b4a55c0beffcb62efe25a770a7f"
 	req.AttestationResult[0].Payload = []byte("bad json")
 	_, err = h.Prepare(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210044: Failed to unmarshal proving response.", "cannot parse invalid wire-format data")
 
 	tx.DomainConfig.TokenName = "Zeto_Anon"
 	tx.Params = &types.LockParams{
-		Delegate: tktypes.RandAddress(),
+		Delegate: pldtypes.RandAddress(),
 	}
 	req.AttestationResult[0].Payload = payload
+	req.InfoStates = nil
 	_, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
 

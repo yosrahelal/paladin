@@ -21,11 +21,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type KeyResolver interface {
@@ -60,10 +60,10 @@ type KeyManager interface {
 	ResolveBatchNewDatabaseTX(ctx context.Context, algorithm, verifierType string, identifiers []string) (resolvedKey []*pldapi.KeyMappingAndVerifier, err error)
 
 	// Convenience when all you want is the EthAddress, and to know the reverse lookup will later be possible
-	ResolveEthAddressNewDatabaseTX(ctx context.Context, identifier string) (ethAddress *tktypes.EthAddress, err error)
+	ResolveEthAddressNewDatabaseTX(ctx context.Context, identifier string) (ethAddress *pldtypes.EthAddress, err error)
 
 	// Convenience when all you want is the EthAddress, and to know the reverse lookup will later be possible
-	ResolveEthAddressBatchNewDatabaseTX(ctx context.Context, identifiers []string) (ethAddresses []*tktypes.EthAddress, err error)
+	ResolveEthAddressBatchNewDatabaseTX(ctx context.Context, identifiers []string) (ethAddresses []*pldtypes.EthAddress, err error)
 
 	// Domains register their signers during PostCommit
 	AddInMemorySigner(prefix string, signer signerapi.InMemorySigner)

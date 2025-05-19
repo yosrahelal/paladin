@@ -25,12 +25,12 @@ import (
 
 	"sigs.k8s.io/yaml"
 
+	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
+	"github.com/kaleido-io/paladin/common/go/pkg/log"
+	"github.com/kaleido-io/paladin/common/go/pkg/pldmsgs"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 )
 
 type staticStoreFactory[C signerapi.ExtensibleConfig] struct{}
@@ -76,7 +76,7 @@ func (fsf *staticStoreFactory[C]) NewKeyStore(ctx context.Context, eConf C) (_ s
 		if keyEntry.Filename != "" {
 			if keyData, err = os.ReadFile(string(keyEntry.Filename)); err != nil {
 				log.L(ctx).Errorf("Failed to load file %s: %s", keyEntry.Filename, err)
-				return nil, i18n.NewError(ctx, tkmsgs.MsgSigningStaticKeyInvalid, keyHandle)
+				return nil, i18n.NewError(ctx, pldmsgs.MsgSigningStaticKeyInvalid, keyHandle)
 			}
 		} else if keyEntry.Inline != "" {
 			keyData = []byte(keyEntry.Inline)
@@ -86,20 +86,20 @@ func (fsf *staticStoreFactory[C]) NewKeyStore(ctx context.Context, eConf C) (_ s
 		}
 		// If we didn't get either, or what we did get is zero length - we fail startup
 		if len(keyData) == 0 {
-			return nil, i18n.NewError(ctx, tkmsgs.MsgSigningStaticKeyInvalid, keyHandle)
+			return nil, i18n.NewError(ctx, pldmsgs.MsgSigningStaticKeyInvalid, keyHandle)
 		}
 		switch keyEntry.Encoding {
 		case pldconf.StaticKeyEntryEncodingNONE:
 		case pldconf.StaticKeyEntryEncodingHEX:
 			if keyData, err = hex.DecodeString(strings.TrimPrefix(string(keyData), "0x")); err != nil {
-				return nil, i18n.NewError(ctx, tkmsgs.MsgSigningStaticKeyInvalid, keyHandle)
+				return nil, i18n.NewError(ctx, pldmsgs.MsgSigningStaticKeyInvalid, keyHandle)
 			}
 		case pldconf.StaticKeyEntryEncodingBase64:
 			if keyData, err = base64.StdEncoding.DecodeString(string(keyData)); err != nil {
-				return nil, i18n.NewError(ctx, tkmsgs.MsgSigningStaticKeyInvalid, keyHandle)
+				return nil, i18n.NewError(ctx, pldmsgs.MsgSigningStaticKeyInvalid, keyHandle)
 			}
 		default:
-			return nil, i18n.NewError(ctx, tkmsgs.MsgSigningStaticBadEncoding, keyHandle, keyEntry.Encoding)
+			return nil, i18n.NewError(ctx, pldmsgs.MsgSigningStaticBadEncoding, keyHandle, keyEntry.Encoding)
 		}
 		ils.keys[keyHandle] = keyData
 	}
@@ -113,7 +113,7 @@ func (ils *staticStore) loadFileIntoKeyMap(ctx context.Context, filename string,
 		err = yaml.Unmarshal(b, &fileKeyMap)
 	}
 	if err != nil {
-		return i18n.WrapError(ctx, err, tkmsgs.MsgSigningFailedToLoadStaticKeyFile)
+		return i18n.WrapError(ctx, err, pldmsgs.MsgSigningFailedToLoadStaticKeyFile)
 	}
 	for k, v := range fileKeyMap {
 		keyMap[k] = v
@@ -124,13 +124,13 @@ func (ils *staticStore) loadFileIntoKeyMap(ctx context.Context, filename string,
 func (ils *staticStore) FindOrCreateLoadableKey(ctx context.Context, req *prototk.ResolveKeyRequest, newKeyMaterial func() ([]byte, error)) (keyMaterial []byte, keyHandle string, err error) {
 	for _, segment := range req.Path {
 		if len(segment.Name) == 0 {
-			return nil, "", i18n.NewError(ctx, tkmsgs.MsgSigningModuleBadKeyHandle)
+			return nil, "", i18n.NewError(ctx, pldmsgs.MsgSigningModuleBadKeyHandle)
 		}
 		keyHandle += url.PathEscape(segment.Name)
 		keyHandle += "."
 	}
 	if len(req.Name) == 0 {
-		return nil, "", i18n.NewError(ctx, tkmsgs.MsgSigningModuleBadKeyHandle)
+		return nil, "", i18n.NewError(ctx, pldmsgs.MsgSigningModuleBadKeyHandle)
 	}
 	keyHandle += url.PathEscape(req.Name)
 	key, err := ils.LoadKeyMaterial(ctx, keyHandle)
@@ -144,7 +144,7 @@ func (ils *staticStore) LoadKeyMaterial(ctx context.Context, keyHandle string) (
 	log.L(ctx).Debugf("Resolving key %s", keyHandle)
 	key, ok := ils.keys[keyHandle]
 	if !ok {
-		return nil, i18n.NewError(ctx, tkmsgs.MsgSigningKeyCannotBeResolved)
+		return nil, i18n.NewError(ctx, pldmsgs.MsgSigningKeyCannotBeResolved)
 	}
 	return key, nil
 }

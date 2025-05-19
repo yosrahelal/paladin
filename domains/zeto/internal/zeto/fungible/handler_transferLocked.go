@@ -22,19 +22,19 @@ import (
 	"strings"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
-	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"google.golang.org/protobuf/proto"
 )
@@ -67,7 +67,7 @@ var transferLockedABINullifiers = &abi.Entry{
 	},
 }
 
-func NewTransferLockedHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema *pb.StateSchema) *transferLockedHandler {
+func NewTransferLockedHandler(name string, callbacks plugintk.DomainCallbacks, coinSchema, merkleTreeRootSchema, merkleTreeNodeSchema, dataSchema *pb.StateSchema) *transferLockedHandler {
 	return &transferLockedHandler{
 		baseHandler: baseHandler{
 			name: name,
@@ -75,6 +75,7 @@ func NewTransferLockedHandler(name string, callbacks plugintk.DomainCallbacks, c
 				CoinSchema:           coinSchema,
 				MerkleTreeRootSchema: merkleTreeRootSchema,
 				MerkleTreeNodeSchema: merkleTreeNodeSchema,
+				DataSchema:           dataSchema,
 			},
 		},
 		callbacks: callbacks,
@@ -110,7 +111,7 @@ func (h *transferLockedHandler) Init(ctx context.Context, tx *types.ParsedTransa
 		},
 	}
 	// the delegate can be an address, or a resolvable name
-	_, err := tktypes.ParseEthAddress(params.Delegate)
+	_, err := pldtypes.ParseEthAddress(params.Delegate)
 	if err != nil {
 		// delegate is not an eth address, so we need to resolve it
 		res.RequiredVerifiers = append(res.RequiredVerifiers, &pb.ResolveVerifierRequest{
@@ -138,7 +139,7 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, tx.Transaction.From)
 	}
 	var delegateAddr string
-	_, err := tktypes.ParseEthAddress(params.Delegate)
+	_, err := pldtypes.ParseEthAddress(params.Delegate)
 	if err != nil {
 		resolvedDelegate := domain.FindVerifier(params.Delegate, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
 		if resolvedDelegate == nil {
@@ -175,7 +176,7 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 	remainder := big.NewInt(0).Sub(inputTotal, transferTotal)
 	if remainder.Sign() > 0 {
 		// add the remainder as an output to the sender themselves
-		remainderHex := tktypes.HexUint256(*remainder)
+		remainderHex := pldtypes.HexUint256(*remainder)
 		remainderParams := []*types.FungibleTransferParamEntry{
 			{
 				To:     tx.Transaction.From,
@@ -190,7 +191,16 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		outputStates = append(outputStates, returnedStates...)
 	}
 
-	contractAddress, err := tktypes.ParseEthAddress(req.Transaction.ContractInfo.ContractAddress)
+	infoStates := make([]*pb.NewState, 0, len(params.Transfers))
+	for _, param := range params.Transfers {
+		info, err := prepareTransactionInfoStates(ctx, param.Data, []string{tx.Transaction.From, param.To}, h.stateSchemas.DataSchema)
+		if err != nil {
+			return nil, err
+		}
+		infoStates = append(infoStates, info...)
+	}
+
+	contractAddress, err := pldtypes.ParseEthAddress(req.Transaction.ContractInfo.ContractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
@@ -204,6 +214,7 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		AssembledTransaction: &pb.AssembledTransaction{
 			InputStates:  inputStates,
 			OutputStates: outputStates,
+			InfoStates:   infoStates,
 		},
 		AttestationPlan: []*pb.AttestationRequest{
 			{
@@ -243,7 +254,7 @@ func (h *transferLockedHandler) Prepare(ctx context.Context, tx *types.ParsedTra
 		return nil, err
 	}
 
-	data, err := common.EncodeTransactionData(ctx, req.Transaction)
+	data, err := common.EncodeTransactionData(ctx, req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}
@@ -285,7 +296,7 @@ func (h *transferLockedHandler) Prepare(ctx context.Context, tx *types.ParsedTra
 	}, nil
 }
 
-func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*tktypes.HexUint256, useNullifiers bool, stateQueryContext string) ([]*types.ZetoCoin, []*pb.StateRef, error) {
+func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*pldtypes.HexUint256, useNullifiers bool, stateQueryContext string) ([]*types.ZetoCoin, []*pb.StateRef, error) {
 	inputIDs := make([]any, 0, len(ids))
 	for _, input := range ids {
 		if !input.NilOrZero() {

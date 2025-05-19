@@ -10,6 +10,7 @@ interface IZetoFungible {
     struct TransferParam {
         string to;
         uint256 amount;
+        bytes data;
     }
 
     function mint(TransferParam[] memory mints) external;
