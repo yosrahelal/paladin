@@ -175,7 +175,7 @@ func TestConfiguredSigningModules(t *testing.T) {
 		SigningModules: map[string]*pldconf.SigningModuleConfig{
 			"test1": {
 				Plugin: pldconf.PluginConfig{
-					Type:    string(tktypes.LibraryTypeCShared),
+					Type:    string(pldtypes.LibraryTypeCShared),
 					Library: "some/where",
 				},
 			},
@@ -185,7 +185,7 @@ func TestConfiguredSigningModules(t *testing.T) {
 
 	assert.Equal(t, map[string]*pldconf.PluginConfig{
 		"test1": {
-			Type:    string(tktypes.LibraryTypeCShared),
+			Type:    string(pldtypes.LibraryTypeCShared),
 			Library: "some/where",
 		},
 	}, km.ConfiguredSigningModules())
