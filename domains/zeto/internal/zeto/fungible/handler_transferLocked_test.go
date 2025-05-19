@@ -27,10 +27,10 @@ import (
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
@@ -85,12 +85,12 @@ func TestTransferLockedInit(t *testing.T) {
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
 		Params: &types.FungibleTransferLockedParams{
-			LockedInputs: []*tktypes.HexUint256{tktypes.MustParseHexUint256("0x0c3d1d2996e66d8512c7c3faa4b5f55180fee870190d589a911b6517dc578dba")},
+			LockedInputs: []*pldtypes.HexUint256{pldtypes.MustParseHexUint256("0x0c3d1d2996e66d8512c7c3faa4b5f55180fee870190d589a911b6517dc578dba")},
 			Delegate:     "delegate1",
 			Transfers: []*types.FungibleTransferParamEntry{
 				{
 					To:     "Alice",
-					Amount: tktypes.MustParseHexUint256("0x0a"),
+					Amount: pldtypes.MustParseHexUint256("0x0a"),
 				},
 			},
 		},
@@ -121,6 +121,9 @@ func TestTransferLockedAssemble(t *testing.T) {
 				MerkleTreeNodeSchema: &prototk.StateSchema{
 					Id: "merkle_tree_node",
 				},
+				DataSchema: &prototk.StateSchema{
+					Id: "data",
+				},
 			},
 		},
 	}
@@ -133,12 +136,12 @@ func TestTransferLockedAssemble(t *testing.T) {
 	}
 	tx := &types.ParsedTransaction{
 		Params: &types.FungibleTransferLockedParams{
-			LockedInputs: []*tktypes.HexUint256{tktypes.MustParseHexUint256("0x0c3d1d2996e66d8512c7c3faa4b5f55180fee870190d589a911b6517dc578dba")},
+			LockedInputs: []*pldtypes.HexUint256{pldtypes.MustParseHexUint256("0x0c3d1d2996e66d8512c7c3faa4b5f55180fee870190d589a911b6517dc578dba")},
 			Delegate:     "delegate1",
 			Transfers: []*types.FungibleTransferParamEntry{
 				{
 					To:     "Alice",
-					Amount: tktypes.MustParseHexUint256("0x13"),
+					Amount: pldtypes.MustParseHexUint256("0x13"),
 				},
 			},
 		},
@@ -209,7 +212,7 @@ func TestTransferLockedAssemble(t *testing.T) {
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210129: Insufficient input amount (total=15) for the transfers (total=19)")
 
-	tx.Params.(*types.FungibleTransferLockedParams).Transfers[0].Amount = tktypes.MustParseHexUint256("0x09")
+	tx.Params.(*types.FungibleTransferLockedParams).Transfers[0].Amount = pldtypes.MustParseHexUint256("0x09")
 	calls = 0
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210040: Failed to prepare transaction outputs. PD210037: Failed load owner public key. expected 32 bytes in hex string, got 20")
@@ -369,12 +372,12 @@ func TestTransferLockedPrepare(t *testing.T) {
 	}
 	tx := &types.ParsedTransaction{
 		Params: &types.FungibleTransferLockedParams{
-			LockedInputs: []*tktypes.HexUint256{tktypes.MustParseHexUint256("0x0c3d1d2996e66d8512c7c3faa4b5f55180fee870190d589a911b6517dc578dba")},
+			LockedInputs: []*pldtypes.HexUint256{pldtypes.MustParseHexUint256("0x0c3d1d2996e66d8512c7c3faa4b5f55180fee870190d589a911b6517dc578dba")},
 			Delegate:     "delegate1",
 			Transfers: []*types.FungibleTransferParamEntry{
 				{
 					To:     "Alice",
-					Amount: tktypes.MustParseHexUint256("0x0a"),
+					Amount: pldtypes.MustParseHexUint256("0x0a"),
 				},
 			},
 		},
@@ -453,7 +456,7 @@ func TestTransferLockedPrepare(t *testing.T) {
 
 	res, err := h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "{\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"inputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)
+	assert.Equal(t, "{\"data\":\"0x00010000123456789012345678901234567890123456789012345678901234567890123400000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000\",\"inputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)
 
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
 	(*tx.DomainConfig.Circuits)["transfer"] = &zetosignerapi.Circuit{Name: "anon_nullifier_transfer", Type: "transfer", UsesNullifiers: true}
@@ -464,7 +467,7 @@ func TestTransferLockedPrepare(t *testing.T) {
 	req.AttestationResult[0].Payload = payload
 	res, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "{\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"nullifiers\":[\"0x1234567890\",\"0x1234567890\"],\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]},\"root\":\"0x1234567890\"}", res.Transaction.ParamsJson)
+	assert.Equal(t, "{\"data\":\"0x00010000123456789012345678901234567890123456789012345678901234567890123400000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000\",\"nullifiers\":[\"0x1234567890\",\"0x1234567890\"],\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]},\"root\":\"0x1234567890\"}", res.Transaction.ParamsJson)
 }
 
 func TestGenerateMerkleProofsForLockedStates(t *testing.T) {
@@ -490,13 +493,13 @@ func TestGenerateMerkleProofsForLockedStates(t *testing.T) {
 		},
 		callbacks: testCallbacks,
 	}
-	addr, err := tktypes.ParseEthAddress("0x1234567890123456789012345678901234567890")
+	addr, err := pldtypes.ParseEthAddress("0x1234567890123456789012345678901234567890")
 	assert.NoError(t, err)
 	inputCoins := []*types.ZetoCoin{
 		{
-			Salt:   tktypes.MustParseHexUint256("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
-			Owner:  tktypes.MustParseHexBytes("0x1234"),
-			Amount: tktypes.MustParseHexUint256("0x0f"),
+			Salt:   pldtypes.MustParseHexUint256("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+			Owner:  pldtypes.MustParseHexBytes("0x1234"),
+			Amount: pldtypes.MustParseHexUint256("0x0f"),
 		},
 	}
 	ctx := context.Background()
@@ -516,11 +519,11 @@ func TestGenerateMerkleProofsForLockedStates(t *testing.T) {
 	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, "Zeto_Anon", queryContext, addr, inputCoins, false)
 	assert.EqualError(t, err, "PD210037: Failed load owner public key. PD210072: Invalid compressed public key length: 2")
 
-	inputCoins[0].Owner = tktypes.MustParseHexBytes("0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
+	inputCoins[0].Owner = pldtypes.MustParseHexBytes("0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
 	_, _, err = generateMerkleProofs(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, "Zeto_Anon", queryContext, addr, inputCoins, false)
 	assert.EqualError(t, err, "PD210054: Failed to create new leaf node. inputs values not inside Finite Field")
 
-	inputCoins[0].Salt = tktypes.MustParseHexUint256("0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec")
+	inputCoins[0].Salt = pldtypes.MustParseHexUint256("0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec")
 	calls := 0
 	testCallbacks.MockFindAvailableStates = func() (*prototk.FindAvailableStatesResponse, error) {
 		defer func() { calls++ }()

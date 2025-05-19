@@ -30,16 +30,14 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldclient"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/query"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -47,36 +45,15 @@ import (
 )
 
 func TestRunSimpleStorageEthTransaction(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+
 	logrus.SetLevel(logrus.DebugLevel)
 
-	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil, false)
-	cm := instance.cm
+	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil, true)
 	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(250 * time.Millisecond)
 
 	build, err := solutils.LoadBuild(ctx, simpleStorageBuildJSON)
-	require.NoError(t, err)
-
-	eventStreamEvents := make(chan *pldapi.EventWithData, 2 /* all the events we exepct */)
-	_, err = cm.BlockIndexer().AddEventStream(ctx, cm.Persistence().NOTX(), &blockindexer.InternalEventStream{
-		Handler: func(ctx context.Context, tx persistence.DBTX, batch *blockindexer.EventDeliveryBatch) error {
-			// With SQLite we cannot hang in here with a DB TX - as there's only one per process.
-			for _, e := range batch.Events {
-				select {
-				case eventStreamEvents <- e:
-				default:
-					assert.Fail(t, "more than expected number of events received")
-				}
-			}
-			return nil
-		},
-		Definition: &blockindexer.EventStream{
-			Name: "unittest",
-			Sources: []blockindexer.EventStreamSource{{
-				ABI: abi.ABI{build.ABI.Events()["Changed"]},
-			}},
-		},
-	})
 	require.NoError(t, err)
 
 	simpleStorage := c.ForABI(ctx, build.ABI).Public().From("key1")
@@ -89,14 +66,38 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	require.NoError(t, res.Error())
 	contractAddr := res.Receipt().ContractAddress
 
-	var getX1 tktypes.RawJSON
+	// set up the event listener
+	success, err := c.PTX().CreateBlockchainEventListener(ctx, &pldapi.BlockchainEventListener{
+		Name: "listener1",
+		Sources: []pldapi.BlockchainEventListenerSource{{
+			ABI:     abi.ABI{build.ABI.Events()["Changed"]},
+			Address: contractAddr,
+		}},
+	})
+	require.NoError(t, err)
+	require.True(t, success)
+
+	wsClient, err := c.WebSocket(ctx, instance.wsConfig)
+	require.NoError(t, err)
+
+	eventData := make(chan string)
+	subscribeAndSendDataToChannel(ctx, t, wsClient, "listener1", eventData)
+
+	success, err = c.PTX().StartBlockchainEventListener(ctx, "listener1")
+	require.NoError(t, err)
+	require.True(t, success)
+
+	data := <-eventData
+	assert.JSONEq(t, `{"x":"11223344"}`, data)
+
+	var getX pldtypes.RawJSON
 	err = simpleStorage.Clone().
 		Function("get").
 		To(contractAddr).
-		Outputs(&getX1).
+		Outputs(&getX).
 		Call()
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"x":"11223344"}`, getX1.Pretty())
+	assert.JSONEq(t, `{"x":"11223344"}`, getX.Pretty())
 
 	res = simpleStorage.Clone().
 		Function("set").
@@ -105,21 +106,193 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 		Send().Wait(5 * time.Second)
 	require.NoError(t, res.Error())
 
-	var getX2 tktypes.RawJSON
-	err = simpleStorage.Clone().
-		Function("get").
+	data = <-eventData
+	assert.JSONEq(t, `{"x":"99887766"}`, data)
+
+	res = simpleStorage.Clone().
+		Function("set").
 		To(contractAddr).
-		Outputs(&getX2).
-		Call()
+		Inputs(`{"_x":1234}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
+
+	data = <-eventData
+	assert.JSONEq(t, `{"x":"1234"}`, data)
+}
+
+func TestBlockchainEventListeners(t *testing.T) {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+
+	logrus.SetLevel(logrus.DebugLevel)
+
+	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil, true)
+	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(250 * time.Millisecond)
+
+	build, err := solutils.LoadBuild(ctx, simpleStorageBuildJSON)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"x":"99887766"}`, getX2.Pretty())
 
-	// Expect our event listener to be queued up with two Changed events
-	event1 := <-eventStreamEvents
-	assert.JSONEq(t, `{"x":"11223344"}`, string(event1.Data))
-	event2 := <-eventStreamEvents
-	assert.JSONEq(t, `{"x":"99887766"}`, string(event2.Data))
+	simpleStorage := c.ForABI(ctx, build.ABI).Public().From("key1")
 
+	res := simpleStorage.Clone().
+		Constructor().
+		Bytecode(build.Bytecode).
+		Inputs(`{"x":1}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
+	contractAddr := res.Receipt().ContractAddress
+	deployBlock := res.Receipt().BlockNumber
+
+	// set up the event listener
+	_, err = c.PTX().CreateBlockchainEventListener(ctx, &pldapi.BlockchainEventListener{
+		Name:    "listener1",
+		Started: confutil.P(false),
+		Sources: []pldapi.BlockchainEventListenerSource{{
+			ABI:     abi.ABI{build.ABI.Events()["Changed"]},
+			Address: contractAddr,
+		}},
+	})
+	require.NoError(t, err)
+
+	status, err := c.PTX().GetBlockchainEventListenerStatus(ctx, "listener1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(-1), status.Checkpoint.BlockNumber)
+
+	wsClient, err := c.WebSocket(ctx, instance.wsConfig)
+	require.NoError(t, err)
+
+	listener1 := make(chan string)
+	subscribeAndSendDataToChannel(ctx, t, wsClient, "listener1", listener1)
+
+	// pause to make sure that if an event was going to be received, it would have been
+	ticker1 := time.NewTicker(10 * time.Millisecond)
+	defer ticker1.Stop()
+
+	select {
+	case <-listener1:
+		t.FailNow()
+	case <-ticker1.C:
+	}
+
+	_, err = c.PTX().StartBlockchainEventListener(ctx, "listener1")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"x":"1"}`, <-listener1)
+
+	res = simpleStorage.Clone().
+		Function("set").
+		To(contractAddr).
+		Inputs(`{"_x":2}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
+
+	assert.JSONEq(t, `{"x":"2"}`, <-listener1)
+
+	// making this check immediately after receiving the event results in a race condition where the ack might not have been processed
+	// and the checkpoint updated, so check that it is either equal to the block number of the deploy or the block number of the invoke
+	status, err = c.PTX().GetBlockchainEventListenerStatus(ctx, "listener1")
+	require.NoError(t, err)
+	assert.True(t, status.Checkpoint.BlockNumber == deployBlock || status.Checkpoint.BlockNumber == res.Receipt().BlockNumber)
+
+	// stop the event listener
+	_, err = c.PTX().StopBlockchainEventListener(ctx, "listener1")
+	require.NoError(t, err)
+
+	res = simpleStorage.Clone().
+		Function("set").
+		To(contractAddr).
+		Inputs(`{"_x":3}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
+
+	// pause to make sure that if an event was going to be received, it would have been
+	ticker2 := time.NewTicker(10 * time.Millisecond)
+	defer ticker2.Stop()
+
+	select {
+	case <-listener1:
+		t.FailNow()
+	case <-ticker2.C:
+	}
+
+	_, err = c.PTX().StartBlockchainEventListener(ctx, "listener1")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"x":"3"}`, <-listener1)
+
+	// create a second listener with default fromBlock settings, it should receive all the events
+	_, err = c.PTX().CreateBlockchainEventListener(ctx, &pldapi.BlockchainEventListener{
+		Name: "listener2",
+		Sources: []pldapi.BlockchainEventListenerSource{{
+			ABI:     abi.ABI{build.ABI.Events()["Changed"]},
+			Address: contractAddr,
+		}},
+	})
+	require.NoError(t, err)
+
+	listener2 := make(chan string)
+	subscribeAndSendDataToChannel(ctx, t, wsClient, "listener2", listener2)
+
+	assert.JSONEq(t, `{"x":"1"}`, <-listener2)
+	assert.JSONEq(t, `{"x":"2"}`, <-listener2)
+	assert.JSONEq(t, `{"x":"3"}`, <-listener2)
+
+	// create a third listener that listeners from latest
+	_, err = c.PTX().CreateBlockchainEventListener(ctx, &pldapi.BlockchainEventListener{
+		Name: "listener3",
+		Sources: []pldapi.BlockchainEventListenerSource{{
+			ABI:     abi.ABI{build.ABI.Events()["Changed"]},
+			Address: contractAddr,
+		}},
+		Options: pldapi.BlockchainEventListenerOptions{
+			FromBlock: json.RawMessage(`"latest"`),
+		},
+	})
+	require.NoError(t, err)
+
+	listener3 := make(chan string)
+	subscribeAndSendDataToChannel(ctx, t, wsClient, "listener3", listener3)
+
+	// submit another transaction- this should be the next event that all the listeners receive
+	res = simpleStorage.Clone().
+		Function("set").
+		To(contractAddr).
+		Inputs(`{"_x":4}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
+
+	assert.JSONEq(t, `{"x":"4"}`, <-listener1)
+	assert.JSONEq(t, `{"x":"4"}`, <-listener2)
+	assert.JSONEq(t, `{"x":"4"}`, <-listener3)
+}
+
+func subscribeAndSendDataToChannel(ctx context.Context, t *testing.T, wsClient pldclient.PaladinWSClient, listenerName string, data chan string) {
+	sub, err := wsClient.PTX().SubscribeBlockchainEvents(ctx, listenerName)
+	require.NoError(t, err)
+	go func() {
+		for {
+			select {
+			case subNotification, ok := <-sub.Notifications():
+				if ok {
+					eventData := make([]string, 0)
+					var batch pldapi.TransactionEventBatch
+					_ = json.Unmarshal(subNotification.GetResult(), &batch)
+					for _, e := range batch.Events {
+						t.Logf("Received event on %s from %d/%d/%d : %s", listenerName, e.BlockNumber, e.TransactionIndex, e.LogIndex, e.Data.String())
+						eventData = append(eventData, e.Data.String())
+					}
+					require.NoError(t, subNotification.Ack(ctx))
+					// send after the ack otherwise the main test can complete when it receives the last values and the websocket is closed before the ack
+					// can be sent
+					for _, d := range eventData {
+						data <- d
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
 func TestUpdatePublicTransaction(t *testing.T) {
@@ -181,7 +354,7 @@ func TestUpdatePublicTransaction(t *testing.T) {
 		Inputs(`{"_x":99887766}`).
 		PublicTxOptions(pldapi.PublicTxOptions{
 			// gas is set below instrinsic limit
-			Gas: confutil.P(tktypes.HexUint64(1)),
+			Gas: confutil.P(pldtypes.HexUint64(1)),
 		}).
 		Send()
 	require.NoError(t, setRes.Error())
@@ -200,11 +373,11 @@ func TestUpdatePublicTransaction(t *testing.T) {
 		TransactionBase: pldapi.TransactionBase{
 			From:         "key1",
 			Function:     "set",
-			Data:         tktypes.RawJSON(`{"_x":99887766}`),
+			Data:         pldtypes.RawJSON(`{"_x":99887766}`),
 			To:           contractAddr,
 			ABIReference: tx.ABIReference,
 			PublicTxOptions: pldapi.PublicTxOptions{
-				Gas: confutil.P(tktypes.HexUint64(10000000)),
+				Gas: confutil.P(pldtypes.HexUint64(10000000)),
 			},
 		},
 	})
@@ -240,7 +413,7 @@ func TestUpdatePublicTransaction(t *testing.T) {
 		TransactionBase: pldapi.TransactionBase{
 			From:         "key1",
 			Function:     "set",
-			Data:         tktypes.RawJSON(`{"_x":99887765}`),
+			Data:         pldtypes.RawJSON(`{"_x":99887765}`),
 			To:           contractAddr,
 			ABIReference: tx.ABIReference,
 		},
@@ -275,7 +448,7 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           "wallets.org1.aaaaaa",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                     "from": "wallets.org1.aaaaaa",
                     "name": "FakeToken1",
                     "symbol": "FT1",
@@ -315,7 +488,7 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 			IdempotencyKey: "tx1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.aaaaaa",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                 "from": "",
                 "to": "wallets.org1.aaaaaa",
                 "amount": "123000000000000000000"
@@ -364,7 +537,7 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           "wallets.org1.aaaaaa",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                     "from": "wallets.org1.aaaaaa",
                     "name": "FakeToken1",
                     "symbol": "FT1",
@@ -404,7 +577,7 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 			IdempotencyKey: "tx1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.aaaaaa",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                 "from": "",
                 "to": "wallets.org1.bbbbbb",
                 "amount": "123000000000000000000"
@@ -431,7 +604,7 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 			IdempotencyKey: "tx2",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.bbbbbb",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                 "from": "wallets.org1.bbbbbb",
                 "to": "wallets.org1.aaaaaa",
                 "amount": "123000000000000000000"
@@ -465,7 +638,7 @@ func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           "wallets.org1.aaaaaa",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"from": "wallets.org1.aaaaaa",
 					"name": "FakeToken1",
 					"symbol": "FT1",
@@ -501,7 +674,7 @@ func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
 			IdempotencyKey: "tx2",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.bbbbbb",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 				"from": "wallets.org1.bbbbbb",
 				"to": "wallets.org1.aaaaaa",
 				"amount": "123000000000000000000"
@@ -537,7 +710,7 @@ func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
 			IdempotencyKey: "goodTx",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.aaaaaa",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                 "from": "",
                 "to": "wallets.org1.bbbbbb",
                 "amount": "123000000000000000000"
@@ -588,7 +761,7 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           aliceIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                     "from": "` + aliceIdentity + `",
                     "name": "FakeToken1",
                     "symbol": "FT1",
@@ -620,7 +793,7 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 			IdempotencyKey: "tx1-alice",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           aliceIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                     "from": "",
                     "to": "` + aliceIdentity + `",
                     "amount": "123000000000000000000"
@@ -648,7 +821,7 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 			IdempotencyKey: "tx1-bob",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           bobIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                     "from": "",
                     "to": "` + bobIdentity + `",
                     "amount": "123000000000000000000"
@@ -768,7 +941,7 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 			IdempotencyKey: "tx1-alice",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           alice.identity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                     "from": "",
                     "to": "` + bob.identityLocator + `",
                     "amount": "123000000000000000000"
@@ -796,7 +969,7 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 			IdempotencyKey: "tx1-bob",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           bob.identity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                     "from": "` + bob.identityLocator + `",
                     "to": "` + alice.identityLocator + `",
                     "amount": "123000000000000000000"
@@ -848,7 +1021,7 @@ func TestNotaryDelegated(t *testing.T) {
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           notaryIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"notary": "` + notaryIdentity + `",
 					"name": "FakeToken1",
 					"symbol": "FT1",
@@ -881,7 +1054,7 @@ func TestNotaryDelegated(t *testing.T) {
 			IdempotencyKey: "tx1-mint",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           notaryIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"from": "",
 					"to": "` + aliceIdentity + `",
 					"amount": "100"
@@ -908,7 +1081,7 @@ func TestNotaryDelegated(t *testing.T) {
 			IdempotencyKey: "transferA2B1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           aliceIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"from": "` + aliceIdentity + `",
 					"to": "` + bobIdentity + `",
 					"amount": "50"
@@ -959,7 +1132,7 @@ func TestNotaryDelegatedPrepare(t *testing.T) {
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           notaryIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"notary": "` + notaryIdentity + `",
 					"name": "FakeToken1",
 					"symbol": "FT1",
@@ -993,7 +1166,7 @@ func TestNotaryDelegatedPrepare(t *testing.T) {
 			IdempotencyKey: "tx1-mint",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           notaryIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"from": "",
 					"to": "` + aliceIdentity + `",
 					"amount": "100"
@@ -1020,7 +1193,7 @@ func TestNotaryDelegatedPrepare(t *testing.T) {
 			IdempotencyKey: "transferA2B1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           aliceIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"from": "` + aliceIdentity + `",
 					"to": "` + bobIdentity + `",
 					"amount": "25"
@@ -1081,7 +1254,7 @@ func TestSingleNodeSelfEndorseConcurrentSpends(t *testing.T) {
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           "wallets.org1.aaaaaa",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                     "from": "wallets.org1.aaaaaa",
                     "name": "FakeToken1",
                     "symbol": "FT1",
@@ -1119,10 +1292,10 @@ func TestSingleNodeSelfEndorseConcurrentSpends(t *testing.T) {
 			TransactionBase: pldapi.TransactionBase{
 				To:             contractAddress,
 				Domain:         "domain1",
-				IdempotencyKey: tktypes.RandHex(8),
+				IdempotencyKey: pldtypes.RandHex(8),
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				From:           "wallets.org1.aaaaaa",
-				Data: tktypes.RawJSON(`{
+				Data: pldtypes.RawJSON(`{
 					"from": "",
 					"to": "wallets.org1.aaaaaa",
 					"amount": "1"
@@ -1162,10 +1335,10 @@ func TestSingleNodeSelfEndorseConcurrentSpends(t *testing.T) {
 			TransactionBase: pldapi.TransactionBase{
 				To:             contractAddress,
 				Domain:         "domain1",
-				IdempotencyKey: tktypes.RandHex(8),
+				IdempotencyKey: pldtypes.RandHex(8),
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				From:           "wallets.org1.aaaaaa",
-				Data: tktypes.RawJSON(`{
+				Data: pldtypes.RawJSON(`{
 					"from": "wallets.org1.aaaaaa",
 					"to": "wallets.org1.bbbbbb",
 					"amount": "1"
@@ -1212,7 +1385,7 @@ func TestSingleNodeSelfEndorseSeriesOfTransfers(t *testing.T) {
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           "wallets.org1.aaaaaa",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                     "from": "wallets.org1.aaaaaa",
                     "name": "FakeToken1",
                     "symbol": "FT1",
@@ -1252,7 +1425,7 @@ func TestSingleNodeSelfEndorseSeriesOfTransfers(t *testing.T) {
 			IdempotencyKey: "tx1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.aaaaaa",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                 "from": "",
                 "to": "wallets.org1.bbbbbb",
                 "amount": "100"
@@ -1273,7 +1446,7 @@ func TestSingleNodeSelfEndorseSeriesOfTransfers(t *testing.T) {
 			IdempotencyKey: "tx2",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.bbbbbb",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                 "from": "wallets.org1.bbbbbb",
                 "to": "wallets.org1.aaaaaa",
                 "amount": "99"
@@ -1294,7 +1467,7 @@ func TestSingleNodeSelfEndorseSeriesOfTransfers(t *testing.T) {
 			IdempotencyKey: "tx3",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.aaaaaa",
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                 "from": "wallets.org1.aaaaaa",
                 "to": "wallets.org1.bbbbbb",
                 "amount": "98"
@@ -1363,7 +1536,7 @@ func TestNotaryEndorseConcurrentSpends(t *testing.T) {
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           notaryIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"notary": "` + notaryIdentity + `",
 					"name": "FakeToken1",
 					"symbol": "FT1",
@@ -1395,10 +1568,10 @@ func TestNotaryEndorseConcurrentSpends(t *testing.T) {
 			TransactionBase: pldapi.TransactionBase{
 				To:             contractAddress,
 				Domain:         "domain1",
-				IdempotencyKey: tktypes.RandHex(8),
+				IdempotencyKey: pldtypes.RandHex(8),
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				From:           notaryIdentity,
-				Data: tktypes.RawJSON(`{
+				Data: pldtypes.RawJSON(`{
 					"from": "",
 					"to": "` + aliceIdentity + `",
 					"amount": "100"
@@ -1438,10 +1611,10 @@ func TestNotaryEndorseConcurrentSpends(t *testing.T) {
 			TransactionBase: pldapi.TransactionBase{
 				To:             contractAddress,
 				Domain:         "domain1",
-				IdempotencyKey: tktypes.RandHex(8),
+				IdempotencyKey: pldtypes.RandHex(8),
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				From:           aliceIdentity,
-				Data: tktypes.RawJSON(`{
+				Data: pldtypes.RawJSON(`{
 						"from": "` + aliceIdentity + `",
 						"to": "` + bobIdentity + `",
 						"amount": "100"
@@ -1502,7 +1675,7 @@ func TestNotaryEndorseSeriesOfTransfers(t *testing.T) {
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           notaryIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"notary": "` + notaryIdentity + `",
 					"name": "FakeToken1",
 					"symbol": "FT1",
@@ -1532,7 +1705,7 @@ func TestNotaryEndorseSeriesOfTransfers(t *testing.T) {
 			IdempotencyKey: "tx1-mint",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           notaryIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"from": "",
 					"to": "` + aliceIdentity + `",
 					"amount": "100"
@@ -1553,7 +1726,7 @@ func TestNotaryEndorseSeriesOfTransfers(t *testing.T) {
 			IdempotencyKey: "transferA2B1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           aliceIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"from": "` + aliceIdentity + `",
 					"to": "` + bobIdentity + `",
 					"amount": "99"
@@ -1574,7 +1747,7 @@ func TestNotaryEndorseSeriesOfTransfers(t *testing.T) {
 			IdempotencyKey: "transferB2A1",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           bobIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"from": "` + bobIdentity + `",
 					"to": "` + aliceIdentity + `",
 					"amount": "95"
@@ -1595,7 +1768,7 @@ func TestNotaryEndorseSeriesOfTransfers(t *testing.T) {
 			IdempotencyKey: "transferA2B2",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           aliceIdentity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"from": "` + aliceIdentity + `",
 					"to": "` + bobIdentity + `",
 					"amount": "90"
@@ -1679,7 +1852,7 @@ func TestPrivacyGroupEndorsement(t *testing.T) {
 			IdempotencyKey: "tx1-alice",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           alice.identity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"map":"map1"
                 }`),
 		},
@@ -1705,7 +1878,7 @@ func TestPrivacyGroupEndorsement(t *testing.T) {
 			IdempotencyKey: "tx1-bob",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           bob.identity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
 					"map":"map1",
                     "key": "foo",
 					"value": "quz"
@@ -1728,7 +1901,7 @@ func TestPrivacyGroupEndorsement(t *testing.T) {
 	require.Len(t, bobSchemas, 1)
 
 	var bobStates []*pldapi.State
-	err = bob.client.CallRPC(ctx, &bobStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), bobSchemas[0].ID, tktypes.RawJSON(`{}`), "available")
+	err = bob.client.CallRPC(ctx, &bobStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), bobSchemas[0].ID, pldtypes.RawJSON(`{}`), "available")
 	require.NoError(t, err)
 	require.Len(t, bobStates, 1)
 	stateData := make(map[string]string)
@@ -1751,7 +1924,7 @@ func TestPrivacyGroupEndorsement(t *testing.T) {
 
 	var aliceStates []*pldapi.State
 
-	err = alice.client.CallRPC(ctx, &aliceStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), aliceSchemas[0].ID, tktypes.RawJSON(`{}`), "available")
+	err = alice.client.CallRPC(ctx, &aliceStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), aliceSchemas[0].ID, pldtypes.RawJSON(`{}`), "available")
 	require.NoError(t, err)
 	require.Len(t, aliceStates, 1)
 	assert.Equal(t, bobStates[0].ID, aliceStates[0].ID)
@@ -1801,7 +1974,7 @@ func TestPrivacyGroupEndorsementConcurrent(t *testing.T) {
 			IdempotencyKey: "init-tx",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           alice.identity,
-			Data: tktypes.RawJSON(`{
+			Data: pldtypes.RawJSON(`{
                     "map":"TestPrivacyGroupEndorsementConcurrent"
                 }`),
 		},
@@ -1834,7 +2007,7 @@ func TestPrivacyGroupEndorsementConcurrent(t *testing.T) {
 					IdempotencyKey: fmt.Sprintf("tx1-alice-%d-%d", i, j),
 					Type:           pldapi.TransactionTypePrivate.Enum(),
 					From:           alice.identity,
-					Data: tktypes.RawJSON(fmt.Sprintf(`{
+					Data: pldtypes.RawJSON(fmt.Sprintf(`{
 				 	"map":"TestPrivacyGroupEndorsementConcurrent",
                     "key": "alice_key_%d_%d",
 					"value": "alice_value_%d_%d"
@@ -1854,7 +2027,7 @@ func TestPrivacyGroupEndorsementConcurrent(t *testing.T) {
 					IdempotencyKey: fmt.Sprintf("tx1-bob-%d-%d", i, j),
 					Type:           pldapi.TransactionTypePrivate.Enum(),
 					From:           bob.identity,
-					Data: tktypes.RawJSON(fmt.Sprintf(`{
+					Data: pldtypes.RawJSON(fmt.Sprintf(`{
 				 	"map":"TestPrivacyGroupEndorsementConcurrent",
                     "key": "bob_key_%d_%d",
 					"value": "bob_value_%d_%d"
@@ -1872,7 +2045,7 @@ func TestPrivacyGroupEndorsementConcurrent(t *testing.T) {
 					IdempotencyKey: fmt.Sprintf("tx1-carol-%d-%d", i, j),
 					Type:           pldapi.TransactionTypePrivate.Enum(),
 					From:           bob.identity,
-					Data: tktypes.RawJSON(fmt.Sprintf(`{
+					Data: pldtypes.RawJSON(fmt.Sprintf(`{
 				 	"map":"TestPrivacyGroupEndorsementConcurrent",
                     "key": "carol_key_%d_%d",
 					"value": "carol_value_%d_%d"
@@ -1923,18 +2096,18 @@ func TestPrivacyGroupEndorsementConcurrent(t *testing.T) {
 	require.Len(t, schemas, 1)
 
 	var aliceStates []*pldapi.State
-	err = alice.client.CallRPC(ctx, &aliceStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), schemas[0].ID, tktypes.RawJSON(`{}`), "available")
+	err = alice.client.CallRPC(ctx, &aliceStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), schemas[0].ID, pldtypes.RawJSON(`{}`), "available")
 	require.NoError(t, err)
 	require.Len(t, aliceStates, 1)
 
 	var bobStates []*pldapi.State
-	err = bob.client.CallRPC(ctx, &bobStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), schemas[0].ID, tktypes.RawJSON(`{}`), "available")
+	err = bob.client.CallRPC(ctx, &bobStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), schemas[0].ID, pldtypes.RawJSON(`{}`), "available")
 	require.NoError(t, err)
 	require.Len(t, bobStates, 1)
 	assert.Equal(t, aliceStates[0].Data, bobStates[0].Data)
 
 	var carolStates []*pldapi.State
-	err = carol.client.CallRPC(ctx, &carolStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), schemas[0].ID, tktypes.RawJSON(`{}`), "available")
+	err = carol.client.CallRPC(ctx, &carolStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), schemas[0].ID, pldtypes.RawJSON(`{}`), "available")
 	require.NoError(t, err)
 	require.Len(t, carolStates, 1)
 	assert.Equal(t, aliceStates[0].Data, carolStates[0].Data)

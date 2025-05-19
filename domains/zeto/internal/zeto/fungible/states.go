@@ -22,18 +22,18 @@ import (
 	"math/rand/v2"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
+	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
-	"github.com/kaleido-io/paladin/toolkit/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 var MAX_INPUT_COUNT = 10
@@ -72,6 +72,24 @@ func makeNewState(ctx context.Context, coinSchema *prototk.StateSchema, useNulli
 		}
 	}
 	return newState, nil
+}
+
+func makeNewInfoState(ctx context.Context, dataSchema *prototk.StateSchema, info *types.TransactionData, distributionList []string) (*prototk.NewState, error) {
+	infoJSON, err := json.Marshal(info)
+	if err != nil {
+		return nil, err
+	}
+	hash, err := info.Hash(ctx)
+	if err != nil {
+		return nil, err
+	}
+	hashStr := common.HexUint256To32ByteHexString(hash)
+	return &prototk.NewState{
+		Id:               &hashStr,
+		SchemaId:         dataSchema.Id,
+		StateDataJson:    string(infoJSON),
+		DistributionList: distributionList,
+	}, nil
 }
 
 func prepareInputsForTransfer(ctx context.Context, callbacks plugintk.DomainCallbacks, coinSchema *pb.StateSchema, useNullifiers bool, stateQueryContext, senderKey string, params []*types.FungibleTransferParamEntry) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
@@ -145,8 +163,8 @@ func prepareOutputsForTransfer(ctx context.Context, useNullifiers bool, params [
 		salt := crypto.NewSalt()
 		compressedKeyStr := zetosigner.EncodeBabyJubJubPublicKey(recipientKey)
 		newCoin := &types.ZetoCoin{
-			Salt:   (*tktypes.HexUint256)(salt),
-			Owner:  tktypes.MustParseHexBytes(compressedKeyStr),
+			Salt:   (*pldtypes.HexUint256)(salt),
+			Owner:  pldtypes.MustParseHexBytes(compressedKeyStr),
 			Amount: param.Amount,
 			Locked: isLocked,
 		}
@@ -159,6 +177,16 @@ func prepareOutputsForTransfer(ctx context.Context, useNullifiers bool, params [
 		newStates = append(newStates, newState)
 	}
 	return coins, newStates, nil
+}
+
+func prepareTransactionInfoStates(ctx context.Context, data pldtypes.HexBytes, distributionList []string, infoSchema *prototk.StateSchema) ([]*prototk.NewState, error) {
+	salt := crypto.NewSalt()
+	newData := &types.TransactionData{
+		Salt: (*pldtypes.HexUint256)(salt),
+		Data: data,
+	}
+	newState, err := makeNewInfoState(ctx, infoSchema, newData, distributionList)
+	return []*prototk.NewState{newState}, err
 }
 
 func findAvailableStates(ctx context.Context, callbacks plugintk.DomainCallbacks, coinSchema *prototk.StateSchema, useNullifiers bool, stateQueryContext, query string) ([]*pb.StoredState, error) {
