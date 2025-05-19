@@ -44,12 +44,12 @@ import (
 // TransactionInvokeReconciler reconciles a TransactionInvoke object
 type TransactionInvokeReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	RPCCache *rpcCache
+	Scheme           *runtime.Scheme
+	RPCClientManager *rpcClientManager
 
 	// Injected dependencies for testing
 	checkDepsFunc               func(context.Context, client.Client, string, []string, *corev1alpha1.ContactDependenciesStatus) (bool, bool, error)
-	newTransactionReconcileFunc func(client.Client, *rpcCache, string, string, string, *corev1alpha1.TransactionSubmission, string, func() (bool, *pldapi.TransactionInput, error)) transactionReconcileInterface
+	newTransactionReconcileFunc func(client.Client, *rpcClientManager, string, string, string, *corev1alpha1.TransactionSubmission, string, func() (bool, *pldapi.TransactionInput, error)) transactionReconcileInterface
 }
 
 // allows generic functions by giving a mapping between the types and interfaces for the CR
@@ -96,7 +96,7 @@ func (r *TransactionInvokeReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		r.newTransactionReconcileFunc = newTransactionReconcile
 	}
 	txReconcile := r.newTransactionReconcileFunc(r.Client,
-		r.RPCCache,
+		r.RPCClientManager,
 		"txinvoke."+txi.Name,
 		txi.Spec.Node, txi.Namespace,
 		&txi.Status.TransactionSubmission,

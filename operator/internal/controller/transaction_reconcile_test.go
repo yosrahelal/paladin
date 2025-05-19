@@ -153,7 +153,7 @@ func TestTransactionReconcile_PaladinNodeNotReady(t *testing.T) {
 	err = fakeClient.Create(context.Background(), paladin)
 	require.NoError(t, err)
 
-	tr.getPaladinRPCFunc = func(ctx context.Context, c client.Client, r *rpcCache, nodeName string, namespace string, timeout string) (pldclient.PaladinClient, error) {
+	tr.getPaladinRPCFunc = func(ctx context.Context, c client.Client, r *rpcClientManager, nodeName string, namespace string, timeout string) (pldclient.PaladinClient, error) {
 		return nil, nil // Node not ready
 	}
 
