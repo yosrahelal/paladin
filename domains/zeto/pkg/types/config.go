@@ -23,6 +23,7 @@ import (
 	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 )
 
@@ -91,7 +92,17 @@ var DomainInstanceConfigABI = &abi.ParameterArray{
 }
 
 // marks the version of the Zeto transaction data schema
-var ZetoTransactionData_V0 = ethtypes.MustNewHexBytes0xPrefix("0x00010000")
+var ZetoTransactionDataID_V0 = ethtypes.MustNewHexBytes0xPrefix("0x00010000")
+
+type ZetoTransactionData_V0 struct {
+	TransactionID pldtypes.Bytes32   `json:"transactionId"`
+	InfoStates    []pldtypes.Bytes32 `json:"infoStates"`
+}
+
+var ZetoTransactionDataABI_V0 = &abi.ParameterArray{
+	{Name: "transactionId", Type: "bytes32"},
+	{Name: "infoStates", Type: "bytes32[]"},
+}
 
 type DomainHandler = domain.DomainHandler[DomainInstanceConfig]
 type ParsedTransaction = domain.ParsedTransaction[DomainInstanceConfig]

@@ -401,7 +401,16 @@ func (s *pvpTestSuite) TestNotoForZeto() {
 
 	jq := query.NewQueryBuilder().Limit(100).Equal("locked", true).Query()
 	lockedZetoCoins := findAvailableCoins(t, ctx, rpc, zetoDomain.Name(), zetoDomain.CoinSchemaID(), "pstate_queryContractStates", zeto.Address, jq, func(coins []*zetotypes.ZetoCoinState) bool {
-		return len(coins) >= 1
+		locked := len(coins) >= 1
+		if locked {
+			log.L(ctx).Infof("Found %d locked Zeto coins", len(coins))
+			for _, coin := range coins {
+				hash, err := coin.Data.Hash(ctx)
+				require.NoError(t, err)
+				log.L(ctx).Infof("Locked Zeto coin: amount=%s, locked=%t, hash=%s\n", coin.Data.Amount.String(), coin.Data.Locked, hash.String())
+			}
+		}
+		return locked
 	})
 	lockedZeto, _ := lockedZetoCoins[0].Data.Hash(ctx)
 

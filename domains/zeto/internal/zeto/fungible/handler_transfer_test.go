@@ -146,6 +146,9 @@ func TestTransferAssemble(t *testing.T) {
 				MerkleTreeNodeSchema: &pb.StateSchema{
 					Id: "merkle_tree_node",
 				},
+				DataSchema: &prototk.StateSchema{
+					Id: "data",
+				},
 			},
 		},
 	}
@@ -408,7 +411,7 @@ func TestTransferPrepare(t *testing.T) {
 
 	res, err := h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "{\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"ecdhPublicKey\":[\"\"],\"encryptedValues\":[\"0x1234567890\",\"0x1234567890\"],\"encryptionNonce\":\"0x1234567890\",\"inputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)
+	assert.Equal(t, "{\"data\":\"0x00010000123456789012345678901234567890123456789012345678901234567890123400000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000\",\"ecdhPublicKey\":[\"\"],\"encryptedValues\":[\"0x1234567890\",\"0x1234567890\"],\"encryptionNonce\":\"0x1234567890\",\"inputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]}}", res.Transaction.ParamsJson)
 
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
 	(*tx.DomainConfig.Circuits)["transfer"] = &zetosignerapi.Circuit{Name: "anon_nullifier_transfer", Type: "transfer", UsesNullifiers: true}
@@ -419,7 +422,7 @@ func TestTransferPrepare(t *testing.T) {
 	req.AttestationResult[0].Payload = payload
 	res, err = h.Prepare(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "{\"data\":\"0x000100001234567890123456789012345678901234567890123456789012345678901234\",\"nullifiers\":[\"0x1234567890\",\"0x1234567890\"],\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]},\"root\":\"0x1234567890\"}", res.Transaction.ParamsJson)
+	assert.Equal(t, "{\"data\":\"0x00010000123456789012345678901234567890123456789012345678901234567890123400000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000\",\"nullifiers\":[\"0x1234567890\",\"0x1234567890\"],\"outputs\":[\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\",\"0\"],\"proof\":{\"pA\":[\"0x1234567890\",\"0x1234567890\"],\"pB\":[[\"0x1234567890\",\"0x1234567890\"],[\"0x1234567890\",\"0x1234567890\"]],\"pC\":[\"0x1234567890\",\"0x1234567890\"]},\"root\":\"0x1234567890\"}", res.Transaction.ParamsJson)
 }
 
 func TestGenerateMerkleProofs(t *testing.T) {

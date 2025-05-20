@@ -53,6 +53,7 @@ export interface ZetoSetERC20Params {
 export interface ZetoTransfer {
   to: PaladinVerifier;
   amount: string | number;
+  data: string;
 }
 
 export interface ZetoDepositParams {

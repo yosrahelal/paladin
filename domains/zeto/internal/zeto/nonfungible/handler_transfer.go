@@ -192,7 +192,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		return nil, err
 	}
 
-	data, err := encodeTransactionDataFunc(ctx, req.Transaction)
+	data, err := encodeTransactionDataFunc(ctx, req.Transaction, req.InfoStates)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}

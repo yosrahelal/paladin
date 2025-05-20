@@ -74,6 +74,24 @@ func makeNewState(ctx context.Context, coinSchema *prototk.StateSchema, useNulli
 	return newState, nil
 }
 
+func makeNewInfoState(ctx context.Context, dataSchema *prototk.StateSchema, info *types.TransactionData, distributionList []string) (*prototk.NewState, error) {
+	infoJSON, err := json.Marshal(info)
+	if err != nil {
+		return nil, err
+	}
+	hash, err := info.Hash(ctx)
+	if err != nil {
+		return nil, err
+	}
+	hashStr := common.HexUint256To32ByteHexString(hash)
+	return &prototk.NewState{
+		Id:               &hashStr,
+		SchemaId:         dataSchema.Id,
+		StateDataJson:    string(infoJSON),
+		DistributionList: distributionList,
+	}, nil
+}
+
 func prepareInputsForTransfer(ctx context.Context, callbacks plugintk.DomainCallbacks, coinSchema *pb.StateSchema, useNullifiers bool, stateQueryContext, senderKey string, params []*types.FungibleTransferParamEntry) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
 	expectedTotal := big.NewInt(0)
 	for _, param := range params {
@@ -159,6 +177,16 @@ func prepareOutputsForTransfer(ctx context.Context, useNullifiers bool, params [
 		newStates = append(newStates, newState)
 	}
 	return coins, newStates, nil
+}
+
+func prepareTransactionInfoStates(ctx context.Context, data pldtypes.HexBytes, distributionList []string, infoSchema *prototk.StateSchema) ([]*prototk.NewState, error) {
+	salt := crypto.NewSalt()
+	newData := &types.TransactionData{
+		Salt: (*pldtypes.HexUint256)(salt),
+		Data: data,
+	}
+	newState, err := makeNewInfoState(ctx, infoSchema, newData, distributionList)
+	return []*prototk.NewState{newState}, err
 }
 
 func findAvailableStates(ctx context.Context, callbacks plugintk.DomainCallbacks, coinSchema *prototk.StateSchema, useNullifiers bool, stateQueryContext, query string) ([]*pb.StoredState, error) {
