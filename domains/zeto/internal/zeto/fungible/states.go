@@ -133,7 +133,7 @@ func buildInputsForExpectedTotal(ctx context.Context, callbacks plugintk.DomainC
 			lastStateTimestamp = state.CreatedAt
 			coin, err := makeCoin(state.DataJson)
 			if err != nil {
-				return nil, false, i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)
+				return nil, true, i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)
 			}
 			total = total.Add(total, coin.Amount.Int())
 			stateRefs = append(stateRefs, &pb.StateRef{
