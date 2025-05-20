@@ -63,7 +63,40 @@ npm install
 npm run compile
 ```
 
-Build [TypeScript SDK](../../sdk/typescript):
+1. **Download and Extract Contracts**
+
+   - [Download Solidity contracts](https://github.com/LF-Decentralized-Trust-labs/paladin/releases/download/latest/abis.tar.gz)
+   - Extract `abis.tar.gz` and copy the `abis` directory to `src/`. (full path should be: `paladin/example/zeto/src/abis`)
+
+2. **Build TypeScript SDK**
+
+```shell
+cp -rf src/abis ../../sdk/typescript/src/domains/
+cd ../../sdk/typescript
+npm install
+npm run build
+```
+
+3. **Run the Example**
+
+```shell
+npm install
+npm run start
+```
+
+---
+
+## Option 2: Build Locally
+
+1. **Compile Solidity Contracts**
+
+```shell
+cd ../../solidity
+npm install
+npm run compile
+```
+
+2. **Build TypeScript SDK**
 
 ```shell
 cd ../../sdk/typescript
@@ -95,6 +128,7 @@ Run the example with the following command from inside the `example/zeto` folder
 ```shell
 cd example/zeto
 npm install
+npm run abi
 npm run start
 
 Use case #1: Privacy-preserving CBDC token, using private minting...
