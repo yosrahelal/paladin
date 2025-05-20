@@ -175,6 +175,8 @@ func TestTransferAssemble(t *testing.T) {
 			},
 		},
 	}
+
+	// Missing verifier for sender
 	req := &pb.AssembleTransactionRequest{
 		ResolvedVerifiers: []*pb.ResolvedVerifier{
 			{
@@ -189,6 +191,7 @@ func TestTransferAssemble(t *testing.T) {
 	_, err := h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210036: Failed to resolve verifier: Bob")
 
+	// Error querying states
 	req.ResolvedVerifiers = append(req.ResolvedVerifiers, &pb.ResolvedVerifier{
 		Lookup:       "Bob",
 		Verifier:     "0x1234567890123456789012345678901234567890",
@@ -219,18 +222,36 @@ func TestTransferAssemble(t *testing.T) {
 			return nil, errors.New("test error")
 		}
 	}
-	req.ResolvedVerifiers[1].Verifier = "0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"
+
+	// Malformed verifier key
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210040: Failed to prepare transaction outputs. PD210037: Failed load owner public key. expected 32 bytes in hex string, got 20")
 
 	calls = 0
+	req.ResolvedVerifiers[0].Verifier = "0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922"
+	req.ResolvedVerifiers[1].Verifier = "0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"
+
+	// Missing verifier for receiver
 	req.ResolvedVerifiers[0].Lookup = "Bob"
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210040: Failed to prepare transaction outputs. PD210036: Failed to resolve verifier: Alice")
+	req.ResolvedVerifiers[0].Lookup = "Alice"
 
-	req.ResolvedVerifiers[0].Verifier = "0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922"
+	// Initially find a state, but error when looking for more states
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210039: Failed to prepare transaction inputs. PD210032: Failed to query the state store for available coins. test error")
+
+	testCallbacks.MockFindAvailableStates = func() (*pb.FindAvailableStatesResponse, error) {
+		return &pb.FindAvailableStatesResponse{
+			States: []*pb.StoredState{},
+		}, nil
+	}
+
+	// No states found
+	res, err := h.Assemble(ctx, tx, req)
+	assert.NoError(t, err)
+	assert.Equal(t, prototk.AssembleTransactionResponse_REVERT, res.AssemblyResult)
+	assert.Equal(t, "PD210033: Insufficient funds (available=0)", *res.RevertReason)
 
 	testCallbacks.MockFindAvailableStates = func() (*pb.FindAvailableStatesResponse, error) {
 		return &pb.FindAvailableStatesResponse{
@@ -241,8 +262,9 @@ func TestTransferAssemble(t *testing.T) {
 			},
 		}, nil
 	}
-	req.ResolvedVerifiers[0].Lookup = "Alice"
-	res, err := h.Assemble(ctx, tx, req)
+
+	// Successful assembly with 1 input state
+	res, err = h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Len(t, res.AssembledTransaction.InputStates, 1)
 	assert.Len(t, res.AssembledTransaction.OutputStates, 2) // one for the receiver Alice, one for self as change
@@ -276,6 +298,8 @@ func TestTransferAssemble(t *testing.T) {
 			},
 		}, nil
 	}
+
+	// Successful assembly with 3 input states
 	res, err = h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Len(t, res.AssembledTransaction.InputStates, 3)
