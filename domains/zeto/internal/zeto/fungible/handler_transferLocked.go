@@ -151,14 +151,21 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 	}
 
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	inputCoins, inputStates, err := h.loadCoins(ctx, params.LockedInputs, useNullifiers, req.StateQueryContext)
+	inputStates, revert, err := h.loadCoins(ctx, params.LockedInputs, useNullifiers, req.StateQueryContext)
 	if err != nil {
+		if revert {
+			message := err.Error()
+			return &prototk.AssembleTransactionResponse{
+				AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+				RevertReason:   &message,
+			}, nil
+		}
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxInputs, err)
 	}
 
 	// verify that the specified inputs have at least the amount to support te transfers
 	inputTotal := big.NewInt(0)
-	for _, coin := range inputCoins {
+	for _, coin := range inputStates.coins {
 		inputTotal = inputTotal.Add(inputTotal, coin.Amount.Int())
 	}
 	transferTotal := big.NewInt(0)
@@ -166,7 +173,11 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		transferTotal = transferTotal.Add(transferTotal, param.Amount.Int())
 	}
 	if inputTotal.Cmp(transferTotal) < 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorInsufficientInputAmount, inputTotal.Text(10), transferTotal.Text(10))
+		message := i18n.NewError(ctx, msgs.MsgErrorInsufficientInputAmount, inputTotal.Text(10), transferTotal.Text(10)).Error()
+		return &prototk.AssembleTransactionResponse{
+			AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+			RevertReason:   &message,
+		}, nil
 	}
 
 	outputCoins, outputStates, err := prepareOutputsForTransfer(ctx, useNullifiers, params.Transfers, req.ResolvedVerifiers, h.stateSchemas.CoinSchema, h.name)
@@ -204,7 +215,7 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := formatTransferProvingRequest(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, inputCoins, outputCoins, (*tx.DomainConfig.Circuits)[types.METHOD_TRANSFER_LOCKED], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress, delegateAddr)
+	payloadBytes, err := formatTransferProvingRequest(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, inputStates.coins, outputCoins, (*tx.DomainConfig.Circuits)[types.METHOD_TRANSFER_LOCKED], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress, delegateAddr)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
@@ -212,7 +223,7 @@ func (h *transferLockedHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 	return &pb.AssembleTransactionResponse{
 		AssemblyResult: pb.AssembleTransactionResponse_OK,
 		AssembledTransaction: &pb.AssembledTransaction{
-			InputStates:  inputStates,
+			InputStates:  inputStates.states,
 			OutputStates: outputStates,
 			InfoStates:   infoStates,
 		},
@@ -296,7 +307,7 @@ func (h *transferLockedHandler) Prepare(ctx context.Context, tx *types.ParsedTra
 	}, nil
 }
 
-func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*pldtypes.HexUint256, useNullifiers bool, stateQueryContext string) ([]*types.ZetoCoin, []*pb.StateRef, error) {
+func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*pldtypes.HexUint256, useNullifiers bool, stateQueryContext string) (inputs *preparedInputs, revert bool, err error) {
 	inputIDs := make([]any, 0, len(ids))
 	for _, input := range ids {
 		if !input.NilOrZero() {
@@ -307,10 +318,10 @@ func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*pldtypes.H
 	queryBuilder := query.NewQueryBuilder().In(".id", inputIDs)
 	inputStates, err := findAvailableStates(ctx, h.callbacks, h.stateSchemas.CoinSchema, useNullifiers, stateQueryContext, queryBuilder.Query().String())
 	if err != nil {
-		return nil, nil, err
+		return nil, false, err
 	}
 	if len(inputStates) != len(inputIDs) {
-		return nil, nil, i18n.NewError(ctx, msgs.MsgFailedToQueryStatesById, len(inputIDs), len(inputStates))
+		return nil, true, i18n.NewError(ctx, msgs.MsgFailedToQueryStatesById, len(inputIDs), len(inputStates))
 	}
 
 	inputCoins := make([]*types.ZetoCoin, len(inputStates))
@@ -318,10 +329,10 @@ func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*pldtypes.H
 	for i, state := range inputStates {
 		err := json.Unmarshal([]byte(state.DataJson), &inputCoins[i])
 		if err != nil {
-			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalStateData, err)
+			return nil, true, i18n.NewError(ctx, msgs.MsgErrorUnmarshalStateData, err)
 		}
 		if inputCoins[i].Locked == false {
-			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorInputNotLocked, state.Id)
+			return nil, true, i18n.NewError(ctx, msgs.MsgErrorInputNotLocked, state.Id)
 		}
 		stateRefs = append(stateRefs, &pb.StateRef{
 			SchemaId: state.SchemaId,
@@ -329,7 +340,10 @@ func (h *transferLockedHandler) loadCoins(ctx context.Context, ids []*pldtypes.H
 		})
 
 	}
-	return inputCoins, stateRefs, nil
+	return &preparedInputs{
+		coins:  inputCoins,
+		states: stateRefs,
+	}, false, nil
 }
 
 func validateTransferLockedParams(ctx context.Context, params types.FungibleTransferLockedParams) error {

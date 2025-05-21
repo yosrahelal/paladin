@@ -52,6 +52,9 @@ async function main(): Promise<boolean> {
   });
   if (!checkReceipt(receipt)) return false;
 
+  // TODO: remove
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+
   // Transfer some cash from bank1 to bank2
   logger.log(
     "- Bank1 transferring CBDC to bank2 to pay for some asset trades ..."
