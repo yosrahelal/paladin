@@ -153,9 +153,8 @@ func TestWithdrawAssemble(t *testing.T) {
 			}, nil
 		},
 	}
-	res, err := h.Assemble(ctx, tx, req)
+	_, err = h.Assemble(ctx, tx, req)
 	require.NoError(t, err)
-	assert.Equal(t, "100", *res.AssembledTransaction.DomainData)
 
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
 	(*tx.DomainConfig.Circuits)["withdraw"] = &zetosignerapi.Circuit{Name: "withdraw_nullifier", Type: "withdraw", UsesNullifiers: true}
@@ -180,7 +179,7 @@ func TestWithdrawAssemble(t *testing.T) {
 			}, nil
 		},
 	}
-	res, err = h.Assemble(ctx, tx, req)
+	_, err = h.Assemble(ctx, tx, req)
 	require.ErrorContains(t, err, "PD210042: Failed to format proving request. PD210052: Failed to generate merkle proofs.")
 
 	called = 0
@@ -204,9 +203,8 @@ func TestWithdrawAssemble(t *testing.T) {
 			}, nil
 		},
 	}
-	res, err = h.Assemble(ctx, tx, req)
+	_, err = h.Assemble(ctx, tx, req)
 	require.NoError(t, err)
-	assert.Equal(t, "100", *res.AssembledTransaction.DomainData)
 }
 
 func TestWithdrawEndorse(t *testing.T) {
@@ -239,7 +237,6 @@ func TestWithdrawPrepare(t *testing.T) {
 			},
 		},
 	}
-	amountStr := "100"
 	req := &prototk.PrepareTransactionRequest{
 		InputStates: []*prototk.EndorsableState{
 			{
@@ -254,7 +251,6 @@ func TestWithdrawPrepare(t *testing.T) {
 			},
 		},
 		Transaction: txSpec,
-		DomainData:  &amountStr,
 	}
 	ctx := context.Background()
 	_, err := h.Prepare(ctx, tx, req)
