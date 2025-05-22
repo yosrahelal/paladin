@@ -379,6 +379,10 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 									MountPath: "/app/config",
 									ReadOnly:  true,
 								},
+								{
+									Name:      "appjna",
+									MountPath: "/app/jna",									
+								},
 							},
 							Args: []string{
 								"/app/config/pldconf.paladin.yaml",
@@ -439,6 +443,14 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 									},
 								},
 							},
+						},
+						{
+							Name: "appjna",
+							VolumeSource: corev1.VolumeSource{
+							  EmptyDir: &corev1.EmptyDirVolumeSource{
+								SizeLimit: "100Mi",
+							  },
+							}
 						},
 					},
 				},
