@@ -34,64 +34,14 @@ The sample uses the following ABIs to accomplish the end to end flow:
 
 These dependency resources can be obtained by one of the following ways.
 
-#### npm commands
+#### Option 1: Manually Building with `npm`
 
-You can perform the setup without having to run Gradle builds.
-
-Compile [Solidity contracts](../../solidity):
-
-```shell
-cd ../../solidity
-npm install
-npm run compile
-```
-
-#### Running The Gradle Build
-
-If you are contributing code and running Gradle builds, the following build will set up all the dependency artifacts.
-
-```shell
-$ ./gradlew :example:zeto:build
-```
-
-You can verify that the dependent ABIs have been successfully put in place by the build:
-
-```shell
-$ ls sdk/typescript/build/domains/abis/
-INoto.json		INotoPrivate.json	IZetoFungible.json	PentePrivacyGroup.json	Zeto_Anon.json
-$ ls example/zeto/src/abis/
-SampleERC20.json
-```
-
-1. **Download and Extract Contracts**
-
-   - [Download Solidity contracts](https://github.com/LF-Decentralized-Trust-labs/paladin/releases/download/latest/abis.tar.gz)
-   - Extract `abis.tar.gz` and copy the `abis` directory to `src/`. (full path should be: `paladin/example/zeto/src/abis`)
-
-2. **Build TypeScript SDK**
-
-```shell
-cp -rf src/abis ../../sdk/typescript/src/domains/
-cd ../../sdk/typescript
-npm install
-npm run build
-```
-
-3. **Run the Example**
-
-```shell
-npm install
-npm run start
-```
-
----
-
-## Option 2: Build Locally
+You can perform the setup with just `npm`, without having to run Gradle builds.
 
 1. **Compile Solidity Contracts**
 
 ```shell
-cd ../../solidity
+cd <paladin-root>/solidity
 npm install
 npm run compile
 ```
@@ -99,25 +49,37 @@ npm run compile
 2. **Build TypeScript SDK**
 
 ```shell
-cd ../../sdk/typescript
+cd <paladin-root>/sdk/typescript
 npm install
 npm run abi
 npm run build
 ```
 
-Copy the ABIs needed by the example:
+3. **Copy the ABIs needed by the example**
 
 ```shell
-cd ../../example/zeto
+cd <paladin-root>/example/zeto
+npm install
 npm run abi
 ```
+
+#### Option 2: Running The Gradle Build
+
+If you are already running Gradle builds, the following build will set up all the dependency artifacts.
+
+```shell
+cd <paladin-root>
+./gradlew :example:zeto:build
+```
+
+### Verify Dependent Zeto Resources
 
 You can verify that the dependent ABIs have been successfully put in place by the build:
 
 ```shell
-$ ls sdk/typescript/build/domains/abis/
+$ ls <paladin-root>/sdk/typescript/build/domains/abis/
 INoto.json		INotoPrivate.json	IZetoFungible.json	PentePrivacyGroup.json	Zeto_Anon.json
-$ ls example/zeto/src/abis/
+$ ls <paladin-root>/example/zeto/src/abis/
 SampleERC20.json
 ```
 
@@ -126,9 +88,7 @@ SampleERC20.json
 Run the example with the following command from inside the `example/zeto` folder:
 
 ```shell
-cd example/zeto
-npm install
-npm run abi
+cd <paladin-root>/example/zeto
 npm run start
 
 Use case #1: Privacy-preserving CBDC token, using private minting...
