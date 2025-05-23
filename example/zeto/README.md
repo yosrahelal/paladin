@@ -34,9 +34,21 @@ The sample uses the following ABIs to accomplish the end to end flow:
 
 These dependency resources can be obtained by one of the following ways.
 
+#### npm commands
+
+You can perform the setup without having to run Gradle builds.
+
+Compile [Solidity contracts](../../solidity):
+
+```shell
+cd ../../solidity
+npm install
+npm run compile
+```
+
 #### Running The Gradle Build
 
-The following build will set up all the dependency artifacts.
+If you are contributing code and running Gradle builds, the following build will set up all the dependency artifacts.
 
 ```shell
 $ ./gradlew :example:zeto:build
@@ -49,18 +61,6 @@ $ ls sdk/typescript/build/domains/abis/
 INoto.json		INotoPrivate.json	IZetoFungible.json	PentePrivacyGroup.json	Zeto_Anon.json
 $ ls example/zeto/src/abis/
 SampleERC20.json
-```
-
-#### Manually Building and Copying
-
-You can also perform the setup without having to run Gradle builds.
-
-Compile [Solidity contracts](../../solidity):
-
-```shell
-cd ../../solidity
-npm install
-npm run compile
 ```
 
 1. **Download and Extract Contracts**
