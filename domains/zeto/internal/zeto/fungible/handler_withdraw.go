@@ -34,6 +34,7 @@ import (
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"google.golang.org/protobuf/proto"
 )
@@ -118,11 +119,19 @@ func (h *withdrawHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	}
 
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	inputCoins, inputStates, _, remainder, err := h.prepareInputs(ctx, useNullifiers, req.StateQueryContext, resolvedSender.Verifier, amount)
+	inputStates, revert, err := h.prepareInputs(ctx, useNullifiers, req.StateQueryContext, resolvedSender.Verifier, amount)
 	if err != nil {
+		if revert {
+			message := err.Error()
+			return &prototk.AssembleTransactionResponse{
+				AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+				RevertReason:   &message,
+			}, nil
+		}
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxInputs, err)
 	}
 
+	remainder := big.NewInt(0).Sub(inputStates.total, amount.Int())
 	outputCoin, outputState, err := h.prepareOutput(ctx, pldtypes.MustParseHexUint256(remainder.Text(10)), resolvedSender)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
@@ -132,18 +141,16 @@ func (h *withdrawHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := h.formatProvingRequest(ctx, inputCoins, outputCoin, (*tx.DomainConfig.Circuits)[types.METHOD_WITHDRAW], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
+	payloadBytes, err := h.formatProvingRequest(ctx, inputStates.coins, outputCoin, (*tx.DomainConfig.Circuits)[types.METHOD_WITHDRAW], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
 
-	amountStr := amount.Int().Text(10)
 	return &pb.AssembleTransactionResponse{
 		AssemblyResult: pb.AssembleTransactionResponse_OK,
 		AssembledTransaction: &pb.AssembledTransaction{
-			InputStates:  inputStates,
+			InputStates:  inputStates.states,
 			OutputStates: []*pb.NewState{outputState},
-			DomainData:   &amountStr,
 		},
 		AttestationPlan: []*pb.AttestationRequest{
 			{
@@ -164,6 +171,8 @@ func (h *withdrawHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 }
 
 func (h *withdrawHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
+	amount := tx.Params.(*pldtypes.HexUint256)
+
 	var proofRes corepb.ProvingResponse
 	result := domain.FindAttestation("sender", req.AttestationResult)
 	if result == nil {
@@ -206,7 +215,6 @@ func (h *withdrawHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}
-	amount := pldtypes.MustParseHexUint256(*req.DomainData)
 	params := map[string]any{
 		"amount": amount.Int().Text(10),
 		"inputs": inputs,
@@ -238,7 +246,7 @@ func (h *withdrawHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	}, nil
 }
 
-func (h *withdrawHandler) prepareInputs(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, amount *pldtypes.HexUint256) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
+func (h *withdrawHandler) prepareInputs(ctx context.Context, useNullifiers bool, stateQueryContext, senderKey string, amount *pldtypes.HexUint256) (inputs *preparedInputs, revert bool, err error) {
 	expectedTotal := amount.Int()
 	return buildInputsForExpectedTotal(ctx, h.callbacks, h.stateSchemas.CoinSchema, useNullifiers, stateQueryContext, senderKey, expectedTotal, false)
 }

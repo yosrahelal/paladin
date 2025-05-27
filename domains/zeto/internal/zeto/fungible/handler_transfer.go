@@ -18,6 +18,7 @@ package fungible
 import (
 	"context"
 	"encoding/json"
+	"math/big"
 	"strings"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -139,14 +140,23 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	}
 
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	inputCoins, inputStates, _, remainder, err := prepareInputsForTransfer(ctx, h.callbacks, h.stateSchemas.CoinSchema, useNullifiers, req.StateQueryContext, resolvedSender.Verifier, params)
+	inputStates, expectedTotal, revert, err := prepareInputsForTransfer(ctx, h.callbacks, h.stateSchemas.CoinSchema, useNullifiers, req.StateQueryContext, resolvedSender.Verifier, params)
 	if err != nil {
+		if revert {
+			message := err.Error()
+			return &prototk.AssembleTransactionResponse{
+				AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+				RevertReason:   &message,
+			}, nil
+		}
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxInputs, err)
 	}
 	outputCoins, outputStates, err := prepareOutputsForTransfer(ctx, useNullifiers, params, req.ResolvedVerifiers, h.stateSchemas.CoinSchema, h.name)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
+
+	remainder := big.NewInt(0).Sub(inputStates.total, expectedTotal)
 	if remainder.Sign() > 0 {
 		// add the remainder as an output to the sender themselves
 		remainderHex := pldtypes.HexUint256(*remainder)
@@ -177,7 +187,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := formatTransferProvingRequest(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, inputCoins, outputCoins, (*tx.DomainConfig.Circuits)[types.METHOD_TRANSFER], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
+	payloadBytes, err := formatTransferProvingRequest(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, inputStates.coins, outputCoins, (*tx.DomainConfig.Circuits)[types.METHOD_TRANSFER], tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
@@ -185,7 +195,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	return &pb.AssembleTransactionResponse{
 		AssemblyResult: pb.AssembleTransactionResponse_OK,
 		AssembledTransaction: &pb.AssembledTransaction{
-			InputStates:  inputStates,
+			InputStates:  inputStates.states,
 			OutputStates: outputStates,
 			InfoStates:   infoStates,
 		},

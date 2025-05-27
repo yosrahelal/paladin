@@ -80,7 +80,7 @@ func TestLockValidateParams(t *testing.T) {
 	assert.EqualError(t, err, "PD210107: Total amount must be in the range (0, 2^100)")
 }
 
-func TestLocktInit(t *testing.T) {
+func TestLockInit(t *testing.T) {
 	h := lockHandler{
 		baseHandler: baseHandler{
 			name: "test1",
@@ -164,9 +164,9 @@ func TestLockAssemble(t *testing.T) {
 		},
 	}
 
+	// Missing verifier for sender
 	_, err := h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210036: Failed to resolve verifier: Alice")
-
 	req.ResolvedVerifiers[0].Lookup = "Alice"
 
 	badCallbacks := &domain.MockDomainCallbacks{
@@ -175,17 +175,34 @@ func TestLockAssemble(t *testing.T) {
 		},
 	}
 	h.callbacks = badCallbacks
+
+	// Error querying states
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210039: Failed to prepare transaction inputs. PD210032: Failed to query the state store for available coins. test error")
-
 	h.callbacks = testCallbacks
+
+	// Bad contract address
 	req.Transaction.ContractInfo.ContractAddress = "bad hex"
 	_, err = h.Assemble(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210017: Failed to decode contract address. bad address")
 
+	h.callbacks = &domain.MockDomainCallbacks{
+		MockFindAvailableStates: func() (*prototk.FindAvailableStatesResponse, error) {
+			return &prototk.FindAvailableStatesResponse{}, nil
+		},
+	}
+
+	// No states found
+	res, err := h.Assemble(ctx, tx, req)
+	assert.NoError(t, err)
+	assert.Equal(t, prototk.AssembleTransactionResponse_REVERT, res.AssemblyResult)
+	assert.Equal(t, "PD210033: Insufficient funds (available=0)", *res.RevertReason)
+	h.callbacks = testCallbacks
+
+	// Successful assembly
 	req.Transaction.ContractInfo.ContractAddress = "0x1234567890123456789012345678901234567890"
 	h.callbacks = testCallbacks
-	res, err := h.Assemble(ctx, tx, req)
+	res, err = h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 }
