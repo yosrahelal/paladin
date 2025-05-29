@@ -181,9 +181,12 @@ func TestTransferLockedAssemble(t *testing.T) {
 		},
 	}
 	h.callbacks = testCallbacks
+
+	// Missing verifier for delegate
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210036: Failed to resolve verifier: delegate1")
 
+	// Error querying states
 	req.ResolvedVerifiers = append(req.ResolvedVerifiers, &prototk.ResolvedVerifier{
 		Lookup:       "delegate1",
 		Verifier:     "0x1234567890123456789012345678901234567890",
@@ -209,22 +212,29 @@ func TestTransferLockedAssemble(t *testing.T) {
 		}
 	}
 	req.ResolvedVerifiers[1].Verifier = "0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"
-	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "PD210129: Insufficient input amount (total=15) for the transfers (total=19)")
 
-	tx.Params.(*types.FungibleTransferLockedParams).Transfers[0].Amount = pldtypes.MustParseHexUint256("0x09")
+	// Insufficient inputs
+	res, err := h.Assemble(ctx, tx, req)
+	assert.NoError(t, err)
+	assert.Equal(t, "PD210129: Insufficient input amount (total=15) for the transfers (total=19)", *res.RevertReason)
 	calls = 0
+	tx.Params.(*types.FungibleTransferLockedParams).Transfers[0].Amount = pldtypes.MustParseHexUint256("0x09")
+
+	// Malformed verifier
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210040: Failed to prepare transaction outputs. PD210037: Failed load owner public key. expected 32 bytes in hex string, got 20")
-
 	calls = 0
+
+	// Missing verifier for receiver
 	req.ResolvedVerifiers[0].Lookup = "Bob"
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210040: Failed to prepare transaction outputs. PD210036: Failed to resolve verifier: Alice")
 
+	// Initially find a state, but error when looking for more states
 	req.ResolvedVerifiers[0].Verifier = "0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922"
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "PD210039: Failed to prepare transaction inputs. test error")
+	req.ResolvedVerifiers[0].Lookup = "Alice"
 
 	testCallbacks.MockFindAvailableStates = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
@@ -235,13 +245,15 @@ func TestTransferLockedAssemble(t *testing.T) {
 			},
 		}, nil
 	}
-	req.ResolvedVerifiers[0].Lookup = "Alice"
+
+	// Bad contract address
 	_, err = h.Assemble(ctx, tx, req)
 	assert.ErrorContains(t, err, "PD210017: Failed to decode contract address.")
-
 	txSpec.ContractInfo.ContractAddress = "0x1234567890123456789012345678901234567890"
 	tx.Transaction = txSpec
-	res, err := h.Assemble(ctx, tx, req)
+
+	// Successful assembly
+	res, err = h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Len(t, res.AssembledTransaction.InputStates, 1)
 	assert.Len(t, res.AssembledTransaction.OutputStates, 2) // one for the receiver Alice, one for self as change
@@ -272,8 +284,11 @@ func TestTransferLockedAssemble(t *testing.T) {
 			},
 		}, nil
 	}
-	_, err = h.Assemble(ctx, tx, req)
-	assert.ErrorContains(t, err, "PD210134: Failed to query states by IDs. Wanted: 1, Found: 2")
+
+	// Duplicate states returned from store
+	res, err = h.Assemble(ctx, tx, req)
+	assert.NoError(t, err)
+	assert.Equal(t, "PD210134: Failed to query states by IDs. Wanted: 1, Found: 2", *res.RevertReason)
 
 	testCallbacks.MockFindAvailableStates = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
@@ -284,8 +299,11 @@ func TestTransferLockedAssemble(t *testing.T) {
 			},
 		}, nil
 	}
-	_, err = h.Assemble(ctx, tx, req)
-	assert.ErrorContains(t, err, "PD210087: Failed to unmarshal state data")
+
+	// Malformed state data
+	res, err = h.Assemble(ctx, tx, req)
+	assert.NoError(t, err)
+	assert.Contains(t, *res.RevertReason, "PD210087: Failed to unmarshal state data")
 
 	testCallbacks.MockFindAvailableStates = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
@@ -297,8 +315,11 @@ func TestTransferLockedAssemble(t *testing.T) {
 			},
 		}, nil
 	}
-	_, err = h.Assemble(ctx, tx, req)
-	assert.ErrorContains(t, err, "PD210128: Input 0x0c3d1d2996e66d8512c7c3faa4b5f55180fee870190d589a911b6517dc578dba is not locked")
+
+	// Invalid locked input
+	res, err = h.Assemble(ctx, tx, req)
+	assert.NoError(t, err)
+	assert.Equal(t, "PD210128: Input 0x0c3d1d2996e66d8512c7c3faa4b5f55180fee870190d589a911b6517dc578dba is not locked", *res.RevertReason)
 
 	testCallbacks.MockFindAvailableStates = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
@@ -309,8 +330,11 @@ func TestTransferLockedAssemble(t *testing.T) {
 			},
 		}, nil
 	}
-	_, err = h.Assemble(ctx, tx, req)
+
+	// Successful assembly
+	res, err = h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
+	assert.Nil(t, res.RevertReason)
 	assert.Len(t, res.AssembledTransaction.InputStates, 1)
 	assert.Len(t, res.AssembledTransaction.OutputStates, 2) // one for the receiver Alice, one for self as change
 

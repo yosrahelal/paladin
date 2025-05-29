@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/wsclient"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -32,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/wsclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -99,12 +99,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	)
 	groupID := groupIDs[0]
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
-		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	err = gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
+	err := gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
 		Name: "listener1",
 		Options: pldapi.PrivacyGroupMessageListenerOptions{
 			ExcludeLocal: false,
@@ -112,7 +107,9 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
+		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)
@@ -244,12 +241,7 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 	)
 	groupID := groupIDs[0]
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
-		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	err = gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
+	err := gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
 		Name: "listener1",
 		Options: pldapi.PrivacyGroupMessageListenerOptions{
 			ExcludeLocal: false,
@@ -257,7 +249,9 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
+		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)
@@ -267,7 +261,6 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 	err = wsc.Send(ctx, req)
 	require.NoError(t, err)
 
-	subIDChan := make(chan string)
 	unSubChan := make(chan bool)
 	sentNack := false
 	messages := make(chan *pldapi.PrivacyGroupMessage)
@@ -291,7 +284,10 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 
 				switch rpcID {
 				case subReqID: // Subscribe reply
-					subIDChan <- rpcPayload.Result.StringValue()
+					subIDStr := rpcPayload.Result.StringValue()
+					_, err = uuid.Parse(subIDStr)
+					require.NoError(t, err)
+					subID.Store(&subIDStr)
 					for subID.Load() == nil { // wait for subID to be set
 						time.Sleep(10 * time.Millisecond)
 					}
@@ -337,15 +333,10 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	subIDStr := <-subIDChan
-	_, err = uuid.Parse(subIDStr)
-	require.NoError(t, err)
-	subID.Store(&subIDStr)
-
 	// We get it on redelivery
 	<-messages
 
-	reqID, req := rpcTestRequest("pgroup_unsubscribe", subIDStr)
+	reqID, req := rpcTestRequest("pgroup_unsubscribe", *subID.Load())
 	unSubReqID.Store(reqID)
 	err = wsc.Send(ctx, req)
 	require.NoError(t, err)
@@ -357,12 +348,9 @@ func TestRPCSubscribeNoType(t *testing.T) {
 	ctx, url, _, _, done := newTestGroupManagerWithWebSocketRPC(t)
 	defer done()
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
 		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)
@@ -385,12 +373,9 @@ func TestRPCSubscribeNoListener(t *testing.T) {
 	ctx, url, _, _, done := newTestGroupManagerWithWebSocketRPC(t)
 	defer done()
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
 		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)
@@ -413,12 +398,9 @@ func TestRPCSubscribeBadListener(t *testing.T) {
 	ctx, url, _, _, done := newTestGroupManagerWithWebSocketRPC(t)
 	defer done()
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
 		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)
@@ -441,12 +423,9 @@ func TestUnsubscribeNoSubscriptionID(t *testing.T) {
 	ctx, url, _, _, done := newTestGroupManagerWithWebSocketRPC(t)
 	defer done()
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
 		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)
