@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {INotoHooks} from "../private/interfaces/INotoHooks.sol";
+import {INotoHooks} from "../domains/interfaces/INotoHooks.sol";
 import {NotoLocks} from "./NotoLocks.sol";
 
 /**
@@ -10,7 +10,7 @@ import {NotoLocks} from "./NotoLocks.sol";
  * @dev Example Noto hooks which track all Noto token movements on a private ERC20.
  */
 contract NotoTrackerERC20 is INotoHooks, ERC20 {
-    NotoLocks internal _locks;
+    NotoLocks internal _locks  = new NotoLocks();
     address internal _notary;
 
     modifier onlyNotary(address sender) {
@@ -32,7 +32,6 @@ contract NotoTrackerERC20 is INotoHooks, ERC20 {
     }
 
     constructor(string memory name, string memory symbol) ERC20(name, symbol) {
-        _locks = new NotoLocks();
         _notary = msg.sender;
     }
 
