@@ -302,16 +302,13 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	}
 
 	// Wait for checkpoint
-	for {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		es := bi.eventStreams[uuid.MustParse(esID)]
 		baseBlock, err := es.readDBCheckpoint()
-		require.NoError(t, err)
-		if baseBlock != nil && *baseBlock >= 14 {
-			break
-		}
-		require.False(t, t.Failed())
-		time.Sleep(10 * time.Millisecond)
-	}
+		assert.NoError(t, err)
+		assert.NotNil(t, baseBlock)
+		assert.Equal(t, int64(14), *baseBlock, "Checkpoint block should be 14")
+	}, testTimeout(t), 10*time.Millisecond, "Checkpoint not written")
 
 	// Stop and restart
 	bi.Stop()
@@ -680,15 +677,7 @@ func TestStartStopEventStream(t *testing.T) {
 	err = bi.StopEventStream(ctx, esID)
 	require.ErrorContains(t, err, "PD011312")
 
-	// these are the DB calls that will be made when starting the the event stream
-	p.Mock.ExpectExec("UPDATE.*event_streams").WillReturnError(errors.New("pop"))
-	p.Mock.ExpectExec("UPDATE.*event_streams").WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// these are the DB calls that the detector go routine might call
-	p.Mock.ExpectQuery("SELECT.*event_stream_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
-	p.Mock.ExpectQuery("SELECT.*indexed_blocks").WillReturnRows(sqlmock.NewRows([]string{}))
-
-	// these are the DB calls that will be made when stopping the the event stream
+	// DB calls when starting the event stream
 	p.Mock.ExpectExec("UPDATE.*event_streams").WillReturnError(errors.New("pop"))
 	p.Mock.ExpectExec("UPDATE.*event_streams").WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -705,21 +694,37 @@ func TestStartStopEventStream(t *testing.T) {
 
 	bi.eventStreams[esID] = eventStream
 
+	// first StartEventStream fails
 	err = bi.StartEventStream(ctx, esID)
 	require.ErrorContains(t, err, "pop")
 
+	// second StartEventStream succeeds
 	err = bi.StartEventStream(ctx, esID)
 	require.NoError(t, err)
 
 	assert.NotNil(t, eventStream.detectorDone)
 	assert.NotNil(t, eventStream.dispatcherDone)
+	assert.NotNil(t, eventStream.detectorStarted)
+	assert.NotNil(t, eventStream.dispatcherStarted)
 
-	// wait because the detector DB mocks run in a different thread and we can't guarantee the ordering otherwise
-	time.Sleep(10 * time.Millisecond)
+	// Declare expected DB queries that the detector/dispatcher may run
+	p.Mock.ExpectQuery("SELECT.*event_stream_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
+	p.Mock.ExpectQuery("SELECT.*indexed_blocks").WillReturnRows(sqlmock.NewRows([]string{}))
 
-	err = bi.StopEventStream(ctx, esID)
-	require.ErrorContains(t, err, "pop")
+	// Wait for goroutines to start
+	<-eventStream.detectorStarted
+	<-eventStream.dispatcherStarted
 
+	// StopEventStream DB update expectations
+	p.Mock.ExpectExec("UPDATE.*event_streams").WillReturnError(errors.New("pop"))
+	p.Mock.ExpectExec("UPDATE.*event_streams").WillReturnResult(sqlmock.NewResult(1, 1))
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		err = bi.StopEventStream(ctx, esID)
+		assert.ErrorContains(c, err, "pop")
+	}, testTimeout(t), 1*time.Millisecond)
+
+	// final StopEventStream
 	err = bi.StopEventStream(ctx, esID)
 	require.NoError(t, err)
 
@@ -764,11 +769,12 @@ func TestProcessCheckpointFail(t *testing.T) {
 	p.Mock.ExpectQuery("SELECT.*event_stream_checkpoints").WillReturnError(fmt.Errorf("pop"))
 
 	es := &eventStream{
-		bi:           bi,
-		ctx:          ctx,
-		definition:   &EventStream{ID: uuid.New()},
-		detectorDone: make(chan struct{}),
-		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
+		bi:              bi,
+		ctx:             ctx,
+		definition:      &EventStream{ID: uuid.New()},
+		detectorStarted: make(chan struct{}),
+		detectorDone:    make(chan struct{}),
+		fromBlock:       confutil.P(ethtypes.HexUint64(0)),
 	}
 	es.detector()
 
@@ -784,11 +790,12 @@ func TestGetHighestIndexedBlockFail(t *testing.T) {
 	p.Mock.ExpectQuery("SELECT.*indexed_blocks").WillReturnError(fmt.Errorf("pop"))
 
 	es := &eventStream{
-		bi:           bi,
-		ctx:          ctx,
-		definition:   &EventStream{ID: uuid.New()},
-		detectorDone: make(chan struct{}),
-		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
+		bi:              bi,
+		ctx:             ctx,
+		definition:      &EventStream{ID: uuid.New()},
+		detectorStarted: make(chan struct{}),
+		detectorDone:    make(chan struct{}),
+		fromBlock:       confutil.P(ethtypes.HexUint64(0)),
 	}
 	es.detector()
 
@@ -829,22 +836,30 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 				ABI: testABI,
 			}},
 		},
-		blocks:       make(chan *eventStreamBlock),
-		dispatch:     make(chan *eventDispatch),
-		detectorDone: make(chan struct{}),
-		serializer:   pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
-		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
+		blocks:          make(chan *eventStreamBlock),
+		dispatch:        make(chan *eventDispatch),
+		detectorStarted: make(chan struct{}),
+		detectorDone:    make(chan struct{}),
+		serializer:      pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
+		fromBlock:       confutil.P(ethtypes.HexUint64(0)),
 	}
 	go func() {
 		assert.NotPanics(t, func() { es.detector() })
 	}()
+	<-es.detectorStarted
 
 	// This will be ignored as behind our head
-	es.blocks <- &eventStreamBlock{blockNumber: 5}
+	es.blocks <- &eventStreamBlock{
+		block: &BlockInfoJSONRPC{
+			Number: 5,
+		},
+	}
 
 	// notify block ten
 	es.blocks <- &eventStreamBlock{
-		blockNumber: 10,
+		block: &BlockInfoJSONRPC{
+			Number: 10,
+		},
 		events: []*LogJSONRPC{
 			{
 				BlockHash:        ethtypes.MustNewHexBytes0xPrefix(pldtypes.RandHex(32)),
@@ -884,9 +899,10 @@ func TestExitInCatchupPhase(t *testing.T) {
 				ABI: testABI,
 			}},
 		},
-		blocks:       make(chan *eventStreamBlock),
-		detectorDone: make(chan struct{}),
-		fromBlock:    confutil.P(ethtypes.HexUint64(0)),
+		blocks:          make(chan *eventStreamBlock),
+		detectorStarted: make(chan struct{}),
+		detectorDone:    make(chan struct{}),
+		fromBlock:       confutil.P(ethtypes.HexUint64(0)),
 	}
 	go func() {
 		assert.NotPanics(t, func() { es.detector() })
@@ -912,17 +928,22 @@ func TestStartFromLatest(t *testing.T) {
 				ABI: testABI,
 			}},
 		},
-		blocks:       make(chan *eventStreamBlock),
-		dispatch:     make(chan *eventDispatch),
-		detectorDone: make(chan struct{}),
-		serializer:   pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
+		blocks:          make(chan *eventStreamBlock),
+		dispatch:        make(chan *eventDispatch),
+		detectorStarted: make(chan struct{}),
+		detectorDone:    make(chan struct{}),
+		serializer:      pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
 	}
 	go func() {
 		assert.NotPanics(t, func() { es.detector() })
 	}()
 
+	<-es.detectorStarted
+
 	es.blocks <- &eventStreamBlock{
-		blockNumber: 5,
+		block: &BlockInfoJSONRPC{
+			Number: 5,
+		},
 		events: []*LogJSONRPC{
 			{
 				BlockHash:        ethtypes.MustNewHexBytes0xPrefix(pldtypes.RandHex(32)),
@@ -957,17 +978,17 @@ func TestExitStartFromLatest(t *testing.T) {
 				ABI: testABI,
 			}},
 		},
-		blocks:       make(chan *eventStreamBlock),
-		dispatch:     make(chan *eventDispatch),
-		detectorDone: make(chan struct{}),
-		serializer:   pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
+		blocks:          make(chan *eventStreamBlock),
+		dispatch:        make(chan *eventDispatch),
+		detectorStarted: make(chan struct{}),
+		detectorDone:    make(chan struct{}),
+		serializer:      pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
 	}
 	go func() {
 		assert.NotPanics(t, func() { es.detector() })
 	}()
 
-	// brief pause otherwise the detector may not start
-	time.Sleep(10 * time.Millisecond)
+	<-es.detectorStarted
 
 	cancelCtx()
 	<-es.detectorDone
@@ -1009,10 +1030,11 @@ func TestDispatcherDispatchClosed(t *testing.T) {
 				ABI: testABI,
 			}},
 		},
-		batchSize:      2,                    // aim for two
-		batchTimeout:   1 * time.Microsecond, // but not going to wait
-		dispatch:       make(chan *eventDispatch),
-		dispatcherDone: make(chan struct{}),
+		batchSize:         2,                    // aim for two
+		batchTimeout:      1 * time.Microsecond, // but not going to wait
+		dispatch:          make(chan *eventDispatch),
+		dispatcherDone:    make(chan struct{}),
+		dispatcherStarted: make(chan struct{}),
 		handlerDBTX: func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) error {
 			called = true
 			return fmt.Errorf("pop")
@@ -1021,6 +1043,8 @@ func TestDispatcherDispatchClosed(t *testing.T) {
 	go func() {
 		assert.NotPanics(t, func() { es.dispatcher() })
 	}()
+
+	<-es.dispatcherStarted
 
 	es.dispatch <- &eventDispatch{
 		event: &pldapi.EventWithData{
@@ -1257,4 +1281,11 @@ func TestNOTXHandler(t *testing.T) {
 	err = es.runBatch(&eventBatch{})
 	assert.NoError(t, err)
 	assert.False(t, returnErr)
+}
+
+func testTimeout(t *testing.T) time.Duration {
+	if deadline, hasDeadline := t.Deadline(); hasDeadline {
+		return time.Until(deadline) - time.Second // Subtract a small buffer to ensure test cleanup
+	}
+	return 30 * time.Second // Default timeout if no deadline is set
 }
