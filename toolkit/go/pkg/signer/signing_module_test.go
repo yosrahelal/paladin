@@ -209,7 +209,7 @@ func TestExtensionKeyStoreListOK(t *testing.T) {
 	}
 	tk := &testKeyStoreAll{
 		listKeys: func(ctx context.Context, req *prototk.ListKeysRequest) (res *prototk.ListKeysResponse, err error) {
-			assert.Equal(t, 10, req.Limit)
+			assert.Equal(t, int32(10), req.Limit)
 			assert.Equal(t, "key12345", req.Continue)
 			return testRes, nil
 		},

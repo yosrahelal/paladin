@@ -272,7 +272,7 @@ func TestHDSigningDefaultBehaviorOK(t *testing.T) {
 
 	testSign, err := testKeyPair.SignDirect(([]byte)("some data"))
 	require.NoError(t, err)
-	assert.Equal(t, pldtypes.HexBytes(testSign.CompactRSV()), resSign.Payload)
+	assert.Equal(t, testSign.CompactRSV(), resSign.Payload)
 	sig, err := secp256k1.DecodeCompactRSV(ctx, resSign.Payload)
 	require.NoError(t, err)
 	assert.Equal(t, testSign, sig)
