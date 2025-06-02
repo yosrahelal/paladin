@@ -3,8 +3,8 @@ import PaladinClient, {
   TransactionType,
   ZetoFactory,
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
+import { checkDeploy, checkReceipt } from "paladin-example-common";
 import erc20Abi from "./abis/SampleERC20.json";
-import { checkDeploy, checkReceipt } from "./util";
 
 const logger = console;
 
@@ -51,6 +51,9 @@ async function main(): Promise<boolean> {
     ],
   });
   if (!checkReceipt(receipt)) return false;
+
+  // TODO: remove
+  await new Promise((resolve) => setTimeout(resolve, 3000));
 
   // Transfer some cash from bank1 to bank2
   logger.log(

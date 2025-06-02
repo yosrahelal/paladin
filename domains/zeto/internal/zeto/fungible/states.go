@@ -92,16 +92,22 @@ func makeNewInfoState(ctx context.Context, dataSchema *prototk.StateSchema, info
 	}, nil
 }
 
-func prepareInputsForTransfer(ctx context.Context, callbacks plugintk.DomainCallbacks, coinSchema *pb.StateSchema, useNullifiers bool, stateQueryContext, senderKey string, params []*types.FungibleTransferParamEntry) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
-	expectedTotal := big.NewInt(0)
+type preparedInputs struct {
+	coins  []*types.ZetoCoin
+	states []*prototk.StateRef
+	total  *big.Int
+}
+
+func prepareInputsForTransfer(ctx context.Context, callbacks plugintk.DomainCallbacks, coinSchema *pb.StateSchema, useNullifiers bool, stateQueryContext, senderKey string, params []*types.FungibleTransferParamEntry) (inputs *preparedInputs, expectedTotal *big.Int, revert bool, err error) {
+	expectedTotal = big.NewInt(0)
 	for _, param := range params {
 		expectedTotal = expectedTotal.Add(expectedTotal, param.Amount.Int())
 	}
-
-	return buildInputsForExpectedTotal(ctx, callbacks, coinSchema, useNullifiers, stateQueryContext, senderKey, expectedTotal, false)
+	inputs, revert, err = buildInputsForExpectedTotal(ctx, callbacks, coinSchema, useNullifiers, stateQueryContext, senderKey, expectedTotal, false)
+	return
 }
 
-func buildInputsForExpectedTotal(ctx context.Context, callbacks plugintk.DomainCallbacks, coinSchema *pb.StateSchema, useNullifiers bool, stateQueryContext, senderKey string, expectedTotal *big.Int, locked bool) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
+func buildInputsForExpectedTotal(ctx context.Context, callbacks plugintk.DomainCallbacks, coinSchema *pb.StateSchema, useNullifiers bool, stateQueryContext, senderKey string, expectedTotal *big.Int, locked bool) (inputs *preparedInputs, revert bool, err error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
@@ -118,16 +124,16 @@ func buildInputsForExpectedTotal(ctx context.Context, callbacks plugintk.DomainC
 		}
 		states, err := findAvailableStates(ctx, callbacks, coinSchema, useNullifiers, stateQueryContext, queryBuilder.Query().String())
 		if err != nil {
-			return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
+			return nil, false, i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
 		}
 		if len(states) == 0 {
-			return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgInsufficientFunds, total.Text(10))
+			return nil, true, i18n.NewError(ctx, msgs.MsgInsufficientFunds, total.Text(10))
 		}
 		for _, state := range states {
 			lastStateTimestamp = state.CreatedAt
 			coin, err := makeCoin(state.DataJson)
 			if err != nil {
-				return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)
+				return nil, true, i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)
 			}
 			total = total.Add(total, coin.Amount.Int())
 			stateRefs = append(stateRefs, &pb.StateRef{
@@ -136,11 +142,14 @@ func buildInputsForExpectedTotal(ctx context.Context, callbacks plugintk.DomainC
 			})
 			coins = append(coins, coin)
 			if total.Cmp(expectedTotal) >= 0 {
-				remainder := big.NewInt(0).Sub(total, expectedTotal)
-				return coins, stateRefs, total, remainder, nil
+				return &preparedInputs{
+					coins:  coins,
+					states: stateRefs,
+					total:  total,
+				}, false, nil
 			}
 			if len(stateRefs) >= MAX_INPUT_COUNT {
-				return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgMaxCoinsReached, MAX_INPUT_COUNT)
+				return nil, true, i18n.NewError(ctx, msgs.MsgMaxCoinsReached, MAX_INPUT_COUNT)
 			}
 		}
 	}
