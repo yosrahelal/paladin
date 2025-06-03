@@ -79,10 +79,6 @@ func (kmsm *exampleSigningModule) ListKeys(ctx context.Context, req *prototk.Lis
 	return kmsm.signingModule.List(ctx, req)
 }
 
-func (kmsm *exampleSigningModule) AddInMemorySigner(ctx context.Context, req *prototk.AddInMemorySignerRequest) (*prototk.AddInMemorySignerResponse, error) {
-	return nil, i18n.NewError(ctx, msgs.MsgFunctionUnsupported)
-}
-
 func (kmsm *exampleSigningModule) Close(ctx context.Context, req *prototk.CloseRequest) (*prototk.CloseResponse, error) {
 	kmsm.signingModule.Close()
 

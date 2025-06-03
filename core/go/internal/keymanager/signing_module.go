@@ -110,10 +110,7 @@ func (sm *signingModule) List(ctx context.Context, req *prototk.ListKeysRequest)
 }
 
 func (sm *signingModule) AddInMemorySigner(prefix string, signer signerapi.InMemorySigner) {
-	_, _ = sm.api.AddInMemorySigner(sm.ctx, &prototk.AddInMemorySignerRequest{
-		Prefix: prefix,
-		//Signer: &signer, // TODO protobuf representation of a signer implementation
-	})
+	log.L(sm.ctx).Warnf("Adding in-memory signer is not supported for signing module plugin: %s", sm.name)
 }
 
 func (sm *signingModule) Close() {

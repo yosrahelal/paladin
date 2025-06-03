@@ -178,7 +178,6 @@ message SigningModuleMessage {
     SignWithKeyRequest sign =                                                1030;
     ListKeysRequest list_keys =                                              1040;
     CloseRequest close =                                                     1050;
-    AddInMemorySignerRequest add_in_memory_signer =                          1060;
   }
 
   oneof response_from_signing_module {
@@ -187,7 +186,6 @@ message SigningModuleMessage {
     SignWithKeyResponse sign_res =                                           1031;
     ListKeysResponse list_keys_res =                                         1041;
     CloseResponse close_res =                                                1051;
-    AddInMemorySignerResponse add_in_memory_signer_res =                     1061;
   }
 
   // Request/reply exchanges initiated by the signing module, to the paladin node

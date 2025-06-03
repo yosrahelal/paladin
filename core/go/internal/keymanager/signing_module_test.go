@@ -251,11 +251,6 @@ func TestHandleAddInMemorySignerOk(t *testing.T) {
 
 	s := &testSigner{}
 
-	tp.Functions.AddInMemorySigner = func(ctx context.Context, aimsr *prototk.AddInMemorySignerRequest) (*prototk.AddInMemorySignerResponse, error) {
-		assert.Equal(t, "test-signer", aimsr.Prefix)
-		return &prototk.AddInMemorySignerResponse{}, nil
-	}
-
 	tp.sm.AddInMemorySigner("test-signer", s)
 }
 

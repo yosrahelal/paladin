@@ -141,10 +141,6 @@ func TestSigningModuleRequestsOK(t *testing.T) {
 				Next: "key23456",
 			}, nil
 		},
-		AddInMemorySigner: func(ctx context.Context, aimsr *prototk.AddInMemorySignerRequest) (*prototk.AddInMemorySignerResponse, error) {
-			assert.Equal(t, "test-signer", aimsr.Prefix)
-			return &prototk.AddInMemorySignerResponse{}, nil
-		},
 		Close: func(ctx context.Context, cr *prototk.CloseRequest) (*prototk.CloseResponse, error) {
 			return &prototk.CloseResponse{}, nil
 		},
@@ -196,10 +192,6 @@ func TestSigningModuleRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, len(listKeysResponse.Items))
-
-	addInMemorySignerResponse, err := signingModuleAPI.AddInMemorySigner(ctx, &prototk.AddInMemorySignerRequest{Prefix: "test-signer"})
-	require.NoError(t, err)
-	assert.NotNil(t, addInMemorySignerResponse)
 
 	closeResponse, err := signingModuleAPI.Close(ctx, &prototk.CloseRequest{})
 	require.NoError(t, err)

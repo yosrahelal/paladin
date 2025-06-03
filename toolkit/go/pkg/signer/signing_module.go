@@ -31,7 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 )
 
-// SigningModule provides functions for the signerapi request/reply functions from the signerapil interface defined
+// SigningModule provides functions for the signerapi request/reply functions from the signerapi interface defined
 // in signing_module.
 // This module can be wrapped and loaded into the core Paladin runtime as an embedded module called directly
 // within the runtime, or wrapped in a remote process connected over a transport like HTTP, WebSockets, gRPC etc.

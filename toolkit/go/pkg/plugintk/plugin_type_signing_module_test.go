@@ -128,23 +128,6 @@ func TestSigningModuleFunction_ListKeys(t *testing.T) {
 	})
 }
 
-func TestSigningModuleFunction_AddInMemorySigner(t *testing.T) {
-	_, exerciser, funcs, _, _, done := setupSigningModuleTests(t)
-	defer done()
-
-	// AddInMemorySigner - paladin to signing module
-	funcs.AddInMemorySigner = func(ctx context.Context, cdr *prototk.AddInMemorySignerRequest) (*prototk.AddInMemorySignerResponse, error) {
-		return &prototk.AddInMemorySignerResponse{}, nil
-	}
-	exerciser.doExchangeToPlugin(func(req *prototk.SigningModuleMessage) {
-		req.RequestToSigningModule = &prototk.SigningModuleMessage_AddInMemorySigner{
-			AddInMemorySigner: &prototk.AddInMemorySignerRequest{},
-		}
-	}, func(res *prototk.SigningModuleMessage) {
-		assert.IsType(t, &prototk.SigningModuleMessage_AddInMemorySignerRes{}, res.ResponseFromSigningModule)
-	})
-}
-
 func TestSigningModuleFunction_Close(t *testing.T) {
 	_, exerciser, funcs, _, _, done := setupSigningModuleTests(t)
 	defer done()

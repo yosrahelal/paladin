@@ -128,21 +128,6 @@ func (br *SigningModuleBridge) ListKeys(ctx context.Context, req *prototk.ListKe
 	return
 }
 
-func (br *SigningModuleBridge) AddInMemorySigner(ctx context.Context, req *prototk.AddInMemorySignerRequest) (res *prototk.AddInMemorySignerResponse, err error) {
-	err = br.toPlugin.RequestReply(ctx,
-		func(dm plugintk.PluginMessage[prototk.SigningModuleMessage]) {
-			dm.Message().RequestToSigningModule = &prototk.SigningModuleMessage_AddInMemorySigner{AddInMemorySigner: req}
-		},
-		func(dm plugintk.PluginMessage[prototk.SigningModuleMessage]) bool {
-			if r, ok := dm.Message().ResponseFromSigningModule.(*prototk.SigningModuleMessage_AddInMemorySignerRes); ok {
-				res = r.AddInMemorySignerRes
-			}
-			return res != nil
-		},
-	)
-	return
-}
-
 func (br *SigningModuleBridge) Close(ctx context.Context, req *prototk.CloseRequest) (res *prototk.CloseResponse, err error) {
 	err = br.toPlugin.RequestReply(ctx,
 		func(dm plugintk.PluginMessage[prototk.SigningModuleMessage]) {

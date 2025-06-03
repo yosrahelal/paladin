@@ -29,7 +29,6 @@ type SigningModuleAPI interface {
 	ResolveKey(context.Context, *prototk.ResolveKeyRequest) (*prototk.ResolveKeyResponse, error)
 	Sign(context.Context, *prototk.SignWithKeyRequest) (*prototk.SignWithKeyResponse, error)
 	ListKeys(context.Context, *prototk.ListKeysRequest) (*prototk.ListKeysResponse, error)
-	AddInMemorySigner(context.Context, *prototk.AddInMemorySignerRequest) (*prototk.AddInMemorySignerResponse, error)
 	Close(context.Context, *prototk.CloseRequest) (*prototk.CloseResponse, error)
 }
 
@@ -133,10 +132,6 @@ func (smh *signingModuleHandler) RequestToPlugin(ctx context.Context, iReq Plugi
 		resMsg := &prototk.SigningModuleMessage_ListKeysRes{}
 		resMsg.ListKeysRes, err = smh.api.ListKeys(ctx, input.ListKeys)
 		res.ResponseFromSigningModule = resMsg
-	case *prototk.SigningModuleMessage_AddInMemorySigner:
-		resMsg := &prototk.SigningModuleMessage_AddInMemorySignerRes{}
-		resMsg.AddInMemorySignerRes, err = smh.api.AddInMemorySigner(ctx, input.AddInMemorySigner)
-		res.ResponseFromSigningModule = resMsg
 	case *prototk.SigningModuleMessage_Close:
 		resMsg := &prototk.SigningModuleMessage_CloseRes{}
 		resMsg.CloseRes, err = smh.api.Close(ctx, input.Close)
@@ -152,7 +147,6 @@ type SigningModuleAPIFunctions struct {
 	ResolveKey             func(context.Context, *prototk.ResolveKeyRequest) (*prototk.ResolveKeyResponse, error)
 	Sign                   func(context.Context, *prototk.SignWithKeyRequest) (*prototk.SignWithKeyResponse, error)
 	ListKeys               func(context.Context, *prototk.ListKeysRequest) (*prototk.ListKeysResponse, error)
-	AddInMemorySigner      func(context.Context, *prototk.AddInMemorySignerRequest) (*prototk.AddInMemorySignerResponse, error)
 	Close                  func(context.Context, *prototk.CloseRequest) (*prototk.CloseResponse, error)
 }
 
@@ -174,10 +168,6 @@ func (smb *SigningModuleAPIBase) Sign(ctx context.Context, req *prototk.SignWith
 
 func (smb *SigningModuleAPIBase) ListKeys(ctx context.Context, req *prototk.ListKeysRequest) (*prototk.ListKeysResponse, error) {
 	return callPluginImpl(ctx, req, smb.Functions.ListKeys)
-}
-
-func (smb *SigningModuleAPIBase) AddInMemorySigner(ctx context.Context, req *prototk.AddInMemorySignerRequest) (*prototk.AddInMemorySignerResponse, error) {
-	return callPluginImpl(ctx, req, smb.Functions.AddInMemorySigner)
 }
 
 func (smb *SigningModuleAPIBase) Close(ctx context.Context, req *prototk.CloseRequest) (*prototk.CloseResponse, error) {

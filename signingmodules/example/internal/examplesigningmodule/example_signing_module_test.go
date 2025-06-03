@@ -169,19 +169,6 @@ func TestListError(t *testing.T) {
 	require.Regexp(t, "PD020815", err)
 }
 
-func TestAddInMemorySignerUnsupportedError(t *testing.T) {
-	callbacks := &testCallbacks{}
-	signingModule := NewKeyManagerSigningModule(callbacks).(*exampleSigningModule)
-	_, err := signingModule.ConfigureSigningModule(signingModule.bgCtx, &prototk.ConfigureSigningModuleRequest{
-		Name:       "test",
-		ConfigJson: `{"signer":{"keyDerivation": { "type": "bip32"}, "keyStore": { "type": "static", "static": { "keys": { "seed": { "encoding": "none", "inline": "field audit weird now route order gentle magnet plastic girl tree lake before super useful unit credit atom person crystal hair drama hole dove"}}}}}}`,
-	})
-	require.NoError(t, err)
-
-	_, err = signingModule.AddInMemorySigner(signingModule.bgCtx, &prototk.AddInMemorySignerRequest{})
-	require.Regexp(t, "PD070002", err)
-}
-
 func TestCloseOk(t *testing.T) {
 	callbacks := &testCallbacks{}
 	signingModule := NewKeyManagerSigningModule(callbacks).(*exampleSigningModule)
