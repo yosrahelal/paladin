@@ -6,9 +6,9 @@ import PaladinClient, {
   ZetoFactory,
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import { ethers } from "ethers";
+import { checkDeploy, checkReceipt } from "paladin-example-common";
 import { newAtomFactory } from "./helpers/atom";
 import { newERC20Tracker } from "./helpers/erc20tracker";
-import { checkDeploy, checkReceipt } from "./util";
 
 const logger = console;
 
@@ -183,7 +183,6 @@ async function main(): Promise<boolean> {
       },
     ],
   });
-  if (!checkReceipt(receipt)) return false;
   const preparedCashTransfer = await paladin3.pollForPreparedTransaction(
     txID,
     10000
