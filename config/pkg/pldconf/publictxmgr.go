@@ -91,15 +91,6 @@ var PublicTxManagerDefaults = &PublicTxManagerConfig{
 			// Size:     confutil.P("5m"),
 			// TTL:      confutil.P("30s"),
 		},
-		AutoFueling: AutoFuelingConfig{
-			Source:                           nil,
-			SourceAddressMinBalance:          nil,
-			ProactiveFuelingTransactionTotal: confutil.P(1),
-			ProactiveCostEstimationMethod:    confutil.P(string(ProactiveAutoFuelingCalcMethodMax)),
-			MinDestBalance:                   nil,
-			MaxDestBalance:                   nil,
-			MinThreshold:                     nil,
-		},
 	},
 	GasLimit: GasLimitConfig{
 		GasEstimateFactor: confutil.P(1.5),
@@ -132,18 +123,7 @@ const (
 )
 
 type BalanceManagerConfig struct {
-	Cache       CacheConfig       `json:"cache"`
-	AutoFueling AutoFuelingConfig `json:"autoFueling"`
-}
-
-type AutoFuelingConfig struct {
-	Source                           *string `json:"source"` // key resolution string
-	SourceAddressMinBalance          *string `json:"sourceAddressMinBalance"`
-	ProactiveFuelingTransactionTotal *int    `json:"proactiveFuelingTransactionTotal"`
-	ProactiveCostEstimationMethod    *string `json:"proactiveCostEstimationMethod"`
-	MinDestBalance                   *string `json:"minDestBalance"`
-	MaxDestBalance                   *string `json:"maxDestBalance"`
-	MinThreshold                     *string `json:"minThreshold"`
+	Cache CacheConfig `json:"cache"`
 }
 
 type GasPriceConfig struct {

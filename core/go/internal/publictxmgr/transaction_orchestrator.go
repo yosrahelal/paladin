@@ -541,11 +541,6 @@ func (oc *orchestrator) ProcessInFlightTransactions(ctx context.Context, its []*
 		}
 	}
 
-	if !skipBalanceCheck && addressAccount.GetAvailableToSpend(ctx).Sign() == -1 && oc.balanceManager.IsAutoFuelingEnabled(ctx) {
-		log.L(ctx).Debugf("%s Address %s requires top up, credit after estimated cost: %s", now.String(), oc.signingAddress, addressAccount.GetAvailableToSpend(ctx).String())
-		_, _ = oc.balanceManager.TopUpAccount(ctx, addressAccount)
-	}
-
 	log.L(ctx).Debugf("%s ProcessInFlightTransaction exit for signing address: %s", now.String(), oc.signingAddress)
 	log.L(ctx).Debugf("Orchestrator process loop took %s", time.Since(processStart))
 	return waitingForBalance, nil

@@ -178,13 +178,7 @@ func (ptm *pubTxManager) PostInit(pic components.AllComponents) error {
 	ptm.bIndexer = pic.BlockIndexer()
 	ptm.rootTxMgr = pic.TxManager()
 	ptm.submissionWriter = newSubmissionWriter(ptm.ctx, ptm.p, ptm.conf)
-
-	balanceManager, err := NewBalanceManagerWithInMemoryTracking(ctx, ptm.conf, ptm)
-	if err != nil {
-		log.L(ctx).Errorf("Failed to create balance manager for public transaction manager due to %+v", err)
-		return err
-	}
-	ptm.balanceManager = balanceManager
+	ptm.balanceManager = NewBalanceManagerWithInMemoryTracking(ctx, ptm.conf, ptm)
 
 	log.L(ctx).Debugf("Initialized public transaction manager")
 	return nil
