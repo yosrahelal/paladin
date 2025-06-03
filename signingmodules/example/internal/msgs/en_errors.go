@@ -34,5 +34,4 @@ var pde = func(key, translation string, statusHint ...int) i18n.ErrorMessageKey 
 var (
 	// Generic PD0700XX
 	MsgInvalidSigningModuleConfig = pde("PD070001", "Invalid signing module configuration")
-	MsgFunctionUnsupported        = pde("PD070002", "Function not supported")
 )
