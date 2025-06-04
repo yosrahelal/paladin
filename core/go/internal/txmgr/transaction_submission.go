@@ -555,7 +555,6 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX persistence
 			return nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateOnlyForPrepare)
 		}
 	default:
-		// Note autofuel transactions can only be created internally within the public TX manager
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidTXType)
 	}
 
