@@ -245,10 +245,6 @@ func getAccountBalance(
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
 		}
-		// no more pages
-		if len(states) == 0 {
-			break
-		}
 
 		// sum up this page
 		for _, state := range states {
