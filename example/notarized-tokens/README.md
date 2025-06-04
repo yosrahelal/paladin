@@ -4,7 +4,7 @@ This tutorial is meant to get familiar with how to create and manage a basic tok
 
 See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/notarized-tokens/) for a detailed explanation.
 
-## Prerequisites
+## Pre-requisites
 
 Run the common [setup steps](../README.md) before running the example.
 

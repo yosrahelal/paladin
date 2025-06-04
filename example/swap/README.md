@@ -5,7 +5,7 @@ This example demonstrates an atomic swap scenario on Paladin. It performs a swap
 - a cash token implemented with Zeto
 - an asset token implemented with Noto, with private hooks implemented on Pente
 
-## Prerequisites
+## Pre-requisites
 
 Run the common [setup steps](../README.md) before running the example.
 

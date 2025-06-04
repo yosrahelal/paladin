@@ -4,7 +4,7 @@ This example demonstrates a privacy-preserving fungible tokens using [Zeto](http
 
 See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/zkp-cbdc/) for a detailed explanation.
 
-## Prerequisites
+## Pre-requisites
 
 Run the common [setup steps](../README.md) before running the example.
 

@@ -5,7 +5,7 @@ Pente private smart contracts in order to control visibility of various aspects 
 
 See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/bond-issuance/) for a detailed explanation.
 
-## Prerequisites
+## Pre-requisites
 
 Run the common [setup steps](../README.md) before running the example.
 

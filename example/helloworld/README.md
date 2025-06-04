@@ -2,7 +2,7 @@
 
 Check out the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/hello-world/) for a detailed explanation.
 
-## Prerequisites
+## Pre-requisites
 
 Run the common [setup steps](../README.md) before running the example.
 
