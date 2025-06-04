@@ -223,13 +223,16 @@ func getAccountBalance(
 	coinSchema *pb.StateSchema,
 	useNullifiers bool,
 	stateQueryContext, accountKey string,
-) (*big.Int, error) {
+) (*big.Int, string, error) {
 	total := big.NewInt(0)
 	var lastStateTimestamp int64
+	var count int
+	var maxDbQueries = 10
+	var dbLimit = 100
 
-	for {
+	for i := 0; i < maxDbQueries; i++ {
 		queryBuilder := query.NewQueryBuilder().
-			Limit(10).
+			Limit(dbLimit).
 			Sort(".created").
 			Equal("owner", accountKey).
 			Equal("locked", false)
@@ -243,7 +246,7 @@ func getAccountBalance(
 			useNullifiers, stateQueryContext, queryBuilder.Query().String(),
 		)
 		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
+			return nil, "", i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
 		}
 
 		// sum up this page
@@ -251,16 +254,20 @@ func getAccountBalance(
 			lastStateTimestamp = state.CreatedAt
 			coin, err := makeCoin(state.DataJson)
 			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)
+				return nil, "", i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)
 			}
 			total.Add(total, coin.Amount.Int())
 		}
 
 		// if fewer than our page size, we’re done
-		if len(states) < 10 {
+		if len(states) < dbLimit {
 			break
 		}
+		count += len(states)
+	}
+	if count == dbLimit*maxDbQueries {
+		return total, "Balance reflects up to 1000 coins only. Actual balance may be higher.", nil
 	}
 
-	return total, nil
+	return total, "", nil
 }

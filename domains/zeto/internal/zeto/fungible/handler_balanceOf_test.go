@@ -164,7 +164,7 @@ func TestBalanceOfExecCall(t *testing.T) {
 	}
 	res, err := h.ExecCall(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, `{"balance":"0"}`, res.ResultJson)
+	assert.Equal(t, `{"balance":"0","balanceNote":""}`, res.ResultJson)
 
 	// Single coin state found
 	testCallbacks.returnFunc = func() (*pb.FindAvailableStatesResponse, error) {
@@ -178,7 +178,7 @@ func TestBalanceOfExecCall(t *testing.T) {
 	}
 	res, err = h.ExecCall(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, `{"balance":"15"}`, res.ResultJson)
+	assert.Equal(t, `{"balance":"15","balanceNote":""}`, res.ResultJson)
 
 	// Multiple coin states found - should sum them
 	testCallbacks.returnFunc = func() (*pb.FindAvailableStatesResponse, error) {
@@ -195,13 +195,13 @@ func TestBalanceOfExecCall(t *testing.T) {
 	}
 	res, err = h.ExecCall(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, `{"balance":"15"}`, res.ResultJson)
+	assert.Equal(t, `{"balance":"15","balanceNote":""}`, res.ResultJson)
 
 	// Test with nullifiers token type
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
 	res, err = h.ExecCall(ctx, tx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, `{"balance":"15"}`, res.ResultJson)
+	assert.Equal(t, `{"balance":"15","balanceNote":""}`, res.ResultJson)
 
 	// Test malformed coin data
 	testCallbacks.returnFunc = func() (*pb.FindAvailableStatesResponse, error) {
