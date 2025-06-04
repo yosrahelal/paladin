@@ -76,4 +76,4 @@ paladin-operator-bc788db4f-mzbs7   1/1     Running   0          19m
 
 ### Option 3 - Gradle
 
-If using gradle every example provides a gradle task that completes the setup steps ready to run the example.
+If you are using gradle, every example provides a gradle task that completes the setup steps ready to run the example.
