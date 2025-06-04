@@ -114,14 +114,6 @@ type PublicTxManagerActivityRecordsConfig struct {
 	RecordsPerTransaction *int `json:"entriesPerTransaction"`
 }
 
-type ProactiveAutoFuelingCalcMethod string
-
-const (
-	ProactiveAutoFuelingCalcMethodMin     ProactiveAutoFuelingCalcMethod = "min"
-	ProactiveAutoFuelingCalcMethodAverage ProactiveAutoFuelingCalcMethod = "avg"
-	ProactiveAutoFuelingCalcMethodMax     ProactiveAutoFuelingCalcMethod = "max"
-)
-
 type BalanceManagerConfig struct {
 	Cache CacheConfig `json:"cache"`
 }

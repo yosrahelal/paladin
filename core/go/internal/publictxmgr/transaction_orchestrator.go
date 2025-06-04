@@ -56,7 +56,7 @@ const (
 	OrchestratorStateNew OrchestratorState = "new"
 	// transaction orchestrator running normally
 	OrchestratorStateRunning OrchestratorState = "running"
-	// transaction orchestrator is blocked and waiting for precondition to be fulfilled, e.g. waiting for fueling
+	// transaction orchestrator is blocked and waiting for precondition to be fulfilled, e.g. waiting for sufficient balance
 	OrchestratorStateWaiting OrchestratorState = "waiting"
 	// the head of the in-flight transaction queue hasn't changed after staleTimeout
 	OrchestratorStateStale OrchestratorState = "stale"
@@ -82,10 +82,6 @@ var AllOrchestratorStates = []string{
 // role of transaction orchestrator:
 // 1. polling transaction persistence to fetch new transactions of a given signing address, all the way to the limit if possible, regardless of whether there are stale transaction / lack of fund.
 // 2. process transactions based on an interval
-//    - auto-fueling
-//     - retrieve the balance of the signing account
-//     - tally up total funds required by the in-flight transactions
-//     - ask its transaction engine to create auto-fueling transactions
 //    - action none event driven transaction stage
 //      - stale transaction check and handling
 //      - action signing request and retries
@@ -94,7 +90,6 @@ var AllOrchestratorStates = []string{
 //      - action transaction submission and retries
 //    - record self-deletion request (based on settings) for its transaction engine to action
 //      - the same stale transaction ID has been staying at the front of the queue for a period of time (based on settings)
-//      - the auto-fueling request is stale
 //    - decide when to stop iterating the queue
 //      - when ran out of fund
 //      - when self-deletion request has been raised after processing the previous transaction

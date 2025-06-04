@@ -29,10 +29,9 @@ import (
 
 // Balance manager is a component that provides the following services
 // - retrieve the balance of a given address either from the node or from the cache
-// - handle auto fueling requests when the feature is turned on
 
 type BalanceManagerWithInMemoryTracking struct {
-	// transaction handler is used to submit and fetch autofueling transaction status
+	// transaction handler is retrieve balances from the chain
 	pubTxMgr *pubTxManager
 
 	// balance cache is used to store cached balances of any address

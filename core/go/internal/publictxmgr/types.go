@@ -118,9 +118,6 @@ type BalanceManager interface {
 	NotifyAddressBalanceChanged(ctx context.Context, address pldtypes.EthAddress)
 }
 
-type AutoFuelTransactionHandler interface {
-}
-
 // AddressAccount provides the following feature:
 // - record a snapshot of the current balance of a signing address
 // - record the total spent of a series of transaction emitted by this signing address
