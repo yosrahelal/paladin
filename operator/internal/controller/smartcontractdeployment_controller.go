@@ -100,6 +100,7 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 	if r.newTransactionReconcileFunc == nil {
 		r.newTransactionReconcileFunc = newTransactionReconcile
 	}
+
 	txReconcile := r.newTransactionReconcileFunc(r.Client,
 		r.RPCClientManager,
 		"scdeploy."+scd.Name,
