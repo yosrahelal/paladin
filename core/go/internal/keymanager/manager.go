@@ -87,29 +87,28 @@ func (km *keyManager) PostInit(c components.AllComponents) error {
 	km.p = c.Persistence()
 
 	for _, walletConf := range km.conf.Wallets {
-		// Only process wallets that don't use a plugin signing module
-		// Those must be added after the associated plugin has been loaded
-		if walletConf.SignerType != pldconf.WalletSignerTypePlugin {
-			err := km.addWallet(walletConf)
-			if err != nil {
-				return err
-			}
+		w, err := km.newWallet(km.bgCtx, walletConf)
+		if err != nil {
+			return err
 		}
+		if km.walletsByName[w.name] != nil {
+			return i18n.NewError(km.bgCtx, msgs.MsgKeyManagerDuplicateName, w.name)
+		}
+		km.walletsByName[w.name] = w
+		km.walletsOrdered = append(km.walletsOrdered, w)
 	}
 
 	return nil
 }
 
-func (km *keyManager) addWallet(walletConf *pldconf.WalletConfig) error {
-	w, err := km.newWallet(km.bgCtx, walletConf)
-	if err != nil {
-		return err
+func (km *keyManager) setWalletSigningModule(ctx context.Context, walletName string, signingModule signer.SigningModule) error {
+	wallet, ok := km.walletsByName[walletName]
+	if !ok {
+		return i18n.NewError(ctx, msgs.MsgKeyManagerWalletNotConfigured, walletName)
 	}
-	if km.walletsByName[w.name] != nil {
-		return i18n.NewError(km.bgCtx, msgs.MsgKeyManagerDuplicateName, w.name)
-	}
-	km.walletsByName[w.name] = w
-	km.walletsOrdered = append(km.walletsOrdered, w)
+
+	wallet.signingModule = signingModule
+	wallet.signingModuleInitialized = true
 
 	return nil
 }
@@ -122,7 +121,6 @@ func (km *keyManager) Stop() {
 }
 
 func (km *keyManager) cleanupSigningModule(sm *signingModule) {
-	// must not hold the registry lock when running this
 	sm.close()
 	delete(km.signingModulesByID, sm.id)
 	delete(km.signingModulesByName, sm.name)
@@ -231,7 +229,11 @@ func (km *keyManager) unlockAllocation(ctx context.Context, kr *keyResolver) {
 func (km *keyManager) AddInMemorySigner(prefix string, signer signerapi.InMemorySigner) {
 	// Called during PostInit phase by domain manager
 	for _, w := range km.walletsByName {
-		w.signingModule.AddInMemorySigner(prefix, signer)
+		if !w.signingModuleInitialized {
+			log.L(km.bgCtx).Warnf("Unable to add in-memory signer, wallet '%s' signing module not initialized", w.name)
+		} else {
+			w.signingModule.AddInMemorySigner(prefix, signer)
+		}
 	}
 }
 

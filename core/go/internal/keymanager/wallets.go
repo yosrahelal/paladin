@@ -18,6 +18,7 @@ package keymanager
 import (
 	"context"
 	"regexp"
+	"strings"
 
 	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/common/go/pkg/log"
@@ -32,9 +33,10 @@ import (
 )
 
 type wallet struct {
-	name          string
-	keySelector   keySelector
-	signingModule signer.SigningModule
+	name                     string
+	keySelector              keySelector
+	signingModule            signer.SigningModule
+	signingModuleInitialized bool
 }
 
 type keySelector struct {
@@ -43,12 +45,12 @@ type keySelector struct {
 }
 
 func (km *keyManager) newWallet(ctx context.Context, walletConf *pldconf.WalletConfig) (w *wallet, err error) {
-
 	w = &wallet{
 		name: walletConf.Name,
 		keySelector: keySelector{
 			mustNotMatch: walletConf.KeySelectorMustNotMatch,
 		},
+		signingModuleInitialized: false,
 	}
 
 	if err := pldtypes.ValidateSafeCharsStartEndAlphaNum(ctx, w.name, pldtypes.DefaultNameMaxLen, "name"); err != nil {
@@ -66,15 +68,21 @@ func (km *keyManager) newWallet(ctx context.Context, walletConf *pldconf.WalletC
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerEmbeddedSignerFailInit, w.name)
 		}
+		w.signingModuleInitialized = true
 	} else if signerType == pldconf.WalletSignerTypePlugin {
 		if walletConf.SignerPluginName == "" {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerPluginSignerEmptyName)
+			return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerPluginSignerEmptyName, w.name)
 		}
 		smp, err := km.GetSigningModule(ctx, walletConf.SignerPluginName)
 		if err != nil {
-			return nil, err
+			// If no signing module yet, then defer loading until it is ready
+			if strings.Contains(err.Error(), "PD010515") {
+				log.L(ctx).Warnf("Wallet '%s' plugin signing module '%s' not found, unable to initialize wallet signing module", w.name, walletConf.SignerPluginName)
+			}
+		} else {
+			w.signingModule = smp
+			w.signingModuleInitialized = true
 		}
-		w.signingModule = smp
 	} else {
 		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerInvalidWalletSignerType, signerType, w.name)
 	}
@@ -114,6 +122,9 @@ func (km *keyManager) getWalletList() []*pldapi.WalletInfo {
 }
 
 func (w *wallet) resolveKeyAndVerifier(ctx context.Context, mapping *pldapi.KeyMappingWithPath, algorithm, verifierType string) (*pldapi.KeyMappingAndVerifier, error) {
+	if !w.signingModuleInitialized {
+		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerPluginSignerNotInit, w.name)
+	}
 
 	req := &prototk.ResolveKeyRequest{
 		Attributes: map[string]string{},
@@ -163,6 +174,11 @@ func (w *wallet) resolveKeyAndVerifier(ctx context.Context, mapping *pldapi.KeyM
 
 func (w *wallet) sign(ctx context.Context, mapping *pldapi.KeyMappingAndVerifier, payloadType string, payload []byte) ([]byte, error) {
 	log.L(ctx).Infof("Wallet '%s' signing %d bytes with keyIdentifier=%s keyHandle=%s algorithm=%s payloadType=%s", w.name, len(payload), mapping.Identifier, mapping.KeyHandle, mapping.Verifier.Algorithm, payloadType)
+
+	if !w.signingModuleInitialized {
+		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerPluginSignerNotInit, w.name)
+	}
+
 	res, err := w.signingModule.Sign(ctx, &prototk.SignWithKeyRequest{
 		KeyHandle:   mapping.KeyHandle,
 		Algorithm:   mapping.Verifier.Algorithm,

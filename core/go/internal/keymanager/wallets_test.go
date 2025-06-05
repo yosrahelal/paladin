@@ -67,7 +67,7 @@ func TestNewWalletConfigErrors(t *testing.T) {
 		SignerType:       pldconf.WalletSignerTypePlugin,
 		SignerPluginName: "test1",
 	})
-	assert.Regexp(t, "PD010515", err)
+	assert.NoError(t, err) // Just a warning message is logged
 
 	_, err = km.selectWallet(ctx, "anything")
 	assert.Regexp(t, "PD010501", err)
@@ -91,6 +91,17 @@ func TestResolveKeyAndVerifierErr(t *testing.T) {
 		Path: []*pldapi.KeyPathSegment{{Name: "a"}},
 	}, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	assert.Regexp(t, "PD010504.*another", err)
+
+	// Mark wallet as not initialized
+	w.signingModuleInitialized = false
+	_, err = w.resolveKeyAndVerifier(ctx, &pldapi.KeyMappingWithPath{
+		KeyMapping: &pldapi.KeyMapping{
+			KeyHandle:  "another",
+			Identifier: "key",
+		},
+		Path: []*pldapi.KeyPathSegment{{Name: "a"}},
+	}, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	assert.Regexp(t, "PD010517", err)
 }
 
 func TestResolveBadSignerResponse(t *testing.T) {
@@ -141,4 +152,16 @@ func TestSignError(t *testing.T) {
 		Verifier: &pldapi.KeyVerifier{},
 	}, "any", []byte("payload"))
 	assert.Regexp(t, "pop", err)
+
+	// Mark wallet as not initialized
+	w.signingModuleInitialized = false
+	_, err = w.sign(ctx, &pldapi.KeyMappingAndVerifier{
+		KeyMappingWithPath: &pldapi.KeyMappingWithPath{
+			KeyMapping: &pldapi.KeyMapping{
+				Identifier: "any",
+			},
+		},
+		Verifier: &pldapi.KeyVerifier{},
+	}, "any", []byte("payload"))
+	assert.Regexp(t, "PD010517", err)
 }

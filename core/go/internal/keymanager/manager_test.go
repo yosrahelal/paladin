@@ -191,6 +191,55 @@ func TestConfiguredSigningModules(t *testing.T) {
 	}, km.ConfiguredSigningModules())
 }
 
+func TestGetSigningModule(t *testing.T) {
+	tp := newTestPlugin(nil)
+	tp.Functions = &plugintk.SigningModuleAPIFunctions{
+		ConfigureSigningModule: func(ctx context.Context, csmr *prototk.ConfigureSigningModuleRequest) (*prototk.ConfigureSigningModuleResponse, error) {
+			return &prototk.ConfigureSigningModuleResponse{}, nil
+		},
+	}
+
+	ctx, km, _, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
+		SigningModules: map[string]*pldconf.SigningModuleConfig{
+			"test1": {
+				Config: map[string]any{"some": "conf"},
+			},
+		},
+		Wallets: []*pldconf.WalletConfig{{
+			Name:             "signingModuleWallet",
+			KeySelector:      "",
+			SignerType:       pldconf.WalletSignerTypePlugin,
+			SignerPluginName: "test1",
+		}},
+	})
+	defer done()
+
+	assert.Len(t, km.walletsOrdered, 1)
+	assert.False(t, km.walletsOrdered[0].signingModuleInitialized)
+	assert.Nil(t, km.walletsOrdered[0].signingModule)
+
+	registerTestSigningModule(t, km, tp)
+
+	sm, err := km.GetSigningModule(ctx, "test1")
+	assert.NoError(t, err)
+	assert.NotNil(t, sm)
+	assert.True(t, km.walletsOrdered[0].signingModuleInitialized)
+	assert.NotNil(t, km.walletsOrdered[0].signingModule)
+	assert.True(t, km.walletsByName["signingModuleWallet"].signingModuleInitialized)
+	assert.NotNil(t, km.walletsByName["signingModuleWallet"].signingModule)
+
+	// For compleness add a new wallet that also uses that signing module
+	w, err := km.newWallet(ctx, &pldconf.WalletConfig{
+		Name:             "signingModuleWalletNew",
+		KeySelector:      "",
+		SignerType:       pldconf.WalletSignerTypePlugin,
+		SignerPluginName: "test1",
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, w.signingModuleInitialized)
+}
+
 func TestSigningModuleRegisteredNotFound(t *testing.T) {
 	_, km, _, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
 		SigningModules: map[string]*pldconf.SigningModuleConfig{},
@@ -223,16 +272,16 @@ func TestConfigureSigningModuleFail(t *testing.T) {
 }
 
 func TestGetSigningModuleNotFound(t *testing.T) {
-	ctx, dm, _, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
+	ctx, km, _, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
 		SigningModules: map[string]*pldconf.SigningModuleConfig{},
 	})
 	defer done()
 
-	_, err := dm.GetSigningModule(ctx, "unknown")
+	_, err := km.GetSigningModule(ctx, "unknown")
 	assert.Regexp(t, "PD010515", err)
 }
 
-func TestConfiguredSigningModulesInvalidWallet(t *testing.T) {
+func TestConfiguredSigningModulesNoWallet(t *testing.T) {
 	tp := newTestPlugin(nil)
 	tp.Functions = &plugintk.SigningModuleAPIFunctions{
 		ConfigureSigningModule: func(ctx context.Context, csmr *prototk.ConfigureSigningModuleRequest) (*prototk.ConfigureSigningModuleResponse, error) {
@@ -247,13 +296,17 @@ func TestConfiguredSigningModulesInvalidWallet(t *testing.T) {
 			},
 		},
 		Wallets: []*pldconf.WalletConfig{{
-			Name:             "**badname!!!",
+			Name:             "signingModuleWallet",
 			KeySelector:      "",
 			SignerType:       pldconf.WalletSignerTypePlugin,
 			SignerPluginName: "test1",
 		}},
 	})
 	defer done()
+
+	// Set to have no wallets
+	km.walletsByName = map[string]*wallet{}
+	km.walletsOrdered = []*wallet{}
 
 	registerTestSigningModule(t, km, tp)
 
@@ -807,6 +860,39 @@ func TestAddInMemorySignerAndSign(t *testing.T) {
 		require.Equal(t, "test:blue", mapping.Verifier.Algorithm)
 		require.Equal(t, "thingies", mapping.Verifier.Type)
 		require.Equal(t, "custom-thing", mapping.Verifier.Verifier)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+}
+
+func TestAddInMemorySignerNotInitialized(t *testing.T) {
+	ctx, km, _, done := newTestKeyManager(t, true, &pldconf.KeyManagerConfig{
+		SigningModules: map[string]*pldconf.SigningModuleConfig{
+			"test1": {
+				Config: map[string]any{"some": "conf"},
+			},
+		},
+		Wallets: []*pldconf.WalletConfig{{
+			Name:             "test",
+			KeySelector:      "",
+			SignerType:       pldconf.WalletSignerTypePlugin,
+			SignerPluginName: "test1",
+		}},
+	})
+	defer done()
+
+	s := &testSigner{
+		getVerifier: func(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error) {
+			return "custom-thing", nil
+		},
+	}
+	km.AddInMemorySigner("test", s)
+
+	err := km.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err := km.KeyResolverForDBTX(dbTX).ResolveKey(ctx, "my-custom-thing", "test:blue", "thingies")
+		assert.Regexp(t, "PD010517", err)
 
 		return nil
 	})

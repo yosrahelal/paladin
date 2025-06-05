@@ -85,12 +85,12 @@ func (sm *signingModule) init() {
 		// Inform the plugin manager callback
 		sm.api.Initialized()
 
-		// Now that the signing module plugin has been loaded, go and add any wallets that use it
+		// Now that the signing module plugin has been loaded, go and set it on any wallets that use it
 		for _, walletConf := range sm.km.conf.Wallets {
 			if walletConf.SignerType == pldconf.WalletSignerTypePlugin && walletConf.SignerPluginName == sm.name {
-				err := sm.km.addWallet(walletConf)
+				err := sm.km.setWalletSigningModule(sm.ctx, walletConf.Name, sm)
 				if err != nil {
-					log.L(sm.ctx).Debugf("error adding wallet with signing module plugin %s: %s", sm.name, err)
+					log.L(sm.ctx).Debugf("error adding plugin signing module %s to wallet %s: %s", sm.name, walletConf.Name, err)
 				}
 			}
 		}
