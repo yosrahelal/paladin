@@ -86,13 +86,13 @@ func (h *balanceOfHandler) ExecCall(ctx context.Context, tx *types.ParsedTransac
 		return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, param.Account)
 	}
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
-	balance, note, err := getAccountBalance(ctx, h.callbacks, h.stateSchemas.CoinSchema, useNullifiers, req.StateQueryContext, resolvedAccount.Verifier)
+	totalStates, totalBalance, overflow, err := getAccountBalance(ctx, h.callbacks, h.stateSchemas.CoinSchema, useNullifiers, req.StateQueryContext, resolvedAccount.Verifier)
 	if err != nil {
 		// don't think we are wrapping errors currently, throwing this out here see if folks are fond of it.
 		return nil, i18n.WrapError(ctx, err, msgs.MsgErrorGetAccountBalance, param.Account)
 	}
 	// Format balance as JSON string
-	balanceJson := fmt.Sprintf(`{"balance":"%s","balanceNote":"%s"}`, balance, note)
+	balanceJson := fmt.Sprintf(`{"totalBalance":"%s","totalStates":"%s","overflow":"%s"}`, fmt.Sprint(totalBalance), fmt.Sprint(totalStates), fmt.Sprint(overflow))
 	return &pb.ExecCallResponse{
 		ResultJson: balanceJson,
 	}, nil

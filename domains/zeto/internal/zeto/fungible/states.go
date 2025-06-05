@@ -223,7 +223,7 @@ func getAccountBalance(
 	coinSchema *pb.StateSchema,
 	useNullifiers bool,
 	stateQueryContext, accountKey string,
-) (*big.Int, string, error) {
+) (int, *big.Int, bool, error) {
 	total := big.NewInt(0)
 
 	queryBuilder := query.NewQueryBuilder().
@@ -237,21 +237,21 @@ func getAccountBalance(
 		useNullifiers, stateQueryContext, queryBuilder.Query().String(),
 	)
 	if err != nil {
-		return nil, "", i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
+		return 0, nil, false, i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
 	}
 
 	// sum up this page
 	for _, state := range states {
 		coin, err := makeCoin(state.DataJson)
 		if err != nil {
-			return nil, "", i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)
+			return 0, nil, false, i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)
 		}
 		total.Add(total, coin.Amount.Int())
 	}
 
 	if len(states) == 1000 {
-		return total, "Balance reflects up to 1000 coins only. Actual balance may be higher.", nil
+		return len(states), total, true, nil
 	}
 
-	return total, "", nil
+	return len(states), total, false, nil
 }
