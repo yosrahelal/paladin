@@ -223,51 +223,35 @@ func getAccountBalance(
 	coinSchema *pb.StateSchema,
 	useNullifiers bool,
 	stateQueryContext, accountKey string,
-) (*big.Int, string, error) {
+) (int, *big.Int, bool, error) {
 	total := big.NewInt(0)
-	var lastStateTimestamp int64
-	var count int
-	var maxDbQueries = 10
-	var dbLimit = 100
 
-	for i := 0; i < maxDbQueries; i++ {
-		queryBuilder := query.NewQueryBuilder().
-			Limit(dbLimit).
-			Sort(".created").
-			Equal("owner", accountKey).
-			Equal("locked", false)
+	queryBuilder := query.NewQueryBuilder().
+		Limit(1000).
+		Sort(".created").
+		Equal("owner", accountKey).
+		Equal("locked", false)
 
-		if lastStateTimestamp > 0 {
-			queryBuilder.GreaterThan(".created", lastStateTimestamp)
-		}
+	states, err := findAvailableStates(
+		ctx, callbacks, coinSchema,
+		useNullifiers, stateQueryContext, queryBuilder.Query().String(),
+	)
+	if err != nil {
+		return 0, nil, false, i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
+	}
 
-		states, err := findAvailableStates(
-			ctx, callbacks, coinSchema,
-			useNullifiers, stateQueryContext, queryBuilder.Query().String(),
-		)
+	// sum up this page
+	for _, state := range states {
+		coin, err := makeCoin(state.DataJson)
 		if err != nil {
-			return nil, "", i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
+			return 0, nil, false, i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)
 		}
-
-		// sum up this page
-		for _, state := range states {
-			lastStateTimestamp = state.CreatedAt
-			coin, err := makeCoin(state.DataJson)
-			if err != nil {
-				return nil, "", i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)
-			}
-			total.Add(total, coin.Amount.Int())
-		}
-
-		// if fewer than our page size, we’re done
-		if len(states) < dbLimit {
-			break
-		}
-		count += len(states)
-	}
-	if count == dbLimit*maxDbQueries {
-		return total, "Balance reflects up to 1000 coins only. Actual balance may be higher.", nil
+		total.Add(total, coin.Amount.Int())
 	}
 
-	return total, "", nil
+	if len(states) == 1000 {
+		return len(states), total, true, nil
+	}
+
+	return len(states), total, false, nil
 }
