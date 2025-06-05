@@ -33,21 +33,29 @@ import (
 
 type wallet struct {
 	name          string
-	keySelector   *regexp.Regexp
+	keySelector   keySelector
 	signingModule signer.SigningModule
+}
+
+type keySelector struct {
+	mustNotMatch bool
+	regexp       *regexp.Regexp
 }
 
 func (km *keyManager) newWallet(ctx context.Context, walletConf *pldconf.WalletConfig) (w *wallet, err error) {
 
 	w = &wallet{
 		name: walletConf.Name,
+		keySelector: keySelector{
+			mustNotMatch: walletConf.KeySelectorMustNotMatch,
+		},
 	}
 
 	if err := pldtypes.ValidateSafeCharsStartEndAlphaNum(ctx, w.name, pldtypes.DefaultNameMaxLen, "name"); err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerInvalidConfig, w.name)
 	}
 
-	w.keySelector, err = regexp.Compile(confutil.StringNotEmpty(&walletConf.KeySelector, pldconf.WalletDefaults.KeySelector))
+	w.keySelector.regexp, err = regexp.Compile(confutil.StringNotEmpty(&walletConf.KeySelector, pldconf.WalletDefaults.KeySelector))
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerInvalidKeySelector, w.name)
 	}
@@ -76,7 +84,8 @@ func (km *keyManager) newWallet(ctx context.Context, walletConf *pldconf.WalletC
 
 func (km *keyManager) selectWallet(ctx context.Context, identifier string) (*wallet, error) {
 	for i, w := range km.walletsOrdered {
-		if w.keySelector.MatchString(identifier) {
+		match := w.keySelector.regexp.MatchString(identifier)
+		if (match && !w.keySelector.mustNotMatch) || (!match && w.keySelector.mustNotMatch) {
 			log.L(ctx).Infof("identifier %s matched by wallet %d (%s)", identifier, i, w.name)
 			return w, nil
 		}
@@ -96,8 +105,9 @@ func (km *keyManager) getWalletList() []*pldapi.WalletInfo {
 	walletNames := make([]*pldapi.WalletInfo, len(km.walletsOrdered))
 	for i, w := range km.walletsOrdered {
 		walletNames[i] = &pldapi.WalletInfo{
-			Name:        w.name,
-			KeySelector: w.keySelector.String(),
+			Name:                    w.name,
+			KeySelector:             w.keySelector.regexp.String(),
+			KeySelectorMustNotMatch: w.keySelector.mustNotMatch,
 		}
 	}
 	return walletNames

@@ -192,6 +192,10 @@ type SecretBackedSigner struct {
 	// rules first on key matching and more generic rules (like the default of ".*") last.
 	// +kubebuilder:default=.*
 	KeySelector string `json:"keySelector"`
+	// To instruct the key selector to behave in a non-matching mode whereby wallet selection applies when the
+	// key identifier DOES NOT match against the given regular expression for the key selector.
+	// +kubebuilder:default=false
+	KeySelectorMustNotMatch bool `json:"keySelectorMustNotMatch"`
 }
 
 type AuthType string

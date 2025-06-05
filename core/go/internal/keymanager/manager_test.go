@@ -682,6 +682,52 @@ func TestE2EMixedKeyResolution(t *testing.T) {
 
 }
 
+func TestE2EMustNotMatchKeyResolution(t *testing.T) {
+	staticKeys := staticKeyConfig("static", `^static\..*$`, "static.key1", "static.key2")
+	notStaticKeys := hdWalletConfig("hdwallet1", `^static\..*$`)
+	notStaticKeys.KeySelectorMustNotMatch = true
+
+	ctx, km, _, done := newTestDBKeyManagerWithWallets(t,
+		notStaticKeys,
+		staticKeys,
+	)
+	defer done()
+
+	err := km.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		kr := km.KeyResolverForDBTX(dbTX)
+		_, err := kr.ResolveKey(ctx, "static.key3", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+		return err
+	})
+	assert.Regexp(t, "PD020818", err)
+
+	var mappingStaticKey1, mappingStaticKey2 *pldapi.KeyMappingAndVerifier
+	err = km.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		kr := km.KeyResolverForDBTX(dbTX)
+		mappingStaticKey1, err = kr.ResolveKey(ctx, "static.key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+		require.NoError(t, err)
+		mappingStaticKey2, err = kr.ResolveKey(ctx, "static.key2", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+		require.NoError(t, err)
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = km.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		kr := km.KeyResolverForDBTX(dbTX)
+
+		key1 := secp256k1.KeyPairFromBytes(pldtypes.MustParseHexBytes(staticKeys.Signer.KeyStore.Static.Keys["static.key1"].Inline))
+		require.Equal(t, key1.Address.String(), mappingStaticKey1.Verifier.Verifier)
+
+		key2 := secp256k1.KeyPairFromBytes(pldtypes.MustParseHexBytes(staticKeys.Signer.KeyStore.Static.Keys["static.key2"].Inline))
+		require.Equal(t, key2.Address.String(), mappingStaticKey2.Verifier.Verifier)
+
+		_, err = kr.ResolveKey(ctx, "anything.at.any.level", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+		assert.NoError(t, err)
+		return nil
+	})
+	require.NoError(t, err)
+
+}
+
 func TestPostInitFailures(t *testing.T) {
 
 	mc := &mockComponents{c: componentmocks.NewAllComponents(t)}

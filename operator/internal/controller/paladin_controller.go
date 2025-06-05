@@ -927,10 +927,11 @@ func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *co
 		}
 
 		wallet := &pldconf.WalletConfig{
-			Name:        s.Name,
-			SignerType:  pldconf.WalletSignerTypeEmbedded,
-			KeySelector: s.KeySelector,
-			Signer:      &pldconf.SignerConfig{},
+			Name:                    s.Name,
+			SignerType:              pldconf.WalletSignerTypeEmbedded,
+			KeySelector:             s.KeySelector,
+			KeySelectorMustNotMatch: s.KeySelectorMustNotMatch,
+			Signer:                  &pldconf.SignerConfig{},
 		}
 
 		// Upsert a secret if we've been asked to. We use a mnemonic in this case (rather than directly generating a 32byte seed)

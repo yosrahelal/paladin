@@ -109,6 +109,7 @@ To then use the signing module a wallet must be configured that references it, b
   {
     "name": "example-signer-1",
     "keySelector": ".*",
+    "keySelectorMustNotMatch": false,
     "signerType": "plugin",
     "signerPluginName": "example"
   }

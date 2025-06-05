@@ -39,11 +39,12 @@ type SigningModuleInitConfig struct {
 }
 
 type WalletConfig struct {
-	Name             string        `json:"name"`
-	KeySelector      string        `json:"keySelector"`
-	Signer           *SignerConfig `json:"signer"` // embedded only
-	SignerPluginName string        `json:"signerPluginName"`
-	SignerType       string        `json:"signerType"`
+	Name                    string        `json:"name"`
+	KeySelector             string        `json:"keySelector"`             // Regex pattern conforming to https://golang.org/s/re2syntax
+	KeySelectorMustNotMatch bool          `json:"keySelectorMustNotMatch"` // To allow for specifying a non-matching regex i.e. all keys that aren't this pattern
+	Signer                  *SignerConfig `json:"signer"`                  // embedded only
+	SignerPluginName        string        `json:"signerPluginName"`
+	SignerType              string        `json:"signerType"`
 }
 
 const (
@@ -52,8 +53,9 @@ const (
 )
 
 var WalletDefaults = &WalletConfig{
-	KeySelector: `.*`,                     // catch-all
-	SignerType:  WalletSignerTypeEmbedded, // uses the embedded signing module running in the Paladin process
+	KeySelector:             `.*`, // catch-all
+	KeySelectorMustNotMatch: false,
+	SignerType:              WalletSignerTypeEmbedded, // uses the embedded signing module running in the Paladin process
 }
 
 var KeyManagerDefaults = &KeyManagerConfig{
