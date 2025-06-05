@@ -59,13 +59,13 @@ func (h *balanceOfHandler) ExecCall(ctx context.Context, tx *types.ParsedTransac
 	if err != nil {
 		return nil, err
 	}
-	balance, _, balanceNote, err := h.noto.getAccountBalance(ctx, req.StateQueryContext, accountAddress)
+	totalStates, totalBalance, overflow, _, err := h.noto.getAccountBalance(ctx, req.StateQueryContext, accountAddress)
 	if err != nil {
 		// don't think we are wrapping errors currently, throwing this out here see if folks are fond of it.
 		return nil, i18n.WrapError(ctx, err, msgs.MsgErrorGetAccountBalance, param.Account)
 	}
 	// Format balance as JSON string
-	balanceJson := fmt.Sprintf(`{"balance":"%s","balanceNote":"%s"}`, balance, balanceNote)
+	balanceJson := fmt.Sprintf(`{"totalBalance":"%s","totalStates":"%s","overflow":"%s"}`, fmt.Sprint(totalBalance), fmt.Sprint(totalStates), fmt.Sprint(overflow))
 	return &prototk.ExecCallResponse{
 		ResultJson: balanceJson,
 	}, nil
