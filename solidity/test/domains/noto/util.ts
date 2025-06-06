@@ -76,13 +76,16 @@ export async function deployNotoInstance(
 }
 
 export async function doTransfer(
+  txId: string,
   notary: Signer,
   noto: Noto,
   inputs: string[],
   outputs: string[],
   data: string
 ) {
-  const tx = await noto.connect(notary).transfer(inputs, outputs, "0x", data);
+  const tx = await noto
+    .connect(notary)
+    .transfer(txId, inputs, outputs, "0x", data);
   const results = await tx.wait();
   expect(results).to.exist;
 
@@ -103,6 +106,7 @@ export async function doTransfer(
 }
 
 export async function doLock(
+  txId: string,
   notary: Signer,
   noto: Noto,
   inputs: string[],
@@ -112,7 +116,7 @@ export async function doLock(
 ) {
   const tx = await noto
     .connect(notary)
-    .lock(inputs, outputs, lockedOutputs, "0x", data);
+    .lock(txId, inputs, outputs, lockedOutputs, "0x", data);
   const results = await tx.wait();
   expect(results).to.exist;
 
@@ -138,6 +142,7 @@ export async function doLock(
 }
 
 export async function doUnlock(
+  txId: string,
   sender: Signer,
   noto: Noto,
   lockedInputs: string[],
@@ -147,7 +152,7 @@ export async function doUnlock(
 ) {
   const tx = await noto
     .connect(sender)
-    .unlock(lockedInputs, lockedOutputs, outputs, "0x", data);
+    .unlock(txId, lockedInputs, lockedOutputs, outputs, "0x", data);
   const results = await tx.wait();
   expect(results).to.exist;
 
@@ -174,6 +179,7 @@ export async function doUnlock(
 }
 
 export async function doPrepareUnlock(
+  txId: string,
   notary: Signer,
   noto: Noto,
   lockedInputs: string[],
@@ -182,7 +188,7 @@ export async function doPrepareUnlock(
 ) {
   const tx = await noto
     .connect(notary)
-    .prepareUnlock(lockedInputs, unlockHash, "0x", data);
+    .prepareUnlock(txId, lockedInputs, unlockHash, "0x", data);
   const results = await tx.wait();
   expect(results).to.exist;
 
@@ -200,6 +206,7 @@ export async function doPrepareUnlock(
 }
 
 export async function doDelegateLock(
+  txId: string,
   notary: Signer,
   noto: Noto,
   unlockHash: string,
@@ -208,7 +215,7 @@ export async function doDelegateLock(
 ) {
   const tx = await noto
     .connect(notary)
-    .delegateLock(unlockHash, delegate, "0x", data);
+    .delegateLock(txId, unlockHash, delegate, "0x", data);
   const results = await tx.wait();
   expect(results).to.exist;
 
