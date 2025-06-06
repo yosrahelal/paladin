@@ -21,10 +21,8 @@ import (
 	"fmt"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/wsclient"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -32,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/wsclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -99,12 +98,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	)
 	groupID := groupIDs[0]
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
-		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	err = gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
+	err := gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
 		Name: "listener1",
 		Options: pldapi.PrivacyGroupMessageListenerOptions{
 			ExcludeLocal: false,
@@ -112,7 +106,9 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
+		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)
@@ -122,9 +118,12 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	err = wsc.Send(ctx, req)
 	require.NoError(t, err)
 
+	// channels for coordination
 	subIDChan := make(chan string)
 	unSubChan := make(chan bool)
 	messages := make(chan *pldapi.PrivacyGroupMessage)
+	ackReady := make(chan struct{}) // will be closed once we have subID
+
 	var unSubReqID atomic.Uint64
 	var subID atomic.Pointer[string]
 
@@ -159,10 +158,8 @@ func TestRPCEventListenerE2E(t *testing.T) {
 				for _, r := range batchPayload.Result.Messages {
 					messages <- r
 				}
-
-				for subID.Load() == nil { // wait for subID to be set
-					time.Sleep(10 * time.Millisecond)
-				}
+				// wait until main test has stored subID and closed ackReady
+				<-ackReady
 				_, req := rpcTestRequest("pgroup_ack", *subID.Load())
 				err = wsc.Send(ctx, req)
 				require.NoError(t, err)
@@ -197,6 +194,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	_, err = uuid.Parse(subIDStr)
 	require.NoError(t, err)
 	subID.Store(&subIDStr)
+	close(ackReady) // now the reader goroutine will send the pgroup_ack
 
 	for i := 0; i < 3; i++ {
 		require.Equal(t, testMsgIDs[i], (<-messages).ID)
@@ -223,6 +221,8 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	require.NoError(t, err)
 	<-unSubChan
 
+	// clean up
+	close(messages)
 }
 
 func TestRPCEventListenerE2ENack(t *testing.T) {
@@ -244,12 +244,7 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 	)
 	groupID := groupIDs[0]
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
-		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	err = gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
+	err := gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
 		Name: "listener1",
 		Options: pldapi.PrivacyGroupMessageListenerOptions{
 			ExcludeLocal: false,
@@ -257,7 +252,9 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
+		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)
@@ -267,12 +264,16 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 	err = wsc.Send(ctx, req)
 	require.NoError(t, err)
 
+	// Channels for coordination
+	subIDChan := make(chan string)
 	unSubChan := make(chan bool)
 	sentNack := false
 	messages := make(chan *pldapi.PrivacyGroupMessage)
 	var unSubReqID atomic.Uint64
 	var subID atomic.Pointer[string]
 
+	// Reader goroutine: handles subscribe‐reply, subscription notifications,
+	// sends exactly one NACK then one ACK, and forwards redelivered message.
 	go func() {
 		for payload := range wsc.Receive() {
 			var rpcPayload *rpcclient.RPCResponse
@@ -294,9 +295,7 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 					_, err = uuid.Parse(subIDStr)
 					require.NoError(t, err)
 					subID.Store(&subIDStr)
-					for subID.Load() == nil { // wait for subID to be set
-						time.Sleep(10 * time.Millisecond)
-					}
+					subIDChan <- subIDStr
 				case unSubReqID.Load(): // Unsubscribe reply
 					unSubChan <- true
 				}
@@ -328,21 +327,31 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 		}
 	}()
 
+	var sentMsgID uuid.UUID
 	err = gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		_, err := gm.SendMessage(ctx, dbTX, &pldapi.PrivacyGroupMessageInput{
+		id, err := gm.SendMessage(ctx, dbTX, &pldapi.PrivacyGroupMessageInput{
 			Domain: "domain1",
 			Group:  groupID,
 			Data:   pldtypes.JSONString("some data"),
 			Topic:  "my/topic",
 		})
+		if err == nil {
+			sentMsgID = *id
+		}
 		return err
 	})
 	require.NoError(t, err)
 
-	// We get it on redelivery
-	<-messages
+	// Wait for subscription reply, then trigger reader’s NACK logic
+	sid := <-subIDChan
+	require.NotEmpty(t, sid)
 
-	reqID, req := rpcTestRequest("pgroup_unsubscribe", *subID.Load())
+	// The reader goroutine will first NACK and then, upon redelivery, push into `messages`
+	redelivered := <-messages
+	require.Equal(t, sentMsgID, redelivered.ID)
+
+	// Finally unsubscribe
+	reqID, req := rpcTestRequest("pgroup_unsubscribe", sid)
 	unSubReqID.Store(reqID)
 	err = wsc.Send(ctx, req)
 	require.NoError(t, err)
@@ -354,12 +363,9 @@ func TestRPCSubscribeNoType(t *testing.T) {
 	ctx, url, _, _, done := newTestGroupManagerWithWebSocketRPC(t)
 	defer done()
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
 		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)
@@ -382,12 +388,9 @@ func TestRPCSubscribeNoListener(t *testing.T) {
 	ctx, url, _, _, done := newTestGroupManagerWithWebSocketRPC(t)
 	defer done()
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
 		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)
@@ -410,12 +413,9 @@ func TestRPCSubscribeBadListener(t *testing.T) {
 	ctx, url, _, _, done := newTestGroupManagerWithWebSocketRPC(t)
 	defer done()
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
 		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)
@@ -438,12 +438,9 @@ func TestUnsubscribeNoSubscriptionID(t *testing.T) {
 	ctx, url, _, _, done := newTestGroupManagerWithWebSocketRPC(t)
 	defer done()
 
-	wscConf, err := rpcclient.ParseWSConfig(ctx, &pldconf.WSClientConfig{
+	wsc, err := wsclient.New(ctx, &pldconf.WSClientConfig{
 		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
-	})
-	require.NoError(t, err)
-
-	wsc, err := wsclient.New(ctx, wscConf, nil, nil)
+	}, nil, nil)
 	require.NoError(t, err)
 	err = wsc.Connect()
 	require.NoError(t, err)

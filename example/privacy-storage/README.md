@@ -1,5 +1,4 @@
-# Example: Storage with Privacy Groups
-
+n# Example: Storage with Privacy Groups
 
 See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/private-storage/) for a detailed explanation.
 
@@ -11,8 +10,9 @@ Requires a local Paladin instance running on `localhost:31748`.
 
 ## Option 1: Use the Latest Stable Version
 
-1. **Download and Extract Contracts**
-   - [Download Solidity contracts](https://github.com/LF-Decentralized-Trust-labs/paladin/releases/download/latest/abis.tar.gz)
+1. **Download and extract contracts**
+
+   - [Download Solidity contracts](https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/abis.tar.gz)
    - Extract `abis.tar.gz` and copy the `abis` directory to `src/`. (full path should be: `paladin/example/private-storage/src/abis`)
 
 2. **Build TypeScript SDK**
@@ -21,13 +21,23 @@ Requires a local Paladin instance running on `localhost:31748`.
 cp -rf src/abis ../../sdk/typescript/src/domains/
 cd ../../sdk/typescript
 npm install
+npm run abi
 npm run build
 ```
 
-3. **Run the Example**
+3. **Build common utilities**
+
+```shell
+cd ../common
+npm install
+npm run build
+```
+
+4. **Run the example**
 
 ```shell
 npm install
+npm run abi
 npm run start
 ```
 
@@ -35,7 +45,7 @@ npm run start
 
 ## Option 2: Build Locally
 
-1. **Compile Solidity Contracts**
+1. **Compile Solidity contracts**
 
 ```shell
 cd ../../solidity
@@ -52,7 +62,15 @@ npm run abi
 npm run build
 ```
 
-3. **Run the Example**
+3. **Build common utilities**
+
+```shell
+cd ../common
+npm install
+npm run build
+```
+
+4. **Run the example**
 
 ```shell
 npm install
