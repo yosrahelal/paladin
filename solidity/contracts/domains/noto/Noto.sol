@@ -167,7 +167,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
         bytes32[] calldata outputs,
         bytes calldata signature,
         bytes calldata data
-    ) external virtual onlyNotary txIdNotUsed(txId) {
+    ) external virtual onlyNotary {
         _transfer(txId, inputs, outputs, signature, data);
     }
 
@@ -180,7 +180,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
         bytes32[] calldata outputs,
         bytes calldata signature,
         bytes calldata data
-    ) external virtual onlyNotary txIdNotUsed(txId) {
+    ) external virtual onlyNotary {
         bytes32[] memory inputs;
         _transfer(txId, inputs, outputs, signature, data);
     }
@@ -191,7 +191,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
         bytes32[] memory outputs,
         bytes calldata signature,
         bytes calldata data
-    ) internal {
+    ) internal txIdNotUsed(txId) {
         _processInputs(inputs);
         _processOutputs(outputs);
         emit NotoTransfer(txId, inputs, outputs, signature, data);
@@ -265,7 +265,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
         bytes32[] calldata outputs,
         bytes calldata signature,
         bytes calldata data
-    ) public txIdNotUsed(txId) {
+    ) public {
         bytes32 txhash = _buildTransferHash(inputs, outputs, data);
         if (_approvals[txhash] != msg.sender) {
             revert NotoInvalidDelegate(txhash, _approvals[txhash], msg.sender);

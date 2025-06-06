@@ -6,6 +6,7 @@ import {
   deployNotoInstance,
   doDelegateLock,
   doLock,
+  doMint,
   doPrepareUnlock,
   doTransfer,
   doUnlock,
@@ -327,5 +328,23 @@ describe("Noto", function () {
         randomBytes32()
       )
     ).to.be.rejectedWith("NotoDuplicateTransaction");
+  });
+
+  it("Duplicate TXID reverts mint", async function () {
+    const { noto, notary } = await loadFixture(deployNotoFixture);
+
+    const txo1 = fakeTXO();
+    const txo2 = fakeTXO();
+    const txo3 = fakeTXO();
+    const txo4 = fakeTXO();
+    const txId1 = randomBytes32();
+
+    // Make two UTXOs - should succeed
+    await doMint(txId1, notary, noto, [txo1, txo2], randomBytes32());
+
+    // Make two more UTXOs using the same TX ID - should fail
+    await expect(
+      doMint(txId1, notary, noto, [txo3, txo4], randomBytes32())
+    ).rejectedWith("NotoDuplicateTransaction");
   });
 });

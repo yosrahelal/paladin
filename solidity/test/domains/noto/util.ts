@@ -105,6 +105,29 @@ export async function doTransfer(
   }
 }
 
+export async function doMint(
+  txId: string,
+  notary: Signer,
+  noto: Noto,
+  outputs: string[],
+  data: string
+) {
+  const tx = await noto.connect(notary).transfer(txId, [], outputs, "0x", data);
+  const results = await tx.wait();
+  expect(results).to.exist;
+
+  for (const log of results?.logs || []) {
+    const event = noto.interface.parseLog(log);
+    expect(event).to.exist;
+    expect(event?.name).to.equal("NotoTransfer");
+    expect(event?.args.outputs).to.deep.equal(outputs);
+    expect(event?.args.data).to.deep.equal(data);
+  }
+  for (const output of outputs) {
+    expect(await noto.isUnspent(output)).to.equal(true);
+  }
+}
+
 export async function doLock(
   txId: string,
   notary: Signer,
