@@ -83,8 +83,8 @@ task installGolangCILint(type: GoInstall) {
 }
 
 task installMockery(type: GoInstall) {
-    tool = "github.com/vektra/mockery/v2"
-    toolVersion = "v2.46.0"
+    tool = "github.com/vektra/mockery/v3"
+    toolVersion = "v3.3.2"
 }
 
 // Task to copy all executables and binaries to the root-level build/libs directory

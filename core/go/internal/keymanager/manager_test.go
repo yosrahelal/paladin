@@ -26,7 +26,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
@@ -41,7 +41,7 @@ import (
 )
 
 type mockComponents struct {
-	c  *componentmocks.AllComponents
+	c  *componentsmocks.AllComponents
 	db sqlmock.Sqlmock
 }
 
@@ -50,8 +50,8 @@ func newTestKeyManager(t *testing.T, realDB bool, conf *pldconf.KeyManagerConfig
 	oldLevel := logrus.GetLevel()
 	logrus.SetLevel(logrus.TraceLevel)
 
-	mc := &mockComponents{c: componentmocks.NewAllComponents(t)}
-	componentMocks := mc.c
+	mc := &mockComponents{c: componentsmocks.NewAllComponents(t)}
+	componentsmocks := mc.c
 
 	var p persistence.Persistence
 	var pDone func()
@@ -68,7 +68,7 @@ func newTestKeyManager(t *testing.T, realDB bool, conf *pldconf.KeyManagerConfig
 			require.NoError(t, mp.Mock.ExpectationsWereMet())
 		}
 	}
-	componentMocks.On("Persistence").Return(p)
+	componentsmocks.On("Persistence").Return(p)
 
 	km := NewKeyManager(ctx, conf)
 
@@ -361,7 +361,7 @@ func TestE2EMixedKeyResolution(t *testing.T) {
 
 func TestPostInitFailures(t *testing.T) {
 
-	mc := &mockComponents{c: componentmocks.NewAllComponents(t)}
+	mc := &mockComponents{c: componentsmocks.NewAllComponents(t)}
 	db, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
 	mc.c.On("Persistence").Return(db.P)

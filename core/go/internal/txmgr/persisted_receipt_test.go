@@ -25,7 +25,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
@@ -127,8 +127,8 @@ func TestFinalizeTransactionsInsertFail(t *testing.T) {
 
 }
 
-func mockKeyResolver(t *testing.T, mc *mockComponents) *componentmocks.KeyResolver {
-	kr := componentmocks.NewKeyResolver(t)
+func mockKeyResolver(t *testing.T, mc *mockComponents) *componentsmocks.KeyResolver {
+	kr := componentsmocks.NewKeyResolver(t)
 	mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(kr)
 	return kr
 }
@@ -147,8 +147,8 @@ func mockDomainContractResolve(t *testing.T, domainName string, contractAddrs ..
 			return false
 		}))
 		mgsc.Run(func(args mock.Arguments) {
-			mpsc := componentmocks.NewDomainSmartContract(t)
-			mdmn := componentmocks.NewDomain(t)
+			mpsc := componentsmocks.NewDomainSmartContract(t)
+			mdmn := componentsmocks.NewDomain(t)
 			mdmn.On("Name").Return(domainName)
 			mpsc.On("Domain").Return(mdmn)
 			mpsc.On("Address").Return(args[2].(pldtypes.EthAddress)).Maybe()
@@ -210,7 +210,7 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 			&pldapi.TransactionStates{None: true}, nil,
 		)
 
-		md := componentmocks.NewDomain(t)
+		md := componentsmocks.NewDomain(t)
 		mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
 		md.On("BuildDomainReceipt", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("not available"))
 	})
