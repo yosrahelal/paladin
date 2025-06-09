@@ -42,7 +42,6 @@ interface INoto {
     );
 
     event NotoUnlockPrepared(
-        bytes32 txId,
         bytes32[] lockedInputs,
         bytes32 unlockHash,
         bytes signature,
@@ -112,7 +111,6 @@ interface INoto {
     ) external;
 
     function prepareUnlock(
-        bytes32 txId,
         bytes32[] calldata lockedInputs,
         bytes32 unlockHash,
         bytes calldata signature,

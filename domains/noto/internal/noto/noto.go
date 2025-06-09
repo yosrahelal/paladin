@@ -147,7 +147,6 @@ type NotoLockParams struct {
 }
 
 type NotoPrepareUnlockParams struct {
-	TxId         string            `json:"txId"`
 	LockedInputs []string          `json:"lockedInputs"`
 	UnlockHash   pldtypes.Bytes32  `json:"unlockHash"`
 	Signature    pldtypes.HexBytes `json:"signature"`

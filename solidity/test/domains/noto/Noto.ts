@@ -170,14 +170,7 @@ describe("Noto", function () {
       [txo5],
       unlockData
     );
-    await doPrepareUnlock(
-      randomBytes32(),
-      notary,
-      noto,
-      [locked2],
-      unlockHash,
-      unlockData
-    );
+    await doPrepareUnlock(notary, noto, [locked2], unlockHash, unlockData);
 
     // Delegate the unlock
     await doDelegateLock(
@@ -311,11 +304,6 @@ describe("Noto", function () {
       [txo5],
       unlockData
     );
-
-    // Prepare unlock using the same TX ID as the transfer - should fail
-    await expect(
-      doPrepareUnlock(txId1, notary, noto, [locked2], unlockHash, unlockData)
-    ).to.be.rejectedWith("NotoDuplicateTransaction");
 
     // Delegate the lock using the same TX ID as the transfer - should fail
     await expect(

@@ -202,7 +202,6 @@ export async function doUnlock(
 }
 
 export async function doPrepareUnlock(
-  txId: string,
   notary: Signer,
   noto: Noto,
   lockedInputs: string[],
@@ -211,7 +210,7 @@ export async function doPrepareUnlock(
 ) {
   const tx = await noto
     .connect(notary)
-    .prepareUnlock(txId, lockedInputs, unlockHash, "0x", data);
+    .prepareUnlock(lockedInputs, unlockHash, "0x", data);
   const results = await tx.wait();
   expect(results).to.exist;
 

@@ -153,6 +153,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
      *      transaction. The inputs and outputs are all opaque to this on-chain function.
      *      Provides ordering and double-spend protection.
      *
+     * @param txId a unique identifier for this transaction which must not have been used before
      * @param inputs array of zero or more outputs of a previous function call against this
      *      contract that have not yet been spent, and the signer is authorized to spend
      * @param outputs array of zero or more new outputs to generate, for future transactions to spend
@@ -174,6 +175,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     /**
      * @dev Perform a transfer with no input states. Base implementation is identical
      *      to transfer(), but both methods can be overriden to provide different constraints.
+     * @param txId a unique identifier for this transaction which must not have been used before
      */
     function mint(
         bytes32 txId,
@@ -231,6 +233,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
      *      - The inputs/outputs/data are not stored on-chain at any point
      *      - The EIP-712 hash is only calculated on-chain once, in transferWithApproval()
      *
+     * @param txId a unique identifier for this transaction which must not have been used before
      * @param delegate the address that is authorized to submit the transaction
      * @param txhash the pre-calculated hash of the transaction that is delegated
      * @param signature a signature over the original request to the notary (opaque to the blockchain)
@@ -252,6 +255,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     /**
      * @dev Transfer via delegation - must be the approved delegate.
      *
+     * @param txId a unique identifier for this transaction which must not have been used before
      * @param inputs as per transfer()
      * @param outputs as per transfer()
      * @param signature as per transfer()
@@ -313,6 +317,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     /**
      * @dev Lock some value so it cannot be spent until it is unlocked.
      *
+     * @param txId a unique identifier for this transaction which must not have been used before
      * @param inputs array of zero or more outputs of a previous function call against this
      *      contract that have not yet been spent, and the signer is authorized to spend
      * @param outputs array of zero or more new outputs to generate, for future transactions to spend
@@ -341,6 +346,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
      *      May be triggered by the notary (if lock is undelegated) or by the current lock delegate.
      *      If triggered by the lock delegate, only a prepared unlock operation may be triggered.
      *
+     * @param txId a unique identifier for this transaction which must not have been used before
      * @param lockedInputs array of zero or more locked outputs of a previous function call
      * @param lockedOutputs array of zero or more locked outputs to generate, which will be tied to the lock ID
      * @param outputs array of zero or more new unlocked outputs to generate, for future transactions to spend
@@ -416,12 +422,11 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
      * Emits a {NotoUnlockPrepared} event.
      */
     function prepareUnlock(
-        bytes32 txId,
         bytes32[] calldata lockedInputs,
         bytes32 unlockHash,
         bytes calldata signature,
         bytes calldata data
-    ) external virtual override onlyNotary txIdNotUsed(txId) {
+    ) external virtual override onlyNotary {
         if (_unlockDelegates[unlockHash] != address(0)) {
             revert NotoAlreadyPrepared(unlockHash);
         }
@@ -429,7 +434,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
         for (uint256 i = 0; i < lockedInputs.length; ++i) {
             _unlockHashes[lockedInputs[i]] = unlockHash;
         }
-        emit NotoUnlockPrepared(txId, lockedInputs, unlockHash, signature, data);
+        emit NotoUnlockPrepared(lockedInputs, unlockHash, signature, data);
     }
 
     /**
@@ -437,6 +442,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
      *      May be triggered by the notary (if lock is undelegated) or by the current lock delegate.
      *      May only be triggered after an unlock operation has been prepared.
      *
+     * @param txId a unique identifier for this transaction which must not have been used before
      * @param delegate the address that is authorized to perform the unlock
      * @param signature a signature over the original request to the notary (opaque to the blockchain)
      * @param data any additional transaction data (opaque to the blockchain)
