@@ -133,6 +133,7 @@ func (h *prepareUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.P
 		return nil, err
 	}
 	params := &NotoPrepareUnlockParams{
+		TxId:         req.Transaction.TransactionId,
 		LockedInputs: endorsableStateIDs(lockedInputs),
 		UnlockHash:   pldtypes.Bytes32(unlockHash),
 		Signature:    sender.Payload,
