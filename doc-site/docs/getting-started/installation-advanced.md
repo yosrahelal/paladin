@@ -65,11 +65,19 @@ paladinNodes:
         config:
           port: 9000
           address: 0.0.0.0
+        ports:
+          transportGrpc:
+            port: 9000
+            targetPort: 9000
     service:
       type: NodePort    # change service type if needed
       ports:
-        rpcHttp: { port: 8548, nodePort: 31548 }
-        rpcWs:   { port: 8549, nodePort: 31549 }
+        rpcHttp:
+          port: 8548
+          nodePort: 31748
+        rpcWs:
+          port: 8549
+          nodePort: 31749
     database:
       mode: sidecarPostgres
       migrationMode: auto
@@ -245,11 +253,19 @@ paladinNodes:
       config:
         port: 9000
         address: 0.0.0.0
+      ports:
+        transportGrpc:
+          port: 9000
+          targetPort: 9000
   service:
     type: NodePort    # change service type if needed
     ports:
-      rpcHttp: { port: 8548, nodePort: 31548 }
-      rpcWs:   { port: 8549, nodePort: 31549 }
+      rpcHttp:
+        port: 8548
+        nodePort: 31748
+      rpcWs:
+        port: 8549
+        nodePort: 31749
   database:
     mode: sidecarPostgres
     migrationMode: auto
