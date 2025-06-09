@@ -78,6 +78,10 @@ paladinNodes:
         secret: central-bank.keys
         type: autoHDWallet  # or preConfigured. in case of preConfigured you must create the secret with the seed
         keySelector: ".*"
+    paladinRegistration:
+      registryAdminNode: central-bank  # The admin node that manages the registry
+      registryAdminKey: registry.operator
+      registry: evm-registry
     config: |
       log:
         level: debug  # Log levels: debug, info, warn, error
