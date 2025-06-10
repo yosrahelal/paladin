@@ -308,26 +308,21 @@ func TestUpsertRegistryRecordsRealDBNameIsUniqueScopedToParentId(t *testing.T) {
 	ctx, _, tp, _, done := newTestRegistry(t, true)
 	defer done()
 
-	// r, err := rm.GetRegistry(ctx, "test1")
-	// require.NoError(t, err)
-
 	// Insert a root entry
 	rootId1 := randID()
 	rootId2 := randID()
 	parentId := randID()
+	parent1 := &prototk.RegistryEntry{Id: parentId, Name: "parent1", Location: randChainInfo(), Active: true}
 	rootEntry1 := &prototk.RegistryEntry{Id: rootId1, Name: "entry1", Location: randChainInfo(), Active: true, ParentId: parentId}
-	rootEntry1SysProp := newSystemPropFor(rootEntry1.Id, "$owner", pldtypes.RandAddress().String())
-	rootEntry1Props1 := randPropFor(rootEntry1.Id)
 	rootEntry2 := &prototk.RegistryEntry{Id: rootId2, Name: "entry1", Location: randChainInfo(), Active: true, ParentId: parentId}
-	rootEntry2Props1 := randPropFor(rootEntry2.Id)
-	rootEntry2Props2 := randPropFor(rootEntry2.Id)
-	upsert1 := &prototk.UpsertRegistryRecordsRequest{
-		Entries:    []*prototk.RegistryEntry{rootEntry1, rootEntry2},
-		Properties: []*prototk.RegistryProperty{rootEntry1Props1, rootEntry2Props1, rootEntry2Props2, rootEntry1SysProp},
+
+	upsert := &prototk.UpsertRegistryRecordsRequest{
+		Entries:    []*prototk.RegistryEntry{parent1, rootEntry1, rootEntry2},
+		Properties: []*prototk.RegistryProperty{},
 	}
 
 	// Upsert first entry
-	res, err := tp.r.UpsertRegistryRecords(ctx, upsert1)
+	res, err := tp.r.UpsertRegistryRecords(ctx, upsert)
 	require.Error(t, err)
 	assert.Nil(t, res)
 	require.Error(t, err)
@@ -340,7 +335,7 @@ func TestUpsertRegistryRecordsRealDBNameIsUniqueScopedToParentId(t *testing.T) {
 	assert.Regexp(t, ".*reg_entries.*", err)
 }
 
-func TestUpsertRegistryRecordsRealDBpreventsTwoRootEntries(t *testing.T) {
+func TestUpsertRegistryRecordsRealDBSameNameAllowedForDifferentParents(t *testing.T) {
 	ctx, _, tp, _, done := newTestRegistry(t, true)
 	defer done()
 
@@ -350,15 +345,58 @@ func TestUpsertRegistryRecordsRealDBpreventsTwoRootEntries(t *testing.T) {
 	// Insert a root entry
 	rootId1 := randID()
 	rootId2 := randID()
+	parentId := randID()
+	parentId2 := randID()
+	entry1 := &prototk.RegistryEntry{Id: rootId1, Name: "entry1", Location: randChainInfo(), Active: true, ParentId: parentId}
+	entry2 := &prototk.RegistryEntry{Id: rootId2, Name: "entry1", Location: randChainInfo(), Active: true, ParentId: parentId2}
+	parent1 := &prototk.RegistryEntry{Id: parentId, Name: "parent1", Location: randChainInfo(), Active: true}
+	parent2 := &prototk.RegistryEntry{Id: parentId2, Name: "parent2", Location: randChainInfo(), Active: true}
+
+	upsert := &prototk.UpsertRegistryRecordsRequest{
+		Entries:    []*prototk.RegistryEntry{parent1, parent2, entry1, entry2},
+		Properties: []*prototk.RegistryProperty{},
+	}
+
+	// Upsert first entry
+	_, err := tp.r.UpsertRegistryRecords(ctx, upsert)
+	require.NoError(t, err)
+
+}
+
+func TestUpsertRegistryRecordsRealDBNameSameParentDifferentNameAllowed(t *testing.T) {
+	ctx, _, tp, _, done := newTestRegistry(t, true)
+	defer done()
+
+	// Insert a root entry
+	rootId1 := randID()
+	rootId2 := randID()
+	parentId := randID()
+	parent1 := &prototk.RegistryEntry{Id: parentId, Name: "parent1", Location: randChainInfo(), Active: true}
+	rootEntry1 := &prototk.RegistryEntry{Id: rootId1, Name: "entry1", Location: randChainInfo(), Active: true, ParentId: parentId}
+	rootEntry2 := &prototk.RegistryEntry{Id: rootId2, Name: "entry2", Location: randChainInfo(), Active: true, ParentId: parentId}
+	upsert1 := &prototk.UpsertRegistryRecordsRequest{
+		Entries:    []*prototk.RegistryEntry{parent1, rootEntry1, rootEntry2},
+		Properties: []*prototk.RegistryProperty{},
+	}
+
+	// Upsert first entry
+	_, err := tp.r.UpsertRegistryRecords(ctx, upsert1)
+	require.NoError(t, err)
+
+}
+
+func TestUpsertRegistryRecordsRealDBpreventsTwoRootEntries(t *testing.T) {
+	ctx, _, tp, _, done := newTestRegistry(t, true)
+	defer done()
+
+	// Insert a root entry
+	rootId1 := randID()
+	rootId2 := randID()
 	rootEntry1 := &prototk.RegistryEntry{Id: rootId1, Name: "entry1", Location: randChainInfo(), Active: true}
-	rootEntry1SysProp := newSystemPropFor(rootEntry1.Id, "$owner", pldtypes.RandAddress().String())
-	rootEntry1Props1 := randPropFor(rootEntry1.Id)
 	rootEntry2 := &prototk.RegistryEntry{Id: rootId2, Name: "entry1", Location: randChainInfo(), Active: true}
-	rootEntry2Props1 := randPropFor(rootEntry2.Id)
-	rootEntry2Props2 := randPropFor(rootEntry2.Id)
 	upsert1 := &prototk.UpsertRegistryRecordsRequest{
 		Entries:    []*prototk.RegistryEntry{rootEntry1, rootEntry2},
-		Properties: []*prototk.RegistryProperty{rootEntry1Props1, rootEntry2Props1, rootEntry2Props2, rootEntry1SysProp},
+		Properties: []*prototk.RegistryProperty{},
 	}
 
 	// Upsert first entry
