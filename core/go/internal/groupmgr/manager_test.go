@@ -26,7 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/statemgr"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
@@ -40,24 +40,24 @@ import (
 )
 
 type mockComponents struct {
-	c                *componentmocks.AllComponents
+	c                *componentsmocks.AllComponents
 	db               *mockpersistence.SQLMockProvider
 	p                persistence.Persistence
-	stateManager     *componentmocks.StateManager
-	txManager        *componentmocks.TXManager
-	domainManager    *componentmocks.DomainManager
-	domain           *componentmocks.Domain
-	registryManager  *componentmocks.RegistryManager
-	transportManager *componentmocks.TransportManager
+	stateManager     *componentsmocks.StateManager
+	txManager        *componentsmocks.TXManager
+	domainManager    *componentsmocks.DomainManager
+	domain           *componentsmocks.Domain
+	registryManager  *componentsmocks.RegistryManager
+	transportManager *componentsmocks.TransportManager
 }
 
 func newMockComponents(t *testing.T, realDB bool) *mockComponents {
-	mc := &mockComponents{c: componentmocks.NewAllComponents(t)}
-	mc.domainManager = componentmocks.NewDomainManager(t)
-	mc.domain = componentmocks.NewDomain(t)
-	mc.registryManager = componentmocks.NewRegistryManager(t)
-	mc.transportManager = componentmocks.NewTransportManager(t)
-	mc.txManager = componentmocks.NewTXManager(t)
+	mc := &mockComponents{c: componentsmocks.NewAllComponents(t)}
+	mc.domainManager = componentsmocks.NewDomainManager(t)
+	mc.domain = componentsmocks.NewDomain(t)
+	mc.registryManager = componentsmocks.NewRegistryManager(t)
+	mc.transportManager = componentsmocks.NewTransportManager(t)
+	mc.txManager = componentsmocks.NewTXManager(t)
 
 	mc.c.On("DomainManager").Return(mc.domainManager).Maybe()
 	mc.c.On("TransportManager").Return(mc.transportManager).Maybe()
@@ -88,7 +88,7 @@ func newMockComponents(t *testing.T, realDB bool) *mockComponents {
 		mc.p = mdb.P
 		mc.c.On("Persistence").Return(mc.p).Maybe()
 
-		mc.stateManager = componentmocks.NewStateManager(t)
+		mc.stateManager = componentsmocks.NewStateManager(t)
 		mc.c.On("StateManager").Return(mc.stateManager).Maybe()
 	}
 
@@ -258,7 +258,7 @@ func TestPrivacyGroupDomainInitFail(t *testing.T) {
 		mockBeginRollback,
 		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 			mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
-			ms := componentmocks.NewSchema(t)
+			ms := componentsmocks.NewSchema(t)
 			ms.On("ID").Return(pldtypes.RandBytes32())
 			mc.stateManager.On("WriteReceivedStates", mock.Anything, mock.Anything, "domain1", mock.Anything).
 				Return([]*pldapi.State{
@@ -291,7 +291,7 @@ func TestPrivacyGroupWriteStateFail(t *testing.T) {
 		func(mc *mockComponents, conf *pldconf.GroupManagerConfig) {
 			mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").Return(nil, nil)
 			mc.domain.On("ConfigurePrivacyGroup", mock.Anything, mock.Anything).Return(map[string]string{}, nil)
-			ms := componentmocks.NewSchema(t)
+			ms := componentsmocks.NewSchema(t)
 			ms.On("ID").Return(pldtypes.RandBytes32())
 			mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
 				Return([]components.Schema{ms}, nil)
@@ -342,7 +342,7 @@ func mockReadyToSendTransaction(t *testing.T) func(mc *mockComponents, conf *pld
 					Type:   pldapi.TransactionTypePrivate.Enum(),
 				},
 			}, nil)
-		ms := componentmocks.NewSchema(t)
+		ms := componentsmocks.NewSchema(t)
 		ms.On("ID").Return(pldtypes.RandBytes32())
 		ms.On("Signature").Return("").Maybe()
 		mc.stateManager.On("EnsureABISchemas", mock.Anything, mock.Anything, "domain1", mock.Anything).
@@ -615,7 +615,7 @@ func TestSendTransactionSendPreparedTx(t *testing.T) {
 	contractAddr := pldtypes.RandAddress()
 	mockDBPrivacyGroup(mc, schemaID, groupID, contractAddr)
 
-	psc := componentmocks.NewDomainSmartContract(t)
+	psc := componentsmocks.NewDomainSmartContract(t)
 	mc.domainManager.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *contractAddr).Return(psc, nil)
 
 	psc.On("WrapPrivacyGroupEVMTX", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&pldapi.TransactionInput{}, nil)

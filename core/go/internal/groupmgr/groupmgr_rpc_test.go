@@ -27,7 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldclient"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
@@ -93,17 +93,17 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mock.Anything).
 			Return([]uuid.UUID{deployTXID}, nil).
 			Run(func(args mock.Arguments) {
-				tx := args[2].(*pldapi.TransactionInput)
+				tx := args[2].([]*pldapi.TransactionInput)[0]
 				assert.Regexp(t, `domains\.domain1\.pgroupinit\.0x[0-9a-f]{32}`, tx.From)
 				assert.Equal(t, "tx_1", tx.IdempotencyKey)
 				assert.Equal(t, uint64(12345), tx.PublicTxOptions.Gas.Uint64())
 			}).Once()
 
 		// Validate the state send gets the correct data
-		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm *pldapi.ReliableMessage) bool {
-			return rm.MessageType.V() == pldapi.RMTPrivacyGroup
+		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm []*pldapi.ReliableMessage) bool {
+			return rm[0].MessageType.V() == pldapi.RMTPrivacyGroup
 		})).Return(nil).Run(func(args mock.Arguments) {
-			msg := args[2].(*pldapi.ReliableMessage)
+			msg := args[2].([]*pldapi.ReliableMessage)[0]
 			require.Equal(t, pldapi.RMTPrivacyGroup, msg.MessageType.V())
 			var pgd *components.PrivacyGroupDistribution
 			err := json.Unmarshal(msg.Metadata, &pgd)
@@ -114,7 +114,7 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 			require.Equal(t, deployTXID, pgd.GenesisTransaction)
 		})
 
-		psc := componentmocks.NewDomainSmartContract(t)
+		psc := componentsmocks.NewDomainSmartContract(t)
 		mc.domainManager.On("GetSmartContractByAddress", mock.Anything, mock.Anything, *contractAddr).Return(psc, nil)
 
 		mwpgt1 := psc.On("WrapPrivacyGroupEVMTX", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Once()
@@ -132,7 +132,7 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 		mc.txManager.On("SendTransactions", mock.Anything, mock.Anything, mock.Anything).
 			Return([]uuid.UUID{tx1ID}, nil).
 			Run(func(args mock.Arguments) {
-				tx := args[2].(*pldapi.TransactionInput)
+				tx := args[2].([]*pldapi.TransactionInput)[0]
 				assert.Regexp(t, `my.key`, tx.From)
 				assert.Equal(t, "pgtx_deploy", tx.IdempotencyKey)
 				assert.JSONEq(t, `{"wrapped":"transaction"}`, tx.Data.Pretty())
@@ -161,8 +161,8 @@ func TestPrivacyGroupRPCLifecycleRealDB(t *testing.T) {
 			}).Once()
 
 		// Validate we also get a send reliable for the message
-		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm *pldapi.ReliableMessage) bool {
-			return rm.MessageType.V() == pldapi.RMTPrivacyGroupMessage
+		mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm []*pldapi.ReliableMessage) bool {
+			return rm[0].MessageType.V() == pldapi.RMTPrivacyGroupMessage
 		})).Return(nil)
 	})
 	defer done()

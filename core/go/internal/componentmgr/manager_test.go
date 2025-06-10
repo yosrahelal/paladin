@@ -29,8 +29,10 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/blockindexermocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
+	"github.com/kaleido-io/paladin/core/mocks/rpcservermocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
@@ -106,7 +108,7 @@ func TestInitOK(t *testing.T) {
 		},
 	}
 
-	mockExtraManager := componentmocks.NewAdditionalManager(t)
+	mockExtraManager := componentsmocks.NewAdditionalManager(t)
 	mockExtraManager.On("Name").Return("unittest_manager")
 	mockExtraManager.On("PreInit", mock.Anything).Return(&components.ManagerInitResult{}, nil)
 	mockExtraManager.On("PostInit", mock.Anything).Return(nil)
@@ -163,62 +165,62 @@ func TestStartOK(t *testing.T) {
 	mockEthClientFactory.On("Start").Return(nil)
 	mockEthClientFactory.On("Stop").Return()
 
-	mockBlockIndexer := componentmocks.NewBlockIndexer(t)
+	mockBlockIndexer := blockindexermocks.NewBlockIndexer(t)
 	mockBlockIndexer.On("Start").Return(nil)
 	mockBlockIndexer.On("GetBlockListenerHeight", mock.Anything).Return(uint64(12345), nil)
 	mockBlockIndexer.On("RPCModule").Return(nil)
 	mockBlockIndexer.On("Stop").Return()
 
-	mockPluginManager := componentmocks.NewPluginManager(t)
+	mockPluginManager := componentsmocks.NewPluginManager(t)
 	mockPluginManager.On("Start").Return(nil)
 	mockPluginManager.On("WaitForInit", mock.Anything).Return(nil)
 	mockPluginManager.On("Stop").Return()
 
-	mockKeyManager := componentmocks.NewKeyManager(t)
+	mockKeyManager := componentsmocks.NewKeyManager(t)
 	mockKeyManager.On("Start").Return(nil)
 	mockKeyManager.On("Stop").Return()
 
-	mockDomainManager := componentmocks.NewDomainManager(t)
+	mockDomainManager := componentsmocks.NewDomainManager(t)
 	mockDomainManager.On("Start").Return(nil)
 	mockDomainManager.On("Stop").Return()
 
-	mockTransportManager := componentmocks.NewTransportManager(t)
+	mockTransportManager := componentsmocks.NewTransportManager(t)
 	mockTransportManager.On("Start").Return(nil)
 	mockTransportManager.On("Stop").Return()
 
-	mockRegistryManager := componentmocks.NewRegistryManager(t)
+	mockRegistryManager := componentsmocks.NewRegistryManager(t)
 	mockRegistryManager.On("Start").Return(nil)
 	mockRegistryManager.On("Stop").Return()
 
-	mockPublicTxManager := componentmocks.NewPublicTxManager(t)
+	mockPublicTxManager := componentsmocks.NewPublicTxManager(t)
 	mockPublicTxManager.On("Start").Return(nil)
 	mockPublicTxManager.On("Stop").Return()
 
-	mockPrivateTxManager := componentmocks.NewPrivateTxManager(t)
+	mockPrivateTxManager := componentsmocks.NewPrivateTxManager(t)
 	mockPrivateTxManager.On("Start").Return(nil)
 	mockPrivateTxManager.On("Stop").Return()
 
-	mockTxManager := componentmocks.NewTXManager(t)
+	mockTxManager := componentsmocks.NewTXManager(t)
 	mockTxManager.On("Start").Return(nil)
 	mockTxManager.On("Stop").Return()
 	mockTxManager.On("LoadBlockchainEventListeners").Return(nil)
 
-	mockGroupManager := componentmocks.NewGroupManager(t)
+	mockGroupManager := componentsmocks.NewGroupManager(t)
 	mockGroupManager.On("Start").Return(nil)
 	mockGroupManager.On("Stop").Return()
 
-	mockStateManager := componentmocks.NewStateManager(t)
+	mockStateManager := componentsmocks.NewStateManager(t)
 	mockStateManager.On("Start").Return(nil)
 	mockStateManager.On("Stop").Return()
 
-	mockRPCServer := componentmocks.NewRPCServer(t)
+	mockRPCServer := rpcservermocks.NewRPCServer(t)
 	mockRPCServer.On("Start").Return(nil)
 	mockRPCServer.On("Register", mock.AnythingOfType("*rpcserver.RPCModule")).Return()
 	mockRPCServer.On("Stop").Return()
 	mockRPCServer.On("HTTPAddr").Return(&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8545})
 	mockRPCServer.On("WSAddr").Return(&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8546})
 
-	mockExtraManager := componentmocks.NewAdditionalManager(t)
+	mockExtraManager := componentsmocks.NewAdditionalManager(t)
 	mockExtraManager.On("Start").Return(nil)
 	mockExtraManager.On("Name").Return("unittest_manager")
 	mockExtraManager.On("Stop").Return()

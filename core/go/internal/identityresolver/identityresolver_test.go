@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
@@ -25,7 +25,7 @@ func TestResolveVerifier(t *testing.T) {
 	r = &identityResolver{
 		nodeName:      "testnode",
 		verifierCache: cache.NewCache[string, string](config, config),
-		keyManager:    componentmocks.NewKeyManager(t),
+		keyManager:    componentsmocks.NewKeyManager(t),
 	}
 	waitChan := make(chan time.Time)
 	resolvedKey := &pldapi.KeyMappingAndVerifier{
@@ -34,7 +34,7 @@ func TestResolveVerifier(t *testing.T) {
 			Type:     "ETH_ADDRESS",
 		},
 	}
-	r.keyManager.(*componentmocks.KeyManager).On("ResolveKeyNewDatabaseTX", mock.Anything, mock.Anything, mock.Anything, mock.Anything).WaitUntil(waitChan).Return(resolvedKey, nil)
+	r.keyManager.(*componentsmocks.KeyManager).On("ResolveKeyNewDatabaseTX", mock.Anything, mock.Anything, mock.Anything, mock.Anything).WaitUntil(waitChan).Return(resolvedKey, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer func() {
 		cancel()
