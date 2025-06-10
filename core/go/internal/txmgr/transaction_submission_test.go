@@ -29,7 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
@@ -1348,7 +1348,7 @@ func TestUpdateTransactionKeyResolutionError(t *testing.T) {
 				Return(map[uuid.UUID][]*pldapi.PublicTx{
 					id: {{LocalID: confutil.P(uint64(1))}},
 				}, nil)
-			kr := componentmocks.NewKeyResolver(t)
+			kr := componentsmocks.NewKeyResolver(t)
 			kr.On("ResolveKey", mock.Anything, "identity", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(kr)
 		},
@@ -1387,7 +1387,7 @@ func TestUpdateTransactionKeyParseError(t *testing.T) {
 				Return(map[uuid.UUID][]*pldapi.PublicTx{
 					id: {{LocalID: confutil.P(uint64(1))}},
 				}, nil)
-			kr := componentmocks.NewKeyResolver(t)
+			kr := componentsmocks.NewKeyResolver(t)
 			kr.On("ResolveKey", mock.Anything, "identity", mock.Anything, mock.Anything).Return(&pldapi.KeyMappingAndVerifier{
 				Verifier: &pldapi.KeyVerifier{
 					Verifier: "not an eth address",

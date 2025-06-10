@@ -27,7 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
@@ -504,7 +504,7 @@ func TestDetailedReceiptRPCsNotFound(t *testing.T) {
 		mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).
 			Return(&pldapi.TransactionStates{None: true}, nil)
 
-		md := componentmocks.NewDomain(t)
+		md := componentsmocks.NewDomain(t)
 		mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
 		md.On("GetDomainReceipt", mock.Anything, mock.Anything, mock.Anything).Return(pldtypes.RawJSON(`{}`), nil)
 	})
