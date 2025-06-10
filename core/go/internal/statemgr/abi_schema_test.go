@@ -25,7 +25,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
@@ -42,8 +42,8 @@ func testABIParam(t *testing.T, jsonParam string) *abi.Parameter {
 	return &a
 }
 
-func mockDomain(t *testing.T, m *mockComponents, name string, customHashFunction bool) *componentmocks.Domain {
-	md := componentmocks.NewDomain(t)
+func mockDomain(t *testing.T, m *mockComponents, name string, customHashFunction bool) *componentsmocks.Domain {
+	md := componentsmocks.NewDomain(t)
 	md.On("Name").Return(name).Maybe()
 	md.On("CustomHashFunction").Return(customHashFunction)
 	m.domainManager.On("GetDomainByName", mock.Anything, name).Return(md, nil)

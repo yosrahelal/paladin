@@ -25,7 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -55,8 +55,8 @@ func transportHeaderAccessor(msg *prototk.TransportMessage) *prototk.Header {
 
 }
 
-func (tp *testTransportManager) mock(t *testing.T) *componentmocks.TransportManager {
-	mdm := componentmocks.NewTransportManager(t)
+func (tp *testTransportManager) mock(t *testing.T) *componentsmocks.TransportManager {
+	mdm := componentsmocks.NewTransportManager(t)
 	pluginMap := make(map[string]*pldconf.PluginConfig)
 	for name := range tp.transports {
 		pluginMap[name] = &pldconf.PluginConfig{
