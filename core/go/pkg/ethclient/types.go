@@ -17,9 +17,6 @@ package ethclient
 
 import (
 	"strings"
-
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 )
 
 // ErrorReason are a set of standard error conditions that a blockchain connector can return
@@ -88,69 +85,4 @@ func MapError(err error) ErrorReason {
 		// default to no mapping
 		return ""
 	}
-}
-
-// txReceiptJSONRPC is the receipt obtained over JSON/RPC from the ethereum client, with gas used, logs and contract address
-type txReceiptJSONRPC struct {
-	BlockHash         ethtypes.HexBytes0xPrefix  `json:"blockHash"`
-	BlockNumber       *ethtypes.HexInteger       `json:"blockNumber"`
-	ContractAddress   *ethtypes.Address0xHex     `json:"contractAddress"`
-	CumulativeGasUsed *ethtypes.HexInteger       `json:"cumulativeGasUsed"`
-	From              *ethtypes.Address0xHex     `json:"from"`
-	GasUsed           *ethtypes.HexInteger       `json:"gasUsed"`
-	Logs              []*logJSONRPC              `json:"logs"`
-	Status            *ethtypes.HexInteger       `json:"status"`
-	To                *ethtypes.Address0xHex     `json:"to"`
-	TransactionHash   ethtypes.HexBytes0xPrefix  `json:"transactionHash"`
-	TransactionIndex  *ethtypes.HexInteger       `json:"transactionIndex"`
-	RevertReason      *ethtypes.HexBytes0xPrefix `json:"revertReason"`
-}
-
-type logJSONRPC struct {
-	Removed          bool                        `json:"removed"`
-	LogIndex         *ethtypes.HexInteger        `json:"logIndex"`
-	TransactionIndex *ethtypes.HexInteger        `json:"transactionIndex"`
-	BlockNumber      *ethtypes.HexInteger        `json:"blockNumber"`
-	TransactionHash  ethtypes.HexBytes0xPrefix   `json:"transactionHash"`
-	BlockHash        ethtypes.HexBytes0xPrefix   `json:"blockHash"`
-	Address          *ethtypes.Address0xHex      `json:"address"`
-	Data             ethtypes.HexBytes0xPrefix   `json:"data"`
-	Topics           []ethtypes.HexBytes0xPrefix `json:"topics"`
-}
-
-type TransactionReceiptResponse struct {
-	BlockNumber      *pldtypes.PLDBigInt `json:"blockNumber"`
-	TransactionIndex *pldtypes.PLDBigInt `json:"transactionIndex"`
-	BlockHash        string              `json:"blockHash"`
-	Success          bool                `json:"success"`
-	ProtocolID       string              `json:"protocolId"`
-	ExtraInfo        pldtypes.RawJSON    `json:"extraInfo,omitempty"`
-	ContractLocation pldtypes.RawJSON    `json:"contractLocation,omitempty"`
-	Logs             []pldtypes.RawJSON  `json:"logs,omitempty"` // all raw un-decoded logs should be included if includeLogs=true
-}
-
-// receiptExtraInfo is the version of the receipt we store under the TX.
-// - We omit the full logs from the JSON/RPC
-// - We omit fields already in the standardized cross-blockchain section
-// - We format numbers as decimals
-type receiptExtraInfo struct {
-	ContractAddress   *ethtypes.Address0xHex `json:"contractAddress"`
-	CumulativeGasUsed *pldtypes.PLDBigInt    `json:"cumulativeGasUsed"`
-	From              *ethtypes.Address0xHex `json:"from"`
-	To                *ethtypes.Address0xHex `json:"to"`
-	GasUsed           *pldtypes.PLDBigInt    `json:"gasUsed"`
-	Status            *pldtypes.PLDBigInt    `json:"status"`
-	ErrorMessage      *string                `json:"errorMessage"`
-	ReturnValue       *string                `json:"returnValue,omitempty"`
-}
-
-type StructLog struct {
-	PC      *pldtypes.PLDBigInt `json:"pc"`
-	Op      *string             `json:"op"`
-	Gas     *pldtypes.PLDBigInt `json:"gas"`
-	GasCost *pldtypes.PLDBigInt `json:"gasCost"`
-	Depth   *pldtypes.PLDBigInt `json:"depth"`
-	Stack   []*string           `json:"stack"`
-	Memory  []*string           `json:"memory"`
-	Reason  *string             `json:"reason"`
 }

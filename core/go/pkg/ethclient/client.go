@@ -16,13 +16,10 @@
 package ethclient
 
 import (
-	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
@@ -49,7 +46,6 @@ type EthClient interface {
 
 	GasPrice(ctx context.Context) (gasPrice *pldtypes.HexUint256, err error)
 	GetBalance(ctx context.Context, address pldtypes.EthAddress, block string) (balance *pldtypes.HexUint256, err error)
-	GetTransactionReceipt(ctx context.Context, txHash string) (*TransactionReceiptResponse, error)
 
 	EstimateGasNoResolve(ctx context.Context, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
 	CallContractNoResolve(ctx context.Context, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
@@ -296,59 +292,6 @@ func (ec *ethClient) GasPrice(ctx context.Context) (*pldtypes.HexUint256, error)
 	return &gasPrice, nil
 }
 
-func (ec *ethClient) GetTransactionReceipt(ctx context.Context, txHash string) (*TransactionReceiptResponse, error) {
-
-	// Get the receipt in the back-end JSON/RPC format
-	var ethReceipt *txReceiptJSONRPC
-	rpcErr := ec.rpc.CallRPC(ctx, &ethReceipt, "eth_getTransactionReceipt", txHash)
-	if rpcErr != nil {
-		return nil, rpcErr
-	}
-	if ethReceipt == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgEthClientReceiptNotAvailable, txHash)
-	}
-	isSuccess := (ethReceipt.Status != nil && ethReceipt.Status.BigInt().Int64() > 0)
-
-	var returnDataString *string
-	var transactionErrorMessage *string
-
-	if !isSuccess {
-		returnDataString, transactionErrorMessage = ec.getErrorInfo(ctx, ethReceipt.RevertReason)
-	}
-
-	fullReceipt, _ := json.Marshal(&receiptExtraInfo{
-		ContractAddress:   ethReceipt.ContractAddress,
-		CumulativeGasUsed: (*pldtypes.PLDBigInt)(ethReceipt.CumulativeGasUsed),
-		From:              ethReceipt.From,
-		To:                ethReceipt.To,
-		GasUsed:           (*pldtypes.PLDBigInt)(ethReceipt.GasUsed),
-		Status:            (*pldtypes.PLDBigInt)(ethReceipt.Status),
-		ReturnValue:       returnDataString,
-		ErrorMessage:      transactionErrorMessage,
-	})
-
-	var txIndex int64
-	if ethReceipt.TransactionIndex != nil {
-		txIndex = ethReceipt.TransactionIndex.BigInt().Int64()
-	}
-	receiptResponse := &TransactionReceiptResponse{
-		BlockNumber:      (*pldtypes.PLDBigInt)(ethReceipt.BlockNumber),
-		TransactionIndex: pldtypes.NewPLDBigInt(txIndex),
-		BlockHash:        ethReceipt.BlockHash.String(),
-		Success:          isSuccess,
-		ProtocolID:       ProtocolIDForReceipt((*pldtypes.PLDBigInt)(ethReceipt.BlockNumber), pldtypes.NewPLDBigInt(txIndex)),
-		ExtraInfo:        pldtypes.RawJSON(fullReceipt),
-	}
-
-	if ethReceipt.ContractAddress != nil {
-		location, _ := json.Marshal(map[string]string{
-			"address": ethReceipt.ContractAddress.String(),
-		})
-		receiptResponse.ContractLocation = pldtypes.RawJSON(location)
-	}
-	return receiptResponse, nil
-}
-
 func (ec *ethClient) EstimateGas(ctx context.Context, from *string, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error) {
 	if _, _, err := ec.resolveFrom(ctx, from, tx); err != nil {
 		return res, err
@@ -478,32 +421,4 @@ func logJSON(v interface{}) string {
 		ret = (string)(b)
 	}
 	return ret
-}
-
-func (ec *ethClient) getErrorInfo(ctx context.Context, revertFromReceipt *ethtypes.HexBytes0xPrefix) (pReturnValue *string, pErrorMessage *string) {
-
-	var revertReason string
-	if revertFromReceipt != nil {
-		revertReason = revertFromReceipt.String()
-	}
-
-	// See if the return value is using the default error you get from "revert"
-	var errorMessage string
-	returnDataBytes, _ := hex.DecodeString(strings.TrimPrefix(revertReason, "0x"))
-	if len(returnDataBytes) > 4 && bytes.Equal(returnDataBytes[0:4], defaultErrorID) {
-		value, err := defaultError.DecodeCallDataCtx(ctx, returnDataBytes)
-		if err == nil {
-			errorMessage = value.Children[0].Value.(string)
-		}
-	}
-
-	// Otherwise we can't decode it, so put it directly in the error
-	if errorMessage == "" {
-		if len(returnDataBytes) > 0 {
-			errorMessage = i18n.NewError(ctx, msgs.MsgEthClientReturnValueNotDecoded, revertReason).Error()
-		} else {
-			errorMessage = i18n.NewError(ctx, msgs.MsgEthClientReturnValueNotAvailable).Error()
-		}
-	}
-	return &revertReason, &errorMessage
 }

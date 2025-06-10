@@ -33,16 +33,15 @@ import (
 )
 
 type mockEth struct {
-	eth_getBalance            func(context.Context, pldtypes.EthAddress, string) (*pldtypes.HexUint256, error)
-	eth_gasPrice              func(context.Context) (*pldtypes.HexUint256, error)
-	eth_gasLimit              func(context.Context, ethsigner.Transaction) (*pldtypes.HexUint256, error)
-	eth_chainId               func(context.Context) (pldtypes.HexUint64, error)
-	eth_getTransactionCount   func(context.Context, pldtypes.EthAddress, string) (pldtypes.HexUint64, error)
-	eth_getTransactionReceipt func(context.Context, pldtypes.Bytes32) (*txReceiptJSONRPC, error)
-	eth_estimateGas           func(context.Context, ethsigner.Transaction) (pldtypes.HexUint64, error)
-	eth_sendRawTransaction    func(context.Context, pldtypes.HexBytes) (pldtypes.HexBytes, error)
-	eth_call                  func(context.Context, ethsigner.Transaction, string) (pldtypes.HexBytes, error)
-	eth_callErr               func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse
+	eth_getBalance          func(context.Context, pldtypes.EthAddress, string) (*pldtypes.HexUint256, error)
+	eth_gasPrice            func(context.Context) (*pldtypes.HexUint256, error)
+	eth_gasLimit            func(context.Context, ethsigner.Transaction) (*pldtypes.HexUint256, error)
+	eth_chainId             func(context.Context) (pldtypes.HexUint64, error)
+	eth_getTransactionCount func(context.Context, pldtypes.EthAddress, string) (pldtypes.HexUint64, error)
+	eth_estimateGas         func(context.Context, ethsigner.Transaction) (pldtypes.HexUint64, error)
+	eth_sendRawTransaction  func(context.Context, pldtypes.HexBytes) (pldtypes.HexBytes, error)
+	eth_call                func(context.Context, ethsigner.Transaction, string) (pldtypes.HexBytes, error)
+	eth_callErr             func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse
 }
 
 func newTestServer(t *testing.T, ctx context.Context, isWS bool, mEth *mockEth) (rpcServer rpcserver.RPCServer, done func()) {
@@ -83,7 +82,6 @@ func newTestServer(t *testing.T, ctx context.Context, isWS bool, mEth *mockEth) 
 	rpcServer.Register(rpcserver.NewRPCModule("eth").
 		Add("eth_chainId", checkNil(mEth.eth_chainId, rpcserver.RPCMethod0)).
 		Add("eth_getTransactionCount", checkNil(mEth.eth_getTransactionCount, rpcserver.RPCMethod2)).
-		Add("eth_getTransactionReceipt", checkNil(mEth.eth_getTransactionReceipt, rpcserver.RPCMethod1)).
 		Add("eth_estimateGas", checkNil(mEth.eth_estimateGas, rpcserver.RPCMethod1)).
 		Add("eth_sendRawTransaction", checkNil(mEth.eth_sendRawTransaction, rpcserver.RPCMethod1)).
 		Add("eth_call", primarySecondary(mEth.eth_callErr, checkNil(mEth.eth_call, rpcserver.RPCMethod2))).

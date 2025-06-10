@@ -102,14 +102,6 @@ const (
 	BaseTxActionConfirmTransaction BaseTxAction = "Confirm"
 )
 
-type TransactionHeaders struct {
-	From  string              `json:"from,omitempty"`
-	To    string              `json:"to,omitempty"`
-	Nonce *pldtypes.PLDBigInt `json:"nonce,omitempty"`
-	Gas   *pldtypes.PLDBigInt `json:"gas,omitempty"`
-	Value *pldtypes.PLDBigInt `json:"value,omitempty"`
-}
-
 type BalanceManager interface {
 	GetAddressBalance(ctx context.Context, address pldtypes.EthAddress) (*AddressAccount, error)
 	NotifyAddressBalanceChanged(ctx context.Context, address pldtypes.EthAddress)
