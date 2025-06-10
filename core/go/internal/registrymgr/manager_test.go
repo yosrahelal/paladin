@@ -23,7 +23,8 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/blockindexermocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 
@@ -37,16 +38,16 @@ import (
 type mockComponents struct {
 	noInit        bool
 	db            sqlmock.Sqlmock
-	allComponents *componentmocks.AllComponents
-	blockIndexer  *componentmocks.BlockIndexer
+	allComponents *componentsmocks.AllComponents
+	blockIndexer  *blockindexermocks.BlockIndexer
 }
 
 func newTestRegistryManager(t *testing.T, realDB bool, conf *pldconf.RegistryManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *registryManager, *mockComponents, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	mc := &mockComponents{
-		blockIndexer:  componentmocks.NewBlockIndexer(t),
-		allComponents: componentmocks.NewAllComponents(t),
+		blockIndexer:  blockindexermocks.NewBlockIndexer(t),
+		allComponents: componentsmocks.NewAllComponents(t),
 	}
 	mc.allComponents.On("BlockIndexer").Return(mc.blockIndexer).Maybe()
 

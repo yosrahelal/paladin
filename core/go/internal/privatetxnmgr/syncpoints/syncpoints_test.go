@@ -19,15 +19,15 @@ package syncpoints
 import (
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/stretchr/testify/require"
 )
 
 type dependencyMocks struct {
 	persistence  *mockpersistence.SQLMockProvider
-	txMgr        *componentmocks.TXManager
-	transportMgr *componentmocks.TransportManager
+	txMgr        *componentsmocks.TXManager
+	transportMgr *componentsmocks.TransportManager
 }
 
 func newSyncPointsForTesting(t *testing.T) (*syncPoints, *dependencyMocks) {
@@ -35,8 +35,8 @@ func newSyncPointsForTesting(t *testing.T) (*syncPoints, *dependencyMocks) {
 	require.NoError(t, err)
 	mocks := &dependencyMocks{
 		persistence:  p,
-		txMgr:        componentmocks.NewTXManager(t),
-		transportMgr: componentmocks.NewTransportManager(t),
+		txMgr:        componentsmocks.NewTXManager(t),
+		transportMgr: componentsmocks.NewTransportManager(t),
 	}
 
 	return &syncPoints{
