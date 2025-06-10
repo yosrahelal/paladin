@@ -265,6 +265,55 @@ func TestGeneratePaladinAuthConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "Valid AuthConfig with secretRef (deprecated)",
+			node: &corev1alpha1.Paladin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-node",
+					Namespace: "default",
+				},
+				Spec: corev1alpha1.PaladinSpec{
+					BaseLedgerEndpoint: &corev1alpha1.BaseLedgerEndpoint{
+						Type: corev1alpha1.EndpointTypeNetwork,
+						Endpoint: &corev1alpha1.NetworkLedgerEndpoint{
+							Auth: &corev1alpha1.Auth{
+								Type:      corev1alpha1.AuthTypeSecret,
+								SecretRef: &corev1alpha1.AuthSecret{Name: "test-secret"},
+							},
+						},
+					},
+				},
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"username": []byte("testuser"),
+					"password": []byte("testpass"),
+				},
+			},
+			wantErr: false,
+			expected: &pldconf.PaladinConfig{
+				Blockchain: pldconf.EthClientConfig{
+					HTTP: pldconf.HTTPClientConfig{
+						Auth: pldconf.HTTPBasicAuthConfig{
+							Username: "testuser",
+							Password: "testpass",
+						},
+					},
+					WS: pldconf.WSClientConfig{
+						HTTPClientConfig: pldconf.HTTPClientConfig{
+							Auth: pldconf.HTTPBasicAuthConfig{
+								Username: "testuser",
+								Password: "testpass",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "Secret not found",
 			node: &corev1alpha1.Paladin{
 				ObjectMeta: metav1.ObjectMeta{

@@ -74,10 +74,10 @@ paladinNodes:
       ports:
         rpcHttp:
           port: 8548
-          nodePort: 31748
+          nodePort: 31748   # Do not set nodePort in case the service.type is not NodePort
         rpcWs:
           port: 8549
-          nodePort: 31749
+          nodePort: 31749   # Do not set nodePort in case the service.type is not NodePort
     database:
       mode: sidecarPostgres
       migrationMode: auto
@@ -262,10 +262,10 @@ paladinNodes:
     ports:
       rpcHttp:
         port: 8548
-        nodePort: 31748
+        nodePort: 31748  # Do not set nodePort in case the service.type is not NodePort
       rpcWs:
         port: 8549
-        nodePort: 31749
+        nodePort: 31749  # Do not set nodePort in case the service.type is not NodePort
   database:
     mode: sidecarPostgres
     migrationMode: auto

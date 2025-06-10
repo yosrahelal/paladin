@@ -21,7 +21,7 @@ spec:
       {{- if .baseLedgerEndpoint.endpoint.auth.enabled }}
       auth:
         type: secret
-        secretRef:
+        secret:
           name: {{ .baseLedgerEndpoint.endpoint.auth.secretName }}
       {{- end }}
     {{- else if eq .baseLedgerEndpoint.type "local" }}
