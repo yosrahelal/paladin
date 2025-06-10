@@ -234,7 +234,7 @@ func getPaladinRPC(ctx context.Context, c client.Client, rpcM *rpcClientManager,
 	// Adding the timeout to the cache key to ensure that different timeouts are cached separately
 	// This is important because the timeout is used in the HTTP client config
 	// and different timeouts may require different configurations.
-	key := fmt.Sprintf("%s-%s", nodeName, timeout)
+	key := fmt.Sprintf("%s/%s", nodeName, timeout)
 
 	// Check if the client is already in the cache
 	// Use a read lock to avoid blocking other goroutines
@@ -271,9 +271,13 @@ func getPaladinRPC(ctx context.Context, c client.Client, rpcM *rpcClientManager,
 func (r *rpcClientManager) removeNode(nodeName string) {
 	r.mux.Lock()
 	defer r.mux.Unlock()
+	var toRemove []string
 	for i := range r.clients {
-		if strings.HasPrefix(i, nodeName+"-") {
-			delete(r.clients, i) // Remove the client from the cache
+		if strings.HasPrefix(i, nodeName+"/") {
+			toRemove = append(toRemove, i)
 		}
+	}
+	for _, i := range toRemove {
+		delete(r.clients, i) // Remove the client from the cache
 	}
 }
