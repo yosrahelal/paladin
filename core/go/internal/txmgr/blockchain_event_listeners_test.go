@@ -26,7 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/blockindexermocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
@@ -43,7 +43,7 @@ var mockABI = abi.ABI{{
 var mockAddress = pldtypes.RandAddress()
 
 func TestLoadBlockchainEventListeners(t *testing.T) {
-	var blockIndexer *componentmocks.BlockIndexer
+	var blockIndexer *blockindexermocks.BlockIndexer
 	_, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.blockIndexer.On("StopEventStream", mock.Anything, mock.Anything).Return(nil)
 		blockIndexer = mc.blockIndexer
@@ -142,7 +142,7 @@ func TestStopBlockchainEventListeners(t *testing.T) {
 }
 
 func TestCreateBlockchainEventListener(t *testing.T) {
-	var blockIndexer *componentmocks.BlockIndexer
+	var blockIndexer *blockindexermocks.BlockIndexer
 	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		blockIndexer = mc.blockIndexer
 		blockIndexer.On("StopEventStream", mock.Anything, mock.Anything).Return(nil)
@@ -240,7 +240,7 @@ func TestCreateBlockchainEventListener(t *testing.T) {
 }
 
 func TestQueryBlockchainEventListeners(t *testing.T) {
-	var blockIndexer *componentmocks.BlockIndexer
+	var blockIndexer *blockindexermocks.BlockIndexer
 	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		blockIndexer = mc.blockIndexer
 	})

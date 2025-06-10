@@ -26,7 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/statemgr"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
@@ -93,7 +93,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 		mockDomainContractResolve(t, "domain2", contractAddressDomain2),
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			stateMgr = newRealStateManager(t, mc)
-			md := componentmocks.NewDomain(t)
+			md := componentsmocks.NewDomain(t)
 			md.On("Name").Return("domain1")
 			md.On("CustomHashFunction").Return(false)
 			mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)

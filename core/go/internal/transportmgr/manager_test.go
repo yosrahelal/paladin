@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/sirupsen/logrus"
@@ -36,29 +36,29 @@ import (
 )
 
 type mockComponents struct {
-	c                *componentmocks.AllComponents
+	c                *componentsmocks.AllComponents
 	db               *mockpersistence.SQLMockProvider
 	p                persistence.Persistence
-	registryManager  *componentmocks.RegistryManager
-	stateManager     *componentmocks.StateManager
-	domainManager    *componentmocks.DomainManager
-	keyManager       *componentmocks.KeyManager
-	txManager        *componentmocks.TXManager
-	privateTxManager *componentmocks.PrivateTxManager
-	identityResolver *componentmocks.IdentityResolver
-	groupManager     *componentmocks.GroupManager
+	registryManager  *componentsmocks.RegistryManager
+	stateManager     *componentsmocks.StateManager
+	domainManager    *componentsmocks.DomainManager
+	keyManager       *componentsmocks.KeyManager
+	txManager        *componentsmocks.TXManager
+	privateTxManager *componentsmocks.PrivateTxManager
+	identityResolver *componentsmocks.IdentityResolver
+	groupManager     *componentsmocks.GroupManager
 }
 
 func newMockComponents(t *testing.T, realDB bool) *mockComponents {
-	mc := &mockComponents{c: componentmocks.NewAllComponents(t)}
-	mc.registryManager = componentmocks.NewRegistryManager(t)
-	mc.stateManager = componentmocks.NewStateManager(t)
-	mc.domainManager = componentmocks.NewDomainManager(t)
-	mc.keyManager = componentmocks.NewKeyManager(t)
-	mc.txManager = componentmocks.NewTXManager(t)
-	mc.privateTxManager = componentmocks.NewPrivateTxManager(t)
-	mc.identityResolver = componentmocks.NewIdentityResolver(t)
-	mc.groupManager = componentmocks.NewGroupManager(t)
+	mc := &mockComponents{c: componentsmocks.NewAllComponents(t)}
+	mc.registryManager = componentsmocks.NewRegistryManager(t)
+	mc.stateManager = componentsmocks.NewStateManager(t)
+	mc.domainManager = componentsmocks.NewDomainManager(t)
+	mc.keyManager = componentsmocks.NewKeyManager(t)
+	mc.txManager = componentsmocks.NewTXManager(t)
+	mc.privateTxManager = componentsmocks.NewPrivateTxManager(t)
+	mc.identityResolver = componentsmocks.NewIdentityResolver(t)
+	mc.groupManager = componentsmocks.NewGroupManager(t)
 	if realDB {
 		p, cleanup, err := persistence.NewUnitTestPersistence(context.Background(), "transportmgr")
 		require.NoError(t, err)

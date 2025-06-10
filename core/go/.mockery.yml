@@ -1,0 +1,46 @@
+template: testify
+pkgname: '{{.SrcPackageName}}mocks'
+structname: '{{.InterfaceName}}'
+filename: '{{.SrcPackageName}}mocks.go'
+dir: "mocks/{{.SrcPackageName}}mocks"
+packages:
+  github.com/kaleido-io/paladin/sdk/go/pkg/rpcclient:
+    config:
+      all: true
+  github.com/kaleido-io/paladin/toolkit/pkg/rpcserver:
+    config:
+      all: true
+  github.com/kaleido-io/paladin/toolkit/pkg/signer:
+    interfaces:
+      SigningModule:
+  github.com/kaleido-io/paladin/core/pkg/blockindexer:
+    interfaces:
+      BlockIndexer:
+  github.com/kaleido-io/paladin/core/pkg/ethclient:
+    config:
+      all: true
+  github.com/kaleido-io/paladin/core/internal/components:
+    config:
+      all: true
+    interfaces:
+      KeyManager:    
+  github.com/kaleido-io/paladin/core/internal/componentmgr:
+    config:
+      all: true
+  github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes:
+    config:
+      all: true
+    interfaces:
+      TransactionFlow:
+        config:
+          dir: "{{.InterfaceDir}}"
+          filename: "mock_transaction_flow.go"
+          pkgname: '{{.SrcPackageName}}'
+          structname: 'Mock{{.InterfaceName}}'
+  github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints:
+    config:
+      all: true
+  github.com/kaleido-io/paladin/core/internal/publictxmgr:
+    interfaces:
+      InFlightStageActionTriggers:
+

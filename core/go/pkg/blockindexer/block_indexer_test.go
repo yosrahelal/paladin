@@ -220,11 +220,13 @@ func mockBlocksRPCCalls(mRPC *rpcclientmocks.WSClient, blocks []*BlockInfoJSONRP
 }
 
 func mockBlocksRPCCallsDynamic(mRPC *rpcclientmocks.WSClient, dynamic func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC)) {
-	byBlock := mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.Anything, true).Maybe()
+	byBlock := mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.MatchedBy(func(params []interface{}) bool {
+		return params[1].(bool)
+	})).Maybe()
 	byBlock.Run(func(args mock.Arguments) {
 		blocks, _ := dynamic(args)
 		blockReturn := args[1].(**BlockInfoJSONRPC)
-		blockNumber := int(args[3].(ethtypes.HexUint64))
+		blockNumber := int((args[3].([]interface{})[0].(ethtypes.HexUint64)))
 		if blockNumber >= len(blocks) {
 			byBlock.Return(rpcclient.WrapRPCError(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 		} else {
@@ -237,7 +239,7 @@ func mockBlocksRPCCallsDynamic(mRPC *rpcclientmocks.WSClient, dynamic func(args 
 	blockReceipts.Run(func(args mock.Arguments) {
 		_, receipts := dynamic(args)
 		blockReturn := args[1].(*[]*TXReceiptJSONRPC)
-		blockHash := args[3].(ethtypes.HexBytes0xPrefix)
+		blockHash := args[3].([]interface{})[0].(ethtypes.HexBytes0xPrefix)
 		*blockReturn = receipts[blockHash.String()]
 		if *blockReturn == nil {
 			blockReceipts.Return(rpcclient.WrapRPCError(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
@@ -250,7 +252,7 @@ func mockBlocksRPCCallsDynamic(mRPC *rpcclientmocks.WSClient, dynamic func(args 
 	txReceipt.Run(func(args mock.Arguments) {
 		_, receipts := dynamic(args)
 		blockReturn := args[1].(**TXReceiptJSONRPC)
-		txHash := args[3].(ethtypes.HexBytes0xPrefix)
+		txHash := args[3].([]interface{})[0].(ethtypes.HexBytes0xPrefix)
 		for _, receipts := range receipts {
 			for _, r := range receipts {
 				if txHash.String() == r.TransactionHash.String() {
@@ -679,7 +681,7 @@ func testBlockIndexerHandleReorgInConfirmationWindow(t *testing.T, blockLenBefor
 	mockBlocksRPCCallsDynamic(mRPC, func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC) {
 		blockNumber := -1
 		if args[2].(string) == "eth_getBlockByNumber" {
-			blockNumber = int(args[3].(ethtypes.HexUint64))
+			blockNumber = int(args[3].([]interface{})[0].(ethtypes.HexUint64))
 		}
 		if isAfterReorg.Load() {
 			return blocksAfterReorg, receipts
@@ -739,7 +741,7 @@ func TestBlockIndexerHandleRandomConflictingBlockNotification(t *testing.T) {
 	randBlockHandled := make(chan struct{}) // <- New sync point
 
 	mockBlocksRPCCallsDynamic(mRPC, func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC) {
-		if !sentRandom && args[3].(ethtypes.HexUint64) == 4 {
+		if !sentRandom && args[3].([]interface{})[0].(ethtypes.HexUint64) == 4 {
 			sentRandom = true
 
 			// Use goroutine to avoid blocking and signal completion
@@ -778,7 +780,7 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 	mockBlocksRPCCallsDynamic(mRPC, func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC) {
 		if !sentFail &&
 			args[2].(string) == "eth_getBlockReceipts" &&
-			args[3].(ethtypes.HexBytes0xPrefix).Equals(blocks[2].Hash) {
+			args[3].([]interface{})[0].(ethtypes.HexBytes0xPrefix).Equals(blocks[2].Hash) {
 			sentFail = true
 			// Send back a not found, to send us round the reset loop
 			return []*BlockInfoJSONRPC{}, map[string][]*TXReceiptJSONRPC{}
