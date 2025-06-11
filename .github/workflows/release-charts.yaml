@@ -173,5 +173,7 @@ jobs:
           path: |
               ${{ github.workspace }}/artifacts/basenet.yaml
               ${{ github.workspace }}/artifacts/devnet.yaml
+              ${{ github.workspace }}/artifacts/customnet.yaml
+              ${{ github.workspace }}/artifacts/attach.yaml
               ${{ github.workspace }}/artifacts/artifacts.tar.gz
  
