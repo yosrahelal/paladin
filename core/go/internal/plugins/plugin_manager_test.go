@@ -23,7 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -66,8 +66,8 @@ type testManagers struct {
 	testKeyManager       *testKeyManager
 }
 
-func (tm *testManagers) componentMocks(t *testing.T) *componentmocks.AllComponents {
-	mc := componentmocks.NewAllComponents(t)
+func (tm *testManagers) componentsmocks(t *testing.T) *componentsmocks.AllComponents {
+	mc := componentsmocks.NewAllComponents(t)
 	if tm.testDomainManager == nil {
 		tm.testDomainManager = &testDomainManager{}
 	}
@@ -112,7 +112,7 @@ func newTestPluginManager(t *testing.T, setup *testManagers) *pluginManager {
 			ShutdownTimeout: confutil.P("1ms"),
 		},
 	})
-	mc := setup.componentMocks(t)
+	mc := setup.componentsmocks(t)
 	ir, err := pc.PreInit(mc)
 	assert.NotNil(t, ir)
 	require.NoError(t, err)
@@ -134,7 +134,7 @@ func TestInitPluginManagerBadPlugin(t *testing.T) {
 		"!badname": &mockPlugin[prototk.DomainMessage]{t: t},
 	}}
 	pc := NewPluginManager(context.Background(), tempUDS(t), uuid.New(), &pldconf.PluginManagerConfig{})
-	err := pc.PostInit((&testManagers{testDomainManager: tdm}).componentMocks(t))
+	err := pc.PostInit((&testManagers{testDomainManager: tdm}).componentsmocks(t))
 	assert.Regexp(t, "PD020005", err)
 }
 
@@ -143,7 +143,7 @@ func TestInitPluginManagerBadSocket(t *testing.T) {
 		t.TempDir(), /* can't use a dir as a socket */
 		uuid.New(), &pldconf.PluginManagerConfig{},
 	)
-	err := pc.PostInit((&testManagers{}).componentMocks(t))
+	err := pc.PostInit((&testManagers{}).componentsmocks(t))
 	require.NoError(t, err)
 
 	err = pc.Start()
@@ -161,7 +161,7 @@ func TestInitPluginManagerUDSTooLong(t *testing.T) {
 		uuid.New(), &pldconf.PluginManagerConfig{},
 	)
 
-	err := pc.PostInit((&testManagers{}).componentMocks(t))
+	err := pc.PostInit((&testManagers{}).componentsmocks(t))
 	assert.Regexp(t, "PD011204", err)
 }
 
@@ -175,7 +175,7 @@ func TestInitPluginManagerTCP4(t *testing.T) {
 		"tcp4:127.0.0.1:0",
 		uuid.New(), &pldconf.PluginManagerConfig{},
 	)
-	err := pc.PostInit((&testManagers{}).componentMocks(t))
+	err := pc.PostInit((&testManagers{}).componentsmocks(t))
 	require.NoError(t, err)
 
 	err = pc.Start()
@@ -193,7 +193,7 @@ func TestInitPluginManagerTCP6(t *testing.T) {
 		"tcp6:[::1]:0",
 		uuid.New(), &pldconf.PluginManagerConfig{},
 	)
-	err := pc.PostInit((&testManagers{}).componentMocks(t))
+	err := pc.PostInit((&testManagers{}).componentsmocks(t))
 	require.NoError(t, err)
 
 	err = pc.Start()
@@ -203,7 +203,7 @@ func TestInitPluginManagerTCP6(t *testing.T) {
 
 func TestNotifyPluginUpdateNotStarted(t *testing.T) {
 	pc := NewPluginManager(context.Background(), tempUDS(t), uuid.New(), &pldconf.PluginManagerConfig{})
-	err := pc.PostInit((&testManagers{}).componentMocks(t))
+	err := pc.PostInit((&testManagers{}).componentsmocks(t))
 	require.NoError(t, err)
 
 	err = pc.WaitForInit(context.Background())
@@ -242,7 +242,7 @@ func TestLoaderErrors(t *testing.T) {
 				ShutdownTimeout: confutil.P("1ms"),
 			},
 		})
-	err := pc.PostInit((&testManagers{testDomainManager: tdm}).componentMocks(t))
+	err := pc.PostInit((&testManagers{testDomainManager: tdm}).componentsmocks(t))
 	require.NoError(t, err)
 
 	err = pc.Start()

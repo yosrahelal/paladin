@@ -24,9 +24,9 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
-	"github.com/kaleido-io/paladin/core/mocks/prvtxsyncpointsmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
+	"github.com/kaleido-io/paladin/core/mocks/ptmgrtypesmocks"
+	"github.com/kaleido-io/paladin/core/mocks/syncpointsmocks"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -38,41 +38,41 @@ import (
 )
 
 type transactionFlowDepencyMocks struct {
-	allComponents       *componentmocks.AllComponents
-	domainSmartContract *componentmocks.DomainSmartContract
-	domainContext       *componentmocks.DomainContext
-	domainMgr           *componentmocks.DomainManager
-	transportManager    *componentmocks.TransportManager
-	stateStore          *componentmocks.StateManager
-	keyManager          *componentmocks.KeyManager
-	endorsementGatherer *privatetxnmgrmocks.EndorsementGatherer
-	publisher           *privatetxnmgrmocks.Publisher
-	identityResolver    *componentmocks.IdentityResolver
-	syncPoints          *prvtxsyncpointsmocks.SyncPoints
-	transportWriter     *privatetxnmgrmocks.TransportWriter
-	environment         *privatetxnmgrmocks.SequencerEnvironment
-	coordinatorSelector *privatetxnmgrmocks.CoordinatorSelector
-	localAssembler      *privatetxnmgrmocks.LocalAssembler
+	allComponents       *componentsmocks.AllComponents
+	domainSmartContract *componentsmocks.DomainSmartContract
+	domainContext       *componentsmocks.DomainContext
+	domainMgr           *componentsmocks.DomainManager
+	transportManager    *componentsmocks.TransportManager
+	stateStore          *componentsmocks.StateManager
+	keyManager          *componentsmocks.KeyManager
+	endorsementGatherer *ptmgrtypesmocks.EndorsementGatherer
+	publisher           *ptmgrtypesmocks.Publisher
+	identityResolver    *componentsmocks.IdentityResolver
+	syncPoints          *syncpointsmocks.SyncPoints
+	transportWriter     *ptmgrtypesmocks.TransportWriter
+	environment         *ptmgrtypesmocks.SequencerEnvironment
+	coordinatorSelector *ptmgrtypesmocks.CoordinatorSelector
+	localAssembler      *ptmgrtypesmocks.LocalAssembler
 }
 
 func newTransactionFlowForTesting(t *testing.T, ctx context.Context, transaction *components.PrivateTransaction, nodeName string) (*transactionFlow, *transactionFlowDepencyMocks) {
 
 	mocks := &transactionFlowDepencyMocks{
-		allComponents:       componentmocks.NewAllComponents(t),
-		domainSmartContract: componentmocks.NewDomainSmartContract(t),
-		domainContext:       componentmocks.NewDomainContext(t),
-		domainMgr:           componentmocks.NewDomainManager(t),
-		transportManager:    componentmocks.NewTransportManager(t),
-		stateStore:          componentmocks.NewStateManager(t),
-		keyManager:          componentmocks.NewKeyManager(t),
-		endorsementGatherer: privatetxnmgrmocks.NewEndorsementGatherer(t),
-		publisher:           privatetxnmgrmocks.NewPublisher(t),
-		identityResolver:    componentmocks.NewIdentityResolver(t),
-		syncPoints:          prvtxsyncpointsmocks.NewSyncPoints(t),
-		transportWriter:     privatetxnmgrmocks.NewTransportWriter(t),
-		environment:         privatetxnmgrmocks.NewSequencerEnvironment(t),
-		coordinatorSelector: privatetxnmgrmocks.NewCoordinatorSelector(t),
-		localAssembler:      privatetxnmgrmocks.NewLocalAssembler(t),
+		allComponents:       componentsmocks.NewAllComponents(t),
+		domainSmartContract: componentsmocks.NewDomainSmartContract(t),
+		domainContext:       componentsmocks.NewDomainContext(t),
+		domainMgr:           componentsmocks.NewDomainManager(t),
+		transportManager:    componentsmocks.NewTransportManager(t),
+		stateStore:          componentsmocks.NewStateManager(t),
+		keyManager:          componentsmocks.NewKeyManager(t),
+		endorsementGatherer: ptmgrtypesmocks.NewEndorsementGatherer(t),
+		publisher:           ptmgrtypesmocks.NewPublisher(t),
+		identityResolver:    componentsmocks.NewIdentityResolver(t),
+		syncPoints:          syncpointsmocks.NewSyncPoints(t),
+		transportWriter:     ptmgrtypesmocks.NewTransportWriter(t),
+		environment:         ptmgrtypesmocks.NewSequencerEnvironment(t),
+		coordinatorSelector: ptmgrtypesmocks.NewCoordinatorSelector(t),
+		localAssembler:      ptmgrtypesmocks.NewLocalAssembler(t),
 	}
 	contractAddress := pldtypes.RandAddress()
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
@@ -85,7 +85,7 @@ func newTransactionFlowForTesting(t *testing.T, ctx context.Context, transaction
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	}).Maybe()
 
-	domain := componentmocks.NewDomain(t)
+	domain := componentsmocks.NewDomain(t)
 	domain.On("Configuration").Return(&prototk.DomainConfig{}).Maybe()
 	mocks.domainSmartContract.On("Domain").Return(domain).Maybe()
 
