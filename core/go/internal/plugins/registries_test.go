@@ -24,7 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -53,8 +53,8 @@ func registryHeaderAccessor(msg *prototk.RegistryMessage) *prototk.Header {
 	return msg.Header
 }
 
-func (tp *testRegistryManager) mock(t *testing.T) *componentmocks.RegistryManager {
-	mdm := componentmocks.NewRegistryManager(t)
+func (tp *testRegistryManager) mock(t *testing.T) *componentsmocks.RegistryManager {
+	mdm := componentsmocks.NewRegistryManager(t)
 	pluginMap := make(map[string]*pldconf.PluginConfig)
 	for name := range tp.registries {
 		pluginMap[name] = &pldconf.PluginConfig{

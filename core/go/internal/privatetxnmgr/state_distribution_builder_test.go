@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
@@ -28,10 +28,10 @@ import (
 )
 
 func newTestStateDistributionBuilder(t *testing.T, tx *components.PrivateTransaction) (context.Context, *stateDistributionBuilder) {
-	mt := componentmocks.NewTransportManager(t)
+	mt := componentsmocks.NewTransportManager(t)
 	mt.On("LocalNodeName").Return("node1")
 
-	mc := componentmocks.NewAllComponents(t)
+	mc := componentsmocks.NewAllComponents(t)
 	mc.On("TransportManager").Return(mt)
 
 	return context.Background(), newStateDistributionBuilder(mc, tx)

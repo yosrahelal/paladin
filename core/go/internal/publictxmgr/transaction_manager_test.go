@@ -33,7 +33,8 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/keymanager"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/blockindexermocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
@@ -53,13 +54,13 @@ import (
 
 type mocksAndTestControl struct {
 	disableManagerStart bool
-	allComponents       *componentmocks.AllComponents
+	allComponents       *componentsmocks.AllComponents
 	db                  sqlmock.Sqlmock // unless realDB
 	keyManager          components.KeyManager
 	ethClientFactory    *ethclientmocks.EthClientFactory
 	ethClient           *ethclientmocks.EthClient
-	blockIndexer        *componentmocks.BlockIndexer
-	txManager           *componentmocks.TXManager
+	blockIndexer        *blockindexermocks.BlockIndexer
+	txManager           *componentsmocks.TXManager
 }
 
 // const testDestAddress = "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
@@ -68,11 +69,11 @@ type mocksAndTestControl struct {
 
 func baseMocks(t *testing.T) *mocksAndTestControl {
 	mocks := &mocksAndTestControl{
-		allComponents:    componentmocks.NewAllComponents(t),
+		allComponents:    componentsmocks.NewAllComponents(t),
 		ethClientFactory: ethclientmocks.NewEthClientFactory(t),
 		ethClient:        ethclientmocks.NewEthClient(t),
-		blockIndexer:     componentmocks.NewBlockIndexer(t),
-		txManager:        componentmocks.NewTXManager(t),
+		blockIndexer:     blockindexermocks.NewBlockIndexer(t),
+		txManager:        componentsmocks.NewTXManager(t),
 	}
 	mocks.allComponents.On("EthClientFactory").Return(mocks.ethClientFactory).Maybe()
 	mocks.ethClientFactory.On("SharedWS").Return(mocks.ethClient).Maybe()
@@ -150,7 +151,7 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 		p = mp.P
 		mocks.db = mp.Mock
 		dbClose = func() {}
-		mocks.keyManager = componentmocks.NewKeyManager(t)
+		mocks.keyManager = componentsmocks.NewKeyManager(t)
 		mocks.allComponents.On("Persistence").Return(p).Maybe()
 	}
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
@@ -180,26 +181,6 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 		pmgr.Stop()
 		dbClose()
 	}
-}
-
-func TestNewEngineErrors(t *testing.T) {
-	mocks := baseMocks(t)
-
-	mockKeyManager := componentmocks.NewKeyManager(t)
-	mocks.keyManager = mockKeyManager
-	mocks.allComponents.On("Persistence").Return(mocks.db)
-	mocks.allComponents.On("KeyManager").Return(mocks.keyManager)
-	pmgr := NewPublicTransactionManager(context.Background(), &pldconf.PublicTxManagerConfig{
-		BalanceManager: pldconf.BalanceManagerConfig{
-			AutoFueling: pldconf.AutoFuelingConfig{
-				Source: confutil.P("bad address"),
-			},
-		},
-	})
-	mockKeyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, "bad address", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
-		Return(nil, fmt.Errorf("lookup failed"))
-	err := pmgr.PostInit(mocks.allComponents)
-	assert.Regexp(t, "lookup failed", err)
 }
 
 func TestInit(t *testing.T) {

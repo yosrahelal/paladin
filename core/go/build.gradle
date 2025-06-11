@@ -162,79 +162,8 @@ task goGet(type:Exec, dependsOn:[protoc, copyContracts, ":toolkit:go:goGet"]) {
     args 'get'
 }
 
-task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
-    args '--case', 'underscore'
-    mock {
-        inputDir "go list -f {{.Dir}} github.com/kaleido-io/paladin/sdk/go/pkg/rpcclient".execute().text.trim()
-        includeAll true
-        outputPackage 'rpcclientmocks'
-        outputDir 'mocks/rpcclientmocks'
-    }
-    mock {
-        inputDir 'internal/publictxmgr'
-        name 'InFlightStageActionTriggers'
-        outputPackage 'publictxmocks'
-        outputDir 'mocks/publictxmocks'
-    }
-    mock {
-        inputDir 'internal/privatetxnmgr/ptmgrtypes'
-        includeAll true
-        outputPackage 'privatetxnmgrmocks'
-        outputDir 'mocks/privatetxnmgrmocks'
-    }
-    mock {
-        inputDir 'internal/privatetxnmgr/syncpoints'
-        includeAll true
-        outputPackage 'prvtxsyncpointsmocks'
-        outputDir 'mocks/prvtxsyncpointsmocks'
-    }
-    mock {
-        inputDir 'internal/components'
-        includeAll true
-        outputPackage 'componentmocks'
-        outputDir 'mocks/componentmocks'
-    }
-    mock {
-        inputDir 'internal/componentmgr'
-        name 'ComponentManager'
-        outputPackage 'componentmocks'
-        outputDir 'mocks/componentmocks'
-    }
-    mock {
-        inputDir 'pkg/blockindexer'
-        name 'BlockIndexer'
-        outputPackage 'componentmocks'
-        outputDir 'mocks/componentmocks'
-    }
-    mock {
-        inputDir 'internal/components'
-        name 'PublicTxManager'
-        outputPackage 'componentmocks'
-        outputDir 'mocks/componentmocks'
-    }
-    mock {
-        inputDir "go list -f {{.Dir}} github.com/kaleido-io/paladin/toolkit/pkg/rpcserver".execute().text.trim()
-        includeAll true
-        outputPackage 'componentmocks'
-        outputDir 'mocks/componentmocks'
-    }
-    mock {
-        inputDir "go list -f {{.Dir}} github.com/kaleido-io/paladin/toolkit/pkg/signer".execute().text.trim()
-        name 'SigningModule'
-        outputPackage 'signermocks'
-        outputDir 'mocks/signermocks'
-    }
-    mock {
-        inputDir 'pkg/ethclient'
-        includeAll true
-        outputPackage 'ethclientmocks'
-        outputDir 'mocks/ethclientmocks'
-    }
-    mock {
-        inputDir 'internal/privatetxnmgr/ptmgrtypes'
-        name "TransactionFlow"
-        inpackage true
-    }
+task makeMocks(type: Exec, dependsOn: [":installMockery", protoc, goGet]) {
+   executable "mockery"
 }
 
 task clean(type: Delete, dependsOn: ':testinfra:stopTestInfra') {

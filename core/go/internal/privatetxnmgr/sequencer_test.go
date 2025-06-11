@@ -25,8 +25,8 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
+	"github.com/kaleido-io/paladin/core/mocks/ptmgrtypesmocks"
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
@@ -38,21 +38,21 @@ import (
 )
 
 type sequencerDepencyMocks struct {
-	allComponents       *componentmocks.AllComponents
-	privateTxManager    *componentmocks.PrivateTxManager
-	domainSmartContract *componentmocks.DomainSmartContract
-	domainContext       *componentmocks.DomainContext
-	domainMgr           *componentmocks.DomainManager
-	domain              *componentmocks.Domain
-	transportManager    *componentmocks.TransportManager
-	stateStore          *componentmocks.StateManager
-	keyManager          *componentmocks.KeyManager
-	endorsementGatherer *privatetxnmgrmocks.EndorsementGatherer
-	publisher           *privatetxnmgrmocks.Publisher
-	identityResolver    *componentmocks.IdentityResolver
-	txManager           *componentmocks.TXManager
-	pubTxManager        *componentmocks.PublicTxManager
-	transportWriter     *privatetxnmgrmocks.TransportWriter
+	allComponents       *componentsmocks.AllComponents
+	privateTxManager    *componentsmocks.PrivateTxManager
+	domainSmartContract *componentsmocks.DomainSmartContract
+	domainContext       *componentsmocks.DomainContext
+	domainMgr           *componentsmocks.DomainManager
+	domain              *componentsmocks.Domain
+	transportManager    *componentsmocks.TransportManager
+	stateStore          *componentsmocks.StateManager
+	keyManager          *componentsmocks.KeyManager
+	endorsementGatherer *ptmgrtypesmocks.EndorsementGatherer
+	publisher           *ptmgrtypesmocks.Publisher
+	identityResolver    *componentsmocks.IdentityResolver
+	txManager           *componentsmocks.TXManager
+	pubTxManager        *componentsmocks.PublicTxManager
+	transportWriter     *ptmgrtypesmocks.TransportWriter
 }
 
 func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *pldtypes.EthAddress) (*Sequencer, *sequencerDepencyMocks, func()) {
@@ -61,21 +61,21 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *pl
 	}
 
 	mocks := &sequencerDepencyMocks{
-		allComponents:       componentmocks.NewAllComponents(t),
-		privateTxManager:    componentmocks.NewPrivateTxManager(t),
-		domainSmartContract: componentmocks.NewDomainSmartContract(t),
-		domainContext:       componentmocks.NewDomainContext(t),
-		domainMgr:           componentmocks.NewDomainManager(t),
-		domain:              componentmocks.NewDomain(t),
-		transportManager:    componentmocks.NewTransportManager(t),
-		stateStore:          componentmocks.NewStateManager(t),
-		keyManager:          componentmocks.NewKeyManager(t),
-		endorsementGatherer: privatetxnmgrmocks.NewEndorsementGatherer(t),
-		publisher:           privatetxnmgrmocks.NewPublisher(t),
-		identityResolver:    componentmocks.NewIdentityResolver(t),
-		txManager:           componentmocks.NewTXManager(t),
-		pubTxManager:        componentmocks.NewPublicTxManager(t),
-		transportWriter:     privatetxnmgrmocks.NewTransportWriter(t),
+		allComponents:       componentsmocks.NewAllComponents(t),
+		privateTxManager:    componentsmocks.NewPrivateTxManager(t),
+		domainSmartContract: componentsmocks.NewDomainSmartContract(t),
+		domainContext:       componentsmocks.NewDomainContext(t),
+		domainMgr:           componentsmocks.NewDomainManager(t),
+		domain:              componentsmocks.NewDomain(t),
+		transportManager:    componentsmocks.NewTransportManager(t),
+		stateStore:          componentsmocks.NewStateManager(t),
+		keyManager:          componentsmocks.NewKeyManager(t),
+		endorsementGatherer: ptmgrtypesmocks.NewEndorsementGatherer(t),
+		publisher:           ptmgrtypesmocks.NewPublisher(t),
+		identityResolver:    componentsmocks.NewIdentityResolver(t),
+		txManager:           componentsmocks.NewTXManager(t),
+		pubTxManager:        componentsmocks.NewPublicTxManager(t),
+		transportWriter:     ptmgrtypesmocks.NewTransportWriter(t),
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
