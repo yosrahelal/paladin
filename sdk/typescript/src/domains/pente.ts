@@ -132,6 +132,23 @@ export class PenteFactory {
       ? undefined
       : new PentePrivacyGroup(this.paladin, group, this.options);
   }
+
+  async resumePrivacyGroup(
+    paladinClient: PaladinClient,
+    input: IPrivacyGroup,
+    options?: PenteOptions
+  ) {
+    return new PentePrivacyGroup(
+      paladinClient,
+      {
+        id: input.id,
+        domain: input.domain,
+        members: input.members,
+        contractAddress: input.contractAddress,
+      },
+      options
+    );
+  }
 }
 
 export class PentePrivacyGroup {

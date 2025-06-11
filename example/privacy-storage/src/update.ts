@@ -35,16 +35,15 @@ async function main(): Promise<boolean> {
 
   // Step 1: Create a privacy group for members
   logger.log("Recreating a privacy group for Node1 and Node2...");
-  const existingPrivacyMemberGroup = new PentePrivacyGroup(
+  const penteFactory = new PenteFactory(paladinNode1, "pente");
+  const existingPrivacyMemberGroup = await penteFactory.resumePrivacyGroup(
     paladinNode1,
     {
       id: groupId,
       domain: "pente",
-      created: new Date().toISOString(),
-      members: ["member@node2", "outsider@node3"],
+      members: [verifierNode2.lookup, verifierNode2.lookup],
       contractAddress: groupAddress,
-    },
-    {}
+    }
   );
 
   // Step 3: Use the deployed contract for private storage
