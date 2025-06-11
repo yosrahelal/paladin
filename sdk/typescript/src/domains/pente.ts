@@ -134,15 +134,14 @@ export class PenteFactory {
   }
 
   async resumePrivacyGroup(
-    paladinClient: PaladinClient,
     input: IPrivacyGroup,
     options?: PenteOptions
   ) {
     return new PentePrivacyGroup(
-      paladinClient,
+      this.paladin,
       {
         id: input.id,
-        domain: input.domain,
+        domain: this.domain,
         members: input.members,
         contractAddress: input.contractAddress,
       },

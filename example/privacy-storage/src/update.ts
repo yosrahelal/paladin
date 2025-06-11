@@ -37,10 +37,9 @@ async function main(): Promise<boolean> {
   logger.log("Recreating a privacy group for Node1 and Node2...");
   const penteFactory = new PenteFactory(paladinNode1, "pente");
   const existingPrivacyMemberGroup = await penteFactory.resumePrivacyGroup(
-    paladinNode1,
     {
       id: groupId,
-      domain: "pente",
+      domain: penteFactory.domain,
       members: [verifierNode2.lookup, verifierNode2.lookup],
       contractAddress: groupAddress,
     }
