@@ -25,7 +25,7 @@ async function main(): Promise<boolean> {
     return false;
   }
   const groupAddress = process.argv[2];
-  const gropuID = process.argv[3];
+  const groupId = process.argv[3];
   const contractAddress = process.argv[4];
 
   // Get verifiers for each node
@@ -39,7 +39,7 @@ async function main(): Promise<boolean> {
   const existingPrivacyMemberGroup = new PentePrivacyGroup(
     paladinNode1,
     {
-      id: gropuID,
+      id: groupId,
       domain: "pente",
       created: new Date().toISOString(),
       members: ["member@node2", "outsider@node3"],
