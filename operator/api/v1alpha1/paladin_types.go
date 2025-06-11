@@ -198,7 +198,10 @@ type Auth struct {
 	Type AuthType `json:"type"`
 
 	// Secret is used to provide the name of the secret to use for authentication
-	Secret *AuthSecret `json:"secretRef,omitempty"`
+	Secret *AuthSecret `json:"secret,omitempty"`
+
+	// SecretRef is used to provide the name of the secret to use for authentication (deprecated, use secret)
+	SecretRef *AuthSecret `json:"secretRef,omitempty"`
 
 	// Auth details are provided inline (not recommended)
 	Inline *AuthInline `json:"inline,omitempty"`

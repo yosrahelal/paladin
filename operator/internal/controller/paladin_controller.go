@@ -805,12 +805,17 @@ func (r *PaladinReconciler) generatePaladinAuthConfig(ctx context.Context, node 
 
 	switch authConfig.Type {
 	case corev1alpha1.AuthTypeSecret:
-		if authConfig.Secret == nil {
-			return fmt.Errorf("AuthSecret must be provided when using AuthTypeSecret")
+		authConfigSec := authConfig.Secret
+		if authConfigSec == nil {
+			// fallback to deprecated authConfig.SecretRef
+			authConfigSec = authConfig.SecretRef
 		}
-		secretName := authConfig.Secret.Name
+		if authConfigSec == nil {
+			return fmt.Errorf("authConfig.Secret must be provided when using AuthTypeSecret")
+		}
+		secretName := authConfigSec.Name
 		if secretName == "" {
-			return fmt.Errorf("AuthSecret must be provided when using AuthTypeSecret")
+			return fmt.Errorf("authConfig.Secret.Name must be provided when using AuthTypeSecret")
 		}
 		sec := &corev1.Secret{}
 		if err := r.Client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: node.Namespace}, sec); err != nil {
