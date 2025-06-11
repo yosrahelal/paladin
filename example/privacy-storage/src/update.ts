@@ -35,7 +35,6 @@ async function main(): Promise<boolean> {
 
   // Step 1: Create a privacy group for members
   logger.log("Recreating a privacy group for Node1 and Node2...");
-  //const penteFactory = new PenteFactory(paladinNode1, "pente");
   const existingPrivacyMemberGroup = new PentePrivacyGroup(
     paladinNode1,
     {
