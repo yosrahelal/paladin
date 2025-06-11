@@ -86,8 +86,8 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").
 		Return([]*components.RegistryNodeTransportEntry{ /* contents not checked */ }, nil)
 
-	mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm *pldapi.ReliableMessage) bool {
-		return rm.MessageType.V() == pldapi.RMTPrivacyGroupMessage
+	mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm []*pldapi.ReliableMessage) bool {
+		return rm[0].MessageType.V() == pldapi.RMTPrivacyGroupMessage
 	})).Return(nil)
 
 	groupIDs := createTestGroups(t, ctx, mc, gm,
@@ -232,8 +232,8 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 	mc.registryManager.On("GetNodeTransports", mock.Anything, "node2").
 		Return([]*components.RegistryNodeTransportEntry{ /* contents not checked */ }, nil)
 
-	mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm *pldapi.ReliableMessage) bool {
-		return rm.MessageType.V() == pldapi.RMTPrivacyGroupMessage
+	mc.transportManager.On("SendReliable", mock.Anything, mock.Anything, mock.MatchedBy(func(rm []*pldapi.ReliableMessage) bool {
+		return rm[0].MessageType.V() == pldapi.RMTPrivacyGroupMessage
 	})).Return(nil)
 
 	groupIDs := createTestGroups(t, ctx, mc, gm,

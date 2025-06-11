@@ -19,6 +19,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -28,7 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
@@ -287,6 +288,94 @@ func TestResolveFunctionPlainNameOK(t *testing.T) {
 		ABI: exampleABI,
 	})
 	assert.NoError(t, err)
+}
+
+func TestSubmitEthAddrOK(t *testing.T) {
+	addr := pldtypes.RandAddress()
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		mockInsertABIAndTransactionOK(true),
+		mockSubmitPublicTxOk(t, addr),
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mapping := &pldapi.KeyMappingAndVerifier{
+				KeyMappingWithPath: &pldapi.KeyMappingWithPath{
+					KeyMapping: &pldapi.KeyMapping{
+						Identifier: "sender1",
+					},
+				},
+			}
+			mc.keyManager.On("ReverseKeyLookup", mock.Anything, mock.Anything, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, addr.String()).Return(mapping, nil)
+		},
+	)
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransactionNewDBTX(ctx, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type:     pldapi.TransactionTypePublic.Enum(),
+			From:     fmt.Sprintf("eth_address:%s", addr.String()),
+			Function: "doIt",
+			To:       pldtypes.MustEthAddress(pldtypes.RandHex(20)),
+			Data:     pldtypes.JSONString(pldtypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.NoError(t, err)
+}
+
+func TestSubmitVerifierNotEthAddr(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		mockInsertABI,
+	)
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransactionNewDBTX(ctx, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type:     pldapi.TransactionTypePublic.Enum(),
+			From:     "eth_address:banana",
+			Function: "doIt",
+			To:       pldtypes.MustEthAddress(pldtypes.RandHex(20)),
+			Data:     pldtypes.JSONString(pldtypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.ErrorContains(t, err, "PD012253")
+}
+
+func TestSubmitVerifierNotFound(t *testing.T) {
+	addr := pldtypes.RandAddress()
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		mockInsertABI,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.keyManager.On("ReverseKeyLookup", mock.Anything, mock.Anything, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, addr.String()).Return(nil, errors.New("not found"))
+		},
+	)
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransactionNewDBTX(ctx, &pldapi.TransactionInput{
+		TransactionBase: pldapi.TransactionBase{
+			Type:     pldapi.TransactionTypePublic.Enum(),
+			From:     fmt.Sprintf("eth_address:%s", addr.String()),
+			Function: "doIt",
+			To:       pldtypes.MustEthAddress(pldtypes.RandHex(20)),
+			Data:     pldtypes.JSONString(pldtypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.ErrorContains(t, err, "not found")
 }
 
 func TestSendTransactionPrivateDeploy(t *testing.T) {
@@ -1259,7 +1348,7 @@ func TestUpdateTransactionKeyResolutionError(t *testing.T) {
 				Return(map[uuid.UUID][]*pldapi.PublicTx{
 					id: {{LocalID: confutil.P(uint64(1))}},
 				}, nil)
-			kr := componentmocks.NewKeyResolver(t)
+			kr := componentsmocks.NewKeyResolver(t)
 			kr.On("ResolveKey", mock.Anything, "identity", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(kr)
 		},
@@ -1298,7 +1387,7 @@ func TestUpdateTransactionKeyParseError(t *testing.T) {
 				Return(map[uuid.UUID][]*pldapi.PublicTx{
 					id: {{LocalID: confutil.P(uint64(1))}},
 				}, nil)
-			kr := componentmocks.NewKeyResolver(t)
+			kr := componentsmocks.NewKeyResolver(t)
 			kr.On("ResolveKey", mock.Anything, "identity", mock.Anything, mock.Anything).Return(&pldapi.KeyMappingAndVerifier{
 				Verifier: &pldapi.KeyVerifier{
 					Verifier: "not an eth address",

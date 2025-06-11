@@ -52,7 +52,7 @@ func mockBlockListenerNil(mRPC *rpcclientmocks.WSClient) {
 		hbh := args[1].(*string)
 		*hbh = "filter_id1"
 	}).Maybe()
-	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getFilterChanges", "filter_id1").Return(nil).Run(func(args mock.Arguments) {
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getFilterChanges", []interface{}{"filter_id1"}).Return(nil).Run(func(args mock.Arguments) {
 		hbh := args[1].(*[]ethtypes.HexBytes0xPrefix)
 		*hbh = []ethtypes.HexBytes0xPrefix{}
 	}).Maybe()
@@ -1064,9 +1064,9 @@ func TestProcessCatchupEventPageFailRPC(t *testing.T) {
 	txHash := pldtypes.MustParseBytes32(pldtypes.RandHex(32))
 
 	bi.retry.UTSetMaxAttempts(2)
-	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.MustNewHexBytes0xPrefix(txHash.String())).
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", []interface{}{ethtypes.MustNewHexBytes0xPrefix(txHash.String())}).
 		Return(rpcclient.WrapRPCError(rpcclient.RPCCodeInternalError, fmt.Errorf("pop"))).Once()
-	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.MustNewHexBytes0xPrefix(txHash.String())).
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", []interface{}{ethtypes.MustNewHexBytes0xPrefix(txHash.String())}).
 		Return(nil) // but still not found
 
 	p.Mock.ExpectQuery("SELECT.*indexed_events").WillReturnRows(
@@ -1137,7 +1137,7 @@ func TestProcessCatchupEventMultiPageRealDB(t *testing.T) {
 					Data:             []byte{}, // "EventA" has no data
 				})
 			}
-			mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.HexBytes0xPrefix(txHash[:])).
+			mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", []interface{}{ethtypes.HexBytes0xPrefix(txHash[:])}).
 				Run(func(args mock.Arguments) {
 					pTxReceipt := args[1].(**TXReceiptJSONRPC)
 					*pTxReceipt = txReceipt

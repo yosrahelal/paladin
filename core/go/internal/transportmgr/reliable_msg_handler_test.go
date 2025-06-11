@@ -26,7 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
@@ -72,7 +72,7 @@ func TestReceiveMessageStateWithNullifierSendAckRealDB(t *testing.T) {
 			nullifier := &components.NullifierUpsert{ID: pldtypes.RandBytes(32)}
 			mc.stateManager.On("WriteNullifiersForReceivedStates", mock.Anything, mock.Anything, "domain1", []*components.NullifierUpsert{nullifier}).
 				Return(nil).Once()
-			mkr := componentmocks.NewKeyResolver(t)
+			mkr := componentsmocks.NewKeyResolver(t)
 			mc.privateTxManager.On("BuildNullifier", mock.Anything, mkr, mock.Anything).Return(nullifier, nil)
 			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(mkr).Once()
 		},
@@ -215,7 +215,7 @@ func TestHandleStateDistroBadNullifier(t *testing.T) {
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
 			mc.db.Mock.ExpectBegin()
 			mc.db.Mock.ExpectCommit()
-			mkr := componentmocks.NewKeyResolver(t)
+			mkr := componentsmocks.NewKeyResolver(t)
 			mc.privateTxManager.On("BuildNullifier", mock.Anything, mkr, mock.Anything).Return(nil, fmt.Errorf("bad nullifier"))
 			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(mkr).Once()
 		},
@@ -501,7 +501,7 @@ func TestHandleNullifierFail(t *testing.T) {
 			nullifier := &components.NullifierUpsert{ID: pldtypes.RandBytes(32)}
 			mc.stateManager.On("WriteNullifiersForReceivedStates", mock.Anything, mock.Anything, "domain1", []*components.NullifierUpsert{nullifier}).
 				Return(fmt.Errorf("pop")).Once()
-			mkr := componentmocks.NewKeyResolver(t)
+			mkr := componentsmocks.NewKeyResolver(t)
 			mc.privateTxManager.On("BuildNullifier", mock.Anything, mkr, mock.Anything).Return(nullifier, nil)
 			mc.keyManager.On("KeyResolverForDBTX", mock.Anything).Return(mkr).Once()
 		},
@@ -636,7 +636,7 @@ func TestHandlePreparedOk(t *testing.T) {
 func TestHandlePrivacyGroupOK(t *testing.T) {
 	var stateID pldtypes.HexBytes = pldtypes.RandBytes(32)
 	schemaID := pldtypes.RandBytes32()
-	schema := componentmocks.NewSchema(t)
+	schema := componentsmocks.NewSchema(t)
 	ctx, tm, tp, done := newTestTransport(t, false,
 		mockGoodTransport,
 		mockEmptyReliableMsgs,
@@ -692,7 +692,7 @@ func TestHandlePrivacyGroupOK(t *testing.T) {
 func TestHandlePrivacyGroupBadState(t *testing.T) {
 	var stateID pldtypes.HexBytes = pldtypes.RandBytes(32)
 	schemaID := pldtypes.RandBytes32()
-	schema := componentmocks.NewSchema(t)
+	schema := componentsmocks.NewSchema(t)
 	ctx, tm, tp, done := newTestTransport(t, false,
 		mockGoodTransport,
 		mockEmptyReliableMsgs,
@@ -744,7 +744,7 @@ func TestHandlePrivacyGroupBadState(t *testing.T) {
 func TestHandlePrivacyGroupGroupFail(t *testing.T) {
 	var stateID pldtypes.HexBytes = pldtypes.RandBytes(32)
 	schemaID := pldtypes.RandBytes32()
-	schema := componentmocks.NewSchema(t)
+	schema := componentsmocks.NewSchema(t)
 	ctx, tm, _, done := newTestTransport(t, false,
 		mockEmptyReliableMsgs,
 		func(mc *mockComponents, conf *pldconf.TransportManagerConfig) {
