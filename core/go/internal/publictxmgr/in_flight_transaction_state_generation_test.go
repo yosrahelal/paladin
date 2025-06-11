@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
-	"github.com/kaleido-io/paladin/core/mocks/publictxmocks"
+	"github.com/kaleido-io/paladin/core/mocks/publictxmgrmocks"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/stretchr/testify/assert"
@@ -31,14 +31,14 @@ import (
 
 type testInFlightTransactionStateVersionWithMocks struct {
 	version InFlightTransactionStateGeneration
-	mAT     *publictxmocks.InFlightStageActionTriggers
+	mAT     *publictxmgrmocks.InFlightStageActionTriggers
 }
 
 func newTestInFlightTransactionStateVersion(t *testing.T) (*testInFlightTransactionStateVersionWithMocks, *mocksAndTestControl, func()) {
 	_, balanceManager, ptm, m, done := newTestBalanceManager(t)
 
 	mockInMemoryState := NewTestInMemoryTxState(t)
-	mockActionTriggers := publictxmocks.NewInFlightStageActionTriggers(t)
+	mockActionTriggers := publictxmgrmocks.NewInFlightStageActionTriggers(t)
 
 	v := NewInFlightTransactionStateGeneration(&publicTxEngineMetrics{}, balanceManager, mockActionTriggers, mockInMemoryState, ptm, ptm.submissionWriter, false)
 	return &testInFlightTransactionStateVersionWithMocks{

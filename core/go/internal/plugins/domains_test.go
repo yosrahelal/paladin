@@ -25,7 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 
 	"github.com/kaleido-io/paladin/common/go/pkg/log"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
@@ -88,8 +88,8 @@ func domainHeaderAccessor(msg *prototk.DomainMessage) *prototk.Header {
 	return msg.Header
 }
 
-func (tp *testDomainManager) mock(t *testing.T) *componentmocks.DomainManager {
-	mdm := componentmocks.NewDomainManager(t)
+func (tp *testDomainManager) mock(t *testing.T) *componentsmocks.DomainManager {
+	mdm := componentsmocks.NewDomainManager(t)
 	pluginMap := make(map[string]*pldconf.PluginConfig)
 	for name := range tp.domains {
 		pluginMap[name] = &pldconf.PluginConfig{

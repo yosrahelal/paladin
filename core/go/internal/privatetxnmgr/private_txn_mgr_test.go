@@ -41,7 +41,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
@@ -2653,21 +2653,21 @@ func TestCallPrivateSmartContractExecCallFail(t *testing.T) {
 /* Utils */
 
 type dependencyMocks struct {
-	preInitComponents   *componentmocks.PreInitComponents
-	allComponents       *componentmocks.AllComponents
+	preInitComponents   *componentsmocks.PreInitComponents
+	allComponents       *componentsmocks.AllComponents
 	db                  *mockpersistence.SQLMockProvider
 	persistence         persistence.Persistence
-	domain              *componentmocks.Domain
-	domainSmartContract *componentmocks.DomainSmartContract
-	domainContext       *componentmocks.DomainContext
-	domainMgr           *componentmocks.DomainManager
-	transportManager    *componentmocks.TransportManager
-	stateStore          *componentmocks.StateManager
-	keyManager          *componentmocks.KeyManager
-	keyResolver         *componentmocks.KeyResolver
-	publicTxManager     *componentmocks.PublicTxManager
-	identityResolver    *componentmocks.IdentityResolver
-	txManager           *componentmocks.TXManager
+	domain              *componentsmocks.Domain
+	domainSmartContract *componentsmocks.DomainSmartContract
+	domainContext       *componentsmocks.DomainContext
+	domainMgr           *componentsmocks.DomainManager
+	transportManager    *componentsmocks.TransportManager
+	stateStore          *componentsmocks.StateManager
+	keyManager          *componentsmocks.KeyManager
+	keyResolver         *componentsmocks.KeyResolver
+	publicTxManager     *componentsmocks.PublicTxManager
+	identityResolver    *componentsmocks.IdentityResolver
+	txManager           *componentsmocks.TXManager
 }
 
 func (m *dependencyMocks) mockDomain(domainAddress *pldtypes.EthAddress) {
@@ -2858,19 +2858,19 @@ func NewPrivateTransactionMgrForPackageTesting(t *testing.T, nodeName string) (p
 	t.Cleanup(persistenceCleanup)
 
 	mocks := &dependencyMocks{
-		preInitComponents:   componentmocks.NewPreInitComponents(t),
-		allComponents:       componentmocks.NewAllComponents(t),
-		domain:              componentmocks.NewDomain(t),
-		domainSmartContract: componentmocks.NewDomainSmartContract(t),
-		domainContext:       componentmocks.NewDomainContext(t),
-		domainMgr:           componentmocks.NewDomainManager(t),
-		transportManager:    componentmocks.NewTransportManager(t),
-		stateStore:          componentmocks.NewStateManager(t),
-		keyManager:          componentmocks.NewKeyManager(t),
-		keyResolver:         componentmocks.NewKeyResolver(t),
-		identityResolver:    componentmocks.NewIdentityResolver(t),
-		txManager:           componentmocks.NewTXManager(t),
-		publicTxManager:     componentmocks.NewPublicTxManager(t),
+		preInitComponents:   componentsmocks.NewPreInitComponents(t),
+		allComponents:       componentsmocks.NewAllComponents(t),
+		domain:              componentsmocks.NewDomain(t),
+		domainSmartContract: componentsmocks.NewDomainSmartContract(t),
+		domainContext:       componentsmocks.NewDomainContext(t),
+		domainMgr:           componentsmocks.NewDomainManager(t),
+		transportManager:    componentsmocks.NewTransportManager(t),
+		stateStore:          componentsmocks.NewStateManager(t),
+		keyManager:          componentsmocks.NewKeyManager(t),
+		keyResolver:         componentsmocks.NewKeyResolver(t),
+		identityResolver:    componentsmocks.NewIdentityResolver(t),
+		txManager:           componentsmocks.NewTXManager(t),
+		publicTxManager:     componentsmocks.NewPublicTxManager(t),
 		persistence:         p,
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
@@ -3053,19 +3053,19 @@ func timeTillDeadline(t *testing.T) time.Duration {
 	return timeRemaining - 100*time.Millisecond
 }
 
-func mockDomainSmartContractAndCtx(t *testing.T, m *dependencyMocks) (*componentmocks.Domain, *componentmocks.DomainSmartContract) {
+func mockDomainSmartContractAndCtx(t *testing.T, m *dependencyMocks) (*componentsmocks.Domain, *componentsmocks.DomainSmartContract) {
 	contractAddr := *pldtypes.RandAddress()
 
-	mDomain := componentmocks.NewDomain(t)
+	mDomain := componentsmocks.NewDomain(t)
 	mDomain.On("Name").Return("domain1").Maybe()
 
-	mPSC := componentmocks.NewDomainSmartContract(t)
+	mPSC := componentsmocks.NewDomainSmartContract(t)
 	mPSC.On("Address").Return(contractAddr).Maybe()
 	mPSC.On("Domain").Return(mDomain).Maybe()
 
 	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything, contractAddr).Return(mPSC, nil)
 
-	mDC := componentmocks.NewDomainContext(t)
+	mDC := componentsmocks.NewDomainContext(t)
 	m.stateStore.On("NewDomainContext", mock.Anything, mDomain, contractAddr).Return(mDC).Maybe()
 	mDC.On("Close").Return().Maybe()
 

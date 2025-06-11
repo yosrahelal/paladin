@@ -20,7 +20,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/mocks/publictxmocks"
+	"github.com/kaleido-io/paladin/core/mocks/publictxmgrmocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,7 @@ func newTestInFlightTransactionStateManager(t *testing.T) (InFlightTransactionSt
 	_, balanceManager, ptm, _, done := newTestBalanceManager(t)
 
 	mockInMemoryState := NewTestInMemoryTxState(t)
-	mockActionTriggers := publictxmocks.NewInFlightStageActionTriggers(t)
+	mockActionTriggers := publictxmgrmocks.NewInFlightStageActionTriggers(t)
 	iftxs := NewInFlightTransactionStateManager(&publicTxEngineMetrics{}, balanceManager, mockActionTriggers, mockInMemoryState, ptm, ptm.submissionWriter, false)
 	return iftxs, done
 
