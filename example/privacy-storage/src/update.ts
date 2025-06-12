@@ -1,5 +1,6 @@
 import PaladinClient, {
   PenteFactory,
+  PentePrivacyGroup,
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import { checkDeploy } from "paladin-example-common";
 import storageJson from "./abis/Storage.json";
@@ -13,48 +14,68 @@ const paladinNode2 = new PaladinClient({ url: "http://127.0.0.1:31648" });
 const paladinNode3 = new PaladinClient({ url: "http://127.0.0.1:31748" });
 
 async function main(): Promise<boolean> {
+  // Get the first argument from the command line
+  if (process.argv.length < 5) {
+    logger.error(
+      "To run the update example, pass the privacy group address, privacy group ID, and storage contract address from a previous invocation of `npm run start`:"
+    );
+    logger.error(
+      "E.g: node run update <privacyGroupAddress> <privacyGroupID> <privacyStorageContractAddress>"
+    );
+    return false;
+  }
+  const groupAddress = process.argv[2];
+  const groupId = process.argv[3];
+  const contractAddress = process.argv[4];
+
   // Get verifiers for each node
   const [verifierNode1] = paladinNode1.getVerifiers("member@node1");
   const [verifierNode2] = paladinNode2.getVerifiers("member@node2");
   const [verifierNode3] = paladinNode3.getVerifiers("outsider@node3");
 
   // Step 1: Create a privacy group for members
-  logger.log("Creating a privacy group for Node1 and Node2...");
-  const penteFactory = new PenteFactory(paladinNode1, "pente");
-  const memberPrivacyGroup = await penteFactory.newPrivacyGroup({
-    members: [verifierNode1, verifierNode2],
-    evmVersion: "shanghai",
-    externalCallsEnabled: true,
-  });
-
-  if (!checkDeploy(memberPrivacyGroup)) return false;
-
-  logger.log(`Privacy group created, ID: ${memberPrivacyGroup?.group.id}`);
-
-  // Step 2: Deploy a smart contract within the privacy group
-  logger.log("Deploying a smart contract to the privacy group...");
-  const contractAddress = await memberPrivacyGroup.deploy({
-    abi: storageJson.abi,
-    bytecode: storageJson.bytecode,
-    from: verifierNode1.lookup,
-  });
-
-  if (!contractAddress) {
-    logger.error("Failed to deploy the contract. No address returned.");
-    return false;
-  }
-
-  logger.log(`Contract deployed successfully! Address: ${contractAddress}`);
+  logger.log("Recreating a privacy group for Node1 and Node2...");
+  const existingPrivacyMemberGroup = new PentePrivacyGroup(
+    paladinNode1,
+    {
+      id: groupId,
+      domain: "pente",
+      created: new Date().toISOString(),
+      members: ["member@node2", "outsider@node3"],
+      contractAddress: groupAddress,
+    },
+    {}
+  );
 
   // Step 3: Use the deployed contract for private storage
   const privateStorageContract = new PrivateStorage(
-    memberPrivacyGroup,
+    existingPrivacyMemberGroup,
     contractAddress
   );
 
-  // Store a value in the contract
-  const valueToStore = 125; // Example value to store
-  logger.log(`Storing a value "${valueToStore}" in the contract...`);
+  logger.log(
+    `Using existing private member group ${existingPrivacyMemberGroup.address}, with existing storage contract address ${privateStorageContract.address}`
+  );
+
+  // Retrieve the current value as Node1
+  logger.log("Node1 retrieving the current value from the contract...");
+  let retrievedValueNode1 = await privateStorageContract.call({
+    from: verifierNode1.lookup,
+    function: "retrieve",
+  });
+  logger.log(
+    "Node1 retrieved the value successfully:",
+    retrievedValueNode1["value"]
+  );
+
+  // Store a new value in the contract
+  const valueToAdd = Math.floor(Math.random() * 100);
+  logger.log(
+    `Adding ${valueToAdd} to the current value and storing the new value`
+  );
+  const valueToStore = parseInt(retrievedValueNode1["value"]) + valueToAdd;
+
+  logger.log(`Storing the new value "${valueToStore}" in the contract...`);
   const storeTx = await privateStorageContract.sendTransaction({
     from: verifierNode1.lookup,
     function: "store",
@@ -66,8 +87,8 @@ async function main(): Promise<boolean> {
   );
 
   // Retrieve the value as Node1
-  logger.log("Node1 retrieving the value from the contract...");
-  const retrievedValueNode1 = await privateStorageContract.call({
+  logger.log("Node1 retrieving the new value from the contract...");
+  retrievedValueNode1 = await privateStorageContract.call({
     from: verifierNode1.lookup,
     function: "retrieve",
   });
