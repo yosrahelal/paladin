@@ -7,6 +7,7 @@
     "build": "tsc",
     "start": "ts-node ./src/index.ts",
     "start:prod": "node ./build/index.js",
+    "update": "ts-node ./src/update.ts",
     "abi": "node scripts/abi.mjs"
   },
   "author": "",

@@ -61,9 +61,19 @@ spec:
                     - password
                     - username
                     type: object
-                  secretRef:
+                  secret:
                     description: Secret is used to provide the name of the secret
                       to use for authentication
+                    properties:
+                      name:
+                        description: The name of the secret to use for authentication
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  secretRef:
+                    description: SecretRef is used to provide the name of the secret
+                      to use for authentication (deprecated, use secret)
                     properties:
                       name:
                         description: The name of the secret to use for authentication
@@ -101,9 +111,20 @@ spec:
                             - password
                             - username
                             type: object
-                          secretRef:
+                          secret:
                             description: Secret is used to provide the name of the
                               secret to use for authentication
+                            properties:
+                              name:
+                                description: The name of the secret to use for authentication
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          secretRef:
+                            description: SecretRef is used to provide the name of
+                              the secret to use for authentication (deprecated, use
+                              secret)
                             properties:
                               name:
                                 description: The name of the secret to use for authentication

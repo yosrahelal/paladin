@@ -159,9 +159,10 @@ var _ = Describe("Paladin Controller", func() {
 				},
 			}
 			controllerReconciler := &PaladinReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-				config: cfg,
+				Client:           k8sClient,
+				Scheme:           k8sClient.Scheme(),
+				RPCClientManager: NewRPCCache(),
+				config:           cfg,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -239,6 +240,55 @@ func TestGeneratePaladinAuthConfig(t *testing.T) {
 							Auth: &corev1alpha1.Auth{
 								Type:   corev1alpha1.AuthTypeSecret,
 								Secret: &corev1alpha1.AuthSecret{Name: "test-secret"},
+							},
+						},
+					},
+				},
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"username": []byte("testuser"),
+					"password": []byte("testpass"),
+				},
+			},
+			wantErr: false,
+			expected: &pldconf.PaladinConfig{
+				Blockchain: pldconf.EthClientConfig{
+					HTTP: pldconf.HTTPClientConfig{
+						Auth: pldconf.HTTPBasicAuthConfig{
+							Username: "testuser",
+							Password: "testpass",
+						},
+					},
+					WS: pldconf.WSClientConfig{
+						HTTPClientConfig: pldconf.HTTPClientConfig{
+							Auth: pldconf.HTTPBasicAuthConfig{
+								Username: "testuser",
+								Password: "testpass",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Valid AuthConfig with secretRef (deprecated)",
+			node: &corev1alpha1.Paladin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-node",
+					Namespace: "default",
+				},
+				Spec: corev1alpha1.PaladinSpec{
+					BaseLedgerEndpoint: &corev1alpha1.BaseLedgerEndpoint{
+						Type: corev1alpha1.EndpointTypeNetwork,
+						Endpoint: &corev1alpha1.NetworkLedgerEndpoint{
+							Auth: &corev1alpha1.Auth{
+								Type:      corev1alpha1.AuthTypeSecret,
+								SecretRef: &corev1alpha1.AuthSecret{Name: "test-secret"},
 							},
 						},
 					},
@@ -420,10 +470,11 @@ func setupTestReconciler(objs ...client.Object) (*PaladinReconciler, client.Clie
 	}
 
 	reconciler := &PaladinReconciler{
-		Client:  client,
-		Scheme:  scheme,
-		config:  cfg,
-		Changes: NewInFlight(1 * time.Second),
+		Client:           client,
+		Scheme:           scheme,
+		config:           cfg,
+		RPCClientManager: NewRPCCache(),
+		Changes:          NewInFlight(1 * time.Second),
 	}
 
 	return reconciler, client, nil
@@ -506,6 +557,18 @@ func TestPaladinReconcile_NewResource(t *testing.T) {
 
 	// Check that the status phase is set to Ready
 	assert.Equal(t, corev1alpha1.StatusPhaseReady, updatedPaladin.Status.Phase)
+
+	// delete the resource
+	err = client.Delete(ctx, updatedPaladin)
+	require.NoError(t, err)
+
+	_, err = reconciler.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	// Check that the resource is deleted
+	err = client.Get(ctx, req.NamespacedName, updatedPaladin)
+	require.Error(t, err)
+	assert.True(t, errors.IsNotFound(err), "Expected resource to be not found")
 }
 
 func TestPaladinCreateService(t *testing.T) {

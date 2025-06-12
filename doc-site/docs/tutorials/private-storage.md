@@ -26,6 +26,14 @@ This tutorial will guide you through:
 3. **Interacting with the contract** – Members will **store and retrieve values** securely.
 4. **Testing unauthorized access** – A non-member (Node3) will attempt to retrieve data, demonstrating **privacy enforcement**.
 
+There is a second example (`update.js`) in the privacy storage example folder which does the following:
+
+1. **Attaches to an existing privacy group and private storage smart contract**
+2. **Reads the value of the existing smart contract, then adds a new random number to it**
+3. **Writes the newly update value to the smart contract**
+
+You can use this second example to learn about using resuming use of existing privacy groups and contracts.
+
 The **full example** code is available in the [Paladin example repository](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/example/privacy-storage).
 
 ---

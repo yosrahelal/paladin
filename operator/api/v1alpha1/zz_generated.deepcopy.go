@@ -34,6 +34,11 @@ func (in *Auth) DeepCopyInto(out *Auth) {
 		*out = new(AuthSecret)
 		**out = **in
 	}
+	if in.SecretRef != nil {
+		in, out := &in.SecretRef, &out.SecretRef
+		*out = new(AuthSecret)
+		**out = **in
+	}
 	if in.Inline != nil {
 		in, out := &in.Inline, &out.Inline
 		*out = new(AuthInline)
