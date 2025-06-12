@@ -9,6 +9,7 @@ import {
   IPrivacyGroup,
   IPrivacyGroupEVMCall,
   IPrivacyGroupEVMTXInput,
+  IPrivacyGroupResume,
 } from "../interfaces/privacygroups";
 import PaladinClient from "../paladin";
 import { PaladinVerifier } from "../verifier";
@@ -133,20 +134,14 @@ export class PenteFactory {
       : new PentePrivacyGroup(this.paladin, group, this.options);
   }
 
-  async resumePrivacyGroup(
-    input: IPrivacyGroup,
-    options?: PenteOptions
-  ) {
-    return new PentePrivacyGroup(
-      this.paladin,
-      {
-        id: input.id,
-        domain: this.domain,
-        members: input.members,
-        contractAddress: input.contractAddress,
-      },
-      options
+  async resumePrivacyGroup(input: IPrivacyGroupResume) {
+    const existingGroup = await this.paladin.getPrivacyGroupById(
+      this.domain,
+      input.id
     );
+    return existingGroup.contractAddress === undefined
+      ? undefined
+      : new PentePrivacyGroup(this.paladin, existingGroup, this.options);
   }
 }
 
