@@ -192,7 +192,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 		testMsgs[i] = &pldapi.PrivacyGroupMessageInput{
 			Domain: "domain1",
 			Group:  groupID,
-			Data:   pldtypes.JSONString("some data"),
+			Data:   pldtypes.JSONString(fmt.Sprintf("message %d", i)),
 			Topic:  "my/topic",
 		}
 	}
@@ -237,7 +237,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 
 	// Send remaining 3 messages
 	err = gm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		for i := 3; i < 6; i++ {
+		for i := 3; i < len(testMsgs); i++ {
 			msgID, err := gm.SendMessage(ctx, dbTX, testMsgs[i])
 			require.NoError(t, err)
 			testMsgIDs[i] = *msgID
@@ -246,9 +246,9 @@ func TestRPCEventListenerE2E(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Wait for next 3 messages
+	// Wait for next all messages
 	timeout = time.After(10 * time.Second)
-	for receivedMsgs < 6 {
+	for receivedMsgs < len(testMsgs) {
 		select {
 		case msg := <-messages:
 			if msg != nil {
@@ -256,7 +256,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 				receivedMsgs++
 			}
 		case <-timeout:
-			t.Fatalf("Timeout waiting for messages, received %d of 6", receivedMsgs)
+			t.Fatalf("Timeout waiting for messages, received %d of %d", receivedMsgs, len(testMsgs))
 		}
 	}
 
