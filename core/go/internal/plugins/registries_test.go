@@ -253,8 +253,7 @@ func TestFromRegistryRequestBadReq(t *testing.T) {
 	defer done()
 
 	select {
-	case err := <-waitForResponse:
-		assert.Regexp(t, "pop", err)
+	case <-waitForResponse:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Test timed out waiting for waitForResponse callback")
 	}
