@@ -81,8 +81,8 @@ func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX persistenc
 				FailureMessage: op.FailureMessage,
 			}
 			node, _ := pldtypes.PrivateIdentityLocator(op.Originator).Node(ctx, true)
+			log.L(ctx).Warnf("Failure receipt %s for node %s: %s", receipt.TransactionID, node, receipt.FailureMessage)
 			if node != "" && node != s.transportMgr.LocalNodeName() {
-				log.L(ctx).Debugf("Returning receipt back to node %s: %+v", node, receipt)
 				remoteSends = append(remoteSends, &pldapi.ReliableMessage{
 					Node:        node,
 					MessageType: pldapi.RMTReceipt.Enum(),
