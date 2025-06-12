@@ -177,7 +177,7 @@ func TestRPCEventListenerE2E(t *testing.T) {
 					<-ackReady
 					if storedSubID := subID.Load(); storedSubID != nil {
 						_, req := rpcTestRequest("pgroup_ack", *storedSubID)
-						wsc.Send(ctx, req)
+						require.NoError(t, wsc.Send(ctx, req))
 					}
 				}
 			case <-ctx.Done():
@@ -366,7 +366,7 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 						// send nack first
 						if storedSubID := subID.Load(); storedSubID != nil {
 							_, req := rpcTestRequest("pgroup_nack", *storedSubID)
-							wsc.Send(ctx, req)
+							require.NoError(t, wsc.Send(ctx, req))
 							sentNack = true
 						}
 					} else {
@@ -380,7 +380,7 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 						}
 						if storedSubID := subID.Load(); storedSubID != nil {
 							_, req := rpcTestRequest("pgroup_ack", *storedSubID)
-							wsc.Send(ctx, req)
+							require.NoError(t, wsc.Send(ctx, req))
 						}
 					}
 				}
