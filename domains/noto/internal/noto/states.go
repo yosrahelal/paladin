@@ -543,7 +543,6 @@ func (n *Noto) getAccountBalance(ctx context.Context, stateQueryContext string, 
 	totalBalance = big.NewInt(0)
 	queryBuilder := query.NewQueryBuilder().
 		Limit(1000).
-		Sort(".created").
 		Equal("owner", owner.String())
 
 	log.L(ctx).Debugf("State query: %s", queryBuilder.Query())
