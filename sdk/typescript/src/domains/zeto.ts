@@ -70,6 +70,16 @@ export interface ZetoWithdrawParams {
   amount: string | number;
 }
 
+export interface ZetoBalanceOfParams {
+  account: string;
+}
+
+export interface ZetoBalanceOfResult {
+  totalBalance: string;
+  totalStates: string;
+  overflow: boolean;
+}
+
 export class ZetoFactory {
   private options: Required<ZetoOptions>;
 
@@ -235,5 +245,17 @@ export class ZetoInstance {
       data,
     });
     return this.paladin.pollForReceipt(receipt, POLL_TIMEOUT_MS);
+  }
+
+  async balanceOf(from: PaladinVerifier, data: ZetoBalanceOfParams): Promise<ZetoBalanceOfResult> {
+    return await this.paladin.call({
+      type: TransactionType.PRIVATE,
+      domain: "zeto",
+      abi: zetoPrivateJSON.abi,
+      function: "balanceOf",
+      to: this.address,
+      from: from.lookup,
+      data,
+    });
   }
 }

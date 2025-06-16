@@ -154,7 +154,7 @@ func TestBalanceOfExecCall(t *testing.T) {
 	}
 	h.callbacks = testCallbacks
 	_, err = h.ExecCall(ctx, tx, req)
-	assert.ErrorContains(t, err, "PD210139: Failed to get account balance. Alice: PD210032: Failed to query the state store for available coins. test error")
+	assert.ErrorContains(t, err, "PD210138: Failed to get account balance. Alice: PD210032: Failed to query the state store for available coins. test error")
 
 	// No states found - balance should be 0
 	testCallbacks.returnFunc = func() (*pb.FindAvailableStatesResponse, error) {
