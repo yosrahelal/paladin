@@ -22,7 +22,8 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/blockindexermocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 	"github.com/stretchr/testify/assert"
 
@@ -32,17 +33,17 @@ import (
 )
 
 type mockComponents struct {
-	c                *componentmocks.AllComponents
+	c                *componentsmocks.AllComponents
 	db               sqlmock.Sqlmock
 	ethClientFactory *ethclientmocks.EthClientFactory
-	domainManager    *componentmocks.DomainManager
-	blockIndexer     *componentmocks.BlockIndexer
-	keyManager       *componentmocks.KeyManager
-	publicTxMgr      *componentmocks.PublicTxManager
-	privateTxMgr     *componentmocks.PrivateTxManager
-	stateMgr         *componentmocks.StateManager
-	identityResolver *componentmocks.IdentityResolver
-	transportManager *componentmocks.TransportManager
+	domainManager    *componentsmocks.DomainManager
+	blockIndexer     *blockindexermocks.BlockIndexer
+	keyManager       *componentsmocks.KeyManager
+	publicTxMgr      *componentsmocks.PublicTxManager
+	privateTxMgr     *componentsmocks.PrivateTxManager
+	stateMgr         *componentsmocks.StateManager
+	identityResolver *componentsmocks.IdentityResolver
+	transportManager *componentsmocks.TransportManager
 }
 
 func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pldconf.TxManagerConfig, mc *mockComponents)) (context.Context, *txManager, func()) {
@@ -56,31 +57,31 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 		},
 	}
 	mc := &mockComponents{
-		c:                componentmocks.NewAllComponents(t),
-		blockIndexer:     componentmocks.NewBlockIndexer(t),
+		c:                componentsmocks.NewAllComponents(t),
+		blockIndexer:     blockindexermocks.NewBlockIndexer(t),
 		ethClientFactory: ethclientmocks.NewEthClientFactory(t),
-		keyManager:       componentmocks.NewKeyManager(t),
-		domainManager:    componentmocks.NewDomainManager(t),
-		publicTxMgr:      componentmocks.NewPublicTxManager(t),
-		privateTxMgr:     componentmocks.NewPrivateTxManager(t),
-		stateMgr:         componentmocks.NewStateManager(t),
-		identityResolver: componentmocks.NewIdentityResolver(t),
-		transportManager: componentmocks.NewTransportManager(t),
+		keyManager:       componentsmocks.NewKeyManager(t),
+		domainManager:    componentsmocks.NewDomainManager(t),
+		publicTxMgr:      componentsmocks.NewPublicTxManager(t),
+		privateTxMgr:     componentsmocks.NewPrivateTxManager(t),
+		stateMgr:         componentsmocks.NewStateManager(t),
+		identityResolver: componentsmocks.NewIdentityResolver(t),
+		transportManager: componentsmocks.NewTransportManager(t),
 	}
 
 	txm := NewTXManager(ctx, conf).(*txManager)
 
-	componentMocks := mc.c
-	componentMocks.On("TxManager").Return(txm).Maybe()
-	componentMocks.On("BlockIndexer").Return(mc.blockIndexer).Maybe()
-	componentMocks.On("DomainManager").Return(mc.domainManager).Maybe()
-	componentMocks.On("KeyManager").Return(mc.keyManager).Maybe()
-	componentMocks.On("PublicTxManager").Return(mc.publicTxMgr).Maybe()
-	componentMocks.On("PrivateTxManager").Return(mc.privateTxMgr).Maybe()
-	componentMocks.On("StateManager").Return(mc.stateMgr).Maybe()
-	componentMocks.On("IdentityResolver").Return(mc.identityResolver).Maybe()
-	componentMocks.On("EthClientFactory").Return(mc.ethClientFactory).Maybe()
-	componentMocks.On("TransportManager").Return(mc.transportManager).Maybe()
+	componentsmocks := mc.c
+	componentsmocks.On("TxManager").Return(txm).Maybe()
+	componentsmocks.On("BlockIndexer").Return(mc.blockIndexer).Maybe()
+	componentsmocks.On("DomainManager").Return(mc.domainManager).Maybe()
+	componentsmocks.On("KeyManager").Return(mc.keyManager).Maybe()
+	componentsmocks.On("PublicTxManager").Return(mc.publicTxMgr).Maybe()
+	componentsmocks.On("PrivateTxManager").Return(mc.privateTxMgr).Maybe()
+	componentsmocks.On("StateManager").Return(mc.stateMgr).Maybe()
+	componentsmocks.On("IdentityResolver").Return(mc.identityResolver).Maybe()
+	componentsmocks.On("EthClientFactory").Return(mc.ethClientFactory).Maybe()
+	componentsmocks.On("TransportManager").Return(mc.transportManager).Maybe()
 	mc.transportManager.On("LocalNodeName").Return("node1").Maybe()
 
 	var p persistence.Persistence
@@ -98,17 +99,17 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 			require.NoError(t, mp.Mock.ExpectationsWereMet())
 		}
 	}
-	componentMocks.On("Persistence").Return(p)
+	componentsmocks.On("Persistence").Return(p)
 
 	for _, fn := range init {
 		fn(conf, mc)
 	}
 
-	ic, err := txm.PreInit(componentMocks)
+	ic, err := txm.PreInit(componentsmocks)
 	require.NoError(t, err)
 	assert.Equal(t, txm.rpcModule, ic.RPCModules[0])
 
-	err = txm.PostInit(componentMocks)
+	err = txm.PostInit(componentsmocks)
 	require.NoError(t, err)
 
 	err = txm.Start()

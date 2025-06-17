@@ -32,7 +32,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/keymanager"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -1009,7 +1009,7 @@ func TestDomainWritePotentialStatesBadSchema(t *testing.T) {
 }
 
 func TestDomainWritePotentialStatesFail(t *testing.T) {
-	schema := componentmocks.NewSchema(t)
+	schema := componentsmocks.NewSchema(t)
 	schemaID := pldtypes.RandBytes32()
 	schema.On("ID").Return(schemaID)
 	schema.On("Signature").Return("schema1_signature")
@@ -1027,7 +1027,7 @@ func TestDomainWritePotentialStatesFail(t *testing.T) {
 }
 
 func TestDomainWritePotentialStatesBadID(t *testing.T) {
-	schema := componentmocks.NewSchema(t)
+	schema := componentsmocks.NewSchema(t)
 	schemaID := pldtypes.RandBytes32()
 	schema.On("ID").Return(schemaID)
 	schema.On("Signature").Return("schema1_signature")

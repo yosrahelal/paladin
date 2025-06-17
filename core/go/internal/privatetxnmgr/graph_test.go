@@ -21,15 +21,15 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-func NewMockTransactionProcessorForTesting(t *testing.T, transactionID uuid.UUID, inputStateIDs []string, outputStateIDs []string, endorsed bool, signer string) *privatetxnmgrmocks.TransactionFlow {
-	mockTransactionProcessor := privatetxnmgrmocks.NewTransactionFlow(t)
+func NewMockTransactionProcessorForTesting(t *testing.T, transactionID uuid.UUID, inputStateIDs []string, outputStateIDs []string, endorsed bool, signer string) *ptmgrtypes.MockTransactionFlow {
+	mockTransactionProcessor := ptmgrtypes.NewMockTransactionFlow(t)
 	mockTransactionProcessor.On("ID", mock.Anything).Return(transactionID).Maybe()
 	mockTransactionProcessor.On("InputStateIDs", mock.Anything).Return(inputStateIDs).Maybe()
 	mockTransactionProcessor.On("OutputStateIDs", mock.Anything).Return(outputStateIDs).Maybe()
