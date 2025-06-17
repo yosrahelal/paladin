@@ -28,7 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
@@ -165,7 +165,7 @@ type testPlugin struct {
 
 type testDomainContext struct {
 	ctx             context.Context
-	mdc             *componentmocks.DomainContext
+	mdc             *componentsmocks.DomainContext
 	dm              *domainManager
 	d               *domain
 	tp              *testPlugin
@@ -218,13 +218,13 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 	registerTestDomain(t, dm, tp)
 
 	var c *inFlightDomainRequest
-	var mdc *componentmocks.DomainContext
+	var mdc *componentsmocks.DomainContext
 	addr := *pldtypes.RandAddress()
 	if realDB {
 		dCtx := dm.stateStore.NewDomainContext(ctx, tp.d, addr)
 		c = tp.d.newInFlightDomainRequest(dm.persistence.NOTX(), dCtx, true /* readonly unless modified by test */)
 	} else {
-		mdc = componentmocks.NewDomainContext(t)
+		mdc = componentsmocks.NewDomainContext(t)
 		mdc.On("Ctx").Return(ctx).Maybe()
 		mdc.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()
 		mdc.On("Close").Return()

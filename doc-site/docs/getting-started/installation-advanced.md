@@ -65,11 +65,19 @@ paladinNodes:
         config:
           port: 9000
           address: 0.0.0.0
+        ports:
+          transportGrpc:
+            port: 9000
+            targetPort: 9000
     service:
       type: NodePort    # change service type if needed
       ports:
-        rpcHttp: { port: 8548, nodePort: 31548 }
-        rpcWs:   { port: 8549, nodePort: 31549 }
+        rpcHttp:
+          port: 8548
+          nodePort: 31748   # Do not set nodePort in case the service.type is not NodePort
+        rpcWs:
+          port: 8549
+          nodePort: 31749   # Do not set nodePort in case the service.type is not NodePort
     database:
       mode: sidecarPostgres
       migrationMode: auto
@@ -78,6 +86,10 @@ paladinNodes:
         secret: central-bank.keys
         type: autoHDWallet  # or preConfigured. in case of preConfigured you must create the secret with the seed
         keySelector: ".*"
+    paladinRegistration:
+      registryAdminNode: central-bank  # The admin node that manages the registry
+      registryAdminKey: registry.operator
+      registry: evm-registry
     config: |
       log:
         level: debug  # Log levels: debug, info, warn, error
@@ -241,11 +253,19 @@ paladinNodes:
       config:
         port: 9000
         address: 0.0.0.0
+      ports:
+        transportGrpc:
+          port: 9000
+          targetPort: 9000
   service:
     type: NodePort    # change service type if needed
     ports:
-      rpcHttp: { port: 8548, nodePort: 31548 }
-      rpcWs:   { port: 8549, nodePort: 31549 }
+      rpcHttp:
+        port: 8548
+        nodePort: 31748  # Do not set nodePort in case the service.type is not NodePort
+      rpcWs:
+        port: 8549
+        nodePort: 31749  # Do not set nodePort in case the service.type is not NodePort
   database:
     mode: sidecarPostgres
     migrationMode: auto

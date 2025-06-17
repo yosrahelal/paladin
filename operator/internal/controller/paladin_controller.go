@@ -64,9 +64,10 @@ var checkPsqlScript string
 // PaladinReconciler reconciles a Paladin object
 type PaladinReconciler struct {
 	client.Client
-	config  *config.Config
-	Scheme  *runtime.Scheme
-	Changes *InFlight
+	config           *config.Config
+	Scheme           *runtime.Scheme
+	Changes          *InFlight
+	RPCClientManager *rpcClientManager
 }
 
 // allows generic functions by giving a mapping between the types and interfaces for the CR
@@ -89,6 +90,7 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if errors.IsNotFound(err) {
 			// Resource not found; could have been deleted after reconcile request.
 			// Return and don't requeue.
+			r.RPCClientManager.removeNode(name)
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -805,12 +807,17 @@ func (r *PaladinReconciler) generatePaladinAuthConfig(ctx context.Context, node 
 
 	switch authConfig.Type {
 	case corev1alpha1.AuthTypeSecret:
-		if authConfig.Secret == nil {
-			return fmt.Errorf("AuthSecret must be provided when using AuthTypeSecret")
+		authConfigSec := authConfig.Secret
+		if authConfigSec == nil {
+			// fallback to deprecated authConfig.SecretRef
+			authConfigSec = authConfig.SecretRef
 		}
-		secretName := authConfig.Secret.Name
+		if authConfigSec == nil {
+			return fmt.Errorf("authConfig.Secret must be provided when using AuthTypeSecret")
+		}
+		secretName := authConfigSec.Name
 		if secretName == "" {
-			return fmt.Errorf("AuthSecret must be provided when using AuthTypeSecret")
+			return fmt.Errorf("authConfig.Secret.Name must be provided when using AuthTypeSecret")
 		}
 		sec := &corev1.Secret{}
 		if err := r.Client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: node.Namespace}, sec); err != nil {

@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/stretchr/testify/assert"
@@ -30,8 +30,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestDomainContextWithFlush(t *testing.T) (dc *componentmocks.DomainContext, flushResult chan error) {
-	dc = componentmocks.NewDomainContext(t)
+func newTestDomainContextWithFlush(t *testing.T) (dc *componentsmocks.DomainContext, flushResult chan error) {
+	dc = componentsmocks.NewDomainContext(t)
 	dc.On("Info").Return(components.DomainContextInfo{
 		ID: uuid.New(),
 	}).Maybe()
