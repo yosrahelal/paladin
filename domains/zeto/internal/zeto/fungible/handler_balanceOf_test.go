@@ -29,7 +29,9 @@ import (
 )
 
 func TestBalanceOfValidateParams(t *testing.T) {
-	h := balanceOfHandler{}
+	h := NewBalanceOfHandler("test1", nil, &pb.StateSchema{
+		Id: "coin",
+	})
 	ctx := context.Background()
 
 	tests := []struct {
@@ -214,5 +216,5 @@ func TestBalanceOfExecCall(t *testing.T) {
 		}, nil
 	}
 	_, err = h.ExecCall(ctx, tx, req)
-	assert.ErrorContains(t, err, "PD210139: Failed to get account balance. Alice: PD210034: Coin  is invalid: invalid character 'b' looking for beginning of value")
+	assert.ErrorContains(t, err, "PD210138: Failed to get account balance. Alice: PD210034: Coin  is invalid: invalid character 'b' looking for beginning of value")
 }
