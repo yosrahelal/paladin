@@ -88,12 +88,19 @@ func (h *balanceOfHandler) ExecCall(ctx context.Context, tx *types.ParsedTransac
 	useNullifiers := common.IsNullifiersToken(tx.DomainConfig.TokenName)
 	totalStates, totalBalance, overflow, err := getAccountBalance(ctx, h.callbacks, h.stateSchemas.CoinSchema, useNullifiers, req.StateQueryContext, resolvedAccount.Verifier)
 	if err != nil {
-		// don't think we are wrapping errors currently, throwing this out here see if folks are fond of it.
 		return nil, i18n.WrapError(ctx, err, msgs.MsgErrorGetAccountBalance, param.Account)
 	}
 	// Format balance as JSON string
-	balanceJson := fmt.Sprintf(`{"totalBalance":"%s","totalStates":"%s","overflow":"%s"}`, fmt.Sprint(totalBalance), fmt.Sprint(totalStates), fmt.Sprint(overflow))
+	balanceResult := types.BalanceOfResult{
+		TotalBalance: fmt.Sprint(totalBalance),
+		TotalStates:  fmt.Sprint(totalStates),
+		Overflow:     fmt.Sprint(overflow),
+	}
+	balanceJson, err := json.Marshal(balanceResult)
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgErrorGetAccountBalance, "failed to marshal balance result")
+	}
 	return &pb.ExecCallResponse{
-		ResultJson: balanceJson,
+		ResultJson: string(balanceJson),
 	}, nil
 }

@@ -105,3 +105,9 @@ type WithdrawParams struct {
 type FungibleBalanceOfParam struct {
 	Account string `json:"account"`
 }
+
+type BalanceOfResult struct {
+	TotalBalance string `json:"totalBalance"`
+	TotalStates  string `json:"totalStates"`
+	Overflow     string `json:"overflow"`
+}

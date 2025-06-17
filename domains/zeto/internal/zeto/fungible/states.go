@@ -228,7 +228,6 @@ func getAccountBalance(
 
 	queryBuilder := query.NewQueryBuilder().
 		Limit(1000).
-		Sort(".created").
 		Equal("owner", accountKey).
 		Equal("locked", false)
 
@@ -240,7 +239,6 @@ func getAccountBalance(
 		return 0, nil, false, i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
 	}
 
-	// sum up this page
 	for _, state := range states {
 		coin, err := makeCoin(state.DataJson)
 		if err != nil {
