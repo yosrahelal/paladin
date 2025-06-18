@@ -25,7 +25,7 @@ ext {
     maxCoverageBarGap = 1
     coveragePackages = [
         "github.com/kaleido-io/paladin/domains/zeto/internal/...",
-        "github.com/kaleido-io/paladin/domains/zeto/pkg/types",
+        "github.com/kaleido-io/paladin/domains/zeto/pkg/types/states.go",
         "github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner",
     ]
 

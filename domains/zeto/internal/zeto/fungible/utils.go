@@ -71,6 +71,13 @@ func validateTransferParams(ctx context.Context, params []*types.FungibleTransfe
 	return nil
 }
 
+func validateBalanceOfParams(ctx context.Context, param *types.FungibleBalanceOfParam) error {
+	if param.Account == "" {
+		return i18n.NewError(ctx, msgs.MsgNoParamAccount)
+	}
+	return nil
+}
+
 func validateAmountParam(ctx context.Context, amount *pldtypes.HexUint256, i int) error {
 	if amount == nil {
 		return i18n.NewError(ctx, msgs.MsgNoParamAmount, i)
@@ -269,7 +276,7 @@ func formatTransferProvingRequest(ctx context.Context, callbacks plugintk.Domain
 }
 
 func trimZeroUtxos(utxos []string) []string {
-	var trimmed []string
+	trimmed := make([]string, 0, len(utxos))
 	for _, utxo := range utxos {
 		if utxo != "0" {
 			trimmed = append(trimmed, utxo)
