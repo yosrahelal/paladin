@@ -44,6 +44,7 @@ type Circuit struct {
 	Type           CircuitType `yaml:"type" json:"type"`
 	UsesNullifiers bool        `yaml:"usesNullifiers" json:"usesNullifiers"`
 	UsesEncryption bool        `yaml:"usesEncryption" json:"usesEncryption"`
+	UsesKyc        bool        `yaml:"usesKyc" json:"usesKyc"`
 }
 
 func (c *Circuit) ToProto() *proto.Circuit {

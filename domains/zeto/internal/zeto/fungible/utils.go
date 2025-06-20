@@ -114,48 +114,9 @@ func utxosFromStates(ctx context.Context, states []*prototk.EndorsableState, des
 	return utxos, nil
 }
 
-func generateMerkleProofs(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName string, stateQueryContext string, contractAddress *pldtypes.EthAddress, inputCoins []*types.ZetoCoin, locked bool) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
-	smtName := smt.MerkleTreeName(tokenName, contractAddress)
-	if locked {
-		smtName = smt.MerkleTreeNameForLockedStates(tokenName, contractAddress)
-	}
-	storage := smt.NewStatesStorage(callbacks, smtName, stateQueryContext, merkleTreeRootSchema.Id, merkleTreeNodeSchema.Id)
-	mt, err := smt.NewSmt(storage)
-	if err != nil {
-		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
-	}
+func generateMerkleProofs(ctx context.Context, mt core.SparseMerkleTree, indexes []*big.Int) ([]core.Proof, *corepb.MerkleProofObject, error) {
 	// verify that the input UTXOs have been indexed by the Merkle tree DB
 	// and generate a merkle proof for each
-	var indexes []*big.Int
-	for _, coin := range inputCoins {
-		pubKey, err := zetosigner.DecodeBabyJubJubPublicKey(coin.Owner.String())
-		if err != nil {
-			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
-		}
-		idx := node.NewFungible(coin.Amount.Int(), pubKey, coin.Salt.Int())
-		leaf, err := node.NewLeafNode(idx)
-		if err != nil {
-			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorNewLeafNode, err)
-		}
-		n, err := mt.GetNode(leaf.Ref())
-		if err != nil {
-			// TODO: deal with when the node is not found in the DB tables for the tree
-			// e.g because the transaction event hasn't been processed yet
-			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorQueryLeafNode, leaf.Ref().Hex(), err)
-		}
-		hash, err := coin.Hash(ctx)
-		if err != nil {
-			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
-		}
-		if n.Index().BigInt().Cmp(hash.Int()) != 0 {
-			expectedIndex, err := node.NewNodeIndexFromBigInt(hash.Int())
-			if err != nil {
-				return nil, nil, i18n.NewError(ctx, msgs.MsgErrorNewNodeIndex, err)
-			}
-			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorHashMismatch, leaf.Ref().Hex(), n.Index().BigInt().Text(16), n.Index().Hex(), hash.HexString0xPrefix(), expectedIndex.Hex())
-		}
-		indexes = append(indexes, n.Index().BigInt())
-	}
 	mtRoot := mt.Root()
 	proofs, _, err := mt.GenerateProofs(indexes, mtRoot)
 	if err != nil {
@@ -178,13 +139,63 @@ func generateMerkleProofs(ctx context.Context, callbacks plugintk.DomainCallback
 		mps = append(mps, &p)
 		enabled = append(enabled, true)
 	}
-	extrasObj := corepb.ProvingRequestExtras_Nullifiers{
+	smtProof := &corepb.MerkleProofObject{
 		Root:         mt.Root().BigInt().Text(16),
 		MerkleProofs: mps,
 		Enabled:      enabled,
 	}
 
-	return proofs, &extrasObj, nil
+	return proofs, smtProof, nil
+}
+
+func getSmt(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName string, stateQueryContext string, contractAddress *pldtypes.EthAddress, locked, kyc bool) (core.SparseMerkleTree, error) {
+	smtName := smt.MerkleTreeName(tokenName, contractAddress)
+	if locked {
+		smtName = smt.MerkleTreeNameForLockedStates(tokenName, contractAddress)
+	} else if kyc {
+		smtName = smt.MerkleTreeNameForKycStates(tokenName, contractAddress)
+	}
+
+	storage := smt.NewStatesStorage(callbacks, smtName, stateQueryContext, merkleTreeRootSchema.Id, merkleTreeNodeSchema.Id)
+	mt, err := smt.NewSmt(storage)
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
+	}
+	return mt, nil
+}
+
+func makeLeafIndexesFromCoins(ctx context.Context, inputCoins []*types.ZetoCoin, mt core.SparseMerkleTree) ([]*big.Int, error) {
+	var indexes []*big.Int
+	for _, coin := range inputCoins {
+		pubKey, err := zetosigner.DecodeBabyJubJubPublicKey(coin.Owner.String())
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
+		}
+		idx := node.NewFungible(coin.Amount.Int(), pubKey, coin.Salt.Int())
+		leaf, err := node.NewLeafNode(idx)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorNewLeafNode, err)
+		}
+		n, err := mt.GetNode(leaf.Ref())
+		if err != nil {
+			// TODO: deal with when the node is not found in the DB tables for the tree
+			// e.g because the transaction event hasn't been processed yet
+			return nil, i18n.NewError(ctx, msgs.MsgErrorQueryLeafNode, leaf.Ref().Hex(), err)
+		}
+		hash, err := coin.Hash(ctx)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
+		}
+		if n.Index().BigInt().Cmp(hash.Int()) != 0 {
+			expectedIndex, err := node.NewNodeIndexFromBigInt(hash.Int())
+			if err != nil {
+				return nil, i18n.NewError(ctx, msgs.MsgErrorNewNodeIndex, err)
+			}
+			return nil, i18n.NewError(ctx, msgs.MsgErrorHashMismatch, leaf.Ref().Hex(), n.Index().BigInt().Text(16), n.Index().Hex(), hash.HexString0xPrefix(), expectedIndex.Hex())
+		}
+		indexes = append(indexes, n.Index().BigInt())
+	}
+	return indexes, nil
 }
 
 // formatTransferProvingRequest formats the proving request for a transfer transaction.
@@ -229,13 +240,27 @@ func formatTransferProvingRequest(ctx context.Context, callbacks plugintk.Domain
 	var extras []byte
 	if circuit.UsesNullifiers {
 		forLockedStates := len(delegate) > 0
-		proofs, extrasObj, err := generateMerkleProofs(ctx, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, tokenName, stateQueryContext, contractAddress, inputCoins, forLockedStates)
+
+		mt, err := getSmt(ctx, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, tokenName, stateQueryContext, contractAddress, forLockedStates, circuit.UsesKyc)
+		if err != nil {
+			return nil, err
+		}
+
+		indexes, err := makeLeafIndexesFromCoins(ctx, inputCoins, mt)
+		if err != nil {
+			return nil, err
+		}
+
+		proofs, smtProof, err := generateMerkleProofs(ctx, mt, indexes)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
 		}
+		extrasObj := &corepb.ProvingRequestExtras_Nullifiers{
+			SmtProof: smtProof,
+		}
 		for i := len(proofs); i < inputSize; i++ {
-			extrasObj.MerkleProofs = append(extrasObj.MerkleProofs, &smt.Empty_Proof)
-			extrasObj.Enabled = append(extrasObj.Enabled, false)
+			extrasObj.SmtProof.MerkleProofs = append(extrasObj.SmtProof.MerkleProofs, &smt.Empty_Proof)
+			extrasObj.SmtProof.Enabled = append(extrasObj.SmtProof.Enabled, false)
 		}
 		if len(delegate) > 0 {
 			extrasObj.Delegate = delegate[0]
