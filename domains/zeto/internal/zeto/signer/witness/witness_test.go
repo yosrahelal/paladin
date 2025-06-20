@@ -515,16 +515,18 @@ func TestAssembleFungibleEncWitnessInputs(t *testing.T) {
 
 func TestAssembleFungibleNullifierWitnessInputs(t *testing.T) {
 	ras := &pb.ProvingRequestExtras_Nullifiers{
-		Root: "123456",
-		MerkleProofs: []*pb.MerkleProof{
-			{
-				Nodes: []string{"1", "2", "3"},
+		SmtProof: &pb.MerkleProofObject{
+			Root: "123456",
+			MerkleProofs: []*pb.MerkleProof{
+				{
+					Nodes: []string{"1", "2", "3"},
+				},
+				{
+					Nodes: []string{"0", "0", "0"},
+				},
 			},
-			{
-				Nodes: []string{"0", "0", "0"},
-			},
+			Enabled: []bool{true, false},
 		},
-		Enabled:  []bool{true, false},
 		Delegate: "0x1234567890123456789012345678901234567890",
 	}
 	inputs := FungibleNullifierWitnessInputs{
@@ -555,16 +557,18 @@ func TestAssembleFungibleNullifierWitnessInputs(t *testing.T) {
 }
 func TestPrepareInputsForNullifiers(t *testing.T) {
 	ras := &pb.ProvingRequestExtras_Nullifiers{
-		Root: "123456",
-		MerkleProofs: []*pb.MerkleProof{
-			{
-				Nodes: []string{"1", "2", "3"},
+		SmtProof: &pb.MerkleProofObject{
+			Root: "123456",
+			MerkleProofs: []*pb.MerkleProof{
+				{
+					Nodes: []string{"1", "2", "3"},
+				},
+				{
+					Nodes: []string{"0", "0", "0"},
+				},
 			},
-			{
-				Nodes: []string{"0", "0", "0"},
-			},
+			Enabled: []bool{true, false},
 		},
-		Enabled: []bool{true, false},
 	}
 	inputs := FungibleNullifierWitnessInputs{
 		Extras: ras,

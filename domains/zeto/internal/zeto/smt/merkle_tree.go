@@ -48,3 +48,7 @@ func MerkleTreeName(tokenName string, domainInstanceContract *pldtypes.EthAddres
 func MerkleTreeNameForLockedStates(tokenName string, domainInstanceContract *pldtypes.EthAddress) string {
 	return "smtLocked_" + tokenName + "_" + domainInstanceContract.String()
 }
+
+func MerkleTreeNameForKycStates(tokenName string, domainInstanceContract *pldtypes.EthAddress) string {
+	return "smtKyc_" + tokenName + "_" + domainInstanceContract.String()
+}

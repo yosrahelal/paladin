@@ -66,6 +66,18 @@ var transferABINullifiers = &abi.Entry{
 	},
 }
 
+var transferABINullifiersKyc = &abi.Entry{
+	Type: abi.Function,
+	Name: types.METHOD_TRANSFER,
+	Inputs: abi.ParameterArray{
+		{Name: "nullifiers", Type: "uint256[]"},
+		{Name: "outputs", Type: "uint256[]"},
+		{Name: "root", Type: "uint256"},
+		{Name: "proof", Type: "tuple", InternalType: "struct Commonlib.Proof", Components: common.ProofComponents},
+		{Name: "data", Type: "bytes"},
+	},
+}
+
 var transferABI_withEncryption = &abi.Entry{
 	Type: abi.Function,
 	Name: types.METHOD_TRANSFER,
