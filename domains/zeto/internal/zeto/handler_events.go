@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
+	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/common/go/pkg/log"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
@@ -141,6 +144,37 @@ func (z *Zeto) handleLockedEvent(ctx context.Context, smtTree *merkleTreeSpec, s
 			err = z.updateMerkleTree(ctx, smtTreeForLocked.tree, smtTreeForLocked.storage, txData.TransactionID, lock.LockedOutputs)
 			if err != nil {
 				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOsLocked", err)
+			}
+		}
+	} else {
+		log.L(ctx).Errorf("Failed to unmarshal lock event: %s", err)
+	}
+	return nil
+}
+
+func (z *Zeto) handleIdentityRegisteredEvent(ctx context.Context, smtKycTree *merkleTreeSpec, ev *prototk.OnChainEvent, tokenName string, res *prototk.HandleEventBatchResponse) error {
+	var registered IdentityRegisteredEvent
+	if err := json.Unmarshal([]byte(ev.DataJson), &registered); err == nil {
+		txData, err := decodeTransactionData(ctx, registered.Data)
+		if err != nil || txData == nil {
+			newTxID := uuid.New()
+			txId := pldtypes.Bytes32UUIDFirst16(newTxID)
+			log.L(ctx).Infof("Failed to decode transaction data for identity registered event: %s. Inserting unique tx ID: %s", registered.Data, txId.HexString())
+			txData = &types.ZetoTransactionData_V0{
+				TransactionID: txId,
+				InfoStates:    []pldtypes.Bytes32{},
+			}
+		}
+		z.recordTransactionInfo(ev, txData, res)
+		if common.IsKycToken(tokenName) {
+			// calculate the Poseidon hash of the public key, to use as the leaf node index and value in the SMT
+			publicKeyHash, err := poseidon.Hash([]*big.Int{registered.PublicKey[0].Int(), registered.PublicKey[1].Int()})
+			if err != nil {
+				return i18n.NewError(ctx, msgs.MsgErrorHandleEvents, fmt.Sprintf("IdentityRegistered. %s", err))
+			}
+			err = z.updateMerkleTree(ctx, smtKycTree.tree, smtKycTree.storage, txData.TransactionID, []pldtypes.HexUint256{*pldtypes.MustParseHexUint256("0x" + publicKeyHash.Text(16))})
+			if err != nil {
+				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "IdentityRegistered", err)
 			}
 		}
 	} else {

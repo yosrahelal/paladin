@@ -302,10 +302,10 @@ func TestInitContract(t *testing.T) {
 	require.True(t, res.Valid)
 	require.JSONEq(t, `{
 		"circuits": {
-			"deposit": { "name": "circuit-deposit", "type": "", "usesEncryption": false, "usesNullifiers": false },
-			"withdraw": { "name": "circuit-withdraw", "type": "", "usesEncryption": false, "usesNullifiers": false },
-			"transfer": { "name": "circuit-transfer", "type": "", "usesEncryption": false, "usesNullifiers": false },
-			"transferLocked": { "name": "circuit-transfer-locked", "type": "", "usesEncryption": false, "usesNullifiers": false }
+			"deposit": { "name": "circuit-deposit", "type": "", "usesEncryption": false, "usesKyc":false, "usesNullifiers": false },
+			"withdraw": { "name": "circuit-withdraw", "type": "", "usesEncryption": false, "usesKyc":false, "usesNullifiers": false },
+			"transfer": { "name": "circuit-transfer", "type": "", "usesEncryption": false, "usesKyc":false, "usesNullifiers": false },
+			"transferLocked": { "name": "circuit-transfer-locked", "type": "", "usesEncryption": false, "usesKyc":false, "usesNullifiers": false }
 		},
 		"tokenName": "testToken1"
 	}`, res.ContractConfig.ContractConfigJson)
@@ -521,9 +521,13 @@ func newTestZeto() (*Zeto, *domain.MockDomainCallbacks) {
 	z.dataSchema = &pb.StateSchema{
 		Id: "data",
 	}
-	z.mintSignature = "event UTXOMint(uint256[] outputs, address indexed submitter, bytes data)"
-	z.transferSignature = "event UTXOTransfer(uint256[] inputs, uint256[] outputs, address indexed submitter, bytes data)"
-	z.transferWithEncSignature = "event UTXOTransferWithEncryptedValues(uint256[] inputs, uint256[] outputs, uint256 encryptionNonce, uint256[2] ecdhPublicKey, uint256[] encryptedValues, address indexed submitter, bytes data)"
+	z.events.mint = "event UTXOMint(uint256[] outputs, address indexed submitter, bytes data)"
+	z.events.burn = "event UTXOBurn(uint256[] inputs, uint256 output, address indexed submitter, bytes data)"
+	z.events.transfer = "event UTXOTransfer(uint256[] inputs, uint256[] outputs, address indexed submitter, bytes data)"
+	z.events.transferWithEnc = "event UTXOTransferWithEncryptedValues(uint256[] inputs, uint256[] outputs, uint256 encryptionNonce, uint256[2] ecdhPublicKey, uint256[] encryptedValues, address indexed submitter, bytes data)"
+	z.events.withdraw = "event UTXOWithdraw(uint256 amount, uint256[] inputs, uint256 output, address indexed submitter, bytes data)"
+	z.events.lock = "event UTXOsLocked(uint256[] inputs, uint256[] outputs, uint256[] lockedOutputs, address indexed delegate, address indexed submitter, bytes data)"
+	z.events.identityRegistered = "event IdentityRegistered(uint256[] publicKeys, bytes data)"
 	return z, testCallbacks
 }
 

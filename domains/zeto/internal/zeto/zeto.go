@@ -49,20 +49,26 @@ var _ plugintk.DomainAPI = &Zeto{}
 type Zeto struct {
 	Callbacks plugintk.DomainCallbacks
 
-	name                     string
-	config                   *types.DomainFactoryConfig
-	chainID                  int64
-	coinSchema               *prototk.StateSchema
-	nftSchema                *prototk.StateSchema
-	merkleTreeRootSchema     *prototk.StateSchema
-	merkleTreeNodeSchema     *prototk.StateSchema
-	dataSchema               *prototk.StateSchema
-	mintSignature            string
-	transferSignature        string
-	transferWithEncSignature string
-	withdrawSignature        string
-	lockSignature            string
-	snarkProver              signerapi.InMemorySigner
+	name                    string
+	config                  *types.DomainFactoryConfig
+	chainID                 int64
+	coinSchema              *prototk.StateSchema
+	nftSchema               *prototk.StateSchema
+	merkleTreeRootSchema    *prototk.StateSchema
+	merkleTreeNodeSchema    *prototk.StateSchema
+	kycMerkleTreeRootSchema *prototk.StateSchema
+	kycMerkleTreeNodeSchema *prototk.StateSchema
+	dataSchema              *prototk.StateSchema
+	snarkProver             signerapi.InMemorySigner
+	events                  struct {
+		mint               string
+		burn               string
+		transfer           string
+		transferWithEnc    string
+		withdraw           string
+		lock               string
+		identityRegistered string
+	}
 }
 
 type MintEvent struct {
@@ -98,6 +104,11 @@ type LockedEvent struct {
 	Delegate      pldtypes.EthAddress   `json:"delegate"`
 	Submitter     pldtypes.EthAddress   `json:"submitter"`
 	Data          pldtypes.HexBytes     `json:"data"`
+}
+
+type IdentityRegisteredEvent struct {
+	PublicKey []pldtypes.HexUint256 `json:"publicKey"`
+	Data      pldtypes.HexBytes     `json:"data"`
 }
 
 type merkleTreeSpec struct {
@@ -422,15 +433,17 @@ func (z *Zeto) registerEventSignatures(eventAbis abi.ABI) {
 	for _, event := range eventAbis.Events() {
 		switch event.Name {
 		case "UTXOMint":
-			z.mintSignature = event.SolString()
+			z.events.mint = event.SolString()
 		case "UTXOTransfer":
-			z.transferSignature = event.SolString()
+			z.events.transfer = event.SolString()
 		case "UTXOTransferWithEncryptedValues":
-			z.transferWithEncSignature = event.SolString()
+			z.events.transferWithEnc = event.SolString()
 		case "UTXOWithdraw":
-			z.withdrawSignature = event.SolString()
+			z.events.withdraw = event.SolString()
 		case "UTXOsLocked":
-			z.lockSignature = event.SolString()
+			z.events.lock = event.SolString()
+		case "IdentityRegistered":
+			z.events.identityRegistered = event.SolString()
 		}
 	}
 }
@@ -451,6 +464,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	var errors []string
 	var smtForStates *merkleTreeSpec
 	var smtForLockedStates *merkleTreeSpec
+	var smtForKyc *merkleTreeSpec
 	if common.IsNullifiersToken(domainConfig.TokenName) {
 		smtName := smt.MerkleTreeName(domainConfig.TokenName, contractAddress)
 		smtForStates, err = z.newSmtTreeSpec(ctx, smtName, req.StateQueryContext)
@@ -463,19 +477,28 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 			return nil, err
 		}
 	}
+	if common.IsKycToken(domainConfig.TokenName) {
+		smtName := smt.MerkleTreeNameForKycStates(domainConfig.TokenName, contractAddress)
+		smtForKyc, err = z.newSmtTreeSpec(ctx, smtName, req.StateQueryContext)
+		if err != nil {
+			return nil, err
+		}
+	}
 	for _, ev := range req.Events {
 		var err error
 		switch ev.SoliditySignature {
-		case z.mintSignature:
+		case z.events.mint:
 			err = z.handleMintEvent(ctx, smtForStates, ev, domainConfig.TokenName, &res)
-		case z.transferSignature:
+		case z.events.transfer:
 			err = z.handleTransferEvent(ctx, smtForStates, ev, domainConfig.TokenName, &res)
-		case z.transferWithEncSignature:
+		case z.events.transferWithEnc:
 			err = z.handleTransferWithEncryptionEvent(ctx, smtForStates, ev, domainConfig.TokenName, &res)
-		case z.withdrawSignature:
+		case z.events.withdraw:
 			err = z.handleWithdrawEvent(ctx, smtForStates, ev, domainConfig.TokenName, &res)
-		case z.lockSignature:
+		case z.events.lock:
 			err = z.handleLockedEvent(ctx, smtForStates, smtForLockedStates, ev, domainConfig.TokenName, &res)
+		case z.events.identityRegistered:
+			err = z.handleIdentityRegisteredEvent(ctx, smtForKyc, ev, domainConfig.TokenName, &res)
 		}
 		if err != nil {
 			errors = append(errors, err.Error())
