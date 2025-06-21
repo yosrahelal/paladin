@@ -305,7 +305,8 @@ func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins [
 
 	var extras []byte
 	if circuit.UsesNullifiers {
-		mt, err := getSmt(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, tokenName, stateQueryContext, contractAddress, false, false)
+		smtName := smt.MerkleTreeName(tokenName, contractAddress)
+		mt, err := getSmt(ctx, smtName, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, stateQueryContext)
 		if err != nil {
 			return nil, err
 		}

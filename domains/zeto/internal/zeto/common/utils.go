@@ -49,7 +49,7 @@ func IsBatchCircuit(sizeOfEndorsableStates int) bool {
 }
 
 func IsNullifiersToken(tokenName string) bool {
-	return tokenName == constants.TOKEN_ANON_NULLIFIER || tokenName == constants.TOKEN_NF_ANON_NULLIFIER
+	return tokenName == constants.TOKEN_ANON_NULLIFIER || tokenName == constants.TOKEN_NF_ANON_NULLIFIER || tokenName == constants.TOKEN_ANON_NULLIFIER_KYC
 }
 
 func IsKycToken(tokenName string) bool {

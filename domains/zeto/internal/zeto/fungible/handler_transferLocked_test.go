@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
@@ -528,7 +529,8 @@ func TestGenerateMerkleProofsForLockedStates(t *testing.T) {
 	}
 	ctx := context.Background()
 	queryContext := "queryContext"
-	_, err = getSmt(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, "Zeto_Anon", queryContext, addr, false, false)
+	smtName := smt.MerkleTreeName("Zeto_Anon", addr)
+	_, err = getSmt(ctx, smtName, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, queryContext)
 	assert.EqualError(t, err, "PD210019: Failed to create Merkle tree for smt_Zeto_Anon_0x1234567890123456789012345678901234567890: PD210065: Failed to find available states for the merkle tree. test error")
 
 	testCallbacks.MockFindAvailableStates = func() (*prototk.FindAvailableStatesResponse, error) {
@@ -540,7 +542,7 @@ func TestGenerateMerkleProofsForLockedStates(t *testing.T) {
 			},
 		}, nil
 	}
-	mt, err := getSmt(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, "Zeto_Anon", queryContext, addr, false, false)
+	mt, err := getSmt(ctx, smtName, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, queryContext)
 	assert.NoError(t, err)
 	_, err = makeLeafIndexesFromCoins(ctx, inputCoins, mt)
 	assert.EqualError(t, err, "PD210037: Failed load owner public key. PD210072: Invalid compressed public key length: 2")
@@ -567,7 +569,7 @@ func TestGenerateMerkleProofsForLockedStates(t *testing.T) {
 			}, nil
 		}
 	}
-	mt, err = getSmt(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, "Zeto_Anon", queryContext, addr, false, false)
+	mt, err = getSmt(ctx, smtName, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, queryContext)
 	assert.NoError(t, err)
 	_, err = makeLeafIndexesFromCoins(ctx, inputCoins, mt)
 	assert.EqualError(t, err, "PD210055: Failed to query the smt DB for leaf node (ref=789c99b9a2196addb3ac11567135877e8b86bc9b5f7725808a79757fd36b2a2a). key not found")
@@ -592,7 +594,7 @@ func TestGenerateMerkleProofsForLockedStates(t *testing.T) {
 			}, nil
 		}
 	}
-	mt, err = getSmt(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, "Zeto_Anon", queryContext, addr, false, false)
+	mt, err = getSmt(ctx, smtName, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, queryContext)
 	assert.NoError(t, err)
 	_, err = makeLeafIndexesFromCoins(ctx, inputCoins, mt)
 	assert.EqualError(t, err, "PD210057: Coin (ref=789c99b9a2196addb3ac11567135877e8b86bc9b5f7725808a79757fd36b2a2a) found in the merkle tree but the persisted hash 26e3879b46b15a4ddbaca5d96af1bd2743f67f13f0bb85c40782950a2a700138 (index=3801702a0a958207c485bbf0137ff64327bdf16ad9a5acdb4d5ab1469b87e326) did not match the expected hash 0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f (index=5f5d5e50a650a20986d496e6645ea31770758d924796f0dfc5ac2ad234b03e30)")
@@ -617,7 +619,7 @@ func TestGenerateMerkleProofsForLockedStates(t *testing.T) {
 			}, nil
 		}
 	}
-	mt, err = getSmt(ctx, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, "Zeto_Anon", queryContext, addr, false, false)
+	mt, err = getSmt(ctx, smtName, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, queryContext)
 	assert.NoError(t, err)
 	indexes, err := makeLeafIndexesFromCoins(ctx, inputCoins, mt)
 	assert.NoError(t, err)

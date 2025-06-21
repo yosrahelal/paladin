@@ -159,7 +159,7 @@ func (z *Zeto) handleIdentityRegisteredEvent(ctx context.Context, smtKycTree *me
 		if err != nil || txData == nil {
 			newTxID := uuid.New()
 			txId := pldtypes.Bytes32UUIDFirst16(newTxID)
-			log.L(ctx).Infof("Failed to decode transaction data for identity registered event: %s. Inserting unique tx ID: %s", registered.Data, txId.HexString())
+			log.L(ctx).Infof("IdentityRegistered event [publicKey=%+v] has no tx data. Inserting unique tx ID: %s", &registered.PublicKey, txId.HexString())
 			txData = &types.ZetoTransactionData_V0{
 				TransactionID: txId,
 				InfoStates:    []pldtypes.Bytes32{},

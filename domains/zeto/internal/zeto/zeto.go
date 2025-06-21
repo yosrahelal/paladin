@@ -19,6 +19,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
@@ -123,6 +124,8 @@ var factoryDeployABI = &abi.Entry{
 	Inputs: abi.ParameterArray{
 		{Name: "transactionId", Type: "bytes32"},
 		{Name: "tokenName", Type: "string"},
+		{Name: "name", Type: "string"},
+		{Name: "symbol", Type: "string"},
 		{Name: "initialOwner", Type: "address"},
 		{Name: "data", Type: "bytes"},
 		{Name: "isNonFungible", Type: "bool"},
@@ -256,6 +259,8 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 		TransactionID: req.Transaction.TransactionId,
 		Data:          pldtypes.HexBytes(encoded),
 		TokenName:     initParams.TokenName,
+		Name:          initParams.TokenName,
+		Symbol:        initParams.TokenName,
 		InitialOwner:  req.ResolvedVerifiers[0].Verifier, // TODO: allow the initial owner to be specified by the deploy request
 		IsNonFungible: common.IsNonFungibleToken(initParams.TokenName),
 	}
@@ -486,6 +491,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	}
 	for _, ev := range req.Events {
 		var err error
+		fmt.Printf("===> Processing event: %+v\n", ev.SoliditySignature)
 		switch ev.SoliditySignature {
 		case z.events.mint:
 			err = z.handleMintEvent(ctx, smtForStates, ev, domainConfig.TokenName, &res)
@@ -521,6 +527,13 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		}
 		if len(newStatesForSMTForLocked) > 0 {
 			res.NewStates = append(res.NewStates, newStatesForSMTForLocked...)
+		}
+		newStatesForSMTForKyc, err := smtForKyc.storage.GetNewStates()
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtForKyc.name, err)
+		}
+		if len(newStatesForSMTForKyc) > 0 {
+			res.NewStates = append(res.NewStates, newStatesForSMTForKyc...)
 		}
 	}
 	return &res, nil

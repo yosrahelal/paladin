@@ -22,6 +22,7 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
+	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
@@ -148,14 +149,7 @@ func generateMerkleProofs(ctx context.Context, mt core.SparseMerkleTree, indexes
 	return proofs, smtProof, nil
 }
 
-func getSmt(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName string, stateQueryContext string, contractAddress *pldtypes.EthAddress, locked, kyc bool) (core.SparseMerkleTree, error) {
-	smtName := smt.MerkleTreeName(tokenName, contractAddress)
-	if locked {
-		smtName = smt.MerkleTreeNameForLockedStates(tokenName, contractAddress)
-	} else if kyc {
-		smtName = smt.MerkleTreeNameForKycStates(tokenName, contractAddress)
-	}
-
+func getSmt(ctx context.Context, smtName string, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, stateQueryContext string) (core.SparseMerkleTree, error) {
 	storage := smt.NewStatesStorage(callbacks, smtName, stateQueryContext, merkleTreeRootSchema.Id, merkleTreeNodeSchema.Id)
 	mt, err := smt.NewSmt(storage)
 	if err != nil {
@@ -194,6 +188,33 @@ func makeLeafIndexesFromCoins(ctx context.Context, inputCoins []*types.ZetoCoin,
 			return nil, i18n.NewError(ctx, msgs.MsgErrorHashMismatch, leaf.Ref().Hex(), n.Index().BigInt().Text(16), n.Index().Hex(), hash.HexString0xPrefix(), expectedIndex.Hex())
 		}
 		indexes = append(indexes, n.Index().BigInt())
+	}
+	return indexes, nil
+}
+
+func makeLeafIndexesFromCoinOwners(ctx context.Context, inputOwner string, outputCoins []*types.ZetoCoin) ([]*big.Int, error) {
+	indexes := make([]*big.Int, len(outputCoins)+1) // +1 for the input owner
+	// the first index is for the input owner
+	pubKey, err := zetosigner.DecodeBabyJubJubPublicKey(inputOwner)
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
+	}
+	hash, err := poseidon.Hash([]*big.Int{pubKey.X, pubKey.Y})
+	if err != nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
+	}
+	indexes[0] = hash
+	// the rest of the indexes are for the output coins
+	for i, coin := range outputCoins {
+		pubKey, err := zetosigner.DecodeBabyJubJubPublicKey(coin.Owner.String())
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
+		}
+		hash, err := poseidon.Hash([]*big.Int{pubKey.X, pubKey.Y})
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorHashOutputState, err)
+		}
+		indexes[i+1] = hash
 	}
 	return indexes, nil
 }
@@ -241,29 +262,38 @@ func formatTransferProvingRequest(ctx context.Context, callbacks plugintk.Domain
 	if circuit.UsesNullifiers {
 		forLockedStates := len(delegate) > 0
 
-		mt, err := getSmt(ctx, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, tokenName, stateQueryContext, contractAddress, forLockedStates, circuit.UsesKyc)
-		if err != nil {
-			return nil, err
-		}
-
-		indexes, err := makeLeafIndexesFromCoins(ctx, inputCoins, mt)
-		if err != nil {
-			return nil, err
-		}
-
-		proofs, smtProof, err := generateMerkleProofs(ctx, mt, indexes)
+		proofs, smtProof, err := smtProofForInputs(ctx, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, tokenName, stateQueryContext, contractAddress, inputCoins, forLockedStates)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
 		}
-		extrasObj := &corepb.ProvingRequestExtras_Nullifiers{
-			SmtProof: smtProof,
-		}
+		// if the proofs are less than the input size, we need to fill the rest with empty proofs
 		for i := len(proofs); i < inputSize; i++ {
-			extrasObj.SmtProof.MerkleProofs = append(extrasObj.SmtProof.MerkleProofs, &smt.Empty_Proof)
-			extrasObj.SmtProof.Enabled = append(extrasObj.SmtProof.Enabled, false)
+			smtProof.MerkleProofs = append(smtProof.MerkleProofs, &smt.Empty_Proof)
+			smtProof.Enabled = append(smtProof.Enabled, false)
 		}
-		if len(delegate) > 0 {
-			extrasObj.Delegate = delegate[0]
+
+		var extrasObj proto.Message
+		if !circuit.UsesKyc {
+			extrasObj = &corepb.ProvingRequestExtras_Nullifiers{
+				SmtProof: smtProof,
+			}
+			if len(delegate) > 0 {
+				extrasObj.(*corepb.ProvingRequestExtras_Nullifiers).Delegate = delegate[0]
+			}
+		} else {
+			// for KYC, we need the additional proof for the KYC states
+			_, smtProofKyc, err := smtProofForOwners(ctx, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, tokenName, stateQueryContext, contractAddress, inputOwner, outputCoins)
+			if err != nil {
+				return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
+			}
+
+			extrasObj = &corepb.ProvingRequestExtras_NullifiersKyc{
+				SmtUtxoProof: smtProof,
+				SmtKycProof:  smtProofKyc,
+			}
+			if len(delegate) > 0 {
+				extrasObj.(*corepb.ProvingRequestExtras_Nullifiers).Delegate = delegate[0]
+			}
 		}
 		protoExtras, err := proto.Marshal(extrasObj)
 		if err != nil {
@@ -291,6 +321,50 @@ func formatTransferProvingRequest(ctx context.Context, callbacks plugintk.Domain
 		payload.Extras = extras
 	}
 	return proto.Marshal(payload)
+}
+
+func smtProofForInputs(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName, stateQueryContext string, contractAddress *pldtypes.EthAddress, inputCoins []*types.ZetoCoin, forLockedStates bool) ([]core.Proof, *corepb.MerkleProofObject, error) {
+	smtName := smt.MerkleTreeName(tokenName, contractAddress)
+	if forLockedStates {
+		smtName = smt.MerkleTreeNameForLockedStates(tokenName, contractAddress)
+	}
+
+	mt, err := getSmt(ctx, smtName, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, stateQueryContext)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var indexes []*big.Int
+	indexes, err = makeLeafIndexesFromCoins(ctx, inputCoins, mt)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	proofs, smtProof, err := generateMerkleProofs(ctx, mt, indexes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return proofs, smtProof, nil
+}
+
+func smtProofForOwners(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName, stateQueryContext string, contractAddress *pldtypes.EthAddress, inputOwner string, outputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.MerkleProofObject, error) {
+	smtName := smt.MerkleTreeNameForKycStates(tokenName, contractAddress)
+	mt, err := getSmt(ctx, smtName, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, stateQueryContext)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// for KYC, we need to collect the indexes from the coins owners
+	indexes, err := makeLeafIndexesFromCoinOwners(ctx, inputOwner, outputCoins)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	proofs, smtProof, err := generateMerkleProofs(ctx, mt, indexes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return proofs, smtProof, nil
 }
 
 func trimZeroUtxos(utxos []string) []string {

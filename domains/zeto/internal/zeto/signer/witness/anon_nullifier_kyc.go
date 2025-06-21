@@ -28,11 +28,11 @@ func (inputs *FungibleNullifierKycWitnessInputs) Assemble(ctx context.Context, k
 		return nil, err
 	}
 	m["nullifiers"] = nullifiers
-	m["root"] = utxoRoot
-	m["merkleProof"] = utxoProofs
+	m["utxosRoot"] = utxoRoot
+	m["utxosMerkleProof"] = utxoProofs
 	m["enabled"] = enabled
-	m["identifiesRoot"] = kycRoot
-	m["identifiesProof"] = kycProofs
+	m["identitiesRoot"] = kycRoot
+	m["identitiesMerkleProof"] = kycProofs
 	if delegate != nil {
 		m["lockDelegate"] = delegate
 	}
@@ -82,17 +82,17 @@ func (inputs *FungibleNullifierKycWitnessInputs) decodeSmtProofObject(ctx contex
 	if !ok {
 		return nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeRootExtras)
 	}
-	var proofs [][]*big.Int
-	for _, proof := range proofObj.MerkleProofs {
-		var mp []*big.Int
-		for _, node := range proof.Nodes {
+	proofs := make([][]*big.Int, len(proofObj.MerkleProofs))
+	for i, proof := range proofObj.MerkleProofs {
+		mp := make([]*big.Int, len(proof.Nodes))
+		for j, node := range proof.Nodes {
 			n, ok := new(big.Int).SetString(node, 16)
 			if !ok {
 				return nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeMTPNodeExtras)
 			}
-			mp = append(mp, n)
+			mp[j] = n
 		}
-		proofs = append(proofs, mp)
+		proofs[i] = mp
 	}
 	enabled := make([]*big.Int, len(proofObj.Enabled))
 	for i, e := range proofObj.Enabled {
