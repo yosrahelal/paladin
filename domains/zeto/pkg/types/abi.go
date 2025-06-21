@@ -42,6 +42,8 @@ const (
 )
 
 type InitializerParams struct {
+	Name      string `json:"name"`
+	Symbol    string `json:"symbol"`
 	TokenName string `json:"tokenName"`
 	// InitialOwner string `json:"initialOwner"` // TODO: allow the initial owner to be specified by the deploy request
 }
@@ -50,6 +52,8 @@ type DeployParams struct {
 	TransactionID string            `json:"transactionId"`
 	Data          pldtypes.HexBytes `json:"data"`
 	TokenName     string            `json:"tokenName"`
+	Name          string            `json:"name"`
+	Symbol        string            `json:"symbol"`
 	InitialOwner  string            `json:"initialOwner"`
 	IsNonFungible bool              `json:"isNonFungible"`
 }
