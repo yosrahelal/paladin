@@ -37,7 +37,14 @@ import (
 )
 
 func TestTransferValidateParams(t *testing.T) {
-	h := transferHandler{}
+	h := NewTransferHandler(
+		"test1",
+		nil,
+		&pb.StateSchema{Id: "coin"},
+		&pb.StateSchema{Id: "merkle_tree_root"},
+		&pb.StateSchema{Id: "merkle_tree_node"},
+		&pb.StateSchema{Id: "data"},
+	)
 	ctx := context.Background()
 
 	tests := []struct {

@@ -39,6 +39,7 @@ const (
 	METHOD_LOCK            = "lock"
 	METHOD_DEPOSIT         = "deposit"
 	METHOD_WITHDRAW        = "withdraw"
+	METHOD_BALANCE_OF      = "balanceOf"
 )
 
 type InitializerParams struct {
@@ -103,4 +104,14 @@ type DepositParams struct {
 
 type WithdrawParams struct {
 	Amount *pldtypes.HexUint256 `json:"amount"`
+}
+
+type FungibleBalanceOfParam struct {
+	Account string `json:"account"`
+}
+
+type BalanceOfResult struct {
+	TotalBalance string `json:"totalBalance"`
+	TotalStates  string `json:"totalStates"`
+	Overflow     string `json:"overflow"`
 }

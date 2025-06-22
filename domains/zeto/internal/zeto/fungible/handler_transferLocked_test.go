@@ -38,7 +38,14 @@ import (
 )
 
 func TestTransferLockedValidateParams(t *testing.T) {
-	h := transferLockedHandler{}
+	h := NewTransferLockedHandler(
+		"test1",
+		nil,
+		&prototk.StateSchema{Id: "coin"},
+		&prototk.StateSchema{Id: "merkle_tree_root"},
+		&prototk.StateSchema{Id: "merkle_tree_node"},
+		&prototk.StateSchema{Id: "data"},
+	)
 	ctx := context.Background()
 	_, err := h.ValidateParams(ctx, nil, "bad json")
 	assert.EqualError(t, err, "invalid character 'b' looking for beginning of value")
