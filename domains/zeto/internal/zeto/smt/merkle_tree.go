@@ -23,21 +23,34 @@ import (
 )
 
 const SMT_HEIGHT_UTXO = 64
+const SMT_HEIGHT_KYC = 10
 
-var Empty_Proof proto.MerkleProof
+var Empty_Proof_Utxos proto.MerkleProof
+var Empty_Proof_kyc proto.MerkleProof
 
 func init() {
 	var nodes []string
 	for i := 0; i < SMT_HEIGHT_UTXO; i++ {
 		nodes = append(nodes, "0")
 	}
-	Empty_Proof = proto.MerkleProof{
+	Empty_Proof_Utxos = proto.MerkleProof{
 		Nodes: nodes,
+	}
+	var kycNodes []string
+	for i := 0; i < SMT_HEIGHT_KYC; i++ {
+		kycNodes = append(kycNodes, "0")
+	}
+	Empty_Proof_Utxos = proto.MerkleProof{
+		Nodes: kycNodes,
 	}
 }
 
-func NewSmt(storage StatesStorage) (core.SparseMerkleTree, error) {
-	mt, err := smt.NewMerkleTree(storage, SMT_HEIGHT_UTXO)
+func NewSmt(storage StatesStorage, forKyc ...bool) (core.SparseMerkleTree, error) {
+	height := SMT_HEIGHT_UTXO
+	if len(forKyc) > 0 && forKyc[0] {
+		height = SMT_HEIGHT_KYC
+	}
+	mt, err := smt.NewMerkleTree(storage, height)
 	return mt, err
 }
 

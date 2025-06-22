@@ -484,7 +484,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	}
 	if common.IsKycToken(domainConfig.TokenName) {
 		smtName := smt.MerkleTreeNameForKycStates(domainConfig.TokenName, contractAddress)
-		smtForKyc, err = z.newSmtTreeSpec(ctx, smtName, req.StateQueryContext)
+		smtForKyc, err = z.newSmtTreeSpec(ctx, smtName, req.StateQueryContext, true)
 		if err != nil {
 			return nil, err
 		}
@@ -672,12 +672,12 @@ func (z *Zeto) WrapPrivacyGroupEVMTX(ctx context.Context, req *prototk.WrapPriva
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
 
-func (z *Zeto) newSmtTreeSpec(ctx context.Context, smtName string, stateQueryContext string) (*merkleTreeSpec, error) {
+func (z *Zeto) newSmtTreeSpec(ctx context.Context, smtName string, stateQueryContext string, forKyc ...bool) (*merkleTreeSpec, error) {
 	smtForStates := &merkleTreeSpec{
 		name:    smtName,
 		storage: smt.NewStatesStorage(z.Callbacks, smtName, stateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id),
 	}
-	tree, err := smt.NewSmt(smtForStates.storage)
+	tree, err := smt.NewSmt(smtForStates.storage, forKyc...)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
 	}

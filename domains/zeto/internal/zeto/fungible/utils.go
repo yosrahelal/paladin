@@ -115,9 +115,13 @@ func utxosFromStates(ctx context.Context, states []*prototk.EndorsableState, des
 	return utxos, nil
 }
 
-func generateMerkleProofs(ctx context.Context, mt core.SparseMerkleTree, indexes []*big.Int) ([]core.Proof, *corepb.MerkleProofObject, error) {
+func generateMerkleProofs(ctx context.Context, mt core.SparseMerkleTree, indexes []*big.Int, forKyc ...bool) ([]core.Proof, *corepb.MerkleProofObject, error) {
 	// verify that the input UTXOs have been indexed by the Merkle tree DB
 	// and generate a merkle proof for each
+	levels := smt.SMT_HEIGHT_UTXO
+	if len(forKyc) > 0 && forKyc[0] {
+		levels = smt.SMT_HEIGHT_KYC
+	}
 	mtRoot := mt.Root()
 	proofs, _, err := mt.GenerateProofs(indexes, mtRoot)
 	if err != nil {
@@ -126,7 +130,7 @@ func generateMerkleProofs(ctx context.Context, mt core.SparseMerkleTree, indexes
 	var mps []*corepb.MerkleProof
 	var enabled []bool
 	for i, proof := range proofs {
-		cp, err := proof.ToCircomVerifierProof(indexes[i], indexes[i], mtRoot, smt.SMT_HEIGHT_UTXO)
+		cp, err := proof.ToCircomVerifierProof(indexes[i], indexes[i], mtRoot, levels)
 		if err != nil {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorConvertToCircomProof, err)
 		}
@@ -149,9 +153,9 @@ func generateMerkleProofs(ctx context.Context, mt core.SparseMerkleTree, indexes
 	return proofs, smtProof, nil
 }
 
-func getSmt(ctx context.Context, smtName string, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, stateQueryContext string) (core.SparseMerkleTree, error) {
+func getSmt(ctx context.Context, smtName string, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, stateQueryContext string, forKyc ...bool) (core.SparseMerkleTree, error) {
 	storage := smt.NewStatesStorage(callbacks, smtName, stateQueryContext, merkleTreeRootSchema.Id, merkleTreeNodeSchema.Id)
-	mt, err := smt.NewSmt(storage)
+	mt, err := smt.NewSmt(storage, forKyc...)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
 	}
@@ -268,7 +272,7 @@ func formatTransferProvingRequest(ctx context.Context, callbacks plugintk.Domain
 		}
 		// if the proofs are less than the input size, we need to fill the rest with empty proofs
 		for i := len(proofs); i < inputSize; i++ {
-			smtProof.MerkleProofs = append(smtProof.MerkleProofs, &smt.Empty_Proof)
+			smtProof.MerkleProofs = append(smtProof.MerkleProofs, &smt.Empty_Proof_Utxos)
 			smtProof.Enabled = append(smtProof.Enabled, false)
 		}
 
@@ -349,7 +353,7 @@ func smtProofForInputs(ctx context.Context, callbacks plugintk.DomainCallbacks, 
 
 func smtProofForOwners(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName, stateQueryContext string, contractAddress *pldtypes.EthAddress, inputOwner string, outputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.MerkleProofObject, error) {
 	smtName := smt.MerkleTreeNameForKycStates(tokenName, contractAddress)
-	mt, err := getSmt(ctx, smtName, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, stateQueryContext)
+	mt, err := getSmt(ctx, smtName, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, stateQueryContext, true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -360,7 +364,7 @@ func smtProofForOwners(ctx context.Context, callbacks plugintk.DomainCallbacks, 
 		return nil, nil, err
 	}
 
-	proofs, smtProof, err := generateMerkleProofs(ctx, mt, indexes)
+	proofs, smtProof, err := generateMerkleProofs(ctx, mt, indexes, true)
 	if err != nil {
 		return nil, nil, err
 	}

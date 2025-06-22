@@ -322,7 +322,7 @@ func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins [
 			SmtProof: smtProof,
 		}
 		for i := len(proofs); i < inputSize; i++ {
-			extrasObj.SmtProof.MerkleProofs = append(extrasObj.SmtProof.MerkleProofs, &smt.Empty_Proof)
+			extrasObj.SmtProof.MerkleProofs = append(extrasObj.SmtProof.MerkleProofs, &smt.Empty_Proof_Utxos)
 			extrasObj.SmtProof.Enabled = append(extrasObj.SmtProof.Enabled, false)
 		}
 		protoExtras, err := proto.Marshal(extrasObj)
