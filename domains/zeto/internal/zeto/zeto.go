@@ -573,12 +573,14 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		if len(newStatesForSMTForLocked) > 0 {
 			res.NewStates = append(res.NewStates, newStatesForSMTForLocked...)
 		}
-		newStatesForSMTForKyc, err := smtForKyc.storage.GetNewStates()
-		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtForKyc.name, err)
-		}
-		if len(newStatesForSMTForKyc) > 0 {
-			res.NewStates = append(res.NewStates, newStatesForSMTForKyc...)
+		if common.IsKycToken(domainConfig.TokenName) {
+			newStatesForSMTForKyc, err := smtForKyc.storage.GetNewStates()
+			if err != nil {
+				return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtForKyc.name, err)
+			}
+			if len(newStatesForSMTForKyc) > 0 {
+				res.NewStates = append(res.NewStates, newStatesForSMTForKyc...)
+			}
 		}
 	}
 	return &res, nil
