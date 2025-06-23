@@ -40,7 +40,7 @@ func init() {
 	for i := 0; i < SMT_HEIGHT_KYC; i++ {
 		kycNodes = append(kycNodes, "0")
 	}
-	Empty_Proof_Utxos = proto.MerkleProof{
+	Empty_Proof_kyc = proto.MerkleProof{
 		Nodes: kycNodes,
 	}
 }

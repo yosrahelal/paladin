@@ -739,9 +739,11 @@ func TestPrepareInputsForNullifiers_ErrorCases(t *testing.T) {
 		{
 			name: "invalid root format",
 			extras: &pb.ProvingRequestExtras_Nullifiers{
-				Root:         "invalid_hex",
-				MerkleProofs: []*pb.MerkleProof{},
-				Enabled:      []bool{},
+				SmtProof: &pb.MerkleProofObject{
+					Root:         "invalid_hex",
+					MerkleProofs: []*pb.MerkleProof{},
+					Enabled:      []bool{},
+				},
 			},
 			inputs: FungibleNullifierWitnessInputs{
 				FungibleWitnessInputs: FungibleWitnessInputs{
@@ -758,13 +760,15 @@ func TestPrepareInputsForNullifiers_ErrorCases(t *testing.T) {
 		{
 			name: "invalid merkle proof node",
 			extras: &pb.ProvingRequestExtras_Nullifiers{
-				Root: "123456",
-				MerkleProofs: []*pb.MerkleProof{
-					{
-						Nodes: []string{"invalid_hex"},
+				SmtProof: &pb.MerkleProofObject{
+					Root: "123456",
+					MerkleProofs: []*pb.MerkleProof{
+						{
+							Nodes: []string{"invalid_hex"},
+						},
 					},
+					Enabled: []bool{true},
 				},
-				Enabled: []bool{true},
 			},
 			inputs: FungibleNullifierWitnessInputs{
 				FungibleWitnessInputs: FungibleWitnessInputs{
@@ -781,10 +785,12 @@ func TestPrepareInputsForNullifiers_ErrorCases(t *testing.T) {
 		{
 			name: "invalid delegate address",
 			extras: &pb.ProvingRequestExtras_Nullifiers{
-				Root:         "123456",
-				MerkleProofs: []*pb.MerkleProof{},
-				Enabled:      []bool{},
-				Delegate:     "invalid_address",
+				SmtProof: &pb.MerkleProofObject{
+					Root:         "123456",
+					MerkleProofs: []*pb.MerkleProof{},
+					Enabled:      []bool{},
+				},
+				Delegate: "invalid_address",
 			},
 			inputs: FungibleNullifierWitnessInputs{
 				FungibleWitnessInputs: FungibleWitnessInputs{
@@ -801,10 +807,12 @@ func TestPrepareInputsForNullifiers_ErrorCases(t *testing.T) {
 		{
 			name: "valid delegate with 0x prefix",
 			extras: &pb.ProvingRequestExtras_Nullifiers{
-				Root:         "123456",
-				MerkleProofs: []*pb.MerkleProof{},
-				Enabled:      []bool{},
-				Delegate:     "0x1234567890123456789012345678901234567890",
+				SmtProof: &pb.MerkleProofObject{
+					Root:         "123456",
+					MerkleProofs: []*pb.MerkleProof{},
+					Enabled:      []bool{},
+				},
+				Delegate: "0x1234567890123456789012345678901234567890",
 			},
 			inputs: FungibleNullifierWitnessInputs{
 				FungibleWitnessInputs: FungibleWitnessInputs{
@@ -887,16 +895,18 @@ func TestFungibleNullifierWitnessInputs_ZeroValueHandling(t *testing.T) {
 	}
 
 	ras := &pb.ProvingRequestExtras_Nullifiers{
-		Root: "123456",
-		MerkleProofs: []*pb.MerkleProof{
-			{
-				Nodes: []string{"1", "2", "3"},
+		SmtProof: &pb.MerkleProofObject{
+			Root: "123456",
+			MerkleProofs: []*pb.MerkleProof{
+				{
+					Nodes: []string{"1", "2", "3"},
+				},
+				{
+					Nodes: []string{"0", "0", "0"},
+				},
 			},
-			{
-				Nodes: []string{"0", "0", "0"},
-			},
+			Enabled: []bool{true, false},
 		},
-		Enabled: []bool{true, false},
 	}
 
 	inputs := FungibleNullifierWitnessInputs{
