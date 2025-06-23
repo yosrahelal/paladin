@@ -1,0 +1,347 @@
+helm template paladin-ci charts/paladin-operator --values charts/paladin-operator/values-customnet.yaml --namespace=default --set mode=customnet --debug
+---
+# Source: paladin-operator/templates/operator/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: paladin-operator
+automountServiceAccountToken: true
+---
+# Source: paladin-operator/templates/operator/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: paladin-operator
+data:
+  config.json: |
+    {
+      "paladin": {
+        "image": "ghcr.io/lf-decentralized-trust-labs/paladin:main",
+        "imagePullPolicy": "Always",
+        "labels": {"app":"paladin"},
+        "annotations": null,
+        "envs": null,
+        "tolerations": null,
+        "affinity": null,
+        "nodeSelector": null,
+        "securityContext": null
+      },
+      "besu": {
+        "image": "hyperledger/besu:latest",
+        "imagePullPolicy": "Always",
+        "labels": {"app":"besu"},
+        "annotations": null,
+        "envs": null,
+        "tolerations": null,
+        "affinity": null,
+        "nodeSelector": null,
+        "securityContext": null
+      },
+      "postgres": {
+        "image": "postgres:latest",
+        "imagePullPolicy": "Always",
+        "labels": null,
+        "annotations": null,
+        "envs": null
+      }
+    }
+---
+# Source: paladin-operator/templates/operator/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: paladin-operator
+rules:
+- apiGroups:
+  - core.paladin.io
+  resources:
+  - smartcontractdeployments
+  - transactioninvokes
+  - besus
+  - paladins
+  - besugeneses
+  - paladinregistries
+  - paladindomains
+  - paladinregistrations 
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.paladin.io
+  resources:
+  - smartcontractdeployments/status
+  - transactioninvokes/status
+  - besus/status
+  - paladins/status
+  - besugeneses/status
+  - paladinregistries/status
+  - paladindomains/status
+  - paladinregistrations/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificates
+  verbs:
+  - get
+  - list
+  - create
+  - delete
+  - update
+  - patch
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - create
+  - delete
+  - update
+  - patch
+  - watch
+- apiGroups:
+  - ""  # core
+  resources:
+  - services
+  - configmaps
+  - secrets
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+  - create
+  - delete
+  - update
+  - patch
+  - watch
+- apiGroups:
+  - "policy"
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - get
+  - list
+  - create
+  - delete
+  - update
+  - patch
+  - watch
+---
+# Source: paladin-operator/templates/operator/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: paladin-operator
+subjects:
+  - kind: ServiceAccount
+    name: paladin-operator     
+    namespace: default             
+roleRef:
+  kind: Role
+  name: paladin-operator
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: paladin-operator/templates/operator/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: paladin-operator
+
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: paladin-operator
+---
+# Source: paladin-operator/templates/operator/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paladin-operator
+  labels:
+    app.kubernetes.io/name: paladin-operator
+    
+    control-plane: controller-manager
+  annotations:
+spec:
+  replicas: 
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: paladin-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: paladin-operator
+        
+        control-plane: controller-manager
+      annotations:
+    spec:
+      serviceAccountName: paladin-operator
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - name: paladin-operator
+        image: "ghcr.io/lf-decentralized-trust-labs/paladin-operator:main"
+        imagePullPolicy: Always
+        command:
+          - /manager
+        ports:
+          - containerPort: 80
+            name: http
+            protocol: TCP
+        env:
+          - name: WATCH_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: CONFIG_PATH
+            value: "/etc/config"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+            scheme: HTTP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+            scheme: HTTP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+            - mountPath: /etc/config/config.json
+              name: config
+              subPath: config.json
+      volumes:
+        - configMap:
+            name: paladin-operator
+          name: config
+---
+# Source: paladin-operator/templates/customnodes/paladin.yaml
+# templates/paladin-nodes.yaml
+---
+# Source: paladin-operator/templates/customnodes/paladin.yaml
+apiVersion: core.paladin.io/v1alpha1
+kind: Paladin
+metadata:
+  name: bank
+  labels:
+    app.kubernetes.io/name: bank
+spec:
+  baseLedgerEndpoint:
+    type: local
+    local:
+      nodeName: node1
+
+  domains:
+    - labelSelector:
+        matchLabels:
+          paladin.io/domain-name: noto
+    - labelSelector:
+        matchLabels:
+          paladin.io/domain-name: zeto
+    - labelSelector:
+        matchLabels:
+          paladin.io/domain-name: pente
+
+  registries:
+    - labelSelector:
+        matchLabels:
+          paladin.io/registry-name: evm-reg
+
+  transports:
+    - name: grpc
+      plugin:
+        type: c-shared
+        library: /app/transports/libgrpc.so
+      configJSON: |-
+        {"address":"0.0.0.0","externalHostname":"","port":9000}
+      ports:
+        - name: transport-grpc
+          port: 9000
+          targetPort: 9000
+      tls:
+        secretName: paladin-mtls
+        certName: paladin-mtls
+
+  service:
+    type: NodePort
+    ports:
+      - name: rpc-http
+        port: 8548
+        nodePort: 31548
+      - name: rpc-ws
+        port: 8549
+        nodePort: 31549
+
+  database:
+    mode: sidecarPostgres
+    migrationMode: auto
+    pvcTemplate:
+
+      accessModes:
+      - ReadWriteOnce
+      capacity:
+        storage: 1Gi
+      claimRef:
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        name: besu-node2-data
+        namespace: default
+        resourceVersion: "129397"
+        uid: 10bbd65f-5219-484d-b819-57fe2ca92352
+      hostPath:
+        path: /var/local-path-provisioner/pvc-10bbd65f-5219-484d-b819-57fe2ca92352_default_besu-node2-data
+        type: DirectoryOrCreate
+      storageClassName: ""
+
+  secretBackedSigners:
+    - name: signer-auto-wallet
+      secret: node1.keys
+      type: autoHDWallet
+      keySelector: .*
+
+  config: |-
+    log:
+      level: debug  # Log levels: debug, info, warn, error
+    publicTxManager:
+      gasLimit:
+        gasEstimateFactor: 2.0
+---
+# Source: paladin-operator/templates/customnodes/paladinregistration.yaml
+apiVersion: core.paladin.io/v1alpha1
+kind: PaladinRegistration
+metadata:
+  name: bank
+  labels:
+    app.kubernetes.io/name: bank
+spec:
+  registry: evm-registry
+  registryAdminNode: bank
+  registryAdminKey: registry.operator
+  node: bank
+  nodeAdminKey: registry.bank
+  transports:
+    - grpc
