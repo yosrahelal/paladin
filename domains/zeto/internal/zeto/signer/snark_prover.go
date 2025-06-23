@@ -281,8 +281,6 @@ func calculateWitness(ctx context.Context, circuit *zetosignerapi.Circuit, commo
 		return nil, i18n.NewError(ctx, msgs.MsgErrorAssembleInputs, err)
 	}
 
-	fmt.Printf("Witness inputs for circuit %s: %+v\n", circuit.Name, witnessInputs)
-
 	// Calculate the witness binary
 	wtns, err := witnessCalculator.CalculateWTNSBin(witnessInputs, true)
 	if err != nil {

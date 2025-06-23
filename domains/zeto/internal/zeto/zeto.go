@@ -19,7 +19,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"reflect"
 
@@ -536,7 +535,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	}
 	for _, ev := range req.Events {
 		var err error
-		fmt.Printf("===> Processing event: %+v\n", ev.SoliditySignature)
+
 		switch ev.SoliditySignature {
 		case z.events.mint:
 			err = z.handleMintEvent(ctx, smtForStates, ev, domainConfig.TokenName, &res)
