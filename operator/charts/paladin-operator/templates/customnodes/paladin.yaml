@@ -74,7 +74,8 @@ spec:
     mode: {{ .database.mode }}
     migrationMode: {{ .database.migrationMode }}
     {{- if .database.pvcTemplate  }}
-    pvcTemplate: {{ .database.pvcTemplate }}
+    pvcTemplate:
+      {{ toYaml .database.pvcTemplate | indent 6 }}
     {{- end }}
 
   secretBackedSigners:
