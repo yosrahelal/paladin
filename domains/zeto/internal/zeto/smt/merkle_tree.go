@@ -45,12 +45,8 @@ func init() {
 	}
 }
 
-func NewSmt(storage StatesStorage, forKyc ...bool) (core.SparseMerkleTree, error) {
-	height := SMT_HEIGHT_UTXO
-	if len(forKyc) > 0 && forKyc[0] {
-		height = SMT_HEIGHT_KYC
-	}
-	mt, err := smt.NewMerkleTree(storage, height)
+func NewSmt(storage StatesStorage, levels int) (core.SparseMerkleTree, error) {
+	mt, err := smt.NewMerkleTree(storage, levels)
 	return mt, err
 }
 

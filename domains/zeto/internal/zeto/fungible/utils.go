@@ -122,22 +122,18 @@ func utxosFromStates(ctx context.Context, states []*prototk.EndorsableState, des
 	return utxos, nil
 }
 
-func generateMerkleProofs(ctx context.Context, mt core.SparseMerkleTree, indexes []*big.Int, forKyc ...bool) ([]core.Proof, *corepb.MerkleProofObject, error) {
+func generateMerkleProofs(ctx context.Context, smtSpec *common.MerkleTreeSpec, indexes []*big.Int, forKyc ...bool) ([]core.Proof, *corepb.MerkleProofObject, error) {
 	// verify that the input UTXOs have been indexed by the Merkle tree DB
 	// and generate a merkle proof for each
-	levels := smt.SMT_HEIGHT_UTXO
-	if len(forKyc) > 0 && forKyc[0] {
-		levels = smt.SMT_HEIGHT_KYC
-	}
-	mtRoot := mt.Root()
-	proofs, _, err := mt.GenerateProofs(indexes, mtRoot)
+	mtRoot := smtSpec.Tree.Root()
+	proofs, _, err := smtSpec.Tree.GenerateProofs(indexes, mtRoot)
 	if err != nil {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
 	}
 	var mps []*corepb.MerkleProof
 	var enabled []bool
 	for i, proof := range proofs {
-		cp, err := proof.ToCircomVerifierProof(indexes[i], indexes[i], mtRoot, levels)
+		cp, err := proof.ToCircomVerifierProof(indexes[i], indexes[i], mtRoot, smtSpec.Levels)
 		if err != nil {
 			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorConvertToCircomProof, err)
 		}
@@ -152,21 +148,12 @@ func generateMerkleProofs(ctx context.Context, mt core.SparseMerkleTree, indexes
 		enabled = append(enabled, true)
 	}
 	smtProof := &corepb.MerkleProofObject{
-		Root:         mt.Root().BigInt().Text(16),
+		Root:         mtRoot.BigInt().Text(16),
 		MerkleProofs: mps,
 		Enabled:      enabled,
 	}
 
 	return proofs, smtProof, nil
-}
-
-func getSmt(ctx context.Context, smtName string, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, stateQueryContext string, forKyc ...bool) (core.SparseMerkleTree, error) {
-	storage := smt.NewStatesStorage(callbacks, smtName, stateQueryContext, merkleTreeRootSchema.Id, merkleTreeNodeSchema.Id)
-	mt, err := smt.NewSmt(storage, forKyc...)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
-	}
-	return mt, nil
 }
 
 func makeLeafIndexesFromCoins(ctx context.Context, inputCoins []*types.ZetoCoin, mt core.SparseMerkleTree) ([]*big.Int, error) {
@@ -176,17 +163,23 @@ func makeLeafIndexesFromCoins(ctx context.Context, inputCoins []*types.ZetoCoin,
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
 		}
+		// Create a new fungible node for the coin, to check existence
+		// in the Merkle tree. The index is calculated from the coin's
+		// amount, owner and salt.
 		idx := node.NewFungible(coin.Amount.Int(), pubKey, coin.Salt.Int())
 		leaf, err := node.NewLeafNode(idx)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorNewLeafNode, err)
 		}
+		// Check if the leaf exists in the Merkle tree
 		n, err := mt.GetNode(leaf.Ref())
 		if err != nil {
 			// TODO: deal with when the node is not found in the DB tables for the tree
 			// e.g because the transaction event hasn't been processed yet
 			return nil, i18n.NewError(ctx, msgs.MsgErrorQueryLeafNode, leaf.Ref().Hex(), err)
 		}
+		// Check if the index of the node returned from the merkle tree
+		// matches the expected index calculated from the coin's amount, owner and salt.
 		hash, err := coin.Hash(ctx)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
@@ -196,6 +189,9 @@ func makeLeafIndexesFromCoins(ctx context.Context, inputCoins []*types.ZetoCoin,
 			if err != nil {
 				return nil, i18n.NewError(ctx, msgs.MsgErrorNewNodeIndex, err)
 			}
+			// we have found a node in the tree based on its primary key (ref),
+			// but the node's index doesn't match the expected index based on
+			// the coin's amount, owner and salt. This is an error situation
 			return nil, i18n.NewError(ctx, msgs.MsgErrorHashMismatch, leaf.Ref().Hex(), n.Index().BigInt().Text(16), n.Index().Hex(), hash.HexString0xPrefix(), expectedIndex.Hex())
 		}
 		indexes = append(indexes, n.Index().BigInt())
@@ -303,7 +299,7 @@ func formatTransferProvingRequest(ctx context.Context, callbacks plugintk.Domain
 				SmtKycProof:  smtProofKyc,
 			}
 			if len(delegate) > 0 {
-				extrasObj.(*corepb.ProvingRequestExtras_Nullifiers).Delegate = delegate[0]
+				extrasObj.(*corepb.ProvingRequestExtras_NullifiersKyc).Delegate = delegate[0]
 			}
 		}
 		protoExtras, err := proto.Marshal(extrasObj)
@@ -339,14 +335,18 @@ func smtProofForInputs(ctx context.Context, callbacks plugintk.DomainCallbacks, 
 	if forLockedStates {
 		smtName = smt.MerkleTreeNameForLockedStates(tokenName, contractAddress)
 	}
+	smtType := common.StatesTree
+	if forLockedStates {
+		smtType = common.LockedStatesTree
+	}
 
-	mt, err := getSmt(ctx, smtName, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, stateQueryContext)
+	mt, err := common.NewMerkleTreeSpec(ctx, smtName, smtType, callbacks, merkleTreeRootSchema.Id, merkleTreeNodeSchema.Id, stateQueryContext)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	var indexes []*big.Int
-	indexes, err = makeLeafIndexesFromCoins(ctx, inputCoins, mt)
+	indexes, err = makeLeafIndexesFromCoins(ctx, inputCoins, mt.Tree)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -360,7 +360,7 @@ func smtProofForInputs(ctx context.Context, callbacks plugintk.DomainCallbacks, 
 
 func smtProofForOwners(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName, stateQueryContext string, contractAddress *pldtypes.EthAddress, inputOwner string, outputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.MerkleProofObject, error) {
 	smtName := smt.MerkleTreeNameForKycStates(tokenName, contractAddress)
-	mt, err := getSmt(ctx, smtName, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, stateQueryContext, true)
+	mt, err := common.NewMerkleTreeSpec(ctx, smtName, common.KycStatesTree, callbacks, merkleTreeRootSchema.Id, merkleTreeNodeSchema.Id, stateQueryContext)
 	if err != nil {
 		return nil, nil, err
 	}

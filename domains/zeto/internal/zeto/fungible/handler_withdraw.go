@@ -306,11 +306,11 @@ func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins [
 	var extras []byte
 	if circuit.UsesNullifiers {
 		smtName := smt.MerkleTreeName(tokenName, contractAddress)
-		mt, err := getSmt(ctx, smtName, h.callbacks, h.stateSchemas.MerkleTreeRootSchema, h.stateSchemas.MerkleTreeNodeSchema, stateQueryContext)
+		mt, err := common.NewMerkleTreeSpec(ctx, smtName, common.StatesTree, h.callbacks, h.stateSchemas.MerkleTreeRootSchema.Id, h.stateSchemas.MerkleTreeNodeSchema.Id, stateQueryContext)
 		if err != nil {
 			return nil, err
 		}
-		indexes, err := makeLeafIndexesFromCoins(ctx, inputCoins, mt)
+		indexes, err := makeLeafIndexesFromCoins(ctx, inputCoins, mt.Tree)
 		if err != nil {
 			return nil, err
 		}

@@ -22,7 +22,6 @@ import (
 	"math/big"
 	"reflect"
 
-	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/iden3/go-iden3-crypto/babyjub"
@@ -50,18 +49,16 @@ var _ plugintk.DomainAPI = &Zeto{}
 type Zeto struct {
 	Callbacks plugintk.DomainCallbacks
 
-	name                    string
-	config                  *types.DomainFactoryConfig
-	chainID                 int64
-	coinSchema              *prototk.StateSchema
-	nftSchema               *prototk.StateSchema
-	merkleTreeRootSchema    *prototk.StateSchema
-	merkleTreeNodeSchema    *prototk.StateSchema
-	kycMerkleTreeRootSchema *prototk.StateSchema
-	kycMerkleTreeNodeSchema *prototk.StateSchema
-	dataSchema              *prototk.StateSchema
-	snarkProver             signerapi.InMemorySigner
-	events                  struct {
+	name                 string
+	config               *types.DomainFactoryConfig
+	chainID              int64
+	coinSchema           *prototk.StateSchema
+	nftSchema            *prototk.StateSchema
+	merkleTreeRootSchema *prototk.StateSchema
+	merkleTreeNodeSchema *prototk.StateSchema
+	dataSchema           *prototk.StateSchema
+	snarkProver          signerapi.InMemorySigner
+	events               struct {
 		mint               string
 		burn               string
 		transfer           string
@@ -110,12 +107,6 @@ type LockedEvent struct {
 type IdentityRegisteredEvent struct {
 	PublicKey []pldtypes.HexUint256 `json:"publicKey"`
 	Data      pldtypes.HexBytes     `json:"data"`
-}
-
-type merkleTreeSpec struct {
-	name    string
-	storage smt.StatesStorage
-	tree    core.SparseMerkleTree
 }
 
 var factoryDeployABI = &abi.Entry{
@@ -511,31 +502,30 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 
 	var res prototk.HandleEventBatchResponse
 	var errors []string
-	var smtForStates *merkleTreeSpec
-	var smtForLockedStates *merkleTreeSpec
-	var smtForKyc *merkleTreeSpec
+	var smtForStates *common.MerkleTreeSpec
+	var smtForLockedStates *common.MerkleTreeSpec
+	var smtForKyc *common.MerkleTreeSpec
 	if common.IsNullifiersToken(domainConfig.TokenName) {
 		smtName := smt.MerkleTreeName(domainConfig.TokenName, contractAddress)
-		smtForStates, err = z.newSmtTreeSpec(ctx, smtName, req.StateQueryContext)
+		smtForStates, err = common.NewMerkleTreeSpec(ctx, smtName, common.StatesTree, z.Callbacks, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id, req.StateQueryContext)
 		if err != nil {
 			return nil, err
 		}
 		smtName = smt.MerkleTreeNameForLockedStates(domainConfig.TokenName, contractAddress)
-		smtForLockedStates, err = z.newSmtTreeSpec(ctx, smtName, req.StateQueryContext)
+		smtForLockedStates, err = common.NewMerkleTreeSpec(ctx, smtName, common.LockedStatesTree, z.Callbacks, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id, req.StateQueryContext)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if common.IsKycToken(domainConfig.TokenName) {
 		smtName := smt.MerkleTreeNameForKycStates(domainConfig.TokenName, contractAddress)
-		smtForKyc, err = z.newSmtTreeSpec(ctx, smtName, req.StateQueryContext, true)
+		smtForKyc, err = common.NewMerkleTreeSpec(ctx, smtName, common.KycStatesTree, z.Callbacks, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id, req.StateQueryContext)
 		if err != nil {
 			return nil, err
 		}
 	}
 	for _, ev := range req.Events {
 		var err error
-
 		switch ev.SoliditySignature {
 		case z.events.mint:
 			err = z.handleMintEvent(ctx, smtForStates, ev, domainConfig.TokenName, &res)
@@ -558,24 +548,24 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		return &res, i18n.NewError(ctx, msgs.MsgErrorHandleEvents, formatErrors(errors))
 	}
 	if common.IsNullifiersToken(domainConfig.TokenName) {
-		newStatesForSMT, err := smtForStates.storage.GetNewStates()
+		newStatesForSMT, err := smtForStates.Storage.GetNewStates()
 		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtForStates.name, err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtForStates.Name, err)
 		}
 		if len(newStatesForSMT) > 0 {
 			res.NewStates = append(res.NewStates, newStatesForSMT...)
 		}
-		newStatesForSMTForLocked, err := smtForLockedStates.storage.GetNewStates()
+		newStatesForSMTForLocked, err := smtForLockedStates.Storage.GetNewStates()
 		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtForLockedStates.name, err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtForLockedStates.Name, err)
 		}
 		if len(newStatesForSMTForLocked) > 0 {
 			res.NewStates = append(res.NewStates, newStatesForSMTForLocked...)
 		}
 		if common.IsKycToken(domainConfig.TokenName) {
-			newStatesForSMTForKyc, err := smtForKyc.storage.GetNewStates()
+			newStatesForSMTForKyc, err := smtForKyc.Storage.GetNewStates()
 			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtForKyc.name, err)
+				return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtForKyc.Name, err)
 			}
 			if len(newStatesForSMTForKyc) > 0 {
 				res.NewStates = append(res.NewStates, newStatesForSMTForKyc...)
@@ -724,17 +714,4 @@ func (z *Zeto) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGro
 
 func (z *Zeto) WrapPrivacyGroupEVMTX(ctx context.Context, req *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
-}
-
-func (z *Zeto) newSmtTreeSpec(ctx context.Context, smtName string, stateQueryContext string, forKyc ...bool) (*merkleTreeSpec, error) {
-	smtForStates := &merkleTreeSpec{
-		name:    smtName,
-		storage: smt.NewStatesStorage(z.Callbacks, smtName, stateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id),
-	}
-	tree, err := smt.NewSmt(smtForStates.storage, forKyc...)
-	if err != nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
-	}
-	smtForStates.tree = tree
-	return smtForStates, nil
 }
