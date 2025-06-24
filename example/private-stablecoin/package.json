@@ -1,7 +1,7 @@
 {
-  "name": "paladin-example-enterprise-stablecoin",
+  "name": "paladin-example-private-stablecoin",
   "version": "0.0.1",
-  "description": "Enterprise stablecoin example using Zeto with nullifiers and KYC",
+  "description": "Private stablecoin example using Zeto with deposit/withdraw functionality",
   "main": "build/index.js",
   "scripts": {
     "build": "tsc",
