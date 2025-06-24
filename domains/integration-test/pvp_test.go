@@ -406,6 +406,9 @@ func (s *pvpTestSuite) TestNotoForZeto() {
 	})
 	lockedZeto, _ := lockedZetoCoins[0].Data.Hash(ctx)
 
+	// TODO: remove
+	time.Sleep(1 * time.Second)
+
 	transferZeto := zeto.TransferLocked(ctx, lockedZeto, bobKey.Verifier.Verifier, alice, 1).Prepare(bob)
 
 	log.L(ctx).Infof("Prepare the trade execute")
