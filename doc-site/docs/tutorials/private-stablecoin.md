@@ -23,11 +23,11 @@ This tutorial demonstrates:
 
 ## Scenario Overview
 
-The example simulates a private stablecoin ecosystem with the following participants:
+- **Financial Institution** (Node 1) – Deploys contracts, manages KYC registration, and issues stablecoins
+- **Client A** (Node 2) – Enterprise client receiving and transacting with stablecoins
+- **Client B** (Node 3) – Enterprise client receiving private transfers and withdrawing tokens
 
-- **Financial Institution** (`bank@node1`) – Issues public stablecoins and deploys the private stablecoin system
-- **Client A** (`client-a@node2`) – Uses both public and private forms of the stablecoin
-- **Client B** (`client-b@node3`) – Receives private transfers and can withdraw to public tokens
+The financial institution manages the entire lifecycle from contract deployment through KYC registration to token issuance and oversight.
 
 ## Step-by-Step Walkthrough
 

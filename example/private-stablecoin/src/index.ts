@@ -140,10 +140,14 @@ async function getERC20Balance(
 }
 
 async function main(): Promise<boolean> {
-  // Get verifiers for the financial institution and clients
-  const [financialInstitution] = paladin1.getVerifiers("bank@node1");
-  const [clientA] = paladin2.getVerifiers("client-a@node2");
-  const [clientB] = paladin3.getVerifiers("client-b@node3");
+  // Generate unique identity names for this run to avoid Merkle tree conflicts
+  const runId = Math.random().toString(36).substring(2, 8);
+  logger.log(`Using run ID: ${runId} for unique identities`);
+  
+  // Get verifiers for the financial institution and clients with unique names
+  const [financialInstitution] = paladin1.getVerifiers(`bank-${runId}@node1`);
+  const [clientA] = paladin2.getVerifiers(`client-a-${runId}@node2`);
+  const [clientB] = paladin3.getVerifiers(`client-b-${runId}@node3`);
 
   logger.log("=== Private Stablecoin with KYC and Deposit/Withdraw ===");
   logger.log(
