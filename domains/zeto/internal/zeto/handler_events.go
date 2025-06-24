@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
 	"github.com/iden3/go-iden3-crypto/poseidon"
@@ -157,9 +156,8 @@ func (z *Zeto) handleIdentityRegisteredEvent(ctx context.Context, smtKycTree *co
 	if err := json.Unmarshal([]byte(ev.DataJson), &registered); err == nil {
 		txData, err := decodeTransactionData(ctx, registered.Data)
 		if err != nil || txData == nil {
-			newTxID := uuid.New()
-			txId := pldtypes.Bytes32UUIDFirst16(newTxID)
-			log.L(ctx).Infof("IdentityRegistered event [publicKey=%+v] has no tx data. Inserting unique tx ID: %s", &registered.PublicKey, txId.HexString())
+			txId := pldtypes.MustParseBytes32("0000000000000000000000000000000000000000000000000000000000000000")
+			log.L(ctx).Infof("IdentityRegistered event [publicKey=%+v] has no tx data. Inserting zero tx ID", &registered.PublicKey)
 			txData = &types.ZetoTransactionData_V0{
 				TransactionID: txId,
 				InfoStates:    []pldtypes.Bytes32{},
