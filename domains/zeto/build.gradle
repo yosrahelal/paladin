@@ -159,7 +159,7 @@ task copySolidity(type: Copy, dependsOn: [protoc, ":solidity:compile", extractZe
     }
     from fileTree("${zkpOut}/artifacts/contracts") {
         include 'lib/interfaces/izeto.sol/IZeto.json'
-        include 'lib/interfaces/izeto_encrypted.sol/IZetoEncrypted.json'
+        include 'lib/interfaces/izeto_kyc.sol/IZetoKyc.json'
         include 'lib/interfaces/izeto_lockable.sol/IZetoLockable.json'
         include 'lib/interfaces/izeto_kyc.sol/IZetoKyc.json'
         include 'lib/interfaces/zeto_fungible_initializable.sol/IZetoFungibleInitializable.json'

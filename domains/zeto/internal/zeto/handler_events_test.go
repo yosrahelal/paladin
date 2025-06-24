@@ -22,11 +22,32 @@ import (
 
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRecordTransactionInfo(t *testing.T) {
+	ev := &prototk.OnChainEvent{
+		Location: &prototk.OnChainEventLocation{},
+	}
+	txData := &types.ZetoTransactionData_V0{
+		TransactionID: pldtypes.MustParseBytes32("0x30e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000"),
+		InfoStates: []pldtypes.Bytes32{
+			pldtypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000001234"),
+			pldtypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000000"),
+		},
+	}
+
+	res := &prototk.HandleEventBatchResponse{}
+	z := &Zeto{}
+	z.recordTransactionInfo(ev, txData, res)
+	assert.Len(t, res.InfoStates, 2)
+	assert.Equal(t, "0x0000000000000000000000000000000000000000000000000000000000001234", res.InfoStates[0].Id)
+	assert.Equal(t, "0x0000000000000000000000000000000000000000000000000000000000000000", res.InfoStates[1].Id)
+}
 
 func TestEncodeDecode(t *testing.T) {
 	ctx := context.Background()
@@ -379,4 +400,61 @@ func TestParseStatesFromEvent(t *testing.T) {
 	assert.Len(t, states, 2)
 	assert.Equal(t, "0000000000000000000000000000000000000000000000000000000000001234", states[0].Id)
 	assert.Equal(t, "0000000000000000000000000000000000000000000000000000000000000000", states[1].Id)
+}
+
+func TestHandleIdentityRegisteredEvent(t *testing.T) {
+	z, testCallbacks := newTestZeto()
+	storage := smt.NewStatesStorage(testCallbacks, "testToken1", "context1", "merkle_tree_root", "merkle_tree_node")
+	merkleTree, err := smt.NewSmt(storage, smt.SMT_HEIGHT_KYC)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	encodedData, _ := common.EncodeTransactionData(ctx, &prototk.TransactionSpecification{
+		TransactionId: "0x30e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000",
+	}, nil)
+	data, _ := json.Marshal(map[string]any{
+		"data":      encodedData,
+		"publicKey": []string{"7980718117603030807695495350922077879582656644717071592146865497574198464253", "7980718117603030807695495350922077879582656644717071592146865497574198464253"},
+	})
+
+	ev := &prototk.OnChainEvent{
+		DataJson:          string(data),
+		SoliditySignature: "event IdentityRegistered(uint256[] publicKey, bytes data)",
+	}
+
+	smtSpec := &common.MerkleTreeSpec{Tree: merkleTree, Storage: storage}
+
+	t.Run("valid data for the identity registered event", func(t *testing.T) {
+		res := &prototk.HandleEventBatchResponse{}
+		err = z.handleIdentityRegisteredEvent(ctx, smtSpec, ev, "Zeto_AnonNullifierKyc", res)
+		assert.NoError(t, err)
+	})
+
+	t.Run("bad data for the identity registered event - should be logged and move on", func(t *testing.T) {
+		ev.DataJson = "bad json"
+		res := &prototk.HandleEventBatchResponse{}
+		err = z.handleIdentityRegisteredEvent(ctx, smtSpec, ev, "Zeto_AnonNullifierKyc", res)
+		assert.NoError(t, err)
+	})
+
+	t.Run("event with no data - generate one", func(t *testing.T) {
+		data, _ := json.Marshal(map[string]any{
+			"publicKey": []string{"7980718117603030807695495350922077879582656644717071592146865497574198464252", "7980718117603030807695495350922077879582656644717071592146865497574198464251"},
+		})
+		ev.DataJson = string(data)
+		res := &prototk.HandleEventBatchResponse{}
+		err = z.handleIdentityRegisteredEvent(ctx, smtSpec, ev, "Zeto_AnonNullifierKyc", res)
+		assert.NoError(t, err)
+	})
+
+	t.Run("public key is not valid field - should return error", func(t *testing.T) {
+		data, _ := json.Marshal(map[string]any{
+			"data":      encodedData,
+			"publicKey": []string{"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},
+		})
+		ev.DataJson = string(data)
+		res := &prototk.HandleEventBatchResponse{}
+		err = z.handleIdentityRegisteredEvent(ctx, smtSpec, ev, "Zeto_AnonNullifierKyc", res)
+		assert.ErrorContains(t, err, "PD210020: Failed to handle events IdentityRegistered. inputs values not inside Finite Field")
+	})
 }

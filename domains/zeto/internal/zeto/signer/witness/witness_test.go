@@ -555,6 +555,103 @@ func TestAssembleFungibleNullifierWitnessInputs(t *testing.T) {
 	assert.Contains(t, result, "merkleProof")
 	assert.Contains(t, result, "enabled")
 }
+
+func TestAssembleFungibleNullifierKycWitnessInputs(t *testing.T) {
+	ras := &pb.ProvingRequestExtras_NullifiersKyc{
+		SmtUtxoProof: &pb.MerkleProofObject{
+			Root: "123456",
+			MerkleProofs: []*pb.MerkleProof{
+				{
+					Nodes: []string{"1", "2", "3"},
+				},
+				{
+					Nodes: []string{"0", "0", "0"},
+				},
+			},
+			Enabled: []bool{true, false},
+		},
+		SmtKycProof: &pb.MerkleProofObject{
+			Root: "123456",
+			MerkleProofs: []*pb.MerkleProof{
+				{
+					Nodes: []string{"1", "2", "3"},
+				},
+				{
+					Nodes: []string{"0", "0", "0"},
+				},
+			},
+			Enabled: []bool{true, false},
+		},
+		Delegate: "0x1234567890123456789012345678901234567890",
+	}
+	inputs := FungibleNullifierKycWitnessInputs{
+		Extras: ras,
+		FungibleWitnessInputs: FungibleWitnessInputs{
+			CommonWitnessInputs: CommonWitnessInputs{
+				inputCommitments: []*big.Int{big.NewInt(1), big.NewInt(2)},
+				inputSalts:       []*big.Int{big.NewInt(3), big.NewInt(4)},
+			},
+			inputValues:  []*big.Int{big.NewInt(5), big.NewInt(6)},
+			outputValues: []*big.Int{big.NewInt(7), big.NewInt(8)},
+		},
+	}
+	key := core.KeyEntry{
+		PrivateKeyForZkp: big.NewInt(123456789),
+	}
+	ctx := context.Background()
+
+	t.Run("valid inputs should succeed", func(t *testing.T) {
+		result, err := inputs.Assemble(ctx, &key)
+		assert.NoError(t, err)
+		assert.Equal(t, inputs.inputCommitments, result["inputCommitments"])
+		assert.Equal(t, inputs.inputSalts, result["inputSalts"])
+		assert.Equal(t, inputs.inputValues, result["inputValues"])
+		assert.Equal(t, inputs.outputValues, result["outputValues"])
+		assert.Contains(t, result, "nullifiers")
+		assert.Contains(t, result, "utxosRoot")
+		assert.Contains(t, result, "utxosMerkleProof")
+		assert.Contains(t, result, "enabled")
+		assert.Contains(t, result, "identitiesRoot")
+		assert.Contains(t, result, "identitiesMerkleProof")
+	})
+
+	t.Run("invalid salts should fail", func(t *testing.T) {
+		invalidField, OK := big.NewInt(0).SetString("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16)
+		require.True(t, OK)
+		inputs.inputSalts = []*big.Int{big.NewInt(3), invalidField}
+		_, err := inputs.Assemble(ctx, &key)
+		assert.ErrorContains(t, err, "PD210079: Failed to calculate nullifier. inputs values not inside Finite Field")
+	})
+
+	t.Run("skip empty input commitments", func(t *testing.T) {
+		inputs.inputCommitments = []*big.Int{big.NewInt(1), big.NewInt(0)}
+		_, err := inputs.Assemble(ctx, &key)
+		assert.NoError(t, err)
+	})
+
+	t.Run("fail to decode smt proof", func(t *testing.T) {
+		inputs.inputCommitments = []*big.Int{big.NewInt(1), big.NewInt(2)}
+		inputs.inputSalts = []*big.Int{big.NewInt(3), big.NewInt(4)}
+		ras.SmtUtxoProof.MerkleProofs[0].Nodes[0] = "invalid"
+		_, err := inputs.Assemble(ctx, &key)
+		assert.ErrorContains(t, err, "PD210081: Failed to decode node in merkle proof in extras")
+	})
+
+	t.Run("fail to decode smt KYC proof", func(t *testing.T) {
+		ras.SmtUtxoProof.MerkleProofs[0].Nodes[0] = "1"
+		ras.SmtKycProof.MerkleProofs[0].Nodes[0] = "invalid"
+		_, err := inputs.Assemble(ctx, &key)
+		assert.ErrorContains(t, err, "PD210081: Failed to decode node in merkle proof in extras")
+	})
+
+	t.Run("fail to decode delegate", func(t *testing.T) {
+		ras.SmtKycProof.MerkleProofs[0].Nodes[0] = "1"
+		ras.Delegate = "invalid"
+		_, err := inputs.Assemble(ctx, &key)
+		assert.ErrorContains(t, err, "PD210132: Failed to decode delegate in extras. invalid")
+	})
+}
+
 func TestPrepareInputsForNullifiers(t *testing.T) {
 	ras := &pb.ProvingRequestExtras_Nullifiers{
 		SmtProof: &pb.MerkleProofObject{
@@ -599,6 +696,7 @@ func TestPrepareInputsForNullifiers(t *testing.T) {
 	}, proofs)
 	assert.Equal(t, []*big.Int{big.NewInt(1), big.NewInt(0)}, enabled)
 }
+
 func TestAssembleLockWitnessInputs(t *testing.T) {
 	inputs := LockWitnessInputs{
 		FungibleWitnessInputs: FungibleWitnessInputs{

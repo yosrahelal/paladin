@@ -29,7 +29,7 @@ var zetoABIBytes []byte
 var zetoLockableABIBytes []byte
 
 //go:embed abis/IZetoKyc.json
-var zetoKYCABIBytes []byte
+var zetoKycABIBytes []byte
 
 func getAllZetoEventAbis() abi.ABI {
 	var events abi.ABI
@@ -37,7 +37,7 @@ func getAllZetoEventAbis() abi.ABI {
 	events = buildEvents(events, contract)
 	contract = solutils.MustLoadBuild(zetoLockableABIBytes)
 	events = buildEvents(events, contract)
-	contract = solutils.MustLoadBuild(zetoKYCABIBytes)
+	contract = solutils.MustLoadBuild(zetoKycABIBytes)
 	events = buildEvents(events, contract)
 	return events
 }

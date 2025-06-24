@@ -527,7 +527,7 @@ func newTestZeto() (*Zeto, *domain.MockDomainCallbacks) {
 	z.events.transferWithEnc = "event UTXOTransferWithEncryptedValues(uint256[] inputs, uint256[] outputs, uint256 encryptionNonce, uint256[2] ecdhPublicKey, uint256[] encryptedValues, address indexed submitter, bytes data)"
 	z.events.withdraw = "event UTXOWithdraw(uint256 amount, uint256[] inputs, uint256 output, address indexed submitter, bytes data)"
 	z.events.lock = "event UTXOsLocked(uint256[] inputs, uint256[] outputs, uint256[] lockedOutputs, address indexed delegate, address indexed submitter, bytes data)"
-	z.events.identityRegistered = "event IdentityRegistered(uint256[] publicKeys, bytes data)"
+	z.events.identityRegistered = "event IdentityRegistered(uint256[] publicKey, bytes data)"
 	return z, testCallbacks
 }
 
@@ -615,6 +615,20 @@ func TestHandleEventBatch(t *testing.T) {
 	req.Events[0].SoliditySignature = "event UTXOWithdraw(uint256 amount, uint256[] inputs, uint256 output, address indexed submitter, bytes data)"
 	_, err = z.HandleEventBatch(ctx, req)
 	assert.NoError(t, err)
+
+	req.Events[0].SoliditySignature = "event UTXOsLocked(uint256[] inputs, uint256[] outputs, uint256[] lockedOutputs, address indexed delegate, address indexed submitter, bytes data)"
+	res5, err := z.HandleEventBatch(ctx, req)
+	assert.NoError(t, err)
+	assert.Len(t, res5.TransactionsComplete, 1)
+
+	req.ContractInfo.ContractConfigJson = pldtypes.JSONString(map[string]interface{}{
+		"circuitId": "anon_nullifier_kyc_transfer",
+		"tokenName": "Zeto_AnonNullifierKYC",
+	}).Pretty()
+	req.Events[0].SoliditySignature = "event IdentityRegistered(uint256[] publicKey, bytes data)"
+	res6, err := z.HandleEventBatch(ctx, req)
+	assert.NoError(t, err)
+	assert.Len(t, res6.TransactionsComplete, 1)
 }
 
 func TestGetVerifier(t *testing.T) {
@@ -823,6 +837,7 @@ func TestGetHandler(t *testing.T) {
 		// Tests for TOKEN_ANON
 		{"Valid mint handler for TOKEN_ANON", "mint", constants.TOKEN_ANON, false},
 		{"Valid transfer handler for TOKEN_ANON", "transfer", constants.TOKEN_ANON, false},
+		{"Valid transferLocked handler for TOKEN_ANON", "transferLocked", constants.TOKEN_ANON, false},
 		{"Valid lock handler for TOKEN_ANON", "lock", constants.TOKEN_ANON, false},
 		{"Valid deposit handler for TOKEN_ANON", "deposit", constants.TOKEN_ANON, false},
 		{"Valid withdraw handler for TOKEN_ANON", "withdraw", constants.TOKEN_ANON, false},
@@ -837,6 +852,33 @@ func TestGetHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			handler := z.GetHandler(tt.action, tt.tokenName)
+			if tt.expectedNil {
+				assert.Nil(t, handler)
+			} else {
+				assert.NotNil(t, handler)
+			}
+		})
+	}
+}
+
+func TestGetCallHandler(t *testing.T) {
+	z := &Zeto{
+		name: "test1",
+	}
+
+	tests := []struct {
+		name        string
+		action      string
+		tokenName   string
+		expectedNil bool
+	}{
+		{"Valid call handler for TOKEN_ANON", "balanceOf", constants.TOKEN_ANON, false},
+		{"Invalid call handler for TOKEN_ANON", "bad", constants.TOKEN_ANON, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := z.GetCallHandler(tt.action, tt.tokenName)
 			if tt.expectedNil {
 				assert.Nil(t, handler)
 			} else {
