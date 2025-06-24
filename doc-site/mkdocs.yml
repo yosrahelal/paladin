@@ -126,6 +126,7 @@ nav:
     - Notarized Tokens: tutorials/notarized-tokens.md
     - Bond Issuance: tutorials/bond-issuance.md
     - Wholesale CBDC: tutorials/zkp-cbdc.md
+    - Enterprise Stablecoin: tutorials/enterprise-stablecoin.md
   - Reference:
     - APIs: reference/apis/*.md
     - Types: reference/types/*.md

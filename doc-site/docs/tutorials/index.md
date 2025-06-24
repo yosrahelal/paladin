@@ -49,6 +49,12 @@ The tutorials on this page provide an introduction to building on the Paladin pl
 
     Implement a wholesale CBDC with **zero-knowledge proof** features for enhanced privacy and regulatory compliance.
 
+-   **[Enterprise Stablecoin](enterprise-stablecoin.md)**  
+
+    ---  
+
+    Deploy a **privacy-preserving enterprise stablecoin** with **KYC compliance** using zero-knowledge proofs and nullifier protection.
+
 -   **[Bond Issuance](bond-issuance.md)**  
 
     ---  
