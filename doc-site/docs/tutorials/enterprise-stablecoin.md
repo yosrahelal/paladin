@@ -24,8 +24,7 @@ This tutorial demonstrates:
 
 The example simulates a regulated enterprise stablecoin ecosystem with the following participants:
 
-- **Regulatory Authority** (`regulator@node1`) – Manages KYC compliance and oversight
-- **Financial Institution** (`bank@node2`) – Issues and manages stablecoin operations
+- **Financial Institution** (`bank@node2`) – Issues stablecoins and manages KYC compliance for its clients
 - **Enterprise Client A** (`enterprise-a@node3`) – Receives and transfers stablecoins
 - **Enterprise Client B** (`enterprise-b@node3`) – Participates in enterprise transactions
 
@@ -36,8 +35,8 @@ The example simulates a regulated enterprise stablecoin ecosystem with the follo
 The example begins by deploying a Zeto contract with KYC and nullifier capabilities:
 
 ```typescript
-const zetoFactory = new ZetoFactory(paladin1, "zeto");
-const enterpriseStablecoin = await zetoFactory.newZeto(regulatoryAuthority, {
+const zetoFactory = new ZetoFactory(paladin2, "zeto");
+const enterpriseStablecoin = await zetoFactory.newZeto(financialInstitution, {
   tokenName: "Zeto_AnonNullifierKyc",
 });
 ```
@@ -49,14 +48,28 @@ The `Zeto_AnonNullifierKyc` contract provides:
 
 ### 2. KYC Registration Process
 
-Before any stablecoin operations, the regulatory authority registers all participants for KYC compliance:
+Before any stablecoin operations, the financial institution registers itself and its clients for KYC compliance:
 
 ```typescript
-// Register Enterprise Client A
-const clientAPublicKey = await getBabyjubPublicKey(enterpriseClientA);
-let kycTxId = await paladin1.sendTransaction({
+// Financial institution registers itself first
+const bankPublicKey = await getBabyjubPublicKey(financialInstitution);
+let kycTxId = await paladin2.sendTransaction({
   type: TransactionType.PUBLIC,
-  from: regulatoryAuthority.lookup,
+  from: financialInstitution.lookup,
+  to: enterpriseStablecoin.address,
+  data: {
+    publicKey: bankPublicKey,
+    data: "0x", // KYC compliance data/proof could go here
+  },
+  function: "register",
+  abi: kycAbi.abi,
+});
+
+// Then register Enterprise Client A
+const clientAPublicKey = await getBabyjubPublicKey(enterpriseClientA);
+kycTxId = await paladin2.sendTransaction({
+  type: TransactionType.PUBLIC,
+  from: financialInstitution.lookup,
   to: enterpriseStablecoin.address,
   data: {
     publicKey: clientAPublicKey,
@@ -68,16 +81,17 @@ let kycTxId = await paladin1.sendTransaction({
 ```
 
 **Key Technical Details:**
+- **Financial institution manages KYC** for all participants
 - Uses **BabyJubJub elliptic curve** keys for zero-knowledge proof compatibility
 - Properly decompresses compressed public keys using **circomlibjs**
 - Stores KYC registration on-chain for verification during transfers
 
 ### 3. Stablecoin Issuance
 
-The financial institution mints enterprise stablecoins under regulatory oversight:
+The financial institution mints enterprise stablecoins to itself:
 
 ```typescript
-let receipt = await enterpriseStablecoin.mint(regulatoryAuthority, {
+let receipt = await enterpriseStablecoin.mint(financialInstitution, {
   mints: [
     {
       to: financialInstitution,
@@ -90,8 +104,8 @@ let receipt = await enterpriseStablecoin.mint(regulatoryAuthority, {
 
 **Privacy Features:**
 - Mint amounts are **cryptographically private**
-- Only the issuer and recipient know the exact amount
-- Regulatory authority maintains oversight without full visibility
+- Only the financial institution knows the exact amount minted
+- Provides privacy while maintaining internal compliance controls
 
 ### 4. Enterprise Transfers
 
@@ -148,7 +162,7 @@ receipt = await enterpriseStablecoin
 
 ### KYC Integration
 - **Cryptographic verification** of participant eligibility
-- **Regulatory oversight** without compromising privacy
+- **Financial institution oversight** without compromising privacy
 - **Automated compliance** checking during transfers
 
 ### Nullifier Protection
@@ -195,12 +209,12 @@ This enterprise stablecoin pattern is suitable for:
 
 The Enterprise Stablecoin example demonstrates how Paladin enables:
 
-- **Regulatory compliance** through automated KYC verification
+- **Financial institution-managed compliance** through automated KYC verification
 - **Transaction privacy** using zero-knowledge proofs
 - **Enterprise scalability** with direct peer-to-peer transfers
 - **Financial security** through nullifier-based double-spend protection
 
-This showcases Paladin's capability to balance **regulatory requirements** with **privacy preservation** in enterprise financial applications.
+This showcases Paladin's capability to balance **compliance requirements** with **privacy preservation** in enterprise financial applications, where financial institutions can manage their own customer onboarding and compliance processes.
 
 ## Next Steps
 

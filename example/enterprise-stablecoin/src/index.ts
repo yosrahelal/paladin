@@ -6,7 +6,7 @@ import PaladinClient, {
   IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import { checkDeploy, checkReceipt } from "paladin-example-common";
-import kycAbi from "../../../domains/zeto/tools/artifacts/contracts/lib/interfaces/izeto_kyc.sol/IZetoKyc.json";
+import kycAbi from "./abis/IZetoKyc.json";
 import { buildBabyjub } from "circomlibjs";
 
 const logger = console;
@@ -49,8 +49,7 @@ async function getBabyjubPublicKey(verifier: PaladinVerifier): Promise<string[]>
 }
 
 async function main(): Promise<boolean> {
-  // Get verifiers for the regulatory authority, financial institution, and enterprise clients
-  const [regulatoryAuthority] = paladin1.getVerifiers("regulator@node1");
+  // Get verifiers for the financial institution and enterprise clients
   const [financialInstitution] = paladin2.getVerifiers("bank@node2");
   const [enterpriseClientA] = paladin3.getVerifiers("enterprise-a@node3");
   const [enterpriseClientB] = paladin3.getVerifiers("enterprise-b@node3");
@@ -63,8 +62,8 @@ async function main(): Promise<boolean> {
 
   // Deploy the enterprise stablecoin using Zeto_AnonNullifierKyc
   logger.log("1. Deploying Enterprise Stablecoin with KYC capabilities...");
-  const zetoFactory = new ZetoFactory(paladin1, "zeto");
-  const enterpriseStablecoin = await zetoFactory.newZeto(regulatoryAuthority, {
+  const zetoFactory = new ZetoFactory(paladin2, "zeto");
+  const enterpriseStablecoin = await zetoFactory.newZeto(financialInstitution, {
     tokenName: "Zeto_AnonNullifierKyc",
   });
   if (!checkDeploy(enterpriseStablecoin)) return false;
@@ -73,51 +72,15 @@ async function main(): Promise<boolean> {
   );
 
   // === KYC REGISTRATION PROCESS ===
-  // The regulatory authority registers enterprise clients for KYC compliance
-  logger.log("2. Regulatory authority registering clients for KYC compliance...");
+  // The financial institution registers its clients for KYC compliance
+  logger.log("2. Financial institution registering clients for KYC compliance...");
   
-  // Register Enterprise Client A for KYC using sendTransaction
-  logger.log("   - Resolving Enterprise Client A babyjub public key...");
-  const clientAPublicKey = await getBabyjubPublicKey(enterpriseClientA);
-  let kycTxId = await paladin1.sendTransaction({
-    type: TransactionType.PUBLIC,
-    from: regulatoryAuthority.lookup,
-    to: enterpriseStablecoin.address,
-    data: {
-      publicKey: clientAPublicKey,
-      data: "0x", // KYC compliance data/proof could go here
-    },
-    function: "register",
-    abi: kycAbi.abi,
-  });
-  let kycReceipt = await paladin1.pollForReceipt(kycTxId, 5000);
-  if (!checkReceipt(kycReceipt)) return false;
-  logger.log("   ✓ Enterprise Client A registered for KYC compliance");
-
-  // Register Enterprise Client B for KYC using sendTransaction
-  logger.log("   - Resolving Enterprise Client B babyjub public key...");
-  const clientBPublicKey = await getBabyjubPublicKey(enterpriseClientB);
-  kycTxId = await paladin1.sendTransaction({
-    type: TransactionType.PUBLIC,
-    from: regulatoryAuthority.lookup,
-    to: enterpriseStablecoin.address,
-    data: {
-      publicKey: clientBPublicKey,
-      data: "0x", // KYC compliance data/proof could go here
-    },
-    function: "register",
-    abi: kycAbi.abi,
-  });
-  kycReceipt = await paladin1.pollForReceipt(kycTxId, 5000);
-  if (!checkReceipt(kycReceipt)) return false;
-  logger.log("   ✓ Enterprise Client B registered for KYC compliance");
-
-  // Register Financial Institution for KYC using sendTransaction
+  // Register Financial Institution itself for KYC using sendTransaction
   logger.log("   - Resolving Financial Institution babyjub public key...");
   const bankPublicKey = await getBabyjubPublicKey(financialInstitution);
-  kycTxId = await paladin1.sendTransaction({
+  let kycTxId = await paladin2.sendTransaction({
     type: TransactionType.PUBLIC,
-    from: regulatoryAuthority.lookup,
+    from: financialInstitution.lookup,
     to: enterpriseStablecoin.address,
     data: {
       publicKey: bankPublicKey,
@@ -126,13 +89,49 @@ async function main(): Promise<boolean> {
     function: "register",
     abi: kycAbi.abi,
   });
-  kycReceipt = await paladin1.pollForReceipt(kycTxId, 5000);
+  let kycReceipt = await paladin2.pollForReceipt(kycTxId, 5000);
   if (!checkReceipt(kycReceipt)) return false;
-  logger.log("   ✓ Financial Institution registered for KYC compliance\n");
+  logger.log("   ✓ Financial Institution registered for KYC compliance");
+
+  // Register Enterprise Client A for KYC using sendTransaction
+  logger.log("   - Resolving Enterprise Client A babyjub public key...");
+  const clientAPublicKey = await getBabyjubPublicKey(enterpriseClientA);
+  kycTxId = await paladin2.sendTransaction({
+    type: TransactionType.PUBLIC,
+    from: financialInstitution.lookup,
+    to: enterpriseStablecoin.address,
+    data: {
+      publicKey: clientAPublicKey,
+      data: "0x", // KYC compliance data/proof could go here
+    },
+    function: "register",
+    abi: kycAbi.abi,
+  });
+  kycReceipt = await paladin2.pollForReceipt(kycTxId, 5000);
+  if (!checkReceipt(kycReceipt)) return false;
+  logger.log("   ✓ Enterprise Client A registered for KYC compliance");
+
+  // Register Enterprise Client B for KYC using sendTransaction
+  logger.log("   - Resolving Enterprise Client B babyjub public key...");
+  const clientBPublicKey = await getBabyjubPublicKey(enterpriseClientB);
+  kycTxId = await paladin2.sendTransaction({
+    type: TransactionType.PUBLIC,
+    from: financialInstitution.lookup,
+    to: enterpriseStablecoin.address,
+    data: {
+      publicKey: clientBPublicKey,
+      data: "0x", // KYC compliance data/proof could go here
+    },
+    function: "register",
+    abi: kycAbi.abi,
+  });
+  kycReceipt = await paladin2.pollForReceipt(kycTxId, 5000);
+  if (!checkReceipt(kycReceipt)) return false;
+  logger.log("   ✓ Enterprise Client B registered for KYC compliance\n");
   
   // === FINANCIAL INSTITUTION MINTS STABLECOIN ===
   logger.log("3. Financial institution minting enterprise stablecoin...");
-  let receipt = await enterpriseStablecoin.mint(regulatoryAuthority, {
+  let receipt = await enterpriseStablecoin.mint(financialInstitution, {
     mints: [
       {
         to: financialInstitution,
@@ -152,7 +151,6 @@ async function main(): Promise<boolean> {
   logger.log(
     `   ✓ Financial institution balance: ${bankBalance.totalBalance} units (${bankBalance.totalStates} states)`
   );
-  logger.log(`   ✓ Overflow protection: ${bankBalance.overflow}\n`);
   
   // Brief pause for blockchain settlement
   await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -221,12 +219,12 @@ async function main(): Promise<boolean> {
 
   logger.log("\n=== Enterprise Stablecoin Example Complete ===");
   logger.log("✓ Successfully demonstrated:");
-  logger.log("  - KYC registration using proper register() method with circomlib babyjub decompression");
+  logger.log("  - KYC registration by financial institution using proper register() method");
   logger.log("  - Privacy-preserving stablecoin issuance");
   logger.log("  - KYC-compliant transfers with nullifiers");
   logger.log("  - Zero-knowledge proof-based compliance verification");
   logger.log("  - Enterprise-grade financial operations");
-  logger.log("  - Regulatory oversight with privacy preservation");
+  logger.log("  - Financial institution-managed compliance with privacy preservation");
 
   return true;
 }
