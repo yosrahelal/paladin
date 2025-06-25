@@ -163,7 +163,6 @@ func (z *Zeto) handleIdentityRegisteredEvent(ctx context.Context, smtKycTree *co
 				InfoStates:    []pldtypes.Bytes32{},
 			}
 		}
-		z.recordTransactionInfo(ev, txData, res)
 		if common.IsKycToken(tokenName) {
 			// calculate the Poseidon hash of the public key, to use as the leaf node index and value in the SMT
 			publicKeyHash, err := poseidon.Hash([]*big.Int{registered.PublicKey[0].Int(), registered.PublicKey[1].Int()})
