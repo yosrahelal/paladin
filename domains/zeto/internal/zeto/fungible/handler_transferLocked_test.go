@@ -630,6 +630,6 @@ func TestGenerateMerkleProofsForLockedStates(t *testing.T) {
 	assert.NoError(t, err)
 	indexes, err := makeLeafIndexesFromCoins(ctx, inputCoins, mt.Tree)
 	assert.NoError(t, err)
-	_, _, err = generateMerkleProofs(ctx, mt, indexes)
+	_, err = generateMerkleProofs(ctx, mt, indexes, 2)
 	assert.NoError(t, err)
 }

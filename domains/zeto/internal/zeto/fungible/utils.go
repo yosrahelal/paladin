@@ -122,20 +122,20 @@ func utxosFromStates(ctx context.Context, states []*prototk.EndorsableState, des
 	return utxos, nil
 }
 
-func generateMerkleProofs(ctx context.Context, smtSpec *common.MerkleTreeSpec, indexes []*big.Int, forKyc ...bool) ([]core.Proof, *corepb.MerkleProofObject, error) {
+func generateMerkleProofs(ctx context.Context, smtSpec *common.MerkleTreeSpec, indexes []*big.Int, targetSize int) (*corepb.MerkleProofObject, error) {
 	// verify that the input UTXOs have been indexed by the Merkle tree DB
 	// and generate a merkle proof for each
 	mtRoot := smtSpec.Tree.Root()
 	proofs, _, err := smtSpec.Tree.GenerateProofs(indexes, mtRoot)
 	if err != nil {
-		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
 	}
 	var mps []*corepb.MerkleProof
 	var enabled []bool
 	for i, proof := range proofs {
 		cp, err := proof.ToCircomVerifierProof(indexes[i], indexes[i], mtRoot, smtSpec.Levels)
 		if err != nil {
-			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorConvertToCircomProof, err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorConvertToCircomProof, err)
 		}
 		proofSiblings := make([]string, len(cp.Siblings)-1)
 		for i, s := range cp.Siblings[0 : len(cp.Siblings)-1] {
@@ -147,13 +147,19 @@ func generateMerkleProofs(ctx context.Context, smtSpec *common.MerkleTreeSpec, i
 		mps = append(mps, &p)
 		enabled = append(enabled, true)
 	}
+	// if the proofs are less than the target size, we need to fill the rest with empty proofs
+	size := len(mps)
+	for i := size; i < targetSize; i++ {
+		mps = append(mps, smtSpec.EmptyProof)
+		enabled = append(enabled, false)
+	}
 	smtProof := &corepb.MerkleProofObject{
 		Root:         mtRoot.BigInt().Text(16),
 		MerkleProofs: mps,
 		Enabled:      enabled,
 	}
 
-	return proofs, smtProof, nil
+	return smtProof, nil
 }
 
 func makeLeafIndexesFromCoins(ctx context.Context, inputCoins []*types.ZetoCoin, mt core.SparseMerkleTree) ([]*big.Int, error) {
@@ -269,14 +275,9 @@ func formatTransferProvingRequest(ctx context.Context, callbacks plugintk.Domain
 	if circuit.UsesNullifiers {
 		forLockedStates := len(delegate) > 0
 
-		proofs, smtProof, err := smtProofForInputs(ctx, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, tokenName, stateQueryContext, contractAddress, inputCoins, forLockedStates)
+		smtProof, err := smtProofForInputs(ctx, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, tokenName, stateQueryContext, contractAddress, inputCoins, forLockedStates, inputSize)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
-		}
-		// if the proofs are less than the input size, we need to fill the rest with empty proofs
-		for i := len(proofs); i < inputSize; i++ {
-			smtProof.MerkleProofs = append(smtProof.MerkleProofs, &smt.Empty_Proof_Utxos)
-			smtProof.Enabled = append(smtProof.Enabled, false)
 		}
 
 		var extrasObj proto.Message
@@ -289,7 +290,7 @@ func formatTransferProvingRequest(ctx context.Context, callbacks plugintk.Domain
 			}
 		} else {
 			// for KYC, we need the additional proof for the KYC states
-			_, smtProofKyc, err := smtProofForOwners(ctx, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, tokenName, stateQueryContext, contractAddress, inputOwner, outputCoins)
+			smtProofKyc, err := smtProofForOwners(ctx, callbacks, merkleTreeRootSchema, merkleTreeNodeSchema, tokenName, stateQueryContext, contractAddress, inputOwner, outputCoins, inputSize+1)
 			if err != nil {
 				return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
 			}
@@ -330,7 +331,7 @@ func formatTransferProvingRequest(ctx context.Context, callbacks plugintk.Domain
 	return proto.Marshal(payload)
 }
 
-func smtProofForInputs(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName, stateQueryContext string, contractAddress *pldtypes.EthAddress, inputCoins []*types.ZetoCoin, forLockedStates bool) ([]core.Proof, *corepb.MerkleProofObject, error) {
+func smtProofForInputs(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName, stateQueryContext string, contractAddress *pldtypes.EthAddress, inputCoins []*types.ZetoCoin, forLockedStates bool, targetSize int) (*corepb.MerkleProofObject, error) {
 	smtName := smt.MerkleTreeName(tokenName, contractAddress)
 	if forLockedStates {
 		smtName = smt.MerkleTreeNameForLockedStates(tokenName, contractAddress)
@@ -342,40 +343,40 @@ func smtProofForInputs(ctx context.Context, callbacks plugintk.DomainCallbacks, 
 
 	mt, err := common.NewMerkleTreeSpec(ctx, smtName, smtType, callbacks, merkleTreeRootSchema.Id, merkleTreeNodeSchema.Id, stateQueryContext)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	var indexes []*big.Int
 	indexes, err = makeLeafIndexesFromCoins(ctx, inputCoins, mt.Tree)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	proofs, smtProof, err := generateMerkleProofs(ctx, mt, indexes)
+	smtProof, err := generateMerkleProofs(ctx, mt, indexes, targetSize)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return proofs, smtProof, nil
+	return smtProof, nil
 }
 
-func smtProofForOwners(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName, stateQueryContext string, contractAddress *pldtypes.EthAddress, inputOwner string, outputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.MerkleProofObject, error) {
+func smtProofForOwners(ctx context.Context, callbacks plugintk.DomainCallbacks, merkleTreeRootSchema *prototk.StateSchema, merkleTreeNodeSchema *prototk.StateSchema, tokenName, stateQueryContext string, contractAddress *pldtypes.EthAddress, inputOwner string, outputCoins []*types.ZetoCoin, targetSize int) (*corepb.MerkleProofObject, error) {
 	smtName := smt.MerkleTreeNameForKycStates(tokenName, contractAddress)
 	mt, err := common.NewMerkleTreeSpec(ctx, smtName, common.KycStatesTree, callbacks, merkleTreeRootSchema.Id, merkleTreeNodeSchema.Id, stateQueryContext)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// for KYC, we need to collect the indexes from the coins owners
 	indexes, err := makeLeafIndexesFromCoinOwners(ctx, inputOwner, outputCoins)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	proofs, smtProof, err := generateMerkleProofs(ctx, mt, indexes, true)
+	smtProof, err := generateMerkleProofs(ctx, mt, indexes, targetSize)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return proofs, smtProof, nil
+	return smtProof, nil
 }
 
 func trimZeroUtxos(utxos []string) []string {

@@ -314,16 +314,12 @@ func (h *withdrawHandler) formatProvingRequest(ctx context.Context, inputCoins [
 		if err != nil {
 			return nil, err
 		}
-		proofs, smtProof, err := generateMerkleProofs(ctx, mt, indexes)
+		smtProof, err := generateMerkleProofs(ctx, mt, indexes, inputSize)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
 		}
 		extrasObj := &corepb.ProvingRequestExtras_Nullifiers{
 			SmtProof: smtProof,
-		}
-		for i := len(proofs); i < inputSize; i++ {
-			extrasObj.SmtProof.MerkleProofs = append(extrasObj.SmtProof.MerkleProofs, &smt.Empty_Proof_Utxos)
-			extrasObj.SmtProof.Enabled = append(extrasObj.SmtProof.Enabled, false)
 		}
 		protoExtras, err := proto.Marshal(extrasObj)
 		if err != nil {

@@ -24,6 +24,7 @@ import (
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 
@@ -54,11 +55,12 @@ const (
 )
 
 type MerkleTreeSpec struct {
-	Name    string
-	Levels  int
-	Type    MerkleTreeType
-	Storage smt.StatesStorage
-	Tree    core.SparseMerkleTree
+	Name       string
+	Levels     int
+	Type       MerkleTreeType
+	Storage    smt.StatesStorage
+	Tree       core.SparseMerkleTree
+	EmptyProof *proto.MerkleProof
 }
 
 func NewMerkleTreeSpec(ctx context.Context, name string, treeType MerkleTreeType, callbacks plugintk.DomainCallbacks, merkleTreeRootSchemaId, merkleTreeNodeSchemaId string, stateQueryContext string) (*MerkleTreeSpec, error) {
@@ -79,12 +81,17 @@ func NewMerkleTreeSpec(ctx context.Context, name string, treeType MerkleTreeType
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, name, err)
 	}
+	emptyProof := &smt.Empty_Proof_Utxos
+	if treeType == KycStatesTree {
+		emptyProof = &smt.Empty_Proof_kyc
+	}
 	return &MerkleTreeSpec{
-		Name:    name,
-		Levels:  levels,
-		Type:    treeType,
-		Storage: storage,
-		Tree:    tree,
+		Name:       name,
+		Levels:     levels,
+		Type:       treeType,
+		Storage:    storage,
+		Tree:       tree,
+		EmptyProof: emptyProof,
 	}, nil
 }
 
