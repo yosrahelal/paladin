@@ -75,6 +75,10 @@ func (s *fungibleTestSuiteHelper) TestZeto_AnonNullifierKyc() {
 	s.testZeto(s.T(), constants.TOKEN_ANON_NULLIFIER_KYC, false, true, true)
 }
 
+func (s *fungibleTestSuiteHelper) TestZeto_AnonNullifierKycBatch() {
+	s.testZeto(s.T(), constants.TOKEN_ANON_NULLIFIER_KYC, true, true, true)
+}
+
 func (s *fungibleTestSuiteHelper) testZeto(t *testing.T, tokenName string, useBatch bool, isNullifiersToken bool, isKycToken ...bool) {
 	ctx := context.Background()
 	log.L(ctx).Info("*************************************")

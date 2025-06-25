@@ -176,7 +176,7 @@ func (z *Zeto) handleIdentityRegisteredEvent(ctx context.Context, smtKycTree *co
 			}
 		}
 	} else {
-		log.L(ctx).Errorf("Failed to unmarshal lock event: %s", err)
+		log.L(ctx).Errorf("Failed to unmarshal IdentityRegistered event: %s", err)
 	}
 	return nil
 }
