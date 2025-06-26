@@ -1,10 +1,10 @@
-# Example: Enterprise Stablecoin with KYC and Nullifiers
+# Example: private stablecoin with KYC and Nullifiers
 
 This example demonstrates an enterprise-grade privacy-preserving stablecoin using [Zeto](https://github.com/hyperledger-labs/zeto) on Paladin with KYC compliance and nullifiers for enhanced security and regulatory oversight.
 
 ## Overview
 
-The enterprise stablecoin example showcases:
+The private stablecoin example showcases:
 
 - **Privacy-preserving transactions** using zero-knowledge proofs
 - **KYC compliance** through Zeto's KYC-enabled circuits
@@ -14,9 +14,9 @@ The enterprise stablecoin example showcases:
 
 ## Use Case Scenario
 
-This example simulates a typical enterprise stablecoin workflow:
+This example simulates a typical private stablecoin workflow:
 
-1. **Regulatory Authority** deploys an enterprise stablecoin with KYC capabilities
+1. **Regulatory Authority** deploys an private stablecoin with KYC capabilities
 2. **Financial Institution** receives an initial allocation of stablecoins
 3. **Enterprise Client** receives stablecoins for business operations
 4. All transactions maintain privacy while ensuring compliance
@@ -79,12 +79,12 @@ These dependency resources can be obtained by one of the following ways.
 
 - **Extract contracts**
 
-  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/example/enterprise-stablecoin/src/abis`)
+  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/example/private-stablecoin/src/abis`)
 
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/example/enterprise-stablecoin
+  cd <paladin-root>/example/private-stablecoin
   npm install
   npm run start
   ```
@@ -96,7 +96,7 @@ These dependency resources can be obtained by one of the following ways.
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/example/enterprise-stablecoin
+  cd <paladin-root>/example/private-stablecoin
   npm install
   npm run abi
   npm run start
@@ -109,7 +109,7 @@ These dependency resources can be obtained by one of the following ways.
 - **Run the gradle build task, then run the sample:**
 
   ```shell
-  cd <paladin-root>/example/enterprise-stablecoin
+  cd <paladin-root>/example/private-stablecoin
   ../../gradlew build
   npm run start
   ```
@@ -121,24 +121,24 @@ You can verify that the dependent ABIs have been successfully put in place by th
 ```shell
 $ ls <paladin-root>/sdk/typescript/build/domains/abis/
 INoto.json		INotoPrivate.json	IZetoFungible.json	PentePrivacyGroup.json	Zeto_AnonNullifierKyc.json
-$ ls <paladin-root>/example/enterprise-stablecoin/src/abis/
+$ ls <paladin-root>/example/private-stablecoin/src/abis/
 SampleERC20.json
 ```
 
 ## Run the example
 
-Run the example with the following command from inside the `example/enterprise-stablecoin` folder:
+Run the example with the following command from inside the `example/private-stablecoin` folder:
 
 ```shell
-cd <paladin-root>/example/enterprise-stablecoin
+cd <paladin-root>/example/private-stablecoin
 npm run start
 
-=== Enterprise Stablecoin with KYC and Nullifiers ===
-This example demonstrates a privacy-preserving enterprise stablecoin
+=== private stablecoin with KYC and Nullifiers ===
+This example demonstrates a privacy-preserving private stablecoin
 using Zeto with nullifiers and KYC compliance features.
 
-1. Deploying Enterprise Stablecoin with KYC capabilities...
-   ✓ Enterprise stablecoin deployed at: 0x1234567890abcdef...
+1. Deploying private stablecoin with KYC capabilities...
+   ✓ private stablecoin deployed at: 0x1234567890abcdef...
 
 2. Regulatory authority issuing stablecoin to financial institution...
    ✓ Financial institution balance: 1000000 units (1 states)
@@ -149,14 +149,14 @@ using Zeto with nullifiers and KYC compliance features.
    ✓ Enterprise client balance: 50000 units (1 states)
    ✓ Transfer completed with privacy and KYC compliance
 
-=== Enterprise Stablecoin Example Complete ===
+=== private stablecoin Example Complete ===
 ✓ Successfully demonstrated:
   - Privacy-preserving stablecoin issuance
   - KYC-compliant transfers with nullifiers
   - Enterprise-grade financial operations
   - Regulatory oversight capabilities
 
-🎉 Enterprise stablecoin example completed successfully!
+🎉 private stablecoin example completed successfully!
 ```
 
 ## Technical Details

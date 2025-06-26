@@ -18,7 +18,7 @@ This tutorial demonstrates:
 - **KYC Compliance** – Financial institution manages client registration for regulatory compliance
 - **Seamless Deposit** – Convert public ERC20 tokens to private Zeto tokens
 - **Private Transfers** – Zero-knowledge proof-based transfers with KYC verification and complete privacy
-- **Seamless Withdraw** – Convert private Zeto tokens back to public ERC20 tokens
+- **Seamless Withdraw** – Convert private Zeto tokens back to public ERC20 tokens, optionally to a different account owned by the depositor
 - **Flexible Liquidity** – Users can choose between public transparency and private anonymity while maintaining compliance
 
 ## Scenario Overview
@@ -52,6 +52,7 @@ await privateStablecoin.setERC20(financialInstitution, {
 ```
 
 The `Zeto_AnonNullifierKyc` contract provides:
+
 - **Anonymous transfers** with zero-knowledge proofs
 - **Nullifier protection** against double-spending
 - **KYC compliance verification** for all participants
@@ -80,6 +81,7 @@ let kycTxId = await paladin1.sendTransaction({
 ```
 
 **KYC Benefits:**
+
 - **Regulatory compliance** – All participants verified before token operations
 - **Privacy-preserving verification** – Uses BabyJubJub keys compatible with zero-knowledge proofs
 - **Financial institution control** – Centralized KYC management by the issuing institution
@@ -98,6 +100,7 @@ await mintERC20(paladin1, financialInstitution, clientB, publicStablecoinAddress
 ```
 
 **Public Token Benefits:**
+
 - **Transparent balances** – All ERC20 balances are publicly visible
 - **Standard compatibility** – Works with existing DeFi protocols
 - **Regulatory compliance** – Full transaction transparency for oversight
@@ -124,6 +127,7 @@ const depositReceipt = await privateStablecoin.using(paladin2).deposit(clientA, 
 ```
 
 **Privacy Benefits:**
+
 - **Token amounts become private** – No longer visible on public ledger
 - **Identity protection** – Client's balance and activity become anonymous
 - **Zero-knowledge security** – Cryptographic proofs ensure validity with KYC compliance
@@ -148,6 +152,7 @@ const transferReceipt = await privateStablecoin
 ```
 
 **KYC-Verified Privacy Features:**
+
 - **Automated compliance** – Transfer only succeeds if both parties are KYC-verified
 - **Zero-knowledge verification** – KYC status verified without revealing identity details
 - **Private amounts** – Transfer amounts remain completely private
@@ -166,6 +171,7 @@ const withdrawReceipt = await privateStablecoin
 ```
 
 **Withdrawal Benefits:**
+
 - **Seamless conversion** – Private tokens automatically converted to public ERC20
 - **Preserved compliance** – KYC verification carries through to public domain
 - **Full interoperability** – Withdrawn tokens work with any ERC20-compatible system

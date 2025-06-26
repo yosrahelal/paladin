@@ -18,12 +18,14 @@ package zeto
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/common"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -407,12 +409,37 @@ func TestHandleIdentityRegisteredEvent(t *testing.T) {
 	storage := smt.NewStatesStorage(testCallbacks, "testToken1", "context1", "merkle_tree_root", "merkle_tree_node")
 	merkleTree, err := smt.NewSmt(storage, smt.SMT_HEIGHT_KYC)
 	require.NoError(t, err)
+	smtSpec := &common.MerkleTreeSpec{Tree: merkleTree, Storage: storage}
+
+	count := 0
+	data, _ := json.Marshal(map[string]string{"rootIndex": "0x1234567890123456789012345678901234567890123456789012345678901234"})
+	errCallbacks := &domain.MockDomainCallbacks{
+		MockFindAvailableStates: func() (*prototk.FindAvailableStatesResponse, error) {
+			if count == 0 {
+				count++
+				return &prototk.FindAvailableStatesResponse{
+					States: []*prototk.StoredState{
+						{
+							DataJson: string(data),
+						},
+					},
+				}, nil
+			}
+			// Return error to simulate generateMerkleProofs failure, which allows us to test error handling
+			return nil, errors.New("already exists")
+		},
+	}
+	errStorage := smt.NewStatesStorage(errCallbacks, "testToken1", "context1", "merkle_tree_root", "merkle_tree_node")
+	errMerkleTree, err := smt.NewSmt(errStorage, smt.SMT_HEIGHT_KYC)
+	require.NoError(t, err)
+	errSmtSpec := &common.MerkleTreeSpec{Tree: errMerkleTree, Storage: errStorage}
+
 	ctx := context.Background()
 
 	encodedData, _ := common.EncodeTransactionData(ctx, &prototk.TransactionSpecification{
 		TransactionId: "0x30e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000",
 	}, nil)
-	data, _ := json.Marshal(map[string]any{
+	data, _ = json.Marshal(map[string]any{
 		"data":      encodedData,
 		"publicKey": []string{"7980718117603030807695495350922077879582656644717071592146865497574198464253", "7980718117603030807695495350922077879582656644717071592146865497574198464253"},
 	})
@@ -421,8 +448,6 @@ func TestHandleIdentityRegisteredEvent(t *testing.T) {
 		DataJson:          string(data),
 		SoliditySignature: "event IdentityRegistered(uint256[] publicKey, bytes data)",
 	}
-
-	smtSpec := &common.MerkleTreeSpec{Tree: merkleTree, Storage: storage}
 
 	t.Run("valid data for the identity registered event", func(t *testing.T) {
 		res := &prototk.HandleEventBatchResponse{}
@@ -456,5 +481,16 @@ func TestHandleIdentityRegisteredEvent(t *testing.T) {
 		res := &prototk.HandleEventBatchResponse{}
 		err = z.handleIdentityRegisteredEvent(ctx, smtSpec, ev, "Zeto_AnonNullifierKyc", res)
 		assert.ErrorContains(t, err, "PD210020: Failed to handle events IdentityRegistered. inputs values not inside Finite Field")
+	})
+
+	t.Run("failed to update SMT - should return error", func(t *testing.T) {
+		data, _ := json.Marshal(map[string]any{
+			"data":      encodedData,
+			"publicKey": []string{"7980718117603030807695495350922077879582656644717071592146865497574198464252", "7980718117603030807695495350922077879582656644717071592146865497574198464251"},
+		})
+		ev.DataJson = string(data)
+		res := &prototk.HandleEventBatchResponse{}
+		err = z.handleIdentityRegisteredEvent(ctx, errSmtSpec, ev, "Zeto_AnonNullifierKyc", res)
+		assert.NoError(t, err)
 	})
 }
