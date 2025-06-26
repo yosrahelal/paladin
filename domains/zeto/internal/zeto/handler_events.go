@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
@@ -171,7 +172,12 @@ func (z *Zeto) handleIdentityRegisteredEvent(ctx context.Context, smtKycTree *co
 			}
 			err = z.updateMerkleTree(ctx, smtKycTree.Tree, smtKycTree.Storage, txData.TransactionID, []pldtypes.HexUint256{*pldtypes.MustParseHexUint256("0x" + publicKeyHash.Text(16))})
 			if err != nil {
-				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "IdentityRegistered", err)
+				// Check if this is a "key already exists" error - if so, treat it as success for idempotency
+				if strings.Contains(err.Error(), "key already exists") || strings.Contains(err.Error(), "already exists") {
+					log.L(ctx).Infof("Identity with publicKey=%+v is already registered in KYC tree - treating as success", &registered.PublicKey)
+				} else {
+					return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "IdentityRegistered", err)
+				}
 			}
 		}
 	} else {
