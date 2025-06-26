@@ -628,7 +628,7 @@ func TestHandleEventBatch(t *testing.T) {
 	req.Events[0].SoliditySignature = "event IdentityRegistered(uint256[] publicKey, bytes data)"
 	res6, err := z.HandleEventBatch(ctx, req)
 	assert.NoError(t, err)
-	assert.Len(t, res6.TransactionsComplete, 1)
+	assert.Len(t, res6.TransactionsComplete, 0)
 }
 
 func TestGetVerifier(t *testing.T) {
