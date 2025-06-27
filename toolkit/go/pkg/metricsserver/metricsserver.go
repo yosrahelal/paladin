@@ -20,7 +20,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/router"
@@ -33,16 +32,13 @@ type MetricsServer interface {
 	Stop()
 }
 
-func NewMetricsServer(ctx context.Context, registry *prometheus.Registry, conf *pldconf.RPCServerConfig) (_ *metricsServer, err error) {
+func NewMetricsServer(ctx context.Context, registry *prometheus.Registry, conf *pldconf.MetricsServerConfig) (_ *metricsServer, err error) {
 	s := &metricsServer{
 		bgCtx: ctx,
 	}
 
-	config := &pldconf.HTTPServerConfig{
-		Port: confutil.P(9090), // Default to port 9090 for metrics
-	}
 	// Add the HTTP server
-	r, err := router.NewRouter(s.bgCtx, "Metrics (HTTP)", config)
+	r, err := router.NewRouter(s.bgCtx, "Metrics (HTTP)", &conf.HTTPServerConfig)
 	if err != nil {
 		return s, err
 	}

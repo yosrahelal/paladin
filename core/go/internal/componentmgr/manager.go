@@ -169,7 +169,7 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.wrapIfErr(err, msgs.MsgComponentRPCServerInitError)
 	}
 	if err == nil {
-		cm.metricsServer, err = metricsserver.NewMetricsServer(cm.bgCtx, cm.metricsManager.Registry(), &cm.conf.RPCServer)
+		cm.metricsServer, err = metricsserver.NewMetricsServer(cm.bgCtx, cm.metricsManager.Registry(), &cm.conf.MetricsServer)
 		err = cm.wrapIfErr(err, msgs.MsgComponentRPCServerInitError)
 	}
 

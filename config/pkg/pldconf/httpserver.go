@@ -63,3 +63,8 @@ type DebugServerConfig struct {
 var DebugServerDefaults = &DebugServerConfig{
 	Enabled: confutil.P(false),
 }
+
+type MetricsServerConfig struct {
+	Enabled *bool `json:"enabled"`
+	HTTPServerConfig
+}
