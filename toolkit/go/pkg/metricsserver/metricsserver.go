@@ -55,7 +55,6 @@ var _ MetricsServer = &metricsServer{}
 type metricsServer struct {
 	bgCtx      context.Context
 	httpServer httpserver.Server
-	counter    prometheus.CounterVec
 }
 
 func (s *metricsServer) Start() (err error) {

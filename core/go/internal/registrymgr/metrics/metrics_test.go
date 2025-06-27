@@ -12,34 +12,30 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+
 package metrics
 
 import (
 	"context"
+	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/assert"
 )
 
-type metricsManager struct {
-	ctx             context.Context
-	metricsRegistry *prometheus.Registry
-}
-
-func NewMetricsManager(ctx context.Context) Metrics {
+func TestInitMetrics(t *testing.T) {
 	registry := prometheus.NewRegistry()
+	metrics := InitMetrics(context.Background(), registry)
+	assert.NotNil(t, metrics)
 
-	mm := &metricsManager{
-		ctx:             ctx,
-		metricsRegistry: registry,
-	}
+	metrics.IncRegistries()
+	metrics.IncRegistries()
+	metrics.IncRegistries()
 
-	return mm
-}
+	metricFamilies, err := registry.Gather()
+	assert.NoError(t, err, "Unexpected error gathering metrics")
 
-func (mm *metricsManager) Registry() *prometheus.Registry {
-	return mm.metricsRegistry
-}
-
-type Metrics interface {
-	Registry() *prometheus.Registry
+	// Completed transactions metrics
+	assert.Equal(t, metricFamilies[0].GetName(), "registry_manager_registries_total")
+	assert.Equal(t, metricFamilies[0].GetMetric()[0].GetCounter().GetValue(), float64(3))
 }

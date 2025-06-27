@@ -166,12 +166,12 @@ func (cm *componentManager) Init() (err error) {
 	}
 	if err == nil {
 		cm.metricsManager = metrics.NewMetricsManager(cm.bgCtx)
-		err = cm.wrapIfErr(err, msgs.MsgComponentRPCServerInitError)
+		err = cm.wrapIfErr(err, msgs.MsgComponentMetricsManagerInitError)
 	}
 	if err == nil {
 		if confutil.Bool(cm.conf.MetricsServer.Enabled, *pldconf.MetricsServerDefaults.Enabled) {
 			cm.metricsServer, err = metricsserver.NewMetricsServer(cm.bgCtx, cm.metricsManager.Registry(), &cm.conf.MetricsServer)
-			err = cm.wrapIfErr(err, msgs.MsgComponentRPCServerInitError)
+			err = cm.wrapIfErr(err, msgs.MsgComponentMetricsServerInitError)
 		}
 	}
 
@@ -436,7 +436,10 @@ func (cm *componentManager) CompleteStart() error {
 		log.L(cm.bgCtx).Infof("RPC endpoints http=%s ws=%s", httpEndpoint, wsEndpoint)
 	}
 
-	cm.metricsServer.Start()
+	if cm.metricsServer != nil {
+		err = cm.metricsServer.Start()
+		err = cm.addIfStarted("metrics_server", cm.metricsServer, err, msgs.MsgComponentMetricsServerStartError)
+	}
 
 	log.L(cm.bgCtx).Infof("Startup complete")
 

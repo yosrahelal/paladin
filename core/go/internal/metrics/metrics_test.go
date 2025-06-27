@@ -16,30 +16,18 @@ package metrics
 
 import (
 	"context"
+	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/assert"
 )
 
-type metricsManager struct {
-	ctx             context.Context
-	metricsRegistry *prometheus.Registry
-}
+func TestInit(t *testing.T) {
+	mgr := NewMetricsManager(context.Background())
+	assert.NotNil(t, mgr)
 
-func NewMetricsManager(ctx context.Context) Metrics {
-	registry := prometheus.NewRegistry()
-
-	mm := &metricsManager{
-		ctx:             ctx,
-		metricsRegistry: registry,
-	}
-
-	return mm
-}
-
-func (mm *metricsManager) Registry() *prometheus.Registry {
-	return mm.metricsRegistry
-}
-
-type Metrics interface {
-	Registry() *prometheus.Registry
+	err := mgr.Registry().Register(prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "test_counter",
+	}))
+	assert.NoError(t, err, "should register a counter successfully")
 }
