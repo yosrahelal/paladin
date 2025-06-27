@@ -169,8 +169,10 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.wrapIfErr(err, msgs.MsgComponentRPCServerInitError)
 	}
 	if err == nil {
-		cm.metricsServer, err = metricsserver.NewMetricsServer(cm.bgCtx, cm.metricsManager.Registry(), &cm.conf.MetricsServer)
-		err = cm.wrapIfErr(err, msgs.MsgComponentRPCServerInitError)
+		if confutil.Bool(cm.conf.MetricsServer.Enabled, *pldconf.MetricsServerDefaults.Enabled) {
+			cm.metricsServer, err = metricsserver.NewMetricsServer(cm.bgCtx, cm.metricsManager.Registry(), &cm.conf.MetricsServer)
+			err = cm.wrapIfErr(err, msgs.MsgComponentRPCServerInitError)
+		}
 	}
 
 	// pre-init managers

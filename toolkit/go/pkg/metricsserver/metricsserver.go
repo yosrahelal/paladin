@@ -38,14 +38,15 @@ func NewMetricsServer(ctx context.Context, registry *prometheus.Registry, conf *
 	}
 
 	// Add the HTTP server
-	r, err := router.NewRouter(s.bgCtx, "Metrics (HTTP)", &conf.HTTPServerConfig)
-	if err != nil {
-		return s, err
+	if *conf.Enabled {
+		r, err := router.NewRouter(s.bgCtx, "Metrics (HTTP)", &conf.HTTPServerConfig)
+		if err != nil {
+			return s, err
+		}
+
+		r.HandleFunc("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}).ServeHTTP)
+		s.httpServer = r
 	}
-
-	r.HandleFunc("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}).ServeHTTP)
-	s.httpServer = r
-
 	return s, err
 }
 
