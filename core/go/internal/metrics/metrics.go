@@ -36,7 +36,6 @@ type metricsManager struct {
 func NewMetricsManager(ctx context.Context) Metrics {
 	registry := prometheus.NewRegistry()
 
-	//_ = ffresty.EnableClientMetrics(ctx, registry)
 	mm := &metricsManager{
 		ctx:             ctx,
 		timeMap:         make(map[string]time.Time),
