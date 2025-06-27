@@ -18,7 +18,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/hyperledger/firefly-common/pkg/metric"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -29,7 +28,6 @@ var metricsSubsystemName = "core"
 type metricsManager struct {
 	ctx             context.Context
 	timeMap         map[string]time.Time
-	metricManager   metric.MetricsManager
 	metricsRegistry *prometheus.Registry
 }
 
@@ -45,15 +43,10 @@ func NewMetricsManager(ctx context.Context) Metrics {
 	return mm
 }
 
-func (mm *metricsManager) MetricManager() metric.MetricsManager {
-	return mm.metricManager
-}
-
 func (mm *metricsManager) Registry() *prometheus.Registry {
 	return mm.metricsRegistry
 }
 
 type Metrics interface {
-	MetricManager() metric.MetricsManager
 	Registry() *prometheus.Registry
 }
