@@ -316,6 +316,15 @@ func newWitnessInputs(tokenType pb.TokenType, circuit *zetosignerapi.Circuit, ex
 				}
 				return &wtns.FungibleEncWitnessInputs{Enc: encExtras}, nil
 			} else if circuit.UsesNullifiers {
+				if circuit.UsesKyc {
+					nullifierKycExtras, ok := extras.(*pb.ProvingRequestExtras_NullifiersKyc)
+					if !ok {
+						return nil, fmt.Errorf("unexpected extras type for anon nullifier kyc circuit")
+					}
+					return &wtns.FungibleNullifierKycWitnessInputs{
+						Extras: nullifierKycExtras,
+					}, nil
+				}
 				nullifierExtras, ok := extras.(*pb.ProvingRequestExtras_Nullifiers)
 				if !ok {
 					return nil, fmt.Errorf("unexpected extras type for anon nullifier circuit")

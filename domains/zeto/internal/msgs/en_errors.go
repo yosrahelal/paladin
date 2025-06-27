@@ -178,4 +178,5 @@ var (
 	MsgErrorValidateExecCallTxSpec           = pde("PD210137", "Failed to validate execute call transaction spec. %s")
 	MsgErrorGetAccountBalance                = pde("PD210138", "Failed to get account balance. %s")
 	MsgErrorHandlerImplementationNotFound    = pde("PD210139", "Handler implementation not found. %s")
+	MsgUnknownSmtType                        = pde("PD210140", "Unknown states merkle tree type: %d")
 )
