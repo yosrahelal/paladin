@@ -242,7 +242,6 @@ func buildEthTX(
 }
 
 func (ptm *pubTxManager) SingleTransactionSubmit(ctx context.Context, txi *components.PublicTxSubmission) (tx *pldapi.PublicTx, err error) {
-	log.L(ctx).Debugf("SingleTransactionSubmit transaction: %+v", txi)
 	var txs []*pldapi.PublicTx
 	err = ptm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		err := ptm.ValidateTransaction(ctx, dbTX, txi)
@@ -258,7 +257,7 @@ func (ptm *pubTxManager) SingleTransactionSubmit(ctx context.Context, txi *compo
 }
 
 func (ptm *pubTxManager) ValidateTransaction(ctx context.Context, dbTX persistence.DBTX, txi *components.PublicTxSubmission) error {
-	log.L(ctx).Debugf("PrepareSubmission transaction: %+v", txi)
+	log.L(ctx).Tracef("PrepareSubmission transaction: %+v", txi)
 
 	if txi.From == nil {
 		return i18n.NewError(ctx, msgs.MsgInvalidTXMissingFromAddr)
@@ -303,7 +302,6 @@ func (ptm *pubTxManager) ValidateTransaction(ctx context.Context, dbTX persisten
 }
 
 func (ptm *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persistence.DBTX, transactions []*components.PublicTxSubmission) (pubTxns []*pldapi.PublicTx, err error) {
-	log.L(ctx).Debugf("WriteNewTransactions transactions: %+v", transactions)
 	persistedTransactions := make([]*DBPublicTxn, len(transactions))
 	for i, txi := range transactions {
 		persistedTransactions[i] = &DBPublicTxn{
@@ -318,7 +316,6 @@ func (ptm *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persiste
 	// All the nonce processing to this point should have ensured we do not have a conflict on nonces.
 	// It is the caller's responsibility to ensure we do not have a conflict on transaction+resubmit_idx.
 	if len(persistedTransactions) > 0 {
-		log.L(ctx).Debugf("WriteNewTransactions persisted transactions: %d", len(persistedTransactions))
 		err = dbTX.DB().
 			WithContext(ctx).
 			Table("public_txns").
@@ -330,7 +327,6 @@ func (ptm *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persiste
 		publicTxBindings := make([]*DBPublicTxnBinding, 0, len(transactions))
 		for i, txi := range transactions {
 			pubTxnID := persistedTransactions[i].PublicTxnID
-			log.L(ctx).Debugf("WriteNewTransactions public txn binding ID: %+v", pubTxnID)
 			for _, bnd := range txi.Bindings {
 				publicTxBindings = append(publicTxBindings, &DBPublicTxnBinding{
 					Transaction:     bnd.TransactionID,
@@ -340,7 +336,6 @@ func (ptm *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persiste
 			}
 		}
 		if len(publicTxBindings) > 0 {
-			log.L(ctx).Debugf("WriteNewTransactions public txn bindings: %d", len(persistedTransactions))
 			err = dbTX.DB().
 				WithContext(ctx).
 				Table("public_txn_bindings").
@@ -758,11 +753,9 @@ func (ptm *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 	// via our node to the network).
 	txHashes := make([]pldtypes.Bytes32, len(itxs))
 	for i, itx := range itxs {
-		log.L(ctx).Debugf("MatchUpdateConfirmedTransactions: checking for %+v", itx.Hash)
 		txHashes[i] = itx.Hash
 	}
 	var lookups []*bindingsMatchingSubmission
-	log.L(ctx).Debugf("MatchUpdateConfirmedTransactions: Selecting from 'public_txn_bindings'")
 	err := dbTX.DB().
 		Table("public_txn_bindings").
 		Select(`"transaction"`, `"tx_type"`, `"Submission"."pub_txn_id"`, `"Submission"."tx_hash"`).
@@ -803,7 +796,6 @@ func (ptm *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 
 	if len(completions) > 0 {
 		// We have some completions to persis - in the same order as the confirmations that came in
-		log.L(ctx).Debugf("MatchUpdateConfirmedTransactions: Writing %d completions to 'public_completions'", len(completions))
 		err := dbTX.DB().
 			Table("public_completions").
 			Clauses(clause.OnConflict{
@@ -813,13 +805,11 @@ func (ptm *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 			Create(completions).
 			Error
 		if err != nil {
-			log.L(ctx).Errorf("MatchUpdateConfirmedTransactions: error writing to `public_completions`: %s", err.Error())
 			return nil, err
 		}
 		ptm.metrics.IncCompletedTransactions()
 	}
 
-	log.L(ctx).Debugf("MatchUpdateConfirmedTransactions: Returning %d results", len(results))
 	return results, nil
 }
 

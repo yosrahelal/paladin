@@ -141,8 +141,6 @@ func (cm *componentManager) startDebugServer() (httpserver.Server, error) {
 }
 
 func (cm *componentManager) Init() (err error) {
-	log.L(cm.bgCtx).Info("Initializing component manager")
-
 	// start the debug server as early as possible
 	if confutil.Bool(cm.conf.DebugServer.Enabled, *pldconf.DebugServerDefaults.Enabled) {
 		cm.debugServer, err = cm.startDebugServer()
