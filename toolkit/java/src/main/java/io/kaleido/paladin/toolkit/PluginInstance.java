@@ -15,16 +15,26 @@
 
  package io.kaleido.paladin.toolkit;
 
- import io.grpc.ManagedChannel;
- import io.grpc.stub.StreamObserver;
- import io.kaleido.paladin.logging.PaladinLogging;
+ import java.util.UUID;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.ExecutorService;
+ import java.util.concurrent.Executors;
+ import java.util.concurrent.TimeUnit;
+
  import org.apache.logging.log4j.Logger;
  import org.apache.logging.log4j.message.FormattedMessage;
- 
- import java.util.UUID;
- import java.util.concurrent.*;
+
+import io.grpc.ManagedChannel;
+import io.grpc.stub.StreamObserver;
+import io.kaleido.paladin.logging.PaladinLogging;
  
  abstract class PluginInstance<MSG> {
+
+    public static class ErrorResponseException extends Exception {
+        public ErrorResponseException(String message) {
+            super(message);
+        }
+    }
  
      private static final Logger LOGGER = PaladinLogging.getLogger(PluginInstance.class);
  
@@ -38,7 +48,7 @@
  
      protected final String pluginId;
  
-     private final InFlight<UUID, MSG> inflightRequests = new InFlight<UUID, MSG>();
+     private final InFlight<UUID, MSG> inflightRequests = new InFlight<>();
  
      private ManagedChannel channel;
  
@@ -109,7 +119,7 @@
          }
      }
  
-     private final Header newHeader(Header.MessageType msgType)  {
+     private Header newHeader(Header.MessageType msgType)  {
          return Header.newBuilder().
                  setPluginId(pluginId).
                  setMessageId(UUID.randomUUID().toString()).
@@ -203,7 +213,7 @@
                      UUID cid = getCorrelationUUID(header);
                      if (cid != null) {
                          LOGGER.debug("Received reply {} to {} type {}", header.getMessageId(), cid, header.getMessageType());
-                         inflightRequests.failRequest(cid, new Exception(header.getErrorMessage()));
+                         inflightRequests.failRequest(cid, new ErrorResponseException(header.getErrorMessage()));
                      }
                  }
                  case Header.MessageType.REQUEST_TO_PLUGIN -> {
