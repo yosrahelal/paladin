@@ -238,6 +238,10 @@ import java.util.concurrent.ExecutionException;
                          parseExternalCalls(execResult.logs())));
      }
 
+     private boolean isPermanentFailure(ErrorResponseException ex) {
+         return ex.getErrorType() == Header.ErrorType.INVALID_INPUT;
+     }
+
      @Override
      protected CompletableFuture<AssembleTransactionResponse> assembleTransaction(AssembleTransactionRequest request) {
          try {
@@ -286,7 +290,7 @@ import java.util.concurrent.ExecutionException;
                      setRevertReason(e.getMessage()).
                      build());
          } catch (ExecutionException e) {
-             if (e.getCause() instanceof ErrorResponseException) {
+             if (e.getCause() instanceof ErrorResponseException && isPermanentFailure((ErrorResponseException) e.getCause())) {
                 // Any error response from a plugin during assembly is considered a revert.
                 // These can stem from things like an invalid ABI or inputs.
                 LOGGER.error(new FormattedMessage("Error response from plugin during assemble for TX {}", request.getTransaction().getTransactionId()), e);

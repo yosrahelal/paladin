@@ -31,8 +31,16 @@ import io.kaleido.paladin.logging.PaladinLogging;
  abstract class PluginInstance<MSG> {
 
     public static class ErrorResponseException extends Exception {
-        public ErrorResponseException(String message) {
+
+        private final Header.ErrorType errorType;
+
+        public ErrorResponseException(Header.ErrorType errorType, String message) {
             super(message);
+            this.errorType = errorType;
+        }
+
+        public Header.ErrorType getErrorType() {
+            return errorType;
         }
     }
  
@@ -195,7 +203,7 @@ import io.kaleido.paladin.logging.PaladinLogging;
          sendStream.onNext(buildMessage(resHeader));
          return null;
      }
- 
+
      private final class StreamHandler implements StreamObserver<MSG> {
          @Override
          public void onNext(MSG msg) {
@@ -213,7 +221,7 @@ import io.kaleido.paladin.logging.PaladinLogging;
                      UUID cid = getCorrelationUUID(header);
                      if (cid != null) {
                          LOGGER.debug("Received reply {} to {} type {}", header.getMessageId(), cid, header.getMessageType());
-                         inflightRequests.failRequest(cid, new ErrorResponseException(header.getErrorMessage()));
+                         inflightRequests.failRequest(cid, new ErrorResponseException(header.getErrorType(), header.getErrorMessage()));
                      }
                  }
                  case Header.MessageType.REQUEST_TO_PLUGIN -> {
