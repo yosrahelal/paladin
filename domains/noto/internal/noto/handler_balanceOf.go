@@ -23,6 +23,7 @@ import (
 	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
@@ -63,11 +64,10 @@ func (h *balanceOfHandler) ExecCall(ctx context.Context, tx *types.ParsedTransac
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgErrorGetAccountBalance, param.Account)
 	}
-	// Format balance as JSON string
 	balanceResult := types.BalanceOfResult{
-		TotalBalance: fmt.Sprint(totalBalance),
-		TotalStates:  fmt.Sprint(totalStates),
-		Overflow:     fmt.Sprint(overflow),
+		TotalBalance: pldtypes.MustParseHexUint256(totalBalance.String()),
+		TotalStates:  pldtypes.MustParseHexUint256(fmt.Sprint(totalStates)),
+		Overflow:     overflow,
 	}
 	balanceJson, err := json.Marshal(balanceResult)
 	if err != nil {

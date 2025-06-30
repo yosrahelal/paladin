@@ -39,6 +39,11 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
+// ParamValidator defines the interface for validating transaction parameters
+type ParamValidator interface {
+	ValidateParams(ctx context.Context, domainConfig *types.NotoParsedConfig, paramsJson string) (any, error)
+}
+
 //go:embed abis/NotoFactory.json
 var notoFactoryJSON []byte
 
@@ -561,9 +566,7 @@ func validateTransactionCommon[T any](
 	}
 
 	// check if the handler implements the ValidateParams method cause generic T
-	validator, ok := any(handler).(interface {
-		ValidateParams(ctx context.Context, domainConfig *types.NotoParsedConfig, paramsJson string) (any, error)
-	})
+	validator, ok := any(handler).(ParamValidator)
 	if !ok {
 		var zero T
 		return nil, zero, i18n.NewError(ctx, msgs.MsgErrorHandlerImplementationNotFound)

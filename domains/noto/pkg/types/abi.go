@@ -130,7 +130,7 @@ type BalanceOfParam struct {
 }
 
 type BalanceOfResult struct {
-	TotalBalance string `json:"totalBalance"`
-	TotalStates  string `json:"totalStates"`
-	Overflow     string `json:"overflow"`
+	TotalBalance *pldtypes.HexUint256 `json:"totalBalance"`
+	TotalStates  *pldtypes.HexUint256 `json:"totalStates"`
+	Overflow     bool                 `json:"overflow"`
 }

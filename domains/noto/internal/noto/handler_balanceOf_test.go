@@ -183,7 +183,7 @@ func TestBalanceOfExecCall(t *testing.T) {
 
 		res, err := h.ExecCall(ctx, parsedTx, req)
 		assert.NoError(t, err)
-		assert.Equal(t, `{"totalBalance":"0","totalStates":"0","overflow":"false"}`, res.ResultJson)
+		assert.Equal(t, `{"totalBalance":"0x00","totalStates":"0x00","overflow":false}`, res.ResultJson)
 	})
 
 	t.Run("Single coin state found", func(t *testing.T) {
@@ -219,7 +219,7 @@ func TestBalanceOfExecCall(t *testing.T) {
 
 		res, err := h.ExecCall(ctx, parsedTx, req)
 		assert.NoError(t, err)
-		assert.Equal(t, `{"totalBalance":"100","totalStates":"1","overflow":"false"}`, res.ResultJson)
+		assert.Equal(t, `{"totalBalance":"0x64","totalStates":"0x01","overflow":false}`, res.ResultJson)
 	})
 
 	t.Run("Multiple coin states found - should sum them", func(t *testing.T) {
@@ -265,7 +265,7 @@ func TestBalanceOfExecCall(t *testing.T) {
 
 		res, err := h.ExecCall(ctx, parsedTx, req)
 		assert.NoError(t, err)
-		assert.Equal(t, `{"totalBalance":"100","totalStates":"2","overflow":"false"}`, res.ResultJson)
+		assert.Equal(t, `{"totalBalance":"0x64","totalStates":"0x02","overflow":false}`, res.ResultJson)
 	})
 
 	t.Run("Test malformed coin data", func(t *testing.T) {
@@ -331,7 +331,7 @@ func TestBalanceOfExecCall(t *testing.T) {
 
 		res, err := h.ExecCall(ctx, parsedTx, req)
 		assert.NoError(t, err)
-		assert.Equal(t, `{"totalBalance":"0","totalStates":"1","overflow":"false"}`, res.ResultJson)
+		assert.Equal(t, `{"totalBalance":"0x00","totalStates":"0x01","overflow":false}`, res.ResultJson)
 	})
 
 	t.Run("Test with large amounts", func(t *testing.T) {
@@ -369,7 +369,7 @@ func TestBalanceOfExecCall(t *testing.T) {
 
 		res, err := h.ExecCall(ctx, parsedTx, req)
 		assert.NoError(t, err)
-		expected := `{"totalBalance":"` + largeAmount.Int().String() + `","totalStates":"1","overflow":"false"}`
+		expected := `{"totalBalance":"` + largeAmount.HexString0xPrefix() + `","totalStates":"0x01","overflow":false}`
 		assert.Equal(t, expected, res.ResultJson)
 	})
 }
