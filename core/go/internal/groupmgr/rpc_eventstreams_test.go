@@ -437,9 +437,6 @@ func TestRPCEventListenerE2ENack(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Small delay to allow message processing to begin reliably
-	time.Sleep(100 * time.Millisecond)
-
 	// The reader goroutine will first NACK and then, upon redelivery, push into `messages`
 	select {
 	case redelivered := <-messages:
