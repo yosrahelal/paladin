@@ -79,7 +79,7 @@ type pubTxManager struct {
 	ctxCancel context.CancelFunc
 
 	conf             *pldconf.PublicTxManagerConfig
-	thMetrics        *publicTxEngineMetrics
+	thMetrics        metrics.PublicTransactionManagerMetrics
 	p                persistence.Persistence
 	bIndexer         blockindexer.BlockIndexer
 	ethClient        ethclient.EthClient

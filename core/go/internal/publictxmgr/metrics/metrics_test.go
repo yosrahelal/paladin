@@ -32,17 +32,19 @@ func TestInitMetrics(t *testing.T) {
 	metrics.IncCompletedTransactions()
 	metrics.IncCompletedTransactions()
 	metrics.IncCompletedTransactions()
-	metrics.IncSubmittedTransactions()
-	metrics.IncSubmittedTransactions()
+	metrics.IncCompletedTransactionsByN(5)
+	metrics.IncDBSubmittedTransactions()
+	metrics.IncDBSubmittedTransactions()
+	metrics.IncDBSubmittedTransactionsByN(5)
 
 	metricFamilies, err := registry.Gather()
 	assert.NoError(t, err, "Unexpected error gathering metrics")
 
 	// Completed transactions metrics
 	assert.Equal(t, metricFamilies[0].GetName(), "public_transaction_manager_completed_txns_total")
-	assert.Equal(t, metricFamilies[0].GetMetric()[0].GetCounter().GetValue(), float64(4))
+	assert.Equal(t, metricFamilies[0].GetMetric()[0].GetCounter().GetValue(), float64(9))
 
 	// Submitted transactions metrics
-	assert.Equal(t, metricFamilies[1].GetName(), "public_transaction_manager_submitted_txns_total")
-	assert.Equal(t, metricFamilies[1].GetMetric()[0].GetCounter().GetValue(), float64(2))
+	assert.Equal(t, metricFamilies[1].GetName(), "public_transaction_manager_db_submitted_txns_total")
+	assert.Equal(t, metricFamilies[1].GetMetric()[0].GetCounter().GetValue(), float64(7))
 }
