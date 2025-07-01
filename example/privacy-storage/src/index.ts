@@ -29,6 +29,8 @@ async function main(): Promise<boolean> {
 
   if (!checkDeploy(memberPrivacyGroup)) return false;
 
+  logger.log(`Privacy group created, ID: ${memberPrivacyGroup?.group.id}`);
+
   // Step 2: Deploy a smart contract within the privacy group
   logger.log("Deploying a smart contract to the privacy group...");
   const contractAddress = await memberPrivacyGroup.deploy({
