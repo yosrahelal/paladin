@@ -28,6 +28,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     struct NotoConfig_V1 {
         string name;
         string symbol;
+        uint8 decimals;
         address notary;
         uint64 variant;
         bytes data;
@@ -47,7 +48,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
 
     string private _name;
     string private _symbol;
-    uint8 private _decimals;
     address public notary;
     mapping(bytes32 => bool) private _unspent;
     mapping(bytes32 => address) private _approvals;
@@ -113,6 +113,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
                 NotoConfig_V1({
                     name: _name,
                     symbol: _symbol,
+                    decimals: decimals(),
                     notary: notary,
                     variant: NotoVariantDefault,
                     data: data
@@ -126,6 +127,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
         bytes memory configOut = abi.encode(
             config.name,
             config.symbol,
+            config.decimals,
             config.notary,
             config.variant,
             config.data
@@ -152,7 +154,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     /**
      * @dev Returns the decimals places of the token.
      */
-    function decimals() external pure returns (uint8) {
+    function decimals() public pure returns (uint8) {
         return 4;
     }
 

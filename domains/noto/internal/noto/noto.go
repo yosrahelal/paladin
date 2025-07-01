@@ -28,6 +28,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
+	"github.com/kaleido-io/paladin/common/go/pkg/log"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
@@ -438,6 +439,7 @@ func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractReques
 	domainConfig, decodedData, err := n.decodeConfig(ctx, req.ContractConfig)
 	if err != nil {
 		// This on-chain contract has invalid configuration - not an error in our process
+		log.L(ctx).Errorf("Error decoding config: %s", err)
 		return &prototk.InitContractResponse{Valid: false}, nil
 	}
 
@@ -448,6 +450,9 @@ func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractReques
 	}
 
 	parsedConfig := &types.NotoParsedConfig{
+		Name:         domainConfig.Name,
+		Symbol:       domainConfig.Symbol,
+		Decimals:     domainConfig.Decimals,
 		NotaryMode:   types.NotaryModeBasic.Enum(),
 		Variant:      domainConfig.Variant,
 		NotaryLookup: decodedData.NotaryLookup,
