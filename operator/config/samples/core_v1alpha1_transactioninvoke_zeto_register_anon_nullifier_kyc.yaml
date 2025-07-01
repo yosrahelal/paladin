@@ -4,7 +4,7 @@ metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-  name: zeto-anon
+  name: zeto-anon-nullifier-kyc
 spec:
   node: node1
   from: zeto.operator
@@ -12,27 +12,29 @@ spec:
   toTemplate: '{{ index .status.resolvedContractAddresses "zeto-factory" }}'
   requiredContractDeployments:
     - 'zeto-factory'
-    - 'zeto-impl-anon'
+    - 'zeto-impl-anon-nullifier-kyc'
     - 'zeto-g16-deposit'
-    - 'zeto-g16-withdraw'
-    - 'zeto-g16-withdraw-batch'
-    - 'zeto-g16-anon'
-    - 'zeto-g16-anon-batch'
+    - 'zeto-g16-withdraw-nullifier'
+    - 'zeto-g16-withdraw-nullifier-batch'
+    - 'zeto-g16-anon-nullifier-kyc-transfer'
+    - 'zeto-g16-anon-nullifier-kyc-transfer-batch'
+    - 'zeto-g16-anon-nullifier-kyc-transfer-locked'
+    - 'zeto-g16-anon-nullifier-kyc-transfer-locked-batch'
   function: registerImplementation
   paramsJSONTemplate: |
     {
-      "name": "Zeto_Anon",
+      "name": "Zeto_AnonNullifierKyc",
       "implementation": {
-        "implementation":        "{{ index .status.resolvedContractAddresses "zeto-impl-anon" }}",
+        "implementation":        "{{ index .status.resolvedContractAddresses "zeto-impl-anon-nullifier-kyc" }}",
         "verifiers": {
-          "verifier":              "{{ index .status.resolvedContractAddresses "zeto-g16-anon" }}",
+          "verifier":              "{{ index .status.resolvedContractAddresses "zeto-g16-anon-nullifier-kyc-transfer" }}",
           "depositVerifier":       "{{ index .status.resolvedContractAddresses "zeto-g16-deposit" }}",
-          "withdrawVerifier":      "{{ index .status.resolvedContractAddresses "zeto-g16-withdraw" }}",
-          "lockVerifier":          "0x0000000000000000000000000000000000000000",
+          "withdrawVerifier":      "{{ index .status.resolvedContractAddresses "zeto-g16-withdraw-nullifier" }}",
+          "lockVerifier":          "{{ index .status.resolvedContractAddresses "zeto-g16-anon-nullifier-kyc-transfer-locked" }}",
           "burnVerifier":          "0x0000000000000000000000000000000000000000",
-          "batchVerifier":         "{{ index .status.resolvedContractAddresses "zeto-g16-anon-batch" }}",
-          "batchWithdrawVerifier": "{{ index .status.resolvedContractAddresses "zeto-g16-withdraw-batch" }}",
-          "batchLockVerifier":     "0x0000000000000000000000000000000000000000",
+          "batchVerifier":         "{{ index .status.resolvedContractAddresses "zeto-g16-anon-nullifier-kyc-transfer-batch" }}",
+          "batchWithdrawVerifier": "{{ index .status.resolvedContractAddresses "zeto-g16-withdraw-nullifier-batch" }}",
+          "batchLockVerifier":     "{{ index .status.resolvedContractAddresses "zeto-g16-anon-nullifier-kyc-transfer-locked-batch" }}",
           "batchBurnVerifier":     "0x0000000000000000000000000000000000000000"
         }
       }
