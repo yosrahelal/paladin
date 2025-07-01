@@ -18,7 +18,6 @@ package noto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
@@ -65,8 +64,8 @@ func (h *balanceOfHandler) ExecCall(ctx context.Context, tx *types.ParsedTransac
 		return nil, i18n.WrapError(ctx, err, msgs.MsgErrorGetAccountBalance, param.Account)
 	}
 	balanceResult := types.BalanceOfResult{
-		TotalBalance: pldtypes.MustParseHexUint256(totalBalance.String()),
-		TotalStates:  pldtypes.MustParseHexUint256(fmt.Sprint(totalStates)),
+		TotalBalance: (*pldtypes.HexUint256)(totalBalance),
+		TotalStates:  pldtypes.Uint64ToUint256(uint64(totalStates)),
 		Overflow:     overflow,
 	}
 	balanceJson, err := json.Marshal(balanceResult)
