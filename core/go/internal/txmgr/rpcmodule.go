@@ -92,7 +92,7 @@ func (tm *txManager) rpcSendTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		txs []*pldapi.TransactionInput,
 	) ([]uuid.UUID, error) {
-		tm.metrics.IncRpc("prepareTransactions")
+		tm.metrics.IncRpc("sendTransactions")
 		return tm.sendTransactionsNewDBTX(ctx, txs)
 	})
 }
