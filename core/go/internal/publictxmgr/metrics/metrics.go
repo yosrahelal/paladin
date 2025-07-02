@@ -18,15 +18,14 @@ package metrics
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/common/go/pkg/log"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 type PublicTransactionManagerMetrics interface {
 	IncDBSubmittedTransactions()
-	IncDBSubmittedTransactionsByN(numberOfTransactions float64)
+	IncDBSubmittedTransactionsByN(numberOfTransactions uint64)
 	IncCompletedTransactions()
-	IncCompletedTransactionsByN(numberOfTransactions float64)
+	IncCompletedTransactionsByN(numberOfTransactions uint64)
 
 	// TODO - TX manager currently expects these, currently they need implementing
 	RecordOperationMetrics(ctx context.Context, operationName string, operationResult string, durationInSeconds float64)
@@ -60,24 +59,16 @@ func (ptm *publicTransactionManagerMetrics) IncDBSubmittedTransactions() {
 	ptm.dbSubmittedTransactions.Inc()
 }
 
-func (ptm *publicTransactionManagerMetrics) IncDBSubmittedTransactionsByN(numberOfTransactions float64) {
-	if numberOfTransactions < 0 {
-		log.L(context.Background()).Errorf("Attempted to increment submitted TX count metric by negative number: %f", numberOfTransactions)
-	} else {
-		ptm.dbSubmittedTransactions.Add(numberOfTransactions)
-	}
+func (ptm *publicTransactionManagerMetrics) IncDBSubmittedTransactionsByN(numberOfTransactions uint64) {
+	ptm.dbSubmittedTransactions.Add(float64(numberOfTransactions))
 }
 
 func (ptm *publicTransactionManagerMetrics) IncCompletedTransactions() {
 	ptm.completedTransactions.Inc()
 }
 
-func (ptm *publicTransactionManagerMetrics) IncCompletedTransactionsByN(numberOfTransactions float64) {
-	if numberOfTransactions < 0 {
-		log.L(context.Background()).Errorf("Attempted to increment completed TX count metric by negative number: %f", numberOfTransactions)
-	} else {
-		ptm.completedTransactions.Add(numberOfTransactions)
-	}
+func (ptm *publicTransactionManagerMetrics) IncCompletedTransactionsByN(numberOfTransactions uint64) {
+	ptm.completedTransactions.Add(float64(numberOfTransactions))
 }
 
 func (ptm *publicTransactionManagerMetrics) RecordOperationMetrics(ctx context.Context, operationName string, operationResult string, durationInSeconds float64) {

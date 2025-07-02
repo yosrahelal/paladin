@@ -804,7 +804,7 @@ func (ptm *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 		if err != nil {
 			return nil, err
 		}
-		ptm.thMetrics.IncCompletedTransactionsByN(float64(len(completions)))
+		ptm.thMetrics.IncCompletedTransactionsByN(uint64(len(completions)))
 	}
 
 	return results, nil

@@ -53,7 +53,7 @@ func (sw *submissionWriter) runBatch(ctx context.Context, tx persistence.DBTX, v
 	if err != nil {
 		return nil, err
 	}
-	sw.metrics.IncDBSubmittedTransactionsByN(float64(len(values)))
+	sw.metrics.IncDBSubmittedTransactionsByN(uint64(len(values)))
 	// We don't actually provide any result, so just build an array of nil results
 	return make([]flushwriter.Result[*noResult], len(values)), err
 }
