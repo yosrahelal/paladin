@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024 Kaleido, Inc.
+ * Copyright © 2025 Kaleido, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -12,23 +12,34 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-package publictxmgr
+package metrics
 
 import (
 	"context"
-	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
-func TestMetrics(t *testing.T) {
-	// none of the functions are actually implemented, so it's purely for test coverage
-	btem := &publicTxEngineMetrics{}
-	ctx := context.Background()
-	btem.InitMetrics(ctx)
-	btem.RecordCompletedTransactionCountMetrics(ctx, "success")
-	btem.RecordOperationMetrics(ctx, "test", "success", 12)
-	btem.RecordStageChangeMetrics(ctx, "test", 12)
-	btem.RecordInFlightOrchestratorPoolMetrics(ctx, nil, 1)
-	btem.RecordInFlightTxQueueMetrics(ctx, nil, 1)
-	btem.RecordCompletedTransactionCountMetrics(ctx, "test")
+type metricsManager struct {
+	ctx             context.Context
+	metricsRegistry *prometheus.Registry
+}
+
+func NewMetricsManager(ctx context.Context) Metrics {
+	registry := prometheus.NewRegistry()
+
+	mm := &metricsManager{
+		ctx:             ctx,
+		metricsRegistry: registry,
+	}
+
+	return mm
+}
+
+func (mm *metricsManager) Registry() *prometheus.Registry {
+	return mm.metricsRegistry
+}
+
+type Metrics interface {
+	Registry() *prometheus.Registry
 }

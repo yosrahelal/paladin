@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/core/internal/metrics"
 	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 
 	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
@@ -67,6 +68,7 @@ type testManagers struct {
 }
 
 func (tm *testManagers) componentsmocks(t *testing.T) *componentsmocks.AllComponents {
+	mm := metrics.NewMetricsManager(context.Background())
 	mc := componentsmocks.NewAllComponents(t)
 	if tm.testDomainManager == nil {
 		tm.testDomainManager = &testDomainManager{}
@@ -84,6 +86,8 @@ func (tm *testManagers) componentsmocks(t *testing.T) *componentsmocks.AllCompon
 		tm.testKeyManager = &testKeyManager{}
 	}
 	mc.On("KeyManager").Return(tm.testKeyManager.mock(t)).Maybe()
+	mc.On("MetricsManager").Return(mm).Maybe()
+
 	return mc
 }
 

@@ -257,7 +257,11 @@ func TestBlockListenerWSShoulderTap(t *testing.T) {
 							for !complete {
 								time.Sleep(100 * time.Microsecond)
 								if bl.newHeadsSub != nil {
-									bl.newHeadsSub.Notifications() <- rpcclientmocks.NewRPCSubscriptionNotification(t)
+									select {
+									case bl.newHeadsSub.Notifications() <- rpcclientmocks.NewRPCSubscriptionNotification(t):
+									case <-ctx.Done():
+										return
+									}
 								}
 							}
 						}()
@@ -274,7 +278,11 @@ func TestBlockListenerWSShoulderTap(t *testing.T) {
 				}
 				b, err := json.Marshal(rpcRes)
 				require.NoError(t, err)
-				fromServer <- string(b)
+				select {
+				case fromServer <- string(b):
+				case <-ctx.Done():
+					return
+				}
 			case <-ctx.Done():
 				return
 			}

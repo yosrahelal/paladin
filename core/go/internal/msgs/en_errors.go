@@ -75,7 +75,10 @@ var (
 	MsgComponentAdditionalMgrStartError    = pde("PD010032", "Error initializing %s manager")
 	MsgComponentDebugServerStartError      = pde("PD010033", "Error starting debug server")
 	MsgComponentGroupManagerInitError      = pde("PD010034", "Error initializing privacy group manager")
-	MsgComponentGroupManagerStartError     = pde("PD010035", "Error starting group manager ")
+	MsgComponentGroupManagerStartError     = pde("PD010035", "Error starting group manager")
+	MsgComponentMetricsServerInitError     = pde("PD010036", "Error initializing metrics server")
+	MsgComponentMetricsServerStartError    = pde("PD010037", "Error starting metrics server")
+	MsgComponentMetricsManagerInitError    = pde("PD010038", "Error initializing metrics manager")
 
 	// States PD0101XX
 	MsgStateInvalidLength             = pde("PD010101", "Invalid hash len expected=%d actual=%d")
