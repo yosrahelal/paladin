@@ -123,10 +123,6 @@ func (dm *domainManager) PostInit(c components.AllComponents) error {
 	dm.keyManager = c.KeyManager()
 	dm.transportMgr = c.TransportManager()
 
-	// Register ourselves as a signing module on the key manager
-	dm.domainSigner = &domainSigner{dm: dm}
-	c.KeyManager().AddInMemorySigner("domain", dm.domainSigner)
-
 	for name, d := range dm.conf.Domains {
 		if _, err := pldtypes.ParseEthAddress(d.RegistryAddress); err != nil {
 			return i18n.WrapError(dm.bgCtx, err, msgs.MsgDomainRegistryAddressInvalid, d.RegistryAddress, name)
@@ -135,7 +131,13 @@ func (dm *domainManager) PostInit(c components.AllComponents) error {
 	return nil
 }
 
-func (dm *domainManager) Start() error { return nil }
+func (dm *domainManager) Start() error {
+	// Register ourselves as a signing module on the key manager after it has been started
+	dm.domainSigner = &domainSigner{dm: dm}
+	dm.keyManager.AddInMemorySigner("domain", dm.domainSigner)
+
+	return nil
+}
 
 func (dm *domainManager) Stop() {
 	dm.mux.Lock()

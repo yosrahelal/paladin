@@ -200,7 +200,7 @@ func TestSigningModuleRequestsOK(t *testing.T) {
 	// This is the point the key manager would call us to say the signing module is initialized
 	// (once it's happy it's updated its internal state)
 	signingModuleAPI.Initialized()
-	require.NoError(t, smpm.WaitForInit(ctx))
+	require.NoError(t, smpm.WaitForInit(ctx, prototk.PluginInfo_SIGNING_MODULE))
 
 	callbacks := <-waitForCallbacks
 

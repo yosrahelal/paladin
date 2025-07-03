@@ -61,7 +61,7 @@ func newTestSigningModule(t *testing.T, realDB bool, extraSetup ...func(mc *mock
 		},
 	}
 
-	ctx, km, mc, done := newTestKeyManager(t, realDB, conf)
+	ctx, km, mc, done := newTestKeyManager(t, realDB, conf, nil)
 
 	tp := newTestPlugin(nil)
 	tp.Functions = &plugintk.SigningModuleAPIFunctions{

@@ -206,7 +206,13 @@ func TestNotifyPluginUpdateNotStarted(t *testing.T) {
 	err := pc.PostInit((&testManagers{}).componentsmocks(t))
 	require.NoError(t, err)
 
-	err = pc.WaitForInit(context.Background())
+	err = pc.WaitForInit(context.Background(), prototk.PluginInfo_DOMAIN)
+	require.NoError(t, err)
+	err = pc.WaitForInit(context.Background(), prototk.PluginInfo_REGISTRY)
+	require.NoError(t, err)
+	err = pc.WaitForInit(context.Background(), prototk.PluginInfo_SIGNING_MODULE)
+	require.NoError(t, err)
+	err = pc.WaitForInit(context.Background(), prototk.PluginInfo_TRANSPORT)
 	require.NoError(t, err)
 
 	err = pc.ReloadPluginList()
@@ -278,7 +284,7 @@ func TestLoaderErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	// We should be notified of the error if we were waiting
-	err = pc.WaitForInit(ctx)
+	err = pc.WaitForInit(ctx, prototk.PluginInfo_DOMAIN)
 	assert.Regexp(t, "pop", err)
 
 	// Get a system command
@@ -299,7 +305,7 @@ func TestLoaderErrors(t *testing.T) {
 	// - check it times out context not an error on load
 	cancelled, cancelCtx := context.WithCancel(context.Background())
 	cancelCtx()
-	err = pc.WaitForInit(cancelled)
+	err = pc.WaitForInit(cancelled, prototk.PluginInfo_DOMAIN)
 	assert.Regexp(t, "PD010301", err)
 
 	err = loaderStream.CloseSend()

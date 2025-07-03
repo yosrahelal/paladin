@@ -85,7 +85,11 @@ func (km *keyManager) PreInit(pic components.PreInitComponents) (*components.Man
 
 func (km *keyManager) PostInit(c components.AllComponents) error {
 	km.p = c.Persistence()
+	return nil
+}
 
+func (km *keyManager) Start() error {
+	// Process wallets once all signing modules have been loaded
 	for _, walletConf := range km.conf.Wallets {
 		w, err := km.newWallet(km.bgCtx, walletConf)
 		if err != nil {
@@ -98,22 +102,6 @@ func (km *keyManager) PostInit(c components.AllComponents) error {
 		km.walletsOrdered = append(km.walletsOrdered, w)
 	}
 
-	return nil
-}
-
-func (km *keyManager) setWalletSigningModule(ctx context.Context, walletName string, signingModule signer.SigningModule) error {
-	wallet, ok := km.walletsByName[walletName]
-	if !ok {
-		return i18n.NewError(ctx, msgs.MsgKeyManagerWalletNotConfigured, walletName)
-	}
-
-	wallet.signingModule = signingModule
-	wallet.signingModuleInitialized = true
-
-	return nil
-}
-
-func (km *keyManager) Start() error {
 	return nil
 }
 
@@ -227,13 +215,9 @@ func (km *keyManager) unlockAllocation(ctx context.Context, kr *keyResolver) {
 }
 
 func (km *keyManager) AddInMemorySigner(prefix string, signer signerapi.InMemorySigner) {
-	// Called during PostInit phase by domain manager
+	// Called during Start phase by domain manager
 	for _, w := range km.walletsByName {
-		if !w.signingModuleInitialized {
-			log.L(km.bgCtx).Warnf("Unable to add in-memory signer, wallet '%s' signing module not initialized", w.name)
-		} else {
-			w.signingModule.AddInMemorySigner(prefix, signer)
-		}
+		w.signingModule.AddInMemorySigner(prefix, signer)
 	}
 }
 

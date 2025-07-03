@@ -73,7 +73,7 @@ func newTestSigner(t *testing.T) (context.Context, signer.SigningModule) {
 	return ctx, sm
 }
 
-func newTestKeyManager(t *testing.T, realDB bool, conf *pldconf.KeyManagerConfig) (context.Context, *keyManager, *mockComponents, func()) {
+func newTestKeyManager(t *testing.T, realDB bool, conf *pldconf.KeyManagerConfig, tps []*testPlugin) (context.Context, *keyManager, *mockComponents, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	oldLevel := logrus.GetLevel()
 	logrus.SetLevel(logrus.TraceLevel)
@@ -106,6 +106,11 @@ func newTestKeyManager(t *testing.T, realDB bool, conf *pldconf.KeyManagerConfig
 
 	err = km.PostInit(mc.c)
 	require.NoError(t, err)
+
+	// Register any signing module plugins
+	for _, tp := range tps {
+		registerTestSigningModule(t, km.(*keyManager), tp)
+	}
 
 	err = km.Start()
 	require.NoError(t, err)
@@ -167,7 +172,7 @@ func staticKeyConfig(name, keyPrefix string, keys ...string) *pldconf.WalletConf
 func newTestDBKeyManagerWithWallets(t *testing.T, wallets ...*pldconf.WalletConfig) (context.Context, *keyManager, *mockComponents, func()) {
 	return newTestKeyManager(t, true, &pldconf.KeyManagerConfig{
 		Wallets: append([]*pldconf.WalletConfig{}, wallets...),
-	})
+	}, nil)
 }
 
 func TestConfiguredSigningModules(t *testing.T) {
@@ -180,7 +185,7 @@ func TestConfiguredSigningModules(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, nil)
 	defer done()
 
 	assert.Equal(t, map[string]*pldconf.PluginConfig{
@@ -211,25 +216,19 @@ func TestGetSigningModule(t *testing.T) {
 			SignerType:       pldconf.WalletSignerTypePlugin,
 			SignerPluginName: "test1",
 		}},
-	})
+	}, []*testPlugin{tp})
 	defer done()
 
 	assert.Len(t, km.walletsOrdered, 1)
-	assert.False(t, km.walletsOrdered[0].signingModuleInitialized)
-	assert.Nil(t, km.walletsOrdered[0].signingModule)
-
-	registerTestSigningModule(t, km, tp)
 
 	sm, err := km.GetSigningModule(ctx, "test1")
 	assert.NoError(t, err)
 	assert.NotNil(t, sm)
-	assert.True(t, km.walletsOrdered[0].signingModuleInitialized)
 	assert.NotNil(t, km.walletsOrdered[0].signingModule)
-	assert.True(t, km.walletsByName["signingModuleWallet"].signingModuleInitialized)
 	assert.NotNil(t, km.walletsByName["signingModuleWallet"].signingModule)
 
 	// For compleness add a new wallet that also uses that signing module
-	w, err := km.newWallet(ctx, &pldconf.WalletConfig{
+	_, err = km.newWallet(ctx, &pldconf.WalletConfig{
 		Name:             "signingModuleWalletNew",
 		KeySelector:      "",
 		SignerType:       pldconf.WalletSignerTypePlugin,
@@ -237,13 +236,12 @@ func TestGetSigningModule(t *testing.T) {
 	})
 
 	assert.NoError(t, err)
-	assert.True(t, w.signingModuleInitialized)
 }
 
 func TestSigningModuleRegisteredNotFound(t *testing.T) {
 	_, km, _, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
 		SigningModules: map[string]*pldconf.SigningModuleConfig{},
-	})
+	}, nil)
 	defer done()
 
 	_, err := km.SigningModuleRegistered("unknown", uuid.New(), nil)
@@ -257,7 +255,7 @@ func TestConfigureSigningModuleFail(t *testing.T) {
 				Config: map[string]any{"some": "conf"},
 			},
 		},
-	})
+	}, nil)
 	defer done()
 
 	tp := newTestPlugin(nil)
@@ -274,7 +272,7 @@ func TestConfigureSigningModuleFail(t *testing.T) {
 func TestGetSigningModuleNotFound(t *testing.T) {
 	ctx, km, _, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
 		SigningModules: map[string]*pldconf.SigningModuleConfig{},
-	})
+	}, nil)
 	defer done()
 
 	_, err := km.GetSigningModule(ctx, "unknown")
@@ -301,14 +299,12 @@ func TestConfiguredSigningModulesNoWallet(t *testing.T) {
 			SignerType:       pldconf.WalletSignerTypePlugin,
 			SignerPluginName: "test1",
 		}},
-	})
+	}, []*testPlugin{tp})
 	defer done()
 
 	// Set to have no wallets
 	km.walletsByName = map[string]*wallet{}
 	km.walletsOrdered = []*wallet{}
-
-	registerTestSigningModule(t, km, tp)
 
 	configuredSigningModules := km.ConfiguredSigningModules()
 
@@ -519,7 +515,7 @@ func TestE2ESigningModulePluginRealDB(t *testing.T) {
 			SignerType:       pldconf.WalletSignerTypePlugin,
 			SignerPluginName: "test1",
 		}},
-	})
+	}, []*testPlugin{tp})
 	defer done()
 
 	registerTestSigningModule(t, km, tp)
@@ -781,8 +777,7 @@ func TestE2EMustNotMatchKeyResolution(t *testing.T) {
 
 }
 
-func TestPostInitFailures(t *testing.T) {
-
+func TestStartFailures(t *testing.T) {
 	mc := &mockComponents{c: componentsmocks.NewAllComponents(t)}
 	db, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
@@ -796,6 +791,8 @@ func TestPostInitFailures(t *testing.T) {
 	_, err = km.PreInit(mc.c)
 	require.NoError(t, err)
 	err = km.PostInit(mc.c)
+	require.NoError(t, err)
+	err = km.Start()
 	assert.Regexp(t, "PD010508", err) // no name
 
 	km = NewKeyManager(context.Background(), &pldconf.KeyManagerConfig{
@@ -807,12 +804,12 @@ func TestPostInitFailures(t *testing.T) {
 	_, err = km.PreInit(mc.c)
 	require.NoError(t, err)
 	err = km.PostInit(mc.c)
+	require.NoError(t, err)
+	err = km.Start()
 	assert.Regexp(t, "PD010509", err) // duplicate name
-
 }
 
 func TestSignUnknownWallet(t *testing.T) {
-
 	ctx, km, _, done := newTestDBKeyManagerWithWallets(t)
 	defer done()
 
@@ -820,7 +817,6 @@ func TestSignUnknownWallet(t *testing.T) {
 		Wallet: "unknown",
 	}}}, signpayloads.OPAQUE_TO_RSV, []byte{})
 	assert.Regexp(t, "PD010503", err)
-
 }
 
 type testSigner struct {
@@ -867,43 +863,10 @@ func TestAddInMemorySignerAndSign(t *testing.T) {
 
 }
 
-func TestAddInMemorySignerNotInitialized(t *testing.T) {
-	ctx, km, _, done := newTestKeyManager(t, true, &pldconf.KeyManagerConfig{
-		SigningModules: map[string]*pldconf.SigningModuleConfig{
-			"test1": {
-				Config: map[string]any{"some": "conf"},
-			},
-		},
-		Wallets: []*pldconf.WalletConfig{{
-			Name:             "test",
-			KeySelector:      "",
-			SignerType:       pldconf.WalletSignerTypePlugin,
-			SignerPluginName: "test1",
-		}},
-	})
-	defer done()
-
-	s := &testSigner{
-		getVerifier: func(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error) {
-			return "custom-thing", nil
-		},
-	}
-	km.AddInMemorySigner("test", s)
-
-	err := km.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		_, err := km.KeyResolverForDBTX(dbTX).ResolveKey(ctx, "my-custom-thing", "test:blue", "thingies")
-		assert.Regexp(t, "PD010517", err)
-
-		return nil
-	})
-	require.NoError(t, err)
-
-}
-
 func TestResolveKeyNewDatabaseTXFail(t *testing.T) {
 	ctx, km, mc, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
 		Wallets: []*pldconf.WalletConfig{hdWalletConfig("hdwallet1", "")},
-	})
+	}, nil)
 	defer done()
 
 	mc.db.ExpectBegin()
@@ -916,7 +879,7 @@ func TestResolveKeyNewDatabaseTXFail(t *testing.T) {
 func TestResolveEthAddressNewDatabaseTXFail(t *testing.T) {
 	ctx, km, mc, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
 		Wallets: []*pldconf.WalletConfig{hdWalletConfig("hdwallet1", "")},
-	})
+	}, nil)
 	defer done()
 
 	mc.db.ExpectBegin()
@@ -929,7 +892,7 @@ func TestResolveEthAddressNewDatabaseTXFail(t *testing.T) {
 func TestResolveBatchNewDatabaseTXFail(t *testing.T) {
 	ctx, km, mc, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
 		Wallets: []*pldconf.WalletConfig{hdWalletConfig("hdwallet1", "")},
-	})
+	}, nil)
 	defer done()
 
 	mc.db.ExpectBegin()
@@ -942,7 +905,7 @@ func TestResolveBatchNewDatabaseTXFail(t *testing.T) {
 func TestReverseKeyLookupFail(t *testing.T) {
 	ctx, km, mc, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
 		Wallets: []*pldconf.WalletConfig{hdWalletConfig("hdwallet1", "")},
-	})
+	}, nil)
 	defer done()
 
 	mc.db.ExpectQuery("SELECT.*key_verifiers").WillReturnError(fmt.Errorf("pop"))
@@ -954,7 +917,7 @@ func TestReverseKeyLookupFail(t *testing.T) {
 func TestReverseKeyLookupNotFound(t *testing.T) {
 	ctx, km, mc, done := newTestKeyManager(t, true, &pldconf.KeyManagerConfig{
 		Wallets: []*pldconf.WalletConfig{hdWalletConfig("hdwallet1", "")},
-	})
+	}, nil)
 	defer done()
 
 	_, err := km.ReverseKeyLookup(ctx, mc.c.Persistence().NOTX(), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, pldtypes.RandAddress().String())
@@ -964,7 +927,7 @@ func TestReverseKeyLookupNotFound(t *testing.T) {
 func TestReverseKeyLookupFailMapping(t *testing.T) {
 	ctx, km, mc, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{
 		Wallets: []*pldconf.WalletConfig{hdWalletConfig("hdwallet1", "")},
-	})
+	}, nil)
 	defer done()
 
 	verifier := pldtypes.RandAddress().String()
