@@ -123,18 +123,16 @@ func (km *keyManager) ConfiguredSigningModules() map[string]*pldconf.PluginConfi
 }
 
 func (km *keyManager) SigningModuleRegistered(name string, id uuid.UUID, toSigningModule components.KeyManagerToSigningModule) (fromSigningModule plugintk.SigningModuleCallbacks, err error) {
+	// Replaces any previously registered instance
+	existingSigningModule, _ := km.GetSigningModule(km.bgCtx, name)
+	for existingSigningModule != nil {
+		// Can't hold the lock in cleanup, hence the loop
+		km.cleanupSigningModule(existingSigningModule.(*signingModule))
+		existingSigningModule, _ = km.GetSigningModule(km.bgCtx, name)
+	}
+
 	km.mux.Lock()
 	defer km.mux.Unlock()
-
-	// Replaces any previously registered instance
-	existing := km.signingModulesByName[name]
-	for existing != nil {
-		// Can't hold the lock in cleanup, hence the loop
-		km.mux.Unlock()
-		km.cleanupSigningModule(existing)
-		km.mux.Lock()
-		existing = km.signingModulesByName[name]
-	}
 
 	// Get the config for this signing module
 	conf := km.conf.SigningModules[name]
