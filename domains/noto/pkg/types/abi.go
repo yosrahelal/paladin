@@ -103,6 +103,7 @@ type UnlockRecipient struct {
 }
 
 type UnlockPublicParams struct {
+	TxId          string            `json:"txId"`
 	LockedInputs  []string          `json:"lockedInputs"`
 	LockedOutputs []string          `json:"lockedOutputs"`
 	Outputs       []string          `json:"outputs"`
@@ -123,4 +124,14 @@ type NotoPublicTransaction struct {
 type NotoTransferMetadata struct {
 	ApprovalParams       ApproveExtraParams    `json:"approvalParams"`       // Partial set of params that can be passed to the "approveTransfer" method to approve another party to perform this transfer
 	TransferWithApproval NotoPublicTransaction `json:"transferWithApproval"` // The public transaction that would need to be submitted by an approved party to perform this transfer
+}
+
+type BalanceOfParam struct {
+	Account string `json:"account"`
+}
+
+type BalanceOfResult struct {
+	TotalBalance *pldtypes.HexUint256 `json:"totalBalance"`
+	TotalStates  *pldtypes.HexUint256 `json:"totalStates"`
+	Overflow     bool                 `json:"overflow"`
 }

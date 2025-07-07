@@ -36,6 +36,18 @@ import {
   ITransactionStates,
 } from "./interfaces/transaction";
 import { PaladinVerifier } from "./verifier";
+import {
+  IRegistryEntry,
+  IRegistryEntryWithProperties,
+  IRegistryProperty,
+  ActiveFilter,
+} from "./interfaces/registry";
+import {
+  IWalletInfo,
+  IKeyMappingAndVerifier,
+  IEthAddress,
+  IKeyQueryEntry,
+} from "./interfaces/keymanager";
 
 const POLL_INTERVAL_MS = 100;
 
@@ -402,4 +414,99 @@ export default class PaladinClient {
     );
     return res.status === 404 ? undefined : res.data.result;
   }
+
+  keymgr = {
+    wallets: async () => {
+      const res = await this.post<JsonRpcResult<IWalletInfo[]>>(
+        "keymgr_wallets",
+        []
+      );
+      return res.data.result;
+    },
+
+    resolveKey: async (
+      identifier: string,
+      algorithm: string,
+      verifierType: string
+    ) => {
+      const res = await this.post<JsonRpcResult<IKeyMappingAndVerifier>>(
+        "keymgr_resolveKey",
+        [identifier, algorithm, verifierType]
+      );
+      return res.data.result;
+    },
+
+    resolveEthAddress: async (identifier: string) => {
+      const res = await this.post<JsonRpcResult<IEthAddress>>(
+        "keymgr_resolveEthAddress",
+        [identifier]
+      );
+      return res.data.result;
+    },
+
+    reverseKeyLookup: async (
+      algorithm: string,
+      verifierType: string,
+      verifier: string
+    ) => {
+      const res = await this.post<JsonRpcResult<IKeyMappingAndVerifier>>(
+        "keymgr_reverseKeyLookup",
+        [algorithm, verifierType, verifier]
+      );
+      return res.data.result;
+    },
+
+    queryKeys: async (query: IQuery) => {
+      const res = await this.post<JsonRpcResult<IKeyQueryEntry[]>>(
+        "keymgr_queryKeys",
+        [query]
+      );
+      return res.data.result;
+    },
+  };
+
+  reg = {
+    registries: async () => {
+      const res = await this.post<JsonRpcResult<string[]>>(
+        "reg_registries",
+        []
+      );
+      return res.data.result;
+    },
+
+    queryEntries: async (
+      registryName: string,
+      query: IQuery,
+      activeFilter: ActiveFilter
+    ) => {
+      const res = await this.post<JsonRpcResult<IRegistryEntry[]>>(
+        "reg_queryEntries",
+        [registryName, query, activeFilter]
+      );
+      return res.data.result;
+    },
+
+    queryEntriesWithProps: async (
+      registryName: string,
+      query: IQuery,
+      activeFilter: ActiveFilter
+    ) => {
+      const res = await this.post<
+        JsonRpcResult<IRegistryEntryWithProperties[]>
+      >("reg_queryEntriesWithProps", [registryName, query, activeFilter]);
+      return res.data.result;
+    },
+
+    getEntryProperties: async (
+      registryName: string,
+      entryId: string,
+      activeFilter: ActiveFilter
+    ) => {
+      const res = await this.post<JsonRpcResult<IRegistryProperty[]>>(
+        "reg_getEntryProperties",
+        [registryName, entryId, activeFilter]
+      );
+      return res.data.result;
+    },
+  };
 }
