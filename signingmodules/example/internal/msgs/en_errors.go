@@ -19,7 +19,7 @@ package msgs
 import (
 	"sync"
 
-	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
 	"golang.org/x/text/language"
 )
 
@@ -28,7 +28,7 @@ var pde = func(key, translation string, statusHint ...int) i18n.ErrorMessageKey 
 	registered.Do(func() {
 		i18n.RegisterPrefix("PD07", "Paladin Example Signing Module")
 	})
-	return i18n.FFE(language.AmericanEnglish, key, translation, statusHint...)
+	return i18n.PDE(language.AmericanEnglish, key, translation, statusHint...)
 }
 
 var (

@@ -5,10 +5,10 @@ go 1.23.0
 toolchain go1.23.7
 
 require (
-	github.com/hyperledger/firefly-common v1.5.4
+	github.com/kaleido-io/paladin/common/go v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/config v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	golang.org/x/text v0.23.0
 )
 
@@ -23,8 +23,8 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/hyperledger/firefly-common v1.5.4 // indirect
 	github.com/hyperledger/firefly-signer v1.1.21 // indirect
-	github.com/kaleido-io/paladin/common/go v0.0.0-00010101000000-000000000000 // indirect
 	github.com/kaleido-io/paladin/sdk/go v0.0.0-00010101000000-000000000000 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -42,7 +42,7 @@ require (
 	golang.org/x/term v0.30.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241007155032-5fefd90f89a9 // indirect
 	google.golang.org/grpc v1.67.1 // indirect
-	google.golang.org/protobuf v1.35.1 // indirect
+	google.golang.org/protobuf v1.36.5 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
