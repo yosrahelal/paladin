@@ -145,9 +145,9 @@ export class PenteFactory {
       this.domain,
       input.id
     );
-    return existingGroup.contractAddress === undefined
-      ? undefined
-      : new PentePrivacyGroup(this.paladin, existingGroup);
+    return existingGroup?.contractAddress
+      ? new PentePrivacyGroup(this.paladin, existingGroup)
+      : undefined;
   }
 }
 
