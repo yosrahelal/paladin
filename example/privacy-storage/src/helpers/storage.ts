@@ -13,7 +13,7 @@ export const newPrivateStorage = async (
     abi: storage.abi,
     bytecode: storage.bytecode,
     from: from.lookup,
-  });
+  }).waitForDeploy();
   return address ? new PrivateStorage(pente, address) : undefined;
 };
 

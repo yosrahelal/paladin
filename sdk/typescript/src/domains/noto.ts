@@ -5,12 +5,7 @@ import * as notoPrivateJSON from "./abis/INotoPrivate.json";
 import * as notoJSON from "./abis/INoto.json";
 import { penteGroupABI } from "./pente";
 import { PaladinVerifier } from "../verifier";
-
-const DEFAULT_POLL_TIMEOUT = 10000;
-
-export interface NotoOptions {
-  pollTimeout?: number;
-}
+import { TransactionWrapper } from "../transaction";
 
 export const notoConstructorABI = (
   withHooks: boolean
@@ -138,101 +133,91 @@ export interface NotoBalanceOfResult {
   overflow: boolean;
 }
 
-export class NotoFactory {
-  private options: Required<NotoOptions>;
-
-  constructor(
-    private paladin: PaladinClient,
-    public readonly domain: string,
-    options?: NotoOptions
-  ) {
-    this.options = {
-      pollTimeout: DEFAULT_POLL_TIMEOUT,
-      ...options,
-    };
+export class NotoWrapper extends TransactionWrapper {
+  async waitForDeploy(waitMs?: number) {
+    const receipt = await this.waitForReceipt(waitMs);
+    return receipt?.contractAddress
+      ? new NotoInstance(this.paladin, receipt.contractAddress)
+      : undefined;
   }
+}
+
+export class NotoFactory {
+  constructor(private paladin: PaladinClient, public readonly domain: string) {}
 
   using(paladin: PaladinClient) {
-    return new NotoFactory(paladin, this.domain, this.options);
+    return new NotoFactory(paladin, this.domain);
   }
 
-  async newNoto(from: PaladinVerifier, data: NotoConstructorParams) {
-    const txID = await this.paladin.sendTransaction({
-      type: TransactionType.PRIVATE,
-      domain: this.domain,
-      abi: [notoConstructorABI(!!data.options?.hooks)],
-      function: "",
-      from: from.lookup,
-      data: {
-        ...data,
-        notary: data.notary.lookup,
-        options: {
-          basic: {
-            restrictMint: true,
-            allowBurn: true,
-            allowLock: true,
-            ...data.options?.basic,
+  newNoto(from: PaladinVerifier, data: NotoConstructorParams) {
+    return new NotoWrapper(
+      this.paladin,
+      this.paladin.sendTransaction({
+        type: TransactionType.PRIVATE,
+        domain: this.domain,
+        abi: [notoConstructorABI(!!data.options?.hooks)],
+        function: "",
+        from: from.lookup,
+        data: {
+          ...data,
+          notary: data.notary.lookup,
+          options: {
+            basic: {
+              restrictMint: true,
+              allowBurn: true,
+              allowLock: true,
+              ...data.options?.basic,
+            },
+            ...data.options,
           },
-          ...data.options,
         },
-      },
-    });
-    const receipt = await this.paladin.pollForReceipt(
-      txID,
-      this.options.pollTimeout
+      })
     );
-    return receipt?.contractAddress === undefined
-      ? undefined
-      : new NotoInstance(this.paladin, receipt.contractAddress, this.options);
   }
 }
 
 export class NotoInstance {
-  private options: Required<NotoOptions>;
-
   constructor(
     private paladin: PaladinClient,
-    public readonly address: string,
-    options?: NotoOptions
-  ) {
-    this.options = {
-      pollTimeout: DEFAULT_POLL_TIMEOUT,
-      ...options,
-    };
-  }
+    public readonly address: string
+  ) {}
 
   using(paladin: PaladinClient) {
-    return new NotoInstance(paladin, this.address, this.options);
+    return new NotoInstance(paladin, this.address);
   }
 
-  async mint(from: PaladinVerifier, data: NotoMintParams) {
-    const txID = await this.paladin.sendTransaction({
-      type: TransactionType.PRIVATE,
-      abi: notoPrivateJSON.abi,
-      function: "mint",
-      to: this.address,
-      from: from.lookup,
-      data: {
-        ...data,
-        to: data.to.lookup,
-      },
-    });
-    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
+  mint(from: PaladinVerifier, data: NotoMintParams) {
+    return new TransactionWrapper(
+      this.paladin,
+      this.paladin.sendTransaction({
+        type: TransactionType.PRIVATE,
+        abi: notoPrivateJSON.abi,
+        function: "mint",
+        to: this.address,
+        from: from.lookup,
+        data: {
+          ...data,
+          to: data.to.lookup,
+        },
+      })
+    );
   }
 
-  async transfer(from: PaladinVerifier, data: NotoTransferParams) {
-    const txID = await this.paladin.sendTransaction({
-      type: TransactionType.PRIVATE,
-      abi: notoPrivateJSON.abi,
-      function: "transfer",
-      to: this.address,
-      from: from.lookup,
-      data: {
-        ...data,
-        to: data.to.lookup,
-      },
-    });
-    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
+  transfer(from: PaladinVerifier, data: NotoTransferParams) {
+    return new TransactionWrapper(
+      this.paladin,
+      this.paladin.sendTransaction({
+        type: TransactionType.PRIVATE,
+        abi: notoPrivateJSON.abi,
+        function: "transfer",
+        to: this.address,
+        from: from.lookup,
+        data: {
+          ...data,
+          to: data.to.lookup,
+        },
+      })
+    );
   }
 
   prepareTransfer(from: PaladinVerifier, data: NotoTransferParams) {
@@ -253,101 +238,115 @@ export class NotoInstance {
     from: PaladinVerifier,
     data: NotoApproveTransferParams
   ) {
-    const txID = await this.paladin.sendTransaction({
-      type: TransactionType.PRIVATE,
-      abi: notoPrivateJSON.abi,
-      function: "approveTransfer",
-      to: this.address,
-      from: from.lookup,
-      data,
-    });
-    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
+    return new TransactionWrapper(
+      this.paladin,
+      this.paladin.sendTransaction({
+        type: TransactionType.PRIVATE,
+        abi: notoPrivateJSON.abi,
+        function: "approveTransfer",
+        to: this.address,
+        from: from.lookup,
+        data,
+      })
+    );
   }
 
-  async burn(from: PaladinVerifier, data: NotoBurnParams) {
-    const txID = await this.paladin.sendTransaction({
-      type: TransactionType.PRIVATE,
-      abi: notoPrivateJSON.abi,
-      function: "burn",
-      to: this.address,
-      from: from.lookup,
-      data,
-    });
-    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
+  burn(from: PaladinVerifier, data: NotoBurnParams) {
+    return new TransactionWrapper(
+      this.paladin,
+      this.paladin.sendTransaction({
+        type: TransactionType.PRIVATE,
+        abi: notoPrivateJSON.abi,
+        function: "burn",
+        to: this.address,
+        from: from.lookup,
+        data,
+      })
+    );
   }
 
-  async lock(from: PaladinVerifier, data: NotoLockParams) {
-    const txID = await this.paladin.sendTransaction({
-      type: TransactionType.PRIVATE,
-      abi: notoPrivateJSON.abi,
-      function: "lock",
-      to: this.address,
-      from: from.lookup,
-      data,
-    });
-    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
+  lock(from: PaladinVerifier, data: NotoLockParams) {
+    return new TransactionWrapper(
+      this.paladin,
+      this.paladin.sendTransaction({
+        type: TransactionType.PRIVATE,
+        abi: notoPrivateJSON.abi,
+        function: "lock",
+        to: this.address,
+        from: from.lookup,
+        data,
+      })
+    );
   }
 
-  async unlock(from: PaladinVerifier, data: NotoUnlockParams) {
-    const txID = await this.paladin.sendTransaction({
-      type: TransactionType.PRIVATE,
-      abi: notoPrivateJSON.abi,
-      function: "unlock",
-      to: this.address,
-      from: from.lookup,
-      data: {
-        ...data,
-        from: data.from.lookup,
-        recipients: data.recipients.map((recipient) => ({
-          to: recipient.to.lookup,
-          amount: recipient.amount,
-        })),
-      },
-    });
-    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
+  unlock(from: PaladinVerifier, data: NotoUnlockParams) {
+    return new TransactionWrapper(
+      this.paladin,
+      this.paladin.sendTransaction({
+        type: TransactionType.PRIVATE,
+        abi: notoPrivateJSON.abi,
+        function: "unlock",
+        to: this.address,
+        from: from.lookup,
+        data: {
+          ...data,
+          from: data.from.lookup,
+          recipients: data.recipients.map((recipient) => ({
+            to: recipient.to.lookup,
+            amount: recipient.amount,
+          })),
+        },
+      })
+    );
   }
 
-  async unlockAsDelegate(from: PaladinVerifier, data: NotoUnlockPublicParams) {
-    const txID = await this.paladin.sendTransaction({
-      type: TransactionType.PUBLIC,
-      abi: notoJSON.abi,
-      function: "unlock",
-      to: this.address,
-      from: from.lookup,
-      data,
-    });
-    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
+  unlockAsDelegate(from: PaladinVerifier, data: NotoUnlockPublicParams) {
+    return new TransactionWrapper(
+      this.paladin,
+      this.paladin.sendTransaction({
+        type: TransactionType.PUBLIC,
+        abi: notoJSON.abi,
+        function: "unlock",
+        to: this.address,
+        from: from.lookup,
+        data,
+      })
+    );
   }
 
-  async prepareUnlock(from: PaladinVerifier, data: NotoUnlockParams) {
-    const txID = await this.paladin.sendTransaction({
-      type: TransactionType.PRIVATE,
-      abi: notoPrivateJSON.abi,
-      function: "prepareUnlock",
-      to: this.address,
-      from: from.lookup,
-      data: {
-        ...data,
-        from: data.from.lookup,
-        recipients: data.recipients.map((recipient) => ({
-          to: recipient.to.lookup,
-          amount: recipient.amount,
-        })),
-      },
-    });
-    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
+  prepareUnlock(from: PaladinVerifier, data: NotoUnlockParams) {
+    return new TransactionWrapper(
+      this.paladin,
+      this.paladin.sendTransaction({
+        type: TransactionType.PRIVATE,
+        abi: notoPrivateJSON.abi,
+        function: "prepareUnlock",
+        to: this.address,
+        from: from.lookup,
+        data: {
+          ...data,
+          from: data.from.lookup,
+          recipients: data.recipients.map((recipient) => ({
+            to: recipient.to.lookup,
+            amount: recipient.amount,
+          })),
+        },
+      })
+    );
   }
 
-  async delegateLock(from: PaladinVerifier, data: NotoDelegateLockParams) {
-    const txID = await this.paladin.sendTransaction({
-      type: TransactionType.PRIVATE,
-      abi: notoPrivateJSON.abi,
-      function: "delegateLock",
-      to: this.address,
-      from: from.lookup,
-      data,
-    });
-    return this.paladin.pollForReceipt(txID, this.options.pollTimeout);
+  delegateLock(from: PaladinVerifier, data: NotoDelegateLockParams) {
+    return new TransactionWrapper(
+      this.paladin,
+      this.paladin.sendTransaction({
+        type: TransactionType.PRIVATE,
+        abi: notoPrivateJSON.abi,
+        function: "delegateLock",
+        to: this.address,
+        from: from.lookup,
+        data,
+      })
+    );
   }
 
   encodeUnlock(data: NotoUnlockPublicParams) {
@@ -360,8 +359,11 @@ export class NotoInstance {
     ]);
   }
 
-  async balanceOf(from: PaladinVerifier, data: NotoBalanceOfParams): Promise<NotoBalanceOfResult> {
-    return await this.paladin.call({
+  balanceOf(
+    from: PaladinVerifier,
+    data: NotoBalanceOfParams
+  ): Promise<NotoBalanceOfResult> {
+    return this.paladin.call({
       type: TransactionType.PRIVATE,
       domain: "noto",
       abi: notoPrivateJSON.abi,
