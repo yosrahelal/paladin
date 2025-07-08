@@ -49,13 +49,7 @@ const memberPrivacyGroup = await penteFactory.newPrivacyGroup({
   members: [verifierNode1, verifierNode2],
   evmVersion: "shanghai",
   externalCallsEnabled: true,
-});
-
-if (!checkDeploy(memberPrivacyGroup)) {
-  logger.error("Failed to create the privacy group.");
-  return false;
-}
-logger.log("Privacy group created successfully!");
+}).waitForDeploy();
 ```
 
 #### Key Points:
@@ -71,18 +65,12 @@ logger.log("Privacy group created successfully!");
 Now that the **privacy group** is established, **deploy** the `Storage` contract inside this group.
 
 ```typescript
-logger.log("Deploying a private Storage contract...");
+logger.log("Deploying a smart contract to the privacy group...");
 const contractAddress = await memberPrivacyGroup.deploy({
   abi: storageJson.abi,
   bytecode: storageJson.bytecode,
   from: verifierNode1.lookup,
-});
-
-if (!contractAddress) {
-  logger.error("Failed to deploy the private Storage contract.");
-  return false;
-}
-logger.log(`Private smart contract deployed! Address: ${contractAddress}`);
+}).waitForDeploy();
 ```
 
 #### Key Points
@@ -99,18 +87,21 @@ logger.log(`Private smart contract deployed! Address: ${contractAddress}`);
 Now that the contract is deployed, **Node1** can store a value.
 
 ```typescript
-const privateStorage = new PrivateStorage(memberPrivacyGroup, contractAddress);
+const privateStorageContract = new PrivateStorage(
+  memberPrivacyGroup,
+  contractAddress
+);
 
 const valueToStore = 125; // Example value to store
 logger.log(`Storing a value "${valueToStore}" in the contract...`);
-const storeTx = await privateStorageContract.sendTransaction({
+const storeReceipt = await privateStorageContract.sendTransaction({
   from: verifierNode1.lookup,
   function: "store",
   data: { num: valueToStore },
-});
+}).waitForReceipt();
 logger.log(
   "Value stored successfully! Transaction hash:",
-  storeTx?.transactionHash
+  storeReceipt?.transactionHash
 );
 ```
 
