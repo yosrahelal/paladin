@@ -5,7 +5,7 @@ import * as notoPrivateJSON from "./abis/INotoPrivate.json";
 import * as notoJSON from "./abis/INoto.json";
 import { penteGroupABI } from "./pente";
 import { PaladinVerifier } from "../verifier";
-import { TransactionWrapper } from "../transaction";
+import { TransactionFuture } from "../transaction";
 
 export const notoConstructorABI = (
   withHooks: boolean
@@ -133,7 +133,8 @@ export interface NotoBalanceOfResult {
   overflow: boolean;
 }
 
-export class NotoWrapper extends TransactionWrapper {
+// Represents an in-flight Noto deployment
+export class NotoFuture extends TransactionFuture {
   async waitForDeploy(waitMs?: number) {
     const receipt = await this.waitForReceipt(waitMs);
     return receipt?.contractAddress
@@ -150,7 +151,7 @@ export class NotoFactory {
   }
 
   newNoto(from: PaladinVerifier, data: NotoConstructorParams) {
-    return new NotoWrapper(
+    return new NotoFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -187,7 +188,7 @@ export class NotoInstance {
   }
 
   mint(from: PaladinVerifier, data: NotoMintParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -204,7 +205,7 @@ export class NotoInstance {
   }
 
   transfer(from: PaladinVerifier, data: NotoTransferParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -238,7 +239,7 @@ export class NotoInstance {
     from: PaladinVerifier,
     data: NotoApproveTransferParams
   ) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -252,7 +253,7 @@ export class NotoInstance {
   }
 
   burn(from: PaladinVerifier, data: NotoBurnParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -266,7 +267,7 @@ export class NotoInstance {
   }
 
   lock(from: PaladinVerifier, data: NotoLockParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -280,7 +281,7 @@ export class NotoInstance {
   }
 
   unlock(from: PaladinVerifier, data: NotoUnlockParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -301,7 +302,7 @@ export class NotoInstance {
   }
 
   unlockAsDelegate(from: PaladinVerifier, data: NotoUnlockPublicParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PUBLIC,
@@ -315,7 +316,7 @@ export class NotoInstance {
   }
 
   prepareUnlock(from: PaladinVerifier, data: NotoUnlockParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -336,7 +337,7 @@ export class NotoInstance {
   }
 
   delegateLock(from: PaladinVerifier, data: NotoDelegateLockParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,

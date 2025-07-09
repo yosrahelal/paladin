@@ -14,7 +14,7 @@ import {
 import PaladinClient from "../paladin";
 import { PaladinVerifier } from "../verifier";
 import * as penteJSON from "./abis/PentePrivacyGroup.json";
-import { TransactionWrapper } from "../transaction";
+import { TransactionFuture } from "../transaction";
 
 export interface PenteGroupTransactionInput {
   from: string;
@@ -84,8 +84,9 @@ export const resolveGroup = (
   return { members, salt: group.salt };
 };
 
-export class PentePrivacyGroupWrapper {
-  public tx: Promise<TransactionWrapper | undefined>;
+// Represents an in-flight Pente privacy group deployment
+export class PentePrivacyGroupFuture {
+  public tx: Promise<TransactionFuture | undefined>;
 
   constructor(
     private paladin: PaladinClient,
@@ -93,7 +94,7 @@ export class PentePrivacyGroupWrapper {
   ) {
     this.tx = Promise.resolve(group).then((group) =>
       group.genesisTransaction
-        ? new TransactionWrapper(paladin, group.genesisTransaction)
+        ? new TransactionFuture(paladin, group.genesisTransaction)
         : undefined
     );
   }
@@ -121,7 +122,7 @@ export class PenteFactory {
   }
 
   newPrivacyGroup(input: PentePrivacyGroupParams) {
-    return new PentePrivacyGroupWrapper(
+    return new PentePrivacyGroupFuture(
       this.paladin,
       this.paladin.createPrivacyGroup({
         domain: this.domain,
@@ -190,7 +191,7 @@ export class PentePrivacyGroup {
       function: constructor,
     };
 
-    return new PentePrivateDeployWrapper(
+    return new PentePrivateDeployFuture(
       this.paladin,
       this.paladin.sendPrivacyGroupTransaction(transaction)
     );
@@ -201,7 +202,7 @@ export class PentePrivacyGroup {
     transaction: PenteGroupTransactionInput,
     txOptions?: Partial<IPrivacyGroupEVMTXInput>
   ) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendPrivacyGroupTransaction({
         ...txOptions,
@@ -235,18 +236,22 @@ export class PentePrivacyGroup {
     from: PaladinVerifier,
     data: PenteApproveTransitionParams
   ) {
-    return this.paladin.sendTransaction({
-      type: TransactionType.PUBLIC,
-      abi: penteJSON.abi,
-      function: "approveTransition",
-      to: this.address,
-      from: from.lookup,
-      data,
-    });
+    return new TransactionFuture(
+      this.paladin,
+      this.paladin.sendTransaction({
+        type: TransactionType.PUBLIC,
+        abi: penteJSON.abi,
+        function: "approveTransition",
+        to: this.address,
+        from: from.lookup,
+        data,
+      })
+    );
   }
 }
 
-export class PentePrivateDeployWrapper extends TransactionWrapper {
+// Represents an in-flight contract deployment within a privacy group
+export class PentePrivateDeployFuture extends TransactionFuture {
   async waitForDeploy(waitMs?: number) {
     const receipt = await this.waitForReceipt(waitMs, true);
     return receipt?.domainReceipt !== undefined &&

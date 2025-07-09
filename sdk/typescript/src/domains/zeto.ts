@@ -1,6 +1,6 @@
 import { TransactionType } from "../interfaces";
 import PaladinClient from "../paladin";
-import { TransactionWrapper } from "../transaction";
+import { TransactionFuture } from "../transaction";
 import { PaladinVerifier } from "../verifier";
 import * as zetoPrivateJSON from "./abis/IZetoFungible.json";
 import * as zetoPublicJSON from "./abis/Zeto_Anon.json";
@@ -75,7 +75,8 @@ export interface ZetoBalanceOfResult {
   overflow: boolean;
 }
 
-export class ZetoWrapper extends TransactionWrapper {
+// Represents an in-flight Zeto deployment
+export class ZetoFuture extends TransactionFuture {
   async waitForDeploy(waitMs?: number) {
     const receipt = await this.waitForReceipt(waitMs);
     return receipt?.contractAddress
@@ -92,7 +93,7 @@ export class ZetoFactory {
   }
 
   newZeto(from: PaladinVerifier, data: ZetoConstructorParams) {
-    return new ZetoWrapper(
+    return new ZetoFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -124,7 +125,7 @@ export class ZetoInstance {
     const params = {
       mints: data.mints.map((t) => ({ ...t, to: t.to.lookup })),
     };
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -138,7 +139,7 @@ export class ZetoInstance {
   }
 
   transfer(from: PaladinVerifier, data: ZetoTransferParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -154,7 +155,7 @@ export class ZetoInstance {
   }
 
   transferLocked(from: PaladinVerifier, data: ZetoTransferLockedParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -172,7 +173,7 @@ export class ZetoInstance {
   }
 
   prepareTransferLocked(from: PaladinVerifier, data: ZetoTransferLockedParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.prepareTransaction({
         type: TransactionType.PRIVATE,
@@ -190,7 +191,7 @@ export class ZetoInstance {
   }
 
   lock(from: PaladinVerifier, data: ZetoLockParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -204,7 +205,7 @@ export class ZetoInstance {
   }
 
   delegateLock(from: PaladinVerifier, data: ZetoDelegateLockParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.Public,
@@ -223,7 +224,7 @@ export class ZetoInstance {
 
   setERC20(from: PaladinVerifier, data: ZetoSetERC20Params) {
     this.erc20 = data.erc20;
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PUBLIC,
@@ -237,7 +238,7 @@ export class ZetoInstance {
   }
 
   deposit(from: PaladinVerifier, data: ZetoDepositParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,
@@ -251,7 +252,7 @@ export class ZetoInstance {
   }
 
   withdraw(from: PaladinVerifier, data: ZetoWithdrawParams) {
-    return new TransactionWrapper(
+    return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
         type: TransactionType.PRIVATE,

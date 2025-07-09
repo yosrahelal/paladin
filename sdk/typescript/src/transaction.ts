@@ -1,6 +1,7 @@
 import PaladinClient from "./paladin";
 
-export class TransactionWrapper {
+// Represents an in-flight transaction
+export class TransactionFuture {
   constructor(
     protected paladin: PaladinClient,
     public readonly id: string | Promise<string>
