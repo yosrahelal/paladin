@@ -1,9 +1,6 @@
 import PaladinClient, {
-  PenteFactory,
-  PentePrivacyGroup,
+  PenteFactory
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
-import { checkDeploy } from "paladin-example-common";
-import storageJson from "./abis/Storage.json";
 import { PrivateStorage } from "./helpers/storage";
 
 const logger = console;
@@ -73,14 +70,16 @@ async function main(): Promise<boolean> {
   const valueToStore = parseInt(retrievedValueNode1["value"]) + valueToAdd;
 
   logger.log(`Storing the new value "${valueToStore}" in the contract...`);
-  const storeTx = await privateStorageContract.sendTransaction({
-    from: verifierNode1.lookup,
-    function: "store",
-    data: { num: valueToStore },
-  });
+  const storeReceipt = await privateStorageContract
+    .sendTransaction({
+      from: verifierNode1.lookup,
+      function: "store",
+      data: { num: valueToStore },
+    })
+    .waitForReceipt();
   logger.log(
     "Value stored successfully! Transaction hash:",
-    storeTx?.transactionHash
+    storeReceipt?.transactionHash
   );
 
   // Retrieve the value as Node1

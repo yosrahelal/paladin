@@ -22,28 +22,34 @@ const paladin3 = new PaladinClient({
   url: "http://127.0.0.1:31748",
 });
 
-async function getBabyjubPublicKey(verifier: PaladinVerifier): Promise<string[]> {
+async function getBabyjubPublicKey(
+  verifier: PaladinVerifier
+): Promise<string[]> {
   const pubKeyStr = await verifier.resolve(
     algorithmZetoSnarkBJJ("zeto") as any,
     IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X as any
   );
-  
+
   if (!pubKeyStr || pubKeyStr === "0x0" || pubKeyStr === "0x") {
     throw new Error(`No babyjub key available for ${verifier.lookup}`);
   }
 
-  const cleanHex = pubKeyStr.startsWith('0x') ? pubKeyStr.slice(2) : pubKeyStr;
-  const compressedBytes = Buffer.from(cleanHex, 'hex');
-  
+  const cleanHex = pubKeyStr.startsWith("0x") ? pubKeyStr.slice(2) : pubKeyStr;
+  const compressedBytes = Buffer.from(cleanHex, "hex");
+
   if (compressedBytes.length !== 32) {
-    throw new Error(`Invalid key length for ${verifier.lookup}: expected 32 bytes, got ${compressedBytes.length}`);
+    throw new Error(
+      `Invalid key length for ${verifier.lookup}: expected 32 bytes, got ${compressedBytes.length}`
+    );
   }
 
   const babyJub = await buildBabyjub();
   const publicKey = babyJub.unpackPoint(compressedBytes);
-  
+
   if (!publicKey || publicKey.length < 2) {
-    throw new Error(`Failed to unpack babyjub key for ${verifier.lookup}: invalid point`);
+    throw new Error(
+      `Failed to unpack babyjub key for ${verifier.lookup}: invalid point`
+    );
   }
 
   return [babyJub.F.toString(publicKey[0]), babyJub.F.toString(publicKey[1])];
@@ -143,7 +149,7 @@ async function main(): Promise<boolean> {
   // Generate unique identity names for this run to avoid Merkle tree conflicts
   const runId = Math.random().toString(36).substring(2, 8);
   logger.log(`Using run ID: ${runId} for unique identities`);
-  
+
   // Get verifiers for the financial institution and clients with unique names
   const [financialInstitution] = paladin1.getVerifiers(`bank-${runId}@node1`);
   const [clientA] = paladin2.getVerifiers(`client-a-${runId}@node2`);
@@ -153,18 +159,24 @@ async function main(): Promise<boolean> {
   logger.log(
     "This example demonstrates a private stablecoin that exists as both"
   );
-  logger.log("a public ERC20 token and a private Zeto token with KYC compliance,");
-  logger.log("showcasing deposit/withdraw functionality for privacy preservation.\n");
+  logger.log(
+    "a public ERC20 token and a private Zeto token with KYC compliance,"
+  );
+  logger.log(
+    "showcasing deposit/withdraw functionality for privacy preservation.\n"
+  );
 
   // === 1. DEPLOY CONTRACTS ===
   logger.log("1. Deploying contracts...");
-  
+
   // Deploy the private stablecoin using Zeto_AnonNullifierKyc
   logger.log("   - Deploying Zeto private stablecoin with KYC capabilities...");
   const zetoFactory = new ZetoFactory(paladin1, "zeto");
-  const privateStablecoin = await zetoFactory.newZeto(financialInstitution, {
-    tokenName: "Zeto_AnonNullifierKyc",
-  });
+  const privateStablecoin = await zetoFactory
+    .newZeto(financialInstitution, {
+      tokenName: "Zeto_AnonNullifierKyc",
+    })
+    .waitForDeploy();
   if (!checkDeploy(privateStablecoin)) return false;
   logger.log(
     `     ✓ Private stablecoin deployed at: ${privateStablecoin.address}`
@@ -172,7 +184,10 @@ async function main(): Promise<boolean> {
 
   // Deploy public ERC20 stablecoin
   logger.log("   - Deploying public ERC20 stablecoin contract...");
-  const publicStablecoinAddress = await deployERC20(paladin1, financialInstitution);
+  const publicStablecoinAddress = await deployERC20(
+    paladin1,
+    financialInstitution
+  );
   if (!publicStablecoinAddress) return false;
   logger.log(
     `     ✓ Public stablecoin deployed at: ${publicStablecoinAddress}`
@@ -180,15 +195,19 @@ async function main(): Promise<boolean> {
 
   // Connect the ERC20 to the Zeto contract for deposit/withdraw
   logger.log("   - Connecting ERC20 to Zeto contract...");
-  const setERC20Receipt = await privateStablecoin.setERC20(financialInstitution, {
-    erc20: publicStablecoinAddress,
-  });
+  const setERC20Receipt = await privateStablecoin
+    .setERC20(financialInstitution, {
+      erc20: publicStablecoinAddress,
+    })
+    .waitForReceipt();
   if (!checkReceipt(setERC20Receipt)) return false;
   logger.log("     ✓ ERC20 connected to Zeto contract\n");
 
   // === 2. KYC REGISTRATION ===
-  logger.log("2. Financial institution registering clients for KYC compliance...");
-  
+  logger.log(
+    "2. Financial institution registering clients for KYC compliance..."
+  );
+
   // Register Financial Institution itself for KYC
   logger.log("   - Registering Financial Institution for KYC...");
   const bankPublicKey = await getBabyjubPublicKey(financialInstitution);
@@ -245,26 +264,46 @@ async function main(): Promise<boolean> {
 
   // === 3. MINT PUBLIC STABLECOINS ===
   logger.log("3. Financial institution minting public stablecoins...");
-  
+
   // Mint public stablecoins to Client A
   logger.log("   - Minting 100,000 public stablecoins to Client A...");
-  await mintERC20(paladin1, financialInstitution, clientA, publicStablecoinAddress, 100000);
-  let clientAPublicBalance = await getERC20Balance(paladin2, clientA, publicStablecoinAddress);
+  await mintERC20(
+    paladin1,
+    financialInstitution,
+    clientA,
+    publicStablecoinAddress,
+    100000
+  );
+  let clientAPublicBalance = await getERC20Balance(
+    paladin2,
+    clientA,
+    publicStablecoinAddress
+  );
   logger.log(
     `     ✓ Client A public balance: ${clientAPublicBalance} stablecoins`
   );
 
   // Mint public stablecoins to Client B
   logger.log("   - Minting 50,000 public stablecoins to Client B...");
-  await mintERC20(paladin1, financialInstitution, clientB, publicStablecoinAddress, 50000);
-  let clientBPublicBalance = await getERC20Balance(paladin3, clientB, publicStablecoinAddress);
+  await mintERC20(
+    paladin1,
+    financialInstitution,
+    clientB,
+    publicStablecoinAddress,
+    50000
+  );
+  let clientBPublicBalance = await getERC20Balance(
+    paladin3,
+    clientB,
+    publicStablecoinAddress
+  );
   logger.log(
     `     ✓ Client B public balance: ${clientBPublicBalance} stablecoins\n`
   );
 
   // === 4. DEPOSIT: PUBLIC TO PRIVATE ===
   logger.log("4. Client A depositing public stablecoins for privacy...");
-  
+
   // Client A approves Zeto contract to spend their ERC20 tokens
   logger.log("   - Client A approving Zeto contract to spend 75,000 tokens...");
   await approveERC20(
@@ -278,22 +317,29 @@ async function main(): Promise<boolean> {
 
   // Client A deposits ERC20 tokens to get private Zeto tokens
   logger.log("   - Client A depositing 75,000 tokens to get private tokens...");
-  const depositReceipt = await privateStablecoin.using(paladin2).deposit(clientA, {
-    amount: 75000,
-  });
+  const depositReceipt = await privateStablecoin
+    .using(paladin2)
+    .deposit(clientA, {
+      amount: 75000,
+    })
+    .waitForReceipt();
   if (!checkReceipt(depositReceipt)) return false;
-  logger.log("     ✓ Deposit successful - public tokens converted to private tokens");
+  logger.log(
+    "     ✓ Deposit successful - public tokens converted to private tokens"
+  );
 
   // Check balances after deposit
-  clientAPublicBalance = await getERC20Balance(paladin2, clientA, publicStablecoinAddress);
+  clientAPublicBalance = await getERC20Balance(
+    paladin2,
+    clientA,
+    publicStablecoinAddress
+  );
   let clientAPrivateBalance = await privateStablecoin
     .using(paladin2)
     .balanceOf(clientA, {
       account: clientA.lookup,
     });
-  logger.log(
-    `     ✓ Client A public balance: ${clientAPublicBalance} tokens`
-  );
+  logger.log(`     ✓ Client A public balance: ${clientAPublicBalance} tokens`);
   logger.log(
     `     ✓ Client A private balance: ${clientAPrivateBalance.totalBalance} tokens (${clientAPrivateBalance.totalStates} states)\n`
   );
@@ -303,7 +349,7 @@ async function main(): Promise<boolean> {
 
   // === 5. PRIVATE TRANSFER ===
   logger.log("5. Client A making a private transfer to Client B...");
-  
+
   const transferReceipt = await privateStablecoin
     .using(paladin2)
     .transfer(clientA, {
@@ -314,7 +360,8 @@ async function main(): Promise<boolean> {
           data: "0x",
         },
       ],
-    });
+    })
+    .waitForReceipt();
   if (!checkReceipt(transferReceipt)) return false;
   logger.log("     ✓ Private transfer successful");
   logger.log("     ✓ Transfer amount and parties remain private");
@@ -342,51 +389,56 @@ async function main(): Promise<boolean> {
 
   // === 6. WITHDRAW: PRIVATE TO PUBLIC ===
   logger.log("6. Client B withdrawing private tokens back to public...");
-  
+
   const withdrawReceipt = await privateStablecoin
     .using(paladin3)
     .withdraw(clientB, {
       amount: 15000, // Withdraw 15,000 tokens
-    });
+    })
+    .waitForReceipt();
   if (!checkReceipt(withdrawReceipt)) return false;
-  logger.log("     ✓ Withdrawal successful - private tokens converted back to public");
+  logger.log(
+    "     ✓ Withdrawal successful - private tokens converted back to public"
+  );
 
   // Check final balances
-  clientBPublicBalance = await getERC20Balance(paladin3, clientB, publicStablecoinAddress);
+  clientBPublicBalance = await getERC20Balance(
+    paladin3,
+    clientB,
+    publicStablecoinAddress
+  );
   clientBPrivateBalance = await privateStablecoin
     .using(paladin3)
     .balanceOf(clientB, {
       account: clientB.lookup,
     });
-  logger.log(
-    `     ✓ Client B public balance: ${clientBPublicBalance} tokens`
-  );
+  logger.log(`     ✓ Client B public balance: ${clientBPublicBalance} tokens`);
   logger.log(
     `     ✓ Client B private balance: ${clientBPrivateBalance.totalBalance} tokens (${clientBPrivateBalance.totalStates} states)\n`
   );
 
   // === 7. FINAL SUMMARY ===
   logger.log("7. Final balance summary...");
-  
-  clientAPublicBalance = await getERC20Balance(paladin2, clientA, publicStablecoinAddress);
+
+  clientAPublicBalance = await getERC20Balance(
+    paladin2,
+    clientA,
+    publicStablecoinAddress
+  );
   clientAPrivateBalance = await privateStablecoin
     .using(paladin2)
     .balanceOf(clientA, {
       account: clientA.lookup,
     });
-  
+
   logger.log("   Client A:");
-  logger.log(
-    `     - Public balance: ${clientAPublicBalance} stablecoins`
-  );
+  logger.log(`     - Public balance: ${clientAPublicBalance} stablecoins`);
   logger.log(
     `     - Private balance: ${clientAPrivateBalance.totalBalance} stablecoins (${clientAPrivateBalance.totalStates} states)`
   );
-  
+
   logger.log("   Client B:");
-  logger.log(
-    `     - Public balance: ${clientBPublicBalance} stablecoins`
-  );
+  logger.log(`     - Public balance: ${clientBPublicBalance} stablecoins`);
   logger.log(
     `     - Private balance: ${clientBPrivateBalance.totalBalance} stablecoins (${clientBPrivateBalance.totalStates} states)`
   );
@@ -396,7 +448,9 @@ async function main(): Promise<boolean> {
   logger.log("  - Dual public/private stablecoin system with KYC compliance");
   logger.log("  - Financial institution-managed KYC registration");
   logger.log("  - Seamless deposit (public → private) functionality");
-  logger.log("  - Privacy-preserving transfers with KYC verification using zero-knowledge proofs");
+  logger.log(
+    "  - Privacy-preserving transfers with KYC verification using zero-knowledge proofs"
+  );
   logger.log("  - Seamless withdraw (private → public) functionality");
   logger.log("  - Flexible liquidity between public and private domains");
   logger.log("  - Enterprise-grade privacy with regulatory compliance");

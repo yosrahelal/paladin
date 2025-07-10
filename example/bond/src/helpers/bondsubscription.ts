@@ -34,12 +34,14 @@ export const newBondSubscription = async (
   if (bondSubscriptionConstructor === undefined) {
     throw new Error("Bond subscription constructor not found");
   }
-  const address = await pente.deploy({
-    abi: bondSubscription.abi,
-    bytecode: bondSubscription.bytecode,
-    from: from.lookup,
-    inputs: params
-  });
+  const address = await pente
+    .deploy({
+      abi: bondSubscription.abi,
+      bytecode: bondSubscription.bytecode,
+      from: from.lookup,
+      inputs: params,
+    })
+    .waitForDeploy();
   return address ? new BondSubscription(pente, address) : undefined;
 };
 
@@ -59,7 +61,7 @@ export class BondSubscription extends PentePrivateContract<BondSubscriptionConst
     return this.sendTransaction({
       from: from.lookup,
       function: "preparePayment",
-      data: params
+      data: params,
     });
   }
 
@@ -67,14 +69,14 @@ export class BondSubscription extends PentePrivateContract<BondSubscriptionConst
     return this.sendTransaction({
       from: from.lookup,
       function: "prepareBond",
-      data: params
+      data: params,
     });
   }
 
-  async distribute(from: PaladinVerifier) {
+  distribute(from: PaladinVerifier) {
     return this.sendTransaction({
       from: from.lookup,
-      function: "distribute"
+      function: "distribute",
     });
   }
 }
