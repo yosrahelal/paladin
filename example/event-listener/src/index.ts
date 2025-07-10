@@ -18,33 +18,32 @@ async function main(): Promise<boolean> {
   // Create a privacy group for Node1 alone
   logger.log("Creating a privacy group for Node1...");
   const penteFactory = new PenteFactory(paladin, "pente");
-  const memberPrivacyGroup = await penteFactory.newPrivacyGroup({
-    members: [verifierNode1],
-    evmVersion: "shanghai",
-    externalCallsEnabled: true,
-  });
+  const memberPrivacyGroup = await penteFactory
+    .newPrivacyGroup({
+      members: [verifierNode1],
+      evmVersion: "shanghai",
+      externalCallsEnabled: true,
+    })
+    .waitForDeploy();
   if (!checkDeploy(memberPrivacyGroup)) return false;
 
   // Deploy a smart contract within the privacy group
   logger.log("Deploying a smart contract to the privacy group...");
-  const contractAddress = await memberPrivacyGroup.deploy({
+  const deploy = memberPrivacyGroup.deploy({
     abi: helloWorldJson.abi,
     bytecode: helloWorldJson.bytecode,
     from: verifierNode1.lookup,
   });
-  if (!contractAddress) {
+  const receipt = await deploy.waitForReceipt();
+  const contractAddress = await deploy.waitForDeploy();
+  if (!receipt || !contractAddress) {
     logger.error("Failed to deploy the contract. No address returned.");
     return false;
   }
-  logger.log(`Contract deployed successfully! Address: ${contractAddress}`);
-
-  // Check the latest sequence received
-  const receipts = await paladin.queryTransactionReceipts({
-    limit: 1,
-    sort: ["-sequence"],
-  });
-  const lastSequence = receipts[0].sequence;
-  logger.log(`Last sequence received: ${lastSequence}`);
+  const lastSequence = receipt.sequence;
+  logger.log(
+    `Contract deployed successfully! Address: ${contractAddress} Sequence: ${lastSequence}`
+  );
 
   // Create a new listener (deleting one if it already exists)
   logger.log("Creating a receipt listener...");
@@ -74,7 +73,9 @@ async function main(): Promise<boolean> {
     if (receipt.domain === undefined) {
       return;
     }
-    logger.log(`Processing receipt ${receipt.id} (sequence: ${receipt.sequence})`);
+    logger.log(
+      `Processing receipt ${receipt.id} (sequence: ${receipt.sequence})`
+    );
     const domainReceipt = await paladin.getDomainReceipt(
       receipt.domain,
       receipt.id
@@ -82,10 +83,14 @@ async function main(): Promise<boolean> {
     if (domainReceipt !== undefined && "receipt" in domainReceipt) {
       // Skip if this receipt is not for our contract
       if (domainReceipt.receipt.to !== contractAddress) {
-        logger.log(`Skipping receipt ${receipt.id} - not for our contract (to: ${domainReceipt.receipt.to})`);
+        logger.log(
+          `Skipping receipt ${receipt.id} - not for our contract (to: ${domainReceipt.receipt.to})`
+        );
         return;
       }
-      logger.log(`Processing contract receipt ${receipt.id} (to: ${domainReceipt.receipt.to})`);
+      logger.log(
+        `Processing contract receipt ${receipt.id} (to: ${domainReceipt.receipt.to})`
+      );
       for (const log of domainReceipt.receipt.logs ?? []) {
         const decoded = await paladin.decodeEvent(log.topics, log.data);
         const message = decoded?.data?.message;
@@ -106,7 +111,9 @@ async function main(): Promise<boolean> {
         event.method === "ptx_subscription" &&
         "receipts" in event.params.result
       ) {
-        logger.log(`Received receipt batch with ${event.params.result.receipts.length} receipts`);
+        logger.log(
+          `Received receipt batch with ${event.params.result.receipts.length} receipts`
+        );
         for (const receipt of event.params.result.receipts) {
           // Process each transaction receipt
           await processReceipt(receipt);
@@ -126,22 +133,22 @@ async function main(): Promise<boolean> {
 
   // Call the sayHello function
   logger.log(`Saying hello to '${name}'...`);
-  const txResult = await memberPrivacyGroup.sendTransaction({
+  const txId = await memberPrivacyGroup.sendTransaction({
     methodAbi: sayHelloMethod,
     from: verifierNode1.lookup,
     to: contractAddress,
     data: { name },
-  });
-  if (txResult) {
-    logger.log(`Transaction sent with ID: ${txResult.id}`);
-  }
+  }).id;
+  logger.log(`Transaction sent with ID: ${txId}`);
 
   // Wait to receive the receipt
   const attempts = 10;
-  const delay = 100;
+  const delay = 500;
   for (let i = 0; i < attempts; i++) {
     if (received) {
-      logger.log(`Successfully received welcome message after ${i + 1} attempts`);
+      logger.log(
+        `Successfully received welcome message after ${i + 1} attempts`
+      );
       break;
     }
     await new Promise((resolve) => setTimeout(resolve, delay));

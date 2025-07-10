@@ -20,7 +20,7 @@ export const newERC20Tracker = async (
     bytecode: erc20Tracker.bytecode,
     from: from.lookup,
     inputs: params,
-  });
+  }).waitForDeploy();
   return address ? new BondTracker(pente, address) : undefined;
 };
 

@@ -38,17 +38,21 @@ The example begins by deploying both the public ERC20 and private Zeto contracts
 ```typescript
 // Deploy private stablecoin using Zeto_AnonNullifierKyc
 const zetoFactory = new ZetoFactory(paladin1, "zeto");
-const privateStablecoin = await zetoFactory.newZeto(financialInstitution, {
-  tokenName: "Zeto_AnonNullifierKyc",
-});
+const privateStablecoin = await zetoFactory
+  .newZeto(financialInstitution, {
+    tokenName: "Zeto_AnonNullifierKyc",
+  })
+  .waitForDeploy();
 
 // Deploy public ERC20 stablecoin
 const publicStablecoinAddress = await deployERC20(paladin1, financialInstitution);
 
 // Connect the ERC20 to the Zeto contract for deposit/withdraw
-await privateStablecoin.setERC20(financialInstitution, {
-  erc20: publicStablecoinAddress,
-});
+await privateStablecoin
+  .setERC20(financialInstitution, {
+    erc20: publicStablecoinAddress,
+  })
+  .waitForReceipt();
 ```
 
 The `Zeto_AnonNullifierKyc` contract provides:
@@ -121,9 +125,12 @@ await approveERC20(
 );
 
 // Client A deposits ERC20 tokens to get private Zeto tokens
-const depositReceipt = await privateStablecoin.using(paladin2).deposit(clientA, {
-  amount: 75000,
-});
+const depositReceipt = await privateStablecoin
+  .using(paladin2)
+  .deposit(clientA, {
+    amount: 75000,
+  })
+  .waitForReceipt();
 ```
 
 **Privacy Benefits:**
@@ -148,7 +155,8 @@ const transferReceipt = await privateStablecoin
         data: "0x",
       },
     ],
-  });
+  })
+  .waitForReceipt();
 ```
 
 **KYC-Verified Privacy Features:**
@@ -167,7 +175,8 @@ const withdrawReceipt = await privateStablecoin
   .using(paladin3)
   .withdraw(clientB, {
     amount: 15000, // Withdraw 15,000 tokens
-  });
+  })
+  .waitForReceipt();
 ```
 
 **Withdrawal Benefits:**

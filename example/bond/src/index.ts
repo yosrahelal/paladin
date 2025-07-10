@@ -34,32 +34,42 @@ async function main(): Promise<boolean> {
   // Create a Noto token to represent cash
   logger.log("Deploying Noto cash token...");
   const notoFactory = new NotoFactory(paladin1, "noto");
-  const notoCash = await notoFactory.newNoto(cashIssuer, {
-    notary: cashIssuer,
-    notaryMode: "basic",
-  });
+  const notoCash = await notoFactory
+    .newNoto(cashIssuer, {
+      notary: cashIssuer,
+      notaryMode: "basic",
+    })
+    .waitForDeploy();
   if (!checkDeploy(notoCash)) return false;
 
   // Issue some cash
   logger.log("Issuing cash...");
-  let receipt = await notoCash.mint(cashIssuer, {
-    to: investor,
-    amount: 100000,
-    data: "0x",
-  });
+  let receipt = await notoCash
+    .mint(cashIssuer, {
+      to: investor,
+      amount: 100000,
+      data: "0x",
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
 
-  let balanceInvestor = await notoCash.balanceOf(cashIssuer, { "account": investor.lookup });
-  logger.log(`(NotoCash) Investor State: ${balanceInvestor.totalBalance} units of cash, ${balanceInvestor.totalStates} states, overflow: ${balanceInvestor.overflow}`);
+  let balanceInvestor = await notoCash.balanceOf(cashIssuer, {
+    account: investor.lookup,
+  });
+  logger.log(
+    `(NotoCash) Investor State: ${balanceInvestor.totalBalance} units of cash, ${balanceInvestor.totalStates} states, overflow: ${balanceInvestor.overflow}`
+  );
 
   // Create a Pente privacy group between the bond issuer and bond custodian
   logger.log("Creating issuer+custodian privacy group...");
   const penteFactory = new PenteFactory(paladin1, "pente");
-  const issuerCustodianGroup = await penteFactory.newPrivacyGroup({
-    members: [bondIssuer, bondCustodian],
-    evmVersion: "shanghai",
-    externalCallsEnabled: true,
-  });
+  const issuerCustodianGroup = await penteFactory
+    .newPrivacyGroup({
+      members: [bondIssuer, bondCustodian],
+      evmVersion: "shanghai",
+      externalCallsEnabled: true,
+    })
+    .waitForDeploy();
   if (!checkDeploy(issuerCustodianGroup)) return false;
 
   // Deploy the public bond tracker on the base ledger (controlled by the privacy group)
@@ -100,17 +110,19 @@ async function main(): Promise<boolean> {
 
   // Deploy Noto token to represent bond
   logger.log("Deploying Noto bond token...");
-  const notoBond = await notoFactory.newNoto(bondIssuer, {
-    notary: bondCustodian,
-    notaryMode: "hooks",
-    options: {
-      hooks: {
-        privateGroup: issuerCustodianGroup,
-        publicAddress: issuerCustodianGroup.address,
-        privateAddress: bondTracker.address,
+  const notoBond = await notoFactory
+    .newNoto(bondIssuer, {
+      notary: bondCustodian,
+      notaryMode: "hooks",
+      options: {
+        hooks: {
+          privateGroup: issuerCustodianGroup,
+          publicAddress: issuerCustodianGroup.address,
+          privateAddress: bondTracker.address,
+        },
       },
-    },
-  });
+    })
+    .waitForDeploy();
   if (!checkDeploy(notoBond)) return false;
 
   // Deploy the atom factory on the base ledger
@@ -133,28 +145,39 @@ async function main(): Promise<boolean> {
 
   // Issue the bond to the custodian
   logger.log("Issuing bond...");
-  receipt = await notoBond.mint(bondIssuer, {
-    to: bondCustodian,
-    amount: 1000,
-    data: "0x",
-  });
+  receipt = await notoBond
+    .mint(bondIssuer, {
+      to: bondCustodian,
+      amount: 1000,
+      data: "0x",
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
-  let balanceCustodian = await notoBond.balanceOf(bondIssuer, { "account": bondCustodian.lookup });
-  logger.log(`(NotoBond) Bond Custodian State: ${balanceCustodian.totalBalance} units of cash, ${balanceCustodian.totalStates} states, overflow: ${balanceCustodian.overflow}`);
+  let balanceCustodian = await notoBond.balanceOf(bondIssuer, {
+    account: bondCustodian.lookup,
+  });
+  logger.log(
+    `(NotoBond) Bond Custodian State: ${balanceCustodian.totalBalance} units of cash, ${balanceCustodian.totalStates} states, overflow: ${balanceCustodian.overflow}`
+  );
 
   // Begin bond distribution to investors
   logger.log("Beginning distribution...");
-  receipt = await bondTracker.using(paladin2).beginDistribution(bondCustodian, {
-    discountPrice: 1,
-    minimumDenomination: 1,
-  });
+  receipt = await bondTracker
+    .using(paladin2)
+    .beginDistribution(bondCustodian, {
+      discountPrice: 1,
+      minimumDenomination: 1,
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
 
   // Add allowed investors
   const investorList = await bondTracker.investorList(bondIssuer);
-  await investorList
+  receipt = await investorList
     .using(paladin2)
-    .addInvestor(bondCustodian, { addr: await investor.address() });
+    .addInvestor(bondCustodian, { addr: await investor.address() })
+    .waitForReceipt();
+  if (!checkReceipt(receipt)) return false;
 
   // Create a Pente privacy group between the bond investor and bond custodian
   logger.log("Creating investor+custodian privacy group...");
@@ -164,7 +187,8 @@ async function main(): Promise<boolean> {
       members: [investor, bondCustodian],
       evmVersion: "shanghai",
       externalCallsEnabled: true,
-    });
+    })
+    .waitForDeploy();
   if (investorCustodianGroup === undefined) {
     logger.error("Failed!");
     return false;
@@ -187,10 +211,13 @@ async function main(): Promise<boolean> {
 
   // Prepare the payment transfer (investor -> custodian)
   logger.log("Locking cash transfer from investor...");
-  receipt = await notoCash.using(paladin3).lock(investor, {
-    amount: 100,
-    data: "0x",
-  });
+  receipt = await notoCash
+    .using(paladin3)
+    .lock(investor, {
+      amount: 100,
+      data: "0x",
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
   receipt = await paladin3.getTransactionReceipt(receipt.id, true);
   let domainReceipt = receipt?.domainReceipt as INotoDomainReceipt | undefined;
@@ -199,19 +226,25 @@ async function main(): Promise<boolean> {
     logger.error("No lock ID found in domain receipt");
     return false;
   }
-  balanceInvestor = await notoCash.using(paladin3).balanceOf(investor, { "account": investor.lookup });
-  logger.log(`(NotoCash) Investor State: ${balanceInvestor.totalBalance} units of cash, ${balanceInvestor.totalStates} states, overflow: ${balanceInvestor.overflow}`);
+  balanceInvestor = await notoCash
+    .using(paladin3)
+    .balanceOf(investor, { account: investor.lookup });
+  logger.log(
+    `(NotoCash) Investor State: ${balanceInvestor.totalBalance} units of cash, ${balanceInvestor.totalStates} states, overflow: ${balanceInvestor.overflow}`
+  );
 
   // Prepare unlock operation
   logger.log("Preparing unlock to bond custodian...");
-  receipt = await notoCash.using(paladin3).prepareUnlock(investor, {
-    lockId: cashLockId,
-    from: investor,
-    recipients: [{ to: bondCustodian, amount: 100 }],
-    data: "0x",
-  });
+  receipt = await notoCash
+    .using(paladin3)
+    .prepareUnlock(investor, {
+      lockId: cashLockId,
+      from: investor,
+      recipients: [{ to: bondCustodian, amount: 100 }],
+      data: "0x",
+    })
+    .waitForReceipt(5000, true);
   if (!checkReceipt(receipt)) return false;
-  receipt = await paladin3.getTransactionReceipt(receipt.id, true);
   domainReceipt = receipt?.domainReceipt as INotoDomainReceipt | undefined;
   const cashUnlockParams = domainReceipt?.lockInfo?.unlockParams;
   const cashUnlockCall = domainReceipt?.lockInfo?.unlockCall;
@@ -222,31 +255,39 @@ async function main(): Promise<boolean> {
 
   // Prepare the bond transfer (custodian -> investor)
   logger.log("Locking bond asset from custodian...");
-  receipt = await notoBond.using(paladin2).lock(bondCustodian, {
-    amount: 100,
-    data: "0x",
-  });
+  receipt = await notoBond
+    .using(paladin2)
+    .lock(bondCustodian, {
+      amount: 100,
+      data: "0x",
+    })
+    .waitForReceipt(5000, true);
   if (!checkReceipt(receipt)) return false;
-  receipt = await paladin2.getTransactionReceipt(receipt.id, true);
   domainReceipt = receipt?.domainReceipt as INotoDomainReceipt | undefined;
   const bondLockId = domainReceipt?.lockInfo?.lockId;
   if (bondLockId === undefined) {
     logger.error("No lock ID found in domain receipt");
     return false;
   }
-  balanceCustodian = await notoBond.using(paladin2).balanceOf(bondCustodian, { "account": bondCustodian.lookup });
-  logger.log(`(NotoBond) Bond Custodian State: ${balanceCustodian.totalBalance} units of bonds, ${balanceCustodian.totalStates} states, overflow: ${balanceCustodian.overflow}`);
+  balanceCustodian = await notoBond
+    .using(paladin2)
+    .balanceOf(bondCustodian, { account: bondCustodian.lookup });
+  logger.log(
+    `(NotoBond) Bond Custodian State: ${balanceCustodian.totalBalance} units of bonds, ${balanceCustodian.totalStates} states, overflow: ${balanceCustodian.overflow}`
+  );
 
   // Prepare unlock operation
   logger.log("Preparing unlock to investor...");
-  receipt = await notoBond.using(paladin2).prepareUnlock(bondCustodian, {
-    lockId: bondLockId,
-    from: bondCustodian,
-    recipients: [{ to: investor, amount: 100 }],
-    data: "0x",
-  });
+  receipt = await notoBond
+    .using(paladin2)
+    .prepareUnlock(bondCustodian, {
+      lockId: bondLockId,
+      from: bondCustodian,
+      recipients: [{ to: investor, amount: 100 }],
+      data: "0x",
+    })
+    .waitForReceipt(5000, true);
   if (!checkReceipt(receipt)) return false;
-  receipt = await paladin2.getTransactionReceipt(receipt.id, true);
   domainReceipt = receipt?.domainReceipt as INotoDomainReceipt | undefined;
   const assetUnlockParams = domainReceipt?.lockInfo?.unlockParams;
   const assetUnlockCall = domainReceipt?.lockInfo?.unlockCall;
@@ -257,23 +298,32 @@ async function main(): Promise<boolean> {
 
   // Pass the prepared payment transfer to the subscription contract
   logger.log("Adding payment information to subscription request...");
-  receipt = await bondSubscription.using(paladin3).preparePayment(investor, {
-    to: notoCash.address,
-    encodedCall: cashUnlockCall,
-  });
+  receipt = await bondSubscription
+    .using(paladin3)
+    .preparePayment(investor, {
+      to: notoCash.address,
+      encodedCall: cashUnlockCall,
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
 
   // Pass the prepared bond transfer to the subscription contract
   logger.log("Adding bond information to subscription request...");
-  receipt = await bondSubscription.using(paladin2).prepareBond(bondCustodian, {
-    to: notoBond.address,
-    encodedCall: assetUnlockCall,
-  });
+  receipt = await bondSubscription
+    .using(paladin2)
+    .prepareBond(bondCustodian, {
+      to: notoBond.address,
+      encodedCall: assetUnlockCall,
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
 
   // Prepare bond distribution (initializes atomic swap of payment and bond units)
   logger.log("Generating atom for bond distribution...");
-  receipt = await bondSubscription.using(paladin2).distribute(bondCustodian);
+  receipt = await bondSubscription
+    .using(paladin2)
+    .distribute(bondCustodian)
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
 
   // Extract the address of the created Atom
@@ -294,22 +344,28 @@ async function main(): Promise<boolean> {
 
   // Approve the payment transfer
   logger.log("Approving payment transfer...");
-  receipt = await notoCash.using(paladin3).delegateLock(investor, {
-    lockId: cashLockId,
-    unlock: cashUnlockParams,
-    delegate: atomAddress,
-    data: "0x",
-  });
+  receipt = await notoCash
+    .using(paladin3)
+    .delegateLock(investor, {
+      lockId: cashLockId,
+      unlock: cashUnlockParams,
+      delegate: atomAddress,
+      data: "0x",
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
 
   // Approve the bond transfer
   logger.log("Approving bond transfer...");
-  receipt = await notoBond.using(paladin2).delegateLock(bondCustodian, {
-    lockId: bondLockId,
-    unlock: assetUnlockParams,
-    delegate: atomAddress,
-    data: "0x",
-  });
+  receipt = await notoBond
+    .using(paladin2)
+    .delegateLock(bondCustodian, {
+      lockId: bondLockId,
+      unlock: assetUnlockParams,
+      delegate: atomAddress,
+      data: "0x",
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
 
   // Execute the atomic transfer
@@ -322,6 +378,7 @@ async function main(): Promise<boolean> {
     to: atomAddress,
     data: {},
   });
+  receipt = await paladin2.pollForReceipt(txID, 10000);
   if (!checkReceipt(receipt)) return false;
   return true;
 }

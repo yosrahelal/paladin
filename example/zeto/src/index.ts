@@ -29,32 +29,44 @@ async function main(): Promise<boolean> {
   );
   logger.log("- Deploying Zeto token...");
   const zetoFactory = new ZetoFactory(paladin3, "zeto");
-  const zetoCBDC1 = await zetoFactory.newZeto(cbdcIssuer, {
-    tokenName: "Zeto_AnonNullifier",
-  });
+  const zetoCBDC1 = await zetoFactory
+    .newZeto(cbdcIssuer, {
+      tokenName: "Zeto_AnonNullifier",
+    })
+    .waitForDeploy();
   if (!checkDeploy(zetoCBDC1)) return false;
 
   // Issue some cash
   logger.log("- Issuing CBDC to bank1 and bank2 with private minting...");
-  let receipt = await zetoCBDC1.mint(cbdcIssuer, {
-    mints: [
-      {
-        to: bank1,
-        amount: 100000,
-        data: "0x",
-      },
-      {
-        to: bank2,
-        amount: 100000,
-        data: "0x",
-      },
-    ],
-  });
+  let receipt = await zetoCBDC1
+    .mint(cbdcIssuer, {
+      mints: [
+        {
+          to: bank1,
+          amount: 100000,
+          data: "0x",
+        },
+        {
+          to: bank2,
+          amount: 100000,
+          data: "0x",
+        },
+      ],
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
-  let bank1Balance = await zetoCBDC1.using(paladin1).balanceOf(bank1, {account: bank1.lookup});
-  logger.log(`bank1 State: ${bank1Balance.totalBalance} units of cash, ${bank1Balance.totalStates} states, overflow: ${bank1Balance.overflow}`);
-  let bank2Balance = await zetoCBDC1.using(paladin2).balanceOf(bank2, {account: bank2.lookup});
-  logger.log(`bank2 State: ${bank2Balance.totalBalance} units of cash, ${bank2Balance.totalStates} states, overflow: ${bank2Balance.overflow}`);
+  let bank1Balance = await zetoCBDC1
+    .using(paladin1)
+    .balanceOf(bank1, { account: bank1.lookup });
+  logger.log(
+    `bank1 State: ${bank1Balance.totalBalance} units of cash, ${bank1Balance.totalStates} states, overflow: ${bank1Balance.overflow}`
+  );
+  let bank2Balance = await zetoCBDC1
+    .using(paladin2)
+    .balanceOf(bank2, { account: bank2.lookup });
+  logger.log(
+    `bank2 State: ${bank2Balance.totalBalance} units of cash, ${bank2Balance.totalStates} states, overflow: ${bank2Balance.overflow}`
+  );
 
   // TODO: remove
   await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -63,29 +75,42 @@ async function main(): Promise<boolean> {
   logger.log(
     "- Bank1 transferring CBDC to bank2 to pay for some asset trades ..."
   );
-  receipt = await zetoCBDC1.using(paladin1).transfer(bank1, {
-    transfers: [
-      {
-        to: bank2,
-        amount: 1000,
-        data: "0x",
-      },
-    ],
-  });
+  receipt = await zetoCBDC1
+    .using(paladin1)
+    .transfer(bank1, {
+      transfers: [
+        {
+          to: bank2,
+          amount: 1000,
+          data: "0x",
+        },
+      ],
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
-  bank1Balance = await zetoCBDC1.using(paladin1).balanceOf(bank1, {account: bank1.lookup});
-  logger.log(`bank1 State: ${bank1Balance.totalBalance} units of cash, ${bank1Balance.totalStates} states, overflow: ${bank1Balance.overflow}`);
-  bank2Balance = await zetoCBDC1.using(paladin2).balanceOf(bank2, {account: bank2.lookup});
-  logger.log(`bank2 State: ${bank2Balance.totalBalance} units of cash, ${bank2Balance.totalStates} states, overflow: ${bank2Balance.overflow}`);
+  bank1Balance = await zetoCBDC1
+    .using(paladin1)
+    .balanceOf(bank1, { account: bank1.lookup });
+  logger.log(
+    `bank1 State: ${bank1Balance.totalBalance} units of cash, ${bank1Balance.totalStates} states, overflow: ${bank1Balance.overflow}`
+  );
+  bank2Balance = await zetoCBDC1
+    .using(paladin2)
+    .balanceOf(bank2, { account: bank2.lookup });
+  logger.log(
+    `bank2 State: ${bank2Balance.totalBalance} units of cash, ${bank2Balance.totalStates} states, overflow: ${bank2Balance.overflow}`
+  );
   logger.log("\nUse case #1 complete!\n");
 
   logger.log(
     "Use case #2: Privacy-preserving CBDC token, using public minting of an ERC20 token..."
   );
   logger.log("- Deploying Zeto token...");
-  const zetoCBDC2 = await zetoFactory.newZeto(cbdcIssuer, {
-    tokenName: "Zeto_AnonNullifier",
-  });
+  const zetoCBDC2 = await zetoFactory
+    .newZeto(cbdcIssuer, {
+      tokenName: "Zeto_AnonNullifier",
+    })
+    .waitForDeploy();
   if (!checkDeploy(zetoCBDC2)) return false;
 
   logger.log("- Deploying ERC20 token to manage the CBDC supply publicly...");
@@ -93,9 +118,11 @@ async function main(): Promise<boolean> {
   logger.log(`  ERC20 deployed at: ${erc20Address}`);
 
   logger.log("- Setting ERC20 to the Zeto token contract ...");
-  const result2 = await zetoCBDC2.setERC20(cbdcIssuer, {
-    erc20: erc20Address as string,
-  });
+  const result2 = await zetoCBDC2
+    .setERC20(cbdcIssuer, {
+      erc20: erc20Address as string,
+    })
+    .waitForReceipt();
   if (!checkReceipt(result2)) return false;
 
   logger.log("- Issuing CBDC to bank1 with public minting in ERC20...");
@@ -106,36 +133,57 @@ async function main(): Promise<boolean> {
   await approveERC20(paladin1, bank1, zetoCBDC2.address, erc20Address!, 10000);
 
   logger.log("- Bank1 deposit ERC20 balance to Zeto ...");
-  const result4 = await zetoCBDC2.using(paladin1).deposit(bank1, {
-    amount: 10000,
-  });
+  const result4 = await zetoCBDC2
+    .using(paladin1)
+    .deposit(bank1, {
+      amount: 10000,
+    })
+    .waitForReceipt();
   if (!checkReceipt(result4)) return false;
-  bank1Balance = await zetoCBDC2.using(paladin1).balanceOf(bank1, {account: bank1.lookup});
-  logger.log(`bank1 State: ${bank1Balance.totalBalance} units of cash, ${bank1Balance.totalStates} states, overflow: ${bank1Balance.overflow}`);
+  bank1Balance = await zetoCBDC2
+    .using(paladin1)
+    .balanceOf(bank1, { account: bank1.lookup });
+  logger.log(
+    `bank1 State: ${bank1Balance.totalBalance} units of cash, ${bank1Balance.totalStates} states, overflow: ${bank1Balance.overflow}`
+  );
 
   // Transfer some cash from bank1 to bank2
   logger.log(
     "- Bank1 transferring CBDC to bank2 to pay for some asset trades ..."
   );
-  receipt = await zetoCBDC2.using(paladin1).transfer(bank1, {
-    transfers: [
-      {
-        to: bank2,
-        amount: 1000,
-        data: "0x",
-      },
-    ],
-  });
+  receipt = await zetoCBDC2
+    .using(paladin1)
+    .transfer(bank1, {
+      transfers: [
+        {
+          to: bank2,
+          amount: 1000,
+          data: "0x",
+        },
+      ],
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
-  bank1Balance = await zetoCBDC2.using(paladin1).balanceOf(bank1, {account: bank1.lookup});
-  logger.log(`bank1 State: ${bank1Balance.totalBalance} units of cash, ${bank1Balance.totalStates} states, overflow: ${bank1Balance.overflow}`);
-  bank2Balance = await zetoCBDC2.using(paladin2).balanceOf(bank2, {account: bank2.lookup});
-  logger.log(`bank2 State: ${bank2Balance.totalBalance} units of cash, ${bank2Balance.totalStates} states, overflow: ${bank2Balance.overflow}`);
+  bank1Balance = await zetoCBDC2
+    .using(paladin1)
+    .balanceOf(bank1, { account: bank1.lookup });
+  logger.log(
+    `bank1 State: ${bank1Balance.totalBalance} units of cash, ${bank1Balance.totalStates} states, overflow: ${bank1Balance.overflow}`
+  );
+  bank2Balance = await zetoCBDC2
+    .using(paladin2)
+    .balanceOf(bank2, { account: bank2.lookup });
+  logger.log(
+    `bank2 State: ${bank2Balance.totalBalance} units of cash, ${bank2Balance.totalStates} states, overflow: ${bank2Balance.overflow}`
+  );
 
   logger.log("- Bank1 withdraws Zeto back to ERC20 balance ...");
-  const result5 = await zetoCBDC2.using(paladin1).withdraw(bank1, {
-    amount: 1000,
-  });
+  const result5 = await zetoCBDC2
+    .using(paladin1)
+    .withdraw(bank1, {
+      amount: 1000,
+    })
+    .waitForReceipt();
   if (!checkReceipt(result5)) return false;
   logger.log("\nUse case #2 complete!");
 
