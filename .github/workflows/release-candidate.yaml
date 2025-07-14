@@ -1,0 +1,107 @@
+name: Release Candidate
+
+on:
+  push:
+    tags:
+      - v*-rc.*
+  workflow_dispatch:
+    inputs:
+      tag:
+        required: true
+        type: string
+        description: 'Release candidate tag (e.g., v0.1.0-rc.1)'
+
+jobs:
+  set-variables:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.set-vars.outputs.tag }}
+      latest: "false"  # RC releases are never marked as latest
+    steps:
+      - id: set-vars
+        name: Set tag
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+           if [[ "$EVENT_NAME" == "push" && "$REF" == refs/tags/v* ]]; then
+            echo "Tag push event"
+            TAG="${REF##*/}"
+           else
+            echo "Workflow dispatch or other event"
+            TAG="$INPUT_TAG"
+           fi
+           echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Validate tag
+        run: |
+            if [[ $TAG != v*-rc.* ]]; then
+            echo "Not an RC tag: $TAG"
+            exit 1
+            else
+            echo "Valid RC tag: $TAG"
+            fi
+        env:
+            TAG: ${{ steps.set-vars.outputs.tag }}
+         
+
+  release-images:
+    needs: set-variables
+    uses: ./.github/workflows/release-images.yaml
+    with:
+      tag: ${{ needs.set-variables.outputs.tag }}
+      latest: "false"
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  release-charts:
+    needs: [set-variables, release-images]
+    uses: ./.github/workflows/release-charts.yaml
+    with:
+      chart_tag: ${{ needs.set-variables.outputs.tag }}
+      images_tag: ${{ needs.set-variables.outputs.tag }}
+      registry: docker.io
+    secrets:
+      CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-solidity-contracts:
+    uses: ./.github/workflows/release-solidity-contracts.yaml
+
+  release:
+    needs: [set-variables, release-charts, release-solidity-contracts]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Helm artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: helm-artifacts
+          path: helm-artifacts/
+
+      - name: Download Solidity artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: contracts
+          path: contracts/
+
+      - name: List downloaded artifacts
+        run: |
+          ls -R
+
+      - name: Create release candidate with all artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.set-variables.outputs.tag }}
+          body: "Release Candidate ${{ needs.set-variables.outputs.tag }}"
+          generate_release_notes: true
+          make_latest: "false"
+          prerelease: true
+          files: |
+            helm-artifacts/basenet.yaml
+            helm-artifacts/devnet.yaml
+            helm-artifacts/artifacts.tar.gz
+            contracts/abis.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

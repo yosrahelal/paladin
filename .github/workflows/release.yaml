@@ -9,7 +9,8 @@ on:
       latest:
         required: false
         type: boolean
-        default: false
+        default: true
+        description: 'Whether to mark this as the latest release'
       tag:
         required: true
         type: string
@@ -47,6 +48,35 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "latest=$LATEST" >> $GITHUB_OUTPUT
 
+      - name: Validate workflow triggered from RC tag only
+        shell: bash
+        run: |
+          if [[ "$REF" != refs/tags/v*-rc* ]]; then
+            echo "This workflow can only be triggered from an RC tag (e.g., v1.2.3-rc1)."
+            echo "Current ref: $REF"
+            exit 1
+          fi
+          echo "Valid RC tag: ${REF##*/}"
+        env:
+          REF: ${{ github.ref }}
+      - name: Validate tag is final and RC exists
+        shell: bash
+        run: |
+          # Ensure the tag is NOT an RC
+          if [[ "$TAG" == *-rc.* ]]; then
+            echo "Final releases must NOT be RC tags. Got: $TAG"
+            exit 1
+          fi
+          # Check for corresponding RC tag
+          VERSION_PREFIX="${TAG}-rc."
+          if ! git ls-remote --tags origin | grep -q "refs/tags/${VERSION_PREFIX}"; then
+            echo "No corresponding RC tag found for $TAG"
+            echo "Expected at least one tag like: ${VERSION_PREFIX}*"
+            exit 1
+          fi
+          echo "Valid final release tag: $TAG, RC found"
+        env:
+          TAG: ${{ steps.set-vars.outputs.tag }}
   release-images:
     needs: set-variables
     uses: ./.github/workflows/release-images.yaml
@@ -111,4 +141,4 @@ jobs:
     with:
       sdk_version: ${{ needs.set-variables.outputs.tag }}
     secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }} 
