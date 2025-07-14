@@ -35,10 +35,32 @@ Once changes are merged into the `main` branch, workflows prepare the project fo
 
 
 ## Release Time 🚀
-Releases deliver artifacts and resources to users and deployment targets through these workflows:
+Paladin follows a two-stage release process to ensure quality and stability:
+
+### Stage 1: Release Candidate (RC) 🧪
+Release candidates are created first for testing and validation:
+
+- **[Release Candidate Workflow](workflows/release-candidate.yaml):**  
+  Triggered by an RC tag (e.g., `v1.2.3-rc.1`), this workflow creates pre-releases:
+  - **[Release Docker Images](workflows/release-images.yaml):**  
+    Builds and **publishes Docker images** tagged with the RC version (e.g., `v1.2.3-rc.1`).
+    - **Registries:** 
+      - `ghcr.io/lf-decentralized-trust-labs`
+      - `docker.io/lfdecentralizedtrust`
+    - **Images:** `paladin`, `paladin-operator`
+    > RC images are **never** tagged as `latest`
+  - **[Release Helm Chart](workflows/release-charts.yaml):**
+    Packages and **publishes Helm charts** tagged with the RC version.
+    > **Includes E2E Testing:** This workflow automatically runs comprehensive end-to-end tests before publishing
+  - **[Release Solidity Contracts](workflows/release-solidity-contracts.yaml):**
+    Packages contract ABIs and deployment artifacts for distribution.
+  - **GitHub Release:** Creates a pre-release with all artifacts
+
+### Stage 2: Final Release 🎯
+Once the RC has been tested and validated, the final release can be created:
 
 - **[Release Orchestrator](workflows/release.yaml):**  
-  Triggered by a version tag (e.g., `v1.2.3`), this workflow coordinates all release activities:
+  Triggered by a final version tag (e.g., `v1.2.3`), this workflow coordinates the final release:
   - **[Release Docker Images](workflows/release-images.yaml):**  
     Builds and **publishes Docker images** tagged with the release version (e.g., `v1.2.3`) and `latest`.
     - **Registries:** 
@@ -56,16 +78,23 @@ Releases deliver artifacts and resources to users and deployment targets through
     - **Registry:** [npm](https://www.npmjs.com/package/@lfdecentralizedtrust/paladin-sdk)
   - **[Release Solidity Contracts](workflows/release-solidity-contracts.yaml):**
     Packages contract ABIs and deployment artifacts for distribution.
+  - **GitHub Release:** Creates a final release with all artifacts
 
 ### Releasing Options: 
-1. **Automatic:** Push a Git tag in the format `vX.Y.Z` (e.g., `v1.2.3`), and the workflows handle the release, marking it as the latest.
-2. **Manual:** Trigger the [release workflow](https://github.com/LF-Decentralized-Trust-labs/paladin/actions/workflows/release.yaml) via the GitHub Actions interface, specifying the version and selecting the "latest" option if needed.
+* **Release Candidate:** Trigger the [RC workflow](https://github.com/LF-Decentralized-Trust-labs/paladin/actions/workflows/release-candidate.yaml) via the GitHub Actions interface, specifying the RC version.
+* **Release:** Trigger the [release workflow](https://github.com/LF-Decentralized-Trust-labs/paladin/actions/workflows/release.yaml) via the GitHub Actions interface, specifying the final version and selecting the "latest" option if needed.
+
+### Important Release Process Notes:
+- **RC Required:** Final releases can only be created if a corresponding RC exists
+- **Testing:** Always test RCs thoroughly before promoting to final release
+- **Version Consistency:** The RC version must match the final version (e.g., `v1.0.0-rc.1` → `v1.0.0`)
 
 
 ## Manual Actions 🛠️
 Workflows can also be triggered manually when needed. Available options include:
 
-- **[Release Orchestrator](workflows/release.yaml)**
+- **[Release Orchestrator](workflows/release.yaml)** (Final releases)
+- **[Release Candidate](workflows/release-candidate.yaml)** (RC releases)
 - **[Release Docker Images](workflows/release-images.yaml)**
 - **[Release Helm Chart](workflows/release-charts.yaml)**
 - **[Release TypeScript SDK](workflows/release-typescript-sdk.yaml)**
