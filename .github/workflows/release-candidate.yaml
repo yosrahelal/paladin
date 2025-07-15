@@ -3,7 +3,7 @@ name: Release Candidate
 on:
   push:
     tags:
-      - v*-rc.*
+      - 'v*.*.*-rc.*'
   workflow_dispatch:
     inputs:
       tag:
@@ -16,37 +16,42 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.set-vars.outputs.tag }}
-      latest: "false"  # RC releases are never marked as latest
     steps:
       - id: set-vars
-        name: Set tag
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           REF: ${{ github.ref }}
           INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-           if [[ "$EVENT_NAME" == "push" && "$REF" == refs/tags/v* ]]; then
+          if [[ "$EVENT_NAME" == "push" && "$REF" == refs/tags/v* ]]; then
             echo "Tag push event"
             TAG="${REF##*/}"
-           else
+          else
             echo "Workflow dispatch or other event"
             TAG="$INPUT_TAG"
-           fi
-           echo "tag=$TAG" >> $GITHUB_OUTPUT
-
-      - name: Validate tag
-        run: |
-            if [[ $TAG != v*-rc.* ]]; then
-            echo "Not an RC tag: $TAG"
-            exit 1
-            else
-            echo "Valid RC tag: $TAG"
-            fi
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+      
+      - id: ref-tag
+        name: Validate ref tag follows semver versioning
+        uses: matt-usurp/validate-semver@v2
+        with:
+          version: ${{ steps.set-vars.outputs.tag }}
+          
+      - name: Validate workflow triggered from RC tag only
+        shell: bash
         env:
-            TAG: ${{ steps.set-vars.outputs.tag }}
-         
-
+          REF_TAG_PRERELEASE: ${{ steps.ref-tag.outputs.prerelease }}
+          REF_TAG_VERSION: ${{ steps.ref-tag.outputs.version }}
+          REF: ${{ steps.set-vars.outputs.tag }}
+        run: |
+          if [[ -z "$REF_TAG_PRERELEASE" ]]; then
+            echo "This workflow can only be triggered from an RC tag (e.g., v1.2.3-rc1)."
+            echo "Current ref: $REF"
+            exit 1
+          fi
+          echo "Valid RC tag: $REF_TAG_VERSION"
   release-images:
     needs: set-variables
     uses: ./.github/workflows/release-images.yaml
@@ -96,7 +101,7 @@ jobs:
           tag_name: ${{ needs.set-variables.outputs.tag }}
           body: "Release Candidate ${{ needs.set-variables.outputs.tag }}"
           generate_release_notes: true
-          make_latest: "false"
+          make_latest: "false" # RC releases are never marked as latest
           prerelease: true
           files: |
             helm-artifacts/basenet.yaml
