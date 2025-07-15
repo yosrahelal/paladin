@@ -69,7 +69,7 @@ Before any stablecoin operations, the financial institution registers all partic
 ```typescript
 // Financial institution registers itself
 const bankPublicKey = await getBabyjubPublicKey(financialInstitution);
-let kycTxId = await paladin1.sendTransaction({
+let kycTxId = await paladin1.ptx.sendTransaction({
   type: TransactionType.PUBLIC,
   from: financialInstitution.lookup,
   to: privateStablecoin.address,
@@ -220,6 +220,6 @@ This showcases Paladin's unique capability to balance **privacy preservation** w
 
 ## Next Steps
 
-Explore how **Notarized Tokens** and **Privacy Groups** work together to create comprehensive financial solutions with controlled oversight and selective disclosure.
+Explore how **Notarized Tokens** and **ZKP Tokens** can be used together in an atomic swap scenario.
 
-[Continue to the Bond Issuance Tutorial →](./bond-issuance.md) 
+[Continue to the Atomic Swap Tutorial →](./atomic-swap.md)
