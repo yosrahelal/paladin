@@ -242,7 +242,7 @@ export class NotoInstance {
     });
   }
 
-  async approveTransfer(
+  approveTransfer(
     from: PaladinVerifier,
     data: NotoApproveTransferParams
   ) {
