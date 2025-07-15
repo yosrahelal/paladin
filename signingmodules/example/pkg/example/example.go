@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024 Kaleido, Inc.
+ * Copyright © 2025 Kaleido, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -12,23 +12,15 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-package publictxmgr
+package example
 
 import (
 	"context"
-	"testing"
+
+	"github.com/kaleido-io/key-manager/signingmodules/example/internal/examplesigningmodule"
+	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 )
 
-func TestMetrics(t *testing.T) {
-	// none of the functions are actually implemented, so it's purely for test coverage
-	btem := &publicTxEngineMetrics{}
-	ctx := context.Background()
-	btem.InitMetrics(ctx)
-	btem.RecordCompletedTransactionCountMetrics(ctx, "success")
-	btem.RecordOperationMetrics(ctx, "test", "success", 12)
-	btem.RecordStageChangeMetrics(ctx, "test", 12)
-	btem.RecordInFlightOrchestratorPoolMetrics(ctx, nil, 1)
-	btem.RecordInFlightTxQueueMetrics(ctx, nil, 1)
-	btem.RecordCompletedTransactionCountMetrics(ctx, "test")
+func NewPlugin(ctx context.Context) plugintk.PluginBase {
+	return examplesigningmodule.NewPlugin(ctx)
 }

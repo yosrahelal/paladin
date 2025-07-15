@@ -54,19 +54,23 @@ async function main(): Promise<boolean> {
   // Deploy a Zeto token to represent cash
   logger.log("Deploying Zeto cash token...");
   const zetoFactory = new ZetoFactory(paladin1, "zeto");
-  const zetoCash = await zetoFactory.newZeto(cashIssuer, {
-    tokenName: "Zeto_Anon",
-  });
+  const zetoCash = await zetoFactory
+    .newZeto(cashIssuer, {
+      tokenName: "Zeto_Anon",
+    })
+    .waitForDeploy();
   if (!checkDeploy(zetoCash)) return false;
 
   // Create a Pente privacy group for the asset issuer only
   logger.log("Creating asset issuer privacy group...");
   const penteFactory = new PenteFactory(paladin1, "pente");
-  const issuerGroup = await penteFactory.newPrivacyGroup({
-    members: [assetIssuer],
-    evmVersion: "shanghai",
-    externalCallsEnabled: true,
-  });
+  const issuerGroup = await penteFactory
+    .newPrivacyGroup({
+      members: [assetIssuer],
+      evmVersion: "shanghai",
+      externalCallsEnabled: true,
+    })
+    .waitForDeploy();
   if (!checkDeploy(issuerGroup)) return false;
 
   // Deploy private tracker to the issuer privacy group
@@ -80,47 +84,56 @@ async function main(): Promise<boolean> {
   // Create a Noto token to represent an asset
   logger.log("Deploying Noto asset token...");
   const notoFactory = new NotoFactory(paladin1, "noto");
-  const notoAsset = await notoFactory.newNoto(assetIssuer, {
-    notary: assetIssuer,
-    notaryMode: "hooks",
-    options: {
-      hooks: {
-        privateGroup: issuerGroup,
-        publicAddress: issuerGroup.address,
-        privateAddress: tracker.address,
+  const notoAsset = await notoFactory
+    .newNoto(assetIssuer, {
+      notary: assetIssuer,
+      notaryMode: "hooks",
+      options: {
+        hooks: {
+          privateGroup: issuerGroup,
+          publicAddress: issuerGroup.address,
+          privateAddress: tracker.address,
+        },
       },
-    },
-  });
+    })
+    .waitForDeploy();
   if (!checkDeploy(notoAsset)) return false;
 
   // Issue asset
   logger.log("Issuing asset to investor1...");
-  let receipt = await notoAsset.mint(assetIssuer, {
-    to: investor1,
-    amount: 1000,
-    data: "0x",
-  });
+  let receipt = await notoAsset
+    .mint(assetIssuer, {
+      to: investor1,
+      amount: 1000,
+      data: "0x",
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
 
   // Issue cash
   logger.log("Issuing cash to investor2...");
-  receipt = await zetoCash.mint(cashIssuer, {
-    mints: [
-      {
-        to: investor2,
-        amount: 10000,
-        data: "0x",
-      },
-    ],
-  });
+  receipt = await zetoCash
+    .mint(cashIssuer, {
+      mints: [
+        {
+          to: investor2,
+          amount: 10000,
+          data: "0x",
+        },
+      ],
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
 
   // Lock the asset for the swap
   logger.log("Locking asset from investor1...");
-  receipt = await notoAsset.using(paladin2).lock(investor1, {
-    amount: 100,
-    data: "0x",
-  });
+  receipt = await notoAsset
+    .using(paladin2)
+    .lock(investor1, {
+      amount: 100,
+      data: "0x",
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
   receipt = await paladin2.getTransactionReceipt(receipt.id, true);
 
@@ -133,12 +146,15 @@ async function main(): Promise<boolean> {
 
   // Prepare asset unlock operation
   logger.log("Preparing unlock to investor2...");
-  receipt = await notoAsset.using(paladin2).prepareUnlock(investor1, {
-    lockId,
-    from: investor1,
-    recipients: [{ to: investor2, amount: 100 }],
-    data: "0x",
-  });
+  receipt = await notoAsset
+    .using(paladin2)
+    .prepareUnlock(investor1, {
+      lockId,
+      from: investor1,
+      recipients: [{ to: investor2, amount: 100 }],
+      data: "0x",
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
   receipt = await paladin2.getTransactionReceipt(receipt.id, true);
 
@@ -153,10 +169,13 @@ async function main(): Promise<boolean> {
   // Prepare cash transfer
   logger.log("Locking cash amount from investor2...");
   const investor2Address = await investor2.address();
-  receipt = await zetoCash.using(paladin3).lock(investor2, {
-    amount: 10,
-    delegate: investor2Address,
-  });
+  receipt = await zetoCash
+    .using(paladin3)
+    .lock(investor2, {
+      amount: 10,
+      delegate: investor2Address,
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
   const lockedStates = await paladin3.getStateReceipt(receipt.id);
   let lockedStateId: string | undefined;
@@ -182,7 +201,7 @@ async function main(): Promise<boolean> {
         data: "0x",
       },
     ],
-  });
+  }).id;
   const preparedCashTransfer = await paladin3.pollForPreparedTransaction(
     txID,
     10000
@@ -207,20 +226,26 @@ async function main(): Promise<boolean> {
 
   // Approve asset unlock operation
   logger.log("Approving asset leg...");
-  receipt = await notoAsset.using(paladin2).delegateLock(investor1, {
-    lockId,
-    unlock: assetUnlockParams,
-    delegate: atom.address,
-    data: "0x",
-  });
+  receipt = await notoAsset
+    .using(paladin2)
+    .delegateLock(investor1, {
+      lockId,
+      unlock: assetUnlockParams,
+      delegate: atom.address,
+      data: "0x",
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
 
   // Approve cash transfer operation
   logger.log("Approving cash leg...");
-  receipt = await zetoCash.using(paladin3).delegateLock(investor2, {
-    utxos: [lockedStateId],
-    delegate: atom.address,
-  });
+  receipt = await zetoCash
+    .using(paladin3)
+    .delegateLock(investor2, {
+      utxos: [lockedStateId],
+      delegate: atom.address,
+    })
+    .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
 
   // execute the swap

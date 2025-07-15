@@ -25,7 +25,7 @@ export class InvestorList extends PentePrivateContract<{}> {
     return this.sendTransaction({
       from: from.lookup,
       function: "addInvestor",
-      data: params
+      data: params,
     });
   }
 }

@@ -25,8 +25,7 @@ async function main(): Promise<boolean> {
     members: [verifierNode1, verifierNode2],
     evmVersion: "shanghai",
     externalCallsEnabled: true,
-  });
-
+  }).waitForDeploy();
   if (!checkDeploy(memberPrivacyGroup)) return false;
 
   logger.log(`Privacy group created, ID: ${memberPrivacyGroup?.group.id}`);
@@ -37,8 +36,7 @@ async function main(): Promise<boolean> {
     abi: storageJson.abi,
     bytecode: storageJson.bytecode,
     from: verifierNode1.lookup,
-  });
-
+  }).waitForDeploy();
   if (!contractAddress) {
     logger.error("Failed to deploy the contract. No address returned.");
     return false;
@@ -55,14 +53,14 @@ async function main(): Promise<boolean> {
   // Store a value in the contract
   const valueToStore = 125; // Example value to store
   logger.log(`Storing a value "${valueToStore}" in the contract...`);
-  const storeTx = await privateStorageContract.sendTransaction({
+  const storeReceipt = await privateStorageContract.sendTransaction({
     from: verifierNode1.lookup,
     function: "store",
     data: { num: valueToStore },
-  });
+  }).waitForReceipt();
   logger.log(
     "Value stored successfully! Transaction hash:",
-    storeTx?.transactionHash
+    storeReceipt?.transactionHash
   );
 
   // Retrieve the value as Node1
