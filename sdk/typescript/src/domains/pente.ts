@@ -201,7 +201,7 @@ export class PentePrivacyGroup {
     });
   }
 
-  async approveTransition(
+  approveTransition(
     from: PaladinVerifier,
     data: PenteApproveTransitionParams
   ) {
