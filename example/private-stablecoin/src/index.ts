@@ -361,7 +361,7 @@ async function main(): Promise<boolean> {
         },
       ],
     })
-    .waitForReceipt();
+    .waitForReceipt(30000); // Wait up to 30 seconds for transfer to give less powerful laptops time to generate ZK proof
   if (!checkReceipt(transferReceipt)) return false;
   logger.log("     ✓ Private transfer successful");
   logger.log("     ✓ Transfer amount and parties remain private");
