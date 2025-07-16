@@ -57,7 +57,7 @@ jobs:
     uses: ./.github/workflows/release-images.yaml
     with:
       tag: ${{ needs.set-variables.outputs.tag }}
-      latest: "false"
+      latest: false
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
