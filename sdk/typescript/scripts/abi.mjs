@@ -11,7 +11,7 @@ await copyFile('../../solidity/artifacts/contracts/domains/interfaces/INotoPriva
 await copyFile('../../solidity/artifacts/contracts/domains/interfaces/IZetoFungible.sol/IZetoFungible.json', 'src/domains/abis/IZetoFungible.json');
 
 // download the zeto anon contract ABI
-const zetoVersion = 'v0.0.12';
+const zetoVersion = 'v0.2.0';
 const zetoOrg = 'hyperledger-labs';
 const filename = `zeto-contracts-${zetoVersion}.tar.gz`;
 const url = `https://github.com/${zetoOrg}/zeto/releases/download/${zetoVersion}/${filename}`;
@@ -20,4 +20,5 @@ const tmpDir = await extractFile(tmpFilePath);
 
 // copy the zeto anon contract ABI
 await copyFile(path.join(tmpDir, 'artifacts/contracts/zeto_anon.sol/Zeto_Anon.json'), 'src/domains/abis/Zeto_Anon.json');
+await copyFile(path.join(tmpDir, 'artifacts/contracts/lib/interfaces/izeto_kyc.sol/IZetoKyc.json'), 'src/domains/abis/IZetoKyc.json');
 await copyFile(path.join(tmpDir, 'artifacts/contracts/erc20.sol/SampleERC20.json'), 'src/domains/abis/SampleERC20.json');

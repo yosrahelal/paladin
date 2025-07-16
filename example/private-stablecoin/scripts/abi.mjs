@@ -2,7 +2,7 @@ import { copyFile } from "copy-file";
 
 // Copy the KYC interface ABI from zeto domain
 await copyFile(
-  "../../domains/zeto/zkp/artifacts/contracts/lib/interfaces/izeto_kyc.sol/IZetoKyc.json",
+  "../../sdk/typescript/src/domains/abis/IZetoKyc.json",
   "src/abis/IZetoKyc.json"
 );
 
