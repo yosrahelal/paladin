@@ -34,7 +34,7 @@ task copyContracts(type: Copy, dependsOn: [":domains:zeto:extractZetoArtifacts"]
     from fileTree("../../domains/zeto/zkp/artifacts/contracts") {
         include '**/SampleERC20.json'
     }
-    into './src/abis'
+    into './src/zeto-abis'
 
     // Flatten all paths into the destination folder
     eachFile { path = name }
@@ -73,4 +73,5 @@ task clean(type: Delete) {
     delete 'node_modules'
     delete 'build'
     delete 'src/abis'
+    delete 'src/zeto-abis'
 }

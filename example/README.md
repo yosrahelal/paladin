@@ -28,18 +28,11 @@ paladin-operator-bc788db4f-mzbs7   1/1     Running   0          19m
 
 1. **Download the contracts**
 
-   - Download the [latest stable solidity contracts](https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/abis.tar.gz) to the paladin root directory.
+   - Download the [latest solidity contracts](https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/abis.tar.gz) to the paladin root directory.
+   - ~~Download the [latest zeto solidity contracts](https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/zeto-abis.tar.gz) to the paladin root directory.~~ (should be available from version `v0.10.0`)
+   - Download the [latest zeto solidity contracts](https://github.com/hyperledger-labs/zeto/releases/download/v0.2.0/zeto-contracts-v0.2.0.tar.gz) to the paladin root directory.
 
-2. **Build TypeScript SDK**
-
-   ```shell
-   cd <paladin-root>/sdk/typescript
-   npm install
-   npm run abi
-   npm run build
-   ```
-
-3. **Build common utilities**
+2. **Build common utilities**
 
    ```shell
    cd <paladin-root>/example/common
@@ -47,7 +40,7 @@ paladin-operator-bc788db4f-mzbs7   1/1     Running   0          19m
    npm run build
    ```
 
-### Option 2 - npm (building contracts and ABIs locally)
+### Option 2 - npm (building contracts, ABIs, and paladin SDK locally)
 
 1. **Compile Solidity contracts**
 

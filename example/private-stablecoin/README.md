@@ -28,6 +28,16 @@ These dependency resources can be obtained by one of the following ways.
 
 - **Run the example**
 
+> **Note**: This example requires the latest Paladin SDK functionality.
+>
+> **Build local SDK**
+> ```shell
+> cd <paladin-root>/sdk/typescript
+> npm install
+> npm run abi
+> npm run build
+> 
+
   ```shell
   cd <paladin-root>/example/private-stablecoin
   npm install

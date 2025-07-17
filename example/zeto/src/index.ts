@@ -4,7 +4,7 @@ import PaladinClient, {
   ZetoFactory,
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import { checkDeploy, checkReceipt } from "paladin-example-common";
-import erc20Abi from "./abis/SampleERC20.json";
+import erc20Abi from "./zeto-abis/SampleERC20.json";
 
 const logger = console;
 

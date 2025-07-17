@@ -77,4 +77,5 @@ task clean(type: Delete) {
     delete 'node_modules'
     delete 'build'
     delete 'src/abis'
+    delete 'src/zeto-abis'
 }

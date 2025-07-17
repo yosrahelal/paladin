@@ -1,0 +1,24 @@
+# This workflow tests the TypeScript SDK ensuring it does not break the examples
+name: Test TypeScript SDK changes
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+on:
+  pull_request:
+    paths:
+      - 'sdk/typescript/**'
+      - '.github/workflows/on-pr-push-ts-sdk.yaml'
+      - '.github/workflows/test-tutorials.yaml'
+
+# Ensure this workflow only runs for the most recent commit of a pull-request
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-examples:
+    uses: ./.github/workflows/test-tutorials.yaml
+    with:
+      build_local_sdk: true # this workflow is meant to test the examples with the local (modified) SDK

@@ -24,7 +24,7 @@ These dependency resources can be obtained by one of the following ways.
 
 - **Extract contracts**
 
-  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/example/zeto/src/abis`)
+  Extract the `zeto-abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `zeto-abis` directory to `src/`. (full path should be: `paladin/example/zeto/src/zeto-abis`)
 
 - **Run the example**
 
@@ -66,7 +66,7 @@ You can verify that the dependent ABIs have been successfully put in place by th
 ```shell
 $ ls <paladin-root>/sdk/typescript/build/domains/abis/
 INoto.json		INotoPrivate.json	IZetoFungible.json	PentePrivacyGroup.json	Zeto_Anon.json
-$ ls <paladin-root>/example/zeto/src/abis/
+$ ls <paladin-root>/example/zeto/src/zeto-abis/
 SampleERC20.json
 ```
 

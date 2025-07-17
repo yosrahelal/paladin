@@ -6,8 +6,8 @@ import PaladinClient, {
   IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import { checkDeploy, checkReceipt } from "paladin-example-common";
-import erc20Abi from "./abis/SampleERC20.json";
-import kycAbi from "./abis/IZetoKyc.json";
+import erc20Abi from "./zeto-abis/SampleERC20.json";
+import kycAbi from "./zeto-abis/IZetoKyc.json";
 import { buildBabyjub } from "circomlibjs";
 
 const logger = console;

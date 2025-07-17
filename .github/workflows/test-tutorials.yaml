@@ -1,0 +1,143 @@
+name: 'Run the tutorials'
+
+on:
+  workflow_dispatch: 
+    inputs:
+      build_local_sdk:
+        description: 'Build local TypeScript SDK instead of using published package'
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      build_local_sdk:
+        description: 'Build local TypeScript SDK instead of using published package'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  run-examples:
+    # here are the steps:
+    # 1. create a cluster with kind
+    # 2. install the helm charts (latest version)
+    # 3. run the examples as the user will run them
+        # 3.1. Download the solidity files
+        # 3.2. Run the examples
+    # 7. destroy the cluster
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Kind
+        uses: helm/kind-action@v1
+        with:
+          install_only: true # only install kind, the cluster creation is managed by the next step
+          ignore_failed_clean: true
+
+      - name: Create cluster
+        run: |
+          # Download the kind configuration
+          curl https://raw.githubusercontent.com/LF-Decentralized-Trust-labs/paladin/refs/heads/main/operator/paladin-kind.yaml -L -O
+          
+          # Create the cluster
+          kind create cluster --name paladin --config paladin-kind.yaml
+          
+          # Wait for cluster to be ready
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+
+      - name: Install latest Paladin charts
+        run: |
+          # Step 1: Install the CRD Chart
+          helm repo add paladin https://LF-Decentralized-Trust-labs.github.io/paladin --force-update
+          helm upgrade --install paladin-crds paladin/paladin-operator-crd
+          
+          # Step 2: Install cert-manager CRDs
+          helm repo add jetstack https://charts.jetstack.io --force-update
+          helm install cert-manager --namespace cert-manager --version v1.16.1 jetstack/cert-manager --create-namespace --set crds.enabled=true
+          
+          # Wait for cert-manager to be ready
+          kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=300s
+          
+          # Step 3: Install the Paladin Operator Chart
+          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace
+
+      - name: Validate installation
+        run: |
+          # Run the validation script
+          ./scripts/default-installation-validation.sh paladin
+
+      - name: Download Solidity contracts
+        run: |
+          # Download the latest stable solidity contracts
+          curl -L -o abis.tar.gz https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/abis.tar.gz
+          
+          mkdir -p contracts/abis
+          tar -xzf abis.tar.gz -C contracts/abis/
+      
+      # this step is not yet supported since the zeto-abis.tar.gz file is not yet available
+      # it should be available from version v0.10.0
+      # - name: Download Zeto Solidity contracts
+      #   run: |
+      #     # Download the latest stable solidity contracts
+      #     curl -L -o zeto-abis.tar.gz https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/zeto-abis.tar.gz
+      #     mkdir -p contracts/zeto-abis
+      #     tar -xzf zeto-abis.tar.gz -C contracts/zeto-abis/
+
+      
+      # This is the only way to download the zeto-abis.tar.gz file for now. once paladin v0.10.0 is released, we can use the latest release of paladin to download the zeto-abis.tar.gz file
+      # TODO: remove this step once paladin v0.10.0 is released
+      - name: Download Zeto Solidity contracts from the zeto release
+        run: |
+          # Download the latest stable solidity contracts
+          curl -L -o zeto-abis.tar.gz https://github.com/hyperledger-labs/zeto/releases/download/v0.2.0/zeto-contracts-v0.2.0.tar.gz
+
+          mkdir -p contracts/zeto-abis
+          mkdir -p contracts/temp
+          tar -xzf zeto-abis.tar.gz -C contracts/temp/
+
+          find contracts/temp/ -type f -name "*.json" ! -name "*.dbg.json" -exec cp {} contracts/zeto-abis/ \;
+
+      - name: Build example/common
+        if: ${{ !inputs.build_local_sdk }}
+        working-directory: example/common
+        run: |
+          npm install
+          npm run build
+
+      - name: Build example/common with local TypeScript SDK
+        if: ${{ inputs.build_local_sdk }}
+        run: |
+          
+          echo "Building solidity contracts..."
+          cd solidity
+          npm install
+          npm run compile
+          cd - 
+
+          echo "Building local TypeScript SDK..."
+          cd sdk/typescript
+          npm install
+          npm run abi
+          npm run build
+          cd - 
+          
+          # Update common utilities to use local SDK
+          cd example/common
+          npm uninstall @lfdecentralizedtrust-labs/paladin-sdk
+          npm install ../../sdk/typescript
+          npm run build
+
+      - name: Run all examples
+        env:
+          USE_PUBLISHED_SDK: ${{ !inputs.build_local_sdk }}
+        run: |
+          # Run the examples script
+          ./scripts/run-examples.sh
+
+      - name: Cleanup cluster
+        if: always()
+        run: |
+          kind delete cluster --name paladin
+      
