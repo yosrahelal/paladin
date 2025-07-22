@@ -53,9 +53,11 @@ jobs:
             SDK_TAG="stable"
           fi
 
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "latest=$LATEST" >> $GITHUB_OUTPUT
-          echo "sdk_tag=$SDK_TAG" >> $GITHUB_OUTPUT
+          {
+            echo "tag=$TAG"
+            echo "latest=$LATEST"
+            echo "sdk_tag=$SDK_TAG"
+          } >> $GITHUB_OUTPUT
       
       - id: new-tag
         name: Validate new tag follows semver versioning
