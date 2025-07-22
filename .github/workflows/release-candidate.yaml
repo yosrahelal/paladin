@@ -74,8 +74,6 @@ jobs:
 
   release-solidity-contracts:
     uses: ./.github/workflows/release-solidity-contracts.yaml
-    with:
-      upload: true
   
   release-typescript-sdk:
     needs: [set-variables]

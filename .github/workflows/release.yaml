@@ -48,9 +48,9 @@ jobs:
           fi
 
           if [[ "$LATEST" ==  "true" ]]; then
-            SDK_TAG="stable"
-          else
             SDK_TAG="latest"
+          else
+            SDK_TAG="stable"
           fi
 
           echo "tag=$TAG" >> $GITHUB_OUTPUT
@@ -136,8 +136,6 @@ jobs:
 
   release-solidity-contracts:
     uses: ./.github/workflows/release-solidity-contracts.yaml
-    with:
-      upload: true
 
   release:
     needs: [set-variables, release-charts, release-solidity-contracts]
