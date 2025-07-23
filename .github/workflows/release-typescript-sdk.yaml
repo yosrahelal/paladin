@@ -26,7 +26,14 @@ on:
         type: string
 
 jobs:
+  test:
+    # make sure the released candidate SDK is not breaking the tutorials
+    uses: ./.github/workflows/test-tutorials.yaml
+    with:
+      build_local_abi: false # we are using the published abi
+      build_local_sdk: true # we are using the local sdk
   publish:
+    needs: test
     permissions:
       contents: read
       id-token: write
