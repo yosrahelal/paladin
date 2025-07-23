@@ -22,7 +22,8 @@ task besuBootstrapTool(type: Exec) {
 
     inputs.dir "besu_bootstrap"
     outputs.upToDateWhen {
-        ["docker", "images", "-q", "paladin/besu_bootstrap"].execute().text != ""
+        def result = ["docker", "images", "-q", "paladin/besu_bootstrap"].execute()
+        result.waitFor() == 0 && result.text.trim() != ""
     }
 }
 

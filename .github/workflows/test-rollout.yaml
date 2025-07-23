@@ -1,4 +1,4 @@
-name: 'Run the tutorials'
+name: 'Rollout a new version'
 
 on:
   workflow_dispatch: 
@@ -8,11 +8,10 @@ on:
         required: false
         type: boolean
         default: false
-      download_abis:
-        description: 'Download the solidity contracts'
-        required: false
-        type: boolean
-        default: true
+      tag:
+        description: 'The new tag to rollout'
+        required: true
+        type: string
   workflow_call:
     inputs:
       build_local_sdk:
@@ -20,14 +19,13 @@ on:
         required: false
         type: boolean
         default: true
-      download_abis:
-        description: 'Download the solidity contracts'
-        required: false
-        type: boolean
-        default: true
+      tag:
+        description: 'The new tag to rollout'
+        required: true
+        type: string
 
 jobs:
-  run-examples:
+  rollout:
     # here are the steps:
     # 1. create a cluster with kind
     # 2. install the helm charts (latest version)
@@ -79,22 +77,12 @@ jobs:
           ./scripts/default-installation-validation.sh paladin
 
       - name: Download Solidity contracts
-        if: ${{ inputs.download_abis }}
         run: |
           # Download the latest stable solidity contracts
           curl -L -o abis.tar.gz https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/abis.tar.gz
           
           mkdir -p contracts/abis
           tar -xzf abis.tar.gz -C contracts/abis/
-
-          # Download the latest stable solidity contracts
-          curl -L -o zeto-abis.tar.gz https://github.com/hyperledger-labs/zeto/releases/download/v0.2.0/zeto-contracts-v0.2.0.tar.gz
-
-          mkdir -p contracts/zeto-abis
-          mkdir -p contracts/temp
-          tar -xzf zeto-abis.tar.gz -C contracts/temp/
-
-          find contracts/temp/ -type f -name "*.json" ! -name "*.dbg.json" -exec cp {} contracts/zeto-abis/ \;
       
       # this step is not yet supported since the zeto-abis.tar.gz file is not yet available
       # it should be available from version v0.10.0
@@ -108,45 +96,70 @@ jobs:
       
       # This is the only way to download the zeto-abis.tar.gz file for now. once paladin v0.10.0 is released, we can use the latest release of paladin to download the zeto-abis.tar.gz file
       # TODO: remove this step once paladin v0.10.0 is released
+      - name: Download Zeto Solidity contracts from the zeto release
+        run: |
+          # Download the latest stable solidity contracts
+          curl -L -o zeto-abis.tar.gz https://github.com/hyperledger-labs/zeto/releases/download/v0.2.0/zeto-contracts-v0.2.0.tar.gz
+
+          mkdir -p contracts/zeto-abis
+          mkdir -p contracts/temp
+          tar -xzf zeto-abis.tar.gz -C contracts/temp/
+
+          find contracts/temp/ -type f -name "*.json" ! -name "*.dbg.json" -exec cp {} contracts/zeto-abis/ \;
+
       - name: Build example/common
-        if: ${{ !inputs.build_local_sdk }}
         working-directory: example/common
         run: |
           npm install
           npm run build
-
-      - name: Build example/common with local TypeScript SDK
-        if: ${{ inputs.build_local_sdk }}
-        run: |
-          
-          echo "Building solidity contracts..."
-          cd solidity
-          npm install
-          npm run compile
-          cd - 
-
-          echo "Building local TypeScript SDK..."
-          cd sdk/typescript
-          npm install
-          npm run abi
-          npm run build
-          cd - 
-          
-          # Update common utilities to use local SDK
-          cd example/common
-          npm uninstall @lfdecentralizedtrust-labs/paladin-sdk
-          npm install ../../sdk/typescript
-          npm run build
-
+ 
       - name: Run all examples
         env:
-          USE_PUBLISHED_SDK: ${{ !inputs.build_local_sdk }}
+          USE_PUBLISHED_SDK: true
           RUN_MODE: start
-          ABIS_DOWNLOADED: ${{ inputs.download_abis }}
+          ABIS_DOWNLOADED: true
         run: |
           # Run the examples script
           ./scripts/run-examples.sh
 
+      - name: Rollout the new version of the paladin operator
+        run: |
+          # check if the paladin-crd has a new tag as well 
+          if [ $(helm search repo paladin-operator --version | grep ${{ inputs.tag }} -c) -eq 0 ]; then
+            helm upgrade --install paladin-crds paladin/paladin-operator-crd --version ${{ inputs.tag }}
+          fi
+
+          # Rollout the new version of the paladin operator
+          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace --version ${{ inputs.tag }}
+
+      - name: Confirm rollout completed
+        # wait for paladin pods to have an image with the new tag
+        run: |
+          
+
+      - name: Confirm rollout completed
+        run: |
+          # Wait for all pods to be ready
+          kubectl wait --for=condition=Ready pods --all -n paladin --timeout=300s
+
+      - name: Validate installation after rollout
+        run: |
+          # Run the validation script
+          ./scripts/default-installation-validation.sh paladin
+      
+     
+      - name: Run all examples for backwards compatibility
+        env:
+          # we do not want to use the latest released SDK because the RC SDK is not yet released
+          USE_PUBLISHED_SDK: false     
+          # this mode verifies the historical data
+          RUN_MODE: verify
+          # we do not want to download the solidity contracts because the RC release is not yet available
+          ABIS_DOWNLOADED: false
+        run: |
+          # Run the examples script
+          ./scripts/run-examples.sh
+      
       - name: Cleanup cluster
         if: always()
         run: |

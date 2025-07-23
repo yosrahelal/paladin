@@ -75,4 +75,6 @@ task clean(type: Delete) {
     delete 'build'
     delete 'src/abis'
     delete 'src/zeto-abis'
+    delete 'data'
+    delete 'logs'
 } 

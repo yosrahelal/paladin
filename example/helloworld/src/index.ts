@@ -2,6 +2,8 @@ import PaladinClient, {
   TransactionType,
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import helloWorldJson from "./abis/HelloWorld.json";
+import * as fs from 'fs';
+import * as path from 'path';
 
 const logger = console;
 
@@ -76,6 +78,24 @@ async function main(): Promise<boolean> {
     return false;
   }
   logger.log("STEP 3: Events verified successfully!");
+
+  // Save contract address and message to file for later use
+  const contractData = {
+    contractAddress: deploymentReceipt.contractAddress,
+    message: message,
+    transactionHash: functionReceipt.transactionHash,
+    timestamp: new Date().toISOString()
+  };
+
+  const dataDir = path.join(__dirname, '..', 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dataFile = path.join(dataDir, `contract-data-${timestamp}.json`);
+  fs.writeFileSync(dataFile, JSON.stringify(contractData, null, 2));
+  logger.log(`Contract data saved to ${dataFile}`);
 
   // Log the final message to the console
   logger.log("\n", message, "\n");

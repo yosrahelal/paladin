@@ -1,5 +1,16 @@
 #!/bin/bash
 
+# Environment variables for configuration
+# RUN_MODE: "start" (default) or "verify" - determines which npm script to run
+#   - "start": runs npm run start (deploy/run examples)
+#   - "verify": runs npm run verify (verify historical data)
+#
+# Examples:
+#   RUN_MODE=start ./scripts/run-examples.sh
+#   RUN_MODE=verify ./scripts/run-examples.sh
+RUN_MODE=${RUN_MODE:-"start"}
+ABIS_DOWNLOADED=${ABIS_DOWNLOADED:-"true"}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -85,10 +96,19 @@ run_example() {
         cd ../..
         return 1
     fi
+
+    if [ "$ABIS_DOWNLOADED" = "false" ]; then
+        rm -rf src/abis/* 2>/dev/null || true # remove all files in the abis directory
+        rm -rf src/zeto-abis/* 2>/dev/null || true # remove all files in the zeto-abis directory
+
+        print_status "Running 'npm run abi' for $example_name..."
+        npm run abi
+    fi
     
+    mkdir -p logs
     # Run the example
-    print_status "Running $example_name..."
-    if ! npm run start; then
+    print_status "Running $example_name with 'npm run $RUN_MODE'..."
+    if ! npm run $RUN_MODE 2>&1 | tee "logs/$example_name.log"; then
         print_error "Example $example_name failed to run"
         exit_code=1
     else
@@ -133,7 +153,16 @@ main() {
     for example_dir in $examples; do
         example_name=$(basename "$example_dir")
 
+        # Check if the required script exists
+        # TODO: remove this temporary check once we implement the verify script for all examples
+        if ! npm run | grep -q "$RUN_MODE"; then
+            print_warning "Script 'npm run $RUN_MODE' not found for $example_name, skipping..."
+            skipped_examples+=("$example_name")
+            continue
+        fi
+
         # skip private-stablecoin if USE_PUBLISHED_SDK is true
+        # TODO: remove this check after v0.10.0 release 
         if [ "$example_name" == "private-stablecoin" ] && [ "$USE_PUBLISHED_SDK" = "true" ]; then
             print_status "Skipping $example_name (not supported yet)"
             skipped_examples+=("$example_name")
