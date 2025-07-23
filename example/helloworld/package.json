@@ -4,11 +4,11 @@
   "description": "",
   "main": "build/index.js",
   "scripts": {
-    "postinstall": "npm install @lfdecentralizedtrust-labs/paladin-sdk@latest",
     "build": "tsc",
     "start": "ts-node ./src/index.ts",
     "start:prod": "node ./build/index.js",
     "abi": "node scripts/abi.mjs",
+    "contracts": "node scripts/contracts.mjs",
     "verify": "ts-node ./src/verify-deployed.ts"
   },
   "author": "",

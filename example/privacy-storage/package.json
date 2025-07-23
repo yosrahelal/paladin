@@ -4,12 +4,12 @@
   "description": "",
   "main": "build/index.js",
   "scripts": {
-    "postinstall": "npm install @lfdecentralizedtrust-labs/paladin-sdk@latest",
     "build": "tsc",
     "start": "ts-node ./src/index.ts",
     "start:prod": "node ./build/index.js",
     "update": "ts-node ./src/update.ts",
-    "abi": "node scripts/abi.mjs"
+    "abi": "node scripts/abi.mjs",
+    "contracts": "node scripts/contracts.mjs"
   },
   "author": "",
   "license": "Apache-2.0",

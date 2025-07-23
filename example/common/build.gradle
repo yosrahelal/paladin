@@ -52,6 +52,7 @@ task build(type: Exec, dependsOn: install) {
 task clean(type: Delete) {
     delete 'node_modules'
     delete 'build'
+    delete 'contracts'
 }
 
 dependencies {
