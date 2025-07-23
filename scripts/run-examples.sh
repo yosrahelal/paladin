@@ -166,6 +166,14 @@ run_example() {
         fi
     fi
     
+    # Check if the required script exists
+    # TODO: remove this temporary check once we implement the verify script for all examples
+    if ! npm run | grep -E "^\s*$RUN_MODE\s*$" >/dev/null 2>&1; then
+        print_warning "Script 'npm run $RUN_MODE' not found for $example_name, skipping..."
+        cd ../..
+        return 2  # Return 2 to indicate skipped
+    fi
+    
     mkdir -p logs
     # Run the example
     print_status "Running $example_name with 'npm run $RUN_MODE'..."
@@ -217,14 +225,6 @@ main() {
     for example_dir in $examples; do
         example_name=$(basename "$example_dir")
 
-        # Check if the required script exists
-        # TODO: remove this temporary check once we implement the verify script for all examples
-        if ! npm run | grep -q "$RUN_MODE"; then
-            print_warning "Script 'npm run $RUN_MODE' not found for $example_name, skipping..."
-            skipped_examples+=("$example_name")
-            continue
-        fi
-
         # skip private-stablecoin if USE_PUBLISHED_SDK is true
         # TODO: remove this check after v0.10.0 release 
         if [ "$example_name" == "private-stablecoin" ] && [ "$USE_PUBLISHED_SDK" = "true" ]; then
@@ -235,8 +235,12 @@ main() {
         
         # Check if it's a valid example (has package.json)
         if [ -f "$example_dir/package.json" ]; then
-            if run_example "$example_dir"; then
+            run_example "$example_dir"
+            exit_code=$?
+            if [ $exit_code -eq 0 ]; then
                 successful_examples+=("$example_name")
+            elif [ $exit_code -eq 2 ]; then
+                skipped_examples+=("$example_name")
             else
                 print_error "Example $example_name failed"
                 failed_examples+=("$example_name")
