@@ -9,12 +9,14 @@ on:
   push:
     paths:
       - 'sdk/typescript/**'
+      - 'scripts/**'
       - '.github/workflows/on-pr-push-ts-sdk.yaml'
       - '.github/workflows/test-tutorials.yaml'
 
   pull_request:
     paths:
       - 'sdk/typescript/**'
+      - 'scripts/**'
       - '.github/workflows/on-pr-push-ts-sdk.yaml'
       - '.github/workflows/test-tutorials.yaml'
 
