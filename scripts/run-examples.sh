@@ -164,7 +164,7 @@ run_example() {
             cd ../..
             return 1
         fi
-    
+    fi
     
     mkdir -p logs
     # Run the example
