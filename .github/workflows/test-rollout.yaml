@@ -80,14 +80,22 @@ jobs:
           ./scripts/run-examples.sh
 
       - name: Rollout the new version of the paladin operator
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
-          # check if the paladin-crd has a new tag as well 
-          if [ $(helm search repo paladin-operator --version | grep ${{ inputs.tag }} -c) -eq 0 ]; then
-            helm upgrade --install paladin-crds paladin/paladin-operator-crd --version ${{ inputs.tag }}
+          # refresh local index
+          helm repo update
+
+          # only install CRDs if that exact version exists
+          if helm show chart paladin/paladin-operator-crd --version "$TAG" >/dev/null 2>&1; then
+            # TODO: We should first check a rollout with the previous version of the CRDs
+            helm upgrade --install paladin-crds paladin/paladin-operator-crd --version "$TAG"
+          else
+            echo "Skipping paladin-operator-crd v$TAG (not found in repo)"
           fi
 
           # Rollout the new version of the paladin operator
-          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace --version ${{ inputs.tag }}
+          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace --version "$TAG"
 
       - name: Validate installation after rollout
         env:
@@ -96,7 +104,6 @@ jobs:
           # Run the validation script
           ./scripts/default-installation-validation.sh paladin
       
-     
       - name: Run all examples for backwards compatibility
         env:
           # we do not want to download the solidity contracts because the RC release is not yet available
