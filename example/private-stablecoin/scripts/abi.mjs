@@ -1,15 +1,14 @@
-import { copyFile } from "copy-file";
+import fs from 'fs';
+import path from 'path';
+import { copyFile } from 'copy-file';
+import { downloadZetoAbis } from './download.mjs';
 
-// Copy the KYC interface ABI from zeto domain
-await copyFile(
-  "../../sdk/typescript/src/domains/abis/IZetoKyc.json",
-  "src/zeto-abis/IZetoKyc.json"
-);
+// download zeto and paladin abis and copy them to the contracts directory
+const zetoDir = await downloadZetoAbis();
 
-// Copy the SampleERC20 ABI from SDK
-await copyFile(
-  "../../sdk/typescript/src/domains/abis/SampleERC20.json",
-  "src/zeto-abis/SampleERC20.json"
-);
+// create directory if it does not exist
+fs.mkdirSync(path.join('src/zeto-abis'), { recursive: true });
 
-console.log("✓ Copied KYC and ERC20 ABIs to src/zeto-abis/");
+// copy the zeto abis
+await copyFile(path.join(zetoDir, 'artifacts/contracts/erc20.sol/SampleERC20.json'), 'src/zeto-abis/SampleERC20.json');
+await copyFile(path.join(zetoDir, 'artifacts/contracts/lib/interfaces/izeto_kyc.sol/IZetoKyc.json'), 'src/zeto-abis/IZetoKyc.json');

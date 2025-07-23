@@ -29,5 +29,5 @@ jobs:
   test-tutorials:
     uses: ./.github/workflows/test-tutorials.yaml
     with:
+      build_local_abi: true
       build_local_sdk: false
-      build_local_solidity: true

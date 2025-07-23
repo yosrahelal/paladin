@@ -69,34 +69,12 @@ jobs:
           # Run the validation script
           ./scripts/default-installation-validation.sh paladin
 
-      - name: Download Solidity contracts
-        run: |
-          # Download the latest stable solidity contracts
-          curl -L -o abis.tar.gz https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/abis.tar.gz
-          
-          mkdir -p contracts/abis
-          tar -xzf abis.tar.gz -C contracts/abis/
-
-          # Download the latest stable zeto solidity contracts
-          curl -L -o zeto-abis.tar.gz https://github.com/hyperledger-labs/zeto/releases/download/v0.2.0/zeto-contracts-v0.2.0.tar.gz
-
-          mkdir -p contracts/zeto-abis
-          mkdir -p contracts/temp
-          tar -xzf zeto-abis.tar.gz -C contracts/temp/
-
-          find contracts/temp/ -type f -name "*.json" ! -name "*.dbg.json" -exec cp {} contracts/zeto-abis/ \;
-      
-        # this step is not yet supported since the zeto-abis.tar.gz file is not yet available
-        # it should be available from version v0.10.0
-        #     # Download the latest stable solidity contracts
-        #     curl -L -o zeto-abis.tar.gz https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/zeto-abis.tar.gz
-        #     mkdir -p contracts/zeto-abis
-        #     tar -xzf zeto-abis.tar.gz -C contracts/zeto-abis/
       - name: Run all examples
         env:
-          SDK_BUILT_LOCALLY: false
-          SOLIDITY_BUILT_LOCALLY: false
+          BUILD_PALADIN_ABI: false
+          BUILD_PALADIN_SDK: false
           RUN_MODE: start
+          PALADIN_ABI_VERSION: latest # run the latest version
         run: |
           # Run the examples script
           ./scripts/run-examples.sh
@@ -122,12 +100,13 @@ jobs:
       - name: Run all examples for backwards compatibility
         env:
           # we do not want to download the solidity contracts because the RC release is not yet available
-          SOLIDITY_BUILT_LOCALLY: false
-          # Use the RC SDK version that was published
-          SDK_BUILT_LOCALLY: false
-          SDK_VERSION: ${{ inputs.tag }}
+          BUILD_PALADIN_ABI: false
+          BUILD_PALADIN_SDK: false
           # this mode verifies the historical data
           RUN_MODE: verify
+
+          PALADIN_ABI_VERSION: ${{ inputs.tag }} # run the RC version
+
         run: |
           # Run the examples script
           ./scripts/run-examples.sh
@@ -136,9 +115,9 @@ jobs:
       - name: Run all examples with the RC SDK version
         env:
           # Use the RC SDK version that was published
-          SDK_BUILT_LOCALLY: false
-          SOLIDITY_BUILT_LOCALLY: false
-          SDK_VERSION: ${{ inputs.tag }}
+          BUILD_PALADIN_ABI: false
+          BUILD_PALADIN_SDK: false
+          PALADIN_ABI_VERSION: ${{ inputs.tag }}
           # this mode runs the tutorials as the user will run them
           RUN_MODE: start
         run: |

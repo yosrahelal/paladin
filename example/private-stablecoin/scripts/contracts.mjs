@@ -11,5 +11,3 @@ await copyFile(
   "../common/contracts/zeto-abis/SampleERC20.json",
   "src/zeto-abis/SampleERC20.json"
 );
-
-console.log("✓ Copied KYC and ERC20 ABIs to src/zeto-abis/");

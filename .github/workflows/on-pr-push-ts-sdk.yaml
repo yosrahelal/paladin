@@ -29,5 +29,5 @@ jobs:
   test-examples:
     uses: ./.github/workflows/test-tutorials.yaml
     with:
-      build_local_sdk: true # this workflow is meant to test the examples with the local (modified) SDK
-      build_local_solidity: false # this workflow is meant to test the examples with the published solidity contracts
+      build_local_abi: false # this workflow is meant to test the examples with the published solidity contracts
+      build_local_sdk: true  # this workflow is meant to test the examples with the local (modified) SDK

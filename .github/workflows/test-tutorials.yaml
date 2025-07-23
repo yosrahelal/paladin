@@ -8,8 +8,8 @@ on:
         required: false
         type: boolean
         default: false
-      build_local_solidity:
-        description: 'Build the solidity contracts locally'
+      build_local_abi:
+        description: 'Build the abi contracts locally'
         required: false
         type: boolean
         default: false
@@ -20,8 +20,8 @@ on:
         required: false
         type: boolean
         default: true
-      build_local_solidity:
-        description: 'Build the solidity contracts'
+      build_local_abi:
+        description: 'Build the abi contracts'
         required: false
         type: boolean
         default: false
@@ -78,73 +78,10 @@ jobs:
           # Run the validation script
           ./scripts/default-installation-validation.sh paladin
 
-      - name: Download Solidity contracts
-        if: ${{ !inputs.build_local_solidity }}
-        run: |
-          # Download the latest stable solidity contracts
-          curl -L -o abis.tar.gz https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/abis.tar.gz
-          
-          mkdir -p contracts/abis
-          tar -xzf abis.tar.gz -C contracts/abis/
-
-          # Download the latest stable solidity contracts
-          curl -L -o zeto-abis.tar.gz https://github.com/hyperledger-labs/zeto/releases/download/v0.2.0/zeto-contracts-v0.2.0.tar.gz
-
-          mkdir -p contracts/zeto-abis
-          mkdir -p contracts/temp
-          tar -xzf zeto-abis.tar.gz -C contracts/temp/
-
-          find contracts/temp/ -type f -name "*.json" ! -name "*.dbg.json" -exec cp {} contracts/zeto-abis/ \;
-      
-      # this step is not yet supported since the zeto-abis.tar.gz file is not yet available
-      # it should be available from version v0.10.0
-      # - name: Download Zeto Solidity contracts
-      #   run: |
-      #     # Download the latest stable solidity contracts
-      #     curl -L -o zeto-abis.tar.gz https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/zeto-abis.tar.gz
-      #     mkdir -p contracts/zeto-abis
-      #     tar -xzf zeto-abis.tar.gz -C contracts/zeto-abis/
-
-      
-      # This is the only way to download the zeto-abis.tar.gz file for now. once paladin v0.10.0 is released, we can use the latest release of paladin to download the zeto-abis.tar.gz file
-      # TODO: remove this step once paladin v0.10.0 is released
-
-      - name: Build solidity contracts
-        if: ${{ inputs.build_local_solidity }}
-        run: |
-          echo "Building solidity contracts..."
-          cd solidity
-          npm install
-          npm run compile
-
-      - name: Build local TypeScript SDK
-        if: ${{ inputs.build_local_sdk }}
-        env:
-          BUILD_SOLIDITY: ${{ inputs.build_local_solidity }}
-        run: |
-          echo "Building local TypeScript SDK..."
-          cd sdk/typescript
-          npm install
-
-          # if the solidity contracts are built, we need to build the abi files
-          if [ "$BUILD_SOLIDITY" = "true" ]; then
-            npm run abi 
-          else 
-            # copy the abi files from the contracts/abis directory
-            # look at the sdk/typescript/scripts/abi.mjs file
-            # to keep it simple, we will copy all of the ABIs and not only the ones that are needed
-            mkdir -p src/domains/abis
-            cp ../../contracts/abis/* src/domains/abis/
-            cp ../../contracts/zeto-abis/* src/domains/abis/
-          fi
-          
-          npm run build
-          
       - name: Run all examples
         env:
-          RUN_MODE: start
-          SDK_BUILT_LOCALLY: ${{ inputs.build_local_sdk }}
-          SOLIDITY_BUILT_LOCALLY: ${{ inputs.build_local_solidity }}
+          BUILD_PALADIN_SDK: ${{ inputs.build_local_sdk }}
+          BUILD_PALADIN_ABI: ${{ inputs.build_local_abi }}
         run: |
           # Run the examples script
           ./scripts/run-examples.sh
@@ -153,4 +90,3 @@ jobs:
         if: always()
         run: |
           kind delete cluster --name paladin
-      
