@@ -1,6 +1,6 @@
 import { copyFile } from 'copy-file';
 import path from 'path';
-import { downloadFile, extractFile } from './util.mjs';
+import { downloadZetoAbis } from './download.mjs';
 
 await copyFile('../../solidity/artifacts/contracts/domains/pente/PentePrivacyGroup.sol/PentePrivacyGroup.json', 'src/domains/abis/PentePrivacyGroup.json');
 
@@ -11,12 +11,7 @@ await copyFile('../../solidity/artifacts/contracts/domains/interfaces/INotoPriva
 await copyFile('../../solidity/artifacts/contracts/domains/interfaces/IZetoFungible.sol/IZetoFungible.json', 'src/domains/abis/IZetoFungible.json');
 
 // download the zeto anon contract ABI
-const zetoVersion = 'v0.2.0';
-const zetoOrg = 'hyperledger-labs';
-const filename = `zeto-contracts-${zetoVersion}.tar.gz`;
-const url = `https://github.com/${zetoOrg}/zeto/releases/download/${zetoVersion}/${filename}`;
-const tmpFilePath = await downloadFile(url, filename);
-const tmpDir = await extractFile(tmpFilePath);
+const tmpDir = await downloadZetoAbis();
 
 // copy the zeto anon contract ABI
 await copyFile(path.join(tmpDir, 'artifacts/contracts/zeto_anon.sol/Zeto_Anon.json'), 'src/domains/abis/Zeto_Anon.json');
