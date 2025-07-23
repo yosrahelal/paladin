@@ -91,7 +91,7 @@ jobs:
       tag: ${{ needs.set-variables.outputs.tag }}
 
   release:
-    needs: [set-variables, release-charts, release-solidity-contracts, release-typescript-sdk]
+    needs: [set-variables, release-charts, release-solidity-contracts, release-typescript-sdk, test-rollout]
     runs-on: ubuntu-latest
     steps:
       - name: Download Helm artifacts

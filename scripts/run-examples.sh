@@ -74,7 +74,7 @@ fi
 print_status "Prerequisites check passed"
 
 # switch paladin sdk version
-npm_install() {
+switch_paladin_sdk_version() {
     local name="$1"
     if [ "$SDK_BUILT_LOCALLY" = "true" ]; then
         print_status "Switching to local SDK for $name..."

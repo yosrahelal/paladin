@@ -136,7 +136,8 @@ jobs:
       - name: Run all examples with the RC SDK version
         env:
           # Use the RC SDK version that was published
-          USE_PUBLISHED_SDK: true
+          SDK_BUILT_LOCALLY: false
+          SOLIDITY_BUILT_LOCALLY: false
           SDK_VERSION: ${{ inputs.tag }}
           # this mode runs the tutorials as the user will run them
           RUN_MODE: start
