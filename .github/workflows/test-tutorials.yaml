@@ -8,11 +8,11 @@ on:
         required: false
         type: boolean
         default: false
-      download_abis:
-        description: 'Download the solidity contracts'
+      build_local_solidity:
+        description: 'Build the solidity contracts locally'
         required: false
         type: boolean
-        default: true
+        default: false
   workflow_call:
     inputs:
       build_local_sdk:
@@ -20,11 +20,11 @@ on:
         required: false
         type: boolean
         default: true
-      download_abis:
-        description: 'Download the solidity contracts'
+      build_local_solidity:
+        description: 'Build the solidity contracts'
         required: false
         type: boolean
-        default: true
+        default: false
 
 jobs:
   run-examples:
@@ -79,7 +79,7 @@ jobs:
           ./scripts/default-installation-validation.sh paladin
 
       - name: Download Solidity contracts
-        if: ${{ inputs.download_abis }}
+        if: ${{ !inputs.build_local_solidity }}
         run: |
           # Download the latest stable solidity contracts
           curl -L -o abis.tar.gz https://github.com/LF-Decentralized-Trust-labs/paladin/releases/latest/download/abis.tar.gz
@@ -108,41 +108,43 @@ jobs:
       
       # This is the only way to download the zeto-abis.tar.gz file for now. once paladin v0.10.0 is released, we can use the latest release of paladin to download the zeto-abis.tar.gz file
       # TODO: remove this step once paladin v0.10.0 is released
-      - name: Build example/common
-        if: ${{ !inputs.build_local_sdk }}
-        working-directory: example/common
-        run: |
-          npm install
-          npm run build
 
-      - name: Build example/common with local TypeScript SDK
-        if: ${{ inputs.build_local_sdk }}
+      - name: Build solidity contracts
+        if: ${{ inputs.build_local_solidity }}
         run: |
-          
           echo "Building solidity contracts..."
           cd solidity
           npm install
           npm run compile
-          cd - 
 
+      - name: Build local TypeScript SDK
+        if: ${{ inputs.build_local_sdk }}
+        env:
+          BUILD_SOLIDITY: ${{ inputs.build_local_solidity }}
+        run: |
           echo "Building local TypeScript SDK..."
           cd sdk/typescript
           npm install
-          npm run abi
-          npm run build
-          cd - 
-          
-          # Update common utilities to use local SDK
-          cd example/common
-          npm uninstall @lfdecentralizedtrust-labs/paladin-sdk
-          npm install ../../sdk/typescript
-          npm run build
 
+          # if the solidity contracts are built, we need to build the abi files
+          if [ "$BUILD_SOLIDITY" = "true" ]; then
+            npm run abi 
+          else 
+            # copy the abi files from the contracts/abis directory
+            # look at the sdk/typescript/scripts/abi.mjs file
+            # to keep it simple, we will copy all of the ABIs and not only the ones that are needed
+            mkdir -p src/domains/abis
+            cp ../../contracts/abis/* src/domains/abis/
+            cp ../../contracts/zeto-abis/* src/domains/abis/
+          fi
+          
+          npm run build
+          
       - name: Run all examples
         env:
-          USE_PUBLISHED_SDK: ${{ !inputs.build_local_sdk }}
           RUN_MODE: start
-          ABIS_DOWNLOADED: ${{ inputs.download_abis }}
+          SDK_BUILT_LOCALLY: ${{ inputs.build_local_sdk }}
+          SOLIDITY_BUILT_LOCALLY: ${{ inputs.build_local_solidity }}
         run: |
           # Run the examples script
           ./scripts/run-examples.sh

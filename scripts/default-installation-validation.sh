@@ -5,6 +5,9 @@ set -e
 # Default namespace
 NAMESPACE=${1:-paladin}
 
+# Environment variable for image tag verification
+IMAGE_TAG=${IMAGE_TAG:-""}
+
 # Show usage if help is requested
 if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "Usage: $0 [NAMESPACE]"
@@ -14,9 +17,13 @@ if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "Arguments:"
     echo "  NAMESPACE    Kubernetes namespace to validate (default: paladin)"
     echo ""
+    echo "Environment Variables:"
+    echo "  IMAGE_TAG    Image tag to verify in all pods (optional)"
+    echo ""
     echo "Examples:"
     echo "  $0                    # Validate in 'paladin' namespace"
     echo "  $0 my-paladin-ns      # Validate in 'my-paladin-ns' namespace"
+    echo "  IMAGE_TAG=v1.2.3 $0   # Validate and verify image tag v1.2.3"
     echo "  $0 --help             # Show this help message"
     exit 0
 fi
@@ -88,6 +95,42 @@ wait_for_pods() {
     
     print_error "Timeout waiting for pods to be ready"
     kubectl --namespace $NAMESPACE get pods
+    return 1
+}
+
+wait_for_image_tag() {
+    local max_attempts=30
+    local attempt=1
+    local image_tag=$1
+    
+    print_status "Checking Paladin pods for image tag: $image_tag"
+    
+    # Get all pods and filter for Paladin-related pods (exclude besu-*)
+    kubectl get pods -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}' | grep -v "besu-" | grep $image_tag
+
+    while [ $attempt -le $max_attempts ]; do
+        # Get all Paladin pods (excluding besu-*) and check if they have the expected image tag
+        local paladin_pods=$(kubectl get pods -l app=paladin -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[1].image}{"\n"}{end}')
+        local pods_with_tag=$(echo "$paladin_pods" | grep $image_tag | wc -l)
+        local total_paladin_pods=$(echo "$paladin_pods" | wc -l)
+        
+        if [ "$pods_with_tag" -eq "$total_paladin_pods" ] && [ "$total_paladin_pods" -gt 0 ]; then
+            print_status "All Paladin pods have the expected image tag! ($pods_with_tag/$total_paladin_pods)"
+            print_status "Paladin pods with image tag $image_tag:"
+            echo "$paladin_pods" | grep $image_tag
+            return 0
+        fi
+
+        print_status "Attempt $attempt/$max_attempts: $pods_with_tag/$total_paladin_pods Paladin pods have image tag $image_tag"
+        print_status "Current Paladin pod images:"
+        echo "$paladin_pods"
+        sleep 10
+        ((attempt++))
+    done
+
+    print_error "Timeout waiting for image update"
+    print_error "Final Paladin pod status:"
+    kubectl get pods -l app=paladin -n $NAMESPACE -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
     return 1
 }
 
@@ -233,11 +276,22 @@ check_registry() {
 # Main validation flow
 main() {
     print_status "Starting Paladin installation validation (namespace: $NAMESPACE)..."
+    if [ -n "$IMAGE_TAG" ]; then
+        print_status "Image tag verification enabled: $IMAGE_TAG"
+    fi
     
     # Check if namespace exists
     if ! kubectl get namespace $NAMESPACE >/dev/null 2>&1; then
         print_error "$NAMESPACE namespace does not exist"
         exit 1
+    fi
+
+    # Check the paladin pods are running the correct image tag (if provided)
+    if [ -n "$IMAGE_TAG" ]; then
+        print_status "Verifying image tag: $IMAGE_TAG"
+        if ! wait_for_image_tag "$IMAGE_TAG"; then
+            exit 1
+        fi
     fi
     
     # Wait for pods to be ready
@@ -248,6 +302,8 @@ main() {
     # Display pod status
     print_status "Pod status:"
     kubectl --namespace $NAMESPACE get pods
+    
+
     
     # Display service status
     print_status "Service status:"

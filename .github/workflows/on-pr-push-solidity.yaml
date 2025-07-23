@@ -1,5 +1,5 @@
 # This workflow tests the examples ensuring they are aligned with the latest SDK
-name: Test Tutorials changes
+name: Test Solidity changes
 permissions:
   contents: write
   packages: write
@@ -9,15 +9,15 @@ on:
   push:
     paths:
       - 'scripts/**'
-      - 'example/**'
-      - '.github/workflows/on-pr-push-examples.yaml'
+      - 'solidity/**'
+      - '.github/workflows/on-pr-push-solidity.yaml'
       - '.github/workflows/test-tutorials.yaml'
 
   pull_request:
     paths:
       - 'scripts/**'
-      - 'example/**'
-      - '.github/workflows/on-pr-push-examples.yaml'
+      - 'solidity/**'
+      - '.github/workflows/on-pr-push-solidity.yaml'
       - '.github/workflows/test-tutorials.yaml'
 
 # Ensure this workflow only runs for the most recent commit of a pull-request
@@ -29,5 +29,5 @@ jobs:
   test-tutorials:
     uses: ./.github/workflows/test-tutorials.yaml
     with:
-      build_local_sdk: false # this workflow is meant to test the examples with the published SDK
-      build_local_solidity: false # this workflow is meant to test the examples with the published solidity contracts
+      build_local_sdk: false
+      build_local_solidity: true

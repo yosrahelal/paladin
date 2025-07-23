@@ -82,7 +82,13 @@ jobs:
       sdk_version: ${{ needs.set-variables.outputs.tag }}
       sdk_tag: "rc"
     secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }} 
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  test-rollout:
+    needs: [set-variables, release-charts, release-solidity-contracts, release-typescript-sdk]
+    uses: ./.github/workflows/test-rollout.yaml
+    with:
+      tag: ${{ needs.set-variables.outputs.tag }}
 
   release:
     needs: [set-variables, release-charts, release-solidity-contracts, release-typescript-sdk]

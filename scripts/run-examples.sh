@@ -8,8 +8,14 @@
 # Examples:
 #   RUN_MODE=start ./scripts/run-examples.sh
 #   RUN_MODE=verify ./scripts/run-examples.sh
+#   SDK_VERSION=0.10.0 ./scripts/run-examples.sh # use a specific SDK version
+#   SDK_BUILT_LOCALLY=true  ./scripts/run-examples.sh # the SDK was built SDK locally
+#   SOLIDITY_BUILT_LOCALLY=true  ./scripts/run-examples.sh # the solidity contracts were built locally
 RUN_MODE=${RUN_MODE:-"start"}
-ABIS_DOWNLOADED=${ABIS_DOWNLOADED:-"true"}
+SDK_BUILT_LOCALLY=${SDK_BUILT_LOCALLY:-"false"}
+SOLIDITY_BUILT_LOCALLY=${SOLIDITY_BUILT_LOCALLY:-"false"}
+
+SDK_VERSION=${SDK_VERSION:-""}
 
 # Colors for output
 RED='\033[0;31m'
@@ -53,7 +59,63 @@ if ! command_exists node; then
     exit 1
 fi
 
+# if the SDK was build locally, you cannot set the SDK version
+if [ "$SDK_BUILT_LOCALLY" = "true" ] && [ "$SDK_VERSION" != "" ]; then
+    print_error "You cannot set SDK_VERSION when SDK_BUILT_LOCALLY is true"
+    exit 1
+fi
+
+# set SDK version to latest if not set
+if [ "$SDK_VERSION" = "" ]; then
+    SDK_VERSION=$(npm view @lfdecentralizedtrust-labs/paladin-sdk version)
+    print_status "SDK_VERSION not set, using latest version: $SDK_VERSION"
+fi
+
 print_status "Prerequisites check passed"
+
+# switch paladin sdk version
+npm_install() {
+    local name="$1"
+    if [ "$SDK_BUILT_LOCALLY" = "true" ]; then
+        print_status "Switching to local SDK for $name..."
+        npm uninstall @lfdecentralizedtrust-labs/paladin-sdk 2>/dev/null || true
+        if ! npm install file:../../sdk/typescript; then
+            print_error "Failed to install local SDK for $name"
+            exit 1
+        fi
+    fi
+
+    if [ "$SDK_VERSION" != "" ]; then
+        print_status "Switching to SDK version $SDK_VERSION for $name..."
+        npm uninstall @lfdecentralizedtrust-labs/paladin-sdk 2>/dev/null || true
+        if ! npm install @lfdecentralizedtrust-labs/paladin-sdk@$SDK_VERSION; then
+            print_error "Failed to install SDK version $SDK_VERSION for $name"
+            exit 1
+        fi
+    fi
+}
+
+# Build example/common
+build_common() {
+    print_status "Building example/common..."
+    cd example/common
+    
+    # switch to the correct paladin sdk version
+    switch_paladin_sdk_version "common"
+
+    if ! npm install; then
+        print_error "Failed to install dependencies for common"
+        exit 1
+    fi
+
+    # build the common package
+    if ! npm run build; then
+        print_error "Failed to build $name"
+        exit 1
+    fi
+
+    cd ../..
+}
 
 # Function to run a single example
 run_example() {
@@ -85,25 +147,24 @@ run_example() {
     # Install dependencies
     print_status "Installing dependencies for $example_name..."
 
-    if [ "$USE_PUBLISHED_SDK" = "false" ]; then
-        print_status "Switching to local SDK for $example_name..."
-        npm uninstall @lfdecentralizedtrust-labs/paladin-sdk 2>/dev/null || true
-        npm install file:../../sdk/typescript
-    fi
-    
+    # switch to the correct paladin sdk version
+    switch_paladin_sdk_version "$example_name"
+
+
     if ! npm install; then
         print_error "Failed to install dependencies for $example_name"
         cd ../..
         return 1
     fi
 
-    if [ "$ABIS_DOWNLOADED" = "false" ]; then
-        rm -rf src/abis/* 2>/dev/null || true # remove all files in the abis directory
-        rm -rf src/zeto-abis/* 2>/dev/null || true # remove all files in the zeto-abis directory
-
+    if [ "$SOLIDITY_BUILT_LOCALLY" = "true" ]; then
         print_status "Running 'npm run abi' for $example_name..."
-        npm run abi
-    fi
+        if ! npm run abi; then
+            print_error "Failed to run 'npm run abi' for $example_name"
+            cd ../..
+            return 1
+        fi
+    
     
     mkdir -p logs
     # Run the example
@@ -150,6 +211,9 @@ main() {
     local successful_examples=()
     local skipped_examples=()
     
+    # build the common package
+    build_common
+
     for example_dir in $examples; do
         example_name=$(basename "$example_dir")
 
@@ -182,7 +246,9 @@ main() {
         fi
     done
     
-    print_status "USE_PUBLISHED_SDK: $USE_PUBLISHED_SDK"
+    print_status "SDK_BUILT_LOCALLY: $SDK_BUILT_LOCALLY"
+    print_status "SOLIDITY_BUILT_LOCALLY: $SOLIDITY_BUILT_LOCALLY"
+    print_status "SDK_VERSION: $SDK_VERSION"
 
     # Summary
     echo "=========================================="
