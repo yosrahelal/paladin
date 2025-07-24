@@ -7,7 +7,7 @@
 #
 # Examples:
 #   ./scripts/run-tutorials.sh # this will run all tutorials with the latest paladin SDK and solidity contracts
-#   BUILD_PALADIN_SDK=true BUILD_PALADIN_SOLIDITY_CONTRACTS=true ./scripts/run-tutorials.sh
+#   BUILD_PALADIN_SDK=true BUILD_PALADIN_ABI=true ./scripts/run-tutorials.sh
 #   PALADIN_SDK_VERSION=0.10.0 ./scripts/run-tutorials.sh # use a specific paladin SDK version
 #   PALADIN_ABI_VERSION=v0.10.0 ./scripts/run-tutorials.sh # use a specific paladin solidity version
 #   ZETO_ABI_VERSION=v0.2.0 ./scripts/run-tutorials.sh # use a specific zeto solidity version
@@ -27,6 +27,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+EXAMPLES_DIR=examples
 
 # Function to print colored output
 print_status() {
@@ -133,7 +135,7 @@ install_prerequisites() {
     fi
 
     # build common
-    cd examples/common
+    cd $EXAMPLES_DIR/common
     if ! npm install; then
         print_error "Failed to install dependencies for common"
         exit 1
@@ -230,14 +232,14 @@ main() {
     print_status "Starting Paladin tutorials execution..."
 
     # Check if we're in the right directory
-    if [ ! -d "tutorials" ]; then
-        print_error "tutorials directory not found. Please run this script from the paladin root directory."
+    if [ ! -d "$EXAMPLES_DIR" ]; then
+        print_error "$EXAMPLES_DIR directory not found. Please run this script from the paladin root directory."
         exit 1
     fi
     
     # List all available tutorials
     print_status "Available tutorials:"
-    for dir in examples/*/; do
+    for dir in $EXAMPLES_DIR/*/; do
         if [ -f "$dir/package.json" ] && [ "$(basename "$dir")" != "common" ]; then
             echo "- $(basename "$dir")"
         fi
@@ -250,7 +252,7 @@ main() {
     print_status "Prerequisites installed"
     
     # Get list of all tutorial directories (excluding common)
-    tutorials=$(find tutorials -maxdepth 1 -type d -name "*" | grep -v "tutorials$" | grep -v "examples/common" | sort)
+    tutorials=$(find $EXAMPLES_DIR -maxdepth 1 -type d -name "*" | grep -v "examples$" | grep -v "$EXAMPLES_DIR/common" | sort)
     
     print_status "Running tutorials in order:"
     echo "$tutorials"
