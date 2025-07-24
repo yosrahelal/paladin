@@ -7,8 +7,9 @@
     "build": "tsc",
     "start": "ts-node ./src/index.ts",
     "start:prod": "node ./build/index.js",
+    "verify": "ts-node ./src/verify-deployed.ts",
     "abi": "node scripts/abi.mjs",
-    "contracts": "node scripts/contracts.mjs"
+    "copy-abi": "node scripts/contracts.mjs"
   },
   "author": "",
   "license": "Apache-2.0",

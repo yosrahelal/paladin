@@ -73,14 +73,6 @@ task start(type: Exec, dependsOn: [build]) {
     args 'start'
 }
 
-task start(type: Exec, dependsOn: [build]) {
-    dependsOn ':operator:e2e'
-
-    executable 'npm'
-    args 'run'
-    args 'start'
-}
-
 task e2e(type: Exec, dependsOn: [start]) {
 
     executable 'npm'

@@ -4,7 +4,7 @@
   "description": "",
   "scripts": {
     "build": "tsc",
-    "contracts": "node scripts/contracts.mjs contracts",
+    "download-abi": "node scripts/contracts.mjs contracts",
     "abi": "echo 'command not implemented'"
   },
   "author": "",

@@ -8,7 +8,7 @@
     "start": "ts-node ./src/index.ts",
     "start:prod": "node ./build/index.js",
     "abi": "node scripts/abi.mjs",
-    "contracts": "node scripts/contracts.mjs",
+    "copy-abi": "node scripts/contracts.mjs",
     "verify": "ts-node ./src/verify-deployed.ts"
   },
   "author": "",

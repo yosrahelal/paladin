@@ -99,7 +99,8 @@ install_prerequisites() {
     # 3. build common
     # now, you can chose not to build the solidity or the SDK and use the published ones
 
-    COPY_CONTRACTS_CMD=contracts
+    DOWNLOAD_CONTRACTS_CMD=download-abi
+    COPY_CONTRACTS_CMD=copy-abi
 
     # build paladin solidity contracts
     if [ "$BUILD_PALADIN_ABI" = "true" ]; then
@@ -113,6 +114,7 @@ install_prerequisites() {
             print_error "Failed to compile solidity contracts"
             exit 1
         fi
+        DOWNLOAD_CONTRACTS_CMD=abi
         COPY_CONTRACTS_CMD=abi
         cd ..
     fi
@@ -125,7 +127,7 @@ install_prerequisites() {
             print_error "Failed to install dependencies for paladin SDK"
             exit 1
         fi
-        if ! npm run $COPY_CONTRACTS_CMD; then
+        if ! npm run $DOWNLOAD_CONTRACTS_CMD; then
             print_error "Failed to run abi for paladin SDK"
             exit 1
         fi
@@ -143,8 +145,8 @@ install_prerequisites() {
         exit 1
     fi
 
-    if ! npm run $COPY_CONTRACTS_CMD; then
-        print_error "Failed to copy contracts for common using `$COPY_CONTRACTS_CMD`"
+    if ! npm run $DOWNLOAD_CONTRACTS_CMD; then
+        print_error "Failed to copy contracts for common using `$DOWNLOAD_CONTRACTS_CMD`"
         exit 1
     fi
 
@@ -213,12 +215,6 @@ run_tutorial() {
     
     for command in "${COMMANDS[@]}"; do
         command=$(echo "$command" | xargs) # trim whitespace
-        
-        # Check if the required script exists
-        if ! npm run | grep -E "^\s*$command\s*$" >/dev/null 2>&1; then
-            print_warning "Script 'npm run $command' not found for $tutorial_name, skipping..."
-            continue
-        fi
         
         # Run the tutorial command
         print_status "Running $tutorial_name with 'npm run $command'..."
