@@ -12,11 +12,11 @@ This tutorial demonstrates how traditional, non-private Ethereum smart contract 
 
 ## Running the Example
 
-The example code can be found in the [Paladin example repository](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/tutorials/helloworld).
+The example code can be found in the [Paladin example repository](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/examples/helloworld).
 
 The HelloWorld solidity contract can be found [here](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/solidity/contracts/tutorials/HelloWorld.sol).
 
-Follow the [Getting Started](../../getting-started/installation/) instructions to set up a Paladin environment. Then, follow the example [README](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/tutorials/helloworld/README.md) to run the code.
+Follow the [Getting Started](../../getting-started/installation/) instructions to set up a Paladin environment. Then, follow the example [README](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/examples/helloworld/README.md) to run the code.
 
 ---
 

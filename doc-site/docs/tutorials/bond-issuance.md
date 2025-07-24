@@ -1,6 +1,6 @@
 # Bond Issuance
 
-The code for this tutorial can be found in [tutorials/bond](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/tutorials/bond).
+The code for this tutorial can be found in [examples/bond](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/examples/bond).
 
 This shows how to leverage the [Noto](../../architecture/noto/) and [Pente](../../architecture/pente/) domains together in order to build a bond issuance process, illustrating multiple aspects of Paladin's privacy capabilities.
 
@@ -9,7 +9,7 @@ This shows how to leverage the [Noto](../../architecture/noto/) and [Pente](../.
 ## Running the example
 
 Follow the [Getting Started](../../getting-started/installation/) instructions to set up a Paladin environment, and
-then follow the example [README](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/tutorials/bond/README.md)
+then follow the example [README](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/examples/bond/README.md)
 to run the code.
 
 ## Explanation

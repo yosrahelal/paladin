@@ -5,7 +5,7 @@ This example demonstrates an atomic swap scenario on Paladin. It performs a swap
 - a cash token implemented with Zeto
 - an asset token implemented with Noto, with private hooks implemented on Pente
 
-See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/atomic-swap/) for a detailed explanation.
+See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/examples/atomic-swap/) for a detailed explanation.
 
 ## Pre-requisites
 
@@ -17,12 +17,12 @@ Run the common [setup steps](../README.md) before running the example.
 
 - **Extract contracts**
 
-  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/tutorials/swap/src/abis`)
+  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/examples/swap/src/abis`)
 
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/tutorials/swap
+  cd <paladin-root>/examples/swap
   npm install
   npm run start
   ```
@@ -34,7 +34,7 @@ Run the common [setup steps](../README.md) before running the example.
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/tutorials/swap
+  cd <paladin-root>/examples/swap
   npm install
   npm run abi
   npm run start
@@ -47,7 +47,7 @@ Run the common [setup steps](../README.md) before running the example.
 - **Run the gradle build task, then run the sample:**
 
   ```shell
-  cd <paladin-root>/tutorials/swap
+  cd <paladin-root>/examples/swap
   ../../gradlew build
   npm run start
   ```

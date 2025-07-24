@@ -3,7 +3,7 @@
 This example demonstrates a bond issuance scenario on Paladin. It leverages a combination of Noto tokens and
 Pente private smart contracts in order to control visibility of various aspects of the bond issuance process.
 
-See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/bond-issuance/) for a detailed explanation.
+See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/examples/bond-issuance/) for a detailed explanation.
 
 ## Pre-requisites
 
@@ -15,12 +15,12 @@ Run the common [setup steps](../README.md) before running the example.
 
 - **Extract contracts**
 
-  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/tutorials/bond/src/abis`)
+  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/examples/bond/src/abis`)
 
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/tutorials/bond
+  cd <paladin-root>/examples/bond
   npm install
   npm run start
   ```
@@ -32,7 +32,7 @@ Run the common [setup steps](../README.md) before running the example.
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/tutorials/bond
+  cd <paladin-root>/examples/bond
   npm install
   npm run abi
   npm run start
@@ -45,7 +45,7 @@ Run the common [setup steps](../README.md) before running the example.
 - **Run the gradle build task, then run the sample:**
 
   ```shell
-  cd <paladin-root>/tutorials/bond
+  cd <paladin-root>/examples/bond
   ../../gradlew build
   npm run start
   ```

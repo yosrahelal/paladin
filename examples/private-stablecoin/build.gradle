@@ -27,7 +27,7 @@ configurations {
 
 dependencies {
     buildSDK project(path: ':sdk:typescript', configuration: 'buildSDK')
-    buildCommon project(path: ':tutorials:common', configuration: 'buildCommon')
+    buildCommon project(path: ':examples:common', configuration: 'buildCommon')
 }
 
 task copyContracts(type: Copy, dependsOn: [":domains:zeto:extractZetoArtifacts"]) {

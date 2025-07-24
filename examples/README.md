@@ -4,7 +4,7 @@ These examples demonstrate the various areas of function provided by Paladin.
 
 Every example has its own readme and setup instructions. The following setup is common to most examples and sets up the SDKs and common requirements ready to run any of the examples.
 
-See the [tutorials](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/) for more information.
+See the [tutorials](https://lf-decentralized-trust-labs.github.io/paladin/head/examples/) for more information.
 
 ### Set up a local Paladin network
 
@@ -27,7 +27,7 @@ paladin-operator-bc788db4f-mzbs7   1/1     Running   0          19m
 ### Build the common package
 
 ```shell
-cd <paladin-root>/tutorials/common
+cd <paladin-root>/examples/common
 npm install
 npm run contracts
 npm run build

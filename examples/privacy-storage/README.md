@@ -2,7 +2,7 @@
 
 This example demonstrates private smart contract operations using Pente privacy groups. Each operation is validated on the base ledger, but the private EVM details are known only to members of the privacy group.
 
-See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/private-storage/) for a detailed explanation.
+See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/examples/private-storage/) for a detailed explanation.
 
 ## Pre-requisites
 
@@ -14,12 +14,12 @@ Run the common [setup steps](../README.md) before running the example.
 
 - **Extract contracts**
 
-  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/tutorials/privacy-storage/src/abis`)
+  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/examples/privacy-storage/src/abis`)
 
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/tutorials/privacy-storage
+  cd <paladin-root>/examples/privacy-storage
   npm install
   npm run start
   ```
@@ -31,7 +31,7 @@ Run the common [setup steps](../README.md) before running the example.
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/tutorials/privacy-storage
+  cd <paladin-root>/examples/privacy-storage
   npm install
   npm run abi
   npm run start
@@ -64,7 +64,7 @@ The script reads the current value and sets it to a new one.
 - **Run the gradle build task, then run the sample:**
 
   ```shell
-  cd <paladin-root>/tutorials/privacy-storage
+  cd <paladin-root>/examples/privacy-storage
   ../../gradlew build
   npm run start
   ```

@@ -9,14 +9,14 @@ on:
   push:
     paths:
       - 'scripts/**'
-      - 'tutorials/**'
+      - 'examples/**'
       - '.github/workflows/on-pr-push-examples.yaml'
       - '.github/workflows/test-tutorials.yaml'
 
   pull_request:
     paths:
       - 'scripts/**'
-      - 'tutorials/**'
+      - 'examples/**'
       - '.github/workflows/on-pr-push-examples.yaml'
       - '.github/workflows/test-tutorials.yaml'
 

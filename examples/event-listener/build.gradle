@@ -32,7 +32,7 @@ configurations {
 dependencies {
     contractCompile project(path: ':solidity', configuration: 'compiledContracts')
     buildSDK project(path: ':sdk:typescript', configuration: 'buildSDK')
-    buildCommon project(path: ':tutorials:common', configuration: 'buildCommon')
+    buildCommon project(path: ':examples:common', configuration: 'buildCommon')
 }
 
 task install(type: Exec) {

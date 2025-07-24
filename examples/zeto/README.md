@@ -2,7 +2,7 @@
 
 This example demonstrates a privacy-preserving fungible tokens using [Zeto](https://github.com/hyperledger-labs/zeto) on Paladin.
 
-See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/zkp-cbdc/) for a detailed explanation.
+See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/examples/zkp-cbdc/) for a detailed explanation.
 
 ## Pre-requisites
 
@@ -24,12 +24,12 @@ These dependency resources can be obtained by one of the following ways.
 
 - **Extract contracts**
 
-  Extract the `zeto-abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `zeto-abis` directory to `src/`. (full path should be: `paladin/tutorials/zeto/src/zeto-abis`)
+  Extract the `zeto-abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `zeto-abis` directory to `src/`. (full path should be: `paladin/examples/zeto/src/zeto-abis`)
 
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/tutorials/zeto
+  cd <paladin-root>/examples/zeto
   npm install
   npm run start
   ```
@@ -41,7 +41,7 @@ These dependency resources can be obtained by one of the following ways.
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/tutorials/zeto
+  cd <paladin-root>/examples/zeto
   npm install
   npm run abi
   npm run start
@@ -54,7 +54,7 @@ These dependency resources can be obtained by one of the following ways.
 - **Run the gradle build task, then run the sample:**
 
   ```shell
-  cd <paladin-root>/tutorials/zeto
+  cd <paladin-root>/examples/zeto
   ../../gradlew build
   npm run start
   ```
@@ -66,15 +66,15 @@ You can verify that the dependent ABIs have been successfully put in place by th
 ```shell
 $ ls <paladin-root>/sdk/typescript/build/domains/abis/
 INoto.json		INotoPrivate.json	IZetoFungible.json	PentePrivacyGroup.json	Zeto_Anon.json
-$ ls <paladin-root>/tutorials/zeto/src/zeto-abis/
+$ ls <paladin-root>/examples/zeto/src/zeto-abis/
 SampleERC20.json
 ```
 
 ## Run the example
 
-Run the example with the following command from inside the `tutorials/zeto` folder:
+Run the example with the following command from inside the `examples/zeto` folder:
 
 ```shell
-cd <paladin-root>/tutorials/zeto
+cd <paladin-root>/examples/zeto
 npm run start
 ```
