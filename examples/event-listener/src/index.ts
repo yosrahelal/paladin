@@ -7,6 +7,9 @@ import PaladinClient, {
 import { nanoid } from "nanoid";
 import { checkDeploy } from "paladin-example-common";
 import helloWorldJson from "./abis/HelloWorld.json";
+import * as fs from 'fs';
+import * as path from 'path';
+import { ContractData } from "./verify-deployed";
 
 const logger = console;
 
@@ -67,6 +70,8 @@ async function main(): Promise<boolean> {
 
   const name = nanoid(10);
   let received = false;
+  let receivedEventData: any = null;
+  let receivedReceiptId: string | null = null;
 
   // Create a websocket client for node1
   const processReceipt = async (receipt: ITransactionReceipt) => {
@@ -97,6 +102,8 @@ async function main(): Promise<boolean> {
         if (message?.indexOf(name) !== -1) {
           logger.log(`Received event data: ${JSON.stringify(decoded?.data)}`);
           received = true;
+          receivedEventData = decoded?.data;
+          receivedReceiptId = receipt.id;
         }
       }
     }
@@ -163,6 +170,46 @@ async function main(): Promise<boolean> {
   await new Promise((resolve) => setTimeout(resolve, 500));
 
   await wsClient.close();
+
+  // Save contract data to file for later use
+  const contractData: ContractData = {
+    privacyGroupId: memberPrivacyGroup.group.id,
+    privacyGroupAddress: memberPrivacyGroup.address,
+    contractAddress: contractAddress,
+    listenerName: "example-event-listener",
+    lastSequence: lastSequence,
+    eventDetails: {
+      name: name,
+      receivedEventData: receivedEventData,
+      receivedReceiptId: receivedReceiptId,
+      transactionId: txId
+    },
+    listenerConfig: {
+      type: TransactionType.PRIVATE,
+      domain: "pente",
+      sequenceAbove: lastSequence,
+      domainReceipts: true,
+      incompleteStateReceiptBehavior: "block_contract"
+    },
+    websocketConfig: {
+      url: "ws://127.0.0.1:31549",
+      subscriptions: ["example-event-listener"]
+    },
+    participant: {
+      verifierNode1: verifierNode1.lookup
+    },
+    timestamp: new Date().toISOString()
+  };
+
+  const dataDir = path.join(__dirname, '..', 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dataFile = path.join(dataDir, `contract-data-${timestamp}.json`);
+  fs.writeFileSync(dataFile, JSON.stringify(contractData, null, 2));
+  logger.log(`Contract data saved to ${dataFile}`);
 
   return true;
 }
