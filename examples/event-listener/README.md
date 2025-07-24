@@ -8,41 +8,8 @@ Run the common [setup steps](../README.md) before running the example.
 
 ## Running the example
 
-### Option 1 - `npm` with downloaded solidity contracts
-
-- **Extract contracts**
-
-  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/examples/event-listener/src/abis`)
-
-- **Run the example**
-
-  ```shell
-  cd <paladin-root>/examples/event-listener
-  npm install
-  npm run start
-  ```
-
----
-
-### Option 2 - `npm` with locally built solidity contracts and ABIs
-
-- **Run the example**
-
-  ```shell
-  cd <paladin-root>/examples/event-listener
-  npm install
-  npm run abi
-  npm run start
-  ```
-
----
-
-### Option 3 - Run with Gradle
-
-- **Run the gradle build task, then run the sample:**
-
-  ```shell
-  cd <paladin-root>/examples/event-listener
-  ../../gradlew build
-  npm run start
-  ```
+```shell
+npm install           # install dependencies
+npm run copy-abi      # copy relevant ABIs
+npm run start         # run the example
+```

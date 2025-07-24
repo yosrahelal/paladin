@@ -28,7 +28,7 @@ paladin-operator-bc788db4f-mzbs7   1/1     Running   0          19m
 
 ```shell
 cd <paladin-root>/examples/common
-npm install
-npm run download-abi
-npm run build
+npm install                        # install dependencies
+npm run copy-abi                   # download ABIs
+npm run build                      # build the 'common' package
 ```

@@ -11,6 +11,7 @@ Make sure to complete the [setup steps](../README.md) before running the example
 ## Running the example
 
 ```shell
-npm install
-npm run start
+npm install           # install dependencies
+npm run copy-abi      # copy relevant ABIs
+npm run start         # run the example
 ```
