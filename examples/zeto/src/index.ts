@@ -5,6 +5,9 @@ import PaladinClient, {
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import { checkDeploy, checkReceipt } from "paladin-example-common";
 import erc20Abi from "./zeto-abis/SampleERC20.json";
+import * as fs from 'fs';
+import * as path from 'path';
+import { ContractData } from "./verify-deployed";
 
 const logger = console;
 
@@ -22,6 +25,13 @@ async function main(): Promise<boolean> {
   const [cbdcIssuer] = paladin1.getVerifiers("centralbank@node3");
   const [bank1] = paladin2.getVerifiers("bank1@node1");
   const [bank2] = paladin3.getVerifiers("bank2@node2");
+
+  const mintAmounts = [100000, 100000];
+  const transferAmount = 1000;
+  const erc20MintAmount = 100000;
+  const erc20ApproveAmount = 10000;
+  const depositAmount = 10000;
+  const withdrawAmount = 1000;
 
   // Deploy a Zeto token to represent cash (CBDC)
   logger.log(
@@ -43,12 +53,12 @@ async function main(): Promise<boolean> {
       mints: [
         {
           to: bank1,
-          amount: 100000,
+          amount: mintAmounts[0],
           data: "0x",
         },
         {
           to: bank2,
-          amount: 100000,
+          amount: mintAmounts[1],
           data: "0x",
         },
       ],
@@ -81,7 +91,7 @@ async function main(): Promise<boolean> {
       transfers: [
         {
           to: bank2,
-          amount: 1000,
+          amount: transferAmount,
           data: "0x",
         },
       ],
@@ -126,21 +136,21 @@ async function main(): Promise<boolean> {
   if (!checkReceipt(result2)) return false;
 
   logger.log("- Issuing CBDC to bank1 with public minting in ERC20...");
-  await mintERC20(paladin3, cbdcIssuer, bank1, erc20Address!, 100000);
+  await mintERC20(paladin3, cbdcIssuer, bank1, erc20Address!, erc20MintAmount);
   logger.log(
     "- Bank1 approve ERC20 balance for the Zeto token contract as spender, to prepare for deposit..."
   );
-  await approveERC20(paladin1, bank1, zetoCBDC2.address, erc20Address!, 10000);
+  await approveERC20(paladin1, bank1, zetoCBDC2.address, erc20Address!, erc20ApproveAmount);
 
   logger.log("- Bank1 deposit ERC20 balance to Zeto ...");
   const result4 = await zetoCBDC2
     .using(paladin1)
     .deposit(bank1, {
-      amount: 10000,
+      amount: depositAmount,
     })
     .waitForReceipt();
   if (!checkReceipt(result4)) return false;
-  bank1Balance = await zetoCBDC2
+  const bank1BalanceAfterDeposit = await zetoCBDC2
     .using(paladin1)
     .balanceOf(bank1, { account: bank1.lookup });
   logger.log(
@@ -157,20 +167,20 @@ async function main(): Promise<boolean> {
       transfers: [
         {
           to: bank2,
-          amount: 1000,
+          amount: transferAmount,
           data: "0x",
         },
       ],
     })
     .waitForReceipt();
   if (!checkReceipt(receipt)) return false;
-  bank1Balance = await zetoCBDC2
+  const bank1BalanceUseCase2 = await zetoCBDC2
     .using(paladin1)
     .balanceOf(bank1, { account: bank1.lookup });
   logger.log(
     `bank1 State: ${bank1Balance.totalBalance} units of cash, ${bank1Balance.totalStates} states, overflow: ${bank1Balance.overflow}`
   );
-  bank2Balance = await zetoCBDC2
+  const bank2BalanceUseCase2 = await zetoCBDC2
     .using(paladin2)
     .balanceOf(bank2, { account: bank2.lookup });
   logger.log(
@@ -181,11 +191,76 @@ async function main(): Promise<boolean> {
   const result5 = await zetoCBDC2
     .using(paladin1)
     .withdraw(bank1, {
-      amount: 1000,
+      amount: withdrawAmount,
     })
     .waitForReceipt();
   if (!checkReceipt(result5)) return false;
+
+  const finalBalanceBank1 = await zetoCBDC2
+    .using(paladin1)
+    .balanceOf(bank1, { account: bank1.lookup });
+  const finalBalanceBank2 = await zetoCBDC2
+    .using(paladin2)
+    .balanceOf(bank2, { account: bank2.lookup });
+
   logger.log("\nUse case #2 complete!");
+
+  // Save contract data to file for later use
+  const contractData : ContractData= {
+    zetoCBDC1Address: zetoCBDC1.address,
+    zetoCBDC2Address: zetoCBDC2.address,
+    erc20Address: erc20Address!,
+    tokenName: "Zeto_AnonNullifier",
+    useCase1: {
+      mintAmounts: mintAmounts, // bank1, bank2
+      transferAmount: transferAmount,
+      finalBalances: {
+        bank1: {
+          totalBalance: bank1Balance.totalBalance,
+          totalStates: bank1Balance.totalStates,
+          overflow: bank1Balance.overflow
+        },
+        bank2: {
+          totalBalance: bank2Balance.totalBalance,
+          totalStates: bank2Balance.totalStates,
+          overflow: bank2Balance.overflow
+        }
+      }
+    },
+    useCase2: {
+      erc20MintAmount: erc20MintAmount,
+      erc20ApproveAmount: erc20ApproveAmount,
+      depositAmount: depositAmount,
+      transferAmount: transferAmount,
+      withdrawAmount: withdrawAmount,
+      finalBalances: {
+        bank1: {
+          totalBalance: finalBalanceBank1.totalBalance,
+          totalStates: finalBalanceBank1.totalStates,
+          overflow: finalBalanceBank1.overflow
+        },
+        bank2: {
+          totalBalance: finalBalanceBank2.totalBalance,
+          totalStates: finalBalanceBank2.totalStates,
+          overflow: finalBalanceBank2.overflow
+        }
+      }
+    },
+    cbdcIssuer: cbdcIssuer.lookup,
+    bank1: bank1.lookup,
+    bank2: bank2.lookup,
+    timestamp: new Date().toISOString()
+  };
+
+  const dataDir = path.join(__dirname, '..', 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dataFile = path.join(dataDir, `contract-data-${timestamp}.json`);
+  fs.writeFileSync(dataFile, JSON.stringify(contractData, null, 2));
+  logger.log(`Contract data saved to ${dataFile}`);
 
   return true;
 }

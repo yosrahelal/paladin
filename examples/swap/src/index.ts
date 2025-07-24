@@ -1,6 +1,7 @@
 import PaladinClient, {
   INotoDomainReceipt,
   IPreparedTransaction,
+  NotoBalanceOfResult,
   NotoFactory,
   PenteFactory,
   ZetoFactory,
@@ -9,6 +10,9 @@ import { ethers } from "ethers";
 import { checkDeploy, checkReceipt } from "paladin-example-common";
 import { newAtomFactory } from "./helpers/atom";
 import { newERC20Tracker } from "./helpers/erc20tracker";
+import * as fs from 'fs';
+import * as path from 'path';
+import { ContractData } from "./verify-deployed";
 
 const logger = console;
 
@@ -45,6 +49,11 @@ async function main(): Promise<boolean> {
   );
   const [investor1] = paladin2.getVerifiers("investor1@node2");
   const [investor2] = paladin3.getVerifiers("investor2@node3");
+
+  const issuedAssetAmount = 1000;
+  const issuedCashAmount = 10000;
+  const assetAmount = 100;
+  const cashAmount = 10;
 
   // Deploy the atom factory on the base ledger
   logger.log("Creating atom factory...");
@@ -104,7 +113,7 @@ async function main(): Promise<boolean> {
   let receipt = await notoAsset
     .mint(assetIssuer, {
       to: investor1,
-      amount: 1000,
+      amount: issuedAssetAmount,
       data: "0x",
     })
     .waitForReceipt();
@@ -117,7 +126,7 @@ async function main(): Promise<boolean> {
       mints: [
         {
           to: investor2,
-          amount: 10000,
+          amount: issuedCashAmount,
           data: "0x",
         },
       ],
@@ -130,7 +139,7 @@ async function main(): Promise<boolean> {
   receipt = await notoAsset
     .using(paladin2)
     .lock(investor1, {
-      amount: 100,
+      amount: assetAmount,
       data: "0x",
     })
     .waitForReceipt();
@@ -151,7 +160,7 @@ async function main(): Promise<boolean> {
     .prepareUnlock(investor1, {
       lockId,
       from: investor1,
-      recipients: [{ to: investor2, amount: 100 }],
+      recipients: [{ to: investor2, amount: assetAmount }],
       data: "0x",
     })
     .waitForReceipt();
@@ -172,7 +181,7 @@ async function main(): Promise<boolean> {
   receipt = await zetoCash
     .using(paladin3)
     .lock(investor2, {
-      amount: 10,
+      amount: cashAmount,
       delegate: investor2Address,
     })
     .waitForReceipt();
@@ -197,14 +206,14 @@ async function main(): Promise<boolean> {
     transfers: [
       {
         to: investor1,
-        amount: 10,
+        amount: cashAmount,
         data: "0x",
       },
     ],
   }).id;
   const preparedCashTransfer = await paladin3.pollForPreparedTransaction(
     txID,
-    10000
+    issuedCashAmount
   );
   if (!preparedCashTransfer) return false;
 
@@ -252,6 +261,95 @@ async function main(): Promise<boolean> {
   logger.log("Performing swap...");
   receipt = await atom.using(paladin3).execute(investor2);
   if (!checkReceipt(receipt)) return false;
+
+  let finalAssetBalanceInvestor1: NotoBalanceOfResult | undefined;
+  let finalAssetBalanceInvestor2: NotoBalanceOfResult | undefined;
+  let finalCashBalanceInvestor1: NotoBalanceOfResult | undefined;
+  let finalCashBalanceInvestor2: NotoBalanceOfResult | undefined;
+
+  // get final balances
+  // it can take some time for the balances to update, so loop until all balances are >0
+  const startTime = Date.now();
+  while (true) {  
+    finalAssetBalanceInvestor1 = await notoAsset.using(paladin2).balanceOf(investor1, { account: investor1.lookup });
+    finalAssetBalanceInvestor2 = await notoAsset.using(paladin3).balanceOf(investor2, { account: investor2.lookup });
+    finalCashBalanceInvestor1 = await zetoCash.using(paladin2).balanceOf(investor1, { account: investor1.lookup });
+    finalCashBalanceInvestor2 = await zetoCash.using(paladin3).balanceOf(investor2, { account: investor2.lookup });
+    if (finalAssetBalanceInvestor1.totalBalance !== "0" &&
+        finalAssetBalanceInvestor2.totalBalance !== "0" &&
+        finalCashBalanceInvestor1.totalBalance !== "0" &&
+        finalCashBalanceInvestor2.totalBalance !== "0") {
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    // if 60 second passed from the beginning of the loop than fail the test
+    if (Date.now() - startTime > 60000) {
+      logger.error("Failed to get final balances after 60 seconds");
+      return false;
+    }
+  }
+
+  // Save contract data to file for later use
+  const contractData : ContractData = {
+    atomFactoryAddress: atomFactory.address,
+    zetoCashAddress: zetoCash.address,
+    notoAssetAddress: notoAsset.address,
+    issuerGroupId: issuerGroup.group.id,
+    issuerGroupAddress: issuerGroup.address,
+    trackerAddress: tracker.address,
+    atomAddress: atom.address,
+    swapDetails: {
+      assetAmount: assetAmount,
+      cashAmount: cashAmount,
+      lockId: lockId,
+      lockedStateId: lockedStateId,
+      assetUnlockCall: assetUnlockCall,
+      encodedCashTransfer: encodedCashTransfer
+    },
+    finalBalances: {
+      asset: {
+        investor1: {
+          totalBalance: finalAssetBalanceInvestor1?.totalBalance ?? "0",
+          totalStates: finalAssetBalanceInvestor1?.totalStates ?? "0",
+          overflow: finalAssetBalanceInvestor1?.overflow ?? false
+        },
+        investor2: {
+          totalBalance: finalAssetBalanceInvestor2?.totalBalance ?? "0",
+          totalStates: finalAssetBalanceInvestor2?.totalStates ?? "0",
+          overflow: finalAssetBalanceInvestor2?.overflow ?? false
+        }
+      },
+      cash: {
+        investor1: {
+          totalBalance: finalCashBalanceInvestor1?.totalBalance ?? "0",
+          totalStates: finalCashBalanceInvestor1?.totalStates ?? "0",
+          overflow: finalCashBalanceInvestor1?.overflow ?? false
+        },
+        investor2: {
+          totalBalance: finalCashBalanceInvestor2?.totalBalance ?? "0",
+          totalStates: finalCashBalanceInvestor2?.totalStates ?? "0",
+          overflow: finalCashBalanceInvestor2?.overflow ?? false
+        }
+      }
+    },
+    participants: {
+      cashIssuer: cashIssuer.lookup,
+      assetIssuer: assetIssuer.lookup,
+      investor1: investor1.lookup,
+      investor2: investor2.lookup
+    },
+    timestamp: new Date().toISOString()
+  };
+
+  const dataDir = path.join(__dirname, '..', 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dataFile = path.join(dataDir, `contract-data-${timestamp}.json`);
+  fs.writeFileSync(dataFile, JSON.stringify(contractData, null, 2));
+  logger.log(`Contract data saved to ${dataFile}`);
 
   return true;
 }
