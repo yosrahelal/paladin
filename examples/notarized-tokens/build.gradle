@@ -48,12 +48,19 @@ task build(type: Exec, dependsOn: install) {
     outputs.dir('build')
 }
 
-task e2e(type: Exec, dependsOn: [build]) {
+task start(type: Exec, dependsOn: [build]) {
     dependsOn ':operator:deploy'
 
     executable 'npm'
     args 'run'
     args 'start'
+}
+
+task e2e(type: Exec, dependsOn: [start]) {
+
+    executable 'npm'
+    args 'run'
+    args 'verify'
 }
 
 task clean(type: Delete) {

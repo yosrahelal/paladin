@@ -1,5 +1,6 @@
 import PaladinClient, {
   INotoDomainReceipt,
+  NotoBalanceOfResult,
   NotoFactory,
   PenteFactory,
   TransactionType,
@@ -10,6 +11,9 @@ import atomFactoryJson from "./abis/AtomFactory.json";
 import bondTrackerPublicJson from "./abis/BondTrackerPublic.json";
 import { newBondSubscription } from "./helpers/bondsubscription";
 import { newBondTracker } from "./helpers/bondtracker";
+import * as fs from 'fs';
+import * as path from 'path';
+import { ContractData } from "./verify-deployed";
 
 const logger = console;
 
@@ -380,6 +384,119 @@ async function main(): Promise<boolean> {
   });
   receipt = await paladin2.pollForReceipt(txID, 10000);
   if (!checkReceipt(receipt)) return false;
+
+
+  // it can take some time for the balances to update, so loop until all balances are >0
+  let finalCashBalanceInvestor: NotoBalanceOfResult | undefined;
+  let finalBondBalanceInvestor: NotoBalanceOfResult | undefined;
+  let finalCashBalanceCustodian: NotoBalanceOfResult | undefined;
+  let finalBondBalanceCustodian: NotoBalanceOfResult | undefined;
+  const startTime = Date.now();
+  while (true) {
+  // Get final balances after the bond distribution
+  finalCashBalanceInvestor = await notoCash
+    .using(paladin3)
+    .balanceOf(investor, { account: investor.lookup });
+
+  finalBondBalanceInvestor = await notoBond
+    .using(paladin3)
+    .balanceOf(investor, { account: investor.lookup });
+
+  finalCashBalanceCustodian = await notoCash
+    .using(paladin2)
+    .balanceOf(bondCustodian, { account: bondCustodian.lookup });
+
+    finalBondBalanceCustodian = await notoBond
+    .using(paladin2)
+    .balanceOf(bondCustodian, { account: bondCustodian.lookup });
+
+    if (finalCashBalanceInvestor?.totalBalance !== "0" &&
+      finalBondBalanceInvestor?.totalBalance !== "0" &&
+      finalCashBalanceCustodian?.totalBalance !== "0" &&
+      finalBondBalanceCustodian?.totalBalance !== "0") {
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    if (Date.now() - startTime > 60000) {
+      logger.error("Failed to get final balances after 60 seconds");
+      return false;
+    }
+  }
+
+      // Save contract data to file for later use
+  const contractData: ContractData = {
+    notoCashAddress: notoCash.address,
+    notoBondAddress: notoBond.address,
+    issuerCustodianGroupId: issuerCustodianGroup.group.id,
+    issuerCustodianGroupAddress: issuerCustodianGroup.address,
+    investorCustodianGroupId: investorCustodianGroup.group.id,
+    investorCustodianGroupAddress: investorCustodianGroup.address,
+    bondTrackerAddress: bondTracker.address,
+    bondTrackerPublicAddress: bondTrackerPublicAddress,
+    bondSubscriptionAddress: bondSubscription.address,
+    atomFactoryAddress: atomFactoryAddress,
+    atomAddress: atomAddress,
+    bondDetails: {
+      issueDate: issueDate,
+      maturityDate: maturityDate,
+      faceValue: 1,
+      discountPrice: 1,
+      minimumDenomination: 1,
+      bondUnits: 100,
+      cashAmount: 100
+    },
+    lockDetails: {
+      cashLockId: cashLockId,
+      bondLockId: bondLockId,
+      cashUnlockCall: cashUnlockCall,
+      assetUnlockCall: assetUnlockCall
+    },
+    finalBalances: {
+      cash: {
+        investor: {
+          totalBalance: finalCashBalanceInvestor.totalBalance,
+          totalStates: finalCashBalanceInvestor.totalStates,
+          overflow: finalCashBalanceInvestor.overflow
+        },
+        custodian: {
+          totalBalance: finalCashBalanceCustodian.totalBalance,
+          totalStates: finalCashBalanceCustodian.totalStates,
+          overflow: finalCashBalanceCustodian.overflow
+        }
+      },
+      bond: {
+        investor: {
+          totalBalance: finalBondBalanceInvestor.totalBalance,
+          totalStates: finalBondBalanceInvestor.totalStates,
+          overflow: finalBondBalanceInvestor.overflow
+        },
+        custodian: {
+          totalBalance: finalBondBalanceCustodian.totalBalance,
+          totalStates: finalBondBalanceCustodian.totalStates,
+          overflow: finalBondBalanceCustodian.overflow
+        }
+      }
+    },
+    participants: {
+      cashIssuer: cashIssuer.lookup,
+      bondIssuer: bondIssuer.lookup,
+      bondCustodian: bondCustodian.lookup,
+      investor: investor.lookup
+    },
+    timestamp: new Date().toISOString()
+  };
+
+  const dataDir = path.join(__dirname, '..', 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dataFile = path.join(dataDir, `contract-data-${timestamp}.json`);
+  fs.writeFileSync(dataFile, JSON.stringify(contractData, null, 2));
+  logger.log(`Contract data saved to ${dataFile}`);
+
   return true;
 }
 
