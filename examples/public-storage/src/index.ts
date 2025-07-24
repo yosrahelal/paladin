@@ -2,6 +2,8 @@ import PaladinClient, {
   TransactionType,
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import storageJson from "./abis/Storage.json";
+import * as fs from 'fs';
+import * as path from 'path';
 
 const logger = console;
 
@@ -32,7 +34,7 @@ async function main(): Promise<boolean> {
   }
   logger.log("Step 1: Storage contract deployed successfully!");
 
-  // Step 3: Store a value in the contract
+  // Step 2: Store a value in the contract
   const valueToStore = 125; // Example value to store
   logger.log(`Step 2: Storing value "${valueToStore}" in the contract...`);
   const storeTxID = await paladin.ptx.sendTransaction({
@@ -52,7 +54,7 @@ async function main(): Promise<boolean> {
   }
   logger.log("Step 2: Value stored successfully!" );
 
-  // Step 4: Retrieve the stored value from the contract
+  // Step 3: Retrieve the stored value from the contract
   logger.log("Step 3: Retrieving the stored value...");
   const retrieveResult = await paladin.ptx.call({
     type: TransactionType.PUBLIC,
@@ -71,6 +73,24 @@ async function main(): Promise<boolean> {
   }
 
   logger.log(`Step 3: Value retrieved successfully! Retrieved value: "${retrievedValue}"`);
+
+  // Save contract data to file for later use
+  const contractData = {
+    contractAddress: deploymentReceipt.contractAddress,
+    storedValue: valueToStore,
+    retrievedValue: retrievedValue,
+    storeTransactionHash: storeReceipt.transactionHash,
+    timestamp: new Date().toISOString()
+  };
+
+  const dataDir = path.join(__dirname, '..', 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dataFile = path.join(dataDir, `contract-data-${timestamp}.json`);
+  fs.writeFileSync(dataFile, JSON.stringify(contractData, null, 2));
 
   return true;
 }
