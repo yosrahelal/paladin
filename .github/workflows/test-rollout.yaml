@@ -3,39 +3,57 @@ name: 'Test new version rollout'
 on:
   workflow_dispatch: 
     inputs:
-      tag:
+      new_tag:
         description: 'The new tag to rollout'
         required: true
         type: string
+      previous_tag:
+        description: 'The old tag that is being tested for backwards compatibility'
+        required: false
+        type: string
+        default: 'latest'
+
   workflow_call:
     inputs:
-      tag:
+      new_tag:
         description: 'The new tag to rollout'
+        required: true
+        type: string
+      previous_tag:
+        description: 'The old tag that is being tested for backwards compatibility'
         required: true
         type: string
 
 jobs:
   rollout:
     # here are the steps:
-    # 1. create a cluster with kind
-    # 2. install the helm charts (latest version)
-    # 3. run the examples as the user will run them
-        # 3.1. Download the solidity files
-        # 3.2. Run the examples
-    # 4. rollout the new version of the paladin operator
-    # 5. validate the installation after rollout
-    # 6. run the examples for backwards compatibility
-    # 7. destroy the cluster
+    # 1. checkout the old tag
+    # 2. create a cluster with kind
+    # 3. install the helm charts (old version)
+    # 4. run the tutorials as the user will run them
+    # 5. rollout the new version of the paladin operator
+    # 6. validate the installation after rollout
+    # 7. test backwards compatibility with the old SDK version
+    # 8. test backwards compatibility with the new SDK version
+    # 9. checkout the main branch
+    # 10. run the tutorials as the user will run them (with the new tutorials and new SDK version)
+    # 11. destroy the cluster
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # checkout the old tag
+          # We will first be testing that after a rollout, the user will still run the tutorials successfully
+          # also if the user did not update the SDK or the tutorials.
+          ref: ${{ inputs.previous_tag }}
 
       - name: Install Kind
         uses: helm/kind-action@v1
         with:
           install_only: true # only install kind, the cluster creation is managed by the next step
           ignore_failed_clean: true
+
 
       - name: Create cluster
         run: |
@@ -48,11 +66,14 @@ jobs:
           # Wait for cluster to be ready
           kubectl wait --for=condition=Ready nodes --all --timeout=300s
 
-      - name: Install latest Paladin charts
+      # Install the old version of the paladin operator
+      - name: Install previous version of Paladin charts
+        env:
+          TAG: ${{ inputs.previous_tag }}
         run: |
           # Step 1: Install the CRD Chart
           helm repo add paladin https://LF-Decentralized-Trust-labs.github.io/paladin --force-update
-          helm upgrade --install paladin-crds paladin/paladin-operator-crd
+          helm upgrade --install paladin-crds paladin/paladin-operator-crd 
           
           # Step 2: Install cert-manager CRDs
           helm repo add jetstack https://charts.jetstack.io --force-update
@@ -62,26 +83,31 @@ jobs:
           kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=300s
           
           # Step 3: Install the Paladin Operator Chart
-          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace
+          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace --version "$TAG"
 
       - name: Validate installation
+        env:
+          TAG: ${{ inputs.previous_tag }}
         run: |
           # Run the validation script
           ./scripts/default-installation-validation.sh paladin
 
+
+      # we first run the tutorials so we can cache the addresses and the data
       - name: Run all examples
         env:
           BUILD_PALADIN_ABI: false
           BUILD_PALADIN_SDK: false
           RUN_MODE: start
-          PALADIN_ABI_VERSION: latest # run the latest version
+          PALADIN_ABI_VERSION: ${{ inputs.previous_tag }}
         run: |
           # Run the examples script
           ./scripts/run-tutorials.sh
 
+      # Rollout the new version of the paladin operator
       - name: Rollout the new version of the paladin operator
         env:
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ inputs.new_tag }}
         run: |
           # refresh local index
           helm repo update
@@ -91,20 +117,22 @@ jobs:
             # TODO: We should first check a rollout with the previous version of the CRDs
             helm upgrade --install paladin-crds paladin/paladin-operator-crd --version "$TAG"
           else
-            echo "Skipping paladin-operator-crd v$TAG (not found in repo)"
+            echo "Skipping paladin-operator-crd v$TAG"
           fi
 
           # Rollout the new version of the paladin operator
           helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace --version "$TAG"
 
+      # Validate the installation after rollout
       - name: Validate installation after rollout
         env:
-          IMAGE_TAG: ${{ inputs.tag }} # The script will complete successfully when all pods have the new image tag
+          IMAGE_TAG: ${{ inputs.new_tag }} # The script will complete successfully when all pods have the new image tag
         run: |
           # Run the validation script
           ./scripts/default-installation-validation.sh paladin
       
-      - name: Run all examples for backwards compatibility
+      # Test backwards compatibility with the old SDK version using the cached addresses and data
+      - name: Test backwards compatibility with the old SDK version
         env:
           # we do not want to download the solidity contracts because the RC release is not yet available
           BUILD_PALADIN_ABI: false
@@ -112,19 +140,39 @@ jobs:
           # this mode verifies the historical data
           RUN_MODE: verify
 
-          PALADIN_ABI_VERSION: ${{ inputs.tag }} # run the RC version
+          PALADIN_ABI_VERSION: ${{ inputs.previous_tag }}
+
+        run: |
+          # Run the examples script
+          ./scripts/run-tutorials.sh
+
+      # Test backwards compatibility with the new SDK version using the cached addresses and data
+      - name: Test backwards compatibility with the new SDK version
+        env:
+          # we do not want to download the solidity contracts because the RC release is not yet available
+          BUILD_PALADIN_ABI: false
+          BUILD_PALADIN_SDK: false
+          # this mode verifies the historical data
+          RUN_MODE: verify
+
+          PALADIN_ABI_VERSION: ${{ inputs.new_tag }}
 
         run: |
           # Run the examples script
           ./scripts/run-tutorials.sh
       
-      # Now that we tested backwards compatibility, we can run the examples again and make sure they pass (with the RC SDK version)
-      - name: Run all examples with the RC SDK version
+      # Checkout the main branch
+      # We cannot use the new tag because the new tag may not be available yet (e.g. the RC release is not yet available)
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      # Now that we tested backwards compatibility, we can run the examples again and make sure they pass (with the new SDK and the latest tutorials)
+      - name: Run all examples with the new SDK version
         env:
-          # Use the RC SDK version that was published
+          # Use the new SDK version that was published
           BUILD_PALADIN_ABI: false
           BUILD_PALADIN_SDK: false
-          PALADIN_ABI_VERSION: ${{ inputs.tag }}
+          PALADIN_ABI_VERSION: ${{ inputs.new_tag }}
           # this mode runs the tutorials as the user will run them
           RUN_MODE: start
         run: |
