@@ -9,6 +9,9 @@ import { checkDeploy, checkReceipt } from "paladin-example-common";
 import erc20Abi from "./zeto-abis/SampleERC20.json";
 import kycAbi from "./zeto-abis/IZetoKyc.json";
 import { buildBabyjub } from "circomlibjs";
+import * as fs from 'fs';
+import * as path from 'path';
+import { ContractData } from "./verify-deployed";
 
 const logger = console;
 
@@ -454,6 +457,79 @@ async function main(): Promise<boolean> {
   logger.log("  - Seamless withdraw (private → public) functionality");
   logger.log("  - Flexible liquidity between public and private domains");
   logger.log("  - Enterprise-grade privacy with regulatory compliance");
+
+  // Save contract data to file for later use
+  const contractData : ContractData = {
+    runId: runId,
+    privateStablecoinAddress: privateStablecoin.address,
+    publicStablecoinAddress: publicStablecoinAddress,
+    tokenName: "Zeto_AnonNullifierKyc",
+    kycDetails: {
+      financialInstitution: {
+        lookup: financialInstitution.lookup,
+        publicKey: bankPublicKey
+      },
+      clientA: {
+        lookup: clientA.lookup,
+        publicKey: clientAPublicKey
+      },
+      clientB: {
+        lookup: clientB.lookup,
+        publicKey: clientBPublicKey
+      }
+    },
+    operations: {
+      deposit: {
+        amount: 75000,
+        receiptId: depositReceipt.id,
+        transactionHash: depositReceipt.transactionHash
+      },
+      transfer: {
+        amount: 25000,
+        receiptId: transferReceipt.id,
+        transactionHash: transferReceipt.transactionHash
+      },
+      withdraw: {
+        amount: 15000,
+        receiptId: withdrawReceipt.id,
+        transactionHash: withdrawReceipt.transactionHash
+      }
+    },
+    finalBalances: {
+      clientA: {
+        public: clientAPublicBalance,
+        private: {
+          totalBalance: clientAPrivateBalance.totalBalance,
+          totalStates: clientAPrivateBalance.totalStates,
+          overflow: clientAPrivateBalance.overflow
+        }
+      },
+      clientB: {
+        public: clientBPublicBalance,
+        private: {
+          totalBalance: clientBPrivateBalance.totalBalance,
+          totalStates: clientBPrivateBalance.totalStates,
+          overflow: clientBPrivateBalance.overflow
+        }
+      }
+    },
+    participants: {
+      financialInstitution: financialInstitution.lookup,
+      clientA: clientA.lookup,
+      clientB: clientB.lookup
+    },
+    timestamp: new Date().toISOString()
+  };
+
+  const dataDir = path.join(__dirname, '..', 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dataFile = path.join(dataDir, `contract-data-${timestamp}.json`);
+  fs.writeFileSync(dataFile, JSON.stringify(contractData, null, 2));
+  logger.log(`Contract data saved to ${dataFile}`);
 
   return true;
 }

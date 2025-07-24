@@ -79,3 +79,47 @@ INoto.json		INotoPrivate.json	IZetoFungible.json	PentePrivacyGroup.json	Zeto_Ano
 $ ls <paladin-root>/examples/private-stablecoin/src/abis/
 SampleERC20.json
 ```
+
+---
+
+## Verification
+
+After running the example, you can verify that the private stablecoin contract data is still accessible on the blockchain:
+
+### Option 1 - Using npm scripts
+
+```shell
+cd <paladin-root>/examples/private-stablecoin
+npm run verify
+```
+
+### Option 2 - Using built JavaScript
+
+```shell
+cd <paladin-root>/examples/private-stablecoin
+npm run build
+npm run verify:prod
+```
+
+The verification script will:
+1. Load the saved contract data from the `data/` directory
+2. Recreate the Zeto private stablecoin connection using `ZetoInstance`
+3. Verify that current private stablecoin balances match the saved data for both clients
+4. Verify that current public ERC20 balances match the saved data for both clients
+5. Test private stablecoin functionality by performing balance queries
+6. Test public ERC20 functionality by performing balance queries
+7. Confirm that all KYC details are preserved (participant lookups and public keys)
+8. Verify that all operation details are preserved (deposit, transfer, withdraw amounts and receipt IDs)
+9. Test private transfer accessibility (without executing to avoid changing balances)
+
+Contract data is automatically saved to `data/contract-data-<timestamp>.json` when you run the main example, including:
+- Run ID for unique identity management
+- Private stablecoin address (Zeto token)
+- Public stablecoin address (ERC20 token)
+- Token name and configuration
+- KYC details for all participants (financial institution, client A, client B) including public keys
+- Operation details (deposit, transfer, withdraw amounts, receipt IDs, transaction hashes)
+- Final balances for both public and private tokens for all clients
+- Participant verifier information
+ 
+  
