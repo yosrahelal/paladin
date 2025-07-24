@@ -223,7 +223,7 @@ async function main(): Promise<boolean> {
     return false;
   }
 
-  logger.log("\nSUCCESS: Historical verification completed!");
+  logger.log("\nSUCCESS: verification completed!");
   logger.log(`Contract address: ${contractData.contractAddress}`);
   logger.log(`Original stored value: ${contractData.storedValue}`);
   logger.log(`Original retrieved value: "${contractData.retrievedValue}"`);

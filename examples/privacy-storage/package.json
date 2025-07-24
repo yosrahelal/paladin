@@ -8,6 +8,7 @@
     "start": "ts-node ./src/index.ts",
     "start:prod": "node ./build/index.js",
     "update": "ts-node ./src/update.ts",
+    "verify": "ts-node ./src/verify-deployed.ts",
     "abi": "node scripts/abi.mjs",
     "contracts": "node scripts/contracts.mjs"
   },

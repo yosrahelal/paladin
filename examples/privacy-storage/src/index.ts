@@ -4,6 +4,8 @@ import PaladinClient, {
 import { checkDeploy } from "paladin-example-common";
 import storageJson from "./abis/Storage.json";
 import { PrivateStorage } from "./helpers/storage";
+import * as fs from 'fs';
+import * as path from 'path';
 
 const logger = console;
 
@@ -103,6 +105,30 @@ async function main(): Promise<boolean> {
       "Expected behavior - Node3 (outsider) cannot retrieve the data from the privacy group. Access denied."
     );
   }
+
+  // Save contract data to file for later use
+  const contractData = {
+    privacyGroupId: memberPrivacyGroup?.group.id,
+    contractAddress: contractAddress,
+    storedValue: valueToStore,
+    retrievedValueNode1: retrievedValueNode1["value"],
+    retrievedValueNode2: retrievedValueNode2["value"],
+    storeTransactionHash: storeReceipt?.transactionHash,
+    node1Verifier: verifierNode1.lookup,
+    node2Verifier: verifierNode2.lookup,
+    node3Verifier: verifierNode3.lookup,
+    timestamp: new Date().toISOString()
+  };
+
+  const dataDir = path.join(__dirname, '..', 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dataFile = path.join(dataDir, `contract-data-${timestamp}.json`);
+  fs.writeFileSync(dataFile, JSON.stringify(contractData, null, 2));
+  logger.log(`Contract data saved to ${dataFile}`);
 
   logger.log("All steps completed successfully!");
 

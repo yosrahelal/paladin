@@ -91,6 +91,9 @@ async function main(): Promise<boolean> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dataFile = path.join(dataDir, `contract-data-${timestamp}.json`);
   fs.writeFileSync(dataFile, JSON.stringify(contractData, null, 2));
+  logger.log(`Contract data saved to ${dataFile}`);
+
+  logger.log("All steps completed successfully!");
 
   return true;
 }
