@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # Environment variables for configuration
-# RUN_MODE: "start" (default) or "verify" - determines which npm script to run
+# RUN_COMMANDS: comma-separated list of npm scripts to run (default: "start")
 #   - "start": runs npm run start (deploy/run tutorials)
 #   - "verify": runs npm run verify (verify historical data)
+#   - "start,verify": runs both start and verify commands in sequence
 #
 # Examples:
 #   ./scripts/run-tutorials.sh # this will run all tutorials with the latest paladin SDK and solidity contracts
@@ -11,9 +12,10 @@
 #   PALADIN_SDK_VERSION=0.10.0 ./scripts/run-tutorials.sh # use a specific paladin SDK version
 #   PALADIN_ABI_VERSION=v0.10.0 ./scripts/run-tutorials.sh # use a specific paladin solidity version
 #   ZETO_ABI_VERSION=v0.2.0 ./scripts/run-tutorials.sh # use a specific zeto solidity version
-#   RUN_MODE=start ./scripts/run-tutorials.sh
-#   RUN_MODE=verify ./scripts/run-tutorials.sh
-RUN_MODE=${RUN_MODE:-"start"}
+#   RUN_COMMANDS=start ./scripts/run-tutorials.sh
+#   RUN_COMMANDS=verify ./scripts/run-tutorials.sh
+#   RUN_COMMANDS=start,verify ./scripts/run-tutorials.sh
+RUN_COMMANDS=${RUN_COMMANDS:-"start"}
 BUILD_PALADIN_SDK=${BUILD_PALADIN_SDK:-"false"} # build the paladin SDK locally
 BUILD_PALADIN_ABI=${BUILD_PALADIN_ABI:-"false"} # build the paladin solidity contracts locally
 
@@ -204,23 +206,30 @@ run_tutorial() {
         return 1
     fi  
     
-    # Check if the required script exists
-    # TODO: remove this temporary check once we implement the verify script for all tutorials
-    if ! npm run | grep -E "^\s*$RUN_MODE\s*$" >/dev/null 2>&1; then
-        print_warning "Script 'npm run $RUN_MODE' not found for $tutorial_name, skipping..."
-        cd ../..
-        return 2  # Return 2 to indicate skipped
-    fi
-    
     mkdir -p logs
-    # Run the tutorial
-    print_status "Running $tutorial_name with 'npm run $RUN_MODE'..."
-    if ! npm run $RUN_MODE; then
-        print_error "Tutorial $tutorial_name failed to run"
-        exit_code=1
-    else
-        print_status "Completed tutorials: $tutorial_name"
-    fi
+    
+    # Split RUN_COMMANDS by comma and run each command
+    IFS=',' read -ra COMMANDS <<< "$RUN_COMMANDS"
+    
+    for command in "${COMMANDS[@]}"; do
+        command=$(echo "$command" | xargs) # trim whitespace
+        
+        # Check if the required script exists
+        if ! npm run | grep -E "^\s*$command\s*$" >/dev/null 2>&1; then
+            print_warning "Script 'npm run $command' not found for $tutorial_name, skipping..."
+            continue
+        fi
+        
+        # Run the tutorial command
+        print_status "Running $tutorial_name with 'npm run $command'..."
+        if ! npm run $command; then
+            print_error "Tutorial $tutorial_name failed to run command '$command'"
+            exit_code=1
+            break
+        else
+            print_status "Completed $tutorial_name command: $command"
+        fi
+    done
     
     echo ""
     cd ../..
@@ -293,6 +302,7 @@ main() {
     print_status "BUILD_PALADIN_SDK: $BUILD_PALADIN_SDK"
     print_status "BUILD_PALADIN_ABI: $BUILD_PALADIN_ABI"
     print_status "PALADIN_SDK_VERSION: $PALADIN_SDK_VERSION"
+    print_status "RUN_COMMANDS: $RUN_COMMANDS"
 
     # Summary
     echo "=========================================="

@@ -114,7 +114,7 @@ jobs:
         env:
           BUILD_PALADIN_ABI: false
           BUILD_PALADIN_SDK: false
-          RUN_MODE: start
+          RUN_COMMANDS: start
           PALADIN_ABI_VERSION: ${{ inputs.previous_tag }}
         run: |
           # Run the examples script
@@ -154,7 +154,7 @@ jobs:
           BUILD_PALADIN_ABI: false
           BUILD_PALADIN_SDK: false
           # this mode verifies the historical data
-          RUN_MODE: verify
+          RUN_COMMANDS: verify
 
           PALADIN_ABI_VERSION: ${{ inputs.previous_tag }}
 
@@ -169,7 +169,7 @@ jobs:
           BUILD_PALADIN_ABI: false
           BUILD_PALADIN_SDK: false
           # this mode verifies the historical data
-          RUN_MODE: verify
+          RUN_COMMANDS: verify
 
           PALADIN_ABI_VERSION: ${{ inputs.new_tag }}
 
@@ -190,7 +190,7 @@ jobs:
           BUILD_PALADIN_SDK: false
           PALADIN_ABI_VERSION: ${{ inputs.new_tag }}
           # this mode runs the tutorials as the user will run them
-          RUN_MODE: start
+          RUN_COMMANDS: start,verify
         run: |
           # Run the examples script
           ./scripts/run-tutorials.sh

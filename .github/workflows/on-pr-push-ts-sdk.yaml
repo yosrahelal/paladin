@@ -7,6 +7,8 @@ permissions:
 
 on:
   push:
+    branches:
+      - main
     paths:
       - 'sdk/typescript/**'
       - 'scripts/**'
@@ -31,3 +33,4 @@ jobs:
     with:
       build_local_abi: false # this workflow is meant to test the examples with the published solidity contracts
       build_local_sdk: true  # this workflow is meant to test the examples with the local (modified) SDK
+      run_commands: start,verify # run the start and validate to ensure the sdk is not broken

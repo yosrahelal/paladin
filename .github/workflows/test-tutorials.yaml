@@ -13,6 +13,11 @@ on:
         required: false
         type: boolean
         default: false
+      run_commands:
+        description: 'Comma-separated list of commands to run (e.g., start,verify)'
+        required: false
+        type: string
+        default: 'start'
   workflow_call:
     inputs:
       build_local_sdk:
@@ -25,6 +30,11 @@ on:
         required: false
         type: boolean
         default: false
+      run_commands:
+        description: 'Comma-separated list of commands to run (e.g., start,verify)'
+        required: false
+        type: string
+        default: 'start'
 
 jobs:
   run-tutorials:
@@ -82,6 +92,7 @@ jobs:
         env:
           BUILD_PALADIN_SDK: ${{ inputs.build_local_sdk }}
           BUILD_PALADIN_ABI: ${{ inputs.build_local_abi }}
+          RUN_COMMANDS: ${{ inputs.run_commands }}
         run: |
           # Run the tutorials script
           ./scripts/run-tutorials.sh
