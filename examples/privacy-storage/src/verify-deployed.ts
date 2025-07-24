@@ -271,7 +271,7 @@ async function main(): Promise<boolean> {
     return false;
   }
 
-  logger.log("\nSUCCESS: Historical verification completed!");
+  logger.log("\nSUCCESS: Verification completed!");
 
   return true;
 }

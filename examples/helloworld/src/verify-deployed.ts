@@ -179,11 +179,7 @@ async function main(): Promise<boolean> {
       return false;
     }
 
-    logger.log("\nSUCCESS: Historical verification completed!");
-    logger.log(`Contract address: ${contractData.contractAddress}`);
-    logger.log(`Original message: "${contractData.message}"`);
-    logger.log(`Transaction hash: ${contractData.transactionHash}`);
-    logger.log(`Deployed at: ${contractData.timestamp}`);
+    logger.log("\nSUCCESS: verification completed!");
 
     return true;
 
