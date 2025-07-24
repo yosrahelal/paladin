@@ -15,12 +15,12 @@ Run the common [setup steps](../README.md) before running the example.
 
 - **Extract contracts**
 
-  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/example/bond/src/abis`)
+  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/tutorials/bond/src/abis`)
 
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/example/bond
+  cd <paladin-root>/tutorials/bond
   npm install
   npm run start
   ```
@@ -32,7 +32,7 @@ Run the common [setup steps](../README.md) before running the example.
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/example/bond
+  cd <paladin-root>/tutorials/bond
   npm install
   npm run abi
   npm run start
@@ -45,7 +45,7 @@ Run the common [setup steps](../README.md) before running the example.
 - **Run the gradle build task, then run the sample:**
 
   ```shell
-  cd <paladin-root>/example/bond
+  cd <paladin-root>/tutorials/bond
   ../../gradlew build
   npm run start
   ```

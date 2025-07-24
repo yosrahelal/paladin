@@ -27,13 +27,13 @@ on:
         default: false
 
 jobs:
-  run-examples:
+  run-tutorials:
     # here are the steps:
     # 1. create a cluster with kind
     # 2. install the helm charts (latest version)
-    # 3. run the examples as the user will run them
+    # 3. run the tutorials as the user will run them
         # 3.1. Download the solidity files
-        # 3.2. Run the examples
+        # 3.2. Run the tutorials
     # 7. destroy the cluster
     runs-on: ubuntu-latest
     steps:
@@ -78,13 +78,13 @@ jobs:
           # Run the validation script
           ./scripts/default-installation-validation.sh paladin
 
-      - name: Run all examples
+      - name: Run all tutorials
         env:
           BUILD_PALADIN_SDK: ${{ inputs.build_local_sdk }}
           BUILD_PALADIN_ABI: ${{ inputs.build_local_abi }}
         run: |
-          # Run the examples script
-          ./scripts/run-examples.sh
+          # Run the tutorials script
+          ./scripts/run-tutorials.sh
 
       - name: Cleanup cluster
         if: always()

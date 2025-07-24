@@ -32,7 +32,7 @@ configurations {
 dependencies {
     contractCompile project(path: ':solidity', configuration: 'compiledContracts')
     buildSDK project(path: ':sdk:typescript', configuration: 'buildSDK')
-    buildCommon project(path: ':example:common', configuration: 'buildCommon')
+    buildCommon project(path: ':tutorials:common', configuration: 'buildCommon')
 }
 
 task install(type: Exec) {
@@ -78,4 +78,6 @@ task clean(type: Delete) {
     delete 'build'
     delete 'src/abis'
     delete 'src/zeto-abis'
+    delete 'data'
+    delete 'logs'
 }

@@ -13,7 +13,7 @@
             ],
             "runtimeExecutable": "npm",
             "type": "node",
-            "cwd": "${workspaceFolder}/example/bond"
+            "cwd": "${workspaceFolder}/tutorials/bond"
         },
         {
             "name": "Lock example: run",
@@ -24,7 +24,7 @@
             ],
             "runtimeExecutable": "npm",
             "type": "node",
-            "cwd": "${workspaceFolder}/example/lock"
+            "cwd": "${workspaceFolder}/tutorials/lock"
         },
         {
             "name": "Run Controller",

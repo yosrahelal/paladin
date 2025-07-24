@@ -14,12 +14,12 @@ Run the common [setup steps](../README.md) before running the example.
 
 - **Extract contracts**
 
-  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/example/public-storage/src/abis`)
+  - Extract the `abis.tar.gz` file that was downloaded in the [setup steps](../README.md) and copy the `abis` directory to `src/`. (full path should be: `paladin/tutorials/public-storage/src/abis`)
 
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/example/public-storage
+  cd <paladin-root>/tutorials/public-storage
   npm install
   npm run start
   ```
@@ -31,7 +31,7 @@ Run the common [setup steps](../README.md) before running the example.
 - **Run the example**
 
   ```shell
-  cd <paladin-root>/example/public-storage
+  cd <paladin-root>/tutorials/public-storage
   npm install
   npm run abi
   npm run start
@@ -44,7 +44,7 @@ Run the common [setup steps](../README.md) before running the example.
 - **Run the gradle build task, then run the sample:**
 
   ```shell
-  cd <paladin-root>/example/public-storage
+  cd <paladin-root>/tutorials/public-storage
   ../../gradlew build
   npm run start
   ```

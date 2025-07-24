@@ -40,7 +40,7 @@ Paladin’s API design follows **Ethereum JSON-RPC patterns**, making it familia
 
 ## Where to Find the Code?
 
-🔹 Example implementation: [Paladin example repository](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/example/public-storage)  
+🔹 Example implementation: [Paladin example repository](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/tutorials/public-storage)  
 🔹 Solidity contract: [Storage.sol](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/solidity/contracts/tutorials/Storage.sol)  
 
 ---

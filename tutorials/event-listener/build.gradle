@@ -32,7 +32,7 @@ configurations {
 dependencies {
     contractCompile project(path: ':solidity', configuration: 'compiledContracts')
     buildSDK project(path: ':sdk:typescript', configuration: 'buildSDK')
-    buildCommon project(path: ':example:common', configuration: 'buildCommon')
+    buildCommon project(path: ':tutorials:common', configuration: 'buildCommon')
 }
 
 task install(type: Exec) {
@@ -66,7 +66,7 @@ task build(type: Exec, dependsOn: [install, copyABI]) {
 }
 
 task e2e(type: Exec, dependsOn: [build]) {
-    dependsOn ':operator:e2e'
+    dependsOn ':operator:deploy'
 
     executable 'npm'
     args 'run'

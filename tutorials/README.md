@@ -27,7 +27,7 @@ paladin-operator-bc788db4f-mzbs7   1/1     Running   0          19m
 ### Build the common package
 
 ```shell
-cd <paladin-root>/example/common
+cd <paladin-root>/tutorials/common
 npm install
 npm run contracts
 npm run build

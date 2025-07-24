@@ -6,13 +6,13 @@
 #   - "verify": runs npm run verify (verify historical data)
 #
 # Examples:
-#   ./scripts/run-examples.sh # this will run all examples with the latest paladin SDK and solidity contracts
-#   BUILD_PALADIN_SDK=true BUILD_PALADIN_SOLIDITY_CONTRACTS=true ./scripts/run-examples.sh
-#   PALADIN_SDK_VERSION=0.10.0 ./scripts/run-examples.sh # use a specific paladin SDK version
-#   PALADIN_ABI_VERSION=v0.10.0 ./scripts/run-examples.sh # use a specific paladin solidity version
-#   ZETO_ABI_VERSION=v0.2.0 ./scripts/run-examples.sh # use a specific zeto solidity version
-#   RUN_MODE=start ./scripts/run-examples.sh
-#   RUN_MODE=verify ./scripts/run-examples.sh
+#   ./scripts/run-tutorials.sh # this will run all examples with the latest paladin SDK and solidity contracts
+#   BUILD_PALADIN_SDK=true BUILD_PALADIN_SOLIDITY_CONTRACTS=true ./scripts/run-tutorials.sh
+#   PALADIN_SDK_VERSION=0.10.0 ./scripts/run-tutorials.sh # use a specific paladin SDK version
+#   PALADIN_ABI_VERSION=v0.10.0 ./scripts/run-tutorials.sh # use a specific paladin solidity version
+#   ZETO_ABI_VERSION=v0.2.0 ./scripts/run-tutorials.sh # use a specific zeto solidity version
+#   RUN_MODE=start ./scripts/run-tutorials.sh
+#   RUN_MODE=verify ./scripts/run-tutorials.sh
 RUN_MODE=${RUN_MODE:-"start"}
 BUILD_PALADIN_SDK=${BUILD_PALADIN_SDK:-"false"} # build the paladin SDK locally
 BUILD_PALADIN_ABI=${BUILD_PALADIN_ABI:-"false"} # build the paladin solidity contracts locally
@@ -133,7 +133,7 @@ install_prerequisites() {
     fi
 
     # build common
-    cd example/common
+    cd tutorials/common
     if ! npm install; then
         print_error "Failed to install dependencies for common"
         exit 1
@@ -176,28 +176,28 @@ switch_paladin_sdk_version() {
 # Function to run a single example
 run_example() {
     local example_dir="$1"
-    local example_name=$(basename "$example_dir")
+    local tutorial_name=$(basename "$example_dir")
     local exit_code=0
     
-    print_header "Running example: $example_name"
+    print_header "Running tutorial: $tutorial_name"
     echo "=========================================="
     
     cd "$example_dir"
     
     # Install dependencies
-    print_status "Installing dependencies for $example_name..."
+    print_status "Installing dependencies for $tutorial_name..."
 
     # switch to the correct paladin sdk version
-    switch_paladin_sdk_version "$example_name"
+    switch_paladin_sdk_version "$tutorial_name"
 
     if ! npm install; then
-        print_error "Failed to install dependencies for $example_name"
+        print_error "Failed to install dependencies for $tutorial_name"
         cd ../..
         return 1
     fi
 
     if ! npm run $COPY_CONTRACTS_CMD; then
-        print_error "Failed to run 'npm run $COPY_CONTRACTS_CMD' for $example_name"
+        print_error "Failed to run 'npm run $COPY_CONTRACTS_CMD' for $tutorial_name"
         cd ../..
         return 1
     fi  
@@ -205,19 +205,19 @@ run_example() {
     # Check if the required script exists
     # TODO: remove this temporary check once we implement the verify script for all examples
     if ! npm run | grep -E "^\s*$RUN_MODE\s*$" >/dev/null 2>&1; then
-        print_warning "Script 'npm run $RUN_MODE' not found for $example_name, skipping..."
+        print_warning "Script 'npm run $RUN_MODE' not found for $tutorial_name, skipping..."
         cd ../..
         return 2  # Return 2 to indicate skipped
     fi
     
     mkdir -p logs
     # Run the example
-    print_status "Running $example_name with 'npm run $RUN_MODE'..."
+    print_status "Running $tutorial_name with 'npm run $RUN_MODE'..."
     if ! npm run $RUN_MODE; then
-        print_error "Example $example_name failed to run"
+        print_error "Example $tutorial_name failed to run"
         exit_code=1
     else
-        print_status "Completed example: $example_name"
+        print_status "Completed tutorials: $tutorial_name"
     fi
     
     echo ""
@@ -237,7 +237,7 @@ main() {
     
     # List all available examples
     print_status "Available examples:"
-    for dir in example/*/; do
+    for dir in tutorials/*/; do
         if [ -f "$dir/package.json" ] && [ "$(basename "$dir")" != "common" ]; then
             echo "- $(basename "$dir")"
         fi
@@ -250,7 +250,7 @@ main() {
     print_status "Prerequisites installed"
     
     # Get list of all example directories (excluding common)
-    examples=$(find example -maxdepth 1 -type d -name "*" | grep -v "example$" | grep -v "example/common" | sort)
+    examples=$(find example -maxdepth 1 -type d -name "*" | grep -v "example$" | grep -v "tutorials/common" | sort)
     
     print_status "Running examples in order:"
     echo "$examples"
@@ -261,13 +261,13 @@ main() {
     local skipped_examples=()
     
     for example_dir in $examples; do
-        example_name=$(basename "$example_dir")
+        tutorial_name=$(basename "$example_dir")
 
         # skip private-stablecoin if BUILD_PALADIN_SDK is false
         # TODO: remove this check after v0.10.0 release 
-        if [ "$example_name" == "private-stablecoin" ] && [ "$BUILD_PALADIN_SDK" = "false" ]; then
-            print_status "Skipping $example_name (not supported yet)"
-            skipped_examples+=("$example_name")
+        if [ "$tutorial_name" == "private-stablecoin" ] && [ "$BUILD_PALADIN_SDK" = "false" ]; then
+            print_status "Skipping $tutorial_name (not supported yet)"
+            skipped_examples+=("$tutorial_name")
             continue
         fi
         
@@ -276,15 +276,15 @@ main() {
             run_example "$example_dir"
             exit_code=$?
             if [ $exit_code -eq 0 ]; then
-                successful_examples+=("$example_name")
+                successful_examples+=("$tutorial_name")
             elif [ $exit_code -eq 2 ]; then
-                skipped_examples+=("$example_name")
+                skipped_examples+=("$tutorial_name")
             else
-                print_error "Example $example_name failed"
-                failed_examples+=("$example_name")
+                print_error "Example $tutorial_name failed"
+                failed_examples+=("$tutorial_name")
             fi
         else
-            print_warning "Skipping $example_name (no package.json found)"
+            print_warning "Skipping $tutorial_name (no package.json found)"
         fi
     done
     

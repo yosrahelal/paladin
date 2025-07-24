@@ -77,7 +77,7 @@ jobs:
           PALADIN_ABI_VERSION: latest # run the latest version
         run: |
           # Run the examples script
-          ./scripts/run-examples.sh
+          ./scripts/run-tutorials.sh
 
       - name: Rollout the new version of the paladin operator
         env:
@@ -116,7 +116,7 @@ jobs:
 
         run: |
           # Run the examples script
-          ./scripts/run-examples.sh
+          ./scripts/run-tutorials.sh
       
       # Now that we tested backwards compatibility, we can run the examples again and make sure they pass (with the RC SDK version)
       - name: Run all examples with the RC SDK version
@@ -129,7 +129,7 @@ jobs:
           RUN_MODE: start
         run: |
           # Run the examples script
-          ./scripts/run-examples.sh
+          ./scripts/run-tutorials.sh
       
       - name: Cleanup cluster
         if: always()

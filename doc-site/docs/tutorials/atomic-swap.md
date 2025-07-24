@@ -1,13 +1,13 @@
 # Atomic Swap
 
-The code for this tutorial can be found in [example/swap](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/example/swap).
+The code for this tutorial can be found in [tutorials/swap](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/tutorials/swap).
 
 This example demonstrates an **atomic swap** scenario on Paladin, showing how to perform secure exchanges between different types of privacy-preserving tokens. It illustrates the power of combining multiple Paladin domains ([Zeto](../../architecture/zeto/), [Noto](../../architecture/noto/), and [Pente](../../architecture/pente/)) to create complex privacy-preserving operations with guaranteed atomicity on a single ledger.
 
 ## Running the example
 
 Follow the [Getting Started](../../getting-started/installation/) instructions to set up a Paladin environment, and
-then follow the example [README](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/example/swap/README.md)
+then follow the example [README](https://github.com/LF-Decentralized-Trust-labs/paladin/blob/main/tutorials/swap/README.md)
 to run the code.
 
 ## Overview
