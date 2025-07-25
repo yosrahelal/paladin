@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-tutorials:
+  test-solidity:
     uses: ./.github/workflows/test-tutorials.yaml
     with:
       build_local_abi: true

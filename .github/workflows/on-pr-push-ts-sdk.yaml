@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-examples:
+  test-sdk:
     uses: ./.github/workflows/test-tutorials.yaml
     with:
       build_local_abi: false # this workflow is meant to test the examples with the published solidity contracts
