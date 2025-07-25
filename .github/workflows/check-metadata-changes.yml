@@ -59,7 +59,23 @@ jobs:
           for file in $CHANGED_METADATA_FILES; do
             echo "Checking $file..."
             
-            # Get the old and new versions
+            # Check if this is a new file (doesn't exist in base branch)
+            if ! git show "origin/$BASE_BRANCH:$file" >/dev/null 2>&1; then
+              echo "  NEW FILE: This is a new metadata file"
+              NEW_VERSION_RANGE=$(cat "$file" | jq -r '.version // "null"')
+              echo "  New version range: $NEW_VERSION_RANGE"
+              
+              if [ "$NEW_VERSION_RANGE" = "null" ] || [ -z "$NEW_VERSION_RANGE" ]; then
+                echo "  ERROR: New metadata file must have a valid 'version' field!"
+                FAILED_CHECKS=$((FAILED_CHECKS + 1))
+              else
+                echo "New file has valid version field"
+              fi
+              echo ""
+              continue
+            fi
+            
+            # Get the old and new versions for existing files
             OLD_VERSION_RANGE=$(git show "origin/$BASE_BRANCH:$file" 2>/dev/null | jq -r '.version // "null"' || echo "null")
             NEW_VERSION_RANGE=$(cat "$file" | jq -r '.version // "null"')
             
@@ -86,9 +102,13 @@ jobs:
           done
           
           if [ $FAILED_CHECKS -gt 0 ]; then
-            echo "Found $FAILED_CHECKS metadata file(s) with version number changes"
+            echo "Found $FAILED_CHECKS metadata file(s) with issues"
             echo ""
-            echo "Version number changes in metadata.json are not allowed because:"
+            echo "Issues found:"
+            echo "   - Version number changes in existing metadata.json files are not allowed"
+            echo "   - New metadata files must have a valid 'version' field"
+            echo ""
+            echo "Version number changes are not allowed because:"
             echo "   - They can break example compatibility with different SDK versions"
             echo "   - They can cause examples to run with incompatible SDK versions"
             echo "   - They can lead to CI/CD failures in different environments"
@@ -99,6 +119,7 @@ jobs:
             echo "   - Use different range operators (e.g., ^0.9.0 vs ~0.9.0) if needed"
             echo ""
             echo "Allowed changes:"
+            echo "   - Adding new metadata files with valid version fields"
             echo "   - Changing range operators: ^0.9.0 → ~0.9.0 (same version, different range)"
             echo "   - Changing range operators: ^0.9.0 → >=0.9.0 (same version, different range)"
             echo "   - Modifying name or description fields"
@@ -106,6 +127,7 @@ jobs:
             echo "Not allowed:"
             echo "   - Changing version numbers: ^0.9.0 → ^0.10.0 (different version)"
             echo "   - Changing version numbers: ~0.9.0 → ~1.0.0 (different version)"
+            echo "   - Adding new metadata files without a valid 'version' field"
             exit 1
           fi
           
