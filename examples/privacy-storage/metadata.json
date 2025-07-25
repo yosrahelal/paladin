@@ -1,0 +1,5 @@
+{
+  "name": "privacy-storage",
+  "version": "^0.9.0",
+  "description": "Private smart contract operations using Pente privacy groups"
+} 

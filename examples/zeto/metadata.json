@@ -1,0 +1,5 @@
+{
+  "name": "zeto",
+  "version": "^0.9.0",
+  "description": "ZKP fungible tokens with Zeto for privacy-preserving CBDC operations"
+} 

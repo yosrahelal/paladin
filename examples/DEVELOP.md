@@ -9,6 +9,7 @@ All Paladin examples must follow a consistent pattern that includes:
 2. **Verification Scripts**: Ensuring deployed contracts remain accessible and functional
 3. **Standard Commands**: Providing consistent npm scripts across all examples
 4. **Documentation**: Clear README with setup and verification instructions
+5. **Metadata Requirements**: Version compatibility and GitHub Action protection
 
 ## Required Structure
 
@@ -22,7 +23,61 @@ examples/your-example/
 │   └── abis/                 # Contract ABIs
 ├── package.json              # Required scripts
 ├── README.md                 # Clear instruction for running the example
+├── metadata.json             # Version requirements (REQUIRED)
 └── tsconfig.json
+```
+
+## Metadata Requirements
+
+Every example must include a `metadata.json` file that specifies version requirements:
+
+```json
+{
+  "name": "your-example",
+  "version": "^0.9.0",
+  "description": "Brief description of what this example demonstrates"
+}
+```
+
+### Version Ranges
+
+Use Node.js-style semantic version ranges:
+
+- **`^0.9.0`** (caret): Accepts `>=0.9.0` and `<1.0.0` (recommended for most examples)
+- **`~0.9.0`** (tilde): Accepts `>=0.9.0` and `<0.10.0` (more restrictive)
+- **`>=0.9.0`**: Accepts any version `>=0.9.0`
+- **`0.9.0`**: Exact version match only
+
+### Version Selection Guidelines
+
+- **Use `^0.10.0`** if your example requires features from v0.10.0
+- **Use `~0.10.0`** if your example is very specific to v0.10.x
+- **Use `>=0.10.0`** if your example works with v0.10.0 and any newer version
+- **Never use exact versions** unless absolutely necessary
+
+### GitHub Action Protection
+
+A GitHub Action automatically prevents version number changes in metadata files:
+
+**✅ Allowed:**
+- Changing range operators: `^0.9.0` → `~0.9.0` (same version, different range)
+- Modifying `name` or `description` fields
+
+**❌ Not Allowed:**
+- Changing version numbers: `^0.9.0` → `^0.10.0` (different version)
+
+**What to do instead:**
+- Create a new example if you need different version requirements
+- Update the SDK version if the example should work with newer versions
+
+### Testing Metadata
+
+```bash
+# Test metadata system
+./scripts/test-metadata-system.sh
+
+# Test version change detection
+./scripts/test-metadata-version-check.sh
 ```
 
 ## Required npm Scripts

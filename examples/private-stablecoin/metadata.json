@@ -1,0 +1,5 @@
+{
+  "name": "private-stablecoin",
+  "version": "^0.10.0",
+  "description": "Private stablecoin using Zeto with KYC compliance and deposit/withdraw functionality"
+} 

@@ -28,9 +28,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-tutorials:
+  test-tutorials-backwards-compatibility:
     uses: ./.github/workflows/test-tutorials.yaml
     with:
       build_local_sdk: false # this workflow is meant to test the tutorials with the published SDK
       build_local_abi: false # this workflow is meant to test the tutorials with the published solidity contracts
       run_commands: start,verify # run the start and validate to ensure the tutorials are not broken
+
+  test-tutorials-forward-compatibility:
+    uses: ./.github/workflows/test-tutorials.yaml
+    with:
+      build_local_sdk: true
+      build_local_abi: true
+      run_commands: start,verify
+    

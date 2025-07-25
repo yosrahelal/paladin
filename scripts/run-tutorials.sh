@@ -92,6 +92,28 @@ fi
 
 print_status "Prerequisites check passed"
 
+# switch paladin sdk version
+switch_paladin_sdk_version() {
+    local name="$1"
+    if [ "$BUILD_PALADIN_SDK" = "true" ]; then
+        print_status "Running $name with local paladin SDK..."
+        npm uninstall @lfdecentralizedtrust-labs/paladin-sdk 2>/dev/null || true
+        if ! npm install file:../../sdk/typescript; then
+            print_error "Failed to install local SDK for $name"
+            exit 1
+        fi
+    fi
+
+    if [ "$PALADIN_SDK_VERSION" != "" ]; then
+        print_status "Running $name with paladin SDK version $PALADIN_SDK_VERSION..."
+        npm uninstall @lfdecentralizedtrust-labs/paladin-sdk 2>/dev/null || true
+        if ! npm install @lfdecentralizedtrust-labs/paladin-sdk@$PALADIN_SDK_VERSION; then
+            print_error "Failed to install SDK version $PALADIN_SDK_VERSION for $name"
+            exit 1
+        fi
+    fi
+}
+
 install_prerequisites() {
     # there are three prerequisites:
     # 1. build solidity contracts
@@ -140,6 +162,9 @@ install_prerequisites() {
 
     # build common
     cd $EXAMPLES_DIR/common
+
+    switch_paladin_sdk_version "common"
+
     if ! npm install; then
         print_error "Failed to install dependencies for common"
         exit 1
@@ -157,27 +182,6 @@ install_prerequisites() {
     cd ../..
 }
 
-# switch paladin sdk version
-switch_paladin_sdk_version() {
-    local name="$1"
-    if [ "$BUILD_PALADIN_SDK" = "true" ]; then
-        print_status "Running $name with local paladin SDK..."
-        npm uninstall @lfdecentralizedtrust-labs/paladin-sdk 2>/dev/null || true
-        if ! npm install file:../../sdk/typescript; then
-            print_error "Failed to install local SDK for $name"
-            exit 1
-        fi
-    fi
-
-    if [ "$PALADIN_SDK_VERSION" != "" ]; then
-        print_status "Running $name with paladin SDK version $PALADIN_SDK_VERSION..."
-        npm uninstall @lfdecentralizedtrust-labs/paladin-sdk 2>/dev/null || true
-        if ! npm install @lfdecentralizedtrust-labs/paladin-sdk@$PALADIN_SDK_VERSION; then
-            print_error "Failed to install SDK version $PALADIN_SDK_VERSION for $name"
-            exit 1
-        fi
-    fi
-}
 
 # Function to run a single tutorial
 run_tutorial() {
@@ -270,16 +274,33 @@ main() {
     for tutorials_dir in $tutorials; do
         tutorial_name=$(basename "$tutorials_dir")
 
-        # skip private-stablecoin if BUILD_PALADIN_SDK is false
-        # TODO: remove this check after v0.10.0 release 
-        if [ "$tutorial_name" == "private-stablecoin" ] && [ "$BUILD_PALADIN_SDK" = "false" ]; then
-            print_status "Skipping tutorial $tutorial_name (not supported yet)"
-            skipped_tutorials+=("$tutorial_name")
-            continue
-        fi
-        
-        # Check if it's a valid tutorial (has package.json)
+        # Check if example should run based on metadata and current version
         if [ -f "$tutorials_dir/package.json" ]; then
+            # Determine current version for comparison
+            CURRENT_VERSION=""
+            if [ "$BUILD_PALADIN_SDK" = "true" ] && [ "$BUILD_PALADIN_ABI" = "true" ]; then
+                # When building locally, use a high version number to run all examples
+                CURRENT_VERSION="999.999.999"
+            else
+                # Use the PALADIN_SDK_VERSION, or "latest" if not set
+                CURRENT_VERSION="${PALADIN_SDK_VERSION:-latest}"
+                # If it's "latest", we need to get the actual version
+                if [ "$CURRENT_VERSION" = "latest" ]; then
+                    CURRENT_VERSION=$(npm view @lfdecentralizedtrust-labs/paladin-sdk version 2>/dev/null || echo "0.0.0")
+                fi
+            fi
+            
+            # Check if example should run based on metadata
+            VERSION_CHECK=$(./scripts/check-example-version.sh "$tutorials_dir" "$CURRENT_VERSION")
+            if [ "$VERSION_CHECK" = "SKIP" ]; then
+                print_status "Skipping tutorial $tutorial_name (added in version newer than current: $CURRENT_VERSION)"
+                skipped_tutorials+=("$tutorial_name")
+                continue
+            elif [ "$VERSION_CHECK" = "ERROR" ]; then
+                print_error "Failed to check version for tutorial $tutorial_name"
+                exit 1
+            fi
+ 
             run_tutorial "$tutorials_dir"
             exit_code=$?
             if [ $exit_code -eq 0 ]; then

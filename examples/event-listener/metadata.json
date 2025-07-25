@@ -1,0 +1,5 @@
+{
+  "name": "event-listener",
+  "version": "^0.10.0",
+  "description": "Event listening from private smart contracts using WebSocket and receipt listeners"
+} 

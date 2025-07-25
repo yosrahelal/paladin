@@ -1,0 +1,5 @@
+{
+  "name": "swap",
+  "version": "^0.9.0",
+  "description": "Atomic swap between Zeto cash and Noto assets using Atom contracts"
+} 

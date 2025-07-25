@@ -1,0 +1,5 @@
+{
+  "name": "public-storage",
+  "version": "^0.9.0",
+  "description": "Public smart contract operations with data persistence and verification"
+} 
