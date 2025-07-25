@@ -54,7 +54,7 @@ async function main(): Promise<boolean> {
       amount: 100000,
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   let balanceInvestor = await notoCash.balanceOf(cashIssuer, {
@@ -155,7 +155,7 @@ async function main(): Promise<boolean> {
       amount: 1000,
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
   let balanceCustodian = await notoBond.balanceOf(bondIssuer, {
     account: bondCustodian.lookup,
@@ -172,7 +172,7 @@ async function main(): Promise<boolean> {
       discountPrice: 1,
       minimumDenomination: 1,
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   // Add allowed investors
@@ -180,7 +180,7 @@ async function main(): Promise<boolean> {
   receipt = await investorList
     .using(paladin2)
     .addInvestor(bondCustodian, { addr: await investor.address() })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   // Create a Pente privacy group between the bond investor and bond custodian
@@ -221,7 +221,7 @@ async function main(): Promise<boolean> {
       amount: 100,
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
   receipt = await paladin3.ptx.getTransactionReceiptFull(receipt.id);
   let domainReceipt = receipt?.domainReceipt as INotoDomainReceipt | undefined;
@@ -308,7 +308,7 @@ async function main(): Promise<boolean> {
       to: notoCash.address,
       encodedCall: cashUnlockCall,
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   // Pass the prepared bond transfer to the subscription contract
@@ -319,7 +319,7 @@ async function main(): Promise<boolean> {
       to: notoBond.address,
       encodedCall: assetUnlockCall,
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   // Prepare bond distribution (initializes atomic swap of payment and bond units)
@@ -327,7 +327,7 @@ async function main(): Promise<boolean> {
   receipt = await bondSubscription
     .using(paladin2)
     .distribute(bondCustodian)
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   // Extract the address of the created Atom
@@ -356,7 +356,7 @@ async function main(): Promise<boolean> {
       delegate: atomAddress,
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   // Approve the bond transfer
@@ -369,7 +369,7 @@ async function main(): Promise<boolean> {
       delegate: atomAddress,
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   // Execute the atomic transfer

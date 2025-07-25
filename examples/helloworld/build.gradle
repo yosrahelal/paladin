@@ -30,9 +30,20 @@ dependencies {
     buildSDK project(path: ':sdk:typescript', configuration: 'buildSDK')
 }
 
-task install(type: Exec) {
+task install_sdk(type: Exec) {
     executable 'npm'
-    args 'install'
+    args 'install' 
+    args 'file:../../sdk/typescript' // use local sdk
+
+    inputs.files(configurations.buildSDK)
+    inputs.files('package.json')
+    outputs.files('package-lock.json')
+    outputs.dir('node_modules')
+}
+
+task install(type: Exec, dependsOn: install_sdk) {
+    executable 'npm'
+    args 'install' 
 
     inputs.files(configurations.buildSDK)
     inputs.files('package.json')

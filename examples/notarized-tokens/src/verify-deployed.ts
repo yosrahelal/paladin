@@ -157,7 +157,7 @@ async function main(): Promise<boolean> {
         amount: testTransferAmount,
         data: "0x",
       })
-      .waitForReceipt();
+      .waitForReceipt(10000);
 
     if (!testTransferReceipt?.transactionHash) {
       logger.error("STEP 4: Test transfer failed!");
@@ -216,7 +216,7 @@ async function main(): Promise<boolean> {
         amount: restoreTransferAmount,
         data: "0x",
       })
-      .waitForReceipt();
+      .waitForReceipt(10000);
 
     if (!restoreTransferReceipt?.transactionHash) {
       logger.error("STEP 5: Restore transfer failed!");

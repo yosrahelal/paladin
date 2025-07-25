@@ -47,7 +47,7 @@ async function main(): Promise<boolean> {
       amount: mintAmount,
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!mintReceipt) {
     logger.error("Failed to mint cash tokens!");
     return false;
@@ -68,7 +68,7 @@ async function main(): Promise<boolean> {
       amount: transferToNode2Amount,
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!transferToNode2) {
     logger.error("Failed to transfer cash to Node2!");
     return false;
@@ -90,7 +90,7 @@ async function main(): Promise<boolean> {
       amount: transferToNode3Amount,
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!transferToNode3) {
     logger.error("Failed to transfer cash to Node3!");
     return false;

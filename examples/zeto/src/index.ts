@@ -63,7 +63,7 @@ async function main(): Promise<boolean> {
         },
       ],
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
   let bank1Balance = await zetoCBDC1
     .using(paladin1)
@@ -96,7 +96,7 @@ async function main(): Promise<boolean> {
         },
       ],
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
   bank1Balance = await zetoCBDC1
     .using(paladin1)
@@ -132,7 +132,7 @@ async function main(): Promise<boolean> {
     .setERC20(cbdcIssuer, {
       erc20: erc20Address as string,
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(result2)) return false;
 
   logger.log("- Issuing CBDC to bank1 with public minting in ERC20...");
@@ -148,7 +148,7 @@ async function main(): Promise<boolean> {
     .deposit(bank1, {
       amount: depositAmount,
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(result4)) return false;
   const bank1BalanceAfterDeposit = await zetoCBDC2
     .using(paladin1)
@@ -172,7 +172,7 @@ async function main(): Promise<boolean> {
         },
       ],
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
   const bank1BalanceUseCase2 = await zetoCBDC2
     .using(paladin1)
@@ -193,7 +193,7 @@ async function main(): Promise<boolean> {
     .withdraw(bank1, {
       amount: withdrawAmount,
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(result5)) return false;
 
   const finalBalanceBank1 = await zetoCBDC2
@@ -279,7 +279,7 @@ async function deployERC20(
     abi: erc20Abi.abi,
     bytecode: erc20Abi.bytecode,
   });
-  const result1 = await paladin.pollForReceipt(txId1, 5000);
+  const result1 = await paladin.pollForReceipt(txId1, 10000);
   if (!checkReceipt(result1)) {
     throw new Error("Failed to deploy ERC20 token");
   }
@@ -305,7 +305,7 @@ async function mintERC20(
     function: "mint",
     abi: erc20Abi.abi,
   });
-  const result3 = await paladin.pollForReceipt(txId2, 5000);
+  const result3 = await paladin.pollForReceipt(txId2, 10000);
   if (!checkReceipt(result3)) {
     throw new Error("Failed to mint ERC20 tokens to bank1");
   }
@@ -327,7 +327,7 @@ async function approveERC20(
     from: from.lookup,
     data: { value: amount, spender },
   });
-  const result1 = await paladin.pollForReceipt(txID1, 5000);
+  const result1 = await paladin.pollForReceipt(txID1, 10000);
   if (!checkReceipt(result1)) {
     throw new Error("Failed to approve transfer");
   }

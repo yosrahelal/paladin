@@ -99,7 +99,9 @@ export default class PaladinClient {
 
   async pollForReceipt(txID: string, waitMs: number, full?: boolean) {
     for (let i = 0; i < waitMs; i += POLL_INTERVAL_MS) {
-      var receipt = await this.getTransactionReceipt(txID, full);
+      var receipt = full 
+        ? await this.ptx.getTransactionReceiptFull(txID)
+        : await this.ptx.getTransactionReceipt(txID);
       if (receipt != undefined) {
         return receipt;
       }

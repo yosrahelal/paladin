@@ -37,7 +37,7 @@ async function main(): Promise<boolean> {
     bytecode: helloWorldJson.bytecode,
     from: verifierNode1.lookup,
   });
-  const receipt = await deploy.waitForReceipt();
+  const receipt = await deploy.waitForReceipt(10000);
   const contractAddress = await deploy.waitForDeploy();
   if (!receipt || !contractAddress) {
     logger.error("Failed to deploy the contract. No address returned.");
@@ -164,6 +164,20 @@ async function main(): Promise<boolean> {
     logger.error("Failed to receive the receipt.");
     return false;
   }
+
+  // Wait for event data to be properly captured
+  logger.log("Waiting for event data to be captured...");
+  const startTime = Date.now();
+  while (!receivedEventData || !receivedReceiptId) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    
+    // If 60 seconds passed from the beginning of the loop then fail the test
+    if (Date.now() - startTime > 60000) {
+      logger.error("Failed to capture event data after 60 seconds");
+      return false;
+    }
+  }
+  logger.log("Event data captured successfully!");
 
   // Add a small delay to ensure any additional receipts are processed
   logger.log(`Waiting for any additional receipts to be processed...`);

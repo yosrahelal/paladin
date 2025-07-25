@@ -116,7 +116,7 @@ async function main(): Promise<boolean> {
       amount: issuedAssetAmount,
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   // Issue cash
@@ -131,7 +131,7 @@ async function main(): Promise<boolean> {
         },
       ],
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   // Lock the asset for the swap
@@ -142,7 +142,7 @@ async function main(): Promise<boolean> {
       amount: assetAmount,
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
   receipt = await paladin2.ptx.getTransactionReceiptFull(receipt.id);
 
@@ -163,7 +163,7 @@ async function main(): Promise<boolean> {
       recipients: [{ to: investor2, amount: assetAmount }],
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
   receipt = await paladin2.ptx.getTransactionReceiptFull(receipt.id);
 
@@ -184,7 +184,7 @@ async function main(): Promise<boolean> {
       amount: cashAmount,
       delegate: investor2Address,
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
   const lockedStates = await paladin3.ptx.getStateReceipt(receipt.id);
   let lockedStateId: string | undefined;
@@ -243,7 +243,7 @@ async function main(): Promise<boolean> {
       delegate: atom.address,
       data: "0x",
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   // Approve cash transfer operation
@@ -254,7 +254,7 @@ async function main(): Promise<boolean> {
       utxos: [lockedStateId],
       delegate: atom.address,
     })
-    .waitForReceipt();
+    .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
 
   // execute the swap

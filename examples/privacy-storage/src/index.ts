@@ -59,7 +59,7 @@ async function main(): Promise<boolean> {
     from: verifierNode1.lookup,
     function: "store",
     data: { num: valueToStore },
-  }).waitForReceipt();
+  }).waitForReceipt(10000);
   logger.log(
     "Value stored successfully! Transaction hash:",
     storeReceipt?.transactionHash

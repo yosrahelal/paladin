@@ -203,7 +203,7 @@ async function main(): Promise<boolean> {
           },
         ],
       })
-      .waitForReceipt();
+      .waitForReceipt(10000);
 
     if (!testTransferReceipt?.transactionHash) {
       logger.error("STEP 5: Test transfer failed!");
@@ -266,7 +266,7 @@ async function main(): Promise<boolean> {
           },
         ],
       })
-      .waitForReceipt();
+      .waitForReceipt(10000);
 
     if (!restoreTransferReceipt?.transactionHash) {
       logger.error("STEP 6: Restore transfer failed!");

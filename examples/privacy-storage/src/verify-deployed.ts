@@ -164,7 +164,7 @@ async function main(): Promise<boolean> {
       from: verifierNode1.lookup,
       function: "store",
       data: { num: newValueToStore },
-    }).waitForReceipt();
+    }).waitForReceipt(10000);
 
     if (!storeReceipt?.transactionHash) {
       logger.error("STEP 7: Function call failed!");
@@ -224,7 +224,7 @@ async function main(): Promise<boolean> {
       from: verifierNode1.lookup,
       function: "store",
       data: { num: contractData.storedValue },
-    }).waitForReceipt();
+    }).waitForReceipt(10000);
 
     if (!restoreReceipt?.transactionHash) {
       logger.error("STEP 8: Function call failed!");
