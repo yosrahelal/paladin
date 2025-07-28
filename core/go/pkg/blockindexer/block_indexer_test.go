@@ -1242,8 +1242,10 @@ func TestValidTransactionTypesArePersisted(t *testing.T) {
 
 	utBatchNotify := make(chan []*pldapi.IndexedBlock)
 	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
+
+	txNotify := make(chan []*IndexedTransactionNotify)
 	addBlockPostCommitTx(bi, func(transactions []*IndexedTransactionNotify) {
-		persistedTransactions += len(transactions)
+		txNotify <- transactions
 	})
 
 	// do not start block listener
@@ -1256,6 +1258,7 @@ func TestValidTransactionTypesArePersisted(t *testing.T) {
 
 	for i := 5; i < len(blocks)-bi.requiredConfirmations; i++ {
 		notifiedBlocks := <-utBatchNotify
+		persistedTransactions += len(<-txNotify)
 		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
 		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
@@ -1291,8 +1294,10 @@ func TestDefaultInvalidTransactionTypesAreIgnored(t *testing.T) {
 
 	utBatchNotify := make(chan []*pldapi.IndexedBlock)
 	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
+
+	txNotify := make(chan []*IndexedTransactionNotify)
 	addBlockPostCommitTx(bi, func(transactions []*IndexedTransactionNotify) {
-		persistedTransactions += len(transactions)
+		txNotify <- transactions
 	})
 
 	// do not start block listener
@@ -1305,6 +1310,7 @@ func TestDefaultInvalidTransactionTypesAreIgnored(t *testing.T) {
 
 	for i := 5; i < len(blocks)-bi.requiredConfirmations; i++ {
 		notifiedBlocks := <-utBatchNotify
+		persistedTransactions += len(<-txNotify)
 		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
 		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
@@ -1328,6 +1334,8 @@ func TestCustomInvalidTransactionTypesAreIgnored(t *testing.T) {
 	expectedTransactions := 10
 	// Persisted transactions. None of the test transactions should be persisted because
 	// we've set their TX type to match an entry in the (configurable) ignore list.
+
+	// Use mutex to protect the persistedTransactions variable
 	persistedTransactions := 0
 
 	bi.fromBlock = nil
@@ -1340,8 +1348,10 @@ func TestCustomInvalidTransactionTypesAreIgnored(t *testing.T) {
 
 	utBatchNotify := make(chan []*pldapi.IndexedBlock)
 	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
+
+	txNotify := make(chan []*IndexedTransactionNotify)
 	addBlockPostCommitTx(bi, func(transactions []*IndexedTransactionNotify) {
-		persistedTransactions += len(transactions)
+		txNotify <- transactions
 	})
 
 	// do not start block listener
@@ -1354,6 +1364,7 @@ func TestCustomInvalidTransactionTypesAreIgnored(t *testing.T) {
 
 	for i := 5; i < len(blocks)-bi.requiredConfirmations; i++ {
 		notifiedBlocks := <-utBatchNotify
+		persistedTransactions += len(<-txNotify)
 		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
 		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
