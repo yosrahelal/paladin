@@ -113,7 +113,7 @@ export default class PaladinClient {
 
   async pollForPreparedTransaction(txID: string, waitMs: number) {
     for (let i = 0; i < waitMs; i += POLL_INTERVAL_MS) {
-      var receipt = await this.getPreparedTransaction(txID);
+      var receipt = await this.ptx.getPreparedTransaction(txID);
       if (receipt != undefined) {
         return receipt;
       }

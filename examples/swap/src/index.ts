@@ -211,10 +211,7 @@ async function main(): Promise<boolean> {
       },
     ],
   }).id;
-  const preparedCashTransfer = await paladin3.pollForPreparedTransaction(
-    txID,
-    issuedCashAmount
-  );
+  const preparedCashTransfer = await paladin3.pollForPreparedTransaction(txID, 50000);
   if (!preparedCashTransfer) return false;
 
   const encodedCashTransfer = await encodeZetoTransfer(preparedCashTransfer);

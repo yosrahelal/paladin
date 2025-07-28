@@ -50,7 +50,8 @@ jobs:
           extract_version_number() {
             local version_range="$1"
             # Remove range operators: ^, ~, >=, <=, >, <, =
-            sed 's/^[^0-9]*//' <<< "$version_range" | sed 's/[^0-9.]*$//'
+            local version_number="${version_range//[^0-9.]/}"
+            echo "$version_number"
           }
           
           # Check each changed metadata file for version changes
