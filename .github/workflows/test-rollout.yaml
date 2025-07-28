@@ -82,6 +82,16 @@ jobs:
           # Wait for cluster to be ready
           kubectl wait --for=condition=Ready nodes --all --timeout=300s
 
+      - name: Cache Helm repositories
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/helm
+            ~/.config/helm
+          key: ${{ runner.os }}-helm-repos-${{ hashFiles('**/helm-repos.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-helm-repos-
+
       # Install the old version of the paladin operator
       - name: Install previous version of Paladin charts
         env:
@@ -89,10 +99,13 @@ jobs:
         run: |
           # Step 1: Install the CRD Chart
           helm repo add paladin https://LF-Decentralized-Trust-labs.github.io/paladin --force-update
-          helm upgrade --install paladin-crds paladin/paladin-operator-crd 
-          
-          # Step 2: Install cert-manager CRDs
           helm repo add jetstack https://charts.jetstack.io --force-update
+          helm repo update
+          
+          # Step 2: Install the CRD Chart
+          helm upgrade --install paladin-crds paladin/paladin-operator-crd
+          
+          # Step 3: Install cert-manager CRDs
           helm install cert-manager --namespace cert-manager --version v1.16.1 jetstack/cert-manager --create-namespace --set crds.enabled=true
           
           # Wait for cert-manager to be ready
