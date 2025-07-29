@@ -79,22 +79,26 @@ function check_pod_status() {
 
     echo "[INFO] Waiting for all pods in namespace '$NAMESPACE' to be ready..."
 
-    local expected_pods=0
-    local dep_replicas=$(kubectl --namespace "$NAMESPACE" get deployments -o jsonpath='{.items[*].spec.replicas}' 2>/dev/null)
-    for i in $dep_replicas; do
-        expected_pods=$((expected_pods + i))
-    done
-    local sts_replicas=$(kubectl --namespace "$NAMESPACE" get statefulsets -o jsonpath='{.items[*].spec.replicas}' 2>/dev/null)
-    for i in $sts_replicas; do
-        expected_pods=$((expected_pods + i))
-    done
-
-    if [ "$expected_pods" -eq 0 ]; then
-        echo "[WARN] No deployments or statefulsets found in namespace '$NAMESPACE'. Skipping pod status check."
-        return 0
-    fi
-
     while [ $elapsed_time -lt $max_wait_time ]; do
+        
+        # we sleep before the first check to avoid race conditions
+        sleep $interval
+        elapsed_time=$((elapsed_time + interval))
+
+        local expected_pods=0
+        local dep_replicas=$(kubectl --namespace "$NAMESPACE" get deployments -o jsonpath='{.items[*].spec.replicas}' 2>/dev/null)
+        for i in $dep_replicas; do
+            expected_pods=$((expected_pods + i))
+        done
+        local sts_replicas=$(kubectl --namespace "$NAMESPACE" get statefulsets -o jsonpath='{.items[*].spec.replicas}' 2>/dev/null)
+        for i in $sts_replicas; do
+            expected_pods=$((expected_pods + i))
+        done
+
+        if [ "$expected_pods" -eq 0 ]; then
+            echo "[WARN] No deployments or statefulsets found in namespace '$NAMESPACE'. Skipping pod status check."
+            continue
+        fi
         local pod_list=$(kubectl --namespace "$NAMESPACE" get pods --no-headers 2>/dev/null || true)
         local total_pods=0
         local ready_pods=0
@@ -122,8 +126,6 @@ function check_pod_status() {
         fi
 
         echo "[INFO] Waiting for pods to become ready... ($ready_pods/$expected_pods)"
-        sleep $interval
-        elapsed_time=$((elapsed_time + interval))
     done
 
     echo "[ERROR] Timed out waiting for pods to be ready."

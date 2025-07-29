@@ -95,7 +95,7 @@ jobs:
           kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=300s
           
           # Step 4: Install the Paladin Operator Chart
-          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace
+          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace --wait --timeout 300s
 
       - name: Validate installation
         run: |
