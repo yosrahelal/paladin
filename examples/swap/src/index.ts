@@ -28,18 +28,32 @@ const paladin3 = new PaladinClient({
 
 // TODO: eliminate the need for this call
 async function encodeZetoTransfer(preparedCashTransfer: IPreparedTransaction) {
-  const zetoTransferAbi = await paladin3.ptx.getStoredABI(
-    preparedCashTransfer.transaction.abiReference ?? ""
-  );
-  return new ethers.Interface(zetoTransferAbi.abi).encodeFunctionData(
-    "transferLocked",
-    [
-      preparedCashTransfer.transaction.data.inputs,
-      preparedCashTransfer.transaction.data.outputs,
-      preparedCashTransfer.transaction.data.proof,
-      preparedCashTransfer.transaction.data.data,
-    ]
-  );
+  try {
+    const zetoTransferAbi = await paladin3.ptx.getStoredABI(
+      preparedCashTransfer.transaction.abiReference ?? ""
+    );
+    
+    if (!zetoTransferAbi) {
+      throw new Error("Failed to get stored ABI for prepared transaction");
+    }
+    
+    const encodedData = new ethers.Interface(zetoTransferAbi.abi).encodeFunctionData(
+      "transferLocked",
+      [
+        preparedCashTransfer.transaction.data.inputs,
+        preparedCashTransfer.transaction.data.outputs,
+        preparedCashTransfer.transaction.data.proof,
+        preparedCashTransfer.transaction.data.data,
+      ]
+    );
+    
+    logger.log("Successfully encoded Zeto transfer data");
+    return encodedData;
+  } catch (error) {
+    logger.error("Failed to encode Zeto transfer:");
+    logger.error(`Error: ${error}`);
+    throw error;
+  }
 }
 
 async function main(): Promise<boolean> {
@@ -175,7 +189,7 @@ async function main(): Promise<boolean> {
     return false;
   }
 
-  // Prepare cash transfer
+  // Lock the cash for the swap
   logger.log("Locking cash amount from investor2...");
   const investor2Address = await investor2.address();
   receipt = await zetoCash
@@ -186,6 +200,10 @@ async function main(): Promise<boolean> {
     })
     .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
+  
+  // Add a delay to ensure the lock operation is fully settled
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  
   const lockedStates = await paladin3.ptx.getStateReceipt(receipt.id);
   let lockedStateId: string | undefined;
   lockedStates?.confirmed?.forEach((state) => {
@@ -200,6 +218,8 @@ async function main(): Promise<boolean> {
     logger.log(`Locked state ID: ${lockedStateId}`);
   }
 
+  // Prepare cash transfer
+  logger.log("Preparing cash transfer...");
   const txID = await zetoCash.using(paladin3).prepareTransferLocked(investor2, {
     lockedInputs: [lockedStateId],
     delegate: investor2.lookup,
@@ -211,13 +231,24 @@ async function main(): Promise<boolean> {
       },
     ],
   }).id;
+  
+  logger.log(`Prepared transaction ID: ${txID}`);
   const preparedCashTransfer = await paladin3.pollForPreparedTransaction(txID, 50000);
-  if (!preparedCashTransfer) return false;
+  if (!preparedCashTransfer) {
+    logger.error(`Failed to get prepared transaction for ID: ${txID}`);
+    return false;
+  }
+  
+  logger.log("Cash transfer preparation successful!");
 
   const encodedCashTransfer = await encodeZetoTransfer(preparedCashTransfer);
+  logger.log(`Encoded cash transfer length: ${encodedCashTransfer.length}`);
 
   // Create an atom for the swap
   logger.log("Creating atom...");
+  logger.log(`Asset unlock call length: ${assetUnlockCall.length}`);
+  logger.log(`Encoded cash transfer length: ${encodedCashTransfer.length}`);
+  
   const atom = await atomFactory.create(cashIssuer, [
     {
       contractAddress: notoAsset.address,
@@ -229,6 +260,8 @@ async function main(): Promise<boolean> {
     },
   ]);
   if (!checkDeploy(atom)) return false;
+  
+  logger.log(`Atom created successfully at address: ${atom.address}`);
 
   // Approve asset unlock operation
   logger.log("Approving asset leg...");
@@ -259,6 +292,9 @@ async function main(): Promise<boolean> {
   receipt = await atom.using(paladin3).execute(investor2);
   if (!checkReceipt(receipt)) return false;
 
+  // Add a delay to ensure the swap operation is fully settled
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+
   let finalAssetBalanceInvestor1: NotoBalanceOfResult | undefined;
   let finalAssetBalanceInvestor2: NotoBalanceOfResult | undefined;
   let finalCashBalanceInvestor1: NotoBalanceOfResult | undefined;
@@ -267,15 +303,20 @@ async function main(): Promise<boolean> {
   // get final balances
   // it can take some time for the balances to update, so loop until all balances are >0
   const startTime = Date.now();
+  logger.log("Waiting for balances to settle after swap...");
   while (true) {  
     finalAssetBalanceInvestor1 = await notoAsset.using(paladin2).balanceOf(investor1, { account: investor1.lookup });
     finalAssetBalanceInvestor2 = await notoAsset.using(paladin3).balanceOf(investor2, { account: investor2.lookup });
     finalCashBalanceInvestor1 = await zetoCash.using(paladin2).balanceOf(investor1, { account: investor1.lookup });
     finalCashBalanceInvestor2 = await zetoCash.using(paladin3).balanceOf(investor2, { account: investor2.lookup });
+    
+    logger.log(`Current balances - Asset: I1=${finalAssetBalanceInvestor1.totalBalance}, I2=${finalAssetBalanceInvestor2.totalBalance}, Cash: I1=${finalCashBalanceInvestor1.totalBalance}, I2=${finalCashBalanceInvestor2.totalBalance}`);
+    
     if (finalAssetBalanceInvestor1.totalBalance !== "0" &&
         finalAssetBalanceInvestor2.totalBalance !== "0" &&
         finalCashBalanceInvestor1.totalBalance !== "0" &&
         finalCashBalanceInvestor2.totalBalance !== "0") {
+      logger.log("All balances are non-zero, proceeding...");
       break;
     }
     await new Promise(resolve => setTimeout(resolve, 1000));

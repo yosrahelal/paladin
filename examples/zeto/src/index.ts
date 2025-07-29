@@ -98,6 +98,10 @@ async function main(): Promise<boolean> {
     })
     .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
+  
+  // Add a small delay to ensure state is settled
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  
   bank1Balance = await zetoCBDC1
     .using(paladin1)
     .balanceOf(bank1, { account: bank1.lookup });
@@ -174,17 +178,21 @@ async function main(): Promise<boolean> {
     })
     .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
+  
+  // Add a small delay to ensure state is settled
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  
   const bank1BalanceUseCase2 = await zetoCBDC2
     .using(paladin1)
     .balanceOf(bank1, { account: bank1.lookup });
   logger.log(
-    `bank1 State: ${bank1Balance.totalBalance} units of cash, ${bank1Balance.totalStates} states, overflow: ${bank1Balance.overflow}`
+    `bank1 State: ${bank1BalanceUseCase2.totalBalance} units of cash, ${bank1BalanceUseCase2.totalStates} states, overflow: ${bank1BalanceUseCase2.overflow}`
   );
   const bank2BalanceUseCase2 = await zetoCBDC2
     .using(paladin2)
     .balanceOf(bank2, { account: bank2.lookup });
   logger.log(
-    `bank2 State: ${bank2Balance.totalBalance} units of cash, ${bank2Balance.totalStates} states, overflow: ${bank2Balance.overflow}`
+    `bank2 State: ${bank2BalanceUseCase2.totalBalance} units of cash, ${bank2BalanceUseCase2.totalStates} states, overflow: ${bank2BalanceUseCase2.overflow}`
   );
 
   logger.log("- Bank1 withdraws Zeto back to ERC20 balance ...");
@@ -195,6 +203,9 @@ async function main(): Promise<boolean> {
     })
     .waitForReceipt(10000);
   if (!checkReceipt(result5)) return false;
+
+  // Add a small delay to ensure state is settled
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 
   const finalBalanceBank1 = await zetoCBDC2
     .using(paladin1)

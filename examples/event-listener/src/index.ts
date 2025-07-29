@@ -48,13 +48,19 @@ async function main(): Promise<boolean> {
     `Contract deployed successfully! Address: ${contractAddress} Sequence: ${lastSequence}`
   );
 
+  // Store the ABI first to ensure event decoding works
+  logger.log("Storing contract ABI for event decoding...");
+  await paladin.ptx.storeABI(helloWorldJson.abi);
+
   // Create a new listener (deleting one if it already exists)
   logger.log("Creating a receipt listener...");
   try {
     await paladin.ptx.deleteReceiptListener("example-event-listener");
   } catch (err) {
-    // do nothing
+    // Ignore error if listener doesn't exist
+    logger.log("No existing listener to delete");
   }
+  
   await paladin.ptx.createReceiptListener({
     name: "example-event-listener",
     filters: {
@@ -97,13 +103,18 @@ async function main(): Promise<boolean> {
         `Processing contract receipt ${receipt.id} (to: ${domainReceipt.receipt.to})`
       );
       for (const log of domainReceipt.receipt.logs ?? []) {
-        const decoded = await paladin.ptx.decodeEvent(log.topics, log.data);
-        const message = decoded?.data?.message;
-        if (message?.indexOf(name) !== -1) {
-          logger.log(`Received event data: ${JSON.stringify(decoded?.data)}`);
-          received = true;
-          receivedEventData = decoded?.data;
-          receivedReceiptId = receipt.id;
+        try {
+          const decoded = await paladin.ptx.decodeEvent(log.topics, log.data);
+          const message = decoded?.data?.message;
+          if (message?.indexOf(name) !== -1) {
+            logger.log(`Received event data: ${JSON.stringify(decoded?.data)}`);
+            received = true;
+            receivedEventData = decoded?.data;
+            receivedReceiptId = receipt.id;
+          }
+        } catch (decodeError) {
+          logger.log(`Failed to decode event: ${decodeError}`);
+          // Continue processing other logs
         }
       }
     }
@@ -132,6 +143,10 @@ async function main(): Promise<boolean> {
       }
     }
   );
+
+  // Wait for WebSocket connection to be established
+  logger.log("Waiting for WebSocket connection...");
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 
   const sayHelloMethod = helloWorldJson.abi.find(
     (abi) => abi.name === "sayHello"
@@ -168,12 +183,15 @@ async function main(): Promise<boolean> {
   // Wait for event data to be properly captured
   logger.log("Waiting for event data to be captured...");
   const startTime = Date.now();
+  const maxWaitTime = 60000; // Reduced to 30 seconds
+  
   while (!receivedEventData || !receivedReceiptId) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 500)); // Reduced polling interval
     
-    // If 60 seconds passed from the beginning of the loop then fail the test
-    if (Date.now() - startTime > 60000) {
-      logger.error("Failed to capture event data after 60 seconds");
+    // If maxWaitTime passed from the beginning of the loop then fail the test
+    if (Date.now() - startTime > maxWaitTime) {
+      logger.error(`Failed to capture event data after ${maxWaitTime/1000} seconds`);
+      logger.error(`received: ${received}, receivedEventData: ${!!receivedEventData}, receivedReceiptId: ${!!receivedReceiptId}`);
       return false;
     }
   }
@@ -181,7 +199,7 @@ async function main(): Promise<boolean> {
 
   // Add a small delay to ensure any additional receipts are processed
   logger.log(`Waiting for any additional receipts to be processed...`);
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 
   await wsClient.close();
 
