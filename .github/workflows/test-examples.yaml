@@ -1,4 +1,4 @@
-name: 'Run the tutorials'
+name: 'Run the examples'
 
 permissions:
   contents: read
@@ -39,12 +39,12 @@ on:
         default: 'start'
 
 jobs:
-  run-tutorials:
+  run-examples:
     # here are the steps:
     # 1. create a cluster with kind
     # 2. install the helm charts (latest version)
     # 3. validate the installation
-    # 4. run the tutorials
+    # 4. run the examples
     # 5. destroy the cluster
     runs-on: ubuntu-latest
     steps:
@@ -102,14 +102,13 @@ jobs:
           # Run the validation script
           ./scripts/default-installation-validation.sh paladin
 
-      - name: Run all tutorials
+      - name: Run all examples
         env:
           BUILD_PALADIN_SDK: ${{ inputs.build_local_sdk }}
           BUILD_PALADIN_ABI: ${{ inputs.build_local_abi }}
           RUN_COMMANDS: ${{ inputs.run_commands }}
         run: |
-          # Run the tutorials script
-          ./scripts/run-tutorials.sh
+          ./scripts/run-examples.sh
 
       - name: Cleanup cluster
         if: always()

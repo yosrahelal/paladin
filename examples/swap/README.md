@@ -1,11 +1,8 @@
 # Example: Atomic Swap
 
-This example demonstrates an atomic swap scenario on Paladin. It performs a swap between:
+This example demonstrates an atomic swap of a ZKP asset for a private asset, using a custom Atom (atomic transaction) contract. Zeto is used for the ZKP asset, and Noto for the private asset, with Pente for the private logic.
 
-- a cash token implemented with Zeto
-- an asset token implemented with Noto, with private hooks implemented on Pente
-
-See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/examples/atomic-swap/) for a detailed explanation.
+See the [tutorial](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/atomic-swap/) for a detailed explanation.
 
 ## Pre-requisites
 

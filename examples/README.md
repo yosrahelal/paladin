@@ -4,7 +4,7 @@ These examples demonstrate the various areas of function provided by Paladin.
 
 Every example has its own readme and setup instructions. The following setup is common to most examples and sets up the SDKs and common requirements ready to run any of the examples.
 
-See the [tutorials](https://lf-decentralized-trust-labs.github.io/paladin/head/examples/) for more information.
+See the [tutorials](https://lf-decentralized-trust-labs.github.io/paladin/head/tutorials/) for more information.
 
 ### Set up a local Paladin network
 

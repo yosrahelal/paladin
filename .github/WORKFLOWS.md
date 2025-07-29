@@ -13,12 +13,14 @@ When a developer opens a PR, several automated checks are triggered to validate 
   - **[Template the Helm Chart](workflows/build-chart.yaml):** Rebuilds and validates Helm charts for correctness.  
     > **Note:** Charts are **not published** but tested locally.
 
-- **[Test Tutorials](workflows/on-pr-push-tutorials.yaml):**  
-  Ensures examples remain functional with the latest SDK:
-  - **Backwards Compatibility:** Tests with published SDK and ABI versions
-  - **Forward Compatibility:** Tests with locally built SDK and ABI
-  - **Commands:** Runs both `start` and `verify` commands for comprehensive testing
-  - **Purpose:** Validates that tutorial changes don't break existing functionality
+- **[Test Examples](workflows/on-pr-push-examples.yaml):**
+  - **Status:** [![Test Examples](https://github.com/LF-Decentralized-Trust-labs/paladin/actions/workflows/on-pr-push-examples.yaml/badge.svg?branch=main)](https://github.com/LF-Decentralized-Trust-labs/paladin/actions/workflows/on-pr-push-examples.yaml)
+  - **Trigger:** Runs on pushes and pull requests to `main` that modify files under `examples/**`.
+  - **Purpose:** Validates that example changes don't break existing functionality by running them against both the latest published and local versions of the SDK and contracts.
+  - **Key Steps:**
+    - **Backwards Compatibility:** Runs `test-examples.yaml` with `build_local_sdk` and `build_local_abi` set to `false` to ensure the examples work with the latest published versions.
+    - **Forward Compatibility:** Runs `test-examples.yaml` with `build_local_sdk` and `build_local_abi` set to `true` to ensure the examples work with the current code in the PR.
+- **[Check Metadata Changes](workflows/check-metadata-changes.yml):**
 
 - **[Test TypeScript SDK](workflows/on-pr-push-ts-sdk.yaml):**  
   Validates SDK changes against existing examples:
@@ -72,23 +74,7 @@ Release candidates are created first for testing and validation:
   - **[Release Solidity Contracts](workflows/release-solidity-contracts.yaml):**
     Packages contract ABIs and deployment artifacts for distribution.
   - **GitHub Release:** Creates a pre-release with all artifacts
-
-  - **[Test Rollout](workflows/test-rollout.yaml):**  
-    **Backwards Compatibility Testing** - Comprehensive validation that ensures smooth version upgrades:
-    - **Manual Trigger:** Can be triggered manually with specific version tags (e.g., previous version vs new RC)
-    - **Testing Process:**
-      1. **Setup:** Creates a Kind cluster and installs the previous version of Paladin
-      2. **Initial State:** Runs all examples with the old version to establish baseline functionality
-      3. **Rollout:** Upgrades to the new RC version using Helm
-      4. **Validation:** Verifies the installation is successful after rollout
-      5. **Backwards Compatibility:** Tests that existing data and contracts still work with:
-        - Old SDK version (ensures users can continue using existing code)
-        - New SDK version (ensures users can upgrade their code)
-      6. **Forward Compatibility:** Runs examples with the new SDK version to validate new features
-      7. **Cleanup:** Destroys the test cluster
-    - **Purpose:** Ensures that users can safely upgrade from the previous version to the new RC without breaking existing functionality or data
-    - **Critical for:** Production deployments, user confidence, and release quality assurance
-
+ 
 ### Stage 2: Final Release 🎯
 Once the RC has been tested and validated, the final release can be created:
 
@@ -145,4 +131,3 @@ Workflows can also be triggered manually when needed. Available options include:
 
 - **[Stale Issues/PRs](workflows/stale.yml):** Automatically marks and closes stale issues and pull requests
 - **[Build Workflows](workflows/build-workflows.yaml):** Validates workflow syntax and structure
-- **[Check Metadata Changes](workflows/check-metadata-changes.yml):** Prevents version number changes in example metadata

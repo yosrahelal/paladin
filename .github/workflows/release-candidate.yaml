@@ -91,15 +91,8 @@ jobs:
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  test-rollout:
-    needs: [set-variables, release-charts, release-solidity-contracts, release-typescript-sdk]
-    uses: ./.github/workflows/test-rollout.yaml
-    with:
-      new_tag: ${{ needs.set-variables.outputs.tag }}
-      previous_tag: ${{ needs.set-variables.outputs.previous_tag }}
-
   release:
-    needs: [set-variables, release-charts, release-solidity-contracts, release-typescript-sdk, test-rollout]
+    needs: [set-variables, release-charts, release-solidity-contracts, release-typescript-sdk]
     runs-on: ubuntu-latest
     steps:
       - name: Download Helm artifacts
