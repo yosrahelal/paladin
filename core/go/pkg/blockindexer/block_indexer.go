@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -109,6 +110,7 @@ type blockIndexer struct {
 	processorDone              chan struct{}
 	dispatcherDone             chan struct{}
 	rpcModule                  *rpcserver.RPCModule
+	ignoredTransactionTypes    []int64
 }
 
 func NewBlockIndexer(ctx context.Context, config *pldconf.BlockIndexerConfig, wsConfig *pldconf.WSClientConfig, persistence persistence.Persistence) (_ BlockIndexer, err error) {
@@ -137,6 +139,7 @@ func newBlockIndexer(ctx context.Context, conf *pldconf.BlockIndexerConfig, pers
 		esBlockDispatchQueueLength: confutil.IntMin(conf.EventStreams.BlockDispatchQueueLength, 0, *pldconf.EventStreamDefaults.BlockDispatchQueueLength),
 		esCatchUpQueryPageSize:     confutil.IntMin(conf.EventStreams.CatchUpQueryPageSize, 0, *pldconf.EventStreamDefaults.CatchUpQueryPageSize),
 		dispatcherTap:              make(chan struct{}, 1),
+		ignoredTransactionTypes:    confutil.Int64Slice(conf.IgnoredTransactionTypes, pldconf.BlockIndexerDefaults.IgnoredTransactionTypes),
 	}
 	bi.highestConfirmedBlock.Store(-1)
 	bi.fromBlock, err = bi.getFromBlock(ctx, conf.FromBlock, pldconf.BlockIndexerDefaults.FromBlock)
@@ -576,6 +579,13 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 			if r.Status.BigInt().Int64() == 1 {
 				result = pldapi.TXResult_SUCCESS.Enum()
 			}
+
+			// Ignore transaction types that don't behave like regular transactions (e.g. L2 transactions where nonce always = 0)
+			if slices.Contains(bi.ignoredTransactionTypes, r.Type.Int64()) {
+				log.L(ctx).Debugf("Ignoring unsupported transaction type %x", r.Type.Int64())
+				continue
+			}
+
 			log.L(ctx).Debugf("Indexed transaction: blockNumber=%d, txIndex=%d, hash=%s, result=%s", block.Number, txIndex, r.TransactionHash, result)
 			txn := IndexedTransactionNotify{
 				IndexedTransaction: pldapi.IndexedTransaction{
