@@ -1335,7 +1335,6 @@ func TestCustomInvalidTransactionTypesAreIgnored(t *testing.T) {
 	// Persisted transactions. None of the test transactions should be persisted because
 	// we've set their TX type to match an entry in the (configurable) ignore list.
 
-	// Use mutex to protect the persistedTransactions variable
 	persistedTransactions := 0
 
 	bi.fromBlock = nil
