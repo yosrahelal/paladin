@@ -1,5 +1,7 @@
 name: Check Examples Metadata Version Changes
 
+permissions:
+  contents: read
 on:
   pull_request:
     paths:

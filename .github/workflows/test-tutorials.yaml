@@ -1,5 +1,7 @@
 name: 'Run the tutorials'
 
+permissions:
+  contents: read
 on:
   workflow_dispatch: 
     inputs:
