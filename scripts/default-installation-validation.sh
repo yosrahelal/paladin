@@ -72,29 +72,62 @@ fi
 
 print_status "Prerequisites check passed"
 
-# Function to wait for pods to be ready
-wait_for_pods() {
-    local max_attempts=30
-    local attempt=1
-    
-    print_status "Waiting for all pods to be ready..."
-    
-    while [ $attempt -le $max_attempts ]; do
-        local ready_pods=$(kubectl --namespace $NAMESPACE get pods --no-headers | grep -c "Running")
-        local total_pods=$(kubectl --namespace $NAMESPACE get pods --no-headers | wc -l)
-        
-        if [ "$ready_pods" -eq "$total_pods" ] && [ "$total_pods" -gt 0 ]; then
-            print_status "All pods are ready! ($ready_pods/$total_pods)"
+function check_pod_status() {
+    local max_wait_time=300
+    local interval=10
+    local elapsed_time=0
+
+    echo "[INFO] Waiting for all pods in namespace '$NAMESPACE' to be ready..."
+
+    local expected_pods=0
+    local dep_replicas=$(kubectl --namespace "$NAMESPACE" get deployments -o jsonpath='{.items[*].spec.replicas}' 2>/dev/null)
+    for i in $dep_replicas; do
+        expected_pods=$((expected_pods + i))
+    done
+    local sts_replicas=$(kubectl --namespace "$NAMESPACE" get statefulsets -o jsonpath='{.items[*].spec.replicas}' 2>/dev/null)
+    for i in $sts_replicas; do
+        expected_pods=$((expected_pods + i))
+    done
+
+    if [ "$expected_pods" -eq 0 ]; then
+        echo "[WARN] No deployments or statefulsets found in namespace '$NAMESPACE'. Skipping pod status check."
+        return 0
+    fi
+
+    while [ $elapsed_time -lt $max_wait_time ]; do
+        local pod_list=$(kubectl --namespace "$NAMESPACE" get pods --no-headers 2>/dev/null || true)
+        local total_pods=0
+        local ready_pods=0
+
+        if [ -n "$pod_list" ]; then
+            total_pods=$(echo "$pod_list" | wc -l)
+            local all_pods_ready_and_running=$(echo "$pod_list" | awk '
+                BEGIN { ready=0 }
+                {
+                    split($2, ready_status, "/");
+                    if ($3 == "Running" && ready_status[1] == ready_status[2]) {
+                        ready++;
+                    }
+                }
+                END { print ready }
+            ')
+            ready_pods=$all_pods_ready_and_running
+        fi
+
+        if [ "$total_pods" -eq "$expected_pods" ] && [ "$ready_pods" -eq "$expected_pods" ]; then
+            echo "[INFO] All pods are ready! ($ready_pods/$expected_pods)"
+            echo "[INFO] Pod status:"
+            kubectl --namespace "$NAMESPACE" get pods
             return 0
         fi
-        
-        print_status "Attempt $attempt/$max_attempts: $ready_pods/$total_pods pods ready"
-        sleep 10
-        ((attempt++))
+
+        echo "[INFO] Waiting for pods to become ready... ($ready_pods/$expected_pods)"
+        sleep $interval
+        elapsed_time=$((elapsed_time + interval))
     done
-    
-    print_error "Timeout waiting for pods to be ready"
-    kubectl --namespace $NAMESPACE get pods
+
+    echo "[ERROR] Timed out waiting for pods to be ready."
+    kubectl --namespace "$NAMESPACE" get pods
     return 1
 }
 
@@ -295,7 +328,7 @@ main() {
     fi
     
     # Wait for pods to be ready
-    if ! wait_for_pods; then
+    if ! check_pod_status; then
         exit 1
     fi
     

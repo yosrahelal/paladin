@@ -81,7 +81,7 @@ async function main(): Promise<boolean> {
     .newZeto(cashIssuer, {
       tokenName: "Zeto_Anon",
     })
-    .waitForDeploy();
+    .waitForDeploy(10000);
   if (!checkDeploy(zetoCash)) return false;
 
   // Create a Pente privacy group for the asset issuer only
@@ -93,7 +93,7 @@ async function main(): Promise<boolean> {
       evmVersion: "shanghai",
       externalCallsEnabled: true,
     })
-    .waitForDeploy();
+    .waitForDeploy(10000);
   if (!checkDeploy(issuerGroup)) return false;
 
   // Deploy private tracker to the issuer privacy group
@@ -119,7 +119,7 @@ async function main(): Promise<boolean> {
         },
       },
     })
-    .waitForDeploy();
+    .waitForDeploy(10000);
   if (!checkDeploy(notoAsset)) return false;
 
   // Issue asset

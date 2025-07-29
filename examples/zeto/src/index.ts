@@ -43,7 +43,7 @@ async function main(): Promise<boolean> {
     .newZeto(cbdcIssuer, {
       tokenName: "Zeto_AnonNullifier",
     })
-    .waitForDeploy();
+    .waitForDeploy(10000);
   if (!checkDeploy(zetoCBDC1)) return false;
 
   // Issue some cash
@@ -124,7 +124,7 @@ async function main(): Promise<boolean> {
     .newZeto(cbdcIssuer, {
       tokenName: "Zeto_AnonNullifier",
     })
-    .waitForDeploy();
+    .waitForDeploy(10000);
   if (!checkDeploy(zetoCBDC2)) return false;
 
   logger.log("- Deploying ERC20 token to manage the CBDC supply publicly...");
