@@ -201,22 +201,28 @@ async function main(): Promise<boolean> {
     .waitForReceipt(10000);
   if (!checkReceipt(receipt)) return false;
   
-  // Add a delay to ensure the lock operation is fully settled
-  await new Promise((resolve) => setTimeout(resolve, 2000));
-  
-  const lockedStates = await paladin3.ptx.getStateReceipt(receipt.id);
+  // Poll for the lock operation to be fully settled
+  logger.log("Waiting for lock operation to settle...");
   let lockedStateId: string | undefined;
-  lockedStates?.confirmed?.forEach((state) => {
-    if (state.data["locked"]) {
-      lockedStateId = state.id;
+  const pollStartTime = Date.now();
+  const pollTimeout = 30000; // 30 seconds
+  while (Date.now() - pollStartTime < pollTimeout) {
+    const lockedStates = await paladin3.ptx.getStateReceipt(receipt.id);
+    const confirmedLockedState = lockedStates?.confirmed?.find(
+      (state) => state.data["locked"]
+    );
+    if (confirmedLockedState) {
+      lockedStateId = confirmedLockedState.id;
+      break;
     }
-  });
-  if (lockedStateId === undefined) {
-    logger.error("No locked state found in state receipt");
-    return false;
-  } else {
-    logger.log(`Locked state ID: ${lockedStateId}`);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
+
+  if (lockedStateId === undefined) {
+    logger.error(`Timed out after ${pollTimeout / 1000}s waiting for locked state in state receipt`);
+    return false;
+  }
+  logger.log(`Locked state ID: ${lockedStateId}`);
 
   // Prepare cash transfer
   logger.log("Preparing cash transfer...");
