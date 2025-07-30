@@ -377,9 +377,13 @@ task prepareArtifacts(type: Exec, dependsOn: [buildContractSamples]) {
     commandLine "go", "run", "./contractpkg", "artifacts", "config/samples", "${artifactDir}"
 }
 
+task helmUnitTest(type: Exec, dependsOn: [prepareOperatorChart]) {
+    executable 'make'
+    args 'helm-unittest'
+}
 
 // Task to install the operator using Helm
-task installOperatorDefault(dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
+task installOperatorDefault(dependsOn: [installCrds, promoteKindImages, helmUnitTest]) {
     doLast {
         installOperator(namespace, 'charts/paladin-operator/values.yaml')
         
