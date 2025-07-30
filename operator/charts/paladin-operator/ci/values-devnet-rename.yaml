@@ -1,0 +1,7 @@
+# testing the prefix for the node names
+# operator:
+  # name: controller
+paladin:
+  nodeNamePrefix: worker
+besu:
+  nodeNamePrefix: evm
