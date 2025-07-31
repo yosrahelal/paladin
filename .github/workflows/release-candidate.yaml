@@ -100,7 +100,7 @@ jobs:
       sdk_version: ${{ needs.set-variables.outputs.tag }}
       # Construct the semicolon-separated string.
       # For a tag like 'v0.1.0-rc.1', this will become "rc;rc.1;1"
-      sdk_tag: "rc;${{ needs.set-variables.npm_prerelease_tag }};${{ needs.set-variables.npm_rc_number }}"
+      sdk_tag: "rc;${{ needs.set-variables.outputs.npm_prerelease_tag }};${{ needs.set-variables.outputs.npm_rc_number }}"
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
   
