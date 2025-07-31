@@ -198,6 +198,15 @@ uninstall-crds: ## Uninstall CRDs.
 helm-template: ## Install operator using Helm.
 	$(HELM) template ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} --values ${VALUES_FILE} --namespace=${NAMESPACE} --set mode=${MODE}
 
+# install helm unittest
+.PHONY: helm-unittest-install
+helm-unittest-install: ## Install helm unittest.
+	$(HELM) plugin install https://github.com/helm-unittest/helm-unittest.git || true
+
+.PHONY: helm-unittest
+helm-unittest: helm-unittest-install ## Test operator using Helm.
+	$(HELM) unittest ${CHART_PATH_OPERATOR}
+
 .PHONY: helm-install-dependencies
 helm-install-dependencies: ## Install operator using Helm.
 	$(HELM) repo add prometheus-community https://prometheus-community.github.io/helm-charts
