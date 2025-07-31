@@ -1287,7 +1287,8 @@ func TestValidTransactionsWithoutTypeArePersisted(t *testing.T) {
 	// 1 TX per block, 10 blocks (5->14)
 	expectedTransactions := 10
 	// Persisted transactions. All of the test transactions should be persisted because
-	// we've set their TX type to something that doesn't match any entries in the (configurable) ignore list.
+	// they simulate pre-EIP2718 transactions which don't set TX type, and we can't ignore
+	// transactions by type if they don't have one
 	persistedTransactions := 0
 
 	bi.fromBlock = nil
