@@ -40,7 +40,7 @@ on:
 
 jobs:
   run-examples:
-    # here are the steps:
+    # here are the steps for this job:
     # 1. create a cluster with kind
     # 2. install the helm charts (latest version)
     # 3. validate the installation
@@ -95,7 +95,7 @@ jobs:
           kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=300s
           
           # Step 4: Install the Paladin Operator Chart
-          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace --wait --timeout 300s
+          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace --besuNodeCount=1  --wait
 
       - name: Validate installation
         run: |

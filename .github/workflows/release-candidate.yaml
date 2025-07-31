@@ -17,6 +17,8 @@ jobs:
     outputs:
       tag: ${{ steps.set-vars.outputs.tag }}
       previous_tag: ${{ steps.get-latest-tag.outputs.previous_tag }}
+      npm_prerelease_tag: ${{ steps.parse-rc-tags.outputs.prerelease_tag }}
+      npm_rc_number: ${{ steps.parse-rc-tags.outputs.rc_number }}
     steps:
       - id: set-vars
         shell: bash

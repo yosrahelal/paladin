@@ -71,15 +71,19 @@ jobs:
         shell: bash
         run: |
           TAG_LIST="${{ inputs.sdk_tag }}"
-          # The first tag in the list is the primary one
-          PRIMARY_TAG=$(echo "$TAG_LIST" | cut -d';' -f1)
-          echo "primary_tag=$PRIMARY_TAG" >> $GITHUB_OUTPUT
+          
+          # Group all writes to the GITHUB_OUTPUT file
+          {
+            # The first tag in the list is the primary one
+            PRIMARY_TAG=$(echo "$TAG_LIST" | cut -d';' -f1)
+            echo "primary_tag=$PRIMARY_TAG"
 
-          # The rest of the tags are additional
-          ADDITIONAL_TAGS=$(echo "$TAG_LIST" | cut -d';' -f2-)
-          echo "additional_tags<<EOF" >> $GITHUB_OUTPUT
-          echo "$ADDITIONAL_TAGS" | tr ';' '\n' >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+            # The rest of the tags are additional
+            ADDITIONAL_TAGS=$(echo "$TAG_LIST" | cut -d';' -f2-)
+            echo "additional_tags<<EOF"
+            echo "$ADDITIONAL_TAGS" | tr ';' '\n'
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Publish to npm with primary tag
         continue-on-error: true
