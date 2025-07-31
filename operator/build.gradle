@@ -432,10 +432,37 @@ task installOperatorNodeCount(dependsOn: [installCrds, promoteKindImages, prepar
     }
 }
 
-task installOperatorPaladinCount(dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
+task installOperatorBesuCount(dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
     doLast {
-        def namespace = "ci-paladin-count"
-        installOperator(namespace, 'charts/paladin-operator/ci/values-devnet-paladinCount.yaml')
+        def namespace = "ci-besu-count"
+        installOperator(namespace, 'charts/paladin-operator/ci/values-devnet-besuCount.yaml')
+        
+        println 'Waiting for operator deployment to become ready...'
+        waitForOperatorRunning(namespace)
+        
+        println 'Waiting for besu statefulSets to become ready...'
+        waitForBesuRunning(namespace, 2, "node")
+        
+        println 'Waiting for paladin statefulSets to become ready...'
+        waitForPaladinRunning(namespace, 3, "node")
+        
+        println 'Verifying all scd resources have status "Success"...'
+        waitForAllSuccess(namespace, "scd", 120)
+        
+        println 'Verifying all txn resources have status "Success"...'
+        waitForAllSuccess(namespace, "txn", 60)
+        
+        println 'Verifying all registries are published...'
+        waitForAllRegistriesPublished(namespace, 120)
+
+        printClusterStatus(namespace)
+    }
+}
+
+task installOperatorBesuCount1(dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
+    doLast {
+        def namespace = "ci-besu-count-1"
+        installOperator(namespace, 'charts/paladin-operator/ci/values-devnet-besuCount1.yaml')
         
         println 'Waiting for operator deployment to become ready...'
         waitForOperatorRunning(namespace)
@@ -444,7 +471,7 @@ task installOperatorPaladinCount(dependsOn: [installCrds, promoteKindImages, pre
         waitForBesuRunning(namespace, 1, "node")
         
         println 'Waiting for paladin statefulSets to become ready...'
-        waitForPaladinRunning(namespace, 2, "node")
+        waitForPaladinRunning(namespace, 3, "node")
         
         println 'Verifying all scd resources have status "Success"...'
         waitForAllSuccess(namespace, "scd", 120)
@@ -503,7 +530,6 @@ task ciOperatorDefault(dependsOn: [deploy]) {
 
 task ciOperatorNodeCount(dependsOn: [installOperatorNodeCount]) {
     def namespace = "ci-node-count"
-    // TODO: Add tests
     
     doLast {
         println 'Uninstalling operator...'
@@ -511,9 +537,17 @@ task ciOperatorNodeCount(dependsOn: [installOperatorNodeCount]) {
     }
 }
 
-task ciOperatorPaladinCount(dependsOn: [installOperatorPaladinCount]) {
-    def namespace = "ci-paladin-count"
-    // TODO: Add tests
+task ciOperatorBesuCount(dependsOn: [installOperatorBesuCount]) {
+    def namespace = "ci-besu-count"
+
+    doLast {
+        println 'Uninstalling operator...'
+        uninstallOperator(namespace)
+    }
+}
+
+task ciOperatorBesuCount1(dependsOn: [installOperatorBesuCount1]) {
+    def namespace = "ci-besu-count-1"
 
     doLast {
         println 'Uninstalling operator...'
@@ -523,7 +557,6 @@ task ciOperatorPaladinCount(dependsOn: [installOperatorPaladinCount]) {
 
 task ciOperatorCustomNames(dependsOn: [installOperatorCustomNames]) {
     def namespace = "ci-custom-names"
-    // TODO: Add tests
 
     doLast {
         println 'Uninstalling operator...'
@@ -547,14 +580,15 @@ task clean {
 }
 
 // The CI task runs the different CI permutations of the chart installation
-task ci(dependsOn: [ciOperatorNodeCount, ciOperatorPaladinCount, ciOperatorCustomNames]) {
+task ci(dependsOn: [ciOperatorNodeCount, ciOperatorBesuCount, ciOperatorBesuCount1, ciOperatorCustomNames]) {
 }
 
-// This task guarantees that the ci task runs before the deploy task
-// the deploy task does not self delete the namespace, for that reason we need to first run the ci task and then the deploy task
+// This task runs CI tests first, then deploy
+// It ensures CI runs before deploy without making deploy dependent on CI
 task e2eTest(dependsOn: [ci]) {
     doLast {
-        dependsOn deploy
+        // After CI completes, run deploy
+        tasks.deploy.execute()
     }
 }
 
