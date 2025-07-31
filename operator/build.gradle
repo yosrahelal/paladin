@@ -585,19 +585,12 @@ task clean {
 
 // The CI task runs the different CI permutations of the chart installation
 task ci(dependsOn: [ciOperatorNodeCount, ciOperatorBesuCount, ciOperatorBesuCount1, ciOperatorCustomNames]) {
+    // This is a grouping task, so it doesn't need a body.
 }
 
-// This task runs CI tests first, then deploy
-// It ensures CI runs before deploy without making deploy dependent on CI
-task e2eTest(dependsOn: [ci]) {
-    doLast {
-        // After CI completes, run deploy
-        tasks.deploy.execute()
-    }
-}
-
-// The 'e2e' task runs the whole flow
-task e2e(type: Exec, dependsOn: [e2eTest]) {
+// The 'e2e' task runs the whole flow.
+// It depends on both 'ci' and 'deploy' to ensure they are part of the execution plan.
+task e2e(type: Exec, dependsOn: [ci, deploy]) {
 
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.notoGo)
@@ -614,6 +607,11 @@ task e2e(type: Exec, dependsOn: [e2eTest]) {
     }
 }
  
+// This rule enforces that IF both 'ci' and 'deploy' are scheduled to run
+// (which happens when you run 'e2e'), 'deploy' must wait for 'ci' to finish.
+// This does NOT create a dependency. Running 'gradle deploy' alone will NOT trigger 'ci'.
+deploy.mustRunAfter(ci)
+
 // Existing 'make' task
 task make(type: Exec, dependsOn: [copySolidity, copyZetoSolidity]) {
     inputs.files(configurations.toolkitGo)
