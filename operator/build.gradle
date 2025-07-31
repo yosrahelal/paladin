@@ -217,7 +217,7 @@ def installOperator(String namespace, String valuesFile) {
         "VALUES_FILE=${valuesFile}"
     ]
     println "Installing operator in namespace ${namespace} with values file ${valuesFile}..."
-    def process = command.execute(null, new File("."))
+    def process = command.execute(null, project.projectDir)
     process.waitFor()
     if (process.exitValue() != 0) {
         throw new Exception("Failed to install operator: ${process.err.text}")
@@ -232,7 +232,7 @@ def uninstallOperator(String namespace) {
         "NAMESPACE=${namespace}",
         "UNINSTALL_DEPENDENCIES=false"
     ]
-    def process = command.execute(null, new File("."))
+    def process = command.execute(null, project.projectDir)
     process.waitFor()
     if (process.exitValue() != 0) {
         throw new Exception("Failed to uninstall operator: ${process.err.text}")
