@@ -123,6 +123,7 @@ export interface NotoDelegateLockParams {
 }
 
 export interface NotoUnlockPublicParams {
+  txId: string;
   lockedInputs: string[];
   lockedOutputs: string[];
   outputs: string[];
@@ -242,10 +243,7 @@ export class NotoInstance {
     });
   }
 
-  approveTransfer(
-    from: PaladinVerifier,
-    data: NotoApproveTransferParams
-  ) {
+  approveTransfer(from: PaladinVerifier, data: NotoApproveTransferParams) {
     return new TransactionFuture(
       this.paladin,
       this.paladin.sendTransaction({
@@ -359,6 +357,7 @@ export class NotoInstance {
 
   encodeUnlock(data: NotoUnlockPublicParams) {
     return new ethers.Interface(notoJSON.abi).encodeFunctionData("unlock", [
+      data.txId,
       data.lockedInputs,
       data.lockedOutputs,
       data.outputs,
