@@ -4,32 +4,30 @@ This chart is part of the larger Paladin ecosystem. For comprehensive setup and 
 
 ## Node Configuration
 
-The chart supports flexible node configuration with three parameters:
+The chart supports flexible node configuration with two independent parameters:
 
-### Standard Mode (Default)
-By default, the chart deploys an equal number of Paladin and Besu nodes using the `nodeCount` parameter:
-
-```yaml
-nodeCount: 3  # Deploys 3 Paladin nodes + 3 Besu nodes
-```
-
-### Single Besu Mode (Resource Optimized)
-For resource-constrained environments (like GitHub Actions), you can use the `paladinNodeCount` parameter to deploy multiple Paladin nodes with a single Besu node:
+### Paladin Nodes
+Set the number of Paladin nodes to deploy:
 
 ```yaml
-paladinNodeCount: 5  # Deploys 5 Paladin nodes + 1 Besu node
+nodeCount: 3  # Deploys 3 Paladin nodes
 ```
 
-**When `paladinNodeCount` is set, `besuNodeCount` automatically becomes 1.**
+### Besu Nodes  
+Set the number of Besu nodes to deploy:
+
+```yaml
+besuNodeCount: 2  # Deploys 2 Besu nodes
+```
 
 ### Node Connectivity Logic
 - **Single Besu node**: All Paladin nodes connect to the first Besu node (`node1`)
-- **Multiple Besu nodes**: Each Paladin node connects to its corresponding Besu node (1:1 mapping)
-
-This configuration is particularly useful for:
-- Testing scenarios where you need multiple Paladin nodes
-- CI/CD environments with limited resources
-- Development environments where you want to test Paladin network behavior without the overhead of multiple Besu instances
+- **Multiple Besu nodes**: Uses modulo arithmetic to distribute Paladin nodes across available Besu nodes
+  - **Example with 3 Paladin nodes and 2 Besu nodes**:
+    - Paladin node 1 → Besu node 1
+    - Paladin node 2 → Besu node 2  
+    - Paladin node 3 → Besu node 1
+  - This creates load distribution where some Besu nodes may handle multiple Paladin nodes
 
 ## Auto-Generated CRs
 

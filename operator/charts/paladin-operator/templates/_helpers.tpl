@@ -4,15 +4,12 @@ operatorConfig: {{ include (printf "%s/operator/configmap.yaml" $.Template.BaseP
 
 {{- define "paladin-operator.paladinNodeCount" -}}
 {{- $paladinCount := .Values.nodeCount | int }}
-{{- if .Values.paladinNodeCount }}
-{{-   $paladinCount = .Values.paladinNodeCount | int }}
-{{- end }}
 {{- $paladinCount }}
 {{- end -}}
 
 {{- define "paladin-operator.besuNodeCount" -}}
-{{- $besuCount := .Values.nodeCount | int }}
-{{- if .Values.paladinNodeCount }}
+{{- $besuCount := .Values.besuNodeCount | int }}
+{{- if eq $besuCount 0 }}
 {{-   $besuCount = 1 }}
 {{- end }}
 {{- $besuCount }}
