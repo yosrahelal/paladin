@@ -459,10 +459,10 @@ task installOperatorPaladinCount(dependsOn: [installCrds, promoteKindImages, pre
     }
 }
 
-task installOperatorRename(dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
+task installOperatorCustomNames(dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
     doLast {
-        def namespace = "ci-rename"
-        installOperator(namespace, 'charts/paladin-operator/ci/values-devnet-rename.yaml')
+        def namespace = "ci-custom-names"
+        installOperator(namespace, 'charts/paladin-operator/ci/values-devnet-customNames.yaml')
         
         println 'Waiting for operator deployment to become ready...'
         // waitForOperatorRunning(namespace, "controller")
@@ -521,8 +521,8 @@ task ciOperatorPaladinCount(dependsOn: [installOperatorPaladinCount]) {
     }
 }
 
-task ciOperatorRename(dependsOn: [installOperatorRename]) {
-    def namespace = "ci-rename"
+task ciOperatorCustomNames(dependsOn: [installOperatorCustomNames]) {
+    def namespace = "ci-custom-names"
     // TODO: Add tests
 
     doLast {
@@ -547,7 +547,7 @@ task clean {
 }
 
 // The CI task runs the different CI permutations of the chart installation
-task ci(dependsOn: [ciOperatorNodeCount, ciOperatorPaladinCount, ciOperatorRename]) {
+task ci(dependsOn: [ciOperatorNodeCount, ciOperatorPaladinCount, ciOperatorCustomNames]) {
 }
 
 // This task guarantees that the ci task runs before the deploy task
