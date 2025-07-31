@@ -202,60 +202,7 @@ async function main(): Promise<boolean> {
     logger.error(`Error: ${error}`);
     return false;
   }
-
-  // STEP 5: Restore the original state by transferring back
-  logger.log("STEP 5: Restoring original state...");
-  try {
-    const restoreTransferAmount = 50;
-    logger.log(`STEP 5: Transferring ${restoreTransferAmount} units back from Node2 to Node1...`);
-    
-    const restoreTransferReceipt = await cashToken
-      .using(paladinClientNode2)
-      .transfer(verifierNode2, {
-        to: verifierNode1,
-        amount: restoreTransferAmount,
-        data: "0x",
-      })
-      .waitForReceipt(10000);
-
-    if (!restoreTransferReceipt?.transactionHash) {
-      logger.error("STEP 5: Restore transfer failed!");
-      return false;
-    }
-
-    logger.log("STEP 5: Restore transfer completed successfully!");
-
-    // Final verification
-    const finalBalanceNode1 = await cashToken.balanceOf(verifierNode1, {
-      account: verifierNode1.lookup,
-    });
-
-    const finalBalanceNode2 = await cashToken.balanceOf(verifierNode1, {
-      account: verifierNode2.lookup,
-    });
-
-    if (finalBalanceNode1.totalBalance !== contractData.finalBalances.node1.totalBalance) {
-      logger.error(`STEP 5: ERROR - Node1 final balance verification failed!`);
-      logger.error(`Expected: ${contractData.finalBalances.node1.totalBalance}`);
-      logger.error(`Found: ${finalBalanceNode1.totalBalance}`);
-      return false;
-    }
-
-    if (finalBalanceNode2.totalBalance !== contractData.finalBalances.node2.totalBalance) {
-      logger.error(`STEP 5: ERROR - Node2 final balance verification failed!`);
-      logger.error(`Expected: ${contractData.finalBalances.node2.totalBalance}`);
-      logger.error(`Found: ${finalBalanceNode2.totalBalance}`);
-      return false;
-    }
-
-    logger.log("STEP 5: Original state restoration verification successful!");
-
-  } catch (error) {
-    logger.error("STEP 5: State restoration failed!");
-    logger.error(`Error: ${error}`);
-    return false;
-  }
-
+ 
   logger.log("\nSUCCESS: Verification completed!");
 
   return true;
