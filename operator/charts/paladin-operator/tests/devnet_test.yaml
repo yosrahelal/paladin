@@ -27,37 +27,19 @@ tests:
           count: 1
         template: nodes/besugenesis.yaml
 
-  # Tests with different nodeCount values
-  - it: devnet with nodeCount=4
-    templates:
-      - nodes/besu.yaml
-      - nodes/paladin.yaml
-      - nodes/paladinregistrations.yaml
-    set:
-      nodeCount: 4
-    asserts:
-      - hasDocuments:
-          count: 4
-        template: nodes/besu.yaml
-      - hasDocuments:
-          count: 4
-        template: nodes/paladin.yaml
-      - hasDocuments:
-          count: 4
-        template: nodes/paladinregistrations.yaml
 
-  # Tests with paladinNodeCount override
-  - it: devnet with paladinNodeCount=5
+  # Tests with different nodeCount values (affects both Paladin and Besu)
+  - it: devnet with nodeCount=5
     templates:
       - nodes/besu.yaml
       - nodes/paladin.yaml
       - nodes/paladinregistrations.yaml
       - nodes/besugenesis.yaml
     set:
-      paladinNodeCount: 5
+      nodeCount: 5
     asserts:
       - hasDocuments:
-          count: 1
+          count: 3
         template: nodes/besu.yaml
       - hasDocuments:
           count: 5
@@ -69,17 +51,17 @@ tests:
           count: 1
         template: nodes/besugenesis.yaml
 
-  # Tests with paladinNodeCount=2
-  - it: devnet with paladinNodeCount=2
+  # Tests with different nodeCount values
+  - it: devnet with nodeCount=2
     templates:
       - nodes/besu.yaml
       - nodes/paladin.yaml
       - nodes/paladinregistrations.yaml
     set:
-      paladinNodeCount: 2
+      nodeCount: 2
     asserts:
       - hasDocuments:
-          count: 1
+          count: 3
         template: nodes/besu.yaml
       - hasDocuments:
           count: 2
@@ -88,18 +70,18 @@ tests:
           count: 2
         template: nodes/paladinregistrations.yaml
 
-  # Tests with mixed paladinNodeCount and nodeCount
-  - it: devnet with paladinNodeCount=3, nodeCount=4
+  # Tests with independent nodeCount and besuNodeCount
+  - it: devnet with nodeCount=3, besuNodeCount=2
     templates:
       - nodes/besu.yaml
       - nodes/paladin.yaml
       - nodes/paladinregistrations.yaml
     set:
-      paladinNodeCount: 3
-      nodeCount: 4
+      nodeCount: 3
+      besuNodeCount: 2
     asserts:
       - hasDocuments:
-          count: 1
+          count: 2
         template: nodes/besu.yaml
       - hasDocuments:
           count: 3
@@ -115,7 +97,7 @@ tests:
     set:
       paladin:
         nodeNamePrefix: "paladin"
-      paladinNodeCount: 2
+      nodeCount: 2
     asserts:
       - equal:
           path: 'metadata.name'
@@ -149,6 +131,20 @@ tests:
     set:
       besu:
         nodeNamePrefix: "besu"
+      nodeCount: 3
+    asserts:
+      - equal:
+          path: 'spec.initialValidators'
+          value: ['besu1', 'besu2', 'besu3']
+        documentIndex: 0
+
+  - it: besugenesis with custom besu prefix and nodeCount=2
+    templates:
+      - nodes/besugenesis.yaml
+    set:
+      besu:
+        nodeNamePrefix: "besu"
+      besuNodeCount: 2
       nodeCount: 2
     asserts:
       - equal:
@@ -157,11 +153,11 @@ tests:
         documentIndex: 0
 
   # Tests for paladin baseLedgerEndpoint configuration
-  - it: paladin baseLedgerEndpoint.local.nodeName with paladinNodeCount=1
+  - it: paladin baseLedgerEndpoint.local.nodeName with nodeCount=1
     templates:
       - nodes/paladin.yaml
     set:
-      paladinNodeCount: 1
+      nodeCount: 1
     asserts:
       - equal:
           path: 'spec.baseLedgerEndpoint.type'
@@ -172,11 +168,12 @@ tests:
           value: 'node1'
         documentIndex: 0
 
-  - it: paladin baseLedgerEndpoint.local.nodeName with paladinNodeCount=3
+  - it: paladin baseLedgerEndpoint.local.nodeName with nodeCount=3, besuNodeCount=1
     templates:
       - nodes/paladin.yaml
     set:
-      paladinNodeCount: 3
+      nodeCount: 3
+      besuNodeCount: 1
     asserts:
       - equal:
           path: 'spec.baseLedgerEndpoint.local.nodeName'
@@ -191,11 +188,12 @@ tests:
           value: 'node1'
         documentIndex: 2
 
-  - it: paladin baseLedgerEndpoint.local.nodeName with nodeCount=3 (multiple besu)
+  - it: paladin baseLedgerEndpoint.local.nodeName with nodeCount=3, besuNodeCount=3 (1:1 mapping)
     templates:
       - nodes/paladin.yaml
     set:
       nodeCount: 3
+      besuNodeCount: 3
     asserts:
       - equal:
           path: 'spec.baseLedgerEndpoint.local.nodeName'
@@ -210,12 +208,32 @@ tests:
           value: 'node3'
         documentIndex: 2
 
+  - it: paladin baseLedgerEndpoint.local.nodeName with nodeCount=3, besuNodeCount=2 (modulo distribution)
+    templates:
+      - nodes/paladin.yaml
+    set:
+      nodeCount: 3
+      besuNodeCount: 2
+    asserts:
+      - equal:
+          path: 'spec.baseLedgerEndpoint.local.nodeName'
+          value: 'node1'
+        documentIndex: 0
+      - equal:
+          path: 'spec.baseLedgerEndpoint.local.nodeName'
+          value: 'node2'
+        documentIndex: 1
+      - equal:
+          path: 'spec.baseLedgerEndpoint.local.nodeName'
+          value: 'node1'
+        documentIndex: 2
+
   # Tests for port calculations
   - it: paladin nodePort calculation with default baseNodePort
     templates:
       - nodes/paladin.yaml
     set:
-      paladinNodeCount: 3
+      nodeCount: 3
     asserts:
       - equal:
           path: 'spec.service.ports[0].nodePort'
@@ -248,7 +266,7 @@ tests:
     set:
       paladin:
         baseNodePort: 32000
-      paladinNodeCount: 3
+      nodeCount: 3
     asserts:
       - equal:
           path: 'spec.service.ports[0].nodePort'
@@ -332,7 +350,7 @@ tests:
     templates:
       - nodes/paladin.yaml
     set:
-      paladinNodeCount: 1
+      nodeCount: 1
     asserts:
       - equal:
           path: 'spec.service.type'
@@ -359,7 +377,7 @@ tests:
     templates:
       - nodes/paladin.yaml
     set:
-      paladinNodeCount: 1
+      nodeCount: 1
     asserts:
       - equal:
           path: 'spec.database.mode'
@@ -374,7 +392,7 @@ tests:
     templates:
       - nodes/paladin.yaml
     set:
-      paladinNodeCount: 1
+      nodeCount: 1
     asserts:
       - equal:
           path: 'spec.domains[0].labelSelector.matchLabels'
@@ -393,7 +411,7 @@ tests:
     templates:
       - nodes/paladin.yaml
     set:
-      paladinNodeCount: 1
+      nodeCount: 1
     asserts:
       - equal:
           path: 'spec.registries[0].labelSelector.matchLabels'
@@ -452,7 +470,7 @@ tests:
     templates:
       - nodes/paladinregistrations.yaml
     set:
-      paladinNodeCount: 2
+      nodeCount: 2
     asserts:
       - equal:
           path: 'spec.registry'
