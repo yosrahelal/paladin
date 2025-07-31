@@ -91,6 +91,7 @@ jobs:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-solidity-contracts:
+    needs: [set-variables]
     uses: ./.github/workflows/release-solidity-contracts.yaml
   
   release-typescript-sdk:
@@ -134,8 +135,11 @@ jobs:
           prerelease: true
           files: |
             helm-artifacts/basenet.yaml
+            helm-artifacts/customnet.yaml
+            helm-artifacts/attach.yaml
             helm-artifacts/devnet.yaml
             helm-artifacts/artifacts.tar.gz
             contracts/abis.tar.gz
+            contracts/zeto-abis.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

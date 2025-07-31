@@ -137,6 +137,7 @@ jobs:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-solidity-contracts:
+    needs: [set-variables]
     uses: ./.github/workflows/release-solidity-contracts.yaml
 
   release:

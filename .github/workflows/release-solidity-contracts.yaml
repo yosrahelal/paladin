@@ -39,11 +39,11 @@ jobs:
       working-directory: solidity
       run: ../gradlew build 
 
-    - name: Copy Solidity artifacts to contracts directory
+    - name: Copy Solidity artifacts to paladin-contracts directory
       shell: bash
       run: |
-        mkdir -p contracts
-        find solidity/artifacts/contracts -type f -name "*.json" ! -name "*.dbg.json" -exec cp {} contracts/ \;
+        mkdir -p paladin-contracts
+        find solidity/artifacts/contracts -type f -name "*.json" ! -name "*.dbg.json" -exec cp {} paladin-contracts/ \;
 
     - name: Download Zeto contracts
       working-directory: domains/zeto
@@ -59,7 +59,7 @@ jobs:
         # issue: https://github.com/hyperledger-labs/zeto/issues/158
         tar -xzf tools/zeto-contracts-v0.2.0.tar.gz -C tools/contracts
 
-    - name: Copy Zeto Solidity artifacts to contracts directory
+    - name: Copy Zeto Solidity artifacts to zeto-contracts directory
       shell: bash
       run: |
         mkdir -p zeto-contracts
@@ -67,17 +67,16 @@ jobs:
 
     - name: Archive ABI directory
       run: |
-        tar -czvf abis.tar.gz -C contracts .
-        tar -czvf zeto-abis.tar.gz -C zeto-contracts .
+        mkdir -p  contracts
+        tar -czvf contracts/abis.tar.gz -C paladin-contracts .
+        tar -czvf contracts/zeto-abis.tar.gz -C zeto-contracts .
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       id: upload-artifacts
       with:
         name: contracts
-        path: |
-          contracts/abis.tar.gz
-          zeto-contracts/zeto-abis.tar.gz
+        path: contracts/
 
     - name: Print upload-artifacts output
       shell: bash
