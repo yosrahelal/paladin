@@ -45,6 +45,15 @@ jobs:
         uses: matt-usurp/validate-semver@v2
         with:
           version: ${{ steps.set-vars.outputs.tag }}
+
+      - id: parse-rc-tags
+        name: Parse RC tags for NPM
+        shell: bash
+        run: |
+          PRERELEASE_TAG="${{ steps.ref-tag.outputs.prerelease }}"
+          RC_NUMBER=$(echo "$PRERELEASE_TAG" | cut -d '.' -f 2)
+          echo "prerelease_tag=$PRERELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "rc_number=$RC_NUMBER" >> $GITHUB_OUTPUT
           
       - name: Validate workflow triggered from RC tag only
         shell: bash
@@ -87,10 +96,12 @@ jobs:
     uses: ./.github/workflows/release-typescript-sdk.yaml
     with:
       sdk_version: ${{ needs.set-variables.outputs.tag }}
-      sdk_tag: "rc"
+      # Construct the semicolon-separated string.
+      # For a tag like 'v0.1.0-rc.1', this will become "rc;rc.1;1"
+      sdk_tag: "rc;${{ needs.set-variables.npm_prerelease_tag }};${{ needs.set-variables.npm_rc_number }}"
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
+  
   release:
     needs: [set-variables, release-charts, release-solidity-contracts, release-typescript-sdk]
     runs-on: ubuntu-latest
