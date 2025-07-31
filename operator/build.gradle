@@ -409,19 +409,19 @@ task installOperatorDefault(dependsOn: [installCrds, promoteKindImages, helmUnit
     }
 }
 
-task installOperatorNodeCount(dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
+task installOperatorDevnet(dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
     doLast {
-        def namespace = "ci-node-count"
-        installOperator(namespace, 'charts/paladin-operator/ci/values-devnet-nodeCount.yaml')
+        def namespace = "ci-devnet"
+        installOperator(namespace, 'charts/paladin-operator/ci/values-devnet.yaml')
         
         println 'Waiting for operator deployment to become ready...'
         waitForOperatorRunning(namespace)
         
         println 'Waiting for besu statefulSets to become ready...'
-        waitForBesuRunning(namespace, 2, "node")
+        waitForBesuRunning(namespace, 1, "evm")
         
         println 'Waiting for paladin statefulSets to become ready...'
-        waitForPaladinRunning(namespace, 2, "node")
+        waitForPaladinRunning(namespace, 2, "worker")
         
         println 'Verifying all scd resources have status "Success"...'
         waitForAllSuccess(namespace, "scd", 120)
@@ -435,89 +435,6 @@ task installOperatorNodeCount(dependsOn: [installCrds, promoteKindImages, prepar
         printClusterStatus(namespace)
     }
 }
-
-task installOperatorBesuCount(dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
-    doLast {
-        def namespace = "ci-besu-count"
-        installOperator(namespace, 'charts/paladin-operator/ci/values-devnet-besuCount.yaml')
-        
-        println 'Waiting for operator deployment to become ready...'
-        waitForOperatorRunning(namespace)
-        
-        println 'Waiting for besu statefulSets to become ready...'
-        waitForBesuRunning(namespace, 2, "node")
-        
-        println 'Waiting for paladin statefulSets to become ready...'
-        waitForPaladinRunning(namespace, 3, "node")
-        
-        println 'Verifying all scd resources have status "Success"...'
-        waitForAllSuccess(namespace, "scd", 120)
-        
-        println 'Verifying all txn resources have status "Success"...'
-        waitForAllSuccess(namespace, "txn", 60)
-        
-        println 'Verifying all registries are published...'
-        waitForAllRegistriesPublished(namespace, 120)
-
-        printClusterStatus(namespace)
-    }
-}
-
-task installOperatorBesuCount1(dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
-    doLast {
-        def namespace = "ci-besu-count-1"
-        installOperator(namespace, 'charts/paladin-operator/ci/values-devnet-besuCount1.yaml')
-        
-        println 'Waiting for operator deployment to become ready...'
-        waitForOperatorRunning(namespace)
-        
-        println 'Waiting for besu statefulSets to become ready...'
-        waitForBesuRunning(namespace, 1, "node")
-        
-        println 'Waiting for paladin statefulSets to become ready...'
-        waitForPaladinRunning(namespace, 3, "node")
-        
-        println 'Verifying all scd resources have status "Success"...'
-        waitForAllSuccess(namespace, "scd", 120)
-        
-        println 'Verifying all txn resources have status "Success"...'
-        waitForAllSuccess(namespace, "txn", 60)
-        
-        println 'Verifying all registries are published...'
-        waitForAllRegistriesPublished(namespace, 120)
-
-        printClusterStatus(namespace)
-    }
-}
-
-task installOperatorCustomNames(dependsOn: [installCrds, promoteKindImages, prepareOperatorChart]) {
-    doLast {
-        def namespace = "ci-custom-names"
-        installOperator(namespace, 'charts/paladin-operator/ci/values-devnet-customNames.yaml')
-        
-        println 'Waiting for operator deployment to become ready...'
-        // waitForOperatorRunning(namespace, "controller")
-        waitForOperatorRunning(namespace)
-        
-        println 'Waiting for besu statefulSets to become ready...'
-        waitForBesuRunning(namespace, 3, "evm")
-        
-        println 'Waiting for paladin statefulSets to become ready...'
-        waitForPaladinRunning(namespace, 3, "worker")
-        
-        println 'Verifying all scd resources have status "Success"...'
-        waitForAllSuccess(namespace, "scd", 120)
-        
-        println 'Verifying all txn resources have status "Success"...'
-        waitForAllSuccess(namespace, "txn", 60)
-        
-        println 'Verifying all registries are published...'
-        waitForAllRegistriesPublished(namespace, 120)
-
-        printClusterStatus(namespace)
-    }
-}
-
 
 // Task to deploy the operator and the Paladin nodes
 task deploy(dependsOn: [installOperatorDefault]) {
@@ -532,42 +449,15 @@ task ciOperatorDefault(dependsOn: [deploy]) {
     }
 }
 
-task ciOperatorNodeCount(dependsOn: [installOperatorNodeCount]) {
-    def namespace = "ci-node-count"
+task ciOperatorDevnet(dependsOn: [installOperatorDevnet]) {
+    def namespace = "ci-devnet"
     
     doLast {
         println 'Uninstalling operator...'
         uninstallOperator(namespace)
     }
 }
-
-task ciOperatorBesuCount(dependsOn: [installOperatorBesuCount]) {
-    def namespace = "ci-besu-count"
-
-    doLast {
-        println 'Uninstalling operator...'
-        uninstallOperator(namespace)
-    }
-}
-
-task ciOperatorBesuCount1(dependsOn: [installOperatorBesuCount1]) {
-    def namespace = "ci-besu-count-1"
-
-    doLast {
-        println 'Uninstalling operator...'
-        uninstallOperator(namespace)
-    }
-}
-
-task ciOperatorCustomNames(dependsOn: [installOperatorCustomNames]) {
-    def namespace = "ci-custom-names"
-
-    doLast {
-        println 'Uninstalling operator...'
-        uninstallOperator(namespace)
-    }
-}
-  
+ 
 // Task to clean up resources
 task cleanCluster(type: Exec) {
     executable 'make'
@@ -584,7 +474,7 @@ task clean {
 }
 
 // The CI task runs the different CI permutations of the chart installation
-task ci(dependsOn: [ciOperatorNodeCount, ciOperatorBesuCount, ciOperatorBesuCount1, ciOperatorCustomNames]) {
+task ci(dependsOn: [ciOperatorDevnet]) {
     // This is a grouping task, so it doesn't need a body.
 }
 
