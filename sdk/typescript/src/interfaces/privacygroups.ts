@@ -5,6 +5,7 @@ import { PublicTxOptions } from ".";
 export interface IPrivacyGroupInput {
   domain: string;
   members: string[];
+  name: string;
   configuration?: Record<string, string | undefined>;
   properties?: Record<string, string | undefined>;
   transactionOptions?: IPrivacyGroupTXOptions;
@@ -22,7 +23,10 @@ export interface IPrivacyGroup {
   id: string;
   domain: string;
   created: string;
+  name: string;
   members: string[];
+  properties: Record<string, string>;
+  configuration: Record<string, string>;
   contractAddress?: string;
   genesisTransaction?: string;
   genesisSchema?: string;
