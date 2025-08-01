@@ -13,8 +13,28 @@ When a developer opens a PR, several automated checks are triggered to validate 
   - **[Template the Helm Chart](workflows/build-chart.yaml):** Rebuilds and validates Helm charts for correctness.  
     > **Note:** Charts are **not published** but tested locally.
 
-All checks must pass before PRs can be merged to the main branch.
+- **[Test Examples](workflows/on-pr-push-examples.yaml):**
+  - **Status:** [![Test Examples](https://github.com/LF-Decentralized-Trust-labs/paladin/actions/workflows/on-pr-push-examples.yaml/badge.svg?branch=main)](https://github.com/LF-Decentralized-Trust-labs/paladin/actions/workflows/on-pr-push-examples.yaml)
+  - **Trigger:** Runs on pushes and pull requests to `main` that modify files under `examples/**`.
+  - **Purpose:** Validates that example changes don't break existing functionality by running them against both the latest published and local versions of the SDK and contracts.
+  - **Key Steps:**
+    - **Backwards Compatibility:** Runs `test-examples.yaml` with `build_local_sdk` and `build_local_abi` set to `false` to ensure the examples work with the latest published versions.
+    - **Forward Compatibility:** Runs `test-examples.yaml` with `build_local_sdk` and `build_local_abi` set to `true` to ensure the examples work with the current code in the PR.
+- **[Check Metadata Changes](workflows/check-metadata-changes.yml):**
 
+- **[Test TypeScript SDK](workflows/on-pr-push-ts-sdk.yaml):**  
+  Validates SDK changes against existing examples:
+  - **Triggers on:** Changes to `sdk/typescript/**` files
+  - **Tests:** Examples with locally built SDK and published ABI
+  - **Purpose:** Ensures SDK modifications don't break example compatibility
+
+- **[Test Solidity Changes](workflows/on-pr-push-solidity.yaml):**  
+  Validates Solidity contract changes against examples:
+  - **Triggers on:** Changes to `solidity/**` files
+  - **Tests:** Examples with locally built ABI and published SDK
+  - **Purpose:** Ensures contract changes don't break example functionality
+
+All checks must pass before PRs can be merged to the main branch.
 
 ## Changes Pushed to Main 🌟
 Once changes are merged into the `main` branch, workflows prepare the project for production:
@@ -32,7 +52,6 @@ Once changes are merged into the `main` branch, workflows prepare the project fo
 
 - **[Update Documentation](workflows/docs.yaml):**  
   Detects documentation updates and publishes the latest content to the documentation site.
-
 
 ## Release Time 🚀
 Paladin follows a two-stage release process to ensure quality and stability:
@@ -55,7 +74,7 @@ Release candidates are created first for testing and validation:
   - **[Release Solidity Contracts](workflows/release-solidity-contracts.yaml):**
     Packages contract ABIs and deployment artifacts for distribution.
   - **GitHub Release:** Creates a pre-release with all artifacts
-
+ 
 ### Stage 2: Final Release 🎯
 Once the RC has been tested and validated, the final release can be created:
 
@@ -93,6 +112,7 @@ Once the RC has been tested and validated, the final release can be created:
 ## Manual Actions 🛠️
 Workflows can also be triggered manually when needed. Available options include:
 
+- **[Test Rollout](workflows/test-rollout.yaml)** (Version rollout testing)
 - **[Release Orchestrator](workflows/release.yaml)** (Final releases)
 - **[Release Candidate](workflows/release-candidate.yaml)** (RC releases)
 - **[Release Docker Images](workflows/release-images.yaml)**
@@ -110,4 +130,4 @@ Workflows can also be triggered manually when needed. Available options include:
 ## Additional Workflows
 
 - **[Stale Issues/PRs](workflows/stale.yml):** Automatically marks and closes stale issues and pull requests
-- **[Build Workflows](workflows/build-workflows.yaml):** Validates workflow syntax and structure 
+- **[Build Workflows](workflows/build-workflows.yaml):** Validates workflow syntax and structure
