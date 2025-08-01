@@ -5,7 +5,7 @@ import PaladinClient, {
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import * as fs from 'fs';
 import * as path from 'path';
-import helloWorldJson from "./abis/HelloWorld.json";
+import helloWorldJson from "../abis/HelloWorld.json";
 
 const logger = console;
 
