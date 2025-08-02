@@ -57,7 +57,7 @@ export interface PrivacyGroupWebSocketEvent {
   method: "pgroup_subscription" | undefined;
   params: {
     subscription: string;
-    result: IPrivacyGroupMessage;
+    result: IPrivacyGroupMessageBatch;
   };
 }
 

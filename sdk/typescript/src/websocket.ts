@@ -3,7 +3,7 @@ import { Transform } from "stream";
 import WebSocket from "ws";
 import { Logger } from "./interfaces/logger";
 import {
-  IPrivacyGroupMessageBatch,
+  PrivacyGroupWebSocketEvent,
   WebSocketClientOptions,
   WebSocketEvent,
   WebSocketEventCallback
@@ -201,7 +201,7 @@ export class PaladinWebSocketClient extends PaladinWebSocketClientBase<
 
 export class PrivacyGroupWebSocketClient extends PaladinWebSocketClientBase<
   "messages",
-  IPrivacyGroupMessageBatch
+  PrivacyGroupWebSocketEvent
 > {
   subscribe(type: "messages", name: string) {
     this.sendRpc("pgroup_subscribe", [type, name]);
