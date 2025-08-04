@@ -4,7 +4,16 @@ description: 'Install pre-requisites for building paladin'
 runs:
   using: 'composite'
   steps:
-  - name: Install protoc
+  # Cache and install protoc
+  - name: Cache protoc
+    id: cache-protoc
+    uses: actions/cache@v4
+    with:
+      path: protoc
+      key: ${{ runner.os }}-protoc-25.1
+
+  - name: Install protoc if not cached
+    if: steps.cache-protoc.outputs.cache-hit != 'true'
     shell: bash
     run: |
       PB_REL="https://github.com/protocolbuffers/protobuf/releases"
