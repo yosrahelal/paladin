@@ -93,11 +93,8 @@ jobs:
       - name: Set sanitized artifact name
         id: image-name-sanitizer
         run: |
-          echo "IMAGE_NAME_SANITIZED=${IMAGE//\//-}" >> $GITHUB_OUTPUT
-          echo "IMAGE_NAME_SANITIZED=${IMAGE//\//-}" >> $GITHUB_ENV
-        env:
-          IMAGE: ${{ inputs.image }}
-
+          echo "IMAGE_NAME_SANITIZED=${{ inputs.image }}//\//-" >> $GITHUB_OUTPUT
+          
       - name: cache image
         id: image-cache
         run: |
