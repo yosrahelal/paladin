@@ -73,6 +73,16 @@ jobs:
           kind create cluster --name paladin --config paladin-kind.yaml
           kubectl wait --for=condition=Ready nodes --all --timeout=300s
 
+      - name: Cache Helm repositories
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/helm
+            ~/.config/helm
+          key: ${{ runner.os }}-helm-repos-${{ hashFiles('**/helm-repos.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-helm-repos-
+
       - name: Add Helm Repositories
         run: |
           helm repo add paladin https://LF-Decentralized-Trust-labs.github.io/paladin --force-update
@@ -102,11 +112,8 @@ jobs:
             echo "Checking out git ref $tag..."
             git checkout "$tag"
 
-            echo "Installing CRDs for $tag..."
-            helm upgrade --install paladin-crds paladin/paladin-operator-crd --version "$tag"
-
             echo "Upgrading Helm chart to $tag..."
-            helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace --version "$tag" --wait
+            helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace --version "$tag" --wait --set installCRDs=true
             
             IMAGE_TAG="$tag" ./scripts/default-installation-validation.sh paladin
             
@@ -123,11 +130,8 @@ jobs:
         run: |
           NEW_TAG="${{ inputs.new_tag }}"
 
-          echo "Installing CRDs for $NEW_TAG..."
-          helm upgrade --install paladin-crds paladin/paladin-operator-crd --version "$NEW_TAG"
-          
           echo "--- Upgrading to Release Candidate $NEW_TAG ---"
-          helm upgrade --install paladin paladin/paladin-operator -n paladin --version "$NEW_TAG" --wait
+          helm upgrade --install paladin paladin/paladin-operator -n paladin --version "$NEW_TAG" --wait --set installCRDs=true
           
           # We check out the new tag here primarily to validate the new chart installation
           # with the corresponding version of the validation script.

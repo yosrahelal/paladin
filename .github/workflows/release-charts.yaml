@@ -88,6 +88,7 @@ jobs:
           registry: ${{ inputs.registry }}
       
       - name: Finalize image names
+        id: finalize-image-names          
         shell: bash
         run: |
           echo "IMG_PALADIN=${{ inputs.registry }}/${{ steps.docker_repo.outputs.repository }}/paladin" >> $GITHUB_ENV
@@ -97,18 +98,15 @@ jobs:
         uses: ./.github/actions/update-yaml
         with:
           file: 'operator/charts/paladin-operator/values.yaml'
-          updates: |
-            operator:
-              image:
-                repository: ${{ env.IMG_OPERATOR }}
-                tag: ${{ inputs.images_tag }}
-            paladin:
-              image:
-                repository: ${{ env.IMG_PALADIN }}
-                tag: ${{ inputs.images_tag }}
+          expressions: |
+            .operator.image.repository = "${{ steps.finalize-image-names.outputs.IMG_OPERATOR }}"
+            .operator.image.tag = "${{ inputs.images_tag }}"
+            .paladin.image.repository = "${{ steps.finalize-image-names.outputs.IMG_PALADIN }}"
+            .paladin.image.tag = "${{ inputs.images_tag }}"
       
       # Remove 'v' prefix from the tag
       - name: Process Tag
+        id: clean-tag
         shell: bash
         run: |
           TAG="${{ inputs.chart_tag }}"
@@ -120,9 +118,19 @@ jobs:
         uses: ./.github/actions/update-yaml
         with:
           file: 'operator/charts/paladin-operator/Chart.yaml'
-          updates: |
-            version: ${{ env.PROCESSED_TAG }}
-            appVersion: ${{ inputs.chart_tag }}
+          expressions: |
+            .version = "${{ steps.clean-tag.outputs.PROCESSED_TAG }}"
+            .appVersion = "${{ inputs.chart_tag }}"
+            (.dependencies[] | select(.name == "paladin-operator-crd")).version = "${{ steps.clean-tag.outputs.PROCESSED_TAG }}"
+            (.dependencies[] | select(.name == "paladin-operator-crd")).repository = "https://LF-Decentralized-Trust-labs.github.io/paladin"
+
+      - name: Override paladin-operator-crd chart version
+        uses: ./.github/actions/update-yaml
+        with:
+          file: 'operator/charts/paladin-operator-crd/Chart.yaml'
+          expressions: |
+            .version = "${{ steps.clean-tag.outputs.PROCESSED_TAG }}"
+            .appVersion = "${{ inputs.chart_tag }}"
 
       - name: Confirm Helm templates
         working-directory: operator/charts/paladin-operator
@@ -139,9 +147,9 @@ jobs:
             -PloadImages=false \
             -PbuildOperator=false \
             -PbuildPaladin=false \
-            -PoperatorImageName=${{ env.IMG_OPERATOR }} \
+            -PoperatorImageName=${{ steps.finalize-image-names.outputs.IMG_OPERATOR }} \
             -PoperatorImageTag=${{ inputs.images_tag }} \
-            -PpaladinImageName=${{ env.IMG_PALADIN }} \
+            -PpaladinImageName=${{ steps.finalize-image-names.outputs.IMG_PALADIN }} \
             -PpaladinImageTag=${{ inputs.images_tag }} \
             -PdeleteCluster=false
 
