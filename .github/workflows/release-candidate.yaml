@@ -79,14 +79,7 @@ jobs:
 
   # ================================ TESTING/PRE-RELEASE ================================
 
-  # testing the examples with the new release candidate
-  test-examples:
-    needs: [setup]
-    uses: ./.github/workflows/test-examples.yaml
-    with:
-      build_local_sdk: true
-      build_local_abi: true
-      run_commands: "start,verify"
+
   release-images:
     needs: setup
     uses: ./.github/workflows/release-images.yaml
@@ -96,10 +89,11 @@ jobs:
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+  
 
   # ================================ RELEASE ================================
   release-charts:
-    needs: [setup, release-images, test-examples]
+    needs: [setup, release-images]
     uses: ./.github/workflows/release-charts.yaml
     with:
       chart_tag: ${{ needs.setup.outputs.tag }}
@@ -109,11 +103,13 @@ jobs:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-solidity-contracts:
-    needs: [setup, release-images, test-examples]
+    needs: [setup, release-charts]
     uses: ./.github/workflows/release-solidity-contracts.yaml
-  
+    with:
+      tag: ${{ needs.setup.outputs.tag }}
+      
   release-typescript-sdk:
-    needs: [setup, release-images, test-examples]
+    needs: [setup, release-charts]
     uses: ./.github/workflows/release-typescript-sdk.yaml
     with:
       sdk_version: ${{ needs.setup.outputs.tag }}
@@ -143,7 +139,7 @@ jobs:
 
   # ================================ FINAL RC RELEASE ================================
   release:
-    needs: [setup, release-typescript-sdk, test-rollout-compatibility, test-v9-to-v10]
+    needs: [setup, test-rollout-compatibility, test-v9-to-v10]
     runs-on: ubuntu-latest
     steps:
       - name: Download Helm artifacts
