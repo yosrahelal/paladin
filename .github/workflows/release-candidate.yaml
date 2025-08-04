@@ -105,6 +105,23 @@ jobs:
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
   
+  # testing the examples with the new release candidate
+  test-examples:
+    needs: [set-variables]
+    uses: ./.github/workflows/test-examples.yaml
+    with:
+      build_local_sdk: true
+      build_local_abi: true
+      run_commands: "start,verify"
+
+    
+  # testing the rollout compatibility
+  test-rollout-compatibility:
+    needs: [set-variables]
+    uses: ./.github/workflows/test-rollout-compatibility.yaml
+    with:
+      new_tag: ${{ needs.set-variables.outputs.tag }}
+
   release:
     needs: [set-variables, release-charts, release-solidity-contracts, release-typescript-sdk]
     runs-on: ubuntu-latest
