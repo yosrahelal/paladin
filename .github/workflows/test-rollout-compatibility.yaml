@@ -53,10 +53,17 @@ jobs:
           
           echo "Found previous tags: $previous_tags"
           
-          # The list of tags is converted to a JSON array. This is a robust way to pass
-          # multi-line or complex strings between steps and could be used in a matrix strategy in the future.
-          tags_json=$(echo "$previous_tags" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s .)
-          echo "tags=$tags_json" >> $GITHUB_OUTPUT
+          # TODO: remove this once we have a v0.10.0 release
+          # Handle case where no previous tags are found
+          if [[ -z "$previous_tags" ]]; then
+            echo "No previous tags found, skipping backward compatibility tests"
+            echo "tags=[]" >> $GITHUB_OUTPUT
+          else
+            # The list of tags is converted to a JSON array. This is a robust way to pass
+            # multi-line or complex strings between steps and could be used in a matrix strategy in the future.
+            tags_json=$(echo "$previous_tags" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s .)
+            echo "tags=$tags_json" >> $GITHUB_OUTPUT
+          fi
 
       - name: Install Dependencies
         uses: ./.github/actions/setup
@@ -103,10 +110,18 @@ jobs:
         id: cache_data
         shell: bash
         run: |
+          # TODO: remove this once we have a v0.10.0 release
+          # Check if we have any previous tags to process
+          tags_array=$(echo '${{ steps.get_tags.outputs.tags }}' | jq -r '.[]')
+          if [[ -z "$tags_array" ]]; then
+            echo "No previous tags found, skipping Phase 1"
+            exit 0
+          fi
+          
           # This loop simulates a real-world cluster being upgraded over time.
           # For each historical version, we install it, check out its corresponding source code,
           # and run the examples to generate and cache state data.
-          for tag in $(echo '${{ steps.get_tags.outputs.tags }}' | jq -r '.[]'); do
+          for tag in $tags_array; do
             echo "--- Processing version $tag ---"
 
             echo "Checking out git ref $tag..."
@@ -140,9 +155,17 @@ jobs:
 
           echo "--- Verifying Backwards Compatibility ---"
           
+          # TODO: remove this once we have a v0.10.0 release
+          # Check if we have any previous tags to verify
+          tags_array=$(echo '${{ steps.get_tags.outputs.tags }}' | jq -r '.[]')
+          if [[ -z "$tags_array" ]]; then
+            echo "No previous tags found, skipping Phase 2"
+            exit 0
+          fi
+          
           # This loop tests two critical user scenarios after an upgrade.
           # For each historical version, we check out its code to get the original examples and dependencies.
-          for tag in $(echo '${{ steps.get_tags.outputs.tags }}' | jq -r '.[]'); do
+          for tag in $tags_array; do
             echo "--- Verifying data from $tag ---"
             
             echo "Checking out git ref $tag..."
