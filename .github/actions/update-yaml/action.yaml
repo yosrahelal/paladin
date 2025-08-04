@@ -30,24 +30,16 @@ runs:
         set -e
         echo "Applying expressions to ${{ inputs.file }}"
         
-        # Create a temporary file to hold the expressions
-        echo "${{ inputs.expressions }}" > expressions.txt
+        # Write the expressions to a temporary file, filtering out any empty lines
+        # that might result from the multi-line string.
+        echo "${{ inputs.expressions }}" | grep -v '^$' > expressions.txt
         
-        # Create a temporary copy of the target file to apply changes to
-        temp_file="${{ inputs.file }}.tmp"
-        cp "${{ inputs.file }}" "$temp_file"
-
-        # Read the file line by line and apply each expression to the temp file
-        while IFS= read -r expression; do
-          # Skip empty lines
-          if [[ -n "$expression" ]]; then
-            echo "Applying: yq e -i '$expression' $temp_file"
-            yq e -i "$expression" "$temp_file"
-          fi
-        done < expressions.txt
-
-        # Replace the original file with the updated one
-        mv "$temp_file" "${{ inputs.file }}"
+        # Use xargs to apply each expression. This is the most robust way to handle quotes
+        # and special characters in shell scripting.
+        # - The -I {} tells xargs to replace {} with each line from the input file.
+        # - The single quotes around '{}' ensure the shell treats the entire expression
+        #   as a single, safe argument for yq.
+        cat expressions.txt | xargs -I {} yq e -i '{}' "${{ inputs.file }}"
 
         echo "Updated content of ${{ inputs.file }}:"
         cat "${{ inputs.file }}"
