@@ -9,14 +9,14 @@ on:
   workflow_dispatch: 
     inputs:
       new_tag:
-        description: 'The new v0.10.0-RC.* tag'
+        description: 'The new v0.10.0-rc.* tag'
         required: true
         type: string
 
   workflow_call:
     inputs:
       new_tag:
-        description: 'The new v0.10.0-RC.* tag'
+        description: 'The new v0.10.0-rc.* tag'
         required: true
         type: string
 
@@ -27,11 +27,19 @@ jobs:
       run_job: ${{ steps.run-job.outputs.run_job }}
       previous_tag: ${{ steps.previous-tag.outputs.previous_tag }}
     steps:
-      - name: check that new tag is v0.10.0-RC.*
+      - id: validate-new-tag
+        name: Validate ref tag follows semver versioning
+        uses: matt-usurp/validate-semver@v2
+        with:
+          version: ${{ inputs.new_tag }}
+      - name: check that new tag is v0.10.0-rc.*
         id: run-job
         run: |
-          if [[ "${{ inputs.new_tag }}" != v0.10.0-RC.* ]]; then
-            echo "New tag must be v0.10.0-RC.*"
+          if [[ "${{ steps.validate-new-tag.outputs.major }}" != 0 ]] || \
+            [[ "${{ steps.validate-new-tag.outputs.minor }}" != 10 ]] || \
+            [[ "${{ steps.validate-new-tag.outputs.patch }}" != 0 ]] || \
+            [[ "${{ steps.validate-new-tag.outputs.prerelease }}" == "" ]]; then
+            echo "New tag must be v0.10.0-rc.*"
             echo "run_job=false" >> $GITHUB_OUTPUT
             exit 0
           fi
