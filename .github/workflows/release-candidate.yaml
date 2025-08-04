@@ -124,7 +124,7 @@ jobs:
     
   # testing the rollout compatibility
   test-rollout-compatibility:
-    needs: [setup, release-charts, release-solidity-contracts, release-typescript-sdk]
+    needs: [setup, release-solidity-contracts, release-typescript-sdk]
     uses: ./.github/workflows/test-rollout-compatibility.yaml
     with:
       new_tag: ${{ needs.setup.outputs.tag }}
@@ -132,7 +132,7 @@ jobs:
   # testing the rollout compatibility between v0.9.0 and v0.10.0-RC.*
   # this is a temporary step that should be removed after the v0.10.0 release
   test-v9-to-v10:
-    needs: [setup, release-charts, release-solidity-contracts, release-typescript-sdk]
+    needs: [setup, release-solidity-contracts, release-typescript-sdk]
     uses: ./.github/workflows/test-v9-to-v10.yaml
     with:
       new_tag: ${{ needs.setup.outputs.tag }}

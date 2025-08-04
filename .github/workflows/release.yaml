@@ -140,11 +140,13 @@ jobs:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-solidity-contracts:
-    needs: [setup, release-images]
+    needs: [setup, release-charts]
     uses: ./.github/workflows/release-solidity-contracts.yaml
+    with:
+      tag: ${{ needs.setup.outputs.tag }}
 
   release-typescript-sdk:
-    needs: [setup, release-charts] # release SDKs only after charts are released
+    needs: [setup, release-charts]
     uses: ./.github/workflows/release-typescript-sdk.yaml
     with:
       sdk_version: ${{ needs.setup.outputs.tag }}
@@ -154,7 +156,7 @@ jobs:
 
   # ================================ FINAL RELEASE ================================
   release:
-    needs: [setup, release-charts, release-solidity-contracts, release-typescript-sdk]
+    needs: [setup, release-solidity-contracts, release-typescript-sdk]
     runs-on: ubuntu-latest
     steps:
       - name: Download Helm artifacts
