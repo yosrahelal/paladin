@@ -122,8 +122,16 @@ jobs:
     with:
       new_tag: ${{ needs.set-variables.outputs.tag }}
 
+  # testing the rollout compatibility between v0.9.0 and v0.10.0-RC.*
+  # this is a temporary step that should be removed after the v0.10.0 release
+  test-v9-to-v10:
+    needs: [set-variables]
+    uses: ./.github/workflows/test-v9-to-v10.yaml
+    with:
+      new_tag: ${{ needs.set-variables.outputs.tag }}
+
   release:
-    needs: [set-variables, release-charts, release-solidity-contracts, release-typescript-sdk]
+    needs: [set-variables, release-charts, release-solidity-contracts, release-typescript-sdk, test-examples, test-rollout-compatibility, test-v9-to-v10]
     runs-on: ubuntu-latest
     steps:
       - name: Download Helm artifacts
