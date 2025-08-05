@@ -91,18 +91,18 @@ jobs:
         id: finalize-image-names          
         shell: bash
         run: |
-          echo "IMG_PALADIN=${{ inputs.registry }}/${{ steps.docker_repo.outputs.repository }}/paladin" >> $GITHUB_ENV
-          echo "IMG_OPERATOR=${{ inputs.registry }}/${{ steps.docker_repo.outputs.repository }}/paladin-operator" >> $GITHUB_ENV
+          echo "IMG_PALADIN=${{ inputs.registry }}/${{ steps.docker_repo.outputs.repository }}/paladin" >> $GITHUB_OUTPUT
+          echo "IMG_OPERATOR=${{ inputs.registry }}/${{ steps.docker_repo.outputs.repository }}/paladin-operator" >> $GITHUB_OUTPUT
       
       - name: Override image tags
         uses: ./.github/actions/update-yaml
         with:
           file: 'operator/charts/paladin-operator/values.yaml'
           expressions: |
-            .operator.image.repository = "${{ steps.finalize-image-names.outputs.IMG_OPERATOR }}"
-            .operator.image.tag = "${{ inputs.images_tag }}"
-            .paladin.image.repository = "${{ steps.finalize-image-names.outputs.IMG_PALADIN }}"
-            .paladin.image.tag = "${{ inputs.images_tag }}"
+            .operator.image.repository=\"${{ steps.finalize-image-names.outputs.IMG_OPERATOR }}\"
+            .operator.image.tag=\"${{ inputs.images_tag }}\"
+            .paladin.image.repository=\"${{ steps.finalize-image-names.outputs.IMG_PALADIN }}\"
+            .paladin.image.tag=\"${{ inputs.images_tag }}\"
       
       # Remove 'v' prefix from the tag
       - name: Process Tag
@@ -111,7 +111,7 @@ jobs:
         run: |
           TAG="${{ inputs.chart_tag }}"
           PROCESSED_TAG="${TAG#v}"
-          echo "PROCESSED_TAG=${PROCESSED_TAG}" >> $GITHUB_ENV
+          echo "PROCESSED_TAG=${PROCESSED_TAG}" >> $GITHUB_OUTPUT
 
       # Override the chart version in the Chart.yaml file
       - name: Override chart version
@@ -119,18 +119,18 @@ jobs:
         with:
           file: 'operator/charts/paladin-operator/Chart.yaml'
           expressions: |
-            .version = "${{ steps.clean-tag.outputs.PROCESSED_TAG }}"
-            .appVersion = "${{ inputs.chart_tag }}"
-            (.dependencies[] | select(.name == "paladin-operator-crd")).version = "${{ steps.clean-tag.outputs.PROCESSED_TAG }}"
-            (.dependencies[] | select(.name == "paladin-operator-crd")).repository = "https://LF-Decentralized-Trust-labs.github.io/paladin"
-
+            .version=\"${{ steps.clean-tag.outputs.PROCESSED_TAG }}\"
+            .appVersion=\"${{ inputs.chart_tag }}\"
+            (.dependencies[] | select(.name == \"paladin-operator-crd\")).version=\"${{ steps.clean-tag.outputs.PROCESSED_TAG }}\"
+            (.dependencies[] | select(.name == \"paladin-operator-crd\")).repository=\"https://LF-Decentralized-Trust-labs.github.io/paladin\"
+            
       - name: Override paladin-operator-crd chart version
         uses: ./.github/actions/update-yaml
         with:
           file: 'operator/charts/paladin-operator-crd/Chart.yaml'
           expressions: |
-            .version = "${{ steps.clean-tag.outputs.PROCESSED_TAG }}"
-            .appVersion = "${{ inputs.chart_tag }}"
+            .version=\"${{ steps.clean-tag.outputs.PROCESSED_TAG }}\"
+            .appVersion=\"${{ inputs.chart_tag }}\"
 
       - name: Confirm Helm templates
         working-directory: operator/charts/paladin-operator
