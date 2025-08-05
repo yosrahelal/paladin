@@ -113,6 +113,32 @@ jobs:
           PROCESSED_TAG="${TAG#v}"
           echo "PROCESSED_TAG=${PROCESSED_TAG}" >> $GITHUB_OUTPUT
 
+      - name: Override paladin-operator-crd chart version
+        uses: ./.github/actions/update-yaml
+        with:
+          file: 'operator/charts/paladin-operator-crd/Chart.yaml'
+          expressions: |
+            .version=\"${{ steps.clean-tag.outputs.PROCESSED_TAG }}\"
+            .appVersion=\"${{ inputs.chart_tag }}\"
+
+      # Override the chart version in the Chart.yaml file
+      - name: Override chart version
+        uses: ./.github/actions/update-yaml
+        with:
+          file: 'operator/charts/paladin-operator/Chart.yaml'
+          expressions: |
+            .version=\"${{ steps.clean-tag.outputs.PROCESSED_TAG }}\"
+            .appVersion=\"${{ inputs.chart_tag }}\"
+            (.dependencies[] | select(.name == \"paladin-operator-crd\")).version=\"${{ steps.clean-tag.outputs.PROCESSED_TAG }}\"
+      
+      - name: Confirm Helm templates
+        working-directory: operator/charts/paladin-operator
+        run: |
+          helm dependency build
+          helm template .
+          rm -rf charts
+          rm Chart.lock
+          
       # e2e tests 
       - name: E2E Test
         run: |
@@ -126,26 +152,6 @@ jobs:
             -PpaladinImageTag=${{ inputs.images_tag }} \
             -PdeleteCluster=false
 
-
-      # Override the chart version in the Chart.yaml file
-      - name: Override chart version
-        uses: ./.github/actions/update-yaml
-        with:
-          file: 'operator/charts/paladin-operator/Chart.yaml'
-          expressions: |
-            .version=\"${{ steps.clean-tag.outputs.PROCESSED_TAG }}\"
-            .appVersion=\"${{ inputs.chart_tag }}\"
-            (.dependencies[] | select(.name == \"paladin-operator-crd\")).version=\"${{ steps.clean-tag.outputs.PROCESSED_TAG }}\"
-            (.dependencies[] | select(.name == \"paladin-operator-crd\")).repository=\"https://LF-Decentralized-Trust-labs.github.io/paladin\"
-
-      - name: Override paladin-operator-crd chart version
-        uses: ./.github/actions/update-yaml
-        with:
-          file: 'operator/charts/paladin-operator-crd/Chart.yaml'
-          expressions: |
-            .version=\"${{ steps.clean-tag.outputs.PROCESSED_TAG }}\"
-            .appVersion=\"${{ inputs.chart_tag }}\"
-
       # set CR_TOKEN env with the GitHub token secret when it is workflow_dispatch action
       - name: Set CR_TOKEN
         shell: bash
@@ -155,8 +161,7 @@ jobs:
           else
             echo "CR_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
           fi
-
-      - name: Run chart-releaser
+      - name: Release crd chart
         uses: helm/chart-releaser-action@v1.6.0
         with:
           mark_as_latest: false # the release job is marked as latest
@@ -165,6 +170,7 @@ jobs:
         env: 
           CR_TOKEN: "${{ env.CR_TOKEN }}"
 
+      
       - name: Prepare CRs artifacts
         run: ./gradlew prepareArtifacts -PartifactDir=${{ github.workspace }}/artifacts
       
