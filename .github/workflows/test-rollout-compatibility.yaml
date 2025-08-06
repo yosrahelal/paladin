@@ -150,7 +150,7 @@ jobs:
 
           echo "--- Upgrading to Release Candidate $NEW_TAG ---"
           helm upgrade --install paladin-crds paladin/paladin-operator-crd --version "$NEW_TAG"
-          helm upgrade --install paladin paladin/paladin-operator -n paladin --version "$NEW_TAG" --wait
+          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace --version "$NEW_TAG" --wait
           
           # We check out the new tag here primarily to validate the new chart installation
           # with the corresponding version of the validation script.
