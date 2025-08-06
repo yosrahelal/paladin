@@ -356,7 +356,7 @@ func (dc *domainContext) upsertStates(dbTX persistence.DBTX, holdingLock bool, s
 			createLock := &pldapi.StateLock{
 				Type:        pldapi.StateLockTypeCreate.Enum(),
 				Transaction: *ns.CreatedBy,
-				StateID:     withValues[i].State.ID,
+				StateID:     withValues[i].ID,
 			}
 			stateLocks = append(stateLocks, createLock)
 			toMakeAvailable = append(toMakeAvailable, vs)

@@ -63,7 +63,7 @@ func NewUnitTestPluginLoader(grpcTarget, loaderID string, plugins map[string]plu
 }
 
 func (tpl *testPluginLoader) Stop() {
-	tpl.conn.Close()
+	_ = tpl.conn.Close()
 	tpl.cancelCtx()
 	for _, p := range tpl.plugins {
 		p.Stop()

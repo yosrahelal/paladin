@@ -238,7 +238,7 @@ func (tb *testbed) resolveFunction(invocation *pldapi.TransactionInput) (*abi.En
 	if invocation.Function == "" && len(invocation.ABI) == 1 {
 		return invocation.ABI[0], nil
 	}
-	return nil, fmt.Errorf("Could not find function '%s' in provided ABI", invocation.Function)
+	return nil, fmt.Errorf("could not find function '%s' in provided ABI", invocation.Function)
 }
 
 func (tb *testbed) resolveTXSigner(tx *testbedTransaction) error {

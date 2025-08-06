@@ -567,7 +567,7 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, dbTX persistence
 		return nil, err
 	}
 	// Update to normalized JSON in what we store
-	tx.TransactionBase.Data = normalizedJSON
+	tx.Data = normalizedJSON
 
 	var localFrom string
 	bypassFromCheck := submitMode == pldapi.SubmitModePrepare || /* no checking on from for prepare */

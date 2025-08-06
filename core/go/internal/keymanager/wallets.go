@@ -60,12 +60,13 @@ func (km *keyManager) newWallet(ctx context.Context, walletConf *pldconf.WalletC
 	}
 
 	signerType := confutil.StringNotEmpty(&walletConf.SignerType, pldconf.WalletDefaults.SignerType)
-	if signerType == pldconf.WalletSignerTypeEmbedded {
+	switch signerType {
+	case pldconf.WalletSignerTypeEmbedded:
 		w.signingModule, err = signer.NewSigningModule(ctx, (*signerapi.ConfigNoExt)(walletConf.Signer))
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerEmbeddedSignerFailInit, w.name)
 		}
-	} else if signerType == pldconf.WalletSignerTypePlugin {
+	case pldconf.WalletSignerTypePlugin:
 		if walletConf.SignerPluginName == "" {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerPluginSignerEmptyName, w.name)
 		}
@@ -75,7 +76,7 @@ func (km *keyManager) newWallet(ctx context.Context, walletConf *pldconf.WalletC
 		} else {
 			w.signingModule = smp
 		}
-	} else {
+	default:
 		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerInvalidWalletSignerType, signerType, w.name)
 	}
 

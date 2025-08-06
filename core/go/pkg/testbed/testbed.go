@@ -178,9 +178,9 @@ func (tb *testbed) StartForTest(configFile string, domains map[string]*TestbedDo
 		}
 	}
 
-	conf.DomainManagerConfig.Domains = make(map[string]*pldconf.DomainConfig, len(domains))
+	conf.Domains = make(map[string]*pldconf.DomainConfig, len(domains))
 	for name, domain := range domains {
-		conf.DomainManagerConfig.Domains[name] = &pldconf.DomainConfig{
+		conf.Domains[name] = &pldconf.DomainConfig{
 			Plugin: pldconf.PluginConfig{
 				Type:    string(pldtypes.LibraryTypeCShared),
 				Library: "loaded/via/unit/test/loader",

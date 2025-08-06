@@ -356,7 +356,7 @@ func initPostgres(t *testing.T, ctx context.Context) (dns string, cleanup func()
 		adminDB, err := sql.Open("postgres", dbDSN("postgres"))
 		if err == nil {
 			_, _ = adminDB.Exec(fmt.Sprintf(`DROP DATABASE "%s" WITH(FORCE);`, componentTestdbName))
-			adminDB.Close()
+			_ = adminDB.Close()
 		}
 	}
 }
@@ -421,7 +421,9 @@ func getFreePort() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer listener.Close()
+	defer func() {
+		_ = listener.Close()
+	}()
 
 	port := listener.Addr().(*net.TCPAddr).Port
 	return port, nil

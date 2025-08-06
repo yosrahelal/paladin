@@ -243,6 +243,8 @@ func (oc *orchestrator) handleUpdates(ctx context.Context) {
 }
 
 // Used in unit tests
+//
+//nolint:unused // Used in unit tests
 func (oc *orchestrator) getFirstInFlight() (ift *inFlightTransactionStageController) {
 	oc.inFlightTxsMux.Lock()
 	defer oc.inFlightTxsMux.Unlock()
@@ -496,13 +498,14 @@ func (oc *orchestrator) ProcessInFlightTransactions(ctx context.Context, its []*
 		addressAccount, err = oc.balanceManager.GetAddressBalance(oc.ctx, oc.signingAddress)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to retrieve balance for address %s due to %+v", oc.signingAddress, err)
-			if oc.unavailableBalanceHandlingStrategy == OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyWait {
+			switch oc.unavailableBalanceHandlingStrategy {
+			case OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyWait:
 				// wait till next retry
 				return true, nil
-			} else if oc.unavailableBalanceHandlingStrategy == OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyStop {
+			case OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyStop:
 				oc.Stop()
 				return true, nil
-			} else {
+			default:
 				// just continue without any balance check
 				skipBalanceCheck = true
 			}

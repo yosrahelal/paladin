@@ -520,13 +520,14 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 				err = json.Unmarshal([]byte(configJSON), &constructorParameters)
 				require.NoError(t, err)
 
-				if constructorParameters.EndorsementMode == SelfEndorsement {
+				switch constructorParameters.EndorsementMode {
+				case SelfEndorsement:
 					contractConfig.CoordinatorSelection = prototk.ContractConfig_COORDINATOR_SENDER
 					contractConfig.SubmitterSelection = prototk.ContractConfig_SUBMITTER_SENDER
-				} else if constructorParameters.EndorsementMode == PrivacyGroupEndorsement {
+				case PrivacyGroupEndorsement:
 					contractConfig.CoordinatorSelection = prototk.ContractConfig_COORDINATOR_ENDORSER
 					contractConfig.SubmitterSelection = prototk.ContractConfig_SUBMITTER_COORDINATOR
-				} else {
+				default:
 					return nil, fmt.Errorf("unknown endorsement mode %s", constructorParameters.EndorsementMode)
 				}
 

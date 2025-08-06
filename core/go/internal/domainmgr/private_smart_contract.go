@@ -564,8 +564,8 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 		// We cannot fall back to eth_estimateGas, as we queue up multiple transactions for dispatch that chain together.
 		// As such our transactions are not always executable in isolation, and would revert (due to consuming non-existent UTXO states)
 		// if we attempted to do gas estimation or call.
-		if tx.PreparedPublicTransaction.PublicTxOptions.Gas == nil {
-			tx.PreparedPublicTransaction.PublicTxOptions.Gas = &dc.d.defaultGasLimit
+		if tx.PreparedPublicTransaction.Gas == nil {
+			tx.PreparedPublicTransaction.Gas = &dc.d.defaultGasLimit
 		}
 	}
 	if res.Metadata != nil {

@@ -197,6 +197,7 @@ task lint(type: Exec, dependsOn:[
     args '-v'
     args '--color=always'
     args '--timeout', '5m'
+    args '--tests=false'
 }
 
 task buildSharedLibrary(type:GoLib, dependsOn:[goGet]) {

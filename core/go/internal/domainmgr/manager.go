@@ -50,6 +50,7 @@ var iPaladinContractRegistryBuildJSON []byte
 
 var iPaladinContractRegistryABI = mustParseEmbeddedBuildABI(iPaladinContractRegistryBuildJSON)
 
+//nolint:unused // Used in tests
 var eventSig_PaladinRegisterSmartContract_V0 = mustParseEventSignatureHash(iPaladinContractRegistryABI, "PaladinRegisterSmartContract_V0")
 var eventSolSig_PaladinRegisterSmartContract_V0 = mustParseEventSoliditySignature(iPaladinContractRegistryABI, "PaladinRegisterSmartContract_V0")
 
@@ -410,6 +411,7 @@ func mustParseEventSoliditySignature(a abi.ABI, eventName string) string {
 	return solString
 }
 
+//nolint:unused // Used in tests
 func mustParseEventSignatureHash(a abi.ABI, eventName string) pldtypes.Bytes32 {
 	event := a.Events()[eventName]
 	if event == nil {

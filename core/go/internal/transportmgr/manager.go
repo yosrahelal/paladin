@@ -358,6 +358,7 @@ func (tm *transportManager) writeAcks(ctx context.Context, dbTX persistence.DBTX
 		Error
 }
 
+//nolint:unused // May be used in future
 func (tm *transportManager) getReliableMessageByID(ctx context.Context, dbTX persistence.DBTX, id uuid.UUID) (*pldapi.ReliableMessage, error) {
 	var rms []*pldapi.ReliableMessage
 	err := dbTX.DB().

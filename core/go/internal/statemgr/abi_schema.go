@@ -373,11 +373,11 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress *pldtypes
 	}
 
 	for i := range psd.labels {
-		psd.labels[i].DomainName = as.Schema.DomainName
+		psd.labels[i].DomainName = as.DomainName
 		psd.labels[i].State = id
 	}
 	for i := range psd.int64Labels {
-		psd.int64Labels[i].DomainName = as.Schema.DomainName
+		psd.int64Labels[i].DomainName = as.DomainName
 		psd.int64Labels[i].State = id
 	}
 

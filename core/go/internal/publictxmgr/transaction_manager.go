@@ -628,7 +628,7 @@ func (ptm *pubTxManager) UpdateTransaction(ctx context.Context, id uuid.UUID, pu
 		Gas:             tx.Gas.Uint64(),
 		Value:           tx.Value,
 		Data:            publicTxData,
-		FixedGasPricing: pldtypes.JSONString(tx.PublicTxOptions.PublicTxGasPricing),
+		FixedGasPricing: pldtypes.JSONString(tx.PublicTxGasPricing),
 	}
 
 	ptm.updateMux.Lock()

@@ -660,18 +660,19 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				err = json.Unmarshal([]byte(configJSON), &constructorParameters)
 				require.NoError(t, err)
 
-				if constructorParameters.EndorsementMode == SelfEndorsement {
+				switch constructorParameters.EndorsementMode {
+				case SelfEndorsement:
 					contractConfig.CoordinatorSelection = prototk.ContractConfig_COORDINATOR_SENDER
 					contractConfig.SubmitterSelection = prototk.ContractConfig_SUBMITTER_SENDER
-				} else if constructorParameters.EndorsementMode == NotaryEndorsement {
+				case NotaryEndorsement:
 					contractConfig.CoordinatorSelection = prototk.ContractConfig_COORDINATOR_STATIC
 					contractConfig.StaticCoordinator = &constructorParameters.NotaryLocator
 					contractConfig.SubmitterSelection = prototk.ContractConfig_SUBMITTER_COORDINATOR
-				} else if constructorParameters.EndorsementMode == PrivacyGroupEndorsement {
+				case PrivacyGroupEndorsement:
 					//This combination is less common on a token based domain but may use it in some tests
 					contractConfig.CoordinatorSelection = prototk.ContractConfig_COORDINATOR_ENDORSER
 					contractConfig.SubmitterSelection = prototk.ContractConfig_SUBMITTER_COORDINATOR
-				} else {
+				default:
 					return nil, fmt.Errorf("unknown endorsement mode %s", constructorParameters.EndorsementMode)
 				}
 

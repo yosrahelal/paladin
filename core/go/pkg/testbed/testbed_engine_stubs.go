@@ -240,6 +240,7 @@ func (tb *testbed) gatherEndorsements(dCtx components.DomainContext, tx *testbed
 	return nil
 }
 
+//nolint:unused // May be used in future
 func mustParseBuildABI(buildJSON []byte) abi.ABI {
 	var buildParsed map[string]pldtypes.RawJSON
 	var buildABI abi.ABI
@@ -253,6 +254,7 @@ func mustParseBuildABI(buildJSON []byte) abi.ABI {
 	return buildABI
 }
 
+//nolint:unused // May be used in future
 func mustParseBuildBytecode(buildJSON []byte) pldtypes.HexBytes {
 	var buildParsed map[string]pldtypes.RawJSON
 	var byteCode pldtypes.HexBytes
@@ -266,6 +268,7 @@ func mustParseBuildBytecode(buildJSON []byte) pldtypes.HexBytes {
 	return byteCode
 }
 
+//nolint:unused // May be used in future
 func mustParseABIEntry(abiEntryJSON string) *abi.Entry {
 	var abiEntry abi.Entry
 	err := json.Unmarshal([]byte(abiEntryJSON), &abiEntry)

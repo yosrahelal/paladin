@@ -169,12 +169,12 @@ func (v *inFlightTransactionStateGeneration) StartNewStageContext(ctx context.Co
 		log.L(ctx).Tracef("Transaction with ID %s, triggering sign tx", rsc.InMemoryTx.GetSignerNonce())
 		v.stageTriggerError = v.TriggerSignTx(ctx)
 	case InFlightTxStageSubmitting:
-		log.L(ctx).Tracef("Transaction with ID %s, triggering submission, signed message not nil: %t", rsc.InMemoryTx.GetSignerNonce(), v.TransientPreviousStageOutputs != nil && v.TransientPreviousStageOutputs.SignedMessage != nil)
+		log.L(ctx).Tracef("Transaction with ID %s, triggering submission, signed message not nil: %t", rsc.InMemoryTx.GetSignerNonce(), v.TransientPreviousStageOutputs != nil && v.SignedMessage != nil)
 		var signedMessage []byte
 		var calculatedTxHash *pldtypes.Bytes32
 		if v.TransientPreviousStageOutputs != nil {
-			signedMessage = v.TransientPreviousStageOutputs.SignedMessage
-			calculatedTxHash = v.TransientPreviousStageOutputs.TransactionHash
+			signedMessage = v.SignedMessage
+			calculatedTxHash = v.TransactionHash
 		}
 		v.stageTriggerError = v.TriggerSubmitTx(ctx, signedMessage, calculatedTxHash)
 	case InFlightTxStageStatusUpdate:

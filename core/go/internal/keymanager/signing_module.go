@@ -104,7 +104,7 @@ func (sm *signingModule) AddInMemorySigner(prefix string, signer signerapi.InMem
 }
 
 func (sm *signingModule) Close() {
-	sm.api.Close(sm.ctx, &prototk.CloseRequest{})
+	_, _ = sm.api.Close(sm.ctx, &prototk.CloseRequest{})
 }
 
 func (sm *signingModule) close() {

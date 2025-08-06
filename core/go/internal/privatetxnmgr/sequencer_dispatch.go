@@ -68,7 +68,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 			hasPrivateTransaction := preparedTransaction.PreparedPrivateTransaction != nil
 			switch {
 			case preparedTransaction.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPublicTransaction && !hasPrivateTransaction:
-				log.L(ctx).Infof("Result of transaction %s is a public transaction (gas=%d)", preparedTransaction.ID, *preparedTransaction.PreparedPublicTransaction.PublicTxOptions.Gas)
+				log.L(ctx).Infof("Result of transaction %s is a public transaction (gas=%d)", preparedTransaction.ID, *preparedTransaction.PreparedPublicTransaction.Gas)
 				publicTransactionsToSend = append(publicTransactionsToSend, preparedTransaction)
 				sequence.PrivateTransactionDispatches = append(sequence.PrivateTransactionDispatches, &syncpoints.DispatchPersisted{
 					PrivateTransactionID: transactionFlow.ID(ctx).String(),

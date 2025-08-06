@@ -441,14 +441,15 @@ func (it *inFlightTransactionStageController) processSubmittingStageOutput(ctx c
 			}
 			rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit = stageOutput.SubmitOutput.SubmissionTime
 
-			if stageOutput.SubmitOutput.SubmissionOutcome == SubmissionOutcomeSubmittedNew {
+			switch stageOutput.SubmitOutput.SubmissionOutcome {
+			case SubmissionOutcomeSubmittedNew:
 				// new transaction submitted successfully
 				rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionSubmitTransaction, pldtypes.RawJSON(fmt.Sprintf(`{"hash":"%s"}`, stageOutput.SubmitOutput.TxHash)), nil)
 				log.L(ctx).Debugf("Transaction submitted for tx %s (hash=%s)", rsc.InMemoryTx.GetSignerNonce(), rsc.InMemoryTx.GetTransactionHash())
-			} else if stageOutput.SubmitOutput.SubmissionOutcome == SubmissionOutcomeNonceTooLow {
+			case SubmissionOutcomeNonceTooLow:
 				log.L(ctx).Debugf("Nonce too low for tx %s (hash=%s)", rsc.InMemoryTx.GetSignerNonce(), rsc.InMemoryTx.GetTransactionHash())
 				rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionSubmitTransaction, pldtypes.RawJSON(`{"txHash":"`+stageOutput.SubmitOutput.TxHash.String()+`"}`), nil)
-			} else if stageOutput.SubmitOutput.SubmissionOutcome == SubmissionOutcomeAlreadyKnown {
+			case SubmissionOutcomeAlreadyKnown:
 				// nothing to add for persistence, go to the tracking stage
 				log.L(ctx).Debugf("Transaction already known for tx %s (hash=%s)", rsc.InMemoryTx.GetSignerNonce(), rsc.InMemoryTx.GetTransactionHash())
 			}

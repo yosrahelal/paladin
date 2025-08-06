@@ -63,6 +63,7 @@ func (ptm *pubTxManager) engineLoop() {
 	}
 }
 
+//nolint:unused // May be used in future
 func (ptm *pubTxManager) getOrchestratorCount() int {
 	ptm.inFlightOrchestratorMux.Lock()
 	defer ptm.inFlightOrchestratorMux.Unlock()

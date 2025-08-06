@@ -129,7 +129,7 @@ out:
 		case <-timeoutTimer.C:
 			log.L(ac.ctx).Errorf("AssembleCoordinator:waitForDone request timeout for request %s", requestID)
 			//sequencer event loop is responsible for requesting a new assemble
-			break
+			break out
 		}
 	}
 	log.L(ac.ctx).Debugf("AssembleCoordinator:waitForDone done %s", requestID)
