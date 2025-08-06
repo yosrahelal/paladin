@@ -181,6 +181,9 @@ func (hd *hdDerivation[C]) loadHDWalletPrivateKey(ctx context.Context, keyHandle
 				derivation += 0x80000000
 			}
 			pos, err = pos.Derive(uint32(derivation))
+			if err != nil {
+				return nil, i18n.WrapError(ctx, err, pldmsgs.MsgSignerBIP44DerivationInvalid, s)
+			}
 		}
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, pldmsgs.MsgSignerBIP44DerivationInvalid, s)
