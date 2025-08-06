@@ -233,7 +233,7 @@ func (w *wsClient) connect(initial bool) error {
 			var status = -1
 			if res != nil {
 				b, _ = io.ReadAll(res.Body)
-				res.Body.Close()
+				_ = res.Body.Close()
 				status = res.StatusCode
 			}
 			l.Warnf("WS %s connect attempt %d failed [%d]: %s", w.url, attempt, status, string(b))
