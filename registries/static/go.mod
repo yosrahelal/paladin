@@ -1,8 +1,8 @@
 module github.com/LF-Decentralized-Trust-labs/paladin/registries/static
 
-go 1.23.0
+go 1.24.0
 
-toolchain go1.23.10
+toolchain go1.24.3
 
 require (
 	github.com/LF-Decentralized-Trust-labs/paladin/common/go v0.0.0-00010101000000-000000000000

@@ -1,8 +1,8 @@
 module github.com/LF-Decentralized-Trust-labs/paladin/domains/zeto
 
-go 1.23.0
+go 1.24.0
 
-toolchain go1.23.10
+toolchain go1.24.3
 
 require (
 	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20241004174307-aa3c1fdf0966

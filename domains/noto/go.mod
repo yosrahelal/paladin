@@ -1,8 +1,8 @@
 module github.com/LF-Decentralized-Trust-labs/paladin/domains/noto
 
-go 1.23.0
+go 1.24.0
 
-toolchain go1.23.10
+toolchain go1.24.3
 
 require (
 	github.com/google/uuid v1.6.0
