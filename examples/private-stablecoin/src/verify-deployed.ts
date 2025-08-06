@@ -140,9 +140,9 @@ async function main(): Promise<boolean> {
 
   // STEP 2: Get verifiers and recreate contract connections
   logger.log("STEP 2: Recreating contract connections...");
-  const [financialInstitution] = paladin1.getVerifiers(`bank-${contractData.runId}@node1`);
-  const [clientA] = paladin2.getVerifiers(`client-a-${contractData.runId}@node2`);
-  const [clientB] = paladin3.getVerifiers(`client-b-${contractData.runId}@node3`);
+  const [financialInstitution] = paladin1.getVerifiers(`bank-${contractData.runId}@${nodeConnections[0].id}`);
+  const [clientA] = paladin2.getVerifiers(`client-a-${contractData.runId}@${nodeConnections[1].id}`);
+  const [clientB] = paladin3.getVerifiers(`client-b-${contractData.runId}@${nodeConnections[2].id}`);
 
   // Import necessary classes from the SDK
   const { ZetoInstance } = await import("@lfdecentralizedtrust-labs/paladin-sdk");

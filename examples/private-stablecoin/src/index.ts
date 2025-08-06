@@ -151,18 +151,14 @@ async function main(): Promise<boolean> {
     const clients = nodeConnections.map(node => new PaladinClient(node.clientOptions));
     const [paladin1, paladin2, paladin3] = clients;
 
-    const [financialInstitution] = paladin1.getVerifiers(`bank@${nodeConnections[0].id}`);
-    const [clientA] = paladin2.getVerifiers(`client-a@${nodeConnections[1].id}`);
-    const [clientB] = paladin3.getVerifiers(`client-b@${nodeConnections[2].id}`);
+    // Generate unique identity names for this run to avoid Merkle tree conflicts
+    const runId = Math.random().toString(36).substring(2, 8);
+    logger.log(`Using run ID: ${runId} for unique identities`);
 
-  // Generate unique identity names for this run to avoid Merkle tree conflicts
-  const runId = Math.random().toString(36).substring(2, 8);
-  logger.log(`Using run ID: ${runId} for unique identities`);
-
-  // Get verifiers for the financial institution and clients with unique names
-  // const [financialInstitution] = paladin1.getVerifiers(`bank-${runId}@node1`);
-  // const [clientA] = paladin2.getVerifiers(`client-a-${runId}@node2`);
-  // const [clientB] = paladin3.getVerifiers(`client-b-${runId}@node3`);
+    // Get verifiers for the financial institution and clients with unique names
+    const [financialInstitution] = paladin1.getVerifiers(`bank-${runId}@${nodeConnections[0].id}`);
+    const [clientA] = paladin2.getVerifiers(`client-a-${runId}@${nodeConnections[1].id}`);
+    const [clientB] = paladin3.getVerifiers(`client-b-${runId}@${nodeConnections[2].id}`);
 
   logger.log("=== Private Stablecoin with KYC and Deposit/Withdraw ===");
   logger.log(
