@@ -2,7 +2,7 @@ module github.com/kaleido-io/key-manager/signingmodules/example
 
 go 1.24.0
 
-toolchain go1.23.7
+toolchain go1.24.3
 
 require (
 	github.com/LF-Decentralized-Trust-labs/paladin/common/go v0.0.0-00010101000000-000000000000
