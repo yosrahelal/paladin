@@ -63,7 +63,7 @@ func generateEnumList(f reflect.Type) string {
 		if i > 0 {
 			buff.WriteString(", ")
 		}
-		buff.WriteString(fmt.Sprintf(`"%s"`, v))
+		fmt.Fprintf(buff, `"%s"`, v)
 	}
 	return buff.String()
 }

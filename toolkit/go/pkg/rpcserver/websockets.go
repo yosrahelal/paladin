@@ -135,7 +135,7 @@ func (c *webSocketConnection) close() {
 	c.closeMux.Lock()
 	if !c.closed {
 		c.closed = true
-		c.conn.Close()
+		_ = c.conn.Close()
 		close(c.closing)
 		c.cancelCtx()
 	}
