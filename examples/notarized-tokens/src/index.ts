@@ -18,10 +18,11 @@ async function main(): Promise<boolean> {
   
   logger.log("Initializing Paladin clients from the environment configuration...");
   const clients = nodeConnections.map(node => new PaladinClient(node.clientOptions));
-  const verifiers = clients.map((client, i) => client.getVerifiers(nodeConnections[i].verifierName)[0]);
-
   const [paladinClientNode1, paladinClientNode2, paladinClientNode3] = clients;
-  const [verifierNode1, verifierNode2, verifierNode3] = verifiers;
+
+  const [verifierNode1] = paladinClientNode1.getVerifiers(`user@${nodeConnections[0].id}`);
+  const [verifierNode2] = paladinClientNode2.getVerifiers(`user@${nodeConnections[1].id}`);
+  const [verifierNode3] = paladinClientNode3.getVerifiers(`user@${nodeConnections[2].id}`);
 
   const mintAmount = 2000;
   const transferToNode2Amount = 1000;
