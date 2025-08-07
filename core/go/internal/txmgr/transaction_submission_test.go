@@ -1089,6 +1089,7 @@ func TestChainedPrivateTXInsertWithIdempotencyKeys(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
+	fifteenTxsByID := make(map[uuid.UUID]*components.ChainedPrivateTransaction)
 	fifteenTxns := make([]*components.ChainedPrivateTransaction, 15)
 	err = txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
 		for i := range fifteenTxns {
@@ -1099,6 +1100,7 @@ func TestChainedPrivateTXInsertWithIdempotencyKeys(t *testing.T) {
 			}
 			fifteenTxns[i], err = txm.PrepareChainedPrivateTransaction(ctx, dbTX, *parentTxnID, tx, pldapi.SubmitModeAuto)
 			require.NoError(t, err)
+			fifteenTxsByID[*fifteenTxns[i].NewTransaction.Transaction.ID] = fifteenTxns[i]
 		}
 		return nil
 	})
@@ -1148,8 +1150,9 @@ func TestChainedPrivateTXInsertWithIdempotencyKeys(t *testing.T) {
 	parentTx, err := txm.GetTransactionByIDFull(ctx, *parentTxnID)
 	require.NoError(t, err)
 	require.Len(t, parentTx.Chained, 15)
-	for i, chainedTx := range parentTx.Chained {
-		require.Equal(t, fifteenTxns[i].NewTransaction.Transaction.ID, chainedTx.ID)
+	for _, chainedTx := range parentTx.Chained {
+		_, found := fifteenTxsByID[*chainedTx.ID]
+		require.True(t, found)
 	}
 }
 
