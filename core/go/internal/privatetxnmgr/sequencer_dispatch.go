@@ -75,8 +75,12 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				})
 			case preparedTransaction.Intent == prototk.TransactionSpecification_SEND_TRANSACTION && hasPrivateTransaction && !hasPublicTransaction:
 				log.L(ctx).Infof("Result of transaction %s is a chained private transaction", preparedTransaction.ID)
+				tx := transactionFlow.PrivateTransaction()
+				senderLocator := tx.PreAssembly.TransactionSpecification.From
 				validatedPrivateTx, err := s.components.TxManager().
-					PrepareChainedPrivateTransaction(ctx, s.components.Persistence().NOTX(), transactionFlow.ID(ctx), preparedTransaction.PreparedPrivateTransaction, pldapi.SubmitModeAuto)
+					PrepareChainedPrivateTransaction(ctx, s.components.Persistence().NOTX(),
+						senderLocator, tx.ID, tx.Domain,
+						preparedTransaction.PreparedPrivateTransaction, pldapi.SubmitModeAuto)
 				if err != nil {
 					log.L(ctx).Errorf("Error preparing transaction %s: %s", preparedTransaction.ID, err)
 					// TODO: this is just an error situation for one transaction - this function is a batch function

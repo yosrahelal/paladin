@@ -37,6 +37,11 @@ const (
 	RT_FailedWithMessage
 )
 
+type ReceiptInputWithOriginator struct {
+	Originator string
+	ReceiptInput
+}
+
 type ReceiptInput struct {
 	Domain          string                   // set when the receipt is from a domain
 	ReceiptType     ReceiptType              // required
@@ -66,7 +71,9 @@ type ValidatedTransaction struct {
 }
 
 type ChainedPrivateTransaction struct {
-	OriginalTransactionID uuid.UUID // the original transaction that chained this transaction
+	OriginalSenderLocator string    // the original sender fully qualified identity
+	OriginalTransaction   uuid.UUID // the original transaction that chained this transaction
+	OriginalDomain        string    // the original domain of the upstream transaction
 	NewTransaction        *ValidatedTransaction
 }
 
@@ -133,7 +140,7 @@ type TXManager interface {
 
 	LoadBlockchainEventListeners() error
 	NotifyStatesDBChanged(ctx context.Context) // called by state manager after committing DB TXs writing new states that might fill in gaps
-	PrepareChainedPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, originalTxnID uuid.UUID, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*ChainedPrivateTransaction, error)
+	PrepareChainedPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, origSender string, origTxID uuid.UUID, origDomain string, txToChain *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*ChainedPrivateTransaction, error)
 	ChainPrivateTransactions(ctx context.Context, dbTX persistence.DBTX, txis []*ChainedPrivateTransaction) error
 	WritePreparedTransactions(ctx context.Context, dbTX persistence.DBTX, prepared []*PreparedTransactionWithRefs) error
 }

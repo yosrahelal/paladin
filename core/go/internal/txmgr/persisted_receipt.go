@@ -101,6 +101,7 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 		return nil
 	}
 
+	possibleChainingRecordIDs := make([]uuid.UUID, 0, len(info))
 	receiptsToInsert := make([]*transactionReceipt, 0, len(info))
 	for _, ri := range info {
 		receipt := &transactionReceipt{
@@ -148,35 +149,18 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 		}
 		log.L(ctx).Infof("Inserting receipt txId=%s success=%t failure=%s txHash=%v", receipt.TransactionID, receipt.Success, failureMsg, receipt.TransactionHash)
 		receiptsToInsert = append(receiptsToInsert, receipt)
+		if receipt.Domain != "" {
+			possibleChainingRecordIDs = append(possibleChainingRecordIDs, receipt.TransactionID)
+		}
 	}
 
 	if len(receiptsToInsert) > 0 {
-		// Do a query for chained transactions (note only one level here - double chaining not supported)
-		var chainingRecords []*persistedChainedPrivateTxn
-		err := dbTX.DB().
-			Where(`"chained_transaction" IN ?`, chainingRecords).
-			Find(&chainingRecords).
-			Error
-		if err != nil {
-			return err
-		}
-		for _, cr := range chainingRecords {
-			for _, receipt := range receiptsToInsert {
-				if receipt.TransactionID == cr.ChainedTransaction {
-					log.L(ctx).Infof("Propagating receipt from %s to initiating upstream transaction %s", receipt.TransactionID, cr.Transaction)
-					dupReceipt := *receipt
-					dupReceipt.TransactionID = cr.Transaction
-					receiptsToInsert = append(receiptsToInsert, &dupReceipt)
-				}
-			}
-		}
-
 		// It is very important that the sequence number for receipts increases in the commit order of the transactions.
 		// Otherwise receipt listeners might miss receipts that appear behind it's polling checkpoint.
 		// So we use an advisory lock on the DB to ensure the allocation of sequence numbers occurs under a lock.
 		// This means if transaction A commits before transaction B, it is guaranteed that the sequence number(s) allocated
 		// in transaction A will be lower than transaction B (not guaranteed otherwise).
-		err = tm.p.TakeNamedLock(ctx, dbTX, "transaction_receipts")
+		err := tm.p.TakeNamedLock(ctx, dbTX, "transaction_receipts")
 		if err == nil {
 			err = dbTX.DB().Table("transaction_receipts").
 				WithContext(ctx).
@@ -186,6 +170,39 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 				}).
 				Create(receiptsToInsert).
 				Error
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	// Do a query for chained transactions (note only one level here - double chaining not supported)
+	if len(possibleChainingRecordIDs) > 0 {
+		var chainingRecords []*persistedChainedPrivateTxn
+		err := dbTX.DB().
+			Where(`"chained_transaction" IN ?`, possibleChainingRecordIDs).
+			Find(&chainingRecords).
+			Error
+		// Recurse into PrivateTXManager, who will call us back, or send via the transport mgr
+		if err == nil {
+			receiptsToWrite := make([]*components.ReceiptInputWithOriginator, 0, len(chainingRecords))
+			for _, cr := range chainingRecords {
+				for _, receipt := range info {
+					if receipt.TransactionID == cr.ChainedTransaction {
+						log.L(ctx).Infof("Propagating receipt from %s to %s", receipt.TransactionID, cr.Transaction)
+						upstreamReceipt := &components.ReceiptInputWithOriginator{
+							Originator:   cr.Sender,
+							ReceiptInput: *receipt, // note copy by value
+						}
+						upstreamReceipt.TransactionID = cr.Transaction
+						upstreamReceipt.Domain = cr.Domain
+						receiptsToWrite = append(receiptsToWrite, upstreamReceipt)
+					}
+				}
+			}
+			if len(receiptsToWrite) > 0 {
+				err = tm.privateTxMgr.WriteOrDistributeReceipts(ctx, dbTX, receiptsToWrite)
+			}
 		}
 		if err != nil {
 			return err
