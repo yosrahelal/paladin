@@ -6,4 +6,6 @@ CREATE TABLE chained_private_txns (
   PRIMARY KEY ("transaction", "chained_transaction")
 );
 
+CREATE INDEX chained_private_txns_chained_transaction ON chained_private_txns ( "chained_transaction" ); -- hot query on receipt insert
+
 COMMIT;
