@@ -73,6 +73,10 @@ func (tm *txManager) mapPersistedTXFull(pt *persistedTransaction) *pldapi.Transa
 	for _, dep := range pt.TransactionDeps {
 		res.DependsOn = append(res.DependsOn, dep.DependsOn)
 	}
+	for _, chained := range pt.ChainedTransactions {
+		chainedID := chained.ChainedTransaction
+		res.Chained = append(res.Chained, &pldapi.ChainedTxLink{ID: &chainedID})
+	}
 
 	return res
 }
@@ -175,6 +179,7 @@ func (tm *txManager) QueryTransactionsFullTx(ctx context.Context, jq *query.Quer
 		Finalize: func(q *gorm.DB) *gorm.DB {
 			q = q.
 				Preload("TransactionDeps").
+				Preload("ChainedTransactions").
 				Joins("TransactionReceipt")
 
 			if pending {

@@ -42,19 +42,20 @@ import (
 // We keep this separate from the pldapi.TransactionXYZ interfaces that clients and applications use to interact
 // with this, so we have a separation of concerns on the GORM annotations and data serialization format
 type persistedTransaction struct {
-	ID                 uuid.UUID                             `gorm:"column:id;primaryKey"`
-	IdempotencyKey     *string                               `gorm:"column:idempotency_key"`
-	SubmitMode         pldtypes.Enum[pldapi.SubmitMode]      `gorm:"column:submit_mode"`
-	Type               pldtypes.Enum[pldapi.TransactionType] `gorm:"column:type"`
-	Created            pldtypes.Timestamp                    `gorm:"column:created;autoCreateTime:false"` // set by code before insert
-	ABIReference       *pldtypes.Bytes32                     `gorm:"column:abi_ref"`
-	Function           *string                               `gorm:"column:function"`
-	Domain             *string                               `gorm:"column:domain"`
-	From               string                                `gorm:"column:from"`
-	To                 *pldtypes.EthAddress                  `gorm:"column:to"`
-	Data               pldtypes.RawJSON                      `gorm:"column:data"` // we always store in JSON object format
-	TransactionDeps    []*transactionDep                     `gorm:"foreignKey:transaction;references:id"`
-	TransactionReceipt *transactionReceipt                   `gorm:"foreignKey:transaction;references:id"`
+	ID                  uuid.UUID                             `gorm:"column:id;primaryKey"`
+	IdempotencyKey      *string                               `gorm:"column:idempotency_key"`
+	SubmitMode          pldtypes.Enum[pldapi.SubmitMode]      `gorm:"column:submit_mode"`
+	Type                pldtypes.Enum[pldapi.TransactionType] `gorm:"column:type"`
+	Created             pldtypes.Timestamp                    `gorm:"column:created;autoCreateTime:false"` // set by code before insert
+	ABIReference        *pldtypes.Bytes32                     `gorm:"column:abi_ref"`
+	Function            *string                               `gorm:"column:function"`
+	Domain              *string                               `gorm:"column:domain"`
+	From                string                                `gorm:"column:from"`
+	To                  *pldtypes.EthAddress                  `gorm:"column:to"`
+	Data                pldtypes.RawJSON                      `gorm:"column:data"` // we always store in JSON object format
+	TransactionDeps     []*transactionDep                     `gorm:"foreignKey:transaction;references:id"`
+	TransactionReceipt  *transactionReceipt                   `gorm:"foreignKey:transaction;references:id"`
+	ChainedTransactions []*persistedChainedPrivateTxn         `gorm:"foreignKey:transaction;references:id"`
 }
 
 type transactionDep struct {
@@ -87,6 +88,15 @@ type persistedTransactionHistory struct {
 
 func (persistedTransactionHistory) TableName() string {
 	return "transaction_history"
+}
+
+type persistedChainedPrivateTxn struct {
+	Transaction        uuid.UUID `gorm:"column:transaction;primaryKey"`
+	ChainedTransaction uuid.UUID `gorm:"column:chained_transaction;primaryKey"`
+}
+
+func (persistedChainedPrivateTxn) TableName() string {
+	return "chained_private_txns"
 }
 
 var defaultConstructor = &abi.Entry{Type: abi.Constructor, Inputs: abi.ParameterArray{}}
@@ -336,16 +346,34 @@ func (tm *txManager) callTransactionPublic(ctx context.Context, result any, call
 	return err
 }
 
-func (tm *txManager) PrepareInternalPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*components.ValidatedTransaction, error) {
+func (tm *txManager) PrepareChainedPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, originalTxnID uuid.UUID, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (chained *components.ChainedPrivateTransaction, err error) {
 	tx.Type = pldapi.TransactionTypePrivate.Enum()
 	if tx.IdempotencyKey == "" {
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateChainedTXIdemKey)
 	}
-	return tm.resolveNewTransaction(ctx, dbTX, tx, submitMode)
+	newTX, err := tm.resolveNewTransaction(ctx, dbTX, tx, submitMode)
+	if err == nil {
+		chained = &components.ChainedPrivateTransaction{
+			OriginalTransactionID: originalTxnID,
+			NewTransaction:        newTX,
+		}
+	}
+	return chained, err
 }
 
-func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX persistence.DBTX, txis []*components.ValidatedTransaction) error {
-	// On this path we handle the idempotency key matching - noting that we validate the existence of an idempotency key in PrepareInternalPrivateTransaction
+func (tm *txManager) ChainPrivateTransactions(ctx context.Context, dbTX persistence.DBTX, chainedTxns []*components.ChainedPrivateTransaction) error {
+
+	txis := make([]*components.ValidatedTransaction, len(chainedTxns))
+	chainingRecords := make([]*persistedChainedPrivateTxn, len(chainedTxns))
+	for i, chainedTxn := range chainedTxns {
+		txis[i] = chainedTxn.NewTransaction
+		chainingRecords[i] = &persistedChainedPrivateTxn{
+			Transaction:        chainedTxn.OriginalTransactionID,
+			ChainedTransaction: *chainedTxn.NewTransaction.Transaction.ID,
+		}
+	}
+
+	// On this path we handle the idempotency key matching - noting that we validate the existence of an idempotency key in PrepareChainedPrivateTransaction
 	insertCount, err := tm.insertTransactions(ctx, dbTX, txis, true /* on conflict do nothing */)
 	if err != nil {
 		return err
@@ -385,10 +413,15 @@ func (tm *txManager) UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, db
 		}
 	}
 
+	// Insert the chaining records which allow us to correlate the completion of the chained transaction, back
+	// to the completion of the original transaction in the case of a failure in particular.
+	return dbTX.DB().
+		Clauses(clause.OnConflict{DoNothing: true}).
+		WithContext(ctx).
+		Create(chainingRecords).Error
+
 	// Note deliberately no notification to private TX manager here, as this function is for it to call us.
 	// So when it's flushed its internal transaction, it notifies itself.
-
-	return nil
 }
 
 func (tm *txManager) SendTransactions(ctx context.Context, dbTX persistence.DBTX, txs ...*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {

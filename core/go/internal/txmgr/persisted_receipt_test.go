@@ -113,6 +113,7 @@ func TestFinalizeTransactionsInsertFail(t *testing.T) {
 		mockEmptyReceiptListeners,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectBegin()
+			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(sqlmock.NewRows([]string{}))
 			mc.db.ExpectQuery("INSERT.*transaction_receipts").WillReturnError(fmt.Errorf("pop"))
 		})
 	defer done()

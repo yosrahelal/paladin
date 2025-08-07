@@ -156,6 +156,7 @@ func TestPublicConfirmMatch(t *testing.T) {
 				}, nil)
 
 			mc.db.ExpectBegin()
+			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(sqlmock.NewRows([]string{}))
 			mc.db.ExpectQuery("INSERT.*transaction_receipts").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(12345))
 			mc.db.ExpectCommit()
 
@@ -301,6 +302,37 @@ func TestPrivateConfirmError(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 }
 
+func TestConfirmQueryChainedError(t *testing.T) {
+
+	txi := newTestConfirm()
+	txID := uuid.New()
+
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
+				Return([]*components.PublicTxMatch{
+					{
+						PaladinTXReference: components.PaladinTXReference{
+							TransactionID:   txID,
+							TransactionType: pldapi.TransactionTypePublic.Enum(),
+						},
+						IndexedTransactionNotify: txi,
+					},
+				}, nil)
+
+			mc.db.ExpectBegin()
+			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnError(fmt.Errorf("pop"))
+		})
+	defer done()
+
+	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) (err error) {
+		return txm.blockIndexerPreCommit(ctx, dbTX, []*pldapi.IndexedBlock{},
+			[]*blockindexer.IndexedTransactionNotify{txi})
+	})
+	assert.Regexp(t, "pop", err)
+}
+
 func TestConfirmInsertError(t *testing.T) {
 
 	txi := newTestConfirm()
@@ -321,6 +353,7 @@ func TestConfirmInsertError(t *testing.T) {
 				}, nil)
 
 			mc.db.ExpectBegin()
+			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(sqlmock.NewRows([]string{}))
 			mc.db.ExpectQuery("INSERT.*transaction_receipts").WillReturnError(fmt.Errorf("pop"))
 		})
 	defer done()

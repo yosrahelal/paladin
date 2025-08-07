@@ -65,6 +65,11 @@ type ValidatedTransaction struct {
 	PublicTxData []byte
 }
 
+type ChainedPrivateTransaction struct {
+	OriginalTransactionID uuid.UUID // the original transaction that chained this transaction
+	NewTransaction        *ValidatedTransaction
+}
+
 // A resolved function on the ABI
 type ResolvedFunction struct {
 	// ABI          abi.ABI          `json:"abi"`
@@ -128,7 +133,7 @@ type TXManager interface {
 
 	LoadBlockchainEventListeners() error
 	NotifyStatesDBChanged(ctx context.Context) // called by state manager after committing DB TXs writing new states that might fill in gaps
-	PrepareInternalPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*ValidatedTransaction, error)
-	UpsertInternalPrivateTxsFinalizeIDs(ctx context.Context, dbTX persistence.DBTX, txis []*ValidatedTransaction) error
+	PrepareChainedPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, originalTxnID uuid.UUID, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*ChainedPrivateTransaction, error)
+	ChainPrivateTransactions(ctx context.Context, dbTX persistence.DBTX, txis []*ChainedPrivateTransaction) error
 	WritePreparedTransactions(ctx context.Context, dbTX persistence.DBTX, prepared []*PreparedTransactionWithRefs) error
 }
