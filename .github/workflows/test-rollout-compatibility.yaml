@@ -154,7 +154,7 @@ jobs:
           
           # We check out the new tag here primarily to validate the new chart installation
           # with the corresponding version of the validation script.
-          git checkout "$NEW_TAG"
+          git checkout main
           IMAGE_TAG="$NEW_TAG" ./scripts/default-installation-validation.sh paladin
 
           echo "--- Verifying Backwards Compatibility ---"
@@ -194,7 +194,7 @@ jobs:
         run: |
           NEW_TAG="${{ inputs.new_tag }}"
           echo "--- Testing Release Candidate $NEW_TAG ---"
-          git checkout "$NEW_TAG"
+          git checkout main
           
           RUN_COMMANDS=start,verify BUILD_PALADIN_SDK=true BUILD_PALADIN_ABI=true ./scripts/run-examples.sh
           
