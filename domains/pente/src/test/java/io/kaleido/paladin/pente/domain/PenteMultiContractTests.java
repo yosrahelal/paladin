@@ -227,38 +227,23 @@ public class PenteMultiContractTests {
                     ), true));
             domainReceipt = mapper.convertValue(tx.domainReceipt(), PenteEVMTransaction.JSONReceipt.class);
 
-            // TODO: this is wrong
-            // We should get exactly one Tick and one Tock from the main contract
-            // Instead, we get two extra Ticks
-
-            assertEquals(4, domainReceipt.receipt().logs().size());
+            assertEquals(2, domainReceipt.receipt().logs().size());
 
             // Tick event topic 0: 0x69e9c124815de375694fc163013eda46d15d79fe197fc42da80f1cf29f2a24a4
             // Tock event topic 0: 0xf8913ab6e531ecb8dde9472b4c1b3f054c2aa26bde054b2e5e19140bebebc1af
 
-            // Log 0: Tick event (from main contract)
+            // Log 0: Tick event
             assertEquals("0x69e9c124815de375694fc163013eda46d15d79fe197fc42da80f1cf29f2a24a4",
                     domainReceipt.receipt().logs().get(0).topics().get(0).toString());
             assertEquals(mainContractAddress,
                     domainReceipt.receipt().logs().get(0).address());
 
-            // Log 1: Tick event (from helper contract?)
-            assertEquals("0x69e9c124815de375694fc163013eda46d15d79fe197fc42da80f1cf29f2a24a4",
-                    domainReceipt.receipt().logs().get(1).topics().get(0).toString());
-            assertEquals(policyCheckerAddr,
-                    domainReceipt.receipt().logs().get(1).address());
 
-            // Log 2: Tick event (from main contract again?)
-            assertEquals("0x69e9c124815de375694fc163013eda46d15d79fe197fc42da80f1cf29f2a24a4",
-                    domainReceipt.receipt().logs().get(2).topics().get(0).toString());
-            assertEquals(mainContractAddress,
-                    domainReceipt.receipt().logs().get(2).address());
-
-            // Log 3: Tock event (from main contract)
+            // Log 1: Tock event
             assertEquals("0xf8913ab6e531ecb8dde9472b4c1b3f054c2aa26bde054b2e5e19140bebebc1af",
-                    domainReceipt.receipt().logs().get(3).topics().get(0).toString());
+                    domainReceipt.receipt().logs().get(1).topics().get(0).toString());
             assertEquals(mainContractAddress,
-                    domainReceipt.receipt().logs().get(3).address());
+                    domainReceipt.receipt().logs().get(1).address());
         }
     }
 }
