@@ -510,6 +510,12 @@ func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string
 
 }
 
+func (p *privateTxManager) getSequencerIfActive(ctx context.Context, domainAddress string) *Sequencer {
+	p.sequencersLock.RLock()
+	defer p.sequencersLock.RUnlock()
+	return p.sequencers[domainAddress]
+}
+
 func (p *privateTxManager) HandleNewEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
 	p.sequencersLock.RLock()
 	defer p.sequencersLock.RUnlock()
@@ -1037,4 +1043,25 @@ func (p *privateTxManager) CallPrivateSmartContract(ctx context.Context, call *c
 
 func (p *privateTxManager) BuildStateDistributions(ctx context.Context, tx *components.PrivateTransaction) (*components.StateDistributionSet, error) {
 	return newStateDistributionBuilder(p.components, tx).Build(ctx)
+}
+
+func (p *privateTxManager) WriteChainedReceipts(ctx context.Context, dbTX persistence.DBTX, receipts []*components.ReceiptInputWithOriginator) error {
+
+	// For any failures in a chained transaction, it basically invalidates the whole working state of our in-memory
+	// sequencer. In this version of the engine, we simply unload the whole engine.
+	// This is like a restart of the Paladin engine - and means anything in-flight is aborted.
+	// New transactions will load a fresh engine.
+	// TODO: See https://github.com/LF-Decentralized-Trust-labs/paladin/pull/673 for work on the more comprehensive stateful sequencer.
+
+	for _, r := range receipts {
+		if r.ReceiptType != components.RT_Success && r.DomainContractAddress != "" {
+			seq := p.getSequencerIfActive(ctx, r.DomainContractAddress)
+			if seq != nil {
+				log.L(ctx).Errorf("Due to chained transaction error the sequencer for smart contract %s in domain %s is STOPPING", seq.contractAddress, r.Domain)
+				seq.Stop()
+			}
+		}
+	}
+
+	return p.syncPoints.WriteOrDistributeReceipts(ctx, dbTX, receipts)
 }
