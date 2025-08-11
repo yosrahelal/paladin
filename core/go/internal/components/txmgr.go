@@ -38,7 +38,8 @@ const (
 )
 
 type ReceiptInputWithOriginator struct {
-	Originator string
+	Originator            string
+	DomainContractAddress string
 	ReceiptInput
 }
 
@@ -71,10 +72,11 @@ type ValidatedTransaction struct {
 }
 
 type ChainedPrivateTransaction struct {
-	OriginalSenderLocator string    // the original sender fully qualified identity
-	OriginalTransaction   uuid.UUID // the original transaction that chained this transaction
-	OriginalDomain        string    // the original domain of the upstream transaction
-	NewTransaction        *ValidatedTransaction
+	OriginalSenderLocator   string    // the original sender fully qualified identity
+	OriginalTransaction     uuid.UUID // the original transaction that chained this transaction
+	OriginalDomain          string    // the original domain of the upstream transaction
+	OriginalContractAddress string    // the contract address of the original smart contract within the domain
+	NewTransaction          *ValidatedTransaction
 }
 
 // A resolved function on the ABI
@@ -140,7 +142,7 @@ type TXManager interface {
 
 	LoadBlockchainEventListeners() error
 	NotifyStatesDBChanged(ctx context.Context) // called by state manager after committing DB TXs writing new states that might fill in gaps
-	PrepareChainedPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, origSender string, origTxID uuid.UUID, origDomain string, txToChain *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*ChainedPrivateTransaction, error)
+	PrepareChainedPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, origSender string, origTxID uuid.UUID, origDomain string, origDomainAddress *pldtypes.EthAddress, txToChain *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (*ChainedPrivateTransaction, error)
 	ChainPrivateTransactions(ctx context.Context, dbTX persistence.DBTX, txis []*ChainedPrivateTransaction) error
 	WritePreparedTransactions(ctx context.Context, dbTX persistence.DBTX, prepared []*PreparedTransactionWithRefs) error
 }

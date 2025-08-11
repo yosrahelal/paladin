@@ -135,10 +135,6 @@ type TransactionFull struct {
 	History   []*TransactionHistory   `docstruct:"TransactionFull" json:"history,omitempty"`   // list of values previously provided for this transaction
 }
 
-type ChainedTxLink struct {
-	ID *uuid.UUID `docstruct:"Transaction" json:"id,omitempty"` // ID of the transaction
-}
-
 type ABIDecodedData struct {
 	Data       pldtypes.RawJSON `docstruct:"ABIDecodedData" json:"data"`
 	Summary    string           `docstruct:"ABIDecodedData" json:"summary,omitempty"` // errors only
