@@ -79,7 +79,7 @@ func (s *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransa
 				senderLocator := tx.PreAssembly.TransactionSpecification.From
 				validatedPrivateTx, err := s.components.TxManager().
 					PrepareChainedPrivateTransaction(ctx, s.components.Persistence().NOTX(),
-						senderLocator, tx.ID, tx.Domain,
+						senderLocator, tx.ID, tx.Domain, &s.contractAddress,
 						preparedTransaction.PreparedPrivateTransaction, pldapi.SubmitModeAuto)
 				if err != nil {
 					log.L(ctx).Errorf("Error preparing transaction %s: %s", preparedTransaction.ID, err)

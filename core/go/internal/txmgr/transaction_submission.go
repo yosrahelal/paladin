@@ -94,6 +94,7 @@ type persistedChainedPrivateTxn struct {
 	Transaction        uuid.UUID `gorm:"column:transaction;primaryKey"`
 	Sender             string    `gorm:"column:sender;primaryKey"`
 	Domain             string    `gorm:"column:domain;primaryKey"`
+	ContractAddress    string    `gorm:"column:contract_address;primaryKey"`
 }
 
 func (persistedChainedPrivateTxn) TableName() string {
@@ -347,7 +348,7 @@ func (tm *txManager) callTransactionPublic(ctx context.Context, result any, call
 	return err
 }
 
-func (tm *txManager) PrepareChainedPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, origSender string, origTxID uuid.UUID, origDomain string, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (chained *components.ChainedPrivateTransaction, err error) {
+func (tm *txManager) PrepareChainedPrivateTransaction(ctx context.Context, dbTX persistence.DBTX, origSender string, origTxID uuid.UUID, origDomain string, origDomainAddress *pldtypes.EthAddress, tx *pldapi.TransactionInput, submitMode pldapi.SubmitMode) (chained *components.ChainedPrivateTransaction, err error) {
 	tx.Type = pldapi.TransactionTypePrivate.Enum()
 	if tx.IdempotencyKey == "" {
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrPrivateChainedTXIdemKey)
@@ -359,6 +360,9 @@ func (tm *txManager) PrepareChainedPrivateTransaction(ctx context.Context, dbTX 
 			OriginalTransaction:   origTxID,
 			OriginalDomain:        origDomain,
 			NewTransaction:        newTX,
+		}
+		if origDomainAddress != nil {
+			chained.OriginalContractAddress = origDomainAddress.String()
 		}
 	}
 	return chained, err
@@ -374,6 +378,7 @@ func (tm *txManager) ChainPrivateTransactions(ctx context.Context, dbTX persiste
 			Sender:             chainedTxn.OriginalSenderLocator,
 			Transaction:        chainedTxn.OriginalTransaction,
 			Domain:             chainedTxn.OriginalDomain,
+			ContractAddress:    chainedTxn.OriginalContractAddress,
 			ChainedTransaction: *chainedTxn.NewTransaction.Transaction.ID,
 		}
 	}

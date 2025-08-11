@@ -188,10 +188,11 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 			for _, cr := range chainingRecords {
 				for _, receipt := range info {
 					if receipt.TransactionID == cr.ChainedTransaction {
-						log.L(ctx).Infof("Propagating receipt from %s to %s", receipt.TransactionID, cr.Transaction)
+						log.L(ctx).Infof("Propagating chained transaction receipt from %s to %s", receipt.TransactionID, cr.Transaction)
 						upstreamReceipt := &components.ReceiptInputWithOriginator{
-							Originator:   cr.Sender,
-							ReceiptInput: *receipt, // note copy by value
+							Originator:            cr.Sender,
+							DomainContractAddress: cr.ContractAddress,
+							ReceiptInput:          *receipt, // note copy by value
 						}
 						upstreamReceipt.TransactionID = cr.Transaction
 						upstreamReceipt.Domain = cr.Domain
@@ -200,7 +201,7 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 				}
 			}
 			if len(receiptsToWrite) > 0 {
-				err = tm.privateTxMgr.WriteOrDistributeReceipts(ctx, dbTX, receiptsToWrite)
+				err = tm.privateTxMgr.WriteChainedReceipts(ctx, dbTX, receiptsToWrite)
 			}
 		}
 		if err != nil {
