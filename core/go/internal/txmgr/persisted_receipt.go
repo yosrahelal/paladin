@@ -176,7 +176,6 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 		}
 	}
 
-	// Do a query for chained transactions (note only one level here - double chaining not supported)
 	if len(possibleChainingRecordIDs) > 0 {
 		var chainingRecords []*persistedChainedPrivateTxn
 		err := dbTX.DB().
