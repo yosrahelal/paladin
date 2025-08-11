@@ -18,10 +18,10 @@ package types
 import (
 	_ "embed"
 
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/pldapi"
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/solutils"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/solutils"
 )
 
 //go:embed abis/INotoPrivate.json

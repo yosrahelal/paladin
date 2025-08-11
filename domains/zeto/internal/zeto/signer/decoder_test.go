@@ -19,9 +19,9 @@ import (
 	"context"
 	"testing"
 
-	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	pb "github.com/LF-Decentralized-Trust-labs/paladin/domains/zeto/pkg/proto"
+	"github.com/LF-Decentralized-Trust-labs/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"

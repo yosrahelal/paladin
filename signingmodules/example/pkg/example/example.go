@@ -17,8 +17,8 @@ package example
 import (
 	"context"
 
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/key-manager/signingmodules/example/internal/examplesigningmodule"
-	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 )
 
 func NewPlugin(ctx context.Context) plugintk.PluginBase {

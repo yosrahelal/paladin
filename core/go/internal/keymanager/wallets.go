@@ -19,16 +19,16 @@ import (
 	"context"
 	"regexp"
 
-	"github.com/kaleido-io/paladin/common/go/pkg/i18n"
-	"github.com/kaleido-io/paladin/common/go/pkg/log"
-	"github.com/kaleido-io/paladin/config/pkg/confutil"
-	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
+	"github.com/LF-Decentralized-Trust-labs/paladin/common/go/pkg/i18n"
+	"github.com/LF-Decentralized-Trust-labs/paladin/common/go/pkg/log"
+	"github.com/LF-Decentralized-Trust-labs/paladin/config/pkg/confutil"
+	"github.com/LF-Decentralized-Trust-labs/paladin/config/pkg/pldconf"
+	"github.com/LF-Decentralized-Trust-labs/paladin/core/internal/msgs"
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/pldapi"
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/prototk"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/signer"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/signerapi"
 )
 
 type wallet struct {
@@ -60,12 +60,13 @@ func (km *keyManager) newWallet(ctx context.Context, walletConf *pldconf.WalletC
 	}
 
 	signerType := confutil.StringNotEmpty(&walletConf.SignerType, pldconf.WalletDefaults.SignerType)
-	if signerType == pldconf.WalletSignerTypeEmbedded {
+	switch signerType {
+	case pldconf.WalletSignerTypeEmbedded:
 		w.signingModule, err = signer.NewSigningModule(ctx, (*signerapi.ConfigNoExt)(walletConf.Signer))
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerEmbeddedSignerFailInit, w.name)
 		}
-	} else if signerType == pldconf.WalletSignerTypePlugin {
+	case pldconf.WalletSignerTypePlugin:
 		if walletConf.SignerPluginName == "" {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerPluginSignerEmptyName, w.name)
 		}
@@ -75,7 +76,7 @@ func (km *keyManager) newWallet(ctx context.Context, walletConf *pldconf.WalletC
 		} else {
 			w.signingModule = smp
 		}
-	} else {
+	default:
 		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerInvalidWalletSignerType, signerType, w.name)
 	}
 
