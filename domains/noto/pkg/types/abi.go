@@ -18,10 +18,10 @@ package types
 import (
 	_ "embed"
 
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/pldapi"
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/solutils"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/pldapi"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/solutils"
 )
 
 //go:embed abis/INotoPrivate.json
@@ -60,13 +60,26 @@ type MintParams struct {
 	Data   pldtypes.HexBytes    `json:"data"`
 }
 
+type BurnParams struct {
+	Amount *pldtypes.HexUint256 `json:"amount"`
+	Data   pldtypes.HexBytes    `json:"data"`
+}
+
+type BurnFromParams struct {
+	From   string               `json:"from"`
+	Amount *pldtypes.HexUint256 `json:"amount"`
+	Data   pldtypes.HexBytes    `json:"data"`
+}
+
 type TransferParams struct {
 	To     string               `json:"to"`
 	Amount *pldtypes.HexUint256 `json:"amount"`
 	Data   pldtypes.HexBytes    `json:"data"`
 }
 
-type BurnParams struct {
+type TransferFromParams struct {
+	From   string               `json:"from"`
+	To     string               `json:"to"`
 	Amount *pldtypes.HexUint256 `json:"amount"`
 	Data   pldtypes.HexBytes    `json:"data"`
 }

@@ -20,14 +20,14 @@ import (
 	"encoding/json"
 	"sync/atomic"
 
+	"github.com/LF-Decentralized-Trust-labs/paladin/common/go/pkg/log"
+	"github.com/LF-Decentralized-Trust-labs/paladin/config/pkg/pldconf"
+	"github.com/LF-Decentralized-Trust-labs/paladin/core/internal/components"
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/retry"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/prototk"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/signer"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/signerapi"
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/common/go/pkg/log"
-	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/retry"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 )
 
 // Plugin signing module
@@ -104,7 +104,7 @@ func (sm *signingModule) AddInMemorySigner(prefix string, signer signerapi.InMem
 }
 
 func (sm *signingModule) Close() {
-	sm.api.Close(sm.ctx, &prototk.CloseRequest{})
+	_, _ = sm.api.Close(sm.ctx, &prototk.CloseRequest{})
 }
 
 func (sm *signingModule) close() {
