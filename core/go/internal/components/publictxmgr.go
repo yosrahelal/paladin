@@ -46,6 +46,7 @@ type PublicTxSubmission struct {
 type PaladinTXReference struct {
 	TransactionID   uuid.UUID
 	TransactionType pldtypes.Enum[pldapi.TransactionType]
+	Sender          string
 }
 
 type PublicTxMatch struct {
