@@ -328,6 +328,7 @@ func (ptm *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persiste
 				publicTxBindings = append(publicTxBindings, &DBPublicTxnBinding{
 					Transaction:     bnd.TransactionID,
 					TransactionType: bnd.TransactionType,
+					Sender:          bnd.Sender,
 					PublicTxnID:     pubTxnID,
 				})
 			}

@@ -48,6 +48,7 @@ type DBPublicTxnBinding struct {
 	PublicTxnID     uint64                                `gorm:"column:pub_txn_id;primaryKey"`
 	Transaction     uuid.UUID                             `gorm:"column:transaction"`
 	TransactionType pldtypes.Enum[pldapi.TransactionType] `gorm:"column:tx_type"`
+	Sender          string                                `gorm:"column:sender"`
 }
 
 func (DBPublicTxnBinding) TableName() string {

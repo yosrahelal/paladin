@@ -428,7 +428,13 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 
 	publicTXs := []*components.PublicTxSubmission{
 		{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			Bindings: []*components.PaladinTXReference{
+				{
+					TransactionID:   tx.ID,
+					TransactionType: pldapi.TransactionTypePrivate.Enum(),
+					Sender:          tx.From,
+				},
+			},
 			PublicTxInput: pldapi.PublicTxInput{
 				From:            resolvedAddrs[0],
 				PublicTxOptions: pldapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
@@ -963,22 +969,26 @@ func (p *privateTxManager) publishToSubscribers(ctx context.Context, event compo
 
 func (p *privateTxManager) NotifyFailedPublicTx(ctx context.Context, dbTX persistence.DBTX, failures []*components.PublicTxMatch) error {
 	// TODO: We have processing we need to do here to resubmit
-	// For now, we directly raise a failure receipt for them back with the main transaction manager
-	privateFailureReceipts := make([]*components.ReceiptInput, len(failures))
+	privateFailureReceipts := make([]*components.ReceiptInputWithOriginator, len(failures))
 	for i, tx := range failures {
-		privateFailureReceipts[i] = &components.ReceiptInput{
-			ReceiptType:   components.RT_FailedOnChainWithRevertData,
-			TransactionID: tx.TransactionID,
-			OnChain: pldtypes.OnChainLocation{
-				Type:             pldtypes.OnChainTransaction,
-				TransactionHash:  tx.Hash,
-				BlockNumber:      tx.BlockNumber,
-				TransactionIndex: tx.BlockNumber,
+		privateFailureReceipts[i] = &components.ReceiptInputWithOriginator{
+			Originator:            tx.Sender,
+			DomainContractAddress: tx.ContractAddress.String(),
+			ReceiptInput: components.ReceiptInput{
+				ReceiptType:   components.RT_FailedOnChainWithRevertData,
+				TransactionID: tx.TransactionID,
+				OnChain: pldtypes.OnChainLocation{
+					Type:             pldtypes.OnChainTransaction,
+					TransactionHash:  tx.Hash,
+					BlockNumber:      tx.BlockNumber,
+					TransactionIndex: tx.BlockNumber,
+				},
+				RevertData: tx.RevertReason,
 			},
-			RevertData: tx.RevertReason,
 		}
 	}
-	return p.components.TxManager().FinalizeTransactions(ctx, dbTX, privateFailureReceipts)
+	// Distribute the receipts to the correct location - either local if we were the submitter, or remote.
+	return p.WriteOrDistributeReceiptsPostSubmit(ctx, dbTX, privateFailureReceipts)
 }
 
 // We get called post-commit by the indexer in the domain when transaction confirmations have been recorded,
@@ -1045,10 +1055,10 @@ func (p *privateTxManager) BuildStateDistributions(ctx context.Context, tx *comp
 	return newStateDistributionBuilder(p.components, tx).Build(ctx)
 }
 
-func (p *privateTxManager) WriteChainedReceipts(ctx context.Context, dbTX persistence.DBTX, receipts []*components.ReceiptInputWithOriginator) error {
+func (p *privateTxManager) WriteOrDistributeReceiptsPostSubmit(ctx context.Context, dbTX persistence.DBTX, receipts []*components.ReceiptInputWithOriginator) error {
 
-	// For any failures in a chained transaction, it basically invalidates the whole working state of our in-memory
-	// sequencer. In this version of the engine, we simply unload the whole engine.
+	// For any failures in a post submission, it basically invalidates the whole working state of our in-memory sequencer.
+	// In this version of the engine, we simply unload the whole engine.
 	// This is like a restart of the Paladin engine - and means anything in-flight is aborted.
 	// New transactions will load a fresh engine.
 	// TODO: See https://github.com/LF-Decentralized-Trust-labs/paladin/pull/673 for work on the more comprehensive stateful sequencer.
