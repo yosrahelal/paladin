@@ -201,7 +201,7 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX persistence.
 				}
 			}
 			if len(receiptsToWrite) > 0 {
-				err = tm.privateTxMgr.WriteChainedReceipts(ctx, dbTX, receiptsToWrite)
+				err = tm.privateTxMgr.WriteOrDistributeReceiptsPostSubmit(ctx, dbTX, receiptsToWrite)
 			}
 		}
 		if err != nil {
