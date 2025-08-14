@@ -328,7 +328,8 @@ func (ptm *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persiste
 				publicTxBindings = append(publicTxBindings, &DBPublicTxnBinding{
 					Transaction:     bnd.TransactionID,
 					TransactionType: bnd.TransactionType,
-					Sender:          bnd.Sender,
+					Sender:          bnd.TransactionSender,
+					ContractAddress: bnd.TransactionContractAddress,
 					PublicTxnID:     pubTxnID,
 				})
 			}
@@ -775,8 +776,10 @@ func (ptm *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 				// matched results in the order of the inputs
 				results = append(results, &components.PublicTxMatch{
 					PaladinTXReference: components.PaladinTXReference{
-						TransactionID:   match.Transaction,
-						TransactionType: match.TransactionType,
+						TransactionID:              match.Transaction,
+						TransactionType:            match.TransactionType,
+						TransactionSender:          match.Sender,
+						TransactionContractAddress: match.ContractAddress,
 					},
 					IndexedTransactionNotify: txi,
 				})
