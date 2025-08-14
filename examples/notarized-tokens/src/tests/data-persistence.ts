@@ -86,12 +86,21 @@ async function main(): Promise<boolean> {
 
   const contractData: ContractData = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   logger.log(`STEP 1: Loaded contract data from ${dataFile}`);
+  
+  // Print cached data summary
+  logger.log("\n=== CACHED DATA SUMMARY ===");
+  logger.log(`Data File: ${dataFile}`);
+  logger.log(`Timestamp: ${contractData.timestamp}`);
   logger.log(`Token Address: ${contractData.tokenAddress}`);
   logger.log(`Notary: ${contractData.notary}`);
   logger.log(`Notary Mode: ${contractData.notaryMode}`);
   logger.log(`Mint Amount: ${contractData.mintAmount}`);
-  logger.log(`Transfer to Node2 Amount: ${contractData.transferToNode2Amount}`);
-  logger.log(`Transfer to Node3 Amount: ${contractData.transferToNode3Amount}`);
+  logger.log(`Transfer to Node2: ${contractData.transferToNode2Amount}`);
+  logger.log(`Transfer to Node3: ${contractData.transferToNode3Amount}`);
+  logger.log(`Mint TX Hash: ${contractData.mintTransactionHash}`);
+  logger.log(`Transfer2 TX Hash: ${contractData.transferToNode2TransactionHash}`);
+  logger.log(`Transfer3 TX Hash: ${contractData.transferToNode3TransactionHash}`);
+  logger.log("=============================\n");
 
   // STEP 2: Get verifiers and recreate token connection
   logger.log("STEP 2: Recreating token connection...");

@@ -122,6 +122,11 @@ async function main(): Promise<boolean> {
 
   const contractData: ContractData = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   logger.log(`STEP 1: Loaded contract data from ${dataFile}`);
+
+  // Print cached data summary
+  logger.log("\n=== CACHED DATA SUMMARY ===");
+  logger.log(`Data File: ${dataFile}`);
+  logger.log(`Timestamp: ${contractData.timestamp}`);
   logger.log(`Noto Cash Address: ${contractData.notoCashAddress}`);
   logger.log(`Noto Bond Address: ${contractData.notoBondAddress}`);
   logger.log(`Issuer-Custodian Group ID: ${contractData.issuerCustodianGroupId}`);
@@ -130,6 +135,9 @@ async function main(): Promise<boolean> {
   logger.log(`Bond Subscription Address: ${contractData.bondSubscriptionAddress}`);
   logger.log(`Atom Factory Address: ${contractData.atomFactoryAddress}`);
   logger.log(`Atom Address: ${contractData.atomAddress}`);
+  logger.log(`Bond Units: ${contractData.bondDetails.bondUnits}`);
+  logger.log(`Cash Amount: ${contractData.bondDetails.cashAmount}`);
+  logger.log("=============================\n");
 
   // STEP 2: Get verifiers and recreate contract connections
   logger.log("STEP 2: Recreating contract connections...");

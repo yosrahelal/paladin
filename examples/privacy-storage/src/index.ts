@@ -74,6 +74,13 @@ async function main(): Promise<boolean> {
     function: "store",
     data: { num: valueToStore },
   }).waitForReceipt(10000);
+  
+  // Validate store transaction was successful
+  if (!storeReceipt?.success) {
+    logger.error("Store transaction failed!");
+    return false;
+  }
+  
   logger.log(
     "Value stored successfully! Transaction hash:",
     storeReceipt?.transactionHash
@@ -85,6 +92,13 @@ async function main(): Promise<boolean> {
     from: verifierNode1.lookup,
     function: "retrieve",
   });
+  
+  // Validate the retrieved value
+  if (retrievedValueNode1["value"] !== valueToStore.toString()) {
+    logger.error(`Value retrieval validation failed for Node1! Expected: "${valueToStore}", Retrieved: "${retrievedValueNode1["value"]}"`);
+    return false;
+  }
+  
   logger.log(
     "Node1 retrieved the value successfully:",
     retrievedValueNode1["value"]
@@ -98,6 +112,13 @@ async function main(): Promise<boolean> {
       from: verifierNode2.lookup,
       function: "retrieve",
     });
+    
+  // Validate the retrieved value
+  if (retrievedValueNode2["value"] !== valueToStore.toString()) {
+    logger.error(`Value retrieval validation failed for Node2! Expected: "${valueToStore}", Retrieved: "${retrievedValueNode2["value"]}"`);
+    return false;
+  }
+  
   logger.log(
     "Node2 retrieved the value successfully:",
     retrievedValueNode2["value"]

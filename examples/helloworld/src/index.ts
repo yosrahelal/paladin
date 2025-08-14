@@ -74,6 +74,12 @@ async function main(): Promise<boolean> {
     logger.error("STEP 2: Receipt retrieval failed!");
     return false;
   }
+  
+  // Validate the transaction was successful
+  if (!functionReceipt.success) {
+    logger.error("STEP 2: Transaction failed!");
+    return false;
+  }
   logger.log("STEP 2: sayHello function executed successfully!");
 
   // STEP 3: Retrieve and verify the emitted event

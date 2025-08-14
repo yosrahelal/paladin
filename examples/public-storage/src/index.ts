@@ -46,6 +46,13 @@ async function main(): Promise<boolean> {
     logger.error("Deployment failed!");
     return false;
   }
+  
+  // Validate deployment was successful
+  if (!deploymentReceipt.success) {
+    logger.error("Deployment transaction failed!");
+    return false;
+  }
+  
   logger.log("Step 1: Storage contract deployed successfully!");
 
   // Step 2: Store a value in the contract
@@ -66,6 +73,13 @@ async function main(): Promise<boolean> {
     logger.error("Failed to store value in the contract!");
     return false;
   }
+  
+  // Validate store transaction was successful
+  if (!storeReceipt.success) {
+    logger.error("Store transaction failed!");
+    return false;
+  }
+  
   logger.log("Step 2: Value stored successfully!" );
 
   // Step 3: Retrieve the stored value from the contract

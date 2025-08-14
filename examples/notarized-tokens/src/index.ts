@@ -66,10 +66,24 @@ async function main(): Promise<boolean> {
     logger.error("Failed to mint cash tokens!");
     return false;
   }
+  
+  // Validate mint transaction was successful
+  if (!mintReceipt.success) {
+    logger.error("Mint transaction failed!");
+    return false;
+  }
+  
   logger.log(`Successfully minted ${mintAmount} units of cash to Node1!`);
   let balanceNode1 = await cashToken.balanceOf(verifierNode1, {
     account: verifierNode1.lookup,
   });
+  
+  // Validate the balance was updated correctly
+  if (balanceNode1.totalBalance !== mintAmount.toString()) {
+    logger.error(`Mint validation failed! Expected balance: ${mintAmount}, Actual balance: ${balanceNode1.totalBalance}`);
+    return false;
+  }
+  
   logger.log(
     `Node1 State: ${balanceNode1.totalBalance} units of cash, ${balanceNode1.totalStates} states, overflow: ${balanceNode1.overflow}`
   );
@@ -87,10 +101,24 @@ async function main(): Promise<boolean> {
     logger.error("Failed to transfer cash to Node2!");
     return false;
   }
+  
+  // Validate transfer transaction was successful
+  if (!transferToNode2.success) {
+    logger.error("Transfer to Node2 transaction failed!");
+    return false;
+  }
+  
   logger.log(`Successfully transferred ${transferToNode2Amount} units of cash to Node2!`);
   let balanceNode2 = await cashToken.balanceOf(verifierNode1, {
     account: verifierNode2.lookup,
   });
+  
+  // Validate the balance was updated correctly
+  if (balanceNode2.totalBalance !== transferToNode2Amount.toString()) {
+    logger.error(`Transfer to Node2 validation failed! Expected balance: ${transferToNode2Amount}, Actual balance: ${balanceNode2.totalBalance}`);
+    return false;
+  }
+  
   logger.log(
     `Node2 State: ${balanceNode2.totalBalance} units of cash, ${balanceNode2.totalStates} states, overflow: ${balanceNode2.overflow}`
   );
@@ -109,15 +137,29 @@ async function main(): Promise<boolean> {
     logger.error("Failed to transfer cash to Node3!");
     return false;
   }
+  
+  // Validate transfer transaction was successful
+  if (!transferToNode3.success) {
+    logger.error("Transfer to Node3 transaction failed!");
+    return false;
+  }
+  
   logger.log(`Successfully transferred ${transferToNode3Amount} units of cash to Node3!`);
   let balanceNode3 = await cashToken.balanceOf(verifierNode1, {
     account: verifierNode3.lookup,
   });
+  
+  // Validate the balance was updated correctly
+  if (balanceNode3.totalBalance !== transferToNode3Amount.toString()) {
+    logger.error(`Transfer to Node3 validation failed! Expected balance: ${transferToNode3Amount}, Actual balance: ${balanceNode3.totalBalance}`);
+    return false;
+  }
+  
   logger.log(
     `Node3 State: ${balanceNode3.totalBalance} units of cash, ${balanceNode3.totalStates} states, overflow: ${balanceNode3.overflow}`
   );
 
-
+  // Validate final balances after all operations
   const finalBalanceNode1 = await cashToken.balanceOf(verifierNode1, {
     account: verifierNode1.lookup,
   });
@@ -127,6 +169,26 @@ async function main(): Promise<boolean> {
   const finalBalanceNode3 = await cashToken.balanceOf(verifierNode1, {
     account: verifierNode3.lookup,
   });
+
+  // Validate final balances match expected values
+  const expectedBalanceNode1 = mintAmount - transferToNode2Amount;
+  const expectedBalanceNode2 = transferToNode2Amount - transferToNode3Amount;
+  const expectedBalanceNode3 = transferToNode3Amount;
+
+  if (finalBalanceNode1.totalBalance !== expectedBalanceNode1.toString()) {
+    logger.error(`Final balance validation failed for Node1! Expected: ${expectedBalanceNode1}, Actual: ${finalBalanceNode1.totalBalance}`);
+    return false;
+  }
+  if (finalBalanceNode2.totalBalance !== expectedBalanceNode2.toString()) {
+    logger.error(`Final balance validation failed for Node2! Expected: ${expectedBalanceNode2}, Actual: ${finalBalanceNode2.totalBalance}`);
+    return false;
+  }
+  if (finalBalanceNode3.totalBalance !== expectedBalanceNode3.toString()) {
+    logger.error(`Final balance validation failed for Node3! Expected: ${expectedBalanceNode3}, Actual: ${finalBalanceNode3.totalBalance}`);
+    return false;
+  }
+
+  logger.log(`Final balances - Node1: ${finalBalanceNode1.totalBalance}, Node2: ${finalBalanceNode2.totalBalance}, Node3: ${finalBalanceNode3.totalBalance}`);
 
   // Save contract data to file for later use
   // should be of type

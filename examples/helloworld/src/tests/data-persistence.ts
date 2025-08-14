@@ -59,9 +59,15 @@ async function main(): Promise<boolean> {
 
   const contractData: ContractData = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   logger.log(`STEP 1: Loaded contract data from ${dataFile}`);
+
+  // Print cached data summary
+  logger.log("\n=== CACHED DATA SUMMARY ===");
+  logger.log(`Data File: ${dataFile}`);
+  logger.log(`Timestamp: ${contractData.timestamp}`);
   logger.log(`Contract Address: ${contractData.contractAddress}`);
-  logger.log(`Original Message: ${contractData.message}`);
+  logger.log(`Original Message: "${contractData.message}"`);
   logger.log(`Transaction Hash: ${contractData.transactionHash}`);
+  logger.log("=============================\n");
 
   // STEP 2: Get historical events by transaction hash
   logger.log("STEP 2: Getting historical events for the transaction...");

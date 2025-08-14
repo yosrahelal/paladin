@@ -69,12 +69,18 @@ async function main(): Promise<boolean> {
 
   const contractData: ContractData = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   logger.log(`STEP 1: Loaded contract data from ${dataFile}`);
+
+  // Print cached data summary
+  logger.log("\n=== CACHED DATA SUMMARY ===");
+  logger.log(`Data File: ${dataFile}`);
+  logger.log(`Timestamp: ${contractData.timestamp}`);
   logger.log(`Privacy Group ID: ${contractData.privacyGroupId}`);
   logger.log(`Contract Address: ${contractData.contractAddress}`);
   logger.log(`Stored Value: ${contractData.storedValue}`);
   logger.log(`Node1 Retrieved Value: ${contractData.retrievedValueNode1}`);
   logger.log(`Node2 Retrieved Value: ${contractData.retrievedValueNode2}`);
-  logger.log(`Store Transaction Hash: ${contractData.storeTransactionHash}`);
+  logger.log(`Store TX Hash: ${contractData.storeTransactionHash}`);
+  logger.log("=============================\n");
 
   // STEP 2: Get verifiers and recreate privacy group connection
   logger.log("STEP 2: Recreating privacy group connection...");
