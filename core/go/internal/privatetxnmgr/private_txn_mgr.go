@@ -971,9 +971,13 @@ func (p *privateTxManager) NotifyFailedPublicTx(ctx context.Context, dbTX persis
 	// TODO: We have processing we need to do here to resubmit
 	privateFailureReceipts := make([]*components.ReceiptInputWithOriginator, len(failures))
 	for i, tx := range failures {
+		contractAddr := ""
+		if tx.ContractAddress != nil {
+			contractAddr = tx.ContractAddress.String()
+		}
 		privateFailureReceipts[i] = &components.ReceiptInputWithOriginator{
 			Originator:            tx.Sender,
-			DomainContractAddress: tx.ContractAddress.String(),
+			DomainContractAddress: contractAddr,
 			ReceiptInput: components.ReceiptInput{
 				ReceiptType:   components.RT_FailedOnChainWithRevertData,
 				TransactionID: tx.TransactionID,
