@@ -26,6 +26,12 @@ examples/your-example/
 └── tsconfig.json
 ```
 
+## About the Tests Folder
+
+The `tests/` folder within each example contains verification scripts that ensure that the data persistence and contract deployment aspects of examples work correctly.
+
+> **Note**: Users are not expected to run these tests as part of learning Paladin. They are included within each example folder because they directly test that specific example's functionality, making the relationship clear and logical.
+
 ## Required npm Scripts
 
 Every example's `package.json` should include these scripts:

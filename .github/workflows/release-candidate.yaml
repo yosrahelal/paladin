@@ -1,3 +1,8 @@
+# This workflow manages the first phase of the two-phase release process:
+#   1. Create a release candidate (RC) tag and publish all artifacts (images, charts, SDK, etc.) for testing.
+#   2. After successful testing of the RC artifacts, proceed to create the final release with the "latest" tag.
+# The goal is to ensure all released artifacts are validated before making the final release public. 
+# The final release (phase 2) is created by the `release` workflow.
 name: Release Candidate
 
 permissions:
@@ -77,9 +82,10 @@ jobs:
           fi
           echo "Valid RC tag: $REF_TAG_VERSION"
 
-  # ================================ TESTING/PRE-RELEASE ================================
+  # ================================ BUILD ARTIFACTS ================================
+  # Build and prepare all release artifacts (images, charts, contracts, SDK)
 
-
+  # Build and publish RC images
   release-images:
     needs: setup
     uses: ./.github/workflows/release-images.yaml
@@ -91,7 +97,7 @@ jobs:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
   
 
-  # ================================ RELEASE ================================
+  # Test and release RC Helm charts
   release-charts:
     needs: [setup, release-images]
     uses: ./.github/workflows/release-charts.yaml
@@ -102,12 +108,14 @@ jobs:
     secrets:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Upload Solidity contracts
   release-solidity-contracts:
     needs: [setup, release-charts]
     uses: ./.github/workflows/release-solidity-contracts.yaml
     with:
       tag: ${{ needs.setup.outputs.tag }}
-      
+
+  # Release TypeScript SDK
   release-typescript-sdk:
     needs: [setup, release-charts]
     uses: ./.github/workflows/release-typescript-sdk.yaml
@@ -120,25 +128,27 @@ jobs:
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  # ================================ POST-RELEASE TESTING ================================
+  # ================================ PRE-RELEASE TESTING ================================
+  # Test that the built artifacts are compatible and functional before creating the RC release
     
-  # testing the rollout compatibility
   test-rollout-compatibility:
     needs: [setup, release-solidity-contracts, release-typescript-sdk]
     uses: ./.github/workflows/test-rollout-compatibility.yaml
     with:
       new_tag: ${{ needs.setup.outputs.tag }}
 
-  # testing the rollout compatibility between v0.9.0 and v0.10.0-RC.*
-  # this is a temporary step that should be removed after the v0.10.0 release
+  # Testing the rollout compatibility between v0.9.0 and v0.10.0-RC.*
+  # This is a temporary step that should be removed after the v0.10.0 release
   test-v9-to-v10:
     needs: [setup, release-solidity-contracts, release-typescript-sdk]
     uses: ./.github/workflows/test-v9-to-v10.yaml
     with:
       new_tag: ${{ needs.setup.outputs.tag }}
 
-  # ================================ FINAL RC RELEASE ================================
-  release:
+  # ================================ CREATE RC RELEASE ================================
+  # Only create the RC release after all tests have passed
+  # This step bundles all built artifacts and creates the GitHub release
+  create-rc-release:
     needs: [setup, test-rollout-compatibility, test-v9-to-v10]
     runs-on: ubuntu-latest
     steps:

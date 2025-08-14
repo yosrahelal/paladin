@@ -1,3 +1,8 @@
+# This workflow manages the second phase of the two-phase release process:
+#   1. Create a release candidate (RC) tag and publish all artifacts (images, charts, SDK, etc.) for testing.
+#   2. After successful testing of the RC artifacts, proceed to create the final release with the "latest" tag.
+# The goal is to ensure all released artifacts are validated before making the final release public. 
+# This workflow (phase 2) creates the final release after RC testing has been completed.
 name: Release
 
 on:
@@ -18,6 +23,7 @@ on:
 
 jobs:
   # ================================ SETUP ================================
+  # Validate the release tag and ensure it's a final release (not an RC)
   setup:
     runs-on: ubuntu-latest
     outputs:
@@ -65,7 +71,7 @@ jobs:
         uses: matt-usurp/validate-semver@v2
         with:
           version: ${{ steps.set-vars.outputs.tag }}
-      
+          
       - id: ref-tag
         name: Validate ref tag follows semver versioning
         uses: matt-usurp/validate-semver@v2
@@ -118,7 +124,12 @@ jobs:
 
           echo "Valid tag: $NEW_TAG_VERSION"
 
-  # ================================ RELEASE ================================
+
+  # ================================ BUILD ARTIFACTS ================================
+  # Build and prepare all final release artifacts (images, charts, contracts, SDK)
+  # These are the same artifacts that were tested in the RC phase
+
+  # Build and publish final release images
   release-images:
     needs: setup
     uses: ./.github/workflows/release-images.yaml
@@ -129,6 +140,7 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
+  # Test and release final Helm charts
   release-charts:
     needs: [setup, release-images]
     uses: ./.github/workflows/release-charts.yaml
@@ -139,12 +151,14 @@ jobs:
     secrets:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Upload final Solidity contracts
   release-solidity-contracts:
     needs: [setup, release-charts]
     uses: ./.github/workflows/release-solidity-contracts.yaml
     with:
       tag: ${{ needs.setup.outputs.tag }}
 
+  # Release final TypeScript SDK
   release-typescript-sdk:
     needs: [setup, release-charts]
     uses: ./.github/workflows/release-typescript-sdk.yaml
@@ -154,8 +168,10 @@ jobs:
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }} 
 
-  # ================================ FINAL RELEASE ================================
-  release:
+  # ================================ CREATE FINAL RELEASE ================================
+  # Bundle all built artifacts and create the final GitHub release
+  # This step only runs after all artifacts have been successfully built and published
+  create-final-release:
     needs: [setup, release-solidity-contracts, release-typescript-sdk]
     runs-on: ubuntu-latest
     steps:
@@ -175,7 +191,7 @@ jobs:
         run: |
           ls -R
 
-      - name: Create release with all artifacts
+      - name: Create final release with all artifacts
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.setup.outputs.tag }}
