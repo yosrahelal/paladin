@@ -757,7 +757,7 @@ func (ptm *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 	var lookups []*bindingsMatchingSubmission
 	err := dbTX.DB().
 		Table("public_txn_bindings").
-		Select(`"transaction"`, `"tx_type"`, `"Submission"."pub_txn_id"`, `"Submission"."tx_hash"`).
+		Select(`"transaction"`, "sender", "contract_address", `"tx_type"`, `"Submission"."pub_txn_id"`, `"Submission"."tx_hash"`).
 		Joins("Submission").
 		Where(`"Submission"."tx_hash" IN (?)`, txHashes).
 		Find(&lookups).
