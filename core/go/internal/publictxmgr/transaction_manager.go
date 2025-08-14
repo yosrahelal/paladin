@@ -774,6 +774,7 @@ func (ptm *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 		for _, match := range lookups {
 			if txi.Hash.Equals(&match.Submission.TransactionHash) {
 				// matched results in the order of the inputs
+				log.L(ctx).Debugf("Matched on-chain transaction %s (result=%s): %+v", txi.Hash, txi.Result.V(), match)
 				results = append(results, &components.PublicTxMatch{
 					PaladinTXReference: components.PaladinTXReference{
 						TransactionID:              match.Transaction,
