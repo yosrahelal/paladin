@@ -26,6 +26,7 @@ jobs:
         with:
           # Fetch all history and tags to build the full upgrade path.
           fetch-depth: 0
+          ref: ${{ github.ref }}
 
       - name: Get all previous release tags
         id: get_tags
@@ -194,7 +195,7 @@ jobs:
         run: |
           NEW_TAG="${{ inputs.new_tag }}"
           echo "--- Testing Release Candidate $NEW_TAG ---"
-          git checkout main
+          git checkout ${{ github.ref }}
           
           RUN_COMMANDS=start,verify BUILD_PALADIN_SDK=true BUILD_PALADIN_ABI=true ./scripts/run-examples.sh
           
