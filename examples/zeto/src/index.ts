@@ -305,7 +305,7 @@ async function deployERC20(
     abi: erc20Abi.abi,
     bytecode: erc20Abi.bytecode,
   });
-  const result1 = await paladin.pollForReceipt(txId1, 10000);
+  const result1 = await paladin.pollForReceipt(txId1, 120000); // 2 minutes
   if (!checkReceipt(result1)) {
     throw new Error("Failed to deploy ERC20 token");
   }
@@ -331,7 +331,7 @@ async function mintERC20(
     function: "mint",
     abi: erc20Abi.abi,
   });
-  const result3 = await paladin.pollForReceipt(txId2, 10000);
+  const result3 = await paladin.pollForReceipt(txId2, 120000);
   if (!checkReceipt(result3)) {
     throw new Error("Failed to mint ERC20 tokens to bank1");
   }
@@ -353,7 +353,7 @@ async function approveERC20(
     from: from.lookup,
     data: { value: amount, spender },
   });
-  const result1 = await paladin.pollForReceipt(txID1, 10000);
+  const result1 = await paladin.pollForReceipt(txID1, 120000);
   if (!checkReceipt(result1)) {
     throw new Error("Failed to approve transfer");
   }

@@ -219,7 +219,7 @@ async function main(): Promise<boolean> {
   logger.log("Waiting for lock operation to settle...");
   let lockedStateId: string | undefined;
   const pollStartTime = Date.now();
-  const pollTimeout = 30000; // 30 seconds
+  const pollTimeout = 120000; // 2 minutes
   while (Date.now() - pollStartTime < pollTimeout) {
     const lockedStates = await paladin3.ptx.getStateReceipt(receipt.id);
     const confirmedLockedState = lockedStates?.confirmed?.find(
@@ -253,7 +253,7 @@ async function main(): Promise<boolean> {
   }).id;
   
   logger.log(`Prepared transaction ID: ${txID}`);
-  const preparedCashTransfer = await paladin3.pollForPreparedTransaction(txID, 50000);
+  const preparedCashTransfer = await paladin3.pollForPreparedTransaction(txID, pollTimeout); // 2 minutes
   if (!preparedCashTransfer) {
     logger.error(`Failed to get prepared transaction for ID: ${txID}`);
     return false;
@@ -293,7 +293,7 @@ async function main(): Promise<boolean> {
       delegate: atom.address,
       data: "0x",
     })
-    .waitForReceipt(10000);
+    .waitForReceipt(pollTimeout);
   if (!checkReceipt(receipt)) return false;
 
   // Approve cash transfer operation
