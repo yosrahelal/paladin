@@ -419,7 +419,7 @@ func TestReceiveAfterTimeout(t *testing.T) {
 		}()
 
 		_, err := domainAPI.ConfigureDomain(ctx, &prototk.ConfigureDomainRequest{})
-		assert.Regexp(t, "PD011207", err)
+		assert.Regexp(t, "PD020100", err)
 	case <-time.After(20 * time.Second):
 		t.Fatal("Test timed out waiting for domain API - expected registration was not received")
 	}
