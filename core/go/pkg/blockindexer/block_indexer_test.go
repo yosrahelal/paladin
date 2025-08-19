@@ -1531,9 +1531,6 @@ func TestBlockIndexerManyTXsWaitForTransactionSuccess(t *testing.T) {
 	// For SQLite the limit is 999, setting something lower
 	bi.insertDBBatchSize = 500
 
-	// For SQLite the limit is 999, setting something lower
-	bi.insertDBBatchSize = 500
-
 	// 20000 transactions in a block
 	blocks, receipts := testBlockWithManyTXAndEvents(t, 20000, 0)
 	mockBlocksRPCCalls(mRPC, blocks, receipts)

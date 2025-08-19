@@ -251,20 +251,35 @@ func UseAny(db *gorm.DB) {
 
 	db.ClauseBuilders[whereClause] = func(c clause.Clause, builder clause.Builder) {
 		where := c.Expression.(clause.Where)
-		for i, expr := range where.Exprs {
-			if in, ok := expr.(clause.IN); ok {
-				where.Exprs[i] = ANY{IN: &in}
-			}
-
-			if expr, ok := expr.(clause.Expr); ok {
-				strExpr := expr.SQL
-				// Does not support NOT IN
-				if strings.Contains(strExpr, " IN ") && !strings.Contains(strExpr, " NOT ") {
-					where.Exprs[i] = ANY{Expr: &expr}
-				}
-			}
-		}
+		// Recursively process all expressions to handle nested conditions
+		processExpressions(where.Exprs)
 		c.Build(builder)
+	}
+}
+
+// processExpressions recursively processes expressions to find and replace IN clauses with ANY
+func processExpressions(exprs []clause.Expression) {
+	for i, expr := range exprs {
+		switch e := expr.(type) {
+		case clause.IN:
+			// Replace IN clause with ANY
+			exprs[i] = ANY{IN: &e}
+		case clause.Expr:
+			// Check if this expression contains IN (but not NOT IN)
+			strExpr := e.SQL
+			if strings.Contains(strExpr, " IN ") && !strings.Contains(strExpr, " NOT ") {
+				exprs[i] = ANY{Expr: &e}
+			}
+		case clause.Where:
+			// Recursively process nested WHERE clauses
+			processExpressions(e.Exprs)
+		case clause.OrConditions:
+			// Recursively process OR conditions
+			processExpressions(e.Exprs)
+		case clause.AndConditions:
+			// Recursively process AND conditions
+			processExpressions(e.Exprs)
+		}
 	}
 }
 
