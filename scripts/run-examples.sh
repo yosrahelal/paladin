@@ -15,6 +15,7 @@
 #   RUN_COMMANDS=start ./scripts/run-examples.sh
 #   RUN_COMMANDS=verify ./scripts/run-examples.sh
 #   RUN_COMMANDS=start,verify ./scripts/run-examples.sh
+#   IGNORE_EXAMPLES=event-listener,private-stablecoin,bond,helloworld,swap,zeto ./scripts/run-examples.sh # ignore examples
 #
 # Cache directory arguments:
 #   ./scripts/run-examples.sh [base_cache_dir] [version_tag]
@@ -26,6 +27,8 @@ BUILD_PALADIN_ABI=${BUILD_PALADIN_ABI:-"false"} # build the paladin solidity con
 PALADIN_SDK_VERSION=${PALADIN_SDK_VERSION:-""} # download the paladin SDK from npm (default is latest)
 PALADIN_ABI_VERSION=${PALADIN_ABI_VERSION:-""} # download the paladin solidity contracts from npm (default is latest)   
 ZETO_ABI_VERSION=${ZETO_ABI_VERSION:-"v0.2.0"} # download the zeto solidity contracts from npm (default is v0.2.0)
+
+IGNORE_EXAMPLES=${IGNORE_EXAMPLES:-""} # ignore examples (; separated list of example names)
 
 # Command line arguments for cache directory
 BASE_CACHE_DIR=${1:-""} # first argument: base cache directory
@@ -299,6 +302,15 @@ main() {
                 # TODO: remove this once we release v0.10.0
                 if [ "$example_name" = "event-listener" ] || [ "$example_name" = "private-stablecoin" ]; then
                     print_status "Skipping example $example_name (not supported for current version)"
+                    skipped_examples+=("$example_name")
+                    continue
+                fi
+            fi
+
+            # ignore examples if IGNORE_EXAMPLES is set
+            if [ "$IGNORE_EXAMPLES" != "" ]; then
+                if [[ "$IGNORE_EXAMPLES" == *","$example_name* ]]; then
+                    print_status "Skipping example $example_name (IGNORE_EXAMPLES)"
                     skipped_examples+=("$example_name")
                     continue
                 fi
