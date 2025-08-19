@@ -65,8 +65,12 @@ function findLatestContractDataFile(dataDir: string): string | null {
 
   const files = fs.readdirSync(dataDir)
     .filter(file => file.startsWith('contract-data-') && file.endsWith('.json'))
-    .sort()
-    .reverse(); // Most recent first
+    .sort((a, b) => {
+      const timestampA = a.replace('contract-data-', '').replace('.json', '');
+      const timestampB = b.replace('contract-data-', '').replace('.json', '');
+      return new Date(timestampB).getTime() - new Date(timestampA).getTime(); // Descending order (newest first)
+    })
+    .reverse();
 
   return files.length > 0 ? path.join(dataDir, files[0]) : null;
 }
@@ -97,6 +101,9 @@ async function main(): Promise<boolean> {
   logger.log(`Mint Amount: ${contractData.mintAmount}`);
   logger.log(`Transfer to Node2: ${contractData.transferToNode2Amount}`);
   logger.log(`Transfer to Node3: ${contractData.transferToNode3Amount}`);
+  logger.log(`Node1 Total Balance: ${contractData.finalBalances.node1.totalBalance}`);
+  logger.log(`Node2 Total Balance: ${contractData.finalBalances.node2.totalBalance}`);
+  logger.log(`Node3 Total Balance: ${contractData.finalBalances.node3.totalBalance}`);
   logger.log(`Mint TX Hash: ${contractData.mintTransactionHash}`);
   logger.log(`Transfer2 TX Hash: ${contractData.transferToNode2TransactionHash}`);
   logger.log(`Transfer3 TX Hash: ${contractData.transferToNode3TransactionHash}`);
@@ -199,6 +206,10 @@ async function main(): Promise<boolean> {
       account: verifierNode2.lookup,
     });
 
+    const  newBalanceNode3 = await cashToken.balanceOf(verifierNode1, {
+      account: verifierNode3.lookup,
+    });
+
     const expectedNewBalanceNode1 = Number(contractData.finalBalances.node1.totalBalance) - testTransferAmount;
     const expectedNewBalanceNode2 = Number(contractData.finalBalances.node2.totalBalance) + testTransferAmount;
 
@@ -219,14 +230,31 @@ async function main(): Promise<boolean> {
     logger.log("STEP 4: Test transfer verification successful!");
     logger.log(`New Node1 balance: ${newBalanceNode1.totalBalance}`);
     logger.log(`New Node2 balance: ${newBalanceNode2.totalBalance}`);
+    logger.log(`New Node3 balance: ${newBalanceNode3.totalBalance}`);
     logger.log(`Test transfer transaction hash: ${testTransferReceipt.transactionHash}`);
+    
+    // save the new balance in a new file
+    const newContractData: ContractData = {
+      ...contractData,
+      finalBalances: {
+        ...contractData.finalBalances,
+        node1: { ...contractData.finalBalances.node1, totalBalance: newBalanceNode1.totalBalance.toString() },
+        node2: { ...contractData.finalBalances.node2, totalBalance: newBalanceNode2.totalBalance.toString() },
+        node3: { ...contractData.finalBalances.node3, totalBalance: newBalanceNode3.totalBalance.toString() },
+      },
+    };
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const newDataFile = path.join(dataDir, `contract-data-${timestamp}.json`);
+    fs.writeFileSync(newDataFile, JSON.stringify(newContractData, null, 2));
+    logger.log(`New contract data saved to ${newDataFile}`);
 
   } catch (error) {
     logger.error("STEP 4: Token functionality test failed!");
     logger.error(`Error: ${error}`);
     return false;
   }
- 
+
   logger.log("\nSUCCESS: Verification completed!");
 
   return true;

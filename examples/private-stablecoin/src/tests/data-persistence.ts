@@ -100,8 +100,12 @@ function findLatestContractDataFile(dataDir: string): string | null {
 
   const files = fs.readdirSync(dataDir)
     .filter(file => file.startsWith('contract-data-') && file.endsWith('.json'))
-    .sort()
-    .reverse(); // Most recent first
+    .sort((a, b) => {
+      const timestampA = a.replace('contract-data-', '').replace('.json', '');
+      const timestampB = b.replace('contract-data-', '').replace('.json', '');
+      return new Date(timestampB).getTime() - new Date(timestampA).getTime(); // Descending order (newest first)
+    })
+    .reverse();
 
   return files.length > 0 ? path.join(dataDir, files[0]) : null;
 }

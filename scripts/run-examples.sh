@@ -228,8 +228,8 @@ run_example() {
     if [ -n "$BASE_CACHE_DIR" ] && [ -n "$VERSION_TAG_ARG" ]; then
         example_cache_path="$BASE_CACHE_DIR/$VERSION_TAG_ARG/$example_name"
         print_status "Using cache path: $example_cache_path"
+        mkdir -p "$example_cache_path"
     fi
-    mkdir -p "$cache_dir"
     
     # Split RUN_COMMANDS by comma and run each command
     IFS=',' read -ra COMMANDS <<< "$RUN_COMMANDS"

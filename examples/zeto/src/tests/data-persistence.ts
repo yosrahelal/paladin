@@ -84,8 +84,12 @@ function findLatestContractDataFile(dataDir: string): string | null {
 
   const files = fs.readdirSync(dataDir)
     .filter(file => file.startsWith('contract-data-') && file.endsWith('.json'))
-    .sort()
-    .reverse(); // Most recent first
+    .sort((a, b) => {
+      const timestampA = a.replace('contract-data-', '').replace('.json', '');
+      const timestampB = b.replace('contract-data-', '').replace('.json', '');
+      return new Date(timestampB).getTime() - new Date(timestampA).getTime(); // Descending order (newest first)
+    })
+    .reverse();
 
   return files.length > 0 ? path.join(dataDir, files[0]) : null;
 }
@@ -307,6 +311,24 @@ async function main(): Promise<boolean> {
     logger.log(`Original saved Bank2: ${contractData.useCase1.finalBalances.bank2.totalBalance}`);
 
     logger.log("STEP 6: State accessibility verification successful!");
+
+    // save the new balance in a new file
+    const newContractData: ContractData = {
+      ...contractData,
+      useCase1: {
+        ...contractData.useCase1,
+        finalBalances: {
+          ...contractData.useCase1.finalBalances,
+          bank1: { ...contractData.useCase1.finalBalances.bank1, totalBalance: currentBank1Balance.totalBalance.toString() },
+          bank2: { ...contractData.useCase1.finalBalances.bank2, totalBalance: currentBank2Balance.totalBalance.toString() },
+        },
+      },
+    };
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const newDataFile = path.join(dataDir, `contract-data-${timestamp}.json`);
+    fs.writeFileSync(newDataFile, JSON.stringify(newContractData, null, 2));
+    logger.log(`New contract data saved to ${newDataFile}`);
 
   } catch (error) {
     logger.error("STEP 6: State accessibility verification failed!");
