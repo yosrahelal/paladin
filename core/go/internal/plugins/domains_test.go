@@ -522,11 +522,11 @@ func TestDomainRequestsOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "node1", lnr.Name)
 
-	gsr2, err := callbacks.GetStatesByID(ctx, &prototk.GetStatesByIDRequest{
+	gsr, err := callbacks.GetStatesByID(ctx, &prototk.GetStatesByIDRequest{
 		SchemaId: "schema1",
 	})
 	require.NoError(t, err)
-	assert.Len(t, gsr2.States, 1)
+	assert.Len(t, gsr.States, 1)
 }
 
 func TestDomainRegisterFail(t *testing.T) {
