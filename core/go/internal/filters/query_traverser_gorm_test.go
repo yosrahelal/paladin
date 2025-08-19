@@ -578,6 +578,7 @@ func TestBuildQueryJSONNestedAndOrWithANY(t *testing.T) {
 	require.NoError(t, err)
 
 	// Apply the UseAny function to enable ANY clause replacement
+	// Only need to do this because it's the mock provider
 	persistence.UseAny(p.P.DB())
 
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
@@ -589,9 +590,6 @@ func TestBuildQueryJSONNestedAndOrWithANY(t *testing.T) {
 			"cid":      Int256Field("correl_id"),
 		}).Count(&count)
 		require.NoError(t, db.Error)
-
-		// Apply UseAny to the actual query that will be executed
-		persistence.UseAny(db)
 
 		return db
 	})
@@ -714,6 +712,7 @@ func TestBuildQueryJSONComplexNestedWithANY(t *testing.T) {
 	require.NoError(t, err)
 
 	// Apply the UseAny function to enable ANY clause replacement
+	// Only need to do this because it's the mock provider, on by default for the real provider
 	persistence.UseAny(p.P.DB())
 
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
