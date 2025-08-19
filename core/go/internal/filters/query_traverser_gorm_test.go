@@ -493,7 +493,7 @@ func TestBuildQueryJSONIn(t *testing.T) {
 		require.NoError(t, db.Error)
 		return db
 	})
-	assert.Equal(t, "SELECT count(*) FROM \"test\" WHERE tag IN ('a','b','c') AND tag NOT IN ('x','y','z') LIMIT 10", generatedSQL)
+	assert.Equal(t, "SELECT count(*) FROM \"test\" WHERE \"tag\" = ANY ('{\"a\",\"b\",\"c\"}') AND tag NOT IN ('x','y','z') LIMIT 10", generatedSQL)
 }
 
 func TestBuildQueryJSONBadModifiers(t *testing.T) {

@@ -243,7 +243,7 @@ type ANY struct {
 
 // UseAny configures the DB to use the ANY type for IN clauses to resolve parameter limitations.
 func UseAny(db *gorm.DB) {
-	currentDialect := db.Dialector.Name()
+	currentDialect := db.Name()
 	if currentDialect != postgresDialect {
 		log.L(db.Statement.Context).Errorf("ANY clause not supported with %q dialect", currentDialect)
 		return
@@ -343,7 +343,7 @@ func (c ANY) Build(builder clause.Builder) {
 // addBulk integrates a list of values into the query, leveraging postgres's array binding support
 func addBulk(stmt *gorm.Statement, v any) {
 	stmt.Vars = append(stmt.Vars, v)
-	stmt.DB.Dialector.BindVarTo(stmt, stmt, v)
+	stmt.BindVarTo(stmt, stmt, v)
 }
 
 // Util function to convert a slice of any type to a slice of interface{}
