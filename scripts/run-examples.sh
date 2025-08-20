@@ -309,7 +309,7 @@ main() {
 
             # ignore examples if IGNORE_EXAMPLES is set
             if [ "$IGNORE_EXAMPLES" != "" ]; then
-                if [[ "$IGNORE_EXAMPLES" == *","$example_name* ]]; then
+                if [[ "$IGNORE_EXAMPLES" == *$example_name* ]]; then
                     print_status "Skipping example $example_name (IGNORE_EXAMPLES)"
                     skipped_examples+=("$example_name")
                     continue
