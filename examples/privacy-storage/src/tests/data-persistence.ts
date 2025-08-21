@@ -20,7 +20,7 @@ import storageJson from "../abis/Storage.json";
 import { PrivateStorage } from "../helpers/storage";
 import * as fs from 'fs';
 import * as path from 'path';
-import { nodeConnections } from "../../common/src/config";
+import { nodeConnections } from "paladin-example-common";
 
 const logger = console;
 

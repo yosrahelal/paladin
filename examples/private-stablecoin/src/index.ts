@@ -26,7 +26,7 @@ import { buildBabyjub } from "circomlibjs";
 import * as fs from 'fs';
 import * as path from 'path';
 import { ContractData } from "./tests/data-persistence";
-import { nodeConnections } from "../../common/src/config";
+import { nodeConnections } from "paladin-example-common";
 
 const logger = console;
  
