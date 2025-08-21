@@ -22,14 +22,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LF-Decentralized-Trust-labs/paladin/config/pkg/pldconf"
+	"github.com/LF-Decentralized-Trust-labs/paladin/core/internal/components"
+	"github.com/LF-Decentralized-Trust-labs/paladin/core/mocks/componentsmocks"
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
 
-	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/plugintk"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -169,8 +169,13 @@ func TestTransportRequestsOK(t *testing.T) {
 	})
 	defer done()
 
-	transportAPI := <-waitForAPI
-
+	var transportAPI components.TransportManagerToTransport
+	select {
+	case transportAPI = <-waitForAPI:
+		// Received transport API
+	case <-time.After(20 * time.Second):
+		t.Fatal("Test timed out waiting for transport API - expected registration was not received")
+	}
 	_, err := transportAPI.ConfigureTransport(ctx, &prototk.ConfigureTransportRequest{})
 	require.NoError(t, err)
 
@@ -199,7 +204,13 @@ func TestTransportRequestsOK(t *testing.T) {
 	transportAPI.Initialized()
 	require.NoError(t, pc.WaitForInit(ctx, prototk.PluginInfo_DOMAIN))
 
-	callbacks := <-waitForCallbacks
+	// Add timeout for callbacks
+	var callbacks plugintk.TransportCallbacks
+	select {
+	case callbacks = <-waitForCallbacks:
+	case <-time.After(20 * time.Second):
+		t.Fatal("Test timed out waiting for callbacks - expected callbacks were not received")
+	}
 	rts, err := callbacks.GetTransportDetails(ctx, &prototk.GetTransportDetailsRequest{
 		Node: "node1",
 	})

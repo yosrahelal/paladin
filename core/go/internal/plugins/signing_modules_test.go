@@ -20,18 +20,19 @@ import (
 	"os"
 	"runtime/debug"
 	"testing"
+	"time"
 
+	"github.com/LF-Decentralized-Trust-labs/paladin/config/pkg/pldconf"
+	"github.com/LF-Decentralized-Trust-labs/paladin/core/internal/components"
+	"github.com/LF-Decentralized-Trust-labs/paladin/core/mocks/componentsmocks"
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentsmocks"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
-	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/algorithms"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/plugintk"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/prototk"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/signpayloads"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -165,7 +166,13 @@ func TestSigningModuleRequestsOK(t *testing.T) {
 	})
 	defer done()
 
-	signingModuleAPI := <-waitForAPI
+	var signingModuleAPI components.KeyManagerToSigningModule
+	select {
+	case signingModuleAPI = <-waitForAPI:
+		// Received signing module API
+	case <-time.After(20 * time.Second):
+		t.Fatal("Test timed out waiting for signing module API - expected registration was not received")
+	}
 
 	_, err := signingModuleAPI.ConfigureSigningModule(ctx, &prototk.ConfigureSigningModuleRequest{})
 	require.NoError(t, err)
@@ -202,9 +209,14 @@ func TestSigningModuleRequestsOK(t *testing.T) {
 	signingModuleAPI.Initialized()
 	require.NoError(t, smpm.WaitForInit(ctx, prototk.PluginInfo_SIGNING_MODULE))
 
-	callbacks := <-waitForCallbacks
-
-	assert.NotNil(t, callbacks)
+	// Add timeout for callbacks
+	var callbacks plugintk.SigningModuleCallbacks
+	select {
+	case callbacks = <-waitForCallbacks:
+		assert.NotNil(t, callbacks)
+	case <-time.After(20 * time.Second):
+		t.Fatal("Test timed out waiting for callbacks - expected callbacks were not received")
+	}
 }
 
 func TestSigningModuleRegisterFail(t *testing.T) {
@@ -240,7 +252,13 @@ func TestSigningModuleRegisterFail(t *testing.T) {
 	})
 	defer done()
 
-	assert.Regexp(t, "pop", <-waitForError)
+	// Add timeout to prevent test from hanging indefinitely
+	select {
+	case err := <-waitForError:
+		assert.Regexp(t, "pop", err.Error())
+	case <-time.After(20 * time.Second):
+		t.Fatal("Test timed out waiting for error - expected error was not received")
+	}
 }
 
 func TestFromSigningModuleRequestBadReq(t *testing.T) {
@@ -280,5 +298,11 @@ func TestFromSigningModuleRequestBadReq(t *testing.T) {
 	})
 	defer done()
 
-	<-waitForResponse
+	// Add timeout to prevent test from hanging indefinitely
+	select {
+	case <-waitForResponse:
+		// Response received successfully
+	case <-time.After(10 * time.Second):
+		t.Fatal("Test timed out waiting for response - expected response was not received")
+	}
 }

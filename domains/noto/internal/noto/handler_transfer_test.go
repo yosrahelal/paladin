@@ -21,14 +21,14 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/LF-Decentralized-Trust-labs/paladin/domains/noto/pkg/types"
+	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/algorithms"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/prototk"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/verifiers"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
-	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
-	"github.com/kaleido-io/paladin/sdk/go/pkg/pldtypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -301,7 +301,9 @@ func TestTransferAssembleMissingFrom(t *testing.T) {
 		coinSchema: &prototk.StateSchema{Id: "coin"},
 		dataSchema: &prototk.StateSchema{Id: "data"},
 	}
-	h := transferHandler{noto: n}
+	handler := &transferHandler{
+		transferCommon: transferCommon{noto: n},
+	}
 	ctx := context.Background()
 
 	fn := types.NotoABI.Functions()["transfer"]
@@ -323,7 +325,7 @@ func TestTransferAssembleMissingFrom(t *testing.T) {
 		ResolvedVerifiers: []*prototk.ResolvedVerifier{},
 	}
 
-	_, err := h.Assemble(ctx, parsedTx, req)
+	_, err := handler.Assemble(ctx, parsedTx, req)
 	assert.Regexp(t, "PD200011.*'from'", err)
 }
 
@@ -333,7 +335,9 @@ func TestTransferAssembleMissingTo(t *testing.T) {
 		coinSchema: &prototk.StateSchema{Id: "coin"},
 		dataSchema: &prototk.StateSchema{Id: "data"},
 	}
-	h := transferHandler{noto: n}
+	handler := &transferHandler{
+		transferCommon: transferCommon{noto: n},
+	}
 	ctx := context.Background()
 
 	fn := types.NotoABI.Functions()["transfer"]
@@ -362,6 +366,6 @@ func TestTransferAssembleMissingTo(t *testing.T) {
 		},
 	}
 
-	_, err := h.Assemble(ctx, parsedTx, req)
+	_, err := handler.Assemble(ctx, parsedTx, req)
 	assert.Regexp(t, "PD200011.*'to'", err)
 }
