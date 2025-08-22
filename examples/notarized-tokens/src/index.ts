@@ -33,6 +33,8 @@ async function main(): Promise<boolean> {
   const notoFactory = new NotoFactory(paladinClientNode1, "noto");
   const cashToken = await notoFactory
     .newNoto(verifierNode1, {
+      name: "NOTO",
+      symbol: "NOTO",
       notary: verifierNode1,
       notaryMode: "basic",
     })
