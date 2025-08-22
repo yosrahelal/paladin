@@ -19,8 +19,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/LF-Decentralized-Trust-labs/paladin/domains/noto/pkg/types"
+	"github.com/LF-Decentralized-Trust-labs/paladin/toolkit/pkg/prototk"
 )
 
 type nameHandler struct {
