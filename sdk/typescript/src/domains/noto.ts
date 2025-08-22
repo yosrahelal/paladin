@@ -60,8 +60,12 @@ export interface IGroupInfo {
 }
 
 export interface NotoConstructorParams {
-  name: string;
-  symbol: string;
+  // Added in NotoFactory V2 (will be ignored in V1)
+  name?: string;
+
+  // Added in NotoFactory V2 (will be ignored in V1)
+  symbol?: string;
+
   notary: PaladinVerifier;
   notaryMode: "basic" | "hooks";
   options?: {
@@ -178,7 +182,7 @@ export class NotoFactory {
   newNoto(from: PaladinVerifier, data: NotoConstructorParams) {
     return new NotoFuture(
       this.paladin,
-      this.paladin.sendTransaction({
+      this.paladin.ptx.sendTransaction({
         type: TransactionType.PRIVATE,
         domain: this.domain,
         abi: [notoConstructorABI(!!data.options?.hooks)],
@@ -186,6 +190,8 @@ export class NotoFactory {
         from: from.lookup,
         data: {
           ...data,
+          name: data.name ?? "",
+          symbol: data.symbol ?? "",
           notary: data.notary.lookup,
           options: {
             basic: {
