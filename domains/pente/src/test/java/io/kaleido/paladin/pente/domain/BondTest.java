@@ -113,7 +113,9 @@ public class BondTest {
                         "noto",
                         notoFactoryAddress,
                         new Testbed.ConfigPlugin("c-shared", "noto", ""),
-                        new HashMap<>()
+                        new HashMap<String, Object>() {{
+                            put("factoryVersion", 2);
+                        }}
                 )
         )) {
 

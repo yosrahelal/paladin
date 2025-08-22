@@ -7,6 +7,7 @@ import {INoto} from "../interfaces/INoto.sol";
 import {Noto} from "./Noto.sol";
 import {IPaladinContractRegistry_V0} from "../interfaces/IPaladinContractRegistry.sol";
 
+// NotoFactory version: 2
 contract NotoFactory is Ownable, IPaladinContractRegistry_V0 {
     mapping(string => address) internal implementations;
 

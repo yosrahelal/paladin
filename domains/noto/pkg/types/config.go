@@ -22,7 +22,7 @@ import (
 )
 
 type DomainConfig struct {
-	FactoryAddress string `json:"factoryAddress"`
+	FactoryVersion int64 `json:"factoryVersion"`
 }
 
 var NotoConfigID_V0 = pldtypes.MustParseHexBytes("0x00010000")

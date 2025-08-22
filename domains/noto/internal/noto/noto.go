@@ -49,6 +49,9 @@ type ParamValidator interface {
 //go:embed abis/NotoFactory.json
 var notoFactoryJSON []byte
 
+//go:embed abis/NotoFactory_V1.json
+var notoFactoryV1JSON []byte
+
 //go:embed abis/INoto.json
 var notoInterfaceJSON []byte
 
@@ -60,6 +63,7 @@ var notoHooksJSON []byte
 
 var (
 	factoryBuild   = solutils.MustLoadBuild(notoFactoryJSON)
+	factoryV1Build = solutils.MustLoadBuild(notoFactoryV1JSON)
 	interfaceBuild = solutils.MustLoadBuild(notoInterfaceJSON)
 	errorsBuild    = solutils.MustLoadBuild(notoErrorsJSON)
 	hooksBuild     = solutils.MustLoadBuild(notoHooksJSON)
@@ -287,12 +291,14 @@ func (n *Noto) DataSchemaID() string {
 }
 
 func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
-	err := json.Unmarshal([]byte(req.ConfigJson), &n.config)
+	var config types.DomainConfig
+	err := json.Unmarshal([]byte(req.ConfigJson), &config)
 	if err != nil {
 		return nil, err
 	}
 
 	n.name = req.Name
+	n.config = config
 	n.chainID = req.ChainId
 
 	return &prototk.ConfigureDomainResponse{
@@ -408,11 +414,17 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	// TODO: shouldn't it be possible to omit this and let Paladin choose?
 	signer := fmt.Sprintf("%s.deploy.%s", n.name, uuid.New())
 
+	// Default to the V1 NotoFactory ABI if no version is specified
+	abi := factoryV1Build.ABI
+	if n.config.FactoryVersion == 2 {
+		abi = factoryBuild.ABI
+	}
+
 	functionName := "deploy"
 	if params.Implementation != "" {
 		functionName = "deployImplementation"
 	}
-	functionJSON, err = json.Marshal(factoryBuild.ABI.Functions()[functionName])
+	functionJSON, err = json.Marshal(abi.Functions()[functionName])
 	if err == nil {
 		deployDataJSON, err = json.Marshal(deployData)
 	}
@@ -425,6 +437,7 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 			Data:          deployDataJSON,
 		})
 	}
+
 	return &prototk.PrepareDeployResponse{
 		Transaction: &prototk.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),

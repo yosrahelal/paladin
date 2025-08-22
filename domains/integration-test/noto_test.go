@@ -79,9 +79,7 @@ func (s *notoTestSuite) TestNoto() {
 	t := s.T()
 	log.L(ctx).Infof("TestNoto")
 
-	waitForNoto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
-		FactoryAddress: s.factoryAddress,
-	})
+	waitForNoto, notoTestbed := newNotoDomain(t, pldtypes.MustEthAddress(s.factoryAddress))
 	done, _, tb, rpc := newTestbed(t, s.hdWalletSeed, map[string]*testbed.TestbedDomain{
 		s.domainName: notoTestbed,
 	})
@@ -255,9 +253,7 @@ func (s *notoTestSuite) TestNotoApprove() {
 	t := s.T()
 	log.L(ctx).Infof("TestNotoApprove")
 
-	_, notoTestbed := newNotoDomain(t, &types.DomainConfig{
-		FactoryAddress: s.factoryAddress,
-	})
+	_, notoTestbed := newNotoDomain(t, pldtypes.MustEthAddress(s.factoryAddress))
 	done, _, tb, rpc := newTestbed(t, s.hdWalletSeed, map[string]*testbed.TestbedDomain{
 		s.domainName: notoTestbed,
 	})
@@ -343,9 +339,7 @@ func (s *notoTestSuite) TestNotoLock() {
 	t := s.T()
 	log.L(ctx).Infof("TestNotoLock")
 
-	waitForNoto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
-		FactoryAddress: s.factoryAddress,
-	})
+	waitForNoto, notoTestbed := newNotoDomain(t, pldtypes.MustEthAddress(s.factoryAddress))
 	done, _, tb, rpc := newTestbed(t, s.hdWalletSeed, map[string]*testbed.TestbedDomain{
 		s.domainName: notoTestbed,
 	})
