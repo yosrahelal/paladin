@@ -3,8 +3,8 @@ pragma solidity ^0.8.20;
 
 import {IPaladinContractRegistry_V0} from "../interfaces/IPaladinContractRegistry.sol";
 
-// NotoFactory version: 1
-interface NotoFactory_V1 is IPaladinContractRegistry_V0 {
+// NotoFactory version: 0
+interface NotoFactory_V0 is IPaladinContractRegistry_V0 {
     /**
      * Deploy a default instance of Noto.
      */

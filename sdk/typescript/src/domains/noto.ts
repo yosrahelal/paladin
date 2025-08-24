@@ -60,10 +60,10 @@ export interface IGroupInfo {
 }
 
 export interface NotoConstructorParams {
-  // Added in NotoFactory V2 (will be ignored in V1)
+  // Added in NotoFactory V1 (will be ignored in V0)
   name?: string;
 
-  // Added in NotoFactory V2 (will be ignored in V1)
+  // Added in NotoFactory V1 (will be ignored in V0)
   symbol?: string;
 
   notary: PaladinVerifier;

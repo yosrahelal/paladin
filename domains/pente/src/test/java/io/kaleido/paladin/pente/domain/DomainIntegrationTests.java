@@ -219,7 +219,7 @@ public class DomainIntegrationTests {
                         notoFactoryAddress,
                         new Testbed.ConfigPlugin("c-shared", "noto", ""),
                         new HashMap<String, Object>() {{
-                            put("factoryVersion", 2);
+                            put("factoryVersion", 1);
                         }}
                 )
         )) {

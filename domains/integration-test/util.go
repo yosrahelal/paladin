@@ -135,7 +135,7 @@ func newNotoDomain(t *testing.T, registryAddress *pldtypes.EthAddress) (chan not
 	waitForDomain := make(chan noto.Noto, 1)
 	tbd := &testbed.TestbedDomain{
 		Config: mapConfig(t, nototypes.DomainConfig{
-			FactoryVersion: 2,
+			FactoryVersion: 1,
 		}),
 		Plugin: plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
 			domain := noto.New(callbacks)

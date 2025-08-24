@@ -49,8 +49,8 @@ type ParamValidator interface {
 //go:embed abis/NotoFactory.json
 var notoFactoryJSON []byte
 
-//go:embed abis/NotoFactory_V1.json
-var notoFactoryV1JSON []byte
+//go:embed abis/NotoFactory_V0.json
+var notoFactoryV0JSON []byte
 
 //go:embed abis/INoto.json
 var notoInterfaceJSON []byte
@@ -63,7 +63,7 @@ var notoHooksJSON []byte
 
 var (
 	factoryBuild   = solutils.MustLoadBuild(notoFactoryJSON)
-	factoryV1Build = solutils.MustLoadBuild(notoFactoryV1JSON)
+	factoryV0Build = solutils.MustLoadBuild(notoFactoryV0JSON)
 	interfaceBuild = solutils.MustLoadBuild(notoInterfaceJSON)
 	errorsBuild    = solutils.MustLoadBuild(notoErrorsJSON)
 	hooksBuild     = solutils.MustLoadBuild(notoHooksJSON)
@@ -414,9 +414,9 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	// TODO: shouldn't it be possible to omit this and let Paladin choose?
 	signer := fmt.Sprintf("%s.deploy.%s", n.name, uuid.New())
 
-	// Default to the V1 NotoFactory ABI if no version is specified
-	abi := factoryV1Build.ABI
-	if n.config.FactoryVersion == 2 {
+	// Default to the V0 NotoFactory ABI if no version is specified
+	abi := factoryV0Build.ABI
+	if n.config.FactoryVersion == 1 {
 		abi = factoryBuild.ABI
 	}
 
@@ -429,13 +429,23 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 		deployDataJSON, err = json.Marshal(deployData)
 	}
 	if err == nil {
-		paramsJSON, err = json.Marshal(&NotoDeployParams{
-			TransactionID: req.Transaction.TransactionId,
-			Name:          params.Name,
-			Symbol:        params.Symbol,
-			Notary:        *notaryAddress,
-			Data:          deployDataJSON,
-		})
+		// For V0 factories, we need to omit name and symbol parameters
+		if n.config.FactoryVersion == 0 {
+			paramsJSON, err = json.Marshal(&NotoDeployParams{
+				TransactionID: req.Transaction.TransactionId,
+				Notary:        *notaryAddress,
+				Data:          deployDataJSON,
+			})
+		} else {
+			// For V1 factories, include name and symbol
+			paramsJSON, err = json.Marshal(&NotoDeployParams{
+				TransactionID: req.Transaction.TransactionId,
+				Name:          params.Name,
+				Symbol:        params.Symbol,
+				Notary:        *notaryAddress,
+				Data:          deployDataJSON,
+			})
+		}
 	}
 
 	return &prototk.PrepareDeployResponse{
