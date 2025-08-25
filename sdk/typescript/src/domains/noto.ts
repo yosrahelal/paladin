@@ -112,13 +112,6 @@ export interface NotoTransferFromParams {
   data: string;
 }
 
-export interface NotoApproveTransferParams {
-  inputs: IStateEncoded[];
-  outputs: IStateEncoded[];
-  data: string;
-  delegate: string;
-}
-
 export interface NotoLockParams {
   amount: string | number;
   data: string;
@@ -282,20 +275,6 @@ export class NotoInstance {
         to: data.to.lookup,
       },
     });
-  }
-
-  approveTransfer(from: PaladinVerifier, data: NotoApproveTransferParams) {
-    return new TransactionFuture(
-      this.paladin,
-      this.paladin.sendTransaction({
-        type: TransactionType.PRIVATE,
-        abi: notoPrivateJSON.abi,
-        function: "approveTransfer",
-        to: this.address,
-        from: from.lookup,
-        data,
-      })
-    );
   }
 
   burn(from: PaladinVerifier, data: NotoBurnParams) {

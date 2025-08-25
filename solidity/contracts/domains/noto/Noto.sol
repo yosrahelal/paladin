@@ -39,8 +39,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
 
     uint64 public constant NotoVariantDefault = 0x0000;
 
-    bytes32 private constant TRANSFER_TYPEHASH =
-        keccak256("Transfer(bytes32[] inputs,bytes32[] outputs,bytes data)");
     bytes32 private constant UNLOCK_TYPEHASH =
         keccak256(
             "Unlock(bytes32[] lockedInputs,bytes32[] lockedOutputs,bytes32[] outputs,bytes data)"
@@ -50,7 +48,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     string private _symbol;
     address public notary;
     mapping(bytes32 => bool) private _unspent;
-    mapping(bytes32 => address) private _approvals;
     mapping(bytes32 => bool) private _txids;
 
     mapping(bytes32 => bool) private _locked;
@@ -177,17 +174,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     }
 
     /**
-     * @dev query whether an approval exists for the given transaction
-     * @param txhash the transaction hash
-     * @return delegate the non-zero owner address, or zero if the TXO ID is not in the approval map
-     */
-    function getTransferApproval(
-        bytes32 txhash
-    ) public view returns (address delegate) {
-        return _approvals[txhash];
-    }
-
-    /**
      * @dev The main function of the contract, which finalizes execution of a pre-verified
      *      transaction. The inputs and outputs are all opaque to this on-chain function.
      *      Provides ordering and double-spend protection.
@@ -260,79 +246,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
             }
             _unspent[outputs[i]] = true;
         }
-    }
-
-    /**
-     * @dev Authorize a transfer to be performed by another address in a future transaction
-     *      (for example, a smart contract coordinating a DVP).
-     *
-     *      Note the txhash will only be spendable if it is exactly correct for
-     *      the inputs/outputs/data that are later supplied in useDelegation.
-     *      This approach is gas-efficient as it means:
-     *      - The inputs/outputs/data are not stored on-chain at any point
-     *      - The EIP-712 hash is only calculated on-chain once, in transferWithApproval()
-     *
-     * @param txId a unique identifier for this transaction which must not have been used before
-     * @param delegate the address that is authorized to submit the transaction
-     * @param txhash the pre-calculated hash of the transaction that is delegated
-     * @param signature a signature over the original request to the notary (opaque to the blockchain)
-     * @param data any additional transaction data (opaque to the blockchain)
-     *
-     * Emits a {NotoApproved} event.
-     */
-    function approveTransfer(
-        bytes32 txId,
-        address delegate,
-        bytes32 txhash,
-        bytes calldata signature,
-        bytes calldata data
-    ) external virtual onlyNotary txIdNotUsed(txId) {
-        _approvals[txhash] = delegate;
-        emit NotoApproved(txId, delegate, txhash, signature, data);
-    }
-
-    /**
-     * @dev Transfer via delegation - must be the approved delegate.
-     *
-     * @param txId a unique identifier for this transaction which must not have been used before
-     * @param inputs as per transfer()
-     * @param outputs as per transfer()
-     * @param signature as per transfer()
-     * @param data as per transfer()
-     *
-     * Emits a {NotoTransfer} event.
-     */
-    function transferWithApproval(
-        bytes32 txId,
-        bytes32[] calldata inputs,
-        bytes32[] calldata outputs,
-        bytes calldata signature,
-        bytes calldata data
-    ) public {
-        bytes32 txhash = _buildTransferHash(inputs, outputs, data);
-        if (_approvals[txhash] != msg.sender) {
-            revert NotoInvalidDelegate(txhash, _approvals[txhash], msg.sender);
-        }
-
-        _transfer(txId, inputs, outputs, signature, data);
-
-        delete _approvals[txhash];
-    }
-
-    function _buildTransferHash(
-        bytes32[] calldata inputs,
-        bytes32[] calldata outputs,
-        bytes calldata data
-    ) internal view returns (bytes32) {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                TRANSFER_TYPEHASH,
-                keccak256(abi.encodePacked(inputs)),
-                keccak256(abi.encodePacked(outputs)),
-                keccak256(data)
-            )
-        );
-        return _hashTypedDataV4(structHash);
     }
 
     function _buildUnlockHash(

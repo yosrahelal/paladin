@@ -71,7 +71,6 @@ var (
 
 var (
 	NotoTransfer       = "NotoTransfer"
-	NotoApproved       = "NotoApproved"
 	NotoLock           = "NotoLock"
 	NotoUnlock         = "NotoUnlock"
 	NotoUnlockPrepared = "NotoUnlockPrepared"
@@ -80,7 +79,6 @@ var (
 
 var allEvents = []string{
 	NotoTransfer,
-	NotoApproved,
 	NotoLock,
 	NotoUnlock,
 	NotoUnlockPrepared,
