@@ -70,6 +70,12 @@ interface INotoPrivate {
         bytes calldata data
     ) external;
 
+    function name() external view returns (string memory);
+
+    function symbol() external view returns (string memory);
+
+    function decimals() external view returns (uint8);
+
     function balanceOf(
         string memory account
     )

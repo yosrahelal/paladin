@@ -11,6 +11,8 @@ export const notoConstructorABI = (
 ): ethers.JsonFragment => ({
   type: "constructor",
   inputs: [
+    { name: "name", type: "string" },
+    { name: "symbol", type: "string" },
     { name: "notary", type: "string" },
     { name: "notaryMode", type: "string" },
     {
@@ -58,6 +60,12 @@ export interface IGroupInfo {
 }
 
 export interface NotoConstructorParams {
+  // Added in NotoFactory V1 (will be ignored in V0)
+  name?: string;
+
+  // Added in NotoFactory V1 (will be ignored in V0)
+  symbol?: string;
+
   notary: PaladinVerifier;
   notaryMode: "basic" | "hooks";
   options?: {
@@ -167,7 +175,7 @@ export class NotoFactory {
   newNoto(from: PaladinVerifier, data: NotoConstructorParams) {
     return new NotoFuture(
       this.paladin,
-      this.paladin.sendTransaction({
+      this.paladin.ptx.sendTransaction({
         type: TransactionType.PRIVATE,
         domain: this.domain,
         abi: [notoConstructorABI(!!data.options?.hooks)],
@@ -175,6 +183,8 @@ export class NotoFactory {
         from: from.lookup,
         data: {
           ...data,
+          name: data.name ?? "",
+          symbol: data.symbol ?? "",
           notary: data.notary.lookup,
           options: {
             basic: {
