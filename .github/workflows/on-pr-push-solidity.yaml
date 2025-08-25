@@ -32,4 +32,4 @@ jobs:
     uses: ./.github/workflows/test-examples.yaml
     with:
       build_local_abi: true
-      build_local_sdk: false
+      build_local_sdk: true

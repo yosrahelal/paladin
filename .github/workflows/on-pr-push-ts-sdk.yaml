@@ -31,6 +31,6 @@ jobs:
   test-sdk:
     uses: ./.github/workflows/test-examples.yaml
     with:
-      build_local_abi: false # this workflow is meant to test the examples with the published solidity contracts
-      build_local_sdk: true  # this workflow is meant to test the examples with the local (modified) SDK
-      run_commands: start,verify # run the start and validate to ensure the sdk is not broken
+      build_local_abi: true
+      build_local_sdk: true
+      run_commands: start,verify

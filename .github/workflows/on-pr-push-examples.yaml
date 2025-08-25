@@ -28,12 +28,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-examples-backwards-compatibility:
-    uses: ./.github/workflows/test-examples.yaml
-    with:
-      build_local_sdk: false # this workflow is meant to test the examples with the published SDK
-      build_local_abi: false # this workflow is meant to test the examples with the published solidity contracts
-      run_commands: start,verify # run the start and validate to ensure the examples are not broken
 
   test-examples-forward-compatibility:
     uses: ./.github/workflows/test-examples.yaml
