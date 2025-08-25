@@ -53,6 +53,8 @@ public chains this will need increasing to a suitable value, based on the block 
 ```
 const cashToken = await notoFactory
     .newNoto(verifierNode1, {
+      name: "NOTO",
+      symbol: "NOTO",
       notary: verifierNode1,
       notaryMode: "basic",
     })

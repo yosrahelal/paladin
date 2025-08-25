@@ -124,6 +124,8 @@ async function main(): Promise<boolean> {
   const notoFactory = new NotoFactory(paladin1, "noto");
   const notoAsset = await notoFactory
     .newNoto(assetIssuer, {
+      name: "NOTO",
+      symbol: "NOTO",
       notary: assetIssuer,
       notaryMode: "hooks",
       options: {
