@@ -14,14 +14,6 @@ interface INoto {
         bytes data
     );
 
-    event NotoApproved(
-        bytes32 txId,
-        address delegate,
-        bytes32 txhash,
-        bytes signature,
-        bytes data
-    );
-
     event NotoLock(
         bytes32 txId,
         bytes32[] inputs,
@@ -70,22 +62,6 @@ interface INoto {
     ) external;
 
     function transfer(
-        bytes32 txId,
-        bytes32[] calldata inputs,
-        bytes32[] calldata outputs,
-        bytes calldata signature,
-        bytes calldata data
-    ) external;
-
-    function approveTransfer(
-        bytes32 txId,
-        address delegate,
-        bytes32 txhash,
-        bytes calldata signature,
-        bytes calldata data
-    ) external;
-
-    function transferWithApproval(
         bytes32 txId,
         bytes32[] calldata inputs,
         bytes32[] calldata outputs,
