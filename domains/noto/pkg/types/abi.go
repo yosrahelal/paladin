@@ -21,7 +21,6 @@ import (
 	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/pldapi"
 	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LF-Decentralized-Trust-labs/paladin/sdk/go/pkg/solutils"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 )
 
 //go:embed abis/INotoPrivate.json
@@ -122,21 +121,6 @@ type UnlockPublicParams struct {
 	Outputs       []string          `json:"outputs"`
 	Signature     pldtypes.HexBytes `json:"signature"`
 	Data          pldtypes.HexBytes `json:"data"`
-}
-
-type ApproveExtraParams struct {
-	Data pldtypes.HexBytes `json:"data"`
-}
-
-type NotoPublicTransaction struct {
-	FunctionABI *abi.Entry        `json:"functionABI"`
-	ParamsJSON  pldtypes.RawJSON  `json:"paramsJSON"`
-	EncodedCall pldtypes.HexBytes `json:"encodedCall"`
-}
-
-type NotoTransferMetadata struct {
-	ApprovalParams       ApproveExtraParams    `json:"approvalParams"`       // Partial set of params that can be passed to the "approveTransfer" method to approve another party to perform this transfer
-	TransferWithApproval NotoPublicTransaction `json:"transferWithApproval"` // The public transaction that would need to be submitted by an approved party to perform this transfer
 }
 
 type BalanceOfParam struct {

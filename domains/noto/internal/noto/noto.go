@@ -65,7 +65,6 @@ var (
 
 var (
 	NotoTransfer       = "NotoTransfer"
-	NotoApproved       = "NotoApproved"
 	NotoLock           = "NotoLock"
 	NotoUnlock         = "NotoUnlock"
 	NotoUnlockPrepared = "NotoUnlockPrepared"
@@ -74,7 +73,6 @@ var (
 
 var allEvents = []string{
 	NotoTransfer,
-	NotoApproved,
 	NotoLock,
 	NotoUnlock,
 	NotoUnlockPrepared,
@@ -676,7 +674,6 @@ func (n *Noto) parseCoinList(ctx context.Context, label string, states []*protot
 				SchemaId: state.SchemaId,
 				Id:       state.Id,
 			})
-			break
 
 		case n.lockedCoinSchema.Id:
 			coin, err := n.unmarshalLockedCoin(state.StateDataJson)
@@ -689,7 +686,6 @@ func (n *Noto) parseCoinList(ctx context.Context, label string, states []*protot
 				SchemaId: state.SchemaId,
 				Id:       state.Id,
 			})
-			break
 
 		default:
 			return nil, i18n.NewError(ctx, msgs.MsgUnexpectedSchema, state.SchemaId)
