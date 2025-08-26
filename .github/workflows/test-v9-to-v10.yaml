@@ -73,6 +73,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
+          fetch-tags: true
+          fetch-depth: 0
 
       - name: Install Kind
         uses: helm/kind-action@v1
@@ -134,12 +136,14 @@ jobs:
 
       # we first run the tutorials so we can cache the addresses and the data
       - name: Run all examples
+        shell: bash
         env:
           IMAGE_TAG: ${{ needs.validate-tags.outputs.previous_tag }}
           PALADIN_ABI_VERSION: ${{ needs.validate-tags.outputs.previous_tag }}
           PALADIN_SDK_VERSION: ${{ needs.validate-tags.outputs.previous_tag }}
           RUN_COMMANDS: start,verify
         run: |
+
           # checkout the to tag v0.10.0-rc.7 (before the main branch was updated)
           git checkout v0.10.0-rc.7
 
