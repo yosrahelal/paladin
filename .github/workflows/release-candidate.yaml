@@ -107,7 +107,7 @@ jobs:
     secrets:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   
-  test:
+  test-examples:
     needs: [setup, release-charts]
     uses: ./.github/workflows/test-examples.yaml
     with:
@@ -117,14 +117,14 @@ jobs:
 
   # Upload Solidity contracts
   release-solidity-contracts:
-    needs: [setup, test]
+    needs: [setup, test-examples]
     uses: ./.github/workflows/release-solidity-contracts.yaml
     with:
       tag: ${{ needs.setup.outputs.tag }}
 
   # Release TypeScript SDK
   release-typescript-sdk:
-    needs: [setup, test]
+    needs: [setup, test-examples]
     uses: ./.github/workflows/release-typescript-sdk.yaml
     with:
       sdk_version: ${{ needs.setup.outputs.tag }}
