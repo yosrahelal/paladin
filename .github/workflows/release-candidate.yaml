@@ -95,7 +95,6 @@ jobs:
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-  
 
   # Test and release RC Helm charts
   release-charts:
@@ -107,17 +106,25 @@ jobs:
       registry: docker.io
     secrets:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+  test:
+    needs: [setup, release-charts]
+    uses: ./.github/workflows/test-examples.yaml
+    with:
+      build_local_abi: true
+      build_local_sdk: true
+      chart_tag: ${{ needs.setup.outputs.tag }}
 
   # Upload Solidity contracts
   release-solidity-contracts:
-    needs: [setup, release-charts]
+    needs: [setup, test]
     uses: ./.github/workflows/release-solidity-contracts.yaml
     with:
       tag: ${{ needs.setup.outputs.tag }}
 
   # Release TypeScript SDK
   release-typescript-sdk:
-    needs: [setup, release-charts]
+    needs: [setup, test]
     uses: ./.github/workflows/release-typescript-sdk.yaml
     with:
       sdk_version: ${{ needs.setup.outputs.tag }}
