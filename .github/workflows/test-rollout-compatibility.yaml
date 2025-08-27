@@ -27,6 +27,7 @@ jobs:
           # Fetch all history and tags to build the full upgrade path.
           fetch-depth: 0
           ref: ${{ github.ref }}
+          fetch-tags: true
 
       - name: Get all previous release tags
         id: get_tags
