@@ -144,8 +144,8 @@ jobs:
           RUN_COMMANDS: start,verify
         run: |
 
-          # checkout the to tag 4d0f09fae6a622627842283bd0c129f2d08f6ad5 (before the main branch was updated)
-          git checkout 4d0f09fae6a622627842283bd0c129f2d08f6ad5
+          # checkout the to tag 83555cb5ebb8c89e1b42f2e995726af945c96122 (before the main branch was updated)
+          git checkout 83555cb5ebb8c89e1b42f2e995726af945c96122
 
           # Run the examples script
           ./scripts/run-examples.sh paladin
