@@ -52,12 +52,13 @@ type domain struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 
-	conf            *pldconf.DomainConfig
-	defaultGasLimit pldtypes.HexUint64
-	dm              *domainManager
-	name            string
-	api             components.DomainManagerToDomain
-	registryAddress *pldtypes.EthAddress
+	conf                 *pldconf.DomainConfig
+	defaultGasLimit      pldtypes.HexUint64
+	dm                   *domainManager
+	name                 string
+	api                  components.DomainManagerToDomain
+	registryAddress      *pldtypes.EthAddress
+	fixedSigningIdentity string
 
 	stateLock          sync.Mutex
 	initialized        atomic.Bool
@@ -86,14 +87,15 @@ var DefaultDefaultGasLimit pldtypes.HexUint64 = 4000000 // high gas limit by def
 
 func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDomain components.DomainManagerToDomain) *domain {
 	d := &domain{
-		dm:              dm,
-		conf:            conf,
-		defaultGasLimit: DefaultDefaultGasLimit,                     // can be set by config below
-		initRetry:       retry.NewRetryIndefinite(&conf.Init.Retry), // indefinite retry
-		name:            name,
-		api:             toDomain,
-		initDone:        make(chan struct{}),
-		registryAddress: pldtypes.MustEthAddress(conf.RegistryAddress), // check earlier in startup
+		dm:                   dm,
+		conf:                 conf,
+		defaultGasLimit:      DefaultDefaultGasLimit,                     // can be set by config below
+		initRetry:            retry.NewRetryIndefinite(&conf.Init.Retry), // indefinite retry
+		name:                 name,
+		api:                  toDomain,
+		initDone:             make(chan struct{}),
+		registryAddress:      pldtypes.MustEthAddress(conf.RegistryAddress), // check earlier in startup
+		fixedSigningIdentity: conf.FixedSigningIdentity,
 
 		schemasByID:        make(map[string]components.Schema),
 		schemasBySignature: make(map[string]components.Schema),
@@ -199,6 +201,7 @@ func (d *domain) init() {
 			RegistryContractAddress: d.RegistryAddress().String(),
 			ChainId:                 d.dm.ethClientFactory.ChainID(),
 			ConfigJson:              pldtypes.JSONString(d.conf.Config).String(),
+			FixedSigningIdentity:    d.fixedSigningIdentity,
 		})
 		if err != nil {
 			return true, err
@@ -288,6 +291,10 @@ func (d *domain) RegistryAddress() *pldtypes.EthAddress {
 
 func (d *domain) Configuration() *prototk.DomainConfig {
 	return d.config
+}
+
+func (d *domain) FixedSigningIdentity() string {
+	return d.fixedSigningIdentity
 }
 
 func toProtoStates(states []*pldapi.State) []*prototk.StoredState {
@@ -396,6 +403,9 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 		case "eip155", "eip-155":
 			sigPayload = tx.SignaturePayloadLegacyEIP155(d.dm.ethClientFactory.ChainID())
 			finalizer = func(signaturePayload *ethsigner.TransactionSignaturePayload, sig *secp256k1.SignatureData) ([]byte, error) {
+				// sig will have a 0/1 V value as that is the contract with Paladin key manager but firefly-signer library specifies
+				// "starting point must be legacy 27/28" for EIP-155 so we need to convert
+				sig.V.SetInt64(sig.V.Int64() + 27)
 				return tx.FinalizeLegacyEIP155WithSignature(signaturePayload, sig, d.dm.ethClientFactory.ChainID())
 			}
 		default:

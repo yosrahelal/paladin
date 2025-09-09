@@ -18,7 +18,6 @@ package publictxmgr
 import (
 	"context"
 	"encoding/json"
-	"math/big"
 	"sync"
 	"time"
 
@@ -114,10 +113,6 @@ type pubTxManager struct {
 	// balance manager
 	balanceManager BalanceManager
 
-	// orchestrator config
-	gasPriceIncreaseMax     *big.Int
-	gasPriceIncreasePercent int
-
 	// gas limit config
 	gasEstimateFactor float64
 
@@ -134,12 +129,7 @@ type txActivityRecords struct {
 func NewPublicTransactionManager(ctx context.Context, conf *pldconf.PublicTxManagerConfig) components.PublicTxManager {
 	log.L(ctx).Debugf("Creating new public transaction manager")
 
-	gasPriceClient := NewGasPriceClient(ctx, conf)
-	gasPriceIncreaseMax := confutil.BigIntOrNil(conf.GasPrice.IncreaseMax)
-	gasEstimateFactor := confutil.Float64Min(conf.GasLimit.GasEstimateFactor, 1.0, *pldconf.PublicTxManagerDefaults.GasLimit.GasEstimateFactor)
-
-	log.L(ctx).Debugf("Enterprise transaction handler created")
-
+	gasPriceClient := NewGasPriceClient(ctx, &conf.GasPrice)
 	ptmCtx, ptmCtxCancel := context.WithCancel(log.WithLogField(ctx, "role", "public_tx_mgr"))
 
 	return &pubTxManager{
@@ -156,15 +146,17 @@ func NewPublicTransactionManager(ctx context.Context, conf *pldconf.PublicTxMana
 		enginePollingInterval:       confutil.DurationMin(conf.Manager.Interval, 50*time.Millisecond, *pldconf.PublicTxManagerDefaults.Manager.Interval),
 		nonceCacheTimeout:           confutil.DurationMin(conf.Manager.NonceCacheTimeout, 0, *pldconf.PublicTxManagerDefaults.Manager.NonceCacheTimeout),
 		retry:                       retry.NewRetryIndefinite(&conf.Manager.Retry),
-		gasPriceIncreaseMax:         gasPriceIncreaseMax,
-		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *pldconf.PublicTxManagerDefaults.GasPrice.IncreasePercentage),
 		activityRecordCache:         cache.NewCache[uint64, *txActivityRecords](&conf.Manager.ActivityRecords.CacheConfig, &pldconf.PublicTxManagerDefaults.Manager.ActivityRecords.CacheConfig),
 		maxActivityRecordsPerTx:     confutil.Int(conf.Manager.ActivityRecords.RecordsPerTransaction, *pldconf.PublicTxManagerDefaults.Manager.ActivityRecords.RecordsPerTransaction),
-		gasEstimateFactor:           gasEstimateFactor,
+		gasEstimateFactor:           confutil.Float64Min(conf.GasLimit.GasEstimateFactor, 1.0, *pldconf.PublicTxManagerDefaults.GasLimit.GasEstimateFactor),
 	}
 }
 
 func (ptm *pubTxManager) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
+	err = ptm.gasPriceClient.Init(ptm.ctx)
+	if err != nil {
+		return nil, err
+	}
 	ptm.thMetrics = metrics.InitMetrics(ptm.ctx, pic.MetricsManager().Registry())
 	return &components.ManagerInitResult{}, nil
 }
@@ -191,7 +183,7 @@ func (ptm *pubTxManager) Start() error {
 
 	// The client is assured to be started by this point and availaptm
 	ptm.ethClient = ptm.ethClientFactory.SharedWS()
-	ptm.gasPriceClient.Init(ctx, ptm.ethClient)
+	ptm.gasPriceClient.Start(ctx, ptm.ethClient)
 	if ptm.engineLoopDone == nil { // only start once
 		ptm.engineLoopDone = make(chan struct{})
 		log.L(ctx).Debugf("Kicking off  enterprise handler engine loop")
@@ -221,9 +213,9 @@ func buildEthTX(
 	options *pldapi.PublicTxOptions,
 ) *ethsigner.Transaction {
 	ethTx := &ethsigner.Transaction{
-		From:                 json.RawMessage(pldtypes.JSONString(from)),
-		To:                   to.Address0xHex(),
-		GasPrice:             (*ethtypes.HexInteger)(options.GasPrice),
+		From: json.RawMessage(pldtypes.JSONString(from)),
+		To:   to.Address0xHex(),
+
 		MaxPriorityFeePerGas: (*ethtypes.HexInteger)(options.MaxPriorityFeePerGas),
 		MaxFeePerGas:         (*ethtypes.HexInteger)(options.MaxFeePerGas),
 		Value:                (*ethtypes.HexInteger)(options.Value),
@@ -328,6 +320,8 @@ func (ptm *pubTxManager) WriteNewTransactions(ctx context.Context, dbTX persiste
 				publicTxBindings = append(publicTxBindings, &DBPublicTxnBinding{
 					Transaction:     bnd.TransactionID,
 					TransactionType: bnd.TransactionType,
+					Sender:          bnd.TransactionSender,
+					ContractAddress: bnd.TransactionContractAddress,
 					PublicTxnID:     pubTxnID,
 				})
 			}
@@ -755,7 +749,7 @@ func (ptm *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 	var lookups []*bindingsMatchingSubmission
 	err := dbTX.DB().
 		Table("public_txn_bindings").
-		Select(`"transaction"`, `"tx_type"`, `"Submission"."pub_txn_id"`, `"Submission"."tx_hash"`).
+		Select(`"transaction"`, "sender", "contract_address", `"tx_type"`, `"Submission"."pub_txn_id"`, `"Submission"."tx_hash"`).
 		Joins("Submission").
 		Where(`"Submission"."tx_hash" IN (?)`, txHashes).
 		Find(&lookups).
@@ -772,10 +766,13 @@ func (ptm *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 		for _, match := range lookups {
 			if txi.Hash.Equals(&match.Submission.TransactionHash) {
 				// matched results in the order of the inputs
+				log.L(ctx).Debugf("Matched on-chain transaction %s (result=%s): %+v", txi.Hash, txi.Result.V(), match)
 				results = append(results, &components.PublicTxMatch{
 					PaladinTXReference: components.PaladinTXReference{
-						TransactionID:   match.Transaction,
-						TransactionType: match.TransactionType,
+						TransactionID:              match.Transaction,
+						TransactionType:            match.TransactionType,
+						TransactionSender:          match.Sender,
+						TransactionContractAddress: match.ContractAddress,
 					},
 					IndexedTransactionNotify: txi,
 				})
