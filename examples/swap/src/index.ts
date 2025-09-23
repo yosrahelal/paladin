@@ -21,7 +21,13 @@ import PaladinClient, {
   ZetoFactory,
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import { ethers } from "ethers";
-import { checkDeploy, checkReceipt, DEFAULT_POLL_TIMEOUT, LONG_POLL_TIMEOUT } from "paladin-example-common";
+import {
+  checkDeploy,
+  checkReceipt,
+  DEFAULT_POLL_TIMEOUT,
+  LONG_POLL_TIMEOUT,
+  POLL_INTERVAL,
+} from "paladin-example-common";
 import { newAtomFactory } from "./helpers/atom";
 import { newERC20Tracker } from "./helpers/erc20tracker";
 import * as fs from 'fs';
@@ -346,6 +352,8 @@ async function main(): Promise<boolean> {
       logger.error(`Failed to get final balances after ${LONG_POLL_TIMEOUT / 1000} seconds`);
       return false;
     }
+
+    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
   }
 
   // Save contract data to file for later use

@@ -19,7 +19,13 @@ import PaladinClient, {
   PenteFactory,
   TransactionType,
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
-import { checkDeploy, checkReceipt, DEFAULT_POLL_TIMEOUT, LONG_POLL_TIMEOUT } from "paladin-example-common";
+import {
+  checkDeploy,
+  checkReceipt,
+  DEFAULT_POLL_TIMEOUT,
+  LONG_POLL_TIMEOUT,
+  POLL_INTERVAL,
+} from "paladin-example-common";
 import atomJson from "./abis/Atom.json";
 import atomFactoryJson from "./abis/AtomFactory.json";
 import bondTrackerPublicJson from "./abis/BondTrackerPublic.json";
@@ -412,22 +418,22 @@ async function main(): Promise<boolean> {
   let finalBondBalanceCustodian: NotoBalanceOfResult | undefined;
   const startTime = Date.now();
   while (true) {
-  // Get final balances after the bond distribution
-  finalCashBalanceInvestor = await notoCash
-    .using(paladin3)
-    .balanceOf(investor, { account: investor.lookup });
+    // Get final balances after the bond distribution
+    finalCashBalanceInvestor = await notoCash
+      .using(paladin3)
+      .balanceOf(investor, { account: investor.lookup });
 
-  finalBondBalanceInvestor = await notoBond
-    .using(paladin3)
-    .balanceOf(investor, { account: investor.lookup });
+    finalBondBalanceInvestor = await notoBond
+      .using(paladin3)
+      .balanceOf(investor, { account: investor.lookup });
 
-  finalCashBalanceCustodian = await notoCash
-    .using(paladin2)
-    .balanceOf(bondCustodian, { account: bondCustodian.lookup });
+    finalCashBalanceCustodian = await notoCash
+      .using(paladin2)
+      .balanceOf(bondCustodian, { account: bondCustodian.lookup });
 
     finalBondBalanceCustodian = await notoBond
-    .using(paladin2)
-    .balanceOf(bondCustodian, { account: bondCustodian.lookup });
+      .using(paladin2)
+      .balanceOf(bondCustodian, { account: bondCustodian.lookup });
 
     if (finalCashBalanceInvestor?.totalBalance !== "0" &&
       finalBondBalanceInvestor?.totalBalance !== "0" &&
@@ -440,6 +446,8 @@ async function main(): Promise<boolean> {
       logger.error(`Failed to get final balances after ${LONG_POLL_TIMEOUT / 1000} seconds`);
       return false;
     }
+
+    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
   }
 
       // Save contract data to file for later use
