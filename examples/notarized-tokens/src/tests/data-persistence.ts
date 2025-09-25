@@ -17,7 +17,7 @@ import PaladinClient, {
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import * as fs from 'fs';
 import * as path from 'path';
-import { nodeConnections, findLatestContractDataFile, getCachePath } from "paladin-example-common";
+import { nodeConnections, findLatestContractDataFile, getCachePath, DEFAULT_POLL_TIMEOUT } from "paladin-example-common";
 
 const logger = console;
 
@@ -176,7 +176,7 @@ async function main(): Promise<boolean> {
         amount: testTransferAmount,
         data: "0x",
       })
-      .waitForReceipt(10000);
+      .waitForReceipt(DEFAULT_POLL_TIMEOUT);
 
     if (!testTransferReceipt?.transactionHash) {
       logger.error("STEP 4: Test transfer failed!");
