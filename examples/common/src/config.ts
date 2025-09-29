@@ -80,7 +80,6 @@ function loadConfigFromFile(configPath?: string): NodeConnection[] {
   
   if (configPath) {
     // Use the provided config path
-    // filePath = path.resolve(configPath);
     filePath = configPath;
     console.log("filePath:", filePath);
 
