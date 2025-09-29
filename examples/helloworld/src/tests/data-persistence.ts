@@ -15,7 +15,7 @@
 import PaladinClient from "@lfdecentralizedtrust-labs/paladin-sdk";
 import helloWorldJson from "../abis/HelloWorld.json";
 import * as fs from 'fs';
-import { nodeConnections, findLatestContractDataFile, getCachePath } from "paladin-example-common";
+import { DEFAULT_POLL_TIMEOUT, nodeConnections, findLatestContractDataFile, getCachePath } from "paladin-example-common";
 
 const logger = console;
 
@@ -153,7 +153,7 @@ async function main(): Promise<boolean> {
       }
 
       // Wait for the function call receipt
-      const functionReceipt = await paladin.pollForReceipt(sayHelloTxID, 10000, true);
+      const functionReceipt = await paladin.pollForReceipt(sayHelloTxID, DEFAULT_POLL_TIMEOUT, true);
       if (!functionReceipt?.transactionHash) {
         logger.error("STEP 6: Receipt retrieval failed!");
         return false;

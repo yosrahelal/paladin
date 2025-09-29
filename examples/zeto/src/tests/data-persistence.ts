@@ -13,12 +13,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import PaladinClient, {
-  PaladinVerifier,
   ZetoFactory,
 } from "@lfdecentralizedtrust-labs/paladin-sdk";
 import * as fs from 'fs';
 import * as path from 'path';
-import { nodeConnections, findLatestContractDataFile, getCachePath } from "paladin-example-common";
+import { nodeConnections, findLatestContractDataFile, getCachePath, DEFAULT_POLL_TIMEOUT } from "paladin-example-common";
 
 const logger = console;
 
@@ -227,7 +226,7 @@ async function main(): Promise<boolean> {
           },
         ],
       })
-      .waitForReceipt(10000);
+      .waitForReceipt(DEFAULT_POLL_TIMEOUT);
 
     if (!testTransferReceipt?.transactionHash) {
       logger.error("STEP 5: Test transfer failed!");
