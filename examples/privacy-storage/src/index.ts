@@ -46,7 +46,7 @@ async function main(): Promise<boolean> {
     members: [verifierNode1, verifierNode2],
     evmVersion: "shanghai",
     externalCallsEnabled: true,
-  }).waitForDeploy();
+  }).waitForDeploy(DEFAULT_POLL_TIMEOUT);
   if (!checkDeploy(memberPrivacyGroup)) return false;
 
   logger.log(`Privacy group created, ID: ${memberPrivacyGroup?.group.id}`);
@@ -57,7 +57,7 @@ async function main(): Promise<boolean> {
     abi: storageJson.abi,
     bytecode: storageJson.bytecode,
     from: verifierNode1.lookup,
-  }).waitForDeploy();
+  }).waitForDeploy(DEFAULT_POLL_TIMEOUT);
   if (!contractAddress) {
     logger.error("Failed to deploy the contract. No address returned.");
     return false;
