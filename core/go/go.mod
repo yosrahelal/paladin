@@ -9,14 +9,13 @@ require (
 	github.com/LF-Decentralized-Trust-labs/paladin/common/go v0.0.0-00010101000000-000000000000
 	github.com/LF-Decentralized-Trust-labs/paladin/config v0.0.0-00010101000000-000000000000
 	github.com/LF-Decentralized-Trust-labs/paladin/registries/static v0.0.0-00010101000000-000000000000
-	github.com/LF-Decentralized-Trust-labs/paladin/sdk/go v0.0.0-00010101000000-000000000000
+	github.com/LF-Decentralized-Trust-labs/paladin/sdk/go v0.0.0-20250828150332-fbc1c1bc663b
 	github.com/LF-Decentralized-Trust-labs/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/LF-Decentralized-Trust-labs/paladin/transports/grpc v0.0.0-00010101000000-000000000000
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/golang-migrate/migrate/v4 v4.17.1
 	github.com/google/uuid v1.6.0
 	github.com/hyperledger/firefly-signer v1.1.21
-	github.com/lib/pq v1.10.9
 	github.com/prometheus/client_golang v1.22.0
 	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
 	github.com/sirupsen/logrus v1.9.3

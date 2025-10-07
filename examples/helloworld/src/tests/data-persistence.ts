@@ -1,14 +1,23 @@
+/*
+ * Copyright © 2025 Kaleido, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import PaladinClient from "@lfdecentralizedtrust-labs/paladin-sdk";
-import helloWorldJson from "./abis/HelloWorld.json";
+import helloWorldJson from "../abis/HelloWorld.json";
 import * as fs from 'fs';
-import * as path from 'path';
+import { DEFAULT_POLL_TIMEOUT, nodeConnections, findLatestContractDataFile, getCachePath } from "paladin-example-common";
 
 const logger = console;
-
-// Instantiate Paladin client (e.g., connecting to "node1")
-const paladin = new PaladinClient({
-  url: "http://127.0.0.1:31548",
-});
 
 interface ContractData {
   contractAddress: string;
@@ -16,24 +25,23 @@ interface ContractData {
   transactionHash: string;
   timestamp: string;
 }
-
-function findLatestContractDataFile(dataDir: string): string | null {
-  if (!fs.existsSync(dataDir)) {
-    return null;
-  }
-
-  const files = fs.readdirSync(dataDir)
-    .filter(file => file.startsWith('contract-data-') && file.endsWith('.json'))
-    .sort()
-    .reverse(); // Most recent first
-
-  return files.length > 0 ? path.join(dataDir, files[0]) : null;
-}
-
+ 
 async function main(): Promise<boolean> {
+  // --- Initialization from Imported Config ---
+  if (nodeConnections.length < 1) {
+    logger.error("The environment config must provide at least 1 node for this scenario.");
+    return false;
+  }
+  
+  logger.log("Initializing Paladin client from the environment configuration...");
+  const paladin = new PaladinClient(nodeConnections[0].clientOptions);
+  const owner = paladin.getVerifiers(`owner@${nodeConnections[0].id}`)[0];
+
+
   // STEP 1: Load the saved contract data
   logger.log("STEP 1: Loading saved contract data...");
-  const dataDir = path.join(__dirname, '..', 'data');
+  // Use command-line argument for data directory if provided, otherwise use default
+  const dataDir = getCachePath();
   const dataFile = findLatestContractDataFile(dataDir);
   
   if (!dataFile) {
@@ -44,9 +52,15 @@ async function main(): Promise<boolean> {
 
   const contractData: ContractData = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   logger.log(`STEP 1: Loaded contract data from ${dataFile}`);
+
+  // Print cached data summary
+  logger.log("\n=== CACHED DATA SUMMARY ===");
+  logger.log(`Data File: ${dataFile}`);
+  logger.log(`Timestamp: ${contractData.timestamp}`);
   logger.log(`Contract Address: ${contractData.contractAddress}`);
-  logger.log(`Original Message: ${contractData.message}`);
+  logger.log(`Original Message: "${contractData.message}"`);
   logger.log(`Transaction Hash: ${contractData.transactionHash}`);
+  logger.log("=============================\n");
 
   // STEP 2: Get historical events by transaction hash
   logger.log("STEP 2: Getting historical events for the transaction...");
@@ -116,7 +130,6 @@ async function main(): Promise<boolean> {
 
     // STEP 6: Verify we can still call the contract (test callability)
     logger.log("STEP 6: Verifying contract is still callable...");
-    const [owner] = paladin.getVerifiers("owner@node1");
     
     try {
       // Try to call the sayHello function again with a different name
@@ -140,7 +153,7 @@ async function main(): Promise<boolean> {
       }
 
       // Wait for the function call receipt
-      const functionReceipt = await paladin.pollForReceipt(sayHelloTxID, 10000, true);
+      const functionReceipt = await paladin.pollForReceipt(sayHelloTxID, DEFAULT_POLL_TIMEOUT, true);
       if (!functionReceipt?.transactionHash) {
         logger.error("STEP 6: Receipt retrieval failed!");
         return false;
