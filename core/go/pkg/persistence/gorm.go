@@ -245,7 +245,7 @@ type ANY struct {
 func UseAny(db *gorm.DB) {
 	currentDialect := db.Name()
 	if currentDialect != postgresDialect {
-		log.L(db.Statement.Context).Errorf("ANY clause not supported with %q dialect", currentDialect)
+		log.L(db.Statement.Context).Warnf("ANY clause not supported with %q dialect", currentDialect)
 		return
 	}
 
