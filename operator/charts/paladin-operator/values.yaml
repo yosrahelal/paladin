@@ -17,7 +17,7 @@ operator:
   namespace: "" # DEPRECATED: Use the namespace field in the HelmRelease instead. e.g. helm install ... --namespace <namespace>
   image:
     repository: ghcr.io/lf-decentralized-trust-labs/paladin-operator
-    tag: latest
+    tag: main
     pullPolicy: Always
 
   serviceAccount:
