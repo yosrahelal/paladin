@@ -8,7 +8,10 @@
 {{- $registryAdminKey = "registry.operator" }}
 {{- end }}
 
-{{- $registryAdminNode := (index .Values.paladinNodes 0).name }}
+{{- $registryAdminNode := "" }}
+{{- if and .Values.paladinNodes (gt (len .Values.paladinNodes) 0) }}
+{{- $registryAdminNode = (index .Values.paladinNodes 0).name }}
+{{- end }}
 
 
 {{- range .Values.paladinNodes }}
