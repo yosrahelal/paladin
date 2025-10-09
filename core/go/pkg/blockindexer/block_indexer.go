@@ -97,6 +97,7 @@ type blockIndexer struct {
 	requiredConfirmations      int
 	retry                      *retry.Retry
 	batchSize                  int
+	insertDBBatchSize          int
 	batchTimeout               time.Duration
 	txWaiters                  *inflight.InflightManager[pldtypes.Bytes32, *pldapi.IndexedTransaction]
 	preCommitHandlers          []PreCommitHandler
@@ -133,6 +134,7 @@ func newBlockIndexer(ctx context.Context, conf *pldconf.BlockIndexerConfig, pers
 		requiredConfirmations:      confutil.IntMin(conf.RequiredConfirmations, 0, *pldconf.BlockIndexerDefaults.RequiredConfirmations),
 		retry:                      blockListener.retry,
 		batchSize:                  confutil.IntMin(conf.CommitBatchSize, 1, *pldconf.BlockIndexerDefaults.CommitBatchSize),
+		insertDBBatchSize:          confutil.IntMin(conf.InsertDBBatchSize, 1, *pldconf.BlockIndexerDefaults.InsertDBBatchSize),
 		batchTimeout:               confutil.DurationMin(conf.CommitBatchTimeout, 0, *pldconf.BlockIndexerDefaults.CommitBatchTimeout),
 		txWaiters:                  inflight.NewInflightManager[pldtypes.Bytes32, *pldapi.IndexedTransaction](pldtypes.ParseBytes32),
 		eventStreams:               make(map[uuid.UUID]*eventStream),
@@ -620,6 +622,7 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 					err = preCommitHandler(ctx, dbTX, blocks, notifyTransactions)
 				}
 			}
+
 			if err == nil && len(blocks) > 0 {
 				err = dbTX.DB().
 					WithContext(ctx).
@@ -631,7 +634,7 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 				err = dbTX.DB().
 					WithContext(ctx).
 					Table("indexed_transactions").
-					Create(transactions).
+					CreateInBatches(transactions, bi.insertDBBatchSize).
 					Error
 			}
 			if err == nil && len(events) > 0 {
@@ -640,7 +643,7 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 					Table("indexed_events").
 					Omit("Transaction").
 					Omit("Event").
-					Create(events).
+					CreateInBatches(events, bi.insertDBBatchSize).
 					Error
 			}
 			return err
