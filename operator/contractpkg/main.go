@@ -149,7 +149,7 @@ func (m *ContractMap) process(name string, b *ContractMapBuild) error {
 			return fmt.Errorf("mismatch in links for unlinked Solidity %s expected=%d provided=%d", name, libCount, len(b.LinkedLibs))
 		}
 	}
-	firstNameSegment := strings.SplitN(name, "_", 2)[0]
+	firstNameSegment := strings.SplitN(name, "-", 2)[0]
 	scd := corev1alpha1.SmartContractDeployment{
 		TypeMeta: v1.TypeMeta{
 			APIVersion: "core.paladin.io/v1alpha1",
@@ -251,8 +251,48 @@ func template() error {
 
 		newContent := string(content)
 
-		//  if paladinDomain, add more templating
-		if strings.Contains(file, "paladindomain") {
+		if strings.Contains(file, "smartcontractdeployment") {
+			var scd corev1alpha1.SmartContractDeployment
+			if err := yaml.Unmarshal(content, &scd); err != nil {
+				return fmt.Errorf("error unmarshalling content: %v", err)
+			}
+
+			from := scd.Spec.From
+			contractName := strings.ReplaceAll(scd.Name, "-", "_")
+			firstNameSegment := strings.SplitN(contractName, "_", 2)[0]
+
+			if content, err = yaml.Marshal(scd); err != nil {
+				return fmt.Errorf("error marshalling content: %v", err)
+			}
+			newContent = string(content)
+
+			newContent = pattern.ReplaceAllString(newContent, "{{ `{{${1}}}` }}")
+
+			// string replace rather than modifying the gostruct so that the template is on one line
+			helmTemplate := fmt.Sprintf("\"{{if .Values.smartContractDeployments.%s.from}}{{.Values.smartContractDeployments.%s.from}}{{else if .Values.smartContractDeployments.default.from}}{{.Values.smartContractDeployments.default.from}}{{else}}%s.operator{{end}}\"", contractName, contractName, firstNameSegment)
+			newContent = strings.ReplaceAll(newContent, from, helmTemplate)
+
+		} else if strings.Contains(file, "transactioninvoke") {
+			var ti corev1alpha1.TransactionInvoke
+			if err := yaml.Unmarshal(content, &ti); err != nil {
+				return fmt.Errorf("error unmarshalling content: %v", err)
+			}
+
+			from := ti.Spec.From
+			transactionName := strings.ReplaceAll(ti.Name, "-", "_")
+			firstNameSegment := strings.SplitN(transactionName, "_", 2)[0]
+
+			if content, err = yaml.Marshal(ti); err != nil {
+				return fmt.Errorf("error marshalling content: %v", err)
+			}
+			newContent = string(content)
+
+			newContent = pattern.ReplaceAllString(newContent, "{{ `{{${1}}}` }}")
+
+			// string replace rather than modifying the gostruct so that the template is on one line
+			helmTemplate := fmt.Sprintf("\"{{if .Values.transactionInvokes.%s.from}}{{.Values.transactionInvokes.%s.from}}{{else if .Values.transactionInvokes.default.from}}{{.Values.transactionInvokes.default.from}}{{else}}%s.operator{{end}}\"", transactionName, transactionName, firstNameSegment)
+			newContent = strings.ReplaceAll(newContent, from, helmTemplate)
+		} else if strings.Contains(file, "paladindomain") {
 
 			var domain corev1alpha1.PaladinDomain
 			if err := yaml.Unmarshal(content, &domain); err != nil {
@@ -260,7 +300,7 @@ func template() error {
 			}
 			n := fmt.Sprintf(".Values.smartContractsReferences.%sFactory", domain.Name)
 			domain.Spec.RegistryAddress = fmt.Sprintf("{{ %s.address }}", n)
-			domain.Spec.SmartContractDeployment = fmt.Sprintf("{{ %s.deployment }}", n)
+			domain.Spec.SmartContractDeployment = fmt.Sprintf("{{- if ne .Values.mode \"attach\" }}%s-factory{{- end }}", domain.Name)
 
 			domain.Spec.FixedSigningIdentity = fmt.Sprintf("{{ .Values.domains.%s.fixedSigningIdentity }}", domain.Name)
 			if content, err = yaml.Marshal(domain); err != nil {
@@ -273,14 +313,11 @@ func template() error {
 				return fmt.Errorf("error unmarshalling content: %v", err)
 			}
 			registry.Spec.EVM.ContractAddress = "{{ .Values.smartContractsReferences.registry.address }}"
-			registry.Spec.EVM.SmartContractDeployment = "{{ .Values.smartContractsReferences.registry.deployment }}"
+			registry.Spec.EVM.SmartContractDeployment = "{{- if ne .Values.mode \"attach\" }}registry{{- end }}"
 			if content, err = yaml.Marshal(registry); err != nil {
 				return fmt.Errorf("error marshalling content: %v", err)
 			}
 			newContent = string(content)
-		} else {
-			// Perform the regex replacement
-			newContent = pattern.ReplaceAllString(newContent, "{{ `{{${1}}}` }}")
 		}
 
 		// Replace the node name prefix

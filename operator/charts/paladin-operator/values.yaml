@@ -102,22 +102,93 @@ postgres: # the postgres container runs as a sidecar to the paladin container
     pullPolicy: IfNotPresent
 
 # Smart Contracts References
-# Provide either 'deployment' or 'address':
-# - 'deployment' should be set for new installations.
-# - 'address' should be set if using an existing deployment from another operator, to join the same network.
+# Only used when mode is "attach" to join an existing network.
+# - Set 'address' to join an existing deployment from another operator.
 smartContractsReferences:
   notoFactory:
-    address: ""       # Existing contract address (leave blank if deploying new)
-    deployment: noto-factory   # Deployment resource name (leave blank if using existing address)
+    address: ""
   zetoFactory:
     address: ""
-    deployment: zeto-factory
   penteFactory:
     address: ""
-    deployment: pente-factory
   registry:
     address: ""
-    deployment: registry
+
+# Smart Contract Deployments Configuration
+# Controls the signing keys for smart contract deployments.
+# If a 'from' key is set for a specific contract, that value is used.
+# If not set, it falls back to the value in 'default'.
+smartContractDeployments:
+  default:
+    from: ""
+  registry:
+    from: ""
+  noto_factory:
+    from: ""
+  pente_factory:
+    from: ""
+  zeto_g16_anon:
+    from: ""
+  zeto_g16_anon_batch:
+    from: ""
+  zeto_g16_anon_enc:
+    from: ""
+  zeto_g16_anon_enc_batch:
+    from: ""
+  zeto_g16_anon_nullifier_transfer:
+    from: ""
+  zeto_g16_anon_nullifier_transfer_batch:
+    from: ""
+  zeto_g16_anon_nullifier_kyc_transfer:
+    from: ""
+  zeto_g16_anon_nullifier_kyc_transfer_batch:
+    from: ""
+  zeto_g16_anon_nullifier_kyc_transfer_locked:
+    from: ""
+  zeto_g16_anon_nullifier_kyc_transfer_locked_batch:
+    from: ""
+  zeto_g16_deposit:
+    from: ""
+  zeto_g16_withdraw:
+    from: ""
+  zeto_g16_withdraw_batch:
+    from: ""
+  zeto_g16_withdraw_nullifier:
+    from: ""
+  zeto_g16_withdraw_nullifier_batch:
+    from: ""
+  zeto_poseidon_unit2l:
+    from: ""
+  zeto_poseidon_unit3l:
+    from: ""
+  zeto_smt_lib:
+    from: ""
+  zeto_impl_anon:
+    from: ""
+  zeto_impl_anon_enc:
+    from: ""
+  zeto_impl_anon_nullifier:
+    from: ""
+  zeto_impl_anon_nullifier_kyc:
+    from: ""
+  zeto_factory:
+    from: ""
+
+# Transaction Invoke Configuration
+# Controls the signing keys for transaction invocations.
+# If a 'from' key is set for a specific transaction, that value is used.
+# If not set, it falls back to the value in 'default'.
+transactionInvokes:
+  default:
+    from: ""
+  zeto_anon:
+    from: ""
+  zeto_anon_enc:
+    from: ""
+  zeto_anon_nullifier:
+    from: ""
+  zeto_anon_nullifier_kyc:
+    from: ""
 
     
 # Install CRDs as part of the chart installation
