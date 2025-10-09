@@ -43,6 +43,44 @@ var scope = map[string][]string{
 	"attach":    {"issuer", "paladindomain", "paladinregistry"},
 }
 
+// Map of snake_case keys to camelCase keys for smart contract deployments and transaction invokes
+var snakeToCamelMap = map[string]string{
+	// Smart Contract Deployments
+	"default":                                           "default",
+	"registry":                                          "registry",
+	"noto_factory":                                      "notoFactory",
+	"pente_factory":                                     "penteFactory",
+	"zeto_g16_anon":                                     "zetoG16Anon",
+	"zeto_g16_anon_batch":                               "zetoG16AnonBatch",
+	"zeto_g16_anon_enc":                                 "zetoG16AnonEnc",
+	"zeto_g16_anon_enc_batch":                           "zetoG16AnonEncBatch",
+	"zeto_g16_anon_nullifier_transfer":                  "zetoG16AnonNullifierTransfer",
+	"zeto_g16_anon_nullifier_transfer_batch":            "zetoG16AnonNullifierTransferBatch",
+	"zeto_g16_anon_nullifier_kyc_transfer":              "zetoG16AnonNullifierKycTransfer",
+	"zeto_g16_anon_nullifier_kyc_transfer_batch":        "zetoG16AnonNullifierKycTransferBatch",
+	"zeto_g16_anon_nullifier_kyc_transfer_locked":       "zetoG16AnonNullifierKycTransferLocked",
+	"zeto_g16_anon_nullifier_kyc_transfer_locked_batch": "zetoG16AnonNullifierKycTransferLockedBatch",
+	"zeto_g16_deposit":                                  "zetoG16Deposit",
+	"zeto_g16_withdraw":                                 "zetoG16Withdraw",
+	"zeto_g16_withdraw_batch":                           "zetoG16WithdrawBatch",
+	"zeto_g16_withdraw_nullifier":                       "zetoG16WithdrawNullifier",
+	"zeto_g16_withdraw_nullifier_batch":                 "zetoG16WithdrawNullifierBatch",
+	"zeto_poseidon_unit2l":                              "zetoPoseidonUnit2l",
+	"zeto_poseidon_unit3l":                              "zetoPoseidonUnit3l",
+	"zeto_smt_lib":                                      "zetoSmtLib",
+	"zeto_impl_anon":                                    "zetoImplAnon",
+	"zeto_impl_anon_enc":                                "zetoImplAnonEnc",
+	"zeto_impl_anon_nullifier":                          "zetoImplAnonNullifier",
+	"zeto_impl_anon_nullifier_kyc":                      "zetoImplAnonNullifierKyc",
+	"zeto_factory":                                      "zetoFactory",
+
+	// Transaction Invokes
+	"zeto_anon":               "zetoAnon",
+	"zeto_anon_enc":           "zetoAnonEnc",
+	"zeto_anon_nullifier":     "zetoAnonNullifier",
+	"zeto_anon_nullifier_kyc": "zetoAnonNullifierKyc",
+}
+
 type ContractMap map[string]*ContractMapBuild
 
 type ContractMapBuild struct {
@@ -268,8 +306,14 @@ func template() error {
 
 			newContent = pattern.ReplaceAllString(newContent, "{{ `{{${1}}}` }}")
 
+			// Convert snake_case to camelCase using our map
+			camelCaseContractName := contractName
+			if mapped, exists := snakeToCamelMap[contractName]; exists {
+				camelCaseContractName = mapped
+			}
+
 			// string replace rather than modifying the gostruct so that the template is on one line
-			helmTemplate := fmt.Sprintf("\"{{if .Values.smartContractDeployments.%s.from}}{{.Values.smartContractDeployments.%s.from}}{{else if .Values.smartContractDeployments.default.from}}{{.Values.smartContractDeployments.default.from}}{{else}}%s.operator{{end}}\"", contractName, contractName, firstNameSegment)
+			helmTemplate := fmt.Sprintf("\"{{if .Values.smartContractDeployments.%s.from}}{{.Values.smartContractDeployments.%s.from}}{{else if .Values.smartContractDeployments.default.from}}{{.Values.smartContractDeployments.default.from}}{{else}}%s.operator{{end}}\"", camelCaseContractName, camelCaseContractName, firstNameSegment)
 			newContent = strings.ReplaceAll(newContent, from, helmTemplate)
 
 		} else if strings.Contains(file, "transactioninvoke") {
@@ -289,8 +333,14 @@ func template() error {
 
 			newContent = pattern.ReplaceAllString(newContent, "{{ `{{${1}}}` }}")
 
+			// Convert snake_case to camelCase using our map
+			camelCaseTransactionName := transactionName
+			if mapped, exists := snakeToCamelMap[transactionName]; exists {
+				camelCaseTransactionName = mapped
+			}
+
 			// string replace rather than modifying the gostruct so that the template is on one line
-			helmTemplate := fmt.Sprintf("\"{{if .Values.transactionInvokes.%s.from}}{{.Values.transactionInvokes.%s.from}}{{else if .Values.transactionInvokes.default.from}}{{.Values.transactionInvokes.default.from}}{{else}}%s.operator{{end}}\"", transactionName, transactionName, firstNameSegment)
+			helmTemplate := fmt.Sprintf("\"{{if .Values.transactionInvokes.%s.from}}{{.Values.transactionInvokes.%s.from}}{{else if .Values.transactionInvokes.default.from}}{{.Values.transactionInvokes.default.from}}{{else}}%s.operator{{end}}\"", camelCaseTransactionName, camelCaseTransactionName, firstNameSegment)
 			newContent = strings.ReplaceAll(newContent, from, helmTemplate)
 		} else if strings.Contains(file, "paladindomain") {
 
