@@ -17,7 +17,7 @@ operator:
   namespace: "" # DEPRECATED: Use the namespace field in the HelmRelease instead. e.g. helm install ... --namespace <namespace>
   image:
     repository: ghcr.io/lf-decentralized-trust-labs/paladin-operator
-    tag: main
+    tag: latest
     pullPolicy: Always
 
   serviceAccount:
@@ -118,6 +118,7 @@ smartContractsReferences:
 # Controls the signing keys for smart contract deployments.
 # If a 'from' key is set for a specific contract, that value is used.
 # If not set, it falls back to the value in 'default'.
+# If default not set, it falls back to the value set by the operator
 smartContractDeployments:
   default:
     from: ""
@@ -178,6 +179,7 @@ smartContractDeployments:
 # Controls the signing keys for transaction invocations.
 # If a 'from' key is set for a specific transaction, that value is used.
 # If not set, it falls back to the value in 'default'.
+# If default not set, it falls back to the value set by the operator
 transactionInvokes:
   default:
     from: ""
