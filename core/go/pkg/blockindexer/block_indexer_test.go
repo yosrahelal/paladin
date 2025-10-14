@@ -846,6 +846,27 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 
 	blocks, receipts := testBlockArray(t, 5)
 
+	// Set up event stream
+	// Add event stream directly to block indexer (don't use bi.Start as it starts block listener)
+	eventStream, err := bi.AddEventStream(context.Background(), bi.persistence.NOTX(), &InternalEventStream{
+		HandlerDBTX: func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) error {
+			return nil
+		},
+		Definition: &EventStream{
+			Name: "unit_test",
+			Sources: []EventStreamSource{{
+				ABI: abi.ABI{
+					testABI[1], // Listen to one event type
+				},
+			}},
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify event stream is added but not started yet
+	es := bi.eventStreams[eventStream.ID]
+	require.NotNil(t, es)
+
 	sentFail := false
 	mockBlocksRPCCallsDynamic(mRPC, func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC) {
 		if !sentFail &&
@@ -870,6 +891,13 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 	}
 
 	assert.True(t, sentFail)
+
+	// Check that the event stream goroutines are now running
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		es := bi.eventStreams[eventStream.ID]
+		assert.NotNil(c, es.detectorDone, "Event stream detector should be started after reset")
+		assert.NotNil(c, es.dispatcherDone, "Event stream dispatcher should be started after reset")
+	}, testTimeout(t), 100*time.Millisecond, "Event streams should be started after reset")
 }
 
 func TestBlockIndexerDispatcherFallsBehindHead(t *testing.T) {
