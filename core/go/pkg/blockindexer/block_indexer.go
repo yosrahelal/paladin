@@ -487,7 +487,10 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 			for i, receiptError := range batch.receiptResults {
 				if receiptError != nil {
 					log.L(ctx).Errorf("Block indexer requires reset after failing to query receipts for block %s in batch of %d blocks: %s", batch.blocks[i].Hash, len(batch.blocks), receiptError)
-					go bi.startOrReset()
+					go func() {
+						bi.startOrReset()
+						bi.startEventStreams()
+					}()
 					return // We know we need to exit
 				}
 			}
