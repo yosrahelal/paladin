@@ -302,9 +302,8 @@ func template() error {
 			if content, err = yaml.Marshal(scd); err != nil {
 				return fmt.Errorf("error marshalling content: %v", err)
 			}
-			newContent = string(content)
 
-			newContent = pattern.ReplaceAllString(newContent, "{{ `{{${1}}}` }}")
+			newContent = pattern.ReplaceAllString(string(content), "{{ `{{${1}}}` }}")
 
 			// Convert snake_case to camelCase using our map
 			camelCaseContractName := contractName
@@ -329,9 +328,8 @@ func template() error {
 			if content, err = yaml.Marshal(ti); err != nil {
 				return fmt.Errorf("error marshalling content: %v", err)
 			}
-			newContent = string(content)
 
-			newContent = pattern.ReplaceAllString(newContent, "{{ `{{${1}}}` }}")
+			newContent = pattern.ReplaceAllString(string(content), "{{ `{{${1}}}` }}")
 
 			// Convert snake_case to camelCase using our map
 			camelCaseTransactionName := transactionName
