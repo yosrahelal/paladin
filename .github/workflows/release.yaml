@@ -11,24 +11,23 @@ permissions:
   id-token: write
   
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
+      rc_tag:
+        required: true
+        type: string
+        description: 'RC tag to create the final release from (e.g. v1.2.3-rc.1)'
+
+      tag:
+        required: true
+        type: string
+        description: 'Release tag (e.g. v1.2.3)'
+
       latest:
         required: false
         type: boolean
         default: true
         description: 'Whether to mark this as the latest release'
-      tag:
-        required: true
-        type: string
-        description: 'Release tag (chart and images)'
-      rc_tag:
-        required: true
-        type: string
-        description: 'RC tag to create the final release from (e.g., v1.2.3-rc1)'
 
 jobs:
   # ================================ SETUP ================================
@@ -50,26 +49,16 @@ jobs:
           INPUT_LATEST: ${{ github.event.inputs.latest }}
           INPUT_RC_TAG: ${{ github.event.inputs.rc_tag }}
         run: |
-          if [[ "$EVENT_NAME" == "push" && "$REF" == refs/tags/v* ]]; then
-            echo "Tag push event"
-            TAG="${REF##*/}"
-            RC_TAG="$TAG"  # For tag push events, the RC tag is the same as the ref
+          
+          echo "Workflow dispatch or other event"
+          TAG="$INPUT_TAG"
+          RC_TAG="$INPUT_RC_TAG"
+          # Ensure INPUT_LATEST is 'true' or 'false' string
+          if [[ "$INPUT_LATEST" == "true" ]]; then
             LATEST="true"
-          else
-            echo "Workflow dispatch or other event"
-            TAG="$INPUT_TAG"
-            RC_TAG="$INPUT_RC_TAG"
-            # Ensure INPUT_LATEST is 'true' or 'false' string
-            if [[ "$INPUT_LATEST" == "true" ]]; then
-              LATEST="true"
-            else
-              LATEST="false"
-            fi
-          fi
-
-          if [[ "$LATEST" ==  "true" ]]; then
             SDK_TAG="latest"
           else
+            LATEST="false"
             SDK_TAG="stable"
           fi
 
@@ -99,7 +88,7 @@ jobs:
           RC_TAG_VERSION: ${{ steps.rc-tag.outputs.version }}
         run: |
           if [[ -z "$RC_TAG_PRERELEASE" ]]; then
-            echo "This workflow can only be triggered from an RC tag (e.g., v1.2.3-rc1)."
+            echo "This workflow can only be triggered from an RC tag (e.g. v1.2.3-rc.1)."
             echo "Current RC tag: $RC_TAG_VERSION"
             exit 1
           fi
