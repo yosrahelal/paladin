@@ -8,6 +8,10 @@ permissions:
 on:
   workflow_call:
     inputs:
+      ref:
+        required: true
+        type: string
+        description: 'Commit ref for checkout (e.g., v1.2.3-rc.1)'
       source_tag:
         required: true
         type: string
@@ -48,6 +52,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Set Repository Name
         id: repo
@@ -98,6 +104,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Set Repository Name
         id: repo

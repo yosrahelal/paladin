@@ -19,7 +19,7 @@ on:
       tag:
         required: true
         type: string
-        description: 'Release candidate tag (e.g., v1.2.3-rc.1)'
+        description: 'RC tag (e.g. v1.2.3-rc.1)'
 
 jobs:
   # ================================ SETUP ================================
