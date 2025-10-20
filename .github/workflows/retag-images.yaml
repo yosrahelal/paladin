@@ -71,19 +71,17 @@ jobs:
           
           echo "Retagging multi-arch manifest ${REPO}/${IMAGE}:${SOURCE_TAG} -> ${REPO}/${IMAGE}:${TARGET_TAG}"
           
-          # Create new manifest from existing source manifest
-          docker manifest create docker.io/${REPO}/${IMAGE}:${TARGET_TAG} \
-            --amend docker.io/${REPO}/${IMAGE}:${SOURCE_TAG}
+          # Use buildx imagetools to copy the multi-arch manifest
+          docker buildx imagetools create \
+            --tag docker.io/${REPO}/${IMAGE}:${TARGET_TAG} \
+            docker.io/${REPO}/${IMAGE}:${SOURCE_TAG}
           
-          # Push the new manifest
-          docker manifest push docker.io/${REPO}/${IMAGE}:${TARGET_TAG}
-          
-          # Create latest manifest if requested
+          # Create latest tag if requested
           if [[ "${{ inputs.latest }}" == "true" ]]; then
-            echo "Also creating latest manifest"
-            docker manifest create docker.io/${REPO}/${IMAGE}:latest \
-              --amend docker.io/${REPO}/${IMAGE}:${SOURCE_TAG}
-            docker manifest push docker.io/${REPO}/${IMAGE}:latest
+            echo "Also creating latest tag"
+            docker buildx imagetools create \
+              --tag docker.io/${REPO}/${IMAGE}:latest \
+              docker.io/${REPO}/${IMAGE}:${SOURCE_TAG}
           fi
 
   retag-ghcr:
@@ -123,17 +121,15 @@ jobs:
           
           echo "Retagging multi-arch manifest ${REPO}/${IMAGE}:${SOURCE_TAG} -> ${REPO}/${IMAGE}:${TARGET_TAG}"
           
-          # Create new manifest from existing source manifest
-          docker manifest create ghcr.io/${REPO}/${IMAGE}:${TARGET_TAG} \
-            --amend ghcr.io/${REPO}/${IMAGE}:${SOURCE_TAG}
+          # Use buildx imagetools to copy the multi-arch manifest
+          docker buildx imagetools create \
+            --tag ghcr.io/${REPO}/${IMAGE}:${TARGET_TAG} \
+            ghcr.io/${REPO}/${IMAGE}:${SOURCE_TAG}
           
-          # Push the new manifest
-          docker manifest push ghcr.io/${REPO}/${IMAGE}:${TARGET_TAG}
-          
-          # Create latest manifest if requested
+          # Create latest tag if requested
           if [[ "${{ inputs.latest }}" == "true" ]]; then
-            echo "Also creating latest manifest"
-            docker manifest create ghcr.io/${REPO}/${IMAGE}:latest \
-              --amend ghcr.io/${REPO}/${IMAGE}:${SOURCE_TAG}
-            docker manifest push ghcr.io/${REPO}/${IMAGE}:latest
+            echo "Also creating latest tag"
+            docker buildx imagetools create \
+              --tag ghcr.io/${REPO}/${IMAGE}:latest \
+              ghcr.io/${REPO}/${IMAGE}:${SOURCE_TAG}
           fi

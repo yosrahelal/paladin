@@ -53,6 +53,20 @@ jobs:
           echo "Workflow dispatch or other event"
           TAG="$INPUT_TAG"
           RC_TAG="$INPUT_RC_TAG"
+          
+          # Validate tags begin with 'v'
+          if [[ ! "$TAG" =~ ^v ]]; then
+            echo "Error: Release tag must begin with 'v' (e.g., v1.2.3)"
+            echo "Got: $TAG"
+            exit 1
+          fi
+          
+          if [[ ! "$RC_TAG" =~ ^v ]]; then
+            echo "Error: RC tag must begin with 'v' (e.g., v1.2.3-rc.1)"
+            echo "Got: $RC_TAG"
+            exit 1
+          fi
+          
           # Ensure INPUT_LATEST is 'true' or 'false' string
           if [[ "$INPUT_LATEST" == "true" ]]; then
             LATEST="true"
