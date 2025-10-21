@@ -53,6 +53,20 @@ jobs:
           echo "Workflow dispatch or other event"
           TAG="$INPUT_TAG"
           RC_TAG="$INPUT_RC_TAG"
+          
+          # Validate tags begin with 'v'
+          if [[ ! "$TAG" =~ ^v ]]; then
+            echo "Error: Release tag must begin with 'v' (e.g., v1.2.3)"
+            echo "Got: $TAG"
+            exit 1
+          fi
+          
+          if [[ ! "$RC_TAG" =~ ^v ]]; then
+            echo "Error: RC tag must begin with 'v' (e.g., v1.2.3-rc.1)"
+            echo "Got: $RC_TAG"
+            exit 1
+          fi
+          
           # Ensure INPUT_LATEST is 'true' or 'false' string
           if [[ "$INPUT_LATEST" == "true" ]]; then
             LATEST="true"
@@ -140,12 +154,14 @@ jobs:
   # Build and prepare all final release artifacts (images, charts, contracts, SDK)
   # These are the same artifacts that were tested in the RC phase
 
-  # Build and publish final release images
+  # Retag RC images with final release tags (much faster than rebuilding)
   release-images:
     needs: setup
-    uses: ./.github/workflows/release-images.yaml
+    uses: ./.github/workflows/retag-images.yaml
     with:
-      tag: ${{ needs.setup.outputs.tag }}
+      ref: ${{ needs.setup.outputs.rc_tag }}
+      source_tag: ${{ needs.setup.outputs.rc_tag }}
+      target_tag: ${{ needs.setup.outputs.tag }}
       latest: '${{ fromJSON(needs.setup.outputs.latest) }}'
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -156,9 +172,11 @@ jobs:
     needs: [setup, release-images]
     uses: ./.github/workflows/release-charts.yaml
     with:
+      ref: ${{ needs.setup.outputs.rc_tag }}
       chart_tag: ${{ needs.setup.outputs.tag }}
       images_tag: ${{ needs.setup.outputs.tag }}
       registry: docker.io
+      
     secrets:
       CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -166,6 +184,7 @@ jobs:
     needs: [setup, release-charts]
     uses: ./.github/workflows/test-examples.yaml
     with:
+      ref: ${{ needs.setup.outputs.rc_tag }}
       build_local_abi: true
       build_local_sdk: true
       chart_tag: ${{ needs.setup.outputs.tag }}
@@ -175,6 +194,7 @@ jobs:
     needs: [setup, test-examples]
     uses: ./.github/workflows/release-solidity-contracts.yaml
     with:
+      ref: ${{ needs.setup.outputs.rc_tag }}
       tag: ${{ needs.setup.outputs.tag }}
 
   # Release final TypeScript SDK
@@ -182,6 +202,7 @@ jobs:
     needs: [setup, test-examples]
     uses: ./.github/workflows/release-typescript-sdk.yaml
     with:
+      ref: ${{ needs.setup.outputs.rc_tag }}
       sdk_version: ${{ needs.setup.outputs.tag }}
       sdk_tag: ${{ needs.setup.outputs.sdk_tag }}
     secrets:
@@ -200,6 +221,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: recursive
+        ref: ${{ needs.setup.outputs.rc_tag }}
 
     - name: override examples sdk version
       uses: ./.github/actions/override-sdk-version
@@ -227,6 +249,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ needs.setup.outputs.rc_tag }}
 
       - name: Download Helm artifacts
         uses: actions/download-artifact@v4
