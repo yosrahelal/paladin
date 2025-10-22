@@ -96,8 +96,40 @@ The guiding principals are:
     - State is managed via the UTXO state storage of Paladin
         - No use is made of the Bonsai/Forrest state store of Besu
 - Private Smart Contract transactions are atomically interoperable via the Paladin framework
-    - This is the single most important enhancement. Because Pente is just another privacy preserving smart contract in Paladin, it can atomically interoperate with Token smart contracts. 
+    - This is the single most important enhancement. Because Pente is just another privacy preserving smart contract in Paladin, it can atomically interoperate with Token smart contracts.
     - See the [Atomic Interop](./atomic_interop.md) section for how this enables sophisticated DvP scenarios to be programmed via Private EVM
+
+### Ephemeral EVM execution flow
+
+The privacy group contract never embeds a persistent Besu node. Instead, every transaction spins up an isolated Besu EVM instance inside the Paladin runtime, feeds it just the authorised account snapshots, and discards it once the execution result has been notarised. The diagram below shows how the components cooperate during this lifecycle:
+
+```mermaid
+flowchart LR
+    subgraph RuntimeNode[Paladin runtime node]
+        API["Runtime API\n(privacy group tx builder)"]
+        Runner["EVMRunner\n(ephemeral Besu EVM)"]
+        Loader["DynamicLoadWorldState\n+ AccountLoader"]
+        Store["UTXO state store"]
+        Endorser["Endorsement engine\n(EIP-712 signatures)"]
+    end
+    subgraph BaseLedger[Shared base ledger]
+        Contract["Privacy group contract\n(on-chain commitments)"]
+    end
+
+    API -->|Construct PenteEVMTransaction| Runner
+    Runner -->|Pull permitted accounts| Loader
+    Loader -->|Fetch / hydrate states| Store
+    Runner -->|Deterministic execution| Endorser
+    Endorser -->|Commitments + signatures| Contract
+    Contract -->|Verify + apply| Endorser
+    Endorser -->|Update private UTXOs| Store
+```
+
+1. **Runtime API** receives a private transaction request and resolves the privacy group metadata.
+2. **EVMRunner** loads the Besu bytecode in-memory, executes the call or deployment, and collects any account mutations.
+3. **DynamicLoadWorldState** hydrates only the accounts explicitly provided by the transaction, guaranteeing isolation from other private data.
+4. **Endorsement engine** validates the execution result, seals it into commitments, and coordinates the threshold signatures required by the privacy group policy.
+5. **Privacy group contract** on the base ledger verifies the commitments and double-spend proofs before finalising the transition, after which the endorsed state is persisted back into the UTXO store.
 
 ## Implementation
 

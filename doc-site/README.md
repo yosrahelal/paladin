@@ -57,6 +57,21 @@ The commands you will usually use with `mkdocs` are:
 - `mkdocs build` - Build the documentation site.
 - `mkdocs -h` - Print help message and exit.
 
+## Previewing architecture updates
+
+To see how a documentation change renders, serve the site locally and open the
+corresponding page in your browser:
+
+```bash
+cd doc-site
+mkdocs serve
+```
+
+MkDocs prints the local URL (by default http://127.0.0.1:8000). Navigate to the
+updated page, for example the Pente architecture guide lives at
+`/architecture/pente/` and its “Ephemeral EVM execution flow” section is exposed
+at the `#ephemeral-evm-execution-flow` anchor.
+
 ## Adding Content
 
 The basic process for adding content to the site is:
