@@ -140,9 +140,7 @@ func action_FinalizeNonRetryableRevert(ctx context.Context, t *coordinatorTransa
 
 func action_NotifyDependentsOfRevertedConfirmation(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
 	log.L(ctx).Debugf("notifying dependents of reverted confirmation for transaction %s", txn.pt.ID.String())
-	if err := action_ResetConfirmedTransactionLocksOnce(ctx, txn, nil); err != nil {
-		return err
-	}
+	txn.releaseTransactionLocks(ctx)
 	return txn.notifyDependentsOfRevertedConfirmation(ctx)
 }
 

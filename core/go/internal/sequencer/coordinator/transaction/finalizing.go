@@ -35,10 +35,14 @@ func action_ResetConfirmedTransactionLocksOnce(ctx context.Context, txn *coordin
 	if txn.confirmedLocksReleased {
 		return nil
 	}
-	log.L(ctx).Debugf("releasing confirmed transaction locks for %s", txn.pt.ID.String())
-	txn.grapher.Forget(ctx, txn.pt.ID)
-	txn.confirmedLocksReleased = true
+	txn.releaseTransactionLocks(ctx)
 	return nil
+}
+
+func (t *coordinatorTransaction) releaseTransactionLocks(ctx context.Context) {
+	log.L(ctx).Debugf("releasing confirmed transaction locks for %s", t.pt.ID.String())
+	t.grapher.Forget(ctx, t.pt.ID)
+	t.confirmedLocksReleased = true
 }
 
 // action_FinalizeAsUnknownByOriginator is called when the originator reports that it doesn't recognize

@@ -2224,6 +2224,148 @@ func TestStateMachineEventLoop_SyncEventFromPrioritySelect(t *testing.T) {
 	waitForLoopDone(t, sel)
 }
 
+// TestDrainPendingEvents_Empty verifies that DrainPendingEvents returns nil immediately when both queues are empty.
+func TestDrainPendingEvents_Empty(t *testing.T) {
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {},
+	}
+	entity := newTestEntity(definitions, "drain-empty-test")
+	sel := NewStateMachineEventLoop(StateMachineEventLoopConfig[TestState, *TestEntity]{
+		InitialState:           State_Idle,
+		Definitions:            definitions,
+		Entity:                 entity,
+		Name:                   "drain-empty-test",
+		EventQueueSize:         10,
+		PriorityEventQueueSize: 10,
+	})
+
+	ctx := context.Background()
+	err := sel.DrainPendingEvents(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, State_Idle, sel.GetCurrentState())
+}
+
+// TestDrainPendingEvents_PriorityAndRegular verifies that DrainPendingEvents drains all priority events
+// before regular events, then returns nil when both queues are empty.
+func TestDrainPendingEvents_PriorityAndRegular(t *testing.T) {
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+				Event_Start: {
+					Transitions: []Transition[TestState, *TestEntity]{{
+						To: State_Active,
+					}},
+				},
+			},
+		},
+		State_Active: {
+			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+				Event_Process: {
+					Transitions: []Transition[TestState, *TestEntity]{{
+						To: State_Processing,
+					}},
+				},
+			},
+		},
+	}
+	entity := newTestEntity(definitions, "drain-mixed-test")
+	sel := NewStateMachineEventLoop(StateMachineEventLoopConfig[TestState, *TestEntity]{
+		InitialState:           State_Idle,
+		Definitions:            definitions,
+		Entity:                 entity,
+		Name:                   "drain-mixed-test",
+		EventQueueSize:         10,
+		PriorityEventQueueSize: 10,
+	})
+
+	ctx := context.Background()
+	// Pre-populate both queues without starting the event loop goroutine.
+	ok := sel.TryQueuePriorityEvent(ctx, newTestEvent(Event_Start))
+	require.True(t, ok)
+	ok = sel.TryQueueEvent(ctx, newTestEvent(Event_Process))
+	require.True(t, ok)
+
+	err := sel.DrainPendingEvents(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, State_Processing, sel.GetCurrentState())
+}
+
+// TestDrainPendingEvents_PriorityError verifies that DrainPendingEvents returns an error when
+// processing a priority event fails.
+func TestDrainPendingEvents_PriorityError(t *testing.T) {
+	priorityErr := errors.New("priority drain error")
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+				Event_Start: {
+					Actions: []ActionRule[*TestEntity]{{
+						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
+							return priorityErr
+						},
+					}},
+					Transitions: []Transition[TestState, *TestEntity]{{
+						To: State_Active,
+					}},
+				},
+			},
+		},
+	}
+	entity := newTestEntity(definitions, "drain-priority-err-test")
+	sel := NewStateMachineEventLoop(StateMachineEventLoopConfig[TestState, *TestEntity]{
+		InitialState:           State_Idle,
+		Definitions:            definitions,
+		Entity:                 entity,
+		Name:                   "drain-priority-err-test",
+		EventQueueSize:         10,
+		PriorityEventQueueSize: 10,
+	})
+
+	ctx := context.Background()
+	ok := sel.TryQueuePriorityEvent(ctx, newTestEvent(Event_Start))
+	require.True(t, ok)
+
+	err := sel.DrainPendingEvents(ctx)
+	require.ErrorIs(t, err, priorityErr)
+}
+
+// TestDrainPendingEvents_RegularError verifies that DrainPendingEvents returns an error when
+// processing a regular event fails.
+func TestDrainPendingEvents_RegularError(t *testing.T) {
+	regularErr := errors.New("regular drain error")
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+				Event_Start: {
+					Actions: []ActionRule[*TestEntity]{{
+						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
+							return regularErr
+						},
+					}},
+					Transitions: []Transition[TestState, *TestEntity]{{
+						To: State_Active,
+					}},
+				},
+			},
+		},
+	}
+	entity := newTestEntity(definitions, "drain-regular-err-test")
+	sel := NewStateMachineEventLoop(StateMachineEventLoopConfig[TestState, *TestEntity]{
+		InitialState:           State_Idle,
+		Definitions:            definitions,
+		Entity:                 entity,
+		Name:                   "drain-regular-err-test",
+		EventQueueSize:         10,
+		PriorityEventQueueSize: 10,
+	})
+
+	ctx := context.Background()
+	ok := sel.TryQueueEvent(ctx, newTestEvent(Event_Start))
+	require.True(t, ok)
+
+	err := sel.DrainPendingEvents(ctx)
+	require.ErrorIs(t, err, regularErr)
+}
+
 // TestStateMachineEventLoop_ProcessEventError_PriorityFromSelect verifies that when a priority event
 // is received from the blocking select (not the drain) and processEvent returns an error, the error is logged.
 func TestStateMachineEventLoop_ProcessEventError_PriorityFromSelect(t *testing.T) {
