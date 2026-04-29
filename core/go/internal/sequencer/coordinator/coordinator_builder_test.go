@@ -21,7 +21,6 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
-	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
@@ -35,40 +34,6 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-type SentMessageRecorder struct {
-	transaction.SentMessageRecorder
-	hasSentHandoverRequest bool
-	sentHeartbeatCount     int
-}
-
-func NewSentMessageRecorder() *SentMessageRecorder {
-	return &SentMessageRecorder{
-		SentMessageRecorder: *transaction.NewSentMessageRecorder(),
-	}
-}
-
-func (r *SentMessageRecorder) Reset(ctx context.Context) {
-	r.hasSentHandoverRequest = false
-	r.sentHeartbeatCount = 0
-	r.SentMessageRecorder.Reset(ctx)
-}
-
-func (r *SentMessageRecorder) SendHeartbeat(ctx context.Context, targetNode string, contractAddress *pldtypes.EthAddress, coordinatorSnapshot *common.CoordinatorSnapshot) error {
-	r.sentHeartbeatCount++
-	return nil
-}
-
-func (r *SentMessageRecorder) SendDelegationRequest(ctx context.Context, coordinatorLocator string, transactions []*components.PrivateTransaction, blockHeight uint64) error {
-	return nil
-}
-
-func (r *SentMessageRecorder) SentHeartbeatCount() int {
-	return r.sentHeartbeatCount
-}
-
-func (r *SentMessageRecorder) HasSentHeartbeat() bool {
-	return r.sentHeartbeatCount > 0
-}
 
 type CoordinatorBuilderForTesting struct {
 	t                                        *testing.T
@@ -92,7 +57,7 @@ type CoordinatorBuilderForTesting struct {
 }
 
 type CoordinatorDependencyMocks struct {
-	SentMessageRecorder *SentMessageRecorder
+	SentMessageRecorder *transport.SentMessageRecorder
 	EngineIntegration   *common.FakeEngineIntegrationForTesting
 	SyncPoints          syncpoints.SyncPoints
 	TransportWriter     *transport.MockTransportWriter
@@ -289,7 +254,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		b.contractAddress = pldtypes.RandAddress()
 	}
 	mocks := &CoordinatorDependencyMocks{
-		SentMessageRecorder: NewSentMessageRecorder(),
+		SentMessageRecorder: transport.NewSentMessageRecorder(),
 		EngineIntegration:   &common.FakeEngineIntegrationForTesting{},
 		SyncPoints:          &syncpoints.MockSyncPoints{},
 	}

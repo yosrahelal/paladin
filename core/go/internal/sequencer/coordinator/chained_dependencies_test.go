@@ -133,7 +133,7 @@ func (s *ChainedDependenciesSuite) delegate(txIDs ...uuid.UUID) {
 
 func (s *ChainedDependenciesSuite) progressToReadyForDispatch(txIDs ...uuid.UUID) {
 	s.T().Helper()
-	rec := &s.mocks.SentMessageRecorder.SentMessageRecorder
+	rec := s.mocks.SentMessageRecorder
 	for _, id := range txIDs {
 		b := s.txBuilders[id]
 
@@ -303,7 +303,7 @@ func (s *ChainedDependenciesSuite) TestEvictionCascade() {
 
 	s.handleEvent(&transaction.AssembleErrorResponseEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{TransactionID: a},
-		RequestID:            s.mocks.SentMessageRecorder.SentMessageRecorder.SentAssembleRequestIdempotencyKey(),
+		RequestID:            s.mocks.SentMessageRecorder.SentAssembleRequestIdempotencyKey(),
 	})
 
 	s.assertEvicted(a, b)
@@ -339,7 +339,7 @@ func (s *ChainedDependenciesSuite) TestLateArrivalAfterEvictedDepCleanedUp() {
 
 	s.handleEvent(&transaction.AssembleErrorResponseEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{TransactionID: a},
-		RequestID:            s.mocks.SentMessageRecorder.SentMessageRecorder.SentAssembleRequestIdempotencyKey(),
+		RequestID:            s.mocks.SentMessageRecorder.SentAssembleRequestIdempotencyKey(),
 	})
 	s.assertEvicted(a)
 

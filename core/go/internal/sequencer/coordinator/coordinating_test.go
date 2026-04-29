@@ -27,7 +27,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
-	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -197,7 +196,7 @@ func Test_getCoordinatorTransactionState_TxnFound_ReturnsState(t *testing.T) {
 func Test_addTransactionToBackOfPool_WhenNotInPool_Appends(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.Build()
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 
 	c.addTransactionToBackOfPool(txn)
 
@@ -206,9 +205,10 @@ func Test_addTransactionToBackOfPool_WhenNotInPool_Appends(t *testing.T) {
 }
 
 func Test_addTransactionToBackOfPool_WhenAlreadyInPool_DoesNotDuplicate(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.Build()
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	txID := uuid.New()
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txn.EXPECT().GetID().Return(txID)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
 	c.addTransactionToBackOfPool(txn)
 	c.addTransactionToBackOfPool(txn)
@@ -218,14 +218,13 @@ func Test_addTransactionToBackOfPool_WhenAlreadyInPool_DoesNotDuplicate(t *testi
 }
 
 func Test_action_PoolTransaction(t *testing.T) {
-	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.Build()
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	c.transactionsByID[txn.GetID()] = txn
+	txID := uuid.New()
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txn.EXPECT().GetID().Return(txID)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
-	err := action_PoolTransaction(ctx, c, &common.TransactionStateTransitionEvent[transaction.State]{
-		TransactionID: txn.GetID(),
+	err := action_PoolTransaction(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
 		To:            transaction.State_Pooled,
 	})
 	require.NoError(t, err)
@@ -234,46 +233,40 @@ func Test_action_PoolTransaction(t *testing.T) {
 }
 
 func Test_action_QueueTransactionForDispatch(t *testing.T) {
-	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.Build()
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirming_Dispatchable).Build()
-	c.transactionsByID[txn.GetID()] = txn
-
-	err := action_QueueTransactionForDispatch(ctx, c, &common.TransactionStateTransitionEvent[transaction.State]{
-		TransactionID: txn.GetID(),
+	txID := uuid.New()
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txn.EXPECT().GetID().Return(txID)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
+	err := action_QueueTransactionForDispatch(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
 		To:            transaction.State_Ready_For_Dispatch,
 	})
 	require.NoError(t, err)
 }
 
 func Test_action_CleanUpTransaction_RemovesFromMap(t *testing.T) {
-	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.Build()
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirmed).Build()
-	c.transactionsByID[txn.GetID()] = txn
-
-	err := action_CleanUpTransaction(ctx, c, &common.TransactionStateTransitionEvent[transaction.State]{
-		TransactionID: txn.GetID(),
+	txID := uuid.New()
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txn.EXPECT().GetID().Return(txID)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
+	err := action_CleanUpTransaction(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
 		To:            transaction.State_Final,
 	})
 	require.NoError(t, err)
-	_, ok := c.transactionsByID[txn.GetID()]
+	_, ok := c.transactionsByID[txID]
 	assert.False(t, ok, "transaction should be removed from map")
 }
 
 func Test_action_CleanUpTransaction_RemovesFromPool(t *testing.T) {
-	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.Build()
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	c.transactionsByID[txn.GetID()] = txn
+	txID := uuid.New()
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txn.EXPECT().GetID().Return(txID)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 	c.addTransactionToBackOfPool(txn)
 	require.Len(t, c.pooledTransactions, 1)
-
-	err := action_CleanUpTransaction(ctx, c, &common.TransactionStateTransitionEvent[transaction.State]{
-		TransactionID: txn.GetID(),
+	err := action_CleanUpTransaction(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
 		To:            transaction.State_Evicted,
 	})
 	require.NoError(t, err)
@@ -281,24 +274,30 @@ func Test_action_CleanUpTransaction_RemovesFromPool(t *testing.T) {
 }
 
 func Test_removeTransactionFromPool_RemovesMatchingTransaction(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.Build()
-	txn1, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	txn2, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+
+	txn1 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txID1 := uuid.New()
+	txn1.EXPECT().GetID().Return(txID1)
+	txn2 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txID2 := uuid.New()
+	txn2.EXPECT().GetID().Return(txID2)
+
 	c.addTransactionToBackOfPool(txn1)
 	c.addTransactionToBackOfPool(txn2)
 	require.Len(t, c.pooledTransactions, 2)
 
-	c.removeTransactionFromPool(txn1.GetID())
+	c.removeTransactionFromPool(txID1)
 
 	require.Len(t, c.pooledTransactions, 1)
-	assert.Equal(t, txn2.GetID(), c.pooledTransactions[0].GetID())
+	assert.Equal(t, txID2, c.pooledTransactions[0].GetID())
 }
 
 func Test_removeTransactionFromPool_NoOpIfNotInPool(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.Build()
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txID := uuid.New()
+	txn.EXPECT().GetID().Return(txID)
 	c.addTransactionToBackOfPool(txn)
 	require.Len(t, c.pooledTransactions, 1)
 
@@ -308,18 +307,17 @@ func Test_removeTransactionFromPool_NoOpIfNotInPool(t *testing.T) {
 }
 
 func Test_action_CleanUpTransaction_GrapherForgetError_LogsButReturnsNil(t *testing.T) {
-	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.Build()
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirmed).Build()
-	c.transactionsByID[txn.GetID()] = txn
+	txID := uuid.New()
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txn.EXPECT().GetID().Return(txID)
 
-	err := action_CleanUpTransaction(ctx, c, &common.TransactionStateTransitionEvent[transaction.State]{
-		TransactionID: txn.GetID(),
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
+	err := action_CleanUpTransaction(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
 		To:            transaction.State_Final,
 	})
 	require.NoError(t, err)
-	_, ok := c.transactionsByID[txn.GetID()]
+	_, ok := c.transactionsByID[txID]
 	assert.False(t, ok, "transaction should still be removed from map despite grapher error")
 }
 
@@ -601,18 +599,17 @@ func Test_action_cancelCurrentlyAssemblingTransaction_NoAssemblingTransaction_Re
 }
 
 func Test_action_cancelCurrentlyAssemblingTransaction_WithAssemblingTransaction_CancelsIt(t *testing.T) {
-	ctx := t.Context()
-	mockGrapher := graphermocks.NewGrapher(t)
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.Build()
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).Grapher(mockGrapher).Build()
-	mockGrapher.EXPECT().Forget(mock.Anything, txn.GetID())
-	c.transactionsByID[txn.GetID()] = txn
+	txID := uuid.New()
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txn.EXPECT().GetID().Return(txID)
+	txn.EXPECT().GetCurrentState().Return(transaction.State_Assembling)
+	// Transaction should receive AssembleCancelledEvent
+	txn.EXPECT().HandleEvent(mock.Anything, mock.AnythingOfType("*transaction.AssembleCancelledEvent")).Return(nil)
 
-	err := action_cancelCurrentlyAssemblingTransaction(ctx, c, nil)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
+
+	err := action_cancelCurrentlyAssemblingTransaction(t.Context(), c, nil)
 	require.NoError(t, err)
-	// Transaction should transition from Assembling to Pooled when AssembleCancelledEvent is handled
-	assert.Equal(t, transaction.State_Pooled, txn.GetCurrentState())
 }
 
 func Test_action_PoolTransaction_WhenTxnNotInMap_NoOp(t *testing.T) {
@@ -628,17 +625,16 @@ func Test_action_PoolTransaction_WhenTxnNotInMap_NoOp(t *testing.T) {
 }
 
 func Test_action_QueueTransactionForDispatch_WhenContextDone_DoesNotBlock(t *testing.T) {
-	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.Build()
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirming_Dispatchable).Build()
-	c.transactionsByID[txn.GetID()] = txn
+	txID := uuid.New()
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txn.EXPECT().GetID().Return(txID)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
-	ctxCancelled, cancel := context.WithCancel(ctx)
+	ctxCancelled, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	err := action_QueueTransactionForDispatch(ctxCancelled, c, &common.TransactionStateTransitionEvent[transaction.State]{
-		TransactionID: txn.GetID(),
+		TransactionID: txID,
 		To:            transaction.State_Ready_For_Dispatch,
 	})
 	require.NoError(t, err)

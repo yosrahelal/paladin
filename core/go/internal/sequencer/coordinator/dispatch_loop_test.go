@@ -23,6 +23,8 @@ import (
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
+	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,27 +33,29 @@ import (
 // stopDispatchLoop and Signals. We pre-populate inFlightTxns so that when the loop
 // pulls the queued tx it sees len(inFlightTxns)+dispatchedAhead >= maxDispatchAhead and enters Wait().
 func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txnID := uuid.New()
+	txn.EXPECT().GetID().Return(txnID)
+
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn)
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(1)
 	builder.OverrideSequencerConfig(config)
 
-	ctx, cancel := context.WithCancel(t.Context())
 	c, _ := builder.Build()
+
+	ctx, cancel := context.WithCancel(t.Context())
 	require.NoError(t, c.Start(ctx))
 	defer cancel()
 
 	// Pre-populate inFlightTxns so the dispatch loop will enter the first Wait() when it pulls the tx
-	dummyTxn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
 	c.inFlightMutex.L.Lock()
-	c.inFlightTxns[dummyTxn.GetID()] = dummyTxn
+	c.inFlightTxns[uuid.New()] = coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	c.inFlightMutex.L.Unlock()
 
 	// Queue one tx: transition to Ready_For_Dispatch so it gets sent to dispatchQueue
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirming_Dispatchable).Build()
-	c.transactionsByID[txn.GetID()] = txn
 	err := action_QueueTransactionForDispatch(ctx, c, &common.TransactionStateTransitionEvent[transaction.State]{
-		TransactionID: txn.GetID(),
+		TransactionID: txnID,
 		To:            transaction.State_Ready_For_Dispatch,
 	})
 	require.NoError(t, err)

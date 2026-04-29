@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -35,10 +37,28 @@ func TestGetSnapshot_OK(t *testing.T) {
 
 func TestGetSnapshot_AggregatesTransactionsBySnapshotType(t *testing.T) {
 	ctx := context.Background()
-	pooledTxn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	dispatchedTxn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
-	confirmedTxn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirmed).Build()
-	excludedTxn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Reverted).Build()
+	pooledTxnID, dispatchedTxnID, confirmedTxnID, excludedTxnID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	pooledSnapshot := &common.SnapshotPooledTransaction{
+		ID: pooledTxnID,
+	}
+	dispatchedSnapshot := &common.SnapshotDispatchedTransaction{}
+	dispatchedSnapshot.ID = dispatchedTxnID
+	confirmedSnapshot := &common.SnapshotConfirmedTransaction{}
+	confirmedSnapshot.ID = confirmedTxnID
+
+	pooledTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	pooledTxn.EXPECT().GetID().Return(pooledTxnID)
+	pooledTxn.EXPECT().GetSnapshot(mock.Anything).Return(pooledSnapshot, nil, nil)
+	dispatchedTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	dispatchedTxn.EXPECT().GetID().Return(dispatchedTxnID)
+	dispatchedTxn.EXPECT().GetSnapshot(mock.Anything).Return(nil, dispatchedSnapshot, nil)
+	confirmedTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	confirmedTxn.EXPECT().GetID().Return(confirmedTxnID)
+	confirmedTxn.EXPECT().GetSnapshot(mock.Anything).Return(nil, nil, confirmedSnapshot)
+	excludedTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	excludedTxn.EXPECT().GetID().Return(excludedTxnID)
+	excludedTxn.EXPECT().GetSnapshot(mock.Anything).Return(nil, nil, nil)
+
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
 		Transactions(pooledTxn, dispatchedTxn, confirmedTxn, excludedTxn).
 		Build()
@@ -48,9 +68,9 @@ func TestGetSnapshot_AggregatesTransactionsBySnapshotType(t *testing.T) {
 	assert.Len(t, snapshot.PooledTransactions, 1)
 	assert.Len(t, snapshot.DispatchedTransactions, 1)
 	assert.Len(t, snapshot.ConfirmedTransactions, 1)
-	assert.Equal(t, pooledTxn.GetID(), snapshot.PooledTransactions[0].ID)
-	assert.Equal(t, dispatchedTxn.GetID(), snapshot.DispatchedTransactions[0].ID)
-	assert.Equal(t, confirmedTxn.GetID(), snapshot.ConfirmedTransactions[0].ID)
+	assert.Equal(t, pooledTxnID, snapshot.PooledTransactions[0].ID)
+	assert.Equal(t, dispatchedTxnID, snapshot.DispatchedTransactions[0].ID)
+	assert.Equal(t, confirmedTxnID, snapshot.ConfirmedTransactions[0].ID)
 }
 
 func TestGetSnapshot_IncludesCoordinatorStateAndBlockHeight(t *testing.T) {
@@ -132,7 +152,9 @@ func Test_action_PropagateHeartbeatToTransactions_NoTransactions(t *testing.T) {
 
 func Test_action_PropagateHeartbeatToTransactions_WithTransactions(t *testing.T) {
 	ctx := context.Background()
-	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txn.EXPECT().GetID().Return(uuid.New())
+	txn.EXPECT().HandleEvent(mock.Anything, mock.AnythingOfType("*common.HeartbeatIntervalEvent")).Return(nil)
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
 	err := action_PropagateHeartbeatIntervalToTransactions(ctx, c, nil)
