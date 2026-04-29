@@ -431,7 +431,12 @@ func (sMgr *sequencerManager) handleDelegationRequestAcknowledgment(ctx context.
 	}
 }
 
-// TODO AM: why isn't this handled in the sequencer?
+// TODO AM: this is being handled outside the sequencer, although a sequencer is loaded at the end purely to send the response.
+// This means there is no access to the sequencer's knowledge of current block height, current active coordinator etc, and logs
+// will be missing key context fields.
+// It does mean that endorsement is not single threaded which is important.
+// This should probably be moved into the sequencer (coordinator or originator?) but preserving the concurrency handling the event
+// with a new goroutine.
 func (sMgr *sequencerManager) handleEndorsementRequest(ctx context.Context, message *components.ReceivedMessage) {
 	endorsementRequest := &engineProto.EndorsementRequest{}
 

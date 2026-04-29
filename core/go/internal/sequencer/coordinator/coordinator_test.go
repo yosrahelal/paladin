@@ -41,6 +41,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func NewCoordinatorForUnitTest(t *testing.T) (*coordinator, *coordinatorDependencyMocks, func()) {
@@ -558,15 +559,45 @@ func TestCoordinator_GetTransactionsNotInStates_EmptyStatesFilter_ReturnsAll(t *
 	require.Len(t, result, 1)
 }
 
-func TestCoordinator_NewCoordinator_EndorserMode_AllowsNoConfiguredCandidates(t *testing.T) {
+func TestCoordinator_NewCoordinator_EndorserMode_NoConfiguredCandidates_Fails(t *testing.T) {
 	ctx := t.Context()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	})
+	assert.Panics(t, func() { builder.Build(ctx) })
+}
+
+func TestCoordinator_NewCoordinator_StaticMode_EmptyStaticCoordinator_Fails(t *testing.T) {
+	ctx := t.Context()
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
+		StaticCoordinator:    proto.String(""),
+	})
+	assert.Panics(t, func() { builder.Build(ctx) })
+}
+
+func TestCoordinator_NewCoordinator_StaticMode_InvalidIdentity_Fails(t *testing.T) {
+	ctx := t.Context()
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
+		StaticCoordinator:    proto.String("identity"), // no @node
+	})
+	assert.Panics(t, func() { builder.Build(ctx) })
+}
+
+func TestCoordinator_NewCoordinator_StaticMode_ValidStaticCoordinator_StoresNodeName(t *testing.T) {
+	ctx := t.Context()
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
+		StaticCoordinator:    proto.String("identity@nodeA"),
+	})
 	c, _, done := builder.Build(ctx)
 	defer done()
-	assert.Empty(t, c.originatorNodePool)
+	assert.Equal(t, "nodeA", c.staticCoordinatorNode)
 }
 
 func TestCoordinator_NewCoordinator_EndorserMode_FailsOnInvalidConfiguredCandidate(t *testing.T) {

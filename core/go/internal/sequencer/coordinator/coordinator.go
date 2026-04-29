@@ -80,6 +80,7 @@ type coordinator struct {
 	dependencyTracker                  dependencytracker.DependencyTracker
 	grapher                            grapher.Grapher
 	originatorNodePool                 []string // The (possibly changing) list of originator nodes
+	staticCoordinatorNode              string   // Validated at construction for COORDINATOR_STATIC mode
 	newBlockRangeEpoch                 bool
 
 	/* Config */
@@ -188,6 +189,9 @@ func NewCoordinator(
 		c.inFlightMutex.L.Unlock()
 	})
 
+	if err := c.initializeStaticCoordinatorFromContractConfig(coordCtx); err != nil {
+		return nil, err
+	}
 	if err := c.initializeOriginatorNodePoolFromContractConfig(coordCtx); err != nil {
 		return nil, err
 	}
@@ -223,6 +227,23 @@ func (c *coordinator) WaitForDone(ctx context.Context) {
 	c.transportWriter.WaitForDone(ctx)
 }
 
+func (c *coordinator) initializeStaticCoordinatorFromContractConfig(ctx context.Context) error {
+	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_STATIC {
+		return nil
+	}
+	staticCoordinator := c.domainAPI.ContractConfig().GetStaticCoordinator()
+	if staticCoordinator == "" {
+		return i18n.NewError(ctx, msgs.MsgSequencerStaticCoordinatorNotSet, c.contractAddress.String())
+	}
+	node, err := pldtypes.PrivateIdentityLocator(staticCoordinator).Node(ctx, false)
+	if err != nil {
+		return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidStaticCoordinator, c.contractAddress.String(), staticCoordinator)
+	}
+	c.staticCoordinatorNode = node
+	log.L(ctx).Debugf("static coordinator node for contract %s validated and stored: %s", c.contractAddress.String(), node)
+	return nil
+}
+
 func (c *coordinator) initializeOriginatorNodePoolFromContractConfig(ctx context.Context) error {
 	contractConfig := c.domainAPI.ContractConfig()
 	if contractConfig.GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
@@ -230,8 +251,7 @@ func (c *coordinator) initializeOriginatorNodePoolFromContractConfig(ctx context
 	}
 	candidates := contractConfig.GetCoordinatorEndorserCandidates()
 	if len(candidates) == 0 {
-		log.L(ctx).Warnf("endorser coordinator mode for contract %s has no configured candidates; runtime originator updates will populate the pool", c.contractAddress.String())
-		return nil
+		return i18n.NewError(ctx, msgs.MsgSequencerEndorserNoCandidates, c.contractAddress.String())
 	}
 
 	c.originatorNodePool = make([]string, 0, len(candidates))

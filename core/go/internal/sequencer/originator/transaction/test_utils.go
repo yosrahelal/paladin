@@ -87,7 +87,11 @@ func (r *SentMessageRecorder) SendDelegationRequest(ctx context.Context, coordin
 	return nil
 }
 
-func (r *SentMessageRecorder) SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64) error {
+func (r *SentMessageRecorder) SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64, blockHeight uint64) error {
+	return nil
+}
+
+func (r *SentMessageRecorder) SendDelegationRequestRejection(ctx context.Context, delegatingNodeName string, delegationId string, blockHeight uint64) error {
 	return nil
 }
 

@@ -54,11 +54,6 @@ func TestState_String_Closing(t *testing.T) {
 	assert.Equal(t, "Closing", result, "State.String() should return the correct string representation")
 }
 
-func TestState_String_Error(t *testing.T) {
-	result := State_Error.String()
-	assert.Equal(t, "Error", result, "State.String() should return the correct string representation")
-}
-
 func TestState_String_InvalidState(t *testing.T) {
 	result := State(999).String()
 	assert.Equal(t, "Unknown", result, "State.String() should return the correct string representation")

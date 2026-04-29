@@ -24,17 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
-	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-
-	err := action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1000})
-	require.NoError(t, err)
-	assert.Equal(t, uint64(1000), c.currentBlockHeight)
-}
-
 func Test_action_HeartbeatReceived_SetsActiveCoordinatorState(t *testing.T) {
 	ctx := context.Background()
 	addr := pldtypes.RandAddress()

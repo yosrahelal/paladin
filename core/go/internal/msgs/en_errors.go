@@ -513,7 +513,7 @@ var (
 	MsgSequencerDistributionNotFullyQualified      = pde("PD012635", "State distribution from domain is not fully qualified: %s")
 	MsgSequencerInvalidNullifierSpecInDistro       = pde("PD012636", "Invalid nullifier specification in new state instruction from domain")
 	MsgSequencerNewSequencerError                  = pde("PD012637", "Failed to create new sequencer")
-	MsgSequencerInvalidStaticCoordinator           = pde("PD012638", "Contract was configured with invalid static coordinator '%s'.  Must be of the form 'identity@node'")
+	MsgSequencerInvalidStaticCoordinator           = pde("PD012638", "Contract %s is configured with invalid static coordinator '%s'. Must be of the form 'identity@node'")
 	MsgSequencerFunctionNotProvided                = pde("PD012639", "Function abi not provided in transaction input")
 	MsgSequencerAssembleRequestInvalid             = pde("PD012640", "Assemble request is invalid for transaction %s")
 	MsgSequencerAssembleTxnNotFound                = pde("PD012641", "Transaction %s not found in local node")
@@ -523,6 +523,8 @@ var (
 	MsgSequencerTransactionNotFound                = pde("PD012645", "TX %s missing from coordinator")
 	MsgSequencerInvalidEndorserCandidate           = pde("PD012646", "Invalid coordinator endorser candidate identity '%s'")
 	MsgSequencerGrapherAddMinterAlreadyExistsError = pde("PD012647", "Error adding TX %s as minter for state %s, already minted by %s")
+	MsgSequencerEndorserNoCandidates               = pde("PD012648", "Endorser coordinator mode for contract %s has no configured candidates")
+	MsgSequencerStaticCoordinatorNotSet            = pde("PD012649", "Static coordinator mode for contract %s has no configured coordinator node")
 
 	// Entrypoint PD0127XX
 	MsgResolveVerifierRemoteFailed = pde("PD012701", "Failed to resolve verifier on remote node with lookup %s algorithm %s: Error %s")

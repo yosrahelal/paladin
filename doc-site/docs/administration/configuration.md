@@ -802,7 +802,6 @@
 | redelegateGracePeriod | Number of heartbeat intervals without receiving a heartbeast, before re-delegating pending transactions | `int` | `2` |
 | requestTimeout | Timeout for sequencer requests | `string` | `"3s"` |
 | stateTimeout | Timeout for request-driven transaction states before repooling | `string` | `"10s"` |
-| targetActiveCoordinators | Target number of active coordinators | `int` | `50` |
 | targetActiveSequencers | Target number of active sequencers | `int` | `50` |
 | transactionResumeMaxTransactions | Maximum number of pending transactions to resume | `int` | `100000` |
 | transactionResumePageSize | Page size for reading pending transactions to resume | `int` | `1000` |

@@ -22,26 +22,8 @@ import (
 )
 
 func action_RejectDelegatedTransactions(ctx context.Context, c *coordinator, event common.Event) error {
-	// TODO AM: implement accordinging to spec
-	// Is there a nuance between not active and waiting for flush?
-	return nil
-}
-
-// TODO AM: this needs to go somewhere more generic now
-func action_UpdateBlockHeight(ctx context.Context, c *coordinator, event common.Event) error {
-	e := event.(*NewBlockEvent)
-	newHeight := e.BlockHeight
-	blockRange := c.coordinatorSelectionBlockRange
-
-	// integer division tells us which block range epoch we're in and allows us to compare old with new
-	c.newBlockRangeEpoch = newHeight/blockRange == c.currentBlockHeight/blockRange
-	c.currentBlockHeight = newHeight
-	return nil
-}
-
-func guard_IsNewBlockRangeEpoch(_ context.Context, c *coordinator) bool {
-	// This is set when we update the block height, and remains valid until the next block height update
-	return c.newBlockRangeEpoch
+	e := event.(*TransactionsDelegatedEvent)
+	return c.transportWriter.SendDelegationRequestRejection(ctx, e.FromNode, e.DelegationID, c.currentBlockHeight)
 }
 
 func validator_IsHeartbeatFromActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
@@ -55,7 +37,6 @@ func action_HeartbeatReceived(_ context.Context, c *coordinator, event common.Ev
 	return nil
 }
 
-// TODO AM: move everything about heartbeats to a new file
 func action_ResetHeartbeatIntervalsSinceLastReceive(_ context.Context, c *coordinator, _ common.Event) error {
 	c.heartbeatIntervalsSinceLastReceive = 0
 	return nil

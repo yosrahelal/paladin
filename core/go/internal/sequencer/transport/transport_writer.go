@@ -38,7 +38,8 @@ type TransportWriter interface {
 	StartLoopbackWriter()
 	WaitForDone(ctx context.Context)
 	SendDelegationRequest(ctx context.Context, coordinatorNode string, transactions []*components.PrivateTransaction, blockHeight uint64) error
-	SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64) error
+	SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64, blockHeight uint64) error
+	SendDelegationRequestRejection(ctx context.Context, delegatingNodeName string, delegationId string, blockHeight uint64) error
 	SendEndorsementRequest(ctx context.Context, txID uuid.UUID, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState) error
 	SendEndorsementResponse(ctx context.Context, transactionId, idempotencyKey, contractAddress string, attResult *prototk.AttestationResult, endorsementResult *components.EndorsementResult, revertReason, endorsementName, party, node string) error
 	SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, blockHeight int64) error
@@ -129,6 +130,7 @@ func (tw *transportWriter) SendDelegationRequestAcknowledgment(
 	delegationId string,
 	transactionIDs []string,
 	errors []int64,
+	blockHeight uint64,
 ) error {
 	delegationRequestAcknowledgment := &engineProto.DelegationRequestAcknowledgment{
 		DelegationId:    delegationId,
@@ -136,6 +138,8 @@ func (tw *transportWriter) SendDelegationRequestAcknowledgment(
 		DelegateNodeId:  delegatingNodeName,
 		ContractAddress: tw.contractAddress.String(),
 		Errors:          errors,
+		Accepted:        true,
+		BlockHeight:     int64(blockHeight),
 	}
 	delegationRequestAcknowledgmentBytes, err := proto.Marshal(delegationRequestAcknowledgment)
 	if err != nil {
@@ -143,15 +147,39 @@ func (tw *transportWriter) SendDelegationRequestAcknowledgment(
 		return err
 	}
 
-	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
+	return tw.send(ctx, &components.FireAndForgetMessageSend{
 		MessageType: MessageType_DelegationRequestAcknowledgment,
 		Payload:     delegationRequestAcknowledgmentBytes,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        delegatingNodeName,
-	}); err != nil {
+	})
+}
+
+func (tw *transportWriter) SendDelegationRequestRejection(
+	ctx context.Context,
+	delegatingNodeName string,
+	delegationId string,
+	blockHeight uint64,
+) error {
+	rejection := &engineProto.DelegationRequestAcknowledgment{
+		DelegationId:    delegationId,
+		DelegateNodeId:  delegatingNodeName,
+		ContractAddress: tw.contractAddress.String(),
+		Accepted:        false,
+		BlockHeight:     int64(blockHeight),
+	}
+	rejectionBytes, err := proto.Marshal(rejection)
+	if err != nil {
+		log.L(ctx).Errorf("error marshalling delegation rejection message: %s", err)
 		return err
 	}
-	return nil
+
+	return tw.send(ctx, &components.FireAndForgetMessageSend{
+		MessageType: MessageType_DelegationRequestAcknowledgment,
+		Payload:     rejectionBytes,
+		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
+		Node:        delegatingNodeName,
+	})
 }
 
 // TODO do we have duplication here?  contractAddress and transactionID are in the transactionSpecification

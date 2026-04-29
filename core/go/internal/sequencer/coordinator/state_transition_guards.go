@@ -23,20 +23,11 @@ import (
 
 // Guard type is defined as a type alias in state_machine.go using statemachine.Guard[*coordinator]
 
-// TODO AM: get rid of this but need to think more about how tolerance comes in elsewhere
-// func guard_Behind(ctx context.Context, c *coordinator) bool {
-// 	//Return true if the current block height that our indexer has reached is behind the current coordinator
-// 	// there is a configured tolerance so if we are within this tolerance we are not considered behind
-// 	return c.currentBlockHeight < c.activeCoordinatorBlockHeight-c.blockHeightTolerance
-// }
-
 func guard_ActiveCoordinatorFlushComplete(ctx context.Context, c *coordinator) bool {
 	return c.activeCoordinatorState != State_Flush
 }
 
 // Function flushComplete returns true if there are no transactions past the point of no return that haven't been confirmed yet
-// TODO: does considering the flush complete while there might be transactions in terminal states (State_Confirmed/State reverted)
-// waiting for the grace period to expire before being cleaned result in a memory leak? N.B. There is currently no heartbeat handling in State_Flush
 func guard_FlushComplete(ctx context.Context, c *coordinator) bool {
 	return len(
 		c.getTransactionsInStates(ctx, []transaction.State{
@@ -53,15 +44,10 @@ func guard_HasTransactionsInflight(ctx context.Context, c *coordinator) bool {
 }
 
 func guard_HasTransactionAssembling(ctx context.Context, c *coordinator) bool {
-
 	//TODO this could be optimized by keeping track of a boolean that is switched from the onStateChange handler
 	return len(
 		c.getTransactionsInStates(ctx, []transaction.State{
 			transaction.State_Assembling,
 		}),
 	) > 0
-}
-
-func guard_HasActiveCoordinator(ctx context.Context, c *coordinator) bool {
-	return c.activeCoordinatorNode != ""
 }

@@ -389,7 +389,7 @@ func TestSendDelegationRequestAcknowledgment_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendDelegationRequestAcknowledgment(ctx, delegatingNodeName, delegationId, transactionIDs, []int64{0})
+	err := tw.SendDelegationRequestAcknowledgment(ctx, delegatingNodeName, delegationId, transactionIDs, []int64{0}, uint64(100))
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 }
@@ -415,7 +415,77 @@ func TestSendDelegationRequestAcknowledgment_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendDelegationRequestAcknowledgment(ctx, delegatingNodeName, delegationId, []string{transactionID}, []int64{0})
+	err := tw.SendDelegationRequestAcknowledgment(ctx, delegatingNodeName, delegationId, []string{transactionID}, []int64{0}, uint64(100))
+	require.Error(t, err)
+	assert.Equal(t, sendError, err)
+	mockTransportManager.AssertExpectations(t)
+}
+
+// ===== SendDelegationRequestRejection Tests =====
+
+func TestSendDelegationRequestRejection_Success(t *testing.T) {
+	ctx := context.Background()
+	delegatingNodeName := "delegating-node"
+	delegationId := "delegation-123"
+	blockHeight := uint64(100)
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	mockTransportManager := componentsmocks.NewTransportManager(t)
+	mockLoopbackTransport := NewMockLoopbackTransportManager(t)
+	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
+	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
+		if msg.MessageType != MessageType_DelegationRequestAcknowledgment {
+			return false
+		}
+		if msg.Node != delegatingNodeName {
+			return false
+		}
+		var ack engineProto.DelegationRequestAcknowledgment
+		if err := proto.Unmarshal(msg.Payload, &ack); err != nil {
+			return false
+		}
+		return ack.DelegationId == delegationId &&
+			ack.DelegateNodeId == delegatingNodeName &&
+			ack.ContractAddress == contractAddress.String() &&
+			!ack.Accepted &&
+			ack.BlockHeight == int64(blockHeight) &&
+			len(ack.TransactionIds) == 0
+	})).Return(nil)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTransportManager,
+		loopbackTransport: mockLoopbackTransport,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendDelegationRequestRejection(ctx, delegatingNodeName, delegationId, blockHeight)
+	require.NoError(t, err)
+	mockTransportManager.AssertExpectations(t)
+}
+
+func TestSendDelegationRequestRejection_SendError(t *testing.T) {
+	ctx := context.Background()
+	delegatingNodeName := "delegating-node"
+	delegationId := "delegation-123"
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	mockTransportManager := componentsmocks.NewTransportManager(t)
+	mockLoopbackTransport := NewMockLoopbackTransportManager(t)
+	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
+	sendError := errors.New("transport send error")
+	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTransportManager,
+		loopbackTransport: mockLoopbackTransport,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendDelegationRequestRejection(ctx, delegatingNodeName, delegationId, uint64(100))
 	require.Error(t, err)
 	assert.Equal(t, sendError, err)
 	mockTransportManager.AssertExpectations(t)

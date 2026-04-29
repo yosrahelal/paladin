@@ -602,7 +602,7 @@ func Test_addToDelegatedTransactions_SendDelegationRequestAcknowledgmentError_Re
 	defer done()
 
 	mockTransport := transport.NewMockTransportWriter(t)
-	mockTransport.On("SendDelegationRequestAcknowledgment", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("send ack failed"))
+	mockTransport.On("SendDelegationRequestAcknowledgment", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("send ack failed"))
 	mockTransport.On("WaitForDone", mock.Anything).Return().Maybe()
 	c.transportWriter = mockTransport
 
@@ -835,7 +835,7 @@ func Test_addToDelegatedTransactions_SubsequentTransactionGetsPreviousTransactio
 	mockTransport.On("SendDelegationRequestAcknowledgment", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(errors []int64) bool {
 		capturedErrors = errors
 		return true
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 	mockTransport.On("WaitForDone", mock.Anything).Return().Maybe()
 	c.transportWriter = mockTransport
 
@@ -875,7 +875,7 @@ func Test_addToDelegatedTransactions_ErrorStopsSubsequentTransactionsBeingAccept
 
 	fifthErr := fmt.Errorf("fifth transaction HandleEvent failed")
 	mockTransport := transport.NewMockTransportWriter(t)
-	mockTransport.On("SendDelegationRequestAcknowledgment", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockTransport.On("SendDelegationRequestAcknowledgment", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockTransport.On("WaitForDone", mock.Anything).Return().Maybe()
 	c.transportWriter = mockTransport
 
@@ -991,7 +991,7 @@ func Test_addToDelegatedTransactions_FifthFailsThenFullRetry_PreservesFirstFourA
 	}
 
 	mockTransport := transport.NewMockTransportWriter(t)
-	mockTransport.On("SendDelegationRequestAcknowledgment", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Twice()
+	mockTransport.On("SendDelegationRequestAcknowledgment", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Twice()
 	mockTransport.On("WaitForDone", mock.Anything).Return().Maybe()
 	c.transportWriter = mockTransport
 

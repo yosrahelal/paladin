@@ -298,7 +298,7 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 	}
 
 	// Reset activeCoordinatorNode which action_SelectActiveCoordinator may have set during startup.
-	// TODO AM: this can have a big rethink with the new state machine
+	// TODO AM: this can have a big rethink with the new state machine - should be possible to entirely remove it
 	coordinator.activeCoordinatorNode = ""
 	coordinator.stateMachineEventLoop.StateMachine().SetCurrentState(b.state)
 	switch b.state {

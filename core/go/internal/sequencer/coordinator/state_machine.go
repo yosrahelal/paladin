@@ -39,7 +39,6 @@ const (
 	State_Active                 // Have seen the flush point or have reason to believe the old coordinator has become unavailable and am now assembling transactions based on available knowledge of the state of the base ledger and submitting transactions to the base ledger.
 	State_Flush                  // Stopped assembling and dispatching transactions but continue to submit transactions that are already dispatched
 	State_Closing                // Have flushed and are continuing to sent closing status for `x` heartbeats.
-	State_Error                  // Unrecoverable error state
 )
 
 const (
@@ -74,12 +73,8 @@ var stateDefinitionsMap = StateDefinitions{
 	State_Initial: {
 		Events: map[EventType]EventHandler{
 			Event_CoordinatorCreated: {
-				Actions: []ActionRule{{Action: action_SelectActiveCoordinator}},
-				Transitions: []Transition{
-					{To: State_Idle, If: guard_HasActiveCoordinator},
-					// TODO AM: add this state to garbage collection and priority for removal
-					{To: State_Error, If: statemachine.GuardNot(guard_HasActiveCoordinator)},
-				},
+				Actions:     []ActionRule{{Action: action_SelectActiveCoordinator}},
+				Transitions: []Transition{{To: State_Idle}},
 			},
 		},
 	},
@@ -286,6 +281,9 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
+			// TODO: We are periodically flushing in all coordinator selection modes, not just coordinator endorser, where the preferred
+			// active coordinator can change. This allows us to rotate the signing key on a regular basis, but we might want to consider
+			// making this behaviour configurable via the domain
 			Event_NewBlock: {
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
@@ -364,9 +362,12 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Closing: {
-		// TODO AM: send a heartbeat here so that the new coordinator can see we're in closing immediately. This heartbeat
-		// should include our state locks so the new coordinator can start assembling immediately even if they haven't yet
-		// indexed the transaction(s) that have just been confirmed.
+		// Send a heartbeat here, outside of the usual heartbeat interval, so that other nodes see that we've finished our flush without delay.
+		// TODO AM: can this heartbeat include our state locks so the new coordinator can start assembling immediately even if they
+		// haven't yet indexed the transaction(s) that have just been confirmed?
+		// I don't see how we can load them into the grapher without the transactions that go with them too? Is it enough that the new coordinator
+		// waits until it is at the block height of the previous coordinator at the end of the flush?
+		OnTransitionTo: []ActionRule{{Action: action_SendHeartbeat}},
 		Events: map[EventType]EventHandler{
 			Event_TransactionsDelegated: {
 				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
@@ -426,13 +427,6 @@ var stateDefinitionsMap = StateDefinitions{
 						statemachine.GuardNot(guard_HeartbeatThresholdExceeded),
 					),
 				}},
-			},
-		},
-	},
-	State_Error: {
-		Events: map[EventType]EventHandler{
-			Event_TransactionsDelegated: {
-				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
 			},
 		},
 	},
@@ -500,8 +494,6 @@ func (s State) String() string {
 		return "Flush"
 	case State_Closing:
 		return "Closing"
-	case State_Error:
-		return "Error"
 	}
 	return "Unknown"
 }

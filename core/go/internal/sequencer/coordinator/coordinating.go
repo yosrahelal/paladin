@@ -210,7 +210,7 @@ func (c *coordinator) addToDelegatedTransactions(
 	}
 
 	// Acknowledge the delegate request. Optionally errors can be returned which the originator may use to base re-delegate decisions on
-	err = c.transportWriter.SendDelegationRequestAcknowledgment(ctx, originatorNode, delegationID, delegateAcknowledgementIDs, delegateAcknowledgementErrors)
+	err = c.transportWriter.SendDelegationRequestAcknowledgment(ctx, originatorNode, delegationID, delegateAcknowledgementIDs, delegateAcknowledgementErrors, c.currentBlockHeight)
 	if err != nil {
 		return err
 	}
