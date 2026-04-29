@@ -25,8 +25,9 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -240,7 +241,7 @@ func TestNewTransaction_Success_ReturnsTransaction(t *testing.T) {
 	allComponents := componentsmocks.NewAllComponents(t)
 	domainAPI := componentsmocks.NewDomainSmartContract(t)
 	domain := componentsmocks.NewDomain(t)
-	clock := common.NewMockClock(t)
+	clock := sequencercommonmocks.NewClock(t)
 
 	domainAPI.EXPECT().Domain().Return(domain)
 	domain.EXPECT().FixedSigningIdentity().Return("domain-signer")
@@ -257,12 +258,12 @@ func TestNewTransaction_Success_ReturnsTransaction(t *testing.T) {
 		"node1",
 		pt,
 		"coordinator-signer",
-		transport.NewMockTransportWriter(t),
+		sequencermockstransportmocks.NewTransportWriter(t),
 		clock,
 		func(ctx context.Context, event common.Event) {},
 		nil,
 		func(ctx context.Context, id uuid.UUID) (State, bool) { return State(0), false },
-		common.NewMockEngineIntegration(t),
+		sequencercommonmocks.NewEngineIntegration(t),
 		&syncpoints.MockSyncPoints{},
 		allComponents,
 		domainAPI,
@@ -288,7 +289,7 @@ func TestNewTransaction_PublicAPI_ReturnsTransaction(t *testing.T) {
 	allComponents := componentsmocks.NewAllComponents(t)
 	domainAPI := componentsmocks.NewDomainSmartContract(t)
 	domain := componentsmocks.NewDomain(t)
-	clock := common.NewMockClock(t)
+	clock := sequencercommonmocks.NewClock(t)
 
 	domainAPI.EXPECT().Domain().Return(domain)
 	domain.EXPECT().FixedSigningIdentity().Return("domain-signer")
@@ -305,12 +306,12 @@ func TestNewTransaction_PublicAPI_ReturnsTransaction(t *testing.T) {
 		"node1",
 		pt,
 		"coordinator-signer",
-		transport.NewMockTransportWriter(t),
+		sequencermockstransportmocks.NewTransportWriter(t),
 		clock,
 		func(ctx context.Context, event common.Event) {},
 		nil,
 		func(ctx context.Context, id uuid.UUID) (State, bool) { return State(0), false },
-		common.NewMockEngineIntegration(t),
+		sequencercommonmocks.NewEngineIntegration(t),
 		&syncpoints.MockSyncPoints{},
 		allComponents,
 		domainAPI,

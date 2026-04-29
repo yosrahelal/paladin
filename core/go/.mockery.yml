@@ -48,3 +48,15 @@ packages:
       pkgname: coordinatortransactionmocks
       dir: mocks/coordinatortransactionmocks
       all: true    
+  github.com/LFDT-Paladin/paladin/core/internal/sequencer/common:
+    interfaces:
+      EngineIntegration:
+      Clock: 
+    config:
+      pkgname: sequencercommonmocks
+      dir: mocks/sequencercommonmocks
+  github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport:
+    config:
+      pkgname: sequencermockstransportmocks
+      dir: mocks/sequencermockstransportmocks
+      all: true    

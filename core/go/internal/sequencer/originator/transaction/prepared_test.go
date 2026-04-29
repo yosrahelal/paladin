@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -88,7 +88,7 @@ func TestAction_ResendPreDispatchResponse_TransportError(t *testing.T) {
 	txn.pt.PreAssembly.TransactionSpecification = transactionSpec
 
 	// Create a mock transport writer that returns an error
-	mockTransport := transport.NewMockTransportWriter(t)
+	mockTransport := sequencermockstransportmocks.NewTransportWriter(t)
 	expectedError := errors.New("transport error")
 	mockTransport.EXPECT().SendPreDispatchResponse(
 		mock.Anything,
@@ -132,13 +132,12 @@ func Test_action_PreDispatchRequestReceived_SetsRequestID(t *testing.T) {
 	txn, _ := builder.BuildWithMocks()
 	requestID := uuid.New()
 	event := &PreDispatchRequestReceivedEvent{
-		BaseEvent:   BaseEvent{TransactionID: txn.pt.ID},
-		RequestID:   requestID,
-		Coordinator: "coord@node1",
+		BaseEvent:        BaseEvent{TransactionID: txn.pt.ID},
+		RequestID:        requestID,
+		Coordinator:      "coord@node1",
 		PostAssemblyHash: nil,
 	}
 	err := action_PreDispatchRequestReceived(ctx, txn, event)
 	require.NoError(t, err)
 	assert.Equal(t, requestID, txn.latestPreDispatchRequestID)
 }
-

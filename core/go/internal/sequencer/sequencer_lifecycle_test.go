@@ -32,12 +32,12 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/blockindexermocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatormocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/metricsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/persistencemocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/blockindexer"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
@@ -63,7 +63,7 @@ type sequencerLifecycleTestMocks struct {
 	publicTxManager  *componentsmocks.PublicTxManager
 	keyManager       *componentsmocks.KeyManager
 	domainAPI        *componentsmocks.DomainSmartContract
-	transportWriter  *transport.MockTransportWriter
+	transportWriter  *sequencermockstransportmocks.TransportWriter
 	originator       *originator.MockOriginator
 	coordinator      *coordinatormocks.Coordinator
 	syncPoints       *syncpoints.MockSyncPoints
@@ -82,7 +82,7 @@ func newSequencerLifecycleTestMocks(t *testing.T) *sequencerLifecycleTestMocks {
 		publicTxManager:  componentsmocks.NewPublicTxManager(t),
 		keyManager:       componentsmocks.NewKeyManager(t),
 		domainAPI:        componentsmocks.NewDomainSmartContract(t),
-		transportWriter:  transport.NewMockTransportWriter(t),
+		transportWriter:  sequencermockstransportmocks.NewTransportWriter(t),
 		originator:       originator.NewMockOriginator(t),
 		coordinator:      coordinatormocks.NewCoordinator(t),
 		syncPoints:       syncpoints.NewMockSyncPoints(t),

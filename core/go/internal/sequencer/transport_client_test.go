@@ -36,6 +36,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatormocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/persistencemocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
 	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -58,7 +59,7 @@ type transportClientTestMocks struct {
 	domainAPI       *componentsmocks.DomainSmartContract
 	domain          *componentsmocks.Domain
 	domainContext   *componentsmocks.DomainContext
-	transportWriter *transport.MockTransportWriter
+	transportWriter *sequencermockstransportmocks.TransportWriter
 	originator      *originator.MockOriginator
 	coordinator     *coordinatormocks.Coordinator
 	metrics         *metrics.MockDistributedSequencerMetrics
@@ -75,7 +76,7 @@ func newTransportClientTestMocks(t *testing.T) *transportClientTestMocks {
 		domainAPI:       componentsmocks.NewDomainSmartContract(t),
 		domain:          componentsmocks.NewDomain(t),
 		domainContext:   componentsmocks.NewDomainContext(t),
-		transportWriter: transport.NewMockTransportWriter(t),
+		transportWriter: sequencermockstransportmocks.NewTransportWriter(t),
 		originator:      originator.NewMockOriginator(t),
 		coordinator:     coordinatormocks.NewCoordinator(t),
 		metrics:         metrics.NewMockDistributedSequencerMetrics(t),

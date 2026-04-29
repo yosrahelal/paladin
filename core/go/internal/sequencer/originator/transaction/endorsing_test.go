@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -93,7 +93,7 @@ func TestAction_ResendAssembleSuccessResponse_TransportError(t *testing.T) {
 	txn.pt.PreAssembly = &components.TransactionPreAssembly{}
 
 	// Create a mock transport writer that returns an error
-	mockTransport := transport.NewMockTransportWriter(t)
+	mockTransport := sequencermockstransportmocks.NewTransportWriter(t)
 	expectedError := errors.New("transport error")
 	mockTransport.EXPECT().SendAssembleResponse(
 		mock.Anything,
@@ -181,7 +181,7 @@ func TestAction_ResendAssembleRevertResponse_TransportError(t *testing.T) {
 	txn.pt.PreAssembly = &components.TransactionPreAssembly{}
 
 	// Create a mock transport writer that returns an error
-	mockTransport := transport.NewMockTransportWriter(t)
+	mockTransport := sequencermockstransportmocks.NewTransportWriter(t)
 	expectedError := errors.New("transport error")
 	mockTransport.EXPECT().SendAssembleResponse(
 		mock.Anything,
@@ -267,7 +267,7 @@ func TestAction_ResendAssembleParkResponse_TransportError(t *testing.T) {
 	txn.pt.PreAssembly = &components.TransactionPreAssembly{}
 
 	// Create a mock transport writer that returns an error
-	mockTransport := transport.NewMockTransportWriter(t)
+	mockTransport := sequencermockstransportmocks.NewTransportWriter(t)
 	expectedError := errors.New("transport error")
 	mockTransport.EXPECT().SendAssembleResponse(
 		mock.Anything,
@@ -368,4 +368,3 @@ func TestGuard_AssembleRequestMatchesPreviousResponse_OneNilUUID(t *testing.T) {
 
 	assert.False(t, matches, "Should return false when one request ID is nil and the other is not")
 }
-

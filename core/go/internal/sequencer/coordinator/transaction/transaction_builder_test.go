@@ -34,6 +34,8 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -435,9 +437,9 @@ func (b *TransactionBuilderForTesting) GetEndorsers() []string {
 }
 
 type transactionDependencyMocks struct {
-	TransportWriter     *transport.MockTransportWriter
-	Clock               *common.MockClock
-	EngineIntegration   *common.MockEngineIntegration
+	TransportWriter     *sequencermockstransportmocks.TransportWriter
+	Clock               *sequencercommonmocks.Clock
+	EngineIntegration   *sequencercommonmocks.EngineIntegration
 	SentMessageRecorder *transport.SentMessageRecorder
 	SyncPoints          *syncpoints.MockSyncPoints
 	AllComponents       *componentsmocks.AllComponents
@@ -464,9 +466,9 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 	require.NoError(b.t, err)
 
 	mocks := &transactionDependencyMocks{
-		TransportWriter:     transport.NewMockTransportWriter(b.t),
-		Clock:               common.NewMockClock(b.t),
-		EngineIntegration:   common.NewMockEngineIntegration(b.t),
+		TransportWriter:     sequencermockstransportmocks.NewTransportWriter(b.t),
+		Clock:               sequencercommonmocks.NewClock(b.t),
+		EngineIntegration:   sequencercommonmocks.NewEngineIntegration(b.t),
 		SentMessageRecorder: transport.NewSentMessageRecorder(),
 		SyncPoints:          syncpoints.NewMockSyncPoints(b.t),
 		AllComponents:       componentsmocks.NewAllComponents(b.t),

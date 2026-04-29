@@ -27,13 +27,13 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/mock"
 )
-
 
 type CoordinatorBuilderForTesting struct {
 	t                                        *testing.T
@@ -60,7 +60,7 @@ type CoordinatorDependencyMocks struct {
 	SentMessageRecorder *transport.SentMessageRecorder
 	EngineIntegration   *common.FakeEngineIntegrationForTesting
 	SyncPoints          syncpoints.SyncPoints
-	TransportWriter     *transport.MockTransportWriter
+	TransportWriter     *sequencermockstransportmocks.TransportWriter
 }
 
 // copySequencerDefaultsForTest returns a deep copy of SequencerDefaults so tests that mutate
@@ -260,7 +260,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	}
 
 	if b.useMockTransportWriter {
-		mockTransportWriter := transport.NewMockTransportWriter(b.t)
+		mockTransportWriter := sequencermockstransportmocks.NewTransportWriter(b.t)
 		mockTransportWriter.On("StopLoopbackWriter").Return().Maybe()
 		mockTransportWriter.On("WaitForDone", mock.Anything).Return().Maybe()
 		mocks.TransportWriter = mockTransportWriter

@@ -27,9 +27,9 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -598,7 +598,8 @@ func TestCoordinator_CancelContext_WaitsForTransportShutdown(t *testing.T) {
 		c.WaitForDone(t.Context())
 	}()
 
-	mockTransport := transport.NewMockTransportWriter(t)
+	mockTransport := sequencermockstransportmocks.NewTransportWriter(t)
+	// TODO AM: could this not be mocked?
 	// Start uses StartLoopbackWriter on the original transport; replace writer after Start
 	// so that WaitForDone is called on the mock.
 	mockTransport.On("WaitForDone", mock.Anything).Return().Maybe()
