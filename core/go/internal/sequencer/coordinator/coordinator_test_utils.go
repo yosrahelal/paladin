@@ -18,20 +18,21 @@ package coordinator
 import (
 	"context"
 	"testing"
-	"time"
 
+	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/mock"
 )
 
 type SentMessageRecorder struct {
@@ -82,12 +83,19 @@ type CoordinatorBuilderForTesting struct {
 	heartbeatsUntilClosingGracePeriodExpires *int
 	metrics                                  metrics.DistributedSequencerMetrics
 	sequencerConfig                          *pldconf.SequencerConfig
+	originatorNodePool                       *[]string
+	activeCoordinatorNode                    string
+	heartbeatIntervalsSinceLastReceive       *int
+	heartbeatGracePeriod                     *int
+	heartbeatIntervalsSinceStateChange       *int
+	useMockTransportWriter                   bool
 }
 
 type CoordinatorDependencyMocks struct {
 	SentMessageRecorder *SentMessageRecorder
 	EngineIntegration   *common.FakeEngineIntegrationForTesting
 	SyncPoints          syncpoints.SyncPoints
+	TransportWriter     *transport.MockTransportWriter
 }
 
 // copySequencerDefaultsForTest returns a deep copy of SequencerDefaults so tests that mutate
@@ -224,7 +232,43 @@ func (b *CoordinatorBuilderForTesting) OverrideSequencerConfig(config *pldconf.S
 	return b
 }
 
-func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator, *CoordinatorDependencyMocks, func()) {
+func (b *CoordinatorBuilderForTesting) OriginatorNodePool(nodes ...string) *CoordinatorBuilderForTesting {
+	b.originatorNodePool = &nodes
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) ActiveCoordinatorNode(node string) *CoordinatorBuilderForTesting {
+	b.activeCoordinatorNode = node
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) HeartbeatIntervalsSinceLastReceive(n int) *CoordinatorBuilderForTesting {
+	b.heartbeatIntervalsSinceLastReceive = &n
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) HeartbeatGracePeriod(n int) *CoordinatorBuilderForTesting {
+	b.heartbeatGracePeriod = &n
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) HeartbeatIntervalsSinceStateChange(n int) *CoordinatorBuilderForTesting {
+	b.heartbeatIntervalsSinceStateChange = &n
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) WithMockTransportWriter() *CoordinatorBuilderForTesting {
+	b.useMockTransportWriter = true
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) AssembleErrorRetryThreshold(n int) *CoordinatorBuilderForTesting {
+	b.sequencerConfig.AssembleErrorRetryThreshold = confutil.P(n)
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDependencyMocks) {
+	// TODO AM: now?
 	// TODO: This is a bit of a hack, but all this code gets substantial rework in the restructing PRs so
 	// it makes sense to clean this up as part of that merge
 	hasContractConfigExpectation := false
@@ -238,7 +282,7 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 		b.domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 			SubmitterSelection:   prototk.ContractConfig_SUBMITTER_SENDER,
-		})
+		}).Maybe()
 	}
 
 	if b.contractAddress == nil {
@@ -250,10 +294,16 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 		SyncPoints:          &syncpoints.MockSyncPoints{},
 	}
 
+	if b.useMockTransportWriter {
+		mockTransportWriter := transport.NewMockTransportWriter(b.t)
+		mockTransportWriter.On("StopLoopbackWriter").Return().Maybe()
+		mockTransportWriter.On("WaitForDone", mock.Anything).Return().Maybe()
+		mocks.TransportWriter = mockTransportWriter
+	}
+
 	b.domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	}).Maybe()
-	buildCtx, cancel := context.WithCancel(ctx)
 
 	allComponents := componentsmocks.NewAllComponents(b.t)
 	mp, err := mockpersistence.NewSQLMockProvider()
@@ -268,15 +318,19 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 	allComponents.On("SequencerManager").Return(b.sequencerManager).Maybe()
 	allComponents.On("Persistence").Return(mp.P).Maybe()
 
-	coordinator, err := NewCoordinator(
-		buildCtx,
+	var transportWriter transport.TransportWriter = mocks.SentMessageRecorder
+	if mocks.TransportWriter != nil {
+		transportWriter = mocks.TransportWriter
+	}
+
+	coordinator := NewCoordinator(
 		b.contractAddress, // Contract address,
 		b.domainAPI,
 		nil,
 		allComponents,
 		nil,
 		nil,
-		mocks.SentMessageRecorder,
+		transportWriter,
 		common.RealClock(),
 		mocks.EngineIntegration,
 		mocks.SyncPoints,
@@ -284,41 +338,32 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 		"node1",
 		b.metrics,
 	)
-	if err != nil {
-		panic(err)
-	}
 
-	// Drain startup events (CoordinatorCreatedEvent) before overriding the test state.
-	syncEv := statemachine.NewSyncEvent()
-	coordinator.QueueEvent(buildCtx, syncEv)
-	<-syncEv.Done
-
+	// Loops are not started yet — set state and seed transactions directly.
 	for _, tx := range b.transactions {
 		coordinator.transactionsByID[tx.GetID()] = tx
 	}
 
 	coordinator.stateMachineEventLoop.StateMachine().SetCurrentState(b.state)
 
-	done := func() {
-		cancel()
-		// With maxDispatchAhead=-1 the dispatch loop enters sync.Cond.Wait on its
-		// first read. The context.AfterFunc broadcast can race with the goroutine
-		// entering Wait (both dispatchQueue and ctx.Done are ready in the outer
-		// select; Go picks randomly). Keep broadcasting until the loop exits.
-		go func() {
-			for {
-				select {
-				case <-coordinator.dispatchLoopStopped:
-					return
-				default:
-					coordinator.inFlightMutex.L.Lock()
-					coordinator.inFlightMutex.Broadcast()
-					coordinator.inFlightMutex.L.Unlock()
-					time.Sleep(10 * time.Millisecond)
-				}
-			}
-		}()
-		coordinator.WaitForDone(context.Background())
+	if b.currentBlockHeight != nil {
+		coordinator.currentBlockHeight = *b.currentBlockHeight
 	}
-	return coordinator, mocks, done
+	if b.originatorNodePool != nil {
+		coordinator.originatorNodePool = *b.originatorNodePool
+	}
+	if b.activeCoordinatorNode != "" {
+		coordinator.activeCoordinatorNode = b.activeCoordinatorNode
+	}
+	if b.heartbeatIntervalsSinceLastReceive != nil {
+		coordinator.heartbeatIntervalsSinceLastReceive = *b.heartbeatIntervalsSinceLastReceive
+	}
+	if b.heartbeatGracePeriod != nil {
+		coordinator.heartbeatGracePeriod = *b.heartbeatGracePeriod
+	}
+	if b.heartbeatIntervalsSinceStateChange != nil {
+		coordinator.heartbeatIntervalsSinceStateChange = *b.heartbeatIntervalsSinceStateChange
+	}
+
+	return coordinator, mocks
 }

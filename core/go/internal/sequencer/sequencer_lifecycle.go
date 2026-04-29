@@ -200,7 +200,7 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				return nil, err
 			}
 
-			coordinator, err := coordinator.NewCoordinator(seqCtx,
+			seqCoordinator := coordinator.NewCoordinator(
 				&contractAddr,
 				domainAPI,
 				dCtx,
@@ -215,14 +215,14 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				sMgr.nodeName,
 				sMgr.metrics,
 			)
-			if err != nil {
+			if err := seqCoordinator.Start(seqCtx); err != nil {
 				cancelCtx()
-				log.L(ctx).Errorf("failed to create sequencer coordinator for contract %s: %s", contractAddr.String(), err)
+				log.L(ctx).Errorf("failed to start sequencer coordinator for contract %s: %s", contractAddr.String(), err)
 				return nil, err
 			}
 
 			sequencer.originator = seqOriginator
-			sequencer.coordinator = coordinator
+			sequencer.coordinator = seqCoordinator
 			sMgr.sequencers[contractAddr.String()] = sequencer
 
 			go sequencer.heartbeatLoop(seqCtx, sMgr.heartbeatInterval)

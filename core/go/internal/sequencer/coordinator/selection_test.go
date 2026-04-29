@@ -18,7 +18,6 @@ package coordinator
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -27,21 +26,21 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func Test_selectActiveCoordinatorNode_StaticMode_ReturnsStoredNode(t *testing.T) {
+func Test_action_SelectActiveCoordinator_StaticMode_ReturnsStoredNode(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
 		StaticCoordinator:    proto.String("identity@node1"),
 	})
-	c, _, done := builder.Build(ctx)
-	defer done()
+	c, _ := builder.Build()
+	require.NoError(t, c.initializeStaticCoordinatorFromContractConfig(ctx))
 
-	coordinatorNode := c.selectActiveCoordinatorNode(ctx)
-	assert.Equal(t, "node1", coordinatorNode)
+	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	assert.Equal(t, "node1", c.activeCoordinatorNode)
 }
 
-func Test_selectActiveCoordinatorNode_EndorserMode_SingleNodeInPool_ReturnsNode(t *testing.T) {
+func Test_action_SelectActiveCoordinator_EndorserMode_SingleNodeInPool_ReturnsNode(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -51,15 +50,14 @@ func Test_selectActiveCoordinatorNode_EndorserMode_SingleNodeInPool_ReturnsNode(
 	config := builder.GetSequencerConfig()
 	config.BlockRange = confutil.P(uint64(100))
 	builder.OverrideSequencerConfig(config)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.currentBlockHeight = 1000
+	c, _ := builder.CurrentBlockHeight(1000).Build()
+	require.NoError(t, c.initializeOriginatorNodePoolFromContractConfig(ctx))
 
-	coordinatorNode := c.selectActiveCoordinatorNode(ctx)
-	assert.Equal(t, "node1", coordinatorNode)
+	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	assert.Equal(t, "node1", c.activeCoordinatorNode)
 }
 
-func Test_selectActiveCoordinatorNode_EndorserMode_MultipleNodesInPool_ReturnsOneOfPool(t *testing.T) {
+func Test_action_SelectActiveCoordinator_EndorserMode_MultipleNodesInPool_ReturnsOneOfPool(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -69,15 +67,14 @@ func Test_selectActiveCoordinatorNode_EndorserMode_MultipleNodesInPool_ReturnsOn
 	config := builder.GetSequencerConfig()
 	config.BlockRange = confutil.P(uint64(100))
 	builder.OverrideSequencerConfig(config)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.currentBlockHeight = 1000
+	c, _ := builder.CurrentBlockHeight(1000).Build()
+	require.NoError(t, c.initializeOriginatorNodePoolFromContractConfig(ctx))
 
-	coordinatorNode := c.selectActiveCoordinatorNode(ctx)
-	assert.Contains(t, []string{"node1", "node2", "node3"}, coordinatorNode)
+	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	assert.Contains(t, []string{"node1", "node2", "node3"}, c.activeCoordinatorNode)
 }
 
-func Test_selectActiveCoordinatorNode_EndorserMode_BlockHeightRounding_SameRangeSameCoordinator(t *testing.T) {
+func Test_action_SelectActiveCoordinator_EndorserMode_BlockHeightRounding_SameRangeSameCoordinator(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -87,24 +84,30 @@ func Test_selectActiveCoordinatorNode_EndorserMode_BlockHeightRounding_SameRange
 	config := builder.GetSequencerConfig()
 	config.BlockRange = confutil.P(uint64(100))
 	builder.OverrideSequencerConfig(config)
-	c, _, done := builder.Build(ctx)
-	defer done()
+	c, _ := builder.Build()
+	require.NoError(t, c.initializeOriginatorNodePoolFromContractConfig(ctx))
 
-	c.currentBlockHeight = 1000
-	coordinatorNode1 := c.selectActiveCoordinatorNode(ctx)
-	c.currentBlockHeight = 1001
-	coordinatorNode2 := c.selectActiveCoordinatorNode(ctx)
-	c.currentBlockHeight = 1099
-	coordinatorNode3 := c.selectActiveCoordinatorNode(ctx)
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1000}))
+	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	coordinatorNode1 := c.activeCoordinatorNode
+
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1001}))
+	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	coordinatorNode2 := c.activeCoordinatorNode
+
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1099}))
+	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	coordinatorNode3 := c.activeCoordinatorNode
+
 	assert.Equal(t, coordinatorNode1, coordinatorNode2)
 	assert.Equal(t, coordinatorNode2, coordinatorNode3)
 
-	c.currentBlockHeight = 1100
-	coordinatorNode4 := c.selectActiveCoordinatorNode(ctx)
-	assert.Contains(t, []string{"node1", "node2", "node3"}, coordinatorNode4)
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1100}))
+	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	assert.Contains(t, []string{"node1", "node2", "node3"}, c.activeCoordinatorNode)
 }
 
-func Test_selectActiveCoordinatorNode_EndorserMode_DifferentBlockRanges_CanSelectDifferentCoordinators(t *testing.T) {
+func Test_action_SelectActiveCoordinator_EndorserMode_DifferentBlockRanges_CanSelectDifferentCoordinators(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -114,37 +117,36 @@ func Test_selectActiveCoordinatorNode_EndorserMode_DifferentBlockRanges_CanSelec
 	config := builder.GetSequencerConfig()
 	config.BlockRange = confutil.P(uint64(50))
 	builder.OverrideSequencerConfig(config)
-	c, _, done := builder.Build(ctx)
-	defer done()
+	c, _ := builder.Build()
+	require.NoError(t, c.initializeOriginatorNodePoolFromContractConfig(ctx))
 
-	c.currentBlockHeight = 100
-	coordinatorNode1 := c.selectActiveCoordinatorNode(ctx)
-	c.currentBlockHeight = 150
-	coordinatorNode2 := c.selectActiveCoordinatorNode(ctx)
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 100}))
+	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	coordinatorNode1 := c.activeCoordinatorNode
+
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 150}))
+	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	coordinatorNode2 := c.activeCoordinatorNode
+
 	assert.Contains(t, []string{"node1", "node2"}, coordinatorNode1)
 	assert.Contains(t, []string{"node1", "node2"}, coordinatorNode2)
 }
 
-func Test_selectActiveCoordinatorNode_SenderMode_ReturnsCurrentNodeName(t *testing.T) {
+func Test_action_SelectActiveCoordinator_SenderMode_ReturnsCurrentNodeName(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	c, _, done := builder.Build(ctx)
-	defer done()
-	assert.Equal(t, "node1", c.nodeName)
+	c, _ := builder.Build()
 
-	coordinatorNode := c.selectActiveCoordinatorNode(ctx)
-	assert.Equal(t, "node1", coordinatorNode)
+	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	assert.Equal(t, "node1", c.activeCoordinatorNode)
 }
 
 func Test_updateOriginatorNodePool_AddsNodeToEmptyPool(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.originatorNodePool = []string{}
+	c, _ := builder.OriginatorNodePool().Build()
 
 	c.updateOriginatorNodePool("node2")
 
@@ -154,11 +156,8 @@ func Test_updateOriginatorNodePool_AddsNodeToEmptyPool(t *testing.T) {
 }
 
 func Test_updateOriginatorNodePool_AddsNodeToNonEmptyPool(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.originatorNodePool = []string{"node1", "node3"}
+	c, _ := builder.OriginatorNodePool("node1", "node3").Build()
 
 	c.updateOriginatorNodePool("node2")
 
@@ -169,11 +168,8 @@ func Test_updateOriginatorNodePool_AddsNodeToNonEmptyPool(t *testing.T) {
 }
 
 func Test_updateOriginatorNodePool_DoesNotAddDuplicateNode(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.originatorNodePool = []string{"node1", "node2"}
+	c, _ := builder.OriginatorNodePool("node1", "node2").Build()
 
 	c.updateOriginatorNodePool("node2")
 
@@ -183,11 +179,8 @@ func Test_updateOriginatorNodePool_DoesNotAddDuplicateNode(t *testing.T) {
 }
 
 func Test_updateOriginatorNodePool_EnsuresCoordinatorsOwnNodeIsAlwaysInPool(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.originatorNodePool = []string{}
+	c, _ := builder.OriginatorNodePool().Build()
 
 	c.updateOriginatorNodePool("node2")
 
@@ -196,11 +189,8 @@ func Test_updateOriginatorNodePool_EnsuresCoordinatorsOwnNodeIsAlwaysInPool(t *t
 }
 
 func Test_updateOriginatorNodePool_EnsuresCoordinatorsOwnNodeIsAddedEvenWhenPoolAlreadyHasOtherNodes(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.originatorNodePool = []string{"node2", "node3"}
+	c, _ := builder.OriginatorNodePool("node2", "node3").Build()
 
 	c.updateOriginatorNodePool("node4")
 
@@ -209,11 +199,8 @@ func Test_updateOriginatorNodePool_EnsuresCoordinatorsOwnNodeIsAddedEvenWhenPool
 }
 
 func Test_updateOriginatorNodePool_DoesNotDuplicateCoordinatorsOwnNode(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.originatorNodePool = []string{"node1", "node2"}
+	c, _ := builder.OriginatorNodePool("node1", "node2").Build()
 
 	c.updateOriginatorNodePool("node1")
 
@@ -223,11 +210,8 @@ func Test_updateOriginatorNodePool_DoesNotDuplicateCoordinatorsOwnNode(t *testin
 }
 
 func Test_updateOriginatorNodePool_HandlesMultipleSequentialUpdates(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.originatorNodePool = []string{}
+	c, _ := builder.OriginatorNodePool().Build()
 
 	c.updateOriginatorNodePool("node2")
 	c.updateOriginatorNodePool("node3")
@@ -241,11 +225,8 @@ func Test_updateOriginatorNodePool_HandlesMultipleSequentialUpdates(t *testing.T
 }
 
 func Test_updateOriginatorNodePool_HandlesEmptyStringNode(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.originatorNodePool = []string{}
+	c, _ := builder.OriginatorNodePool().Build()
 
 	c.updateOriginatorNodePool("")
 
@@ -254,69 +235,10 @@ func Test_updateOriginatorNodePool_HandlesEmptyStringNode(t *testing.T) {
 	assert.Contains(t, c.originatorNodePool, "node1", "pool should contain coordinator's own node")
 }
 
-func Test_action_SelectActiveCoordinator_StaticModeSelectsCoordinator(t *testing.T) {
-	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Initial)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
-		StaticCoordinator:    proto.String("identity@node1"),
-	})
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.activeCoordinatorNode = ""
-
-	c.QueueEvent(ctx, &CoordinatorCreatedEvent{})
-
-	require.Eventually(t, func() bool {
-		return c.GetCurrentState() == State_Idle && c.activeCoordinatorNode == "node1"
-	}, time.Second, 10*time.Millisecond)
-}
-
-func Test_action_SelectActiveCoordinator_SenderModeSelectsSelf(t *testing.T) {
-	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Initial)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-	})
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.activeCoordinatorNode = ""
-
-	c.QueueEvent(ctx, &CoordinatorCreatedEvent{})
-
-	require.Eventually(t, func() bool {
-		return c.activeCoordinatorNode == "node1" && c.GetCurrentState() == State_Idle
-	}, time.Second, 10*time.Millisecond)
-}
-
-func Test_action_SelectActiveCoordinator_EndorserModeSelectsFromPool(t *testing.T) {
-	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Initial)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2", "id@node3"},
-	})
-	config := builder.GetSequencerConfig()
-	config.BlockRange = confutil.P(uint64(100))
-	builder.OverrideSequencerConfig(config)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.activeCoordinatorNode = ""
-	c.currentBlockHeight = 1000
-
-	c.QueueEvent(ctx, &CoordinatorCreatedEvent{})
-
-	require.Eventually(t, func() bool {
-		return c.GetCurrentState() == State_Idle
-	}, time.Second*1000000000, 10*time.Millisecond)
-	assert.Contains(t, []string{"node1", "node2", "node3"}, c.activeCoordinatorNode)
-}
-
 func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
+	c, _ := builder.Build()
 
 	err := action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1000})
 	require.NoError(t, err)

@@ -21,8 +21,6 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -30,25 +28,20 @@ import (
 
 func TestGetSnapshot_OK(t *testing.T) {
 	ctx := context.Background()
-	c, _, done := NewCoordinatorBuilderForTesting(t, State_Idle).Build(ctx)
-	defer done()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 	snapshot := c.getSnapshot(ctx)
 	assert.NotNil(t, snapshot)
 }
 
 func TestGetSnapshot_AggregatesTransactionsBySnapshotType(t *testing.T) {
 	ctx := context.Background()
-	c, _, done := NewCoordinatorForUnitTest(t)
-	defer done()
-
 	pooledTxn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
 	dispatchedTxn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
 	confirmedTxn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirmed).Build()
 	excludedTxn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Reverted).Build()
-	c.transactionsByID[pooledTxn.GetID()] = pooledTxn
-	c.transactionsByID[dispatchedTxn.GetID()] = dispatchedTxn
-	c.transactionsByID[confirmedTxn.GetID()] = confirmedTxn
-	c.transactionsByID[excludedTxn.GetID()] = excludedTxn
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		Transactions(pooledTxn, dispatchedTxn, confirmedTxn, excludedTxn).
+		Build()
 
 	snapshot := c.getSnapshot(ctx)
 	require.NotNil(t, snapshot)
@@ -63,10 +56,7 @@ func TestGetSnapshot_AggregatesTransactionsBySnapshotType(t *testing.T) {
 func TestGetSnapshot_IncludesCoordinatorStateAndBlockHeight(t *testing.T) {
 	ctx := context.Background()
 	blockHeight := uint64(12345)
-	c, _, done := NewCoordinatorBuilderForTesting(t, State_Idle).Build(ctx)
-	defer done()
-	// Set block height directly since CurrentBlockHeight only works for certain states
-	c.currentBlockHeight = blockHeight
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).CurrentBlockHeight(blockHeight).Build()
 
 	snapshot := c.getSnapshot(ctx)
 	require.NotNil(t, snapshot)
@@ -76,12 +66,9 @@ func TestGetSnapshot_IncludesCoordinatorStateAndBlockHeight(t *testing.T) {
 
 func TestSendHeartbeat_Success(t *testing.T) {
 	ctx := context.Background()
-	c, mocks, done := NewCoordinatorBuilderForTesting(t, State_Idle).Build(ctx)
-	defer done()
-
-	// Set nodeName and originatorNodePool directly
-	c.nodeName = "node1"
-	c.originatorNodePool = []string{"node1", "node2", "node3"}
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		OriginatorNodePool("node1", "node2", "node3").
+		Build()
 
 	err := c.sendHeartbeat(ctx, c.contractAddress)
 	assert.NoError(t, err)
@@ -90,12 +77,9 @@ func TestSendHeartbeat_Success(t *testing.T) {
 
 func TestSendHeartbeat_SkipsCurrentNode(t *testing.T) {
 	ctx := context.Background()
-	c, mocks, done := NewCoordinatorBuilderForTesting(t, State_Idle).Build(ctx)
-	defer done()
-
-	// Set nodeName and originatorNodePool directly
-	c.nodeName = "node1"
-	c.originatorNodePool = []string{"node1"}
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		OriginatorNodePool("node1").
+		Build()
 
 	err := c.sendHeartbeat(ctx, c.contractAddress)
 	assert.NoError(t, err)
@@ -105,36 +89,24 @@ func TestSendHeartbeat_SkipsCurrentNode(t *testing.T) {
 
 func TestSendHeartbeat_HandlesError(t *testing.T) {
 	ctx := context.Background()
-	c, _, done := NewCoordinatorBuilderForTesting(t, State_Idle).Build(ctx)
-	defer done()
-
-	// Set nodeName and originatorNodePool directly
-	c.nodeName = "node1"
-	c.originatorNodePool = []string{"node1", "node2"}
-
-	// Create a mock transport writer that returns an error
-	mockTransport := transport.NewMockTransportWriter(t)
-	mockTransport.EXPECT().SendHeartbeat(mock.Anything, "node2", mock.Anything, mock.Anything).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		OriginatorNodePool("node1", "node2").
+		WithMockTransportWriter().
+		Build()
+	mocks.TransportWriter.EXPECT().SendHeartbeat(mock.Anything, "node2", mock.Anything, mock.Anything).
 		Return(fmt.Errorf("transport error"))
-	mockTransport.On("StopLoopbackWriter").Return().Maybe()
-	mockTransport.On("WaitForDone", mock.Anything).Return().Maybe()
-	c.transportWriter = mockTransport
 
 	err := c.sendHeartbeat(ctx, c.contractAddress)
 	// Should return the error but continue processing
 	assert.Error(t, err)
 	assert.Equal(t, "transport error", err.Error())
-	mockTransport.AssertExpectations(t)
 }
 
 func TestAction_SendHeartbeat(t *testing.T) {
 	ctx := context.Background()
-	c, mocks, done := NewCoordinatorBuilderForTesting(t, State_Idle).Build(ctx)
-	defer done()
-
-	// Set nodeName and originatorNodePool directly
-	c.nodeName = "node1"
-	c.originatorNodePool = []string{"node1", "node2"}
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		OriginatorNodePool("node1", "node2").
+		Build()
 
 	err := action_SendHeartbeat(ctx, c, nil)
 	assert.NoError(t, err)
@@ -143,9 +115,7 @@ func TestAction_SendHeartbeat(t *testing.T) {
 
 func Test_action_IncrementHeartbeatIntervalsSinceStateChange(t *testing.T) {
 	ctx := context.Background()
-	c, _, done := NewCoordinatorBuilderForTesting(t, State_Idle).Build(ctx)
-	defer done()
-	c.heartbeatIntervalsSinceStateChange = 2
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).HeartbeatIntervalsSinceStateChange(2).Build()
 
 	err := action_IncrementHeartbeatIntervalsSinceStateChange(ctx, c, nil)
 	require.NoError(t, err)
@@ -154,9 +124,7 @@ func Test_action_IncrementHeartbeatIntervalsSinceStateChange(t *testing.T) {
 
 func Test_action_PropagateHeartbeatToTransactions_NoTransactions(t *testing.T) {
 	ctx := context.Background()
-	c, _, done := NewCoordinatorBuilderForTesting(t, State_Idle).Build(ctx)
-	defer done()
-	c.transactionsByID = make(map[uuid.UUID]transaction.CoordinatorTransaction)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 
 	err := action_PropagateHeartbeatIntervalToTransactions(ctx, c, nil)
 	require.NoError(t, err)
@@ -164,10 +132,8 @@ func Test_action_PropagateHeartbeatToTransactions_NoTransactions(t *testing.T) {
 
 func Test_action_PropagateHeartbeatToTransactions_WithTransactions(t *testing.T) {
 	ctx := context.Background()
-	c, _, done := NewCoordinatorBuilderForTesting(t, State_Idle).Build(ctx)
-	defer done()
 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	c.transactionsByID[txn.GetID()] = txn
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
 	err := action_PropagateHeartbeatIntervalToTransactions(ctx, c, nil)
 	require.NoError(t, err)

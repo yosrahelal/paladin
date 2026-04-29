@@ -22,89 +22,24 @@ import (
 	"time"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
-	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
-	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
-func NewCoordinatorForUnitTest(t *testing.T) (*coordinator, *coordinatorDependencyMocks, func()) {
-
-	metrics := metrics.InitMetrics(context.Background(), prometheus.NewRegistry())
-	mocks := &coordinatorDependencyMocks{
-		transportWriter:   transport.NewMockTransportWriter(t),
-		clock:             common.NewMockClock(t),
-		engineIntegration: common.NewMockEngineIntegration(t),
-		syncPoints:        &syncpoints.MockSyncPoints{},
-		emit:              func(event common.Event) {},
-	}
-	mockDomainAPI := componentsmocks.NewDomainSmartContract(t)
-	mockTXManager := componentsmocks.NewTXManager(t)
-	mockSequencerManager := componentsmocks.NewSequencerManager(t)
-	allComponents := componentsmocks.NewAllComponents(t)
-	transportManager := componentsmocks.NewTransportManager(t)
-	mp, err := mockpersistence.NewSQLMockProvider()
-	require.NoError(t, err)
-	transportManager.On("LocalNodeName").Return("node1").Maybe()
-	allComponents.On("TransportManager").Return(transportManager).Maybe()
-	allComponents.On("TxManager").Return(mockTXManager).Maybe()
-	allComponents.On("SequencerManager").Return(mockSequencerManager).Maybe()
-	allComponents.On("Persistence").Return(mp.P).Maybe()
-	allComponents.On("KeyManager").Return(nil).Maybe()
-	allComponents.On("PublicTxManager").Return(nil).Maybe()
-	mockDomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-	}).Maybe()
-	mocks.transportWriter.On("StartLoopbackWriter", mock.Anything).Return(nil)
-	mocks.transportWriter.On("StopLoopbackWriter").Return().Maybe()
-	mocks.transportWriter.On("WaitForDone", mock.Anything).Return().Maybe()
-	buildCtx, cancel := context.WithCancel(t.Context())
-
-	config := &pldconf.SequencerConfig{
-		HeartbeatInterval:       confutil.P("10s"),
-		StateTimeout:            confutil.P("5s"),
-		RequestTimeout:          confutil.P("1s"),
-		BlockRange:              confutil.P(uint64(100)),
-		BlockHeightTolerance:    confutil.P(uint64(5)),
-		ClosingGracePeriod:      confutil.P(5),
-		MaxInflightTransactions: confutil.P(500),
-		MaxDispatchAhead:        confutil.P(10),
-		TargetActiveSequencers:  confutil.P(50),
-	}
-
-	coordinator, err := NewCoordinator(buildCtx, pldtypes.RandAddress(), mockDomainAPI, nil, allComponents, nil, nil, mocks.transportWriter, mocks.clock, mocks.engineIntegration, mocks.syncPoints, config, "node1", metrics)
-	require.NoError(t, err)
-
-	done := func() {
-		cancel()
-		coordinator.WaitForDone(context.Background())
-	}
-	return coordinator, mocks, done
-}
-
-type coordinatorDependencyMocks struct {
-	transportWriter   *transport.MockTransportWriter
-	clock             *common.MockClock
-	engineIntegration *common.MockEngineIntegration
-	emit              common.EmitEvent
-	syncPoints        syncpoints.SyncPoints
-}
 
 func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
 	// Test the progression of a single transaction through the coordinator's lifecycle
@@ -112,7 +47,6 @@ func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
 	// by inspecting the coordinator output messages and by sending events that would normally be triggered by those components sending messages to the coordinator.
 	// At each stage, we inspect the state of the coordinator by checking the snapshot it produces on heartbeat messages
 
-	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	mockDomain := componentsmocks.NewDomain(t)
@@ -129,8 +63,14 @@ func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1) // Stop the dispatcher loop from progressing states - we're manually updating state throughout the test
 	builder.OverrideSequencerConfig(config)
-	c, mocks, done := builder.Build(ctx)
-	defer done()
+	builder.ActiveCoordinatorNode("node1")
+	c, mocks := builder.Build()
+	ctx, cancel := context.WithCancel(t.Context())
+	require.NoError(t, c.Start(ctx))
+	defer func() {
+		cancel()
+		c.WaitForDone(t.Context())
+	}()
 	mocks.SyncPoints.(*syncpoints.MockSyncPoints).On("PersistDispatchBatch", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
 	// Start by simulating the originator and delegate a transaction to the coordinator
@@ -327,8 +267,7 @@ func TestCoordinator_MaxInflightTransactions(t *testing.T) {
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	c, _, done := builder.Build(ctx)
-	defer done()
+	c, _ := builder.Build()
 
 	// Start by simulating the originator and delegate a transaction to the coordinator
 	for i := range 100 {
@@ -347,10 +286,7 @@ func TestCoordinator_MaxInflightTransactions(t *testing.T) {
 
 func TestCoordinator_GetTransactionsInStates_EmptyMapReturnsEmpty(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.transactionsByID = make(map[uuid.UUID]transaction.CoordinatorTransaction)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 
 	result := c.getTransactionsInStates(ctx, []transaction.State{transaction.State_Ready_For_Dispatch})
 	assert.Empty(t, result)
@@ -358,13 +294,8 @@ func TestCoordinator_GetTransactionsInStates_EmptyMapReturnsEmpty(t *testing.T) 
 
 func TestCoordinator_GetTransactionsInStates_SingleStateFilter_ReturnsMatching(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Ready_For_Dispatch).Build()
-	c.transactionsByID = map[uuid.UUID]transaction.CoordinatorTransaction{
-		txn.GetID(): txn,
-	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
 	result := c.getTransactionsInStates(ctx, []transaction.State{transaction.State_Ready_For_Dispatch})
 	require.Len(t, result, 1)
@@ -374,13 +305,8 @@ func TestCoordinator_GetTransactionsInStates_SingleStateFilter_ReturnsMatching(t
 
 func TestCoordinator_GetTransactionsInStates_SingleStateFilter_ReturnsEmptyWhenNoMatch(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	c.transactionsByID = map[uuid.UUID]transaction.CoordinatorTransaction{
-		txn.GetID(): txn,
-	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
 	result := c.getTransactionsInStates(ctx, []transaction.State{transaction.State_Ready_For_Dispatch})
 	assert.Empty(t, result)
@@ -388,17 +314,10 @@ func TestCoordinator_GetTransactionsInStates_SingleStateFilter_ReturnsEmptyWhenN
 
 func TestCoordinator_GetTransactionsInStates_MultipleStatesFilter_ReturnsAllMatching(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
 	txReady, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Ready_For_Dispatch).Build()
 	txDispatched, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
 	txPooled, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	c.transactionsByID = map[uuid.UUID]transaction.CoordinatorTransaction{
-		txReady.GetID():      txReady,
-		txDispatched.GetID(): txDispatched,
-		txPooled.GetID():     txPooled,
-	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txReady, txDispatched, txPooled).Build()
 
 	result := c.getTransactionsInStates(ctx, []transaction.State{
 		transaction.State_Ready_For_Dispatch,
@@ -417,17 +336,10 @@ func TestCoordinator_GetTransactionsInStates_MultipleStatesFilter_ReturnsAllMatc
 
 func TestCoordinator_GetTransactionsInStates_MultipleTransactionsInSameState(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
 	tx1, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).Build()
 	tx2, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).Build()
 	tx3, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	c.transactionsByID = map[uuid.UUID]transaction.CoordinatorTransaction{
-		tx1.GetID(): tx1,
-		tx2.GetID(): tx2,
-		tx3.GetID(): tx3,
-	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx1, tx2, tx3).Build()
 
 	result := c.getTransactionsInStates(ctx, []transaction.State{transaction.State_Assembling})
 	require.Len(t, result, 2)
@@ -443,13 +355,8 @@ func TestCoordinator_GetTransactionsInStates_MultipleTransactionsInSameState(t *
 
 func TestCoordinator_GetTransactionsInStates_EmptyStatesFilter_ReturnsEmpty(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Ready_For_Dispatch).Build()
-	c.transactionsByID = map[uuid.UUID]transaction.CoordinatorTransaction{
-		txn.GetID(): txn,
-	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
 	result := c.getTransactionsInStates(ctx, nil)
 	assert.Empty(t, result)
@@ -459,10 +366,7 @@ func TestCoordinator_GetTransactionsInStates_EmptyStatesFilter_ReturnsEmpty(t *t
 
 func TestCoordinator_GetTransactionsNotInStates_EmptyMapReturnsEmpty(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-	c.transactionsByID = make(map[uuid.UUID]transaction.CoordinatorTransaction)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 
 	result := c.getTransactionsNotInStates(ctx, []transaction.State{transaction.State_Ready_For_Dispatch})
 	assert.Empty(t, result)
@@ -470,15 +374,9 @@ func TestCoordinator_GetTransactionsNotInStates_EmptyMapReturnsEmpty(t *testing.
 
 func TestCoordinator_GetTransactionsNotInStates_SingleStateFilter_ReturnsNonMatching(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
 	txReady, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Ready_For_Dispatch).Build()
 	txPooled, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	c.transactionsByID = map[uuid.UUID]transaction.CoordinatorTransaction{
-		txReady.GetID():  txReady,
-		txPooled.GetID(): txPooled,
-	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txReady, txPooled).Build()
 
 	result := c.getTransactionsNotInStates(ctx, []transaction.State{transaction.State_Ready_For_Dispatch})
 	require.Len(t, result, 1)
@@ -488,13 +386,8 @@ func TestCoordinator_GetTransactionsNotInStates_SingleStateFilter_ReturnsNonMatc
 
 func TestCoordinator_GetTransactionsNotInStates_SingleStateFilter_ReturnsAllWhenNoMatch(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	c.transactionsByID = map[uuid.UUID]transaction.CoordinatorTransaction{
-		txn.GetID(): txn,
-	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
 	result := c.getTransactionsNotInStates(ctx, []transaction.State{transaction.State_Ready_For_Dispatch})
 	require.Len(t, result, 1)
@@ -503,17 +396,10 @@ func TestCoordinator_GetTransactionsNotInStates_SingleStateFilter_ReturnsAllWhen
 
 func TestCoordinator_GetTransactionsNotInStates_MultipleStatesFilter_ExcludesAllMatching(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
 	txReady, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Ready_For_Dispatch).Build()
 	txDispatched, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
 	txPooled, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	c.transactionsByID = map[uuid.UUID]transaction.CoordinatorTransaction{
-		txReady.GetID():      txReady,
-		txDispatched.GetID(): txDispatched,
-		txPooled.GetID():     txPooled,
-	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txReady, txDispatched, txPooled).Build()
 
 	result := c.getTransactionsNotInStates(ctx, []transaction.State{
 		transaction.State_Ready_For_Dispatch,
@@ -525,17 +411,10 @@ func TestCoordinator_GetTransactionsNotInStates_MultipleStatesFilter_ExcludesAll
 
 func TestCoordinator_GetTransactionsNotInStates_MultipleTransactionsExcluded(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
 	tx1, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).Build()
 	tx2, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).Build()
 	tx3, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
-	c.transactionsByID = map[uuid.UUID]transaction.CoordinatorTransaction{
-		tx1.GetID(): tx1,
-		tx2.GetID(): tx2,
-		tx3.GetID(): tx3,
-	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx1, tx2, tx3).Build()
 
 	result := c.getTransactionsNotInStates(ctx, []transaction.State{transaction.State_Assembling})
 	require.Len(t, result, 1)
@@ -545,13 +424,8 @@ func TestCoordinator_GetTransactionsNotInStates_MultipleTransactionsExcluded(t *
 
 func TestCoordinator_GetTransactionsNotInStates_EmptyStatesFilter_ReturnsAll(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Ready_For_Dispatch).Build()
-	c.transactionsByID = map[uuid.UUID]transaction.CoordinatorTransaction{
-		txn.GetID(): txn,
-	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
 	result := c.getTransactionsNotInStates(ctx, nil)
 	require.Len(t, result, 1)
@@ -565,7 +439,8 @@ func TestCoordinator_NewCoordinator_EndorserMode_NoConfiguredCandidates_Fails(t 
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	})
-	assert.Panics(t, func() { builder.Build(ctx) })
+	c, _ := builder.Build()
+	assert.Error(t, c.Start(ctx))
 }
 
 func TestCoordinator_NewCoordinator_StaticMode_EmptyStaticCoordinator_Fails(t *testing.T) {
@@ -575,7 +450,8 @@ func TestCoordinator_NewCoordinator_StaticMode_EmptyStaticCoordinator_Fails(t *t
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
 		StaticCoordinator:    proto.String(""),
 	})
-	assert.Panics(t, func() { builder.Build(ctx) })
+	c, _ := builder.Build()
+	assert.Error(t, c.Start(ctx))
 }
 
 func TestCoordinator_NewCoordinator_StaticMode_InvalidIdentity_Fails(t *testing.T) {
@@ -585,18 +461,23 @@ func TestCoordinator_NewCoordinator_StaticMode_InvalidIdentity_Fails(t *testing.
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
 		StaticCoordinator:    proto.String("identity"), // no @node
 	})
-	assert.Panics(t, func() { builder.Build(ctx) })
+	c, _ := builder.Build()
+	assert.Error(t, c.Start(ctx))
 }
 
 func TestCoordinator_NewCoordinator_StaticMode_ValidStaticCoordinator_StoresNodeName(t *testing.T) {
-	ctx := t.Context()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
 		StaticCoordinator:    proto.String("identity@nodeA"),
 	})
-	c, _, done := builder.Build(ctx)
-	defer done()
+	c, _ := builder.Build()
+	ctx, cancel := context.WithCancel(t.Context())
+	require.NoError(t, c.Start(ctx))
+	defer func() {
+		cancel()
+		c.WaitForDone(t.Context())
+	}()
 	assert.Equal(t, "nodeA", c.staticCoordinatorNode)
 }
 
@@ -607,27 +488,32 @@ func TestCoordinator_NewCoordinator_EndorserMode_FailsOnInvalidConfiguredCandida
 		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
 		CoordinatorEndorserCandidates: []string{"endorser1"},
 	})
-	assert.Panics(t, func() {
-		builder.Build(ctx)
-	})
+	c, _ := builder.Build()
+	assert.Error(t, c.Start(ctx))
 }
 
 func TestCoordinator_NewCoordinator_EndorserMode_InitializesPoolFromConfiguredCandidates(t *testing.T) {
-	ctx := t.Context()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
 		CoordinatorEndorserCandidates: []string{"endorser1@nodeB", "endorser2@nodeA", "endorser3@nodeB"},
 	})
-	c, _, done := builder.Build(ctx)
-	defer done()
+	c, _ := builder.Build()
+	ctx, cancel := context.WithCancel(t.Context())
+	require.NoError(t, c.Start(ctx))
+	defer func() {
+		cancel()
+		c.WaitForDone(t.Context())
+	}()
+	defer cancel()
 	assert.Equal(t, []string{"nodeA", "nodeB", "nodeB"}, c.originatorNodePool)
 }
 
 func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {
-	ctx := t.Context()
+	ctx, cancel := context.WithCancel(t.Context())
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
+	c, _ := builder.Build()
+	require.NoError(t, c.Start(ctx))
 
 	// Verify event loop is running
 	require.False(t, c.stateMachineEventLoop.IsStopped(), "event loop should not be stopped initially")
@@ -638,8 +524,9 @@ func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {
 	default:
 	}
 
-	// Should block until shutdown is complete
-	done()
+	// Cancel the context then wait for shutdown to complete
+	cancel()
+	c.WaitForDone(t.Context())
 
 	// Verify both loops have stopped
 	require.True(t, c.stateMachineEventLoop.IsStopped(), "event loop should be stopped")
@@ -661,51 +548,57 @@ func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {
 }
 
 func TestCoordinator_CancelContext_WaitsForTransportShutdown(t *testing.T) {
-	ctx := t.Context()
+	ctx, cancel := context.WithCancel(t.Context())
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
+	c, _ := builder.Build()
+	defer func() {
+		cancel()
+		c.WaitForDone(t.Context())
+	}()
+
 	mockTransport := transport.NewMockTransportWriter(t)
-	// done() waits for transport completion on the configured writer
+	// Start uses StartLoopbackWriter on the original transport; replace writer after Start
+	// so that WaitForDone is called on the mock.
 	mockTransport.On("WaitForDone", mock.Anything).Return().Maybe()
+	mockTransport.On("StopLoopbackWriter").Return().Maybe()
+	require.NoError(t, c.Start(ctx))
 
-	// Replace the transport writer
+	// Replace the transport writer after Start
 	c.transportWriter = mockTransport
-
-	done()
-
-	// Verify transport shutdown wait was invoked
-	mockTransport.AssertExpectations(t)
 }
 
 func TestCoordinator_CancelContext_CompletesSuccessfullyWhenCalledOnce(t *testing.T) {
-	ctx := t.Context()
+	ctx, cancel := context.WithCancel(t.Context())
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
+	c, _ := builder.Build()
+	require.NoError(t, c.Start(ctx))
 
-	done()
+	cancel()
+	c.WaitForDone(t.Context())
 
 	// Verify both loops have stopped
 	require.True(t, c.stateMachineEventLoop.IsStopped(), "event loop should be stopped")
-
 	select {
 	case _, ok := <-c.dispatchLoopStopped:
 		require.False(t, ok, "dispatch loop stopped channel should be closed")
-	case <-time.After(10 * time.Millisecond):
-		t.Fatal("dispatch loop did not stop within timeout")
+	default:
+		t.Fatal("dispatch loop should be stopped")
 	}
 }
 
 func TestCoordinator_CancelContext_StopsLoopsEvenWhenProcessingEvents(t *testing.T) {
-	ctx := t.Context()
+	ctx, cancel := context.WithCancel(t.Context())
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
+	c, _ := builder.Build()
+	require.NoError(t, c.Start(ctx))
 
 	// Queue some events to ensure loops are busy
 	for i := 0; i < 10; i++ {
 		c.QueueEvent(ctx, &common.HeartbeatIntervalEvent{})
 	}
 
-	done()
+	cancel()
+	c.WaitForDone(t.Context())
 
 	// Verify both loops have stopped
 	require.True(t, c.stateMachineEventLoop.IsStopped(), "event loop should be stopped")
@@ -713,29 +606,31 @@ func TestCoordinator_CancelContext_StopsLoopsEvenWhenProcessingEvents(t *testing
 	select {
 	case _, ok := <-c.dispatchLoopStopped:
 		require.False(t, ok, "dispatch loop stopped channel should be closed")
-	case <-time.After(10 * time.Millisecond):
-		t.Fatal("dispatch loop did not stop within timeout")
+	default:
+		t.Fatal("dispatch loop should be stopped")
 	}
 }
 
 func TestCoordinator_CancelContext_WhenAlreadyCancelled_ReturnsImmediately(t *testing.T) {
-	ctx := t.Context()
+	ctx, cancel := context.WithCancel(t.Context())
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
+	c, _ := builder.Build()
+	require.NoError(t, c.Start(ctx))
 
-	done()
+	cancel()
+	c.WaitForDone(t.Context())
+
 	require.True(t, c.stateMachineEventLoop.IsStopped(), "event loop should be stopped")
 
 	// Second cancel should return immediately without blocking or panicking
-	done()
+	cancel()
 	require.True(t, c.stateMachineEventLoop.IsStopped(), "event loop should still be stopped")
 }
 
 func Test_propagateEventToTransaction_UnknownTransaction_ReturnsNil(t *testing.T) {
 	ctx := t.Context()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
+	c, _ := builder.Build()
 
 	event := &transaction.ConfirmedSuccessEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{TransactionID: uuid.New()},
@@ -749,12 +644,7 @@ func Test_propagateEventToTransaction_UnknownTransaction_ReturnsNil(t *testing.T
 
 func TestCoordinator_PropagateEventToAllTransactions_ReturnsNilWhenNoTransactionsExist(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-
-	// Ensure transactionsByID is empty
-	c.transactionsByID = make(map[uuid.UUID]transaction.CoordinatorTransaction)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 
 	event := &common.HeartbeatIntervalEvent{}
 	err := c.propagateEventToAllTransactions(ctx, event)
@@ -764,16 +654,8 @@ func TestCoordinator_PropagateEventToAllTransactions_ReturnsNilWhenNoTransaction
 
 func TestCoordinator_PropagateEventToAllTransactions_SuccessfullyPropagatesEventToSingleTransaction(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-
-	// Create a transaction
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled)
-	txn, _ := txBuilder.Build()
-
-	// Add transaction to coordinator
-	c.transactionsByID[txn.GetID()] = txn
+	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
 	// Propagate heartbeat event (should be handled successfully by any state)
 	event := &common.HeartbeatIntervalEvent{}
@@ -784,24 +666,10 @@ func TestCoordinator_PropagateEventToAllTransactions_SuccessfullyPropagatesEvent
 
 func TestCoordinator_PropagateEventToAllTransactions_SuccessfullyPropagatesEventToMultipleTransactions(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-
-	// Create multiple transactions
-	txBuilder1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled)
-	txn1, _ := txBuilder1.Build()
-
-	txBuilder2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling)
-	txn2, _ := txBuilder2.Build()
-
-	txBuilder3 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched)
-	txn3, _ := txBuilder3.Build()
-
-	// Add transactions to coordinator
-	c.transactionsByID[txn1.GetID()] = txn1
-	c.transactionsByID[txn2.GetID()] = txn2
-	c.transactionsByID[txn3.GetID()] = txn3
+	txn1, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	txn2, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).Build()
+	txn3, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn1, txn2, txn3).Build()
 
 	// Propagate heartbeat event
 	event := &common.HeartbeatIntervalEvent{}
@@ -812,162 +680,89 @@ func TestCoordinator_PropagateEventToAllTransactions_SuccessfullyPropagatesEvent
 
 func TestCoordinator_PropagateEventToAllTransactions_ReturnsErrorWhenSingleTransactionFailsToHandleEvent(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-
-	// Create a transaction in a state that might not handle certain events
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled)
-	txn, _ := txBuilder.Build()
-
-	// Add transaction to coordinator
-	c.transactionsByID[txn.GetID()] = txn
-
-	// Create a mock event that will cause an error
-	event := &common.HeartbeatIntervalEvent{}
-
-	err := c.propagateEventToAllTransactions(ctx, event)
+	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
 	// HeartbeatIntervalEvent should be handled successfully by all transaction states
+	event := &common.HeartbeatIntervalEvent{}
+	err := c.propagateEventToAllTransactions(ctx, event)
 	assert.NoError(t, err, "heartbeat event should be handled successfully")
 }
 
 func TestCoordinator_PropagateEventToAllTransactions_StopsAtFirstErrorWhenMultipleTransactionsExist(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-
-	// Create multiple transactions
-	txBuilder1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled)
-	txn1, _ := txBuilder1.Build()
-
-	txBuilder2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling)
-	txn2, _ := txBuilder2.Build()
-
-	txBuilder3 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched)
-	txn3, _ := txBuilder3.Build()
-
-	// Add transactions to coordinator
-	c.transactionsByID[txn1.GetID()] = txn1
-	c.transactionsByID[txn2.GetID()] = txn2
-	c.transactionsByID[txn3.GetID()] = txn3
+	txn1, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	txn2, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).Build()
+	txn3, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn1, txn2, txn3).Build()
 
 	// Propagate heartbeat event - all should handle it successfully
 	event := &common.HeartbeatIntervalEvent{}
 	err := c.propagateEventToAllTransactions(ctx, event)
-
 	assert.NoError(t, err, "should successfully propagate to all transactions")
 }
 
 func TestCoordinator_PropagateEventToAllTransactions_HandlesEventPropagationWithManyTransactions(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-
-	// Create many transactions
 	numTransactions := 10
+	txns := make([]transaction.CoordinatorTransaction, numTransactions)
 	for i := 0; i < numTransactions; i++ {
-		txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled)
-		txn, _ := txBuilder.Build()
-		c.transactionsByID[txn.GetID()] = txn
+		txns[i], _ = transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
 	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txns...).Build()
 
-	// Verify we have the expected number of transactions
 	assert.Equal(t, numTransactions, len(c.transactionsByID), "should have correct number of transactions")
 
-	// Propagate heartbeat event
 	event := &common.HeartbeatIntervalEvent{}
 	err := c.propagateEventToAllTransactions(ctx, event)
-
 	assert.NoError(t, err, "should successfully propagate event to all transactions")
 }
 
 func TestCoordinator_PropagateEventToAllTransactions_HandlesDifferentEventTypes(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
+	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
-	// Create a transaction
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled)
-	txn, _ := txBuilder.Build()
-
-	// Add transaction to coordinator
-	c.transactionsByID[txn.GetID()] = txn
 	event := &common.HeartbeatIntervalEvent{}
 	err := c.propagateEventToAllTransactions(ctx, event)
-
 	assert.NoError(t, err, "should handle HeartbeatIntervalEvent successfully")
 }
 
 func TestCoordinator_PropagateEventToAllTransactions_HandlesContextCancellationGracefully(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
+	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
-	// Create a transaction
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled)
-	txn, _ := txBuilder.Build()
-
-	// Add transaction to coordinator
-	c.transactionsByID[txn.GetID()] = txn
-
-	// Create a cancelled context
 	cancelledCtx, cancel := context.WithCancel(ctx)
 	cancel()
 
-	// Propagate event with cancelled context
 	event := &common.HeartbeatIntervalEvent{}
 	_ = c.propagateEventToAllTransactions(cancelledCtx, event)
-
 	// Just verify it doesn't panic
 }
 
 func TestCoordinator_PropagateEventToAllTransactions_ProcessesTransactionsInMapIterationOrder(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-
-	// Create multiple transactions
 	txns := make([]transaction.CoordinatorTransaction, 5)
 	for i := 0; i < 5; i++ {
-		txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled)
-		txns[i], _ = txBuilder.Build()
-		c.transactionsByID[txns[i].GetID()] = txns[i]
+		txns[i], _ = transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
 	}
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txns...).Build()
 
-	// Propagate event
 	event := &common.HeartbeatIntervalEvent{}
 	err := c.propagateEventToAllTransactions(ctx, event)
-
 	assert.NoError(t, err, "should process all transactions regardless of order")
 	assert.Equal(t, 5, len(c.transactionsByID), "all transactions should still be in map")
 }
 
 func TestCoordinator_PropagateEventToAllTransactions_ReturnsErrorImmediatelyWhenTransactionHandleEventFails(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-
-	// Create multiple transactions
-	txBuilder1 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled)
-	txn1, _ := txBuilder1.Build()
-
-	txBuilder2 := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling)
-	txn2, _ := txBuilder2.Build()
-
-	// Add transactions to coordinator
-	c.transactionsByID[txn1.GetID()] = txn1
-	c.transactionsByID[txn2.GetID()] = txn2
+	txn1, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pooled).Build()
+	txn2, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn1, txn2).Build()
 
 	event := &common.HeartbeatIntervalEvent{}
 	err := c.propagateEventToAllTransactions(ctx, event)
-
 	// With real transactions, HeartbeatIntervalEvent should be handled successfully
 	assert.NoError(t, err, "heartbeat event should be handled successfully by all transaction states")
 }
@@ -975,19 +770,11 @@ func TestCoordinator_PropagateEventToAllTransactions_ReturnsErrorImmediatelyWhen
 func TestCoordinator_PropagateEventToAllTransactions_IncrementsHeartbeatCounterForConfirmedTransaction(t *testing.T) {
 	ctx := t.Context()
 	mockGrapher := grapher.NewMockGrapher(t)
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-
-	// Create a transaction in State_Confirmed with 4 heartbeat intervals
-	// (grace period is 5, so after one more heartbeat it should transition to State_Final)
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirmed).
-		HeartbeatIntervalsSinceStateChange(4).Grapher(mockGrapher)
-	txn, _ := txBuilder.Build()
+	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirmed).
+		HeartbeatIntervalsSinceStateChange(4).Grapher(mockGrapher).Build()
 	mockGrapher.EXPECT().Forget(mock.Anything, txn.GetID())
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
-	// Add transaction to coordinator
-	c.transactionsByID[txn.GetID()] = txn
 	assert.Equal(t, transaction.State_Confirmed, txn.GetCurrentState(), "transaction should start in State_Confirmed")
 
 	// Propagate heartbeat event
@@ -1001,17 +788,10 @@ func TestCoordinator_PropagateEventToAllTransactions_IncrementsHeartbeatCounterF
 
 func TestCoordinator_PropagateEventToAllTransactions_IncrementsHeartbeatCounterForRevertedTransaction(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
+	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Reverted).
+		HeartbeatIntervalsSinceStateChange(4).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 
-	// Create a transaction in State_Reverted with 4 heartbeat intervals
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Reverted).
-		HeartbeatIntervalsSinceStateChange(4)
-	txn, _ := txBuilder.Build()
-
-	// Add transaction to coordinator
-	c.transactionsByID[txn.GetID()] = txn
 	assert.Equal(t, transaction.State_Reverted, txn.GetCurrentState(), "transaction should start in State_Reverted")
 
 	// Propagate heartbeat event
@@ -1025,22 +805,13 @@ func TestCoordinator_PropagateEventToAllTransactions_IncrementsHeartbeatCounterF
 
 func TestCoordinator_PropagateEventToAllTransactions_HandleEventReturnsError(t *testing.T) {
 	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
-
-	// Create a mock transaction that returns an error from HandleEvent
 	mockTxn := transaction.NewMockCoordinatorTransaction(t)
 	txnID := uuid.New()
 	expectedError := fmt.Errorf("handle event error")
-
 	mockTxn.EXPECT().GetID().Return(txnID)
 	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*common.HeartbeatIntervalEvent")).Return(expectedError)
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(mockTxn).Build()
 
-	// Add mock transaction to coordinator
-	c.transactionsByID[txnID] = mockTxn
-
-	// Propagate heartbeat event - should return the error
 	event := &common.HeartbeatIntervalEvent{}
 	err := c.propagateEventToAllTransactions(ctx, event)
 	require.Error(t, err)
@@ -1048,14 +819,20 @@ func TestCoordinator_PropagateEventToAllTransactions_HandleEventReturnsError(t *
 }
 
 func TestCoordinator_WaitForDone_ReturnsEarlyWhenContextCancelled(t *testing.T) {
-	ctx := t.Context()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
+	ctx, cancel := context.WithCancel(t.Context())
 
-	// Create a context that is already cancelled
-	cancelledCtx, cancel := context.WithCancel(context.Background())
-	cancel()
+	c, _ := builder.Build()
+	require.NoError(t, c.Start(ctx))
 
-	c.WaitForDone(cancelledCtx)
+	defer func() {
+		cancel()
+		c.WaitForDone(t.Context())
+	}()
+
+	// Create a context that is already cancelled — WaitForDone should return early via ctx.Done()
+	ctx2, cancel2 := context.WithCancel(t.Context())
+	cancel2()
+
+	c.WaitForDone(ctx2)
 }

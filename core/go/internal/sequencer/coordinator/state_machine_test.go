@@ -65,10 +65,14 @@ func TestState_String_NegativeState(t *testing.T) {
 }
 
 func Test_queueEventInternal_QueuesPriorityEvent(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
+	ctx, cancel := context.WithCancel(t.Context())
+	c, _ := builder.Build()
+	require.NoError(t, c.Start(ctx))
+	defer func() {
+		cancel()
+		c.WaitForDone(t.Context())
+	}()
 
 	syncEvent := statemachine.NewSyncEvent()
 	c.queueEventInternal(ctx, syncEvent)
@@ -77,10 +81,14 @@ func Test_queueEventInternal_QueuesPriorityEvent(t *testing.T) {
 }
 
 func Test_TryQueueEvent_QueuesToEventLoop(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _, done := builder.Build(ctx)
-	defer done()
+	ctx, cancel := context.WithCancel(t.Context())
+	c, _ := builder.Build()
+	require.NoError(t, c.Start(ctx))
+	defer func() {
+		cancel()
+		c.WaitForDone(t.Context())
+	}()
 
 	event := &CoordinatorCreatedEvent{}
 	ok := c.TryQueueEvent(ctx, event)

@@ -44,6 +44,10 @@ import (
 
 // Coordinator is the interface that consumers should use to interact with the coordinator.
 type Coordinator interface {
+	// Start initializes the coordinator from the contract config and begins the event loop and
+	// dispatch goroutines. It must be called once after construction before any events are processed.
+	Start(ctx context.Context) error
+
 	// Asynchronously update the state machine by queueing an event to be processed
 	// These are the only interfaces by which consumers should update the state of the coordinator
 	QueueEvent(ctx context.Context, event common.Event)
@@ -64,7 +68,8 @@ type coordinator struct {
 	// take the read lock when called.
 	sync.RWMutex
 
-	ctx context.Context
+	started bool
+	ctx     context.Context
 
 	signingIdentity string
 
@@ -118,7 +123,6 @@ type coordinator struct {
 }
 
 func NewCoordinator(
-	ctx context.Context,
 	contractAddress *pldtypes.EthAddress,
 	domainAPI components.DomainSmartContract,
 	dCtx components.DomainContext,
@@ -132,11 +136,9 @@ func NewCoordinator(
 	configuration *pldconf.SequencerConfig,
 	nodeName string,
 	metrics metrics.DistributedSequencerMetrics,
-) (*coordinator, error) {
-	coordCtx := log.WithLogField(ctx, "role", "coordinator")
+) *coordinator {
 	dependencyTracker := dependencytracker.NewDependencyTracker()
 	c := &coordinator{
-		ctx:                                coordCtx,
 		heartbeatIntervalsSinceStateChange: 0,
 		transactionsByID:                   make(map[uuid.UUID]transaction.CoordinatorTransaction),
 		domainAPI:                          domainAPI,
@@ -181,20 +183,33 @@ func NewCoordinator(
 	c.inFlightTxns = make(map[uuid.UUID]transaction.CoordinatorTransaction, c.maxDispatchAhead)
 	c.pooledTransactions = make([]transaction.CoordinatorTransaction, 0, c.maxInflightTransactions)
 	c.dispatchQueue = make(chan transaction.CoordinatorTransaction, c.maxInflightTransactions)
+
+	return c
+}
+
+func (c *coordinator) Start(ctx context.Context) error {
+	if c.started {
+		return nil
+	}
+	coordCtx := log.WithLogField(ctx, "role", "coordinator")
+	c.ctx = coordCtx
+
+	if err := c.initializeStaticCoordinatorFromContractConfig(coordCtx); err != nil {
+		return err
+	}
+	if err := c.initializeOriginatorNodePoolFromContractConfig(coordCtx); err != nil {
+		return err
+	}
+
+	c.started = true
+
 	context.AfterFunc(ctx, func() {
-		// the disptach loop may be waiting on this mutex when the context is cancelled- this wakes
+		// the dispatch loop may be waiting on this mutex when the context is cancelled - this wakes
 		// it up so it may exit
 		c.inFlightMutex.L.Lock()
 		c.inFlightMutex.Broadcast()
 		c.inFlightMutex.L.Unlock()
 	})
-
-	if err := c.initializeStaticCoordinatorFromContractConfig(coordCtx); err != nil {
-		return nil, err
-	}
-	if err := c.initializeOriginatorNodePoolFromContractConfig(coordCtx); err != nil {
-		return nil, err
-	}
 
 	// Start the state machine event loop
 	go c.stateMachineEventLoop.Start(coordCtx)
@@ -203,12 +218,12 @@ func NewCoordinator(
 	go c.dispatchLoop(coordCtx)
 
 	// Handle loopback messages to the same node without blocking the event loop
-	transportWriter.StartLoopbackWriter()
+	c.transportWriter.StartLoopbackWriter()
 
 	// Trigger the initial transition out of State_Initial
 	c.QueueEvent(coordCtx, &CoordinatorCreatedEvent{})
 
-	return c, nil
+	return nil
 }
 
 // GetCurrentState returns the current state of the coordinator.
@@ -218,6 +233,9 @@ func (c *coordinator) GetCurrentState() State {
 }
 
 func (c *coordinator) WaitForDone(ctx context.Context) {
+	if !c.started {
+		return
+	}
 	select {
 	case <-c.dispatchLoopStopped:
 	case <-ctx.Done():
@@ -325,8 +343,4 @@ func (c *coordinator) getTransactionsNotInStates(ctx context.Context, states []t
 	}
 	log.L(ctx).Tracef("%d transactions not in states: %+v", len(matchingTxns), states)
 	return matchingTxns
-}
-
-func ptrTo[T any](v T) *T {
-	return &v
 }

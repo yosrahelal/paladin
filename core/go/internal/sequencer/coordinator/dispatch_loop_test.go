@@ -31,13 +31,15 @@ import (
 // stopDispatchLoop and Signals. We pre-populate inFlightTxns so that when the loop
 // pulls the queued tx it sees len(inFlightTxns)+dispatchedAhead >= maxDispatchAhead and enters Wait().
 func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(1)
 	builder.OverrideSequencerConfig(config)
-	c, _, done := builder.Build(ctx)
-	defer done()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	c, _ := builder.Build()
+	require.NoError(t, c.Start(ctx))
+	defer cancel()
 
 	// Pre-populate inFlightTxns so the dispatch loop will enter the first Wait() when it pulls the tx
 	dummyTxn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).Build()
@@ -56,20 +58,19 @@ func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
 
 	// Give the dispatch loop time to pull the tx and enter the first Wait() (too many in flight).
 	time.Sleep(50 * time.Millisecond)
-	// Stop() sends to stopDispatchLoop (buffered) then Signals; loop wakes, receives from stopDispatchLoop, returns.
-	done()
 }
 
 // TestDispatchLoop_StopAtSelect covers the path where the dispatch loop is in the top-level
-// select and receives from stopDispatchLoop (loop not in Wait()).
+// select and exits when the context is cancelled.
 func TestDispatchLoop_StopAtSelect(t *testing.T) {
-	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1) // no dispatch progress, so loop stays in select
 	builder.OverrideSequencerConfig(config)
-	_, _, done := builder.Build(ctx)
 
-	// Stop without ever queueing a tx; loop is blocked on select between dispatchQueue and stopDispatchLoop
-	done()
+	ctx, cancel := context.WithCancel(t.Context())
+	c, _ := builder.Build()
+	require.NoError(t, c.Start(ctx))
+	cancel()
+	// Stop without ever queueing a tx; loop is blocked on the select waiting for dispatchQueue or ctx.Done()
 }

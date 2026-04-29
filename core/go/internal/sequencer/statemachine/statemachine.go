@@ -571,8 +571,46 @@ func (sel *StateMachineEventLoop[S, E]) TryQueuePriorityEvent(ctx context.Contex
 
 // ProcessEvent synchronously processes an event. This bypasses the event loop
 // and should only be used in tests or when you need synchronous processing.
+// ProcessEvent synchronously processes an event through the same pre-processing and routing
+// pipeline used by the event loop goroutine, including the PreProcess hook (e.g. routing
+// transaction events to sub-state-machines). Use this in tests that need deterministic,
+// synchronous event processing without starting the goroutine-based event loop.
 func (sel *StateMachineEventLoop[S, E]) ProcessEvent(ctx context.Context, event common.Event) error {
-	return sel.stateMachine.ProcessEvent(ctx, sel.entity, event)
+	return sel.processEvent(ctx, event)
+}
+
+// DrainPendingEvents processes all events currently buffered in the priority and regular queues,
+// using the same pipeline as HandleEvent. It stops when both queues are empty.
+// Used in tests to flush internally-queued follow-up events (e.g. TransactionStateTransitionEvents
+// queued by transaction state machines during synchronous processing) before making assertions.
+func (sel *StateMachineEventLoop[S, E]) DrainPendingEvents(ctx context.Context) error {
+	for {
+		processed := false
+		// Drain all priority events before touching the regular queue.
+		for draining := true; draining; {
+			select {
+			case event := <-sel.eventsPriority:
+				if err := sel.processEvent(ctx, event); err != nil {
+					return err
+				}
+				processed = true
+			default:
+				draining = false
+			}
+		}
+		// Process one regular event (priority events queued by it will be picked up next iteration).
+		select {
+		case event := <-sel.events:
+			if err := sel.processEvent(ctx, event); err != nil {
+				return err
+			}
+			processed = true
+		default:
+		}
+		if !processed {
+			return nil
+		}
+	}
 }
 
 // WaitForDone waits for the event loop to complete after context cancellation.
