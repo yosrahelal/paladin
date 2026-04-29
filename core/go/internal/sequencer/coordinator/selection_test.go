@@ -45,14 +45,14 @@ func Test_selectActiveCoordinatorNode_EndorserMode_SingleNodeInPool_ReturnsNode(
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorEndorserCandidates: []string{"id@node1"},
 	})
 	config := builder.GetSequencerConfig()
 	config.BlockRange = confutil.P(uint64(100))
 	builder.OverrideSequencerConfig(config)
 	c, _, done := builder.Build(ctx)
 	defer done()
-	c.originatorNodePool = []string{"node1"}
 	c.currentBlockHeight = 1000
 
 	coordinatorNode := c.selectActiveCoordinatorNode(ctx)
@@ -63,14 +63,14 @@ func Test_selectActiveCoordinatorNode_EndorserMode_MultipleNodesInPool_ReturnsOn
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2", "id@node3"},
 	})
 	config := builder.GetSequencerConfig()
 	config.BlockRange = confutil.P(uint64(100))
 	builder.OverrideSequencerConfig(config)
 	c, _, done := builder.Build(ctx)
 	defer done()
-	c.originatorNodePool = []string{"node1", "node2", "node3"}
 	c.currentBlockHeight = 1000
 
 	coordinatorNode := c.selectActiveCoordinatorNode(ctx)
@@ -81,14 +81,14 @@ func Test_selectActiveCoordinatorNode_EndorserMode_BlockHeightRounding_SameRange
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2", "id@node3"},
 	})
 	config := builder.GetSequencerConfig()
 	config.BlockRange = confutil.P(uint64(100))
 	builder.OverrideSequencerConfig(config)
 	c, _, done := builder.Build(ctx)
 	defer done()
-	c.originatorNodePool = []string{"node1", "node2", "node3"}
 
 	c.currentBlockHeight = 1000
 	coordinatorNode1 := c.selectActiveCoordinatorNode(ctx)
@@ -108,14 +108,14 @@ func Test_selectActiveCoordinatorNode_EndorserMode_DifferentBlockRanges_CanSelec
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
 	})
 	config := builder.GetSequencerConfig()
 	config.BlockRange = confutil.P(uint64(50))
 	builder.OverrideSequencerConfig(config)
 	c, _, done := builder.Build(ctx)
 	defer done()
-	c.originatorNodePool = []string{"node1", "node2"}
 
 	c.currentBlockHeight = 100
 	coordinatorNode1 := c.selectActiveCoordinatorNode(ctx)
@@ -293,7 +293,8 @@ func Test_action_SelectActiveCoordinator_EndorserModeSelectsFromPool(t *testing.
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Initial)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2", "id@node3"},
 	})
 	config := builder.GetSequencerConfig()
 	config.BlockRange = confutil.P(uint64(100))
@@ -301,7 +302,6 @@ func Test_action_SelectActiveCoordinator_EndorserModeSelectsFromPool(t *testing.
 	c, _, done := builder.Build(ctx)
 	defer done()
 	c.activeCoordinatorNode = ""
-	c.originatorNodePool = []string{"node1", "node2", "node3"}
 	c.currentBlockHeight = 1000
 
 	c.QueueEvent(ctx, &CoordinatorCreatedEvent{})

@@ -19,28 +19,23 @@ import (
 	"context"
 	"testing"
 
-	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func Test_action_HeartbeatReceived_SetsActiveCoordinatorState(t *testing.T) {
 	ctx := context.Background()
-	addr := pldtypes.RandAddress()
-	builder := NewCoordinatorBuilderForTesting(t, State_Initial).ContractAddress(addr)
-	contractAddress := builder.GetContractAddress()
+	builder := NewCoordinatorBuilderForTesting(t, State_Observing)
 	c, _, done := builder.Build(ctx)
 	defer done()
 
 	event := &HeartbeatReceivedEvent{}
 	event.From = "node1"
-	event.ContractAddress = &contractAddress
-	event.BlockHeight = 2000
+	event.CoordinatorState = int(State_Active)
 
 	err := action_HeartbeatReceived(ctx, c, event)
 	require.NoError(t, err)
-	assert.Equal(t, "node1", c.activeCoordinatorNode)
-	assert.Contains(t, c.originatorNodePool, "node1")
+	assert.Equal(t, State_Active, c.activeCoordinatorState)
 }
 
 func Test_action_ResetHeartbeatIntervalsSinceLastReceive(t *testing.T) {
@@ -67,7 +62,7 @@ func Test_action_IncrementHeartbeatIntervalsSinceLastReceive(t *testing.T) {
 	assert.Equal(t, 4, c.heartbeatIntervalsSinceLastReceive)
 }
 
-func Test_guard_ObservingIdleThresholdExceeded_NotExceeded(t *testing.T) {
+func Test_guard_HeartbeatThresholdExceeded_NotExceeded(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Observing)
 	c, _, done := builder.Build(ctx)
@@ -78,7 +73,7 @@ func Test_guard_ObservingIdleThresholdExceeded_NotExceeded(t *testing.T) {
 	assert.False(t, guard_HeartbeatThresholdExceeded(ctx, c))
 }
 
-func Test_guard_ObservingIdleThresholdExceeded_ExactlyMet(t *testing.T) {
+func Test_guard_HeartbeatThresholdExceeded_ExactlyMet(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Observing)
 	c, _, done := builder.Build(ctx)
@@ -89,7 +84,7 @@ func Test_guard_ObservingIdleThresholdExceeded_ExactlyMet(t *testing.T) {
 	assert.True(t, guard_HeartbeatThresholdExceeded(ctx, c))
 }
 
-func Test_guard_ObservingIdleThresholdExceeded_Exceeded(t *testing.T) {
+func Test_guard_HeartbeatThresholdExceeded_Exceeded(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Observing)
 	c, _, done := builder.Build(ctx)

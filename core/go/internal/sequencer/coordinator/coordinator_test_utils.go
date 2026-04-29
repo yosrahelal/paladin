@@ -297,31 +297,7 @@ func (b *CoordinatorBuilderForTesting) Build(ctx context.Context) (*coordinator,
 		coordinator.transactionsByID[tx.GetID()] = tx
 	}
 
-	// Reset activeCoordinatorNode which action_SelectActiveCoordinator may have set during startup.
-	// TODO AM: this can have a big rethink with the new state machine - should be possible to entirely remove it
-	coordinator.activeCoordinatorNode = ""
 	coordinator.stateMachineEventLoop.StateMachine().SetCurrentState(b.state)
-	switch b.state {
-	case State_Observing:
-		fallthrough
-	case State_Elect:
-		if b.currentBlockHeight == nil {
-			b.currentBlockHeight = ptrTo(uint64(0))
-		}
-
-		if b.activeCoordinator == nil {
-			b.activeCoordinator = ptrTo("activeCoordinator")
-		}
-
-		coordinator.currentBlockHeight = *b.currentBlockHeight
-		coordinator.activeCoordinatorNode = *b.activeCoordinator
-	case State_Closing:
-		if b.heartbeatsUntilClosingGracePeriodExpires == nil {
-			b.heartbeatsUntilClosingGracePeriodExpires = ptrTo(5)
-		}
-		coordinator.heartbeatIntervalsSinceStateChange = 5 - *b.heartbeatsUntilClosingGracePeriodExpires
-
-	}
 
 	done := func() {
 		cancel()

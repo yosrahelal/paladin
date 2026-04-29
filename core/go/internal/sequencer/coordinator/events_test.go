@@ -21,7 +21,6 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
@@ -145,33 +144,6 @@ func TestNewBlockEvent_Fields(t *testing.T) {
 	assert.Equal(t, blockHeight, event.BlockHeight)
 }
 
-func TestTransactionStateTransitionEvent_Type(t *testing.T) {
-	event := &common.TransactionStateTransitionEvent[transaction.State]{}
-	assert.Equal(t, common.Event_TransactionStateTransition, event.Type())
-}
-
-func TestTransactionStateTransitionEvent_TypeString(t *testing.T) {
-	event := &common.TransactionStateTransitionEvent[transaction.State]{}
-	assert.Equal(t, "Event_TransactionStateTransition", event.TypeString())
-}
-
-func TestTransactionStateTransitionEvent_Fields(t *testing.T) {
-	txID := uuid.New()
-	fromState := transaction.State_Pooled
-	toState := transaction.State_Ready_For_Dispatch
-
-	event := &common.TransactionStateTransitionEvent[transaction.State]{
-		BaseEvent:     common.BaseEvent{EventTime: time.Now()},
-		TransactionID: txID,
-		From:          fromState,
-		To:            toState,
-	}
-
-	assert.Equal(t, txID, event.TransactionID)
-	assert.Equal(t, fromState, event.From)
-	assert.Equal(t, toState, event.To)
-}
-
 func TestEvent_InterfaceCompliance(t *testing.T) {
 	// Test that all events with BaseEvent implement the Event interface
 	events := []Event{
@@ -198,10 +170,4 @@ func TestCoordinatorCreatedEvent_TypeAndTypeString(t *testing.T) {
 	event := &CoordinatorCreatedEvent{}
 	assert.Equal(t, Event_CoordinatorCreated, event.Type())
 	assert.Equal(t, "Event_CoordinatorCreated", event.TypeString())
-}
-
-func TestTransactionStateTransitionEvent_TypeAndTypeString(t *testing.T) {
-	event := &common.TransactionStateTransitionEvent[int]{}
-	assert.Equal(t, common.Event_TransactionStateTransition, event.Type())
-	assert.Equal(t, "Event_TransactionStateTransition", event.TypeString())
 }
