@@ -1282,8 +1282,6 @@ func TestHandleEndorsementRequest_Success_Revert(t *testing.T) {
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
-	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.Anything).Once()
-
 	mocks.metrics.EXPECT().IncEndorsedTransactions().Once()
 	mocks.transportWriter.EXPECT().SendEndorsementResponse(ctx, txID, idempotencyKey, contractAddr.String(), mock.Anything, endorsementResult, revertReason, "endorsement1", party, "coordinator-node").Return(nil).Once()
 
@@ -1397,8 +1395,6 @@ func TestHandleEndorsementRequest_Success_EndorserSubmit(t *testing.T) {
 
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
-
-	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.Anything).Once()
 
 	mocks.metrics.EXPECT().IncEndorsedTransactions().Once()
 	mocks.transportWriter.EXPECT().SendEndorsementResponse(ctx, txID, idempotencyKey, contractAddr.String(), mock.MatchedBy(func(att *prototk.AttestationResult) bool {
@@ -2058,8 +2054,6 @@ func TestHandleEndorsementRequest_SendEndorsementResponseError(t *testing.T) {
 
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
-
-	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.Anything).Once()
 
 	mocks.metrics.EXPECT().IncEndorsedTransactions().Once()
 	mocks.transportWriter.EXPECT().SendEndorsementResponse(ctx, txID, idempotencyKey, contractAddr.String(), mock.Anything, endorsementResult, "", "endorsement1", party, "coordinator-node").Return(errors.New("send failed")).Once()
