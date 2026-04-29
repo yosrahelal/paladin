@@ -37,3 +37,6 @@ packages:
   github.com/LFDT-Paladin/paladin/core/internal/publictxmgr:
     interfaces:
       InFlightStageActionTriggers:
+  github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator:
+    config:
+      all: true

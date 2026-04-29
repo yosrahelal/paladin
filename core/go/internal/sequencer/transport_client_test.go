@@ -34,6 +34,7 @@ import (
 	originatorTransaction "github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatormocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/persistencemocks"
 	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
@@ -59,7 +60,7 @@ type transportClientTestMocks struct {
 	domainContext   *componentsmocks.DomainContext
 	transportWriter *transport.MockTransportWriter
 	originator      *originator.MockOriginator
-	coordinator     *coordinator.MockCoordinator
+	coordinator     *coordinatormocks.Coordinator
 	metrics         *metrics.MockDistributedSequencerMetrics
 }
 
@@ -76,7 +77,7 @@ func newTransportClientTestMocks(t *testing.T) *transportClientTestMocks {
 		domainContext:   componentsmocks.NewDomainContext(t),
 		transportWriter: transport.NewMockTransportWriter(t),
 		originator:      originator.NewMockOriginator(t),
-		coordinator:     coordinator.NewMockCoordinator(t),
+		coordinator:     coordinatormocks.NewCoordinator(t),
 		metrics:         metrics.NewMockDistributedSequencerMetrics(t),
 	}
 }

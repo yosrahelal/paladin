@@ -35,6 +35,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/blockindexermocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatormocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/metricsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/persistencemocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/blockindexer"
@@ -64,7 +65,7 @@ type sequencerLifecycleTestMocks struct {
 	domainAPI        *componentsmocks.DomainSmartContract
 	transportWriter  *transport.MockTransportWriter
 	originator       *originator.MockOriginator
-	coordinator      *coordinator.MockCoordinator
+	coordinator      *coordinatormocks.Coordinator
 	syncPoints       *syncpoints.MockSyncPoints
 	metrics          *metrics.MockDistributedSequencerMetrics
 }
@@ -83,7 +84,7 @@ func newSequencerLifecycleTestMocks(t *testing.T) *sequencerLifecycleTestMocks {
 		domainAPI:        componentsmocks.NewDomainSmartContract(t),
 		transportWriter:  transport.NewMockTransportWriter(t),
 		originator:       originator.NewMockOriginator(t),
-		coordinator:      coordinator.NewMockCoordinator(t),
+		coordinator:      coordinatormocks.NewCoordinator(t),
 		syncPoints:       syncpoints.NewMockSyncPoints(t),
 		metrics:          metrics.NewMockDistributedSequencerMetrics(t),
 	}
@@ -1748,7 +1749,7 @@ func TestOnNewBlockHeight_DispatchesNewBlockToAllSequencers(t *testing.T) {
 	sm := newSequencerManagerForTesting(t, mocks)
 
 	// Create separate mock coordinator and originator for the second sequencer.
-	coord2 := coordinator.NewMockCoordinator(t)
+	coord2 := coordinatormocks.NewCoordinator(t)
 	orig2 := originator.NewMockOriginator(t)
 
 	const expectedHeight = int64(999)
