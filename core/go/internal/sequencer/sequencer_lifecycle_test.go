@@ -29,13 +29,14 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator"
 	coordinatorTx "github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator"
 	"github.com/LFDT-Paladin/paladin/core/mocks/blockindexermocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatormocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/metricsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/originatormocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/persistencemocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermetricsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/syncpointsmocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/blockindexer"
@@ -64,10 +65,10 @@ type sequencerLifecycleTestMocks struct {
 	keyManager       *componentsmocks.KeyManager
 	domainAPI        *componentsmocks.DomainSmartContract
 	transportWriter  *sequencertransportmocks.TransportWriter
-	originator       *originator.MockOriginator
+	originator       *originatormocks.Originator
 	coordinator      *coordinatormocks.Coordinator
 	syncPoints       *syncpointsmocks.SyncPoints
-	metrics          *metrics.MockDistributedSequencerMetrics
+	metrics          *sequencermetricsmocks.DistributedSequencerMetrics
 }
 
 func newSequencerLifecycleTestMocks(t *testing.T) *sequencerLifecycleTestMocks {
@@ -83,10 +84,10 @@ func newSequencerLifecycleTestMocks(t *testing.T) *sequencerLifecycleTestMocks {
 		keyManager:       componentsmocks.NewKeyManager(t),
 		domainAPI:        componentsmocks.NewDomainSmartContract(t),
 		transportWriter:  sequencertransportmocks.NewTransportWriter(t),
-		originator:       originator.NewMockOriginator(t),
+		originator:       originatormocks.NewOriginator(t),
 		coordinator:      coordinatormocks.NewCoordinator(t),
 		syncPoints:       syncpointsmocks.NewSyncPoints(t),
-		metrics:          metrics.NewMockDistributedSequencerMetrics(t),
+		metrics:          sequencermetricsmocks.NewDistributedSequencerMetrics(t),
 	}
 }
 
@@ -1750,7 +1751,7 @@ func TestOnNewBlockHeight_DispatchesNewBlockToAllSequencers(t *testing.T) {
 
 	// Create separate mock coordinator and originator for the second sequencer.
 	coord2 := coordinatormocks.NewCoordinator(t)
-	orig2 := originator.NewMockOriginator(t)
+	orig2 := originatormocks.NewOriginator(t)
 
 	const expectedHeight = int64(999)
 

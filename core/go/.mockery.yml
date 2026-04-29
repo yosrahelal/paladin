@@ -63,3 +63,16 @@ packages:
   github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints:
     config:
       all: true
+  github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics:
+    config:
+      all: true
+      pkgname: sequencermetricsmocks
+      dir: mocks/sequencermetricsmocks
+  github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction:
+    config:
+      all: true
+      pkgname: originatortransactionmocks
+      dir: mocks/originatortransactionmocks
+  github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator:
+    config:
+      all: true

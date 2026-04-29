@@ -29,13 +29,13 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator"
 	coordTransaction "github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator"
 	originatorTransaction "github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatormocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/originatormocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/persistencemocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermetricsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
@@ -60,9 +60,9 @@ type transportClientTestMocks struct {
 	domain          *componentsmocks.Domain
 	domainContext   *componentsmocks.DomainContext
 	transportWriter *sequencertransportmocks.TransportWriter
-	originator      *originator.MockOriginator
+	originator      *originatormocks.Originator
 	coordinator     *coordinatormocks.Coordinator
-	metrics         *metrics.MockDistributedSequencerMetrics
+	metrics         *sequencermetricsmocks.DistributedSequencerMetrics
 }
 
 func newTransportClientTestMocks(t *testing.T) *transportClientTestMocks {
@@ -77,9 +77,9 @@ func newTransportClientTestMocks(t *testing.T) *transportClientTestMocks {
 		domain:          componentsmocks.NewDomain(t),
 		domainContext:   componentsmocks.NewDomainContext(t),
 		transportWriter: sequencertransportmocks.NewTransportWriter(t),
-		originator:      originator.NewMockOriginator(t),
+		originator:      originatormocks.NewOriginator(t),
 		coordinator:     coordinatormocks.NewCoordinator(t),
-		metrics:         metrics.NewMockDistributedSequencerMetrics(t),
+		metrics:         sequencermetricsmocks.NewDistributedSequencerMetrics(t),
 	}
 }
 

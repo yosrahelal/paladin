@@ -21,8 +21,8 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
+	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -338,7 +338,7 @@ func Test_applyHeartbeatReceived_SubmittedHandleEventError_ReturnsWrappedError(t
 	txnID := uuid.New()
 	innerErr := fmt.Errorf("simulated submitted handling failure")
 
-	mockTxn := transaction.NewMockOriginatorTransaction(t)
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.EXPECT().GetID().Return(txnID)
 	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.SubmittedEvent")).Return(innerErr)
 
@@ -382,7 +382,7 @@ func Test_applyHeartbeatReceived_NonceAssignedHandleEventError_ReturnsWrappedErr
 	txnID := uuid.New()
 	innerErr := fmt.Errorf("simulated nonce handling failure")
 
-	mockTxn := transaction.NewMockOriginatorTransaction(t)
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.EXPECT().GetID().Return(txnID)
 	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.NonceAssignedEvent")).Return(innerErr)
 	o.transactionsByID[txnID] = mockTxn
