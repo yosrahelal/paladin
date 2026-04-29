@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -398,7 +398,7 @@ func Test_action_SendAssembleErrorResponse_TransportError(t *testing.T) {
 	requestID := uuid.New()
 	txn.latestFulfilledAssembleRequestID = requestID
 
-	mockTransport := sequencermockstransportmocks.NewTransportWriter(t)
+	mockTransport := sequencertransportmocks.NewTransportWriter(t)
 	expectedError := errors.New("transport error")
 	mockTransport.EXPECT().SendAssembleErrorResponse(
 		mock.Anything,

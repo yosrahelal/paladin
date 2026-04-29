@@ -30,12 +30,12 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
-	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/syncpointsmocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -437,11 +437,11 @@ func (b *TransactionBuilderForTesting) GetEndorsers() []string {
 }
 
 type transactionDependencyMocks struct {
-	TransportWriter     *sequencermockstransportmocks.TransportWriter
+	TransportWriter     *sequencertransportmocks.TransportWriter
 	Clock               *sequencercommonmocks.Clock
 	EngineIntegration   *sequencercommonmocks.EngineIntegration
 	SentMessageRecorder *transport.SentMessageRecorder
-	SyncPoints          *syncpoints.MockSyncPoints
+	SyncPoints          *syncpointsmocks.SyncPoints
 	AllComponents       *componentsmocks.AllComponents
 	DomainAPI           *componentsmocks.DomainSmartContract
 	Domain              *componentsmocks.Domain
@@ -466,11 +466,11 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 	require.NoError(b.t, err)
 
 	mocks := &transactionDependencyMocks{
-		TransportWriter:     sequencermockstransportmocks.NewTransportWriter(b.t),
+		TransportWriter:     sequencertransportmocks.NewTransportWriter(b.t),
 		Clock:               sequencercommonmocks.NewClock(b.t),
 		EngineIntegration:   sequencercommonmocks.NewEngineIntegration(b.t),
 		SentMessageRecorder: transport.NewSentMessageRecorder(),
-		SyncPoints:          syncpoints.NewMockSyncPoints(b.t),
+		SyncPoints:          syncpointsmocks.NewSyncPoints(b.t),
 		AllComponents:       componentsmocks.NewAllComponents(b.t),
 		KeyManager:          componentsmocks.NewKeyManager(b.t),
 		PublicTxManager:     componentsmocks.NewPublicTxManager(b.t),

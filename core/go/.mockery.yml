@@ -57,6 +57,9 @@ packages:
       dir: mocks/sequencercommonmocks
   github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport:
     config:
-      pkgname: sequencermockstransportmocks
-      dir: mocks/sequencermockstransportmocks
-      all: true    
+      pkgname: sequencertransportmocks
+      dir: mocks/sequencertransportmocks
+      all: true 
+  github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints:
+    config:
+      all: true

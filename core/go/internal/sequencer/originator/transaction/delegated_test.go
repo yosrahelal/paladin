@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -113,7 +113,7 @@ func TestAction_SendPreDispatchResponse_TransportError(t *testing.T) {
 
 	// Create a mock transport writer that returns an error
 	// TODO AM: and again- probably need to look at everywhere this mock is used- it looks like AI generated oddness
-	mockTransport := sequencermockstransportmocks.NewTransportWriter(t)
+	mockTransport := sequencertransportmocks.NewTransportWriter(t)
 	expectedError := errors.New("transport error")
 	mockTransport.EXPECT().SendPreDispatchResponse(
 		mock.Anything,

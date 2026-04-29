@@ -26,6 +26,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/syncpointsmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -44,7 +45,7 @@ type ChainedDependenciesSuite struct {
 	ctx        context.Context
 	c          *coordinator
 	mocks      *CoordinatorDependencyMocks
-	syncPoints *syncpoints.MockSyncPoints
+	syncPoints *syncpointsmocks.SyncPoints
 	builder    *CoordinatorBuilderForTesting
 	originator string
 
@@ -80,7 +81,7 @@ func (s *ChainedDependenciesSuite) SetupTest() {
 
 func (s *ChainedDependenciesSuite) buildCoordinator() {
 	s.c, s.mocks = s.builder.Build()
-	s.syncPoints = s.mocks.SyncPoints.(*syncpoints.MockSyncPoints)
+	s.syncPoints = s.mocks.SyncPoints.(*syncpointsmocks.SyncPoints)
 	s.syncPoints.On("PersistDispatchBatch", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	s.syncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 }

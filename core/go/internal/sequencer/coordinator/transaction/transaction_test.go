@@ -24,10 +24,10 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
-	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/syncpointsmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -258,13 +258,13 @@ func TestNewTransaction_Success_ReturnsTransaction(t *testing.T) {
 		"node1",
 		pt,
 		"coordinator-signer",
-		sequencermockstransportmocks.NewTransportWriter(t),
+		sequencertransportmocks.NewTransportWriter(t),
 		clock,
 		func(ctx context.Context, event common.Event) {},
 		nil,
 		func(ctx context.Context, id uuid.UUID) (State, bool) { return State(0), false },
 		sequencercommonmocks.NewEngineIntegration(t),
-		&syncpoints.MockSyncPoints{},
+		&syncpointsmocks.SyncPoints{},
 		allComponents,
 		domainAPI,
 		nil,
@@ -306,13 +306,13 @@ func TestNewTransaction_PublicAPI_ReturnsTransaction(t *testing.T) {
 		"node1",
 		pt,
 		"coordinator-signer",
-		sequencermockstransportmocks.NewTransportWriter(t),
+		sequencertransportmocks.NewTransportWriter(t),
 		clock,
 		func(ctx context.Context, event common.Event) {},
 		nil,
 		func(ctx context.Context, id uuid.UUID) (State, bool) { return State(0), false },
 		sequencercommonmocks.NewEngineIntegration(t),
-		&syncpoints.MockSyncPoints{},
+		&syncpointsmocks.SyncPoints{},
 		allComponents,
 		domainAPI,
 		nil,

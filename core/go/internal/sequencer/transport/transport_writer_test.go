@@ -26,7 +26,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
-	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -46,7 +46,7 @@ func TestSendTransactionSubmitted_Success(t *testing.T) {
 	txHash := &txHashVal
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		// Verify message type
@@ -108,7 +108,7 @@ func TestSendTransactionSubmitted_Loopback(t *testing.T) {
 	txHash := &txHashVal
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
 	mockLoopbackTransport.On("LoopbackQueue").Return(loopbackQueue).Maybe()
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
@@ -152,7 +152,7 @@ func TestSendTransactionSubmitted_NilContractAddress(t *testing.T) {
 	txHash := &txHashVal
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 
 	tw := &transportWriter{
 		nodeID:            "local-node",
@@ -178,7 +178,7 @@ func TestSendTransactionSubmitted_SendError(t *testing.T) {
 	txHash := &txHashVal
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -206,7 +206,7 @@ func TestSendTransactionSubmitted_VerifyProtoFields(t *testing.T) {
 	txHash := &txHashVal
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 
 	var capturedPayload []byte
@@ -267,7 +267,7 @@ func TestSendDelegationRequest_Success(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 
 	callCount := 0
@@ -322,7 +322,7 @@ func TestSendDelegationRequest_EmptyTransactions(t *testing.T) {
 	blockHeight := uint64(100)
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 
 	tw := &transportWriter{
 		ctx:               ctx,
@@ -348,7 +348,7 @@ func TestSendDelegationRequestAcknowledgment_Success(t *testing.T) {
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_DelegationRequestAcknowledgment {
@@ -403,7 +403,7 @@ func TestSendDelegationRequestAcknowledgment_SendError(t *testing.T) {
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -432,7 +432,7 @@ func TestSendDelegationRequestRejection_Success(t *testing.T) {
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_DelegationRequestAcknowledgment {
@@ -473,7 +473,7 @@ func TestSendDelegationRequestRejection_SendError(t *testing.T) {
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -537,7 +537,7 @@ func TestSendEndorsementRequest_Success(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_EndorsementRequest {
@@ -601,7 +601,7 @@ func TestSendEndorsementRequest_NodeLookupError(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 
 	tw := &transportWriter{
 		ctx:               ctx,
@@ -637,7 +637,7 @@ func TestSendEndorsementResponse_Success(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_EndorsementResponse {
@@ -706,7 +706,7 @@ func TestSendEndorsementResponse_WithRevertReason(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		var response engineProto.EndorsementResponse
@@ -748,7 +748,7 @@ func TestSendEndorsementResponse_SendError(t *testing.T) {
 	endorsementResult := &components.EndorsementResult{}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -785,7 +785,7 @@ func TestSendAssembleRequest_Success(t *testing.T) {
 	stateLocks := grapher.ExportableStates{LockedState: []*grapher.StateLock{}}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_AssembleRequest {
@@ -847,7 +847,7 @@ func TestSendAssembleRequest_SendError(t *testing.T) {
 	stateLocks := grapher.ExportableStates{LockedState: []*grapher.StateLock{}}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -886,7 +886,7 @@ func TestSendAssembleResponse_Success(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_AssembleResponse {
@@ -946,7 +946,7 @@ func TestSendAssembleResponse_SendError(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -974,7 +974,7 @@ func TestSendAssembleErrorResponse_Success(t *testing.T) {
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_AssembleError {
@@ -1024,7 +1024,7 @@ func TestSendAssembleErrorResponse_SendError(t *testing.T) {
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -1051,7 +1051,7 @@ func TestSendAssembleErrorResponse_Loopback(t *testing.T) {
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
 	mockLoopbackTransport.On("LoopbackQueue").Return(loopbackQueue).Maybe()
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
@@ -1095,7 +1095,7 @@ func TestSendNonceAssigned_Success(t *testing.T) {
 	nonce := uint64(42)
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_NonceAssigned {
@@ -1146,7 +1146,7 @@ func TestSendNonceAssigned_NilContractAddress(t *testing.T) {
 	nonce := uint64(42)
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 
 	tw := &transportWriter{
 		nodeID:            "local-node",
@@ -1169,7 +1169,7 @@ func TestSendNonceAssigned_SendError(t *testing.T) {
 	nonce := uint64(42)
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -1195,7 +1195,7 @@ func TestSendNonceAssigned_VerifyGeneratedId(t *testing.T) {
 	nonce := uint64(42)
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 
 	var capturedPayload []byte
@@ -1237,7 +1237,7 @@ func TestSendTransactionConfirmed_Success(t *testing.T) {
 	revertReason := pldtypes.HexBytes([]byte("revert reason"))
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_TransactionConfirmed {
@@ -1292,7 +1292,7 @@ func TestSendTransactionConfirmed_WithoutNonce(t *testing.T) {
 	revertReason := pldtypes.HexBytes([]byte("revert reason"))
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		var txConfirmed engineProto.TransactionConfirmed
@@ -1328,7 +1328,7 @@ func TestSendTransactionConfirmed_NilContractAddress(t *testing.T) {
 	revertReason := pldtypes.HexBytes([]byte("revert reason"))
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 
 	tw := &transportWriter{
 		nodeID:            "local-node",
@@ -1353,7 +1353,7 @@ func TestSendTransactionConfirmed_SendError(t *testing.T) {
 	revertReason := pldtypes.HexBytes([]byte("revert reason"))
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -1381,7 +1381,7 @@ func TestSendTransactionConfirmed_Loopback(t *testing.T) {
 	revertReason := pldtypes.HexBytes([]byte("revert reason"))
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
 	mockLoopbackTransport.On("LoopbackQueue").Return(loopbackQueue).Maybe()
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
@@ -1429,7 +1429,7 @@ func TestSendTransactionConfirmed_WillRetryTrue(t *testing.T) {
 	revertReason := pldtypes.HexBytes([]byte("revert reason"))
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		var txConfirmed engineProto.TransactionConfirmed
@@ -1471,7 +1471,7 @@ func TestSendTransactionConfirmed_WillRetryFalse(t *testing.T) {
 	revertReason := pldtypes.HexBytes([]byte("revert reason"))
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		var txConfirmed engineProto.TransactionConfirmed
@@ -1506,7 +1506,7 @@ func TestSendTransactionConfirmed_NilRevertReason(t *testing.T) {
 	nonce := &nonceVal
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		var txConfirmed engineProto.TransactionConfirmed
@@ -1548,7 +1548,7 @@ func TestSendTransactionConfirmed_Loopback_WillRetryFalse(t *testing.T) {
 	revertReason := pldtypes.HexBytes([]byte("revert reason"))
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
 	mockLoopbackTransport.On("LoopbackQueue").Return(loopbackQueue).Maybe()
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
@@ -1592,7 +1592,7 @@ func TestSendHeartbeat_Success(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_CoordinatorHeartbeatNotification {
@@ -1652,7 +1652,7 @@ func TestSendHeartbeat_SendError(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -1680,7 +1680,7 @@ func TestSendHeartbeat_Loopback(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
 	mockLoopbackTransport.On("LoopbackQueue").Return(loopbackQueue).Maybe()
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
@@ -1730,7 +1730,7 @@ func TestSendPreDispatchRequest_Success(t *testing.T) {
 	hash := &hashVal
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_PreDispatchRequest {
@@ -1787,7 +1787,7 @@ func TestSendPreDispatchRequest_SendError(t *testing.T) {
 	hash := &hashVal
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -1818,7 +1818,7 @@ func TestSendPreDispatchRequest_Loopback(t *testing.T) {
 	hash := &hashVal
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
 	mockLoopbackTransport.On("LoopbackQueue").Return(loopbackQueue).Maybe()
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
@@ -1868,7 +1868,7 @@ func TestSendPreDispatchResponse_Success(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_PreDispatchResponse {
@@ -1920,7 +1920,7 @@ func TestSendPreDispatchResponse_SendError(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -1949,7 +1949,7 @@ func TestSendPreDispatchResponse_Loopback(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
 	mockLoopbackTransport.On("LoopbackQueue").Return(loopbackQueue).Maybe()
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
@@ -1998,7 +1998,7 @@ func TestSendDispatched_Success(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_Dispatched {
@@ -2053,7 +2053,7 @@ func TestSendDispatched_NodeLookupError(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 
 	tw := &transportWriter{
 		nodeID:            "local-node",
@@ -2078,7 +2078,7 @@ func TestSendDispatched_SendError(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	sendError := errors.New("transport send error")
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(sendError)
@@ -2107,7 +2107,7 @@ func TestSendDispatched_Loopback(t *testing.T) {
 	}
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
 	mockLoopbackTransport.On("LoopbackQueue").Return(loopbackQueue).Maybe()
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
@@ -2151,7 +2151,7 @@ func TestSendTransactionUnknown_Success(t *testing.T) {
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
 		if msg.MessageType != MessageType_TransactionUnknown {
@@ -2198,7 +2198,7 @@ func TestSendTransactionUnknown_NilContractAddress(t *testing.T) {
 	coordinatorNode := "coordinator-node"
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 
 	tw := &transportWriter{
@@ -2220,7 +2220,7 @@ func TestSendTransactionUnknown_SendError(t *testing.T) {
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.Anything).Return(errors.New("send failed"))
 
@@ -2244,7 +2244,7 @@ func TestSendTransactionUnknown_Loopback(t *testing.T) {
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencermockstransportmocks.NewLoopbackTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
 
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()

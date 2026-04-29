@@ -25,11 +25,11 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
-	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/syncpointsmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -70,7 +70,7 @@ func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
 		cancel()
 		c.WaitForDone(t.Context())
 	}()
-	mocks.SyncPoints.(*syncpoints.MockSyncPoints).On("PersistDispatchBatch", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	mocks.SyncPoints.(*syncpointsmocks.SyncPoints).On("PersistDispatchBatch", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 
 	// Start by simulating the originator and delegate a transaction to the coordinator
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
@@ -598,7 +598,7 @@ func TestCoordinator_CancelContext_WaitsForTransportShutdown(t *testing.T) {
 		c.WaitForDone(t.Context())
 	}()
 
-	mockTransport := sequencermockstransportmocks.NewTransportWriter(t)
+	mockTransport := sequencertransportmocks.NewTransportWriter(t)
 	// TODO AM: could this not be mocked?
 	// Start uses StartLoopbackWriter on the original transport; replace writer after Start
 	// so that WaitForDone is called on the mock.

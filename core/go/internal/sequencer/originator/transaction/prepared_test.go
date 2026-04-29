@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/mocks/sequencermockstransportmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -88,7 +88,7 @@ func TestAction_ResendPreDispatchResponse_TransportError(t *testing.T) {
 	txn.pt.PreAssembly.TransactionSpecification = transactionSpec
 
 	// Create a mock transport writer that returns an error
-	mockTransport := sequencermockstransportmocks.NewTransportWriter(t)
+	mockTransport := sequencertransportmocks.NewTransportWriter(t)
 	expectedError := errors.New("transport error")
 	mockTransport.EXPECT().SendPreDispatchResponse(
 		mock.Anything,
