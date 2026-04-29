@@ -40,3 +40,6 @@ packages:
   github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator:
     config:
       all: true
+  github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher:
+    config:
+      all: true    

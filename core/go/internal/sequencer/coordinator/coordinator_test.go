@@ -24,12 +24,12 @@ import (
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -39,7 +39,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
-
 
 func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
 	// Test the progression of a single transaction through the coordinator's lifecycle
@@ -769,7 +768,7 @@ func TestCoordinator_PropagateEventToAllTransactions_ReturnsErrorImmediatelyWhen
 
 func TestCoordinator_PropagateEventToAllTransactions_IncrementsHeartbeatCounterForConfirmedTransaction(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Confirmed).
 		HeartbeatIntervalsSinceStateChange(4).Grapher(mockGrapher).Build()
 	mockGrapher.EXPECT().Forget(mock.Anything, txn.GetID())

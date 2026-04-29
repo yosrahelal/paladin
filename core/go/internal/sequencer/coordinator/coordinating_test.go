@@ -23,10 +23,10 @@ import (
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -601,7 +601,7 @@ func Test_action_cancelCurrentlyAssemblingTransaction_NoAssemblingTransaction_Re
 
 func Test_action_cancelCurrentlyAssemblingTransaction_WithAssemblingTransaction_CancelsIt(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.Build()
 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).Grapher(mockGrapher).Build()

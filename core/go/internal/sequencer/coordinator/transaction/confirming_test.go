@@ -22,8 +22,8 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
+	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
@@ -179,7 +179,7 @@ func Test_action_RecordConfirmation_SuccessDifferentHash(t *testing.T) {
 
 func Test_action_NotifyDependantsOfRevertedConfirmation_AlwaysResetsLocks(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
 		Grapher(mockGrapher).
 		ConfirmedLockRetentionGracePeriod(2).
@@ -218,7 +218,7 @@ func Test_ConfirmedSuccess_DispatchedStates_TransitionsToConfirmed(t *testing.T)
 func Test_ConfirmedRevert_StateDispatched_RetryableRevert_TransitionsToPooled(t *testing.T) {
 	ctx := t.Context()
 	revertReason := pldtypes.MustParseHexBytes("0xbeef")
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
 		Grapher(mockGrapher).
 		BaseLedgerRevertRetryThreshold(3).
@@ -240,7 +240,7 @@ func Test_ConfirmedRevert_StateDispatched_RetryableRevert_TransitionsToPooled(t 
 }
 func Test_ConfirmedRevert_StateDispatched_NonRetryable_TransitionsToReverted(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	revertReason := pldtypes.MustParseHexBytes("0xdead")
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
 		Grapher(mockGrapher).
@@ -267,7 +267,7 @@ func Test_ConfirmedRevert_StateDispatched_NonRetryable_TransitionsToReverted(t *
 func Test_ConfirmedRevert_StateDispatched_RetryableRevert_ExceedsThreshold_TransitionsToReverted(t *testing.T) {
 	ctx := t.Context()
 	revertReason := pldtypes.MustParseHexBytes("0xbeef")
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
 		Grapher(mockGrapher).
 		BaseLedgerRevertRetryThreshold(1).
@@ -555,7 +555,7 @@ func Test_action_FinalizeNonRetryableRevert_OnRollbackCallback(t *testing.T) {
 
 func Test_action_NotifyDependantsOfRevertedConfirmation_SendsRevertedEvent(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	depTracker := dependencytracker.NewDependencyTracker()
 
 	dependentTx, _ := NewTransactionBuilderForTesting(t, State_Pooled).
@@ -627,7 +627,7 @@ func Test_notifyDependentsOfRevertedConfirmation_QueuesForDelivery(t *testing.T)
 
 func Test_DependencyReset_Dispatched_StaysDispatched(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).Grapher(mockGrapher).Build()
 	mockGrapher.EXPECT().Forget(mock.Anything, txn.pt.ID).Times(2)
 
@@ -640,7 +640,7 @@ func Test_DependencyReset_Dispatched_StaysDispatched(t *testing.T) {
 
 func Test_DependencyConfirmedReverted_Dispatched_StaysDispatched(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).Grapher(mockGrapher).Build()
 	mockGrapher.EXPECT().Forget(mock.Anything, txn.pt.ID).Times(2)
 
@@ -662,7 +662,7 @@ func Test_DependencyReset_PreDispatchStates_TransitionsToPooled(t *testing.T) {
 
 	for _, state := range preDispatchStates {
 		t.Run(state.String(), func(t *testing.T) {
-			mockGrapher := grapher.NewMockGrapher(t)
+			mockGrapher := graphermocks.NewGrapher(t)
 			txn, _ := NewTransactionBuilderForTesting(t, state).Grapher(mockGrapher).Build()
 			mockGrapher.EXPECT().Forget(mock.Anything, txn.pt.ID)
 
@@ -686,7 +686,7 @@ func Test_DependencyConfirmedReverted_PreDispatchStates_TransitionsToPooled(t *t
 
 	for _, state := range preDispatchStates {
 		t.Run(state.String(), func(t *testing.T) {
-			mockGrapher := grapher.NewMockGrapher(t)
+			mockGrapher := graphermocks.NewGrapher(t)
 			txn, _ := NewTransactionBuilderForTesting(t, state).Grapher(mockGrapher).Build()
 			mockGrapher.EXPECT().Forget(mock.Anything, txn.pt.ID)
 
@@ -701,7 +701,7 @@ func Test_DependencyConfirmedReverted_PreDispatchStates_TransitionsToPooled(t *t
 
 func TestDependsOn_CascadeFailure_SendsEventToDependentWhichFinalizesItself(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	depTracker := dependencytracker.NewDependencyTracker()
 	sharedTransactions := map[uuid.UUID]CoordinatorTransaction{}
 
@@ -769,7 +769,7 @@ func TestDependsOn_FinalizeOnChainedDependencyFailure(t *testing.T) {
 
 func TestDependsOn_CascadeFailure_ErrorsWhenDependentMissing(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	depTracker := dependencytracker.NewDependencyTracker()
 	missingDependentID := uuid.New()
 
@@ -785,7 +785,7 @@ func TestDependsOn_CascadeFailure_ErrorsWhenDependentMissing(t *testing.T) {
 
 func TestDependsOn_CascadeEviction_SendsEventToDependentWhichEvictsItself(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	depTracker := dependencytracker.NewDependencyTracker()
 	sharedTransactions := map[uuid.UUID]CoordinatorTransaction{}
 
@@ -813,7 +813,7 @@ func TestDependsOn_CascadeEviction_SendsEventToDependentWhichEvictsItself(t *tes
 
 func TestDependsOn_CascadeEviction_ErrorsWhenDependentMissing(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	depTracker := dependencytracker.NewDependencyTracker()
 	missingDependentID := uuid.New()
 
@@ -828,7 +828,7 @@ func TestDependsOn_CascadeEviction_ErrorsWhenDependentMissing(t *testing.T) {
 }
 
 func TestDependsOn_ParentRecognition_ChainedDependencyRevert(t *testing.T) {
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).
 		Grapher(mockGrapher).
 		BaseLedgerRevertRetryThreshold(3).
@@ -850,7 +850,7 @@ func TestDependsOn_ParentRecognition_ChainedDependencyRevert(t *testing.T) {
 }
 
 func TestDependsOn_ParentRecognition_ChainedDependencyRevert_RespectsRetryThreshold(t *testing.T) {
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).
 		Grapher(mockGrapher).
 		BaseLedgerRevertRetryThreshold(3).
@@ -924,7 +924,7 @@ func Test_action_NotifyPreAssembleDependentOfTermination_NilPrereqOf(t *testing.
 
 func Test_action_NotifyPreAssembleDependentOfTermination_DependentNotInGrapher(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	depTracker := dependencytracker.NewDependencyTracker()
 	missingDependentID := uuid.New()
 
@@ -940,7 +940,7 @@ func Test_action_NotifyPreAssembleDependentOfTermination_DependentNotInGrapher(t
 
 func Test_action_NotifyPreAssembleDependentOfTermination_SendsEventToDependent(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	depTracker := dependencytracker.NewDependencyTracker()
 	sharedTransactions := map[uuid.UUID]CoordinatorTransaction{}
 
@@ -970,7 +970,7 @@ func Test_action_NotifyPreAssembleDependentOfTermination_SendsEventToDependent(t
 
 func Test_action_NotifyPreAssembleDependentOfTermination_StaysBlockedWithChainedDeps(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	depTracker := dependencytracker.NewDependencyTracker()
 	sharedTransactions := map[uuid.UUID]CoordinatorTransaction{}
 

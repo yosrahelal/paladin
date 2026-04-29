@@ -22,7 +22,7 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
+	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -256,7 +256,7 @@ func Test_EndorsementCompletion_ResetsRequests_OnTransitionToConfirmingDispatch(
 
 func Test_EndorsementCompletion_ResetsRequests_OnTransitionToBlocked(t *testing.T) {
 	ctx := t.Context()
-	grapher := grapher.NewMockGrapher(t)
+	grapher := graphermocks.NewGrapher(t)
 
 	blockingTXID := uuid.New()
 	_, _ = NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).

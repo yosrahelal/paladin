@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
+	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -131,7 +131,7 @@ func Test_action_DispatchRequestRejected_ClearsPendingRequestAndTimers(t *testin
 
 func Test_ConfirmingDispatch_Timeout_TransitionsToPooled_AndClearsPendingRequest(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	builder := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).
 		AddPendingPreDispatchRequest().Grapher(mockGrapher)
 	txn, _ := builder.Build()

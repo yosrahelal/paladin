@@ -21,8 +21,8 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
+	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -64,7 +64,7 @@ func TestCoordinatorTransaction_Pooled_ToAssembling_OnSelected(t *testing.T) {
 
 func TestCoordinatorTransaction_Assembling_ToEndorsing_OnAssembleResponse(t *testing.T) {
 	ctx := context.Background()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockGrapher.EXPECT().LockMintsOnCreate(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	mockGrapher.EXPECT().LockMintsOnReadAndSpend(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
@@ -127,7 +127,7 @@ func TestCoordinatorTransaction_Assembling_NoTransition_OnRequestTimeout(t *test
 
 func TestCoordinatorTransaction_Assembling_ToPooled_OnStateTimeout_IfStateTimeoutExpired(t *testing.T) {
 	ctx := context.Background()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).
 		Grapher(mockGrapher).
 		StateTimeout(1).
@@ -147,7 +147,7 @@ func TestCoordinatorTransaction_Assembling_ToPooled_OnStateTimeout_IfStateTimeou
 func TestCoordinatorTransaction_Assembling_ToReverted_OnAssembleRevertResponse(t *testing.T) {
 	ctx := context.Background()
 
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txnBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling).
 		Grapher(mockGrapher).
 		AddPendingAssembleRequest().
@@ -279,7 +279,7 @@ func TestCoordinatorTransaction_Endorsement_Gathering_ToBlocked_OnEndorsed_IfAtt
 	ctx := context.Background()
 
 	// Create a mock grapher
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 
 	txn1, _ := transaction.NewTransactionBuilderForTesting(t, transaction.State_Endorsement_Gathering).
 		Grapher(mockGrapher).
@@ -307,7 +307,7 @@ func TestCoordinatorTransaction_Endorsement_Gathering_ToBlocked_OnEndorsed_IfAtt
 
 func TestCoordinatorTransaction_Endorsement_Gathering_ToPooled_OnEndorseRejected(t *testing.T) {
 	ctx := context.Background()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Endorsement_Gathering).
 		Grapher(mockGrapher).
 		NumberOfRequiredEndorsers(3).
@@ -377,7 +377,7 @@ func TestCoordinatorTransaction_Blocked_ToConfirmingDispatch_OnDependencyReady_I
 	//A transaction (A) is dependant on another 2 transactions (B and C).  One of which (B) is ready for dispatch and the other (C) becomes ready for dispatch,
 	// triggering a transition for A to move from blocked to confirming dispatch
 
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	sharedTransactions := map[uuid.UUID]transaction.CoordinatorTransaction{}
 
 	txAID := uuid.New()
@@ -423,7 +423,7 @@ func TestCoordinatorTransaction_BlockedNoTransition_OnDependencyReady_IfHasDepen
 	//A transaction (A) is dependant on another 2 transactions (B and C).  Neither of which a ready for dispatch. One of them (B) becomes ready for dispatch, but the other is still not ready
 	// thus gating the triggering of a transition for A to move from blocked to confirming dispatch
 
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txAID := uuid.New()
 	txBID := uuid.New()
 	txCID := uuid.New()
@@ -513,7 +513,7 @@ func TestCoordinatorTransaction_Dispatched_NoTransition_OnSubmitted(t *testing.T
 
 func TestCoordinatorTransaction_Dispatched_ToPooled_OnConfirmedRevert_IfRetryable(t *testing.T) {
 	ctx := context.Background()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	revertReason := pldtypes.HexBytes("0x01020304")
 	txn, mocks := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
 		Grapher(mockGrapher).
@@ -535,7 +535,7 @@ func TestCoordinatorTransaction_Dispatched_ToPooled_OnConfirmedRevert_IfRetryabl
 func TestCoordinatorTransaction_Dispatched_ToReverted_OnConfirmedRevert_IfNonRetryable(t *testing.T) {
 	ctx := context.Background()
 	revertReason := pldtypes.HexBytes("0x01020304")
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, mocks := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
 		Grapher(mockGrapher).
 		Build()
@@ -558,7 +558,7 @@ func TestCoordinatorTransaction_Dispatched_ToReverted_OnConfirmedRevert_IfNonRet
 func TestCoordinatorTransaction_Dispatched_ToReverted_OnConfirmedRevert_IfThresholdExceeded(t *testing.T) {
 	ctx := context.Background()
 	revertReason := pldtypes.HexBytes("0x01020304")
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, mocks := transaction.NewTransactionBuilderForTesting(t, transaction.State_Dispatched).
 		Grapher(mockGrapher).
 		BaseLedgerRevertRetryThreshold(1).

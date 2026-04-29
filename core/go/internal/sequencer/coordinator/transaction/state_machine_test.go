@@ -19,7 +19,7 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
+	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -72,7 +72,7 @@ func Test_action_IncrementHeartbeatIntervalsSinceStateChange_IncrementsCounter(t
 
 func Test_StateConfirmed_HeartbeatResetsLocksOnlyAtRetentionThreshold(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	txn, _ := NewTransactionBuilderForTesting(t, State_Confirmed).
 		Grapher(mockGrapher).
 		ConfirmedLockRetentionGracePeriod(2).

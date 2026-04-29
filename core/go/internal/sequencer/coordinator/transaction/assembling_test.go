@@ -26,6 +26,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
+	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -153,7 +154,7 @@ func Test_applyPostAssembly_Success_WriteLockStatesError(t *testing.T) {
 func Test_applyPostAssembly_Success_AddMinterError(t *testing.T) {
 	ctx := t.Context()
 	stateID := pldtypes.HexBytes(uuid.New().String())
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(errors.New("add minter error"))
 
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).Grapher(mockGrapher).Build()
@@ -173,7 +174,7 @@ func Test_applyPostAssembly_Success_AddMinterError(t *testing.T) {
 
 func Test_applyPostAssembly_Success_MapPotentialStatesError(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
@@ -243,7 +244,7 @@ func Test_sendAssembleRequest_GetBlockHeightError(t *testing.T) {
 
 func Test_sendAssembleRequest_ExportStatesAndLocksError(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
+	mockGrapher := graphermocks.NewGrapher(t)
 	mockGrapher.EXPECT().ExportStatesAndLocks(mock.Anything).Return(grapher.ExportableStates{}, errors.New("export states and locks failed"))
 
 	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
