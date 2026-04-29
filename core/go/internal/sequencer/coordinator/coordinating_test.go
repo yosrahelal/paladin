@@ -26,6 +26,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -153,7 +154,7 @@ func Test_coordinatorTransactionHandleEvent_DelegatesToTransaction(t *testing.T)
 	ctx := t.Context()
 	txID := uuid.New()
 	handleErr := fmt.Errorf("handle failed")
-	mockTxn := transaction.NewMockCoordinatorTransaction(t)
+	mockTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	mockTxn.EXPECT().HandleEvent(ctx, mock.Anything).Return(handleErr).Once()
 	c := &coordinator{
 		transactionsByID: map[uuid.UUID]transaction.CoordinatorTransaction{
@@ -180,7 +181,7 @@ func Test_getCoordinatorTransactionState_TxnNotFound_ReturnsFalse(t *testing.T) 
 func Test_getCoordinatorTransactionState_TxnFound_ReturnsState(t *testing.T) {
 	ctx := t.Context()
 	txID := uuid.New()
-	mockTxn := transaction.NewMockCoordinatorTransaction(t)
+	mockTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	mockTxn.EXPECT().GetCurrentState().Return(transaction.State_Confirming_Dispatchable).Once()
 	c := &coordinator{
 		transactionsByID: map[uuid.UUID]transaction.CoordinatorTransaction{
@@ -658,7 +659,7 @@ func Test_addToDelegatedTransactions_PreviousTransactionInPreAssemblyState_Estab
 	builder.OverrideSequencerConfig(config)
 	c, _ := builder.Build()
 	// Create a mock previous transaction in State_Pooled
-	mockPreviousTxn := transaction.NewMockCoordinatorTransaction(t)
+	mockPreviousTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	previousTxnID := uuid.New()
 	mockPreviousTxn.EXPECT().GetCurrentState().Return(transaction.State_Pooled)
 	mockPreviousTxn.EXPECT().GetID().Return(previousTxnID)
@@ -693,7 +694,7 @@ func Test_addToDelegatedTransactions_PreviousTransactionInPreAssemblyState_DoesN
 	builder.OverrideSequencerConfig(config)
 	c, _ := builder.Build()
 	// Create a mock previous transaction in State_Pooled.
-	mockPreviousTxn := transaction.NewMockCoordinatorTransaction(t)
+	mockPreviousTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	previousTxnID := uuid.New()
 	mockPreviousTxn.EXPECT().GetCurrentState().Return(transaction.State_Pooled)
 	mockPreviousTxn.EXPECT().GetID().Return(previousTxnID)
@@ -729,7 +730,7 @@ func Test_addToDelegatedTransactions_MockTransactionHandleEventReturnsError(t *t
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
 
 	expectedError := fmt.Errorf("handle delegated event failed")
-	mockTxn := transaction.NewMockCoordinatorTransaction(t)
+	mockTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.DelegatedEvent")).Return(expectedError)
 
 	createTransaction := func(
@@ -765,7 +766,7 @@ func Test_addToDelegatedTransactions_SubsequentTransactionGetsPreviousTransactio
 	builder.OverrideSequencerConfig(config)
 
 	firstTxnError := fmt.Errorf("first transaction handle event failed")
-	mockTxn := transaction.NewMockCoordinatorTransaction(t)
+	mockTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.DelegatedEvent")).Return(firstTxnError)
 
 	createTransaction := func(
@@ -838,7 +839,7 @@ func Test_addToDelegatedTransactions_ErrorStopsSubsequentTransactionsBeingAccept
 		require.GreaterOrEqual(t, idx, 0)
 		require.Less(t, idx, 5, "only the first five delegated transactions are created before the batch stops")
 
-		m := transaction.NewMockCoordinatorTransaction(t)
+		m := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 		m.EXPECT().GetID().Return(pt.ID).Maybe()
 		m.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
 
@@ -889,27 +890,27 @@ func Test_addToDelegatedTransactions_FifthFailsThenFullRetry_PreservesFirstFourA
 	}
 
 	// Coordinators for transactions 1-4: pass 1 (Delegated) and pass 2 (reused).
-	m0 := transaction.NewMockCoordinatorTransaction(t)
+	m0 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	m0.EXPECT().GetID().Return(txns[0].ID).Maybe()
 	m0.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
 	m0.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.DelegatedEvent")).Return(nil).Once()
 
-	m1 := transaction.NewMockCoordinatorTransaction(t)
+	m1 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	m1.EXPECT().GetID().Return(txns[1].ID).Maybe()
 	m1.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
 	m1.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.DelegatedEvent")).Return(nil).Once()
 
-	m2 := transaction.NewMockCoordinatorTransaction(t)
+	m2 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	m2.EXPECT().GetID().Return(txns[2].ID).Maybe()
 	m2.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
 	m2.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.DelegatedEvent")).Return(nil).Once()
 
-	m3 := transaction.NewMockCoordinatorTransaction(t)
+	m3 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	m3.EXPECT().GetID().Return(txns[3].ID).Maybe()
 	m3.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
 	m3.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.DelegatedEvent")).Return(nil).Once()
 
-	mFail := transaction.NewMockCoordinatorTransaction(t)
+	mFail := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	mFail.EXPECT().GetID().Return(txns[4].ID).Maybe()
 	mFail.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
 	mFail.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.DelegatedEvent")).Return(fifthErr).Once()
@@ -922,11 +923,11 @@ func Test_addToDelegatedTransactions_FifthFailsThenFullRetry_PreservesFirstFourA
 	}
 
 	// New coordinators created on the successful retry for transactions 5-10 (indices 4-9).
-	pass2Mocks := make([]*transaction.MockCoordinatorTransaction, 6)
+	pass2Mocks := make([]*coordinatortransactionmocks.CoordinatorTransaction, 6)
 	for i := range pass2Mocks {
 		idx := 4 + i
 		pt := txns[idx]
-		m := transaction.NewMockCoordinatorTransaction(t)
+		m := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 		m.EXPECT().GetID().Return(pt.ID).Maybe()
 		m.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
 		m.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.DelegatedEvent")).Return(nil).Once()
@@ -1018,7 +1019,7 @@ func Test_addToDelegatedTransactions_PreviousTransactionNotInPreAssemblyState_No
 	builder.OverrideSequencerConfig(config)
 	c, _ := builder.Build()
 	// Create a mock previous transaction in State_Assembling (not a pre-assembly state)
-	mockPreviousTxn := transaction.NewMockCoordinatorTransaction(t)
+	mockPreviousTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	previousTxnID := uuid.New()
 	mockPreviousTxn.EXPECT().GetCurrentState().Return(transaction.State_Assembling)
 	// NOTE: HandleEvent should NOT be called - no expectation set for it

@@ -29,6 +29,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -804,7 +805,7 @@ func TestCoordinator_PropagateEventToAllTransactions_IncrementsHeartbeatCounterF
 
 func TestCoordinator_PropagateEventToAllTransactions_HandleEventReturnsError(t *testing.T) {
 	ctx := t.Context()
-	mockTxn := transaction.NewMockCoordinatorTransaction(t)
+	mockTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	txnID := uuid.New()
 	expectedError := fmt.Errorf("handle event error")
 	mockTxn.EXPECT().GetID().Return(txnID)
