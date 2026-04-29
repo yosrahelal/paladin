@@ -17,6 +17,7 @@ package coordinator
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,4 +77,61 @@ func Test_guard_HeartbeatThresholdExceeded_Exceeded(t *testing.T) {
 		HeartbeatGracePeriod(10).HeartbeatIntervalsSinceLastReceive(15).Build()
 
 	assert.True(t, guard_HeartbeatThresholdExceeded(ctx, c))
+}
+
+func Test_action_RejectDelegatedTransactions_Success(t *testing.T) {
+	ctx := context.Background()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).WithMockTransportWriter().Build()
+
+	delegationID := "del-123"
+	fromNode := "remoteNode"
+	mocks.TransportWriter.EXPECT().SendDelegationRequestRejection(ctx, fromNode, delegationID, c.currentBlockHeight).Return(nil)
+
+	event := &TransactionsDelegatedEvent{
+		FromNode:     fromNode,
+		DelegationID: delegationID,
+	}
+	err := action_RejectDelegatedTransactions(ctx, c, event)
+	require.NoError(t, err)
+}
+
+func Test_action_RejectDelegatedTransactions_PropagatesError(t *testing.T) {
+	ctx := context.Background()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).WithMockTransportWriter().Build()
+
+	delegationID := "del-456"
+	fromNode := "remoteNode"
+	expectedErr := fmt.Errorf("transport error")
+	mocks.TransportWriter.EXPECT().SendDelegationRequestRejection(ctx, fromNode, delegationID, c.currentBlockHeight).Return(expectedErr)
+
+	event := &TransactionsDelegatedEvent{
+		FromNode:     fromNode,
+		DelegationID: delegationID,
+	}
+	err := action_RejectDelegatedTransactions(ctx, c, event)
+	require.ErrorIs(t, err, expectedErr)
+}
+
+func Test_validator_IsHeartbeatFromActiveCoordinator_FromActiveNode_ReturnsTrue(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).ActiveCoordinatorNode("nodeA").Build()
+
+	event := &HeartbeatReceivedEvent{}
+	event.From = "nodeA"
+
+	result, err := validator_IsHeartbeatFromActiveCoordinator(ctx, c, event)
+	require.NoError(t, err)
+	assert.True(t, result)
+}
+
+func Test_validator_IsHeartbeatFromActiveCoordinator_FromOtherNode_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).ActiveCoordinatorNode("nodeA").Build()
+
+	event := &HeartbeatReceivedEvent{}
+	event.From = "nodeB"
+
+	result, err := validator_IsHeartbeatFromActiveCoordinator(ctx, c, event)
+	require.NoError(t, err)
+	assert.False(t, result)
 }

@@ -1033,3 +1033,31 @@ func Test_addToDelegatedTransactions_PreviousTransactionNotInPreAssemblyState_No
 
 	require.NoError(t, err)
 }
+
+func Test_action_CleanUpTransactionsNotYetDispatched_RemovesNonDispatchedTransactions(t *testing.T) {
+	ctx := context.Background()
+
+	txPooled := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	idPooled := uuid.New()
+	txPooled.EXPECT().GetID().Return(idPooled)
+	txPooled.EXPECT().GetCurrentState().Return(transaction.State_Pooled)
+
+	txAssembling := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	idAssembling := uuid.New()
+	txAssembling.EXPECT().GetID().Return(idAssembling)
+	txAssembling.EXPECT().GetCurrentState().Return(transaction.State_Assembling)
+
+	txConfirmed := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	idConfirmed := uuid.New()
+	txConfirmed.EXPECT().GetID().Return(idConfirmed)
+	txConfirmed.EXPECT().GetCurrentState().Return(transaction.State_Confirmed)
+
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txPooled, txAssembling, txConfirmed).Build()
+
+	err := action_CleanUpTransactionsNotYetDispatched(ctx, c, nil)
+	require.NoError(t, err)
+
+	assert.NotContains(t, c.transactionsByID, idPooled, "Pooled transaction should be cleaned up")
+	assert.NotContains(t, c.transactionsByID, idAssembling, "Assembling transaction should be cleaned up")
+	assert.Contains(t, c.transactionsByID, idConfirmed, "Confirmed transaction should remain")
+}

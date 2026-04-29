@@ -24,6 +24,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestState_String_Initial(t *testing.T) {
+	result := State_Initial.String()
+	assert.Equal(t, "Initial", result, "State.String() should return the correct string representation")
+}
+
 func TestState_String_Idle(t *testing.T) {
 	result := State_Idle.String()
 	assert.Equal(t, "Idle", result, "State.String() should return the correct string representation")

@@ -17,6 +17,7 @@ package coordinator
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -25,6 +26,8 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,4 +80,232 @@ func TestDispatchLoop_StopAtSelect(t *testing.T) {
 	require.NoError(t, c.Start(ctx))
 	cancel()
 	// Stop without ever queueing a tx; loop is blocked on the select waiting for dispatchQueue or ctx.Done()
+}
+
+// TestDispatchLoop_HandleEventError_ContinuesLoop verifies that when HandleEvent returns an error
+// for a dispatched transaction, the loop logs the error and continues processing subsequent transactions.
+func TestDispatchLoop_HandleEventError_ContinuesLoop(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+
+	// Register the same AfterFunc that Start() would register, so ctx cancellation wakes the loop
+	context.AfterFunc(ctx, func() {
+		c.inFlightMutex.L.Lock()
+		c.inFlightMutex.Broadcast()
+		c.inFlightMutex.L.Unlock()
+	})
+
+	// tx1: HandleEvent returns an error — the loop should log and continue
+	tx1 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	id1 := uuid.New()
+	tx1.EXPECT().GetID().Return(id1).Maybe()
+	tx1.EXPECT().HandleEvent(ctx, mock.MatchedBy(func(e common.Event) bool {
+		if de, ok := e.(*transaction.DispatchedEvent); ok {
+			return de.TransactionID == id1
+		}
+		return false
+	})).Return(fmt.Errorf("dispatch error"))
+
+	// tx2: HandleEvent returns nil, no public transaction — verifies loop continued after error
+	tx2 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	id2 := uuid.New()
+	tx2.EXPECT().GetID().Return(id2).Maybe()
+	tx2.EXPECT().HandleEvent(ctx, mock.MatchedBy(func(e common.Event) bool {
+		if de, ok := e.(*transaction.DispatchedEvent); ok {
+			return de.TransactionID == id2
+		}
+		return false
+	})).Return(nil)
+	tx2.EXPECT().HasDispatchedPublicTransaction().Return(false)
+
+	// Pre-queue both transactions before starting the loop (buffered channel)
+	c.dispatchQueue <- tx1
+	c.dispatchQueue <- tx2
+
+	go c.dispatchLoop(ctx)
+
+	// Give the loop time to process both transactions
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-c.dispatchLoopStopped:
+	case <-time.After(time.Second):
+		t.Fatal("dispatch loop did not stop within timeout")
+	}
+}
+
+// TestDispatchLoop_TxnWithoutPublicDispatch_DoesNotCountAhead verifies that when a dispatched
+// transaction has HasDispatchedPublicTransaction()==false, dispatchedAhead is not incremented.
+func TestDispatchLoop_TxnWithoutPublicDispatch_DoesNotCountAhead(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+
+	context.AfterFunc(ctx, func() {
+		c.inFlightMutex.L.Lock()
+		c.inFlightMutex.Broadcast()
+		c.inFlightMutex.L.Unlock()
+	})
+
+	tx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	id := uuid.New()
+	tx.EXPECT().GetID().Return(id).Maybe()
+	tx.EXPECT().HandleEvent(ctx, mock.MatchedBy(func(e common.Event) bool {
+		_, ok := e.(*transaction.DispatchedEvent)
+		return ok
+	})).Return(nil)
+	// HasDispatchedPublicTransaction returns false — dispatchedAhead stays 0
+	tx.EXPECT().HasDispatchedPublicTransaction().Return(false)
+
+	c.dispatchQueue <- tx
+	go c.dispatchLoop(ctx)
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-c.dispatchLoopStopped:
+	case <-time.After(time.Second):
+		t.Fatal("dispatch loop did not stop within timeout")
+	}
+}
+
+// TestDispatchLoop_CtxCancelledDuringSecondWait_Exits verifies that when the loop enters the
+// second wait (waiting for the state machine to confirm the tx is in-flight) and the context
+// is cancelled, the loop exits cleanly.
+func TestDispatchLoop_CtxCancelledDuringSecondWait_Exits(t *testing.T) {
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	config := builder.GetSequencerConfig()
+	config.MaxDispatchAhead = confutil.P(1) // exactly 1 slot — second wait fires after first dispatch
+	builder.OverrideSequencerConfig(config)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	c, _ := builder.Build()
+
+	// Register the AfterFunc so context cancellation wakes the loop from its Wait()
+	context.AfterFunc(ctx, func() {
+		c.inFlightMutex.L.Lock()
+		c.inFlightMutex.Broadcast()
+		c.inFlightMutex.L.Unlock()
+	})
+
+	tx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	id := uuid.New()
+	tx.EXPECT().GetID().Return(id).Maybe()
+	tx.EXPECT().HandleEvent(ctx, mock.MatchedBy(func(e common.Event) bool {
+		_, ok := e.(*transaction.DispatchedEvent)
+		return ok
+	})).Return(nil)
+	// HasDispatchedPublicTransaction returns true — dispatchedAhead becomes 1, hitting maxDispatchAhead
+	tx.EXPECT().HasDispatchedPublicTransaction().Return(true)
+
+	c.dispatchQueue <- tx
+	go c.dispatchLoop(ctx)
+
+	// Give the loop time to enter the second wait
+	time.Sleep(50 * time.Millisecond)
+	cancel() // cancelling context triggers AfterFunc → Broadcast → loop exits second wait via ctx.Done()
+
+	select {
+	case <-c.dispatchLoopStopped:
+	case <-time.After(time.Second):
+		t.Fatal("dispatch loop did not stop within timeout")
+	}
+}
+
+// TestAction_NudgeDispatchLoop_TxnWithoutPublicDispatch_NotCountedAsInFlight verifies that
+// a State_Dispatched transaction where HasDispatchedPublicTransaction()==false is not added
+// to inFlightTxns.
+func TestAction_NudgeDispatchLoop_TxnWithoutPublicDispatch_NotCountedAsInFlight(t *testing.T) {
+	ctx := context.Background()
+
+	tx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	id := uuid.New()
+	tx.EXPECT().GetID().Return(id)
+	tx.EXPECT().GetCurrentState().Return(transaction.State_Dispatched)
+	tx.EXPECT().HasDispatchedPublicTransaction().Return(false)
+
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx).Build()
+
+	err := action_NudgeDispatchLoop(ctx, c, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(c.inFlightTxns), "transaction without public dispatch should not be counted as in-flight")
+}
+
+// TestAction_NudgeDispatchLoop_TxnWithPublicDispatch_CountedAsInFlight verifies that
+// a State_Dispatched transaction where HasDispatchedPublicTransaction()==true IS added
+// to inFlightTxns (covers the true-branch body on line 101).
+func TestAction_NudgeDispatchLoop_TxnWithPublicDispatch_CountedAsInFlight(t *testing.T) {
+	ctx := context.Background()
+
+	tx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	id := uuid.New()
+	tx.EXPECT().GetID().Return(id)
+	tx.EXPECT().GetCurrentState().Return(transaction.State_Dispatched)
+	tx.EXPECT().HasDispatchedPublicTransaction().Return(true)
+
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx).Build()
+
+	err := action_NudgeDispatchLoop(ctx, c, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(c.inFlightTxns), "transaction with public dispatch should be counted as in-flight")
+	assert.Equal(t, tx, c.inFlightTxns[id])
+}
+
+// TestDispatchLoop_SecondWait_NormalExit covers the path where the loop enters the second wait
+// (dispatchedAhead hits maxDispatchAhead), then the state machine signals inFlightTxns is updated
+// while ctx is still active (taking the default: case), exits the for loop, and resets dispatchedAhead.
+func TestDispatchLoop_SecondWait_NormalExit(t *testing.T) {
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	config := builder.GetSequencerConfig()
+	config.MaxDispatchAhead = confutil.P(1)
+	builder.OverrideSequencerConfig(config)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	c, _ := builder.Build()
+
+	context.AfterFunc(ctx, func() {
+		c.inFlightMutex.L.Lock()
+		c.inFlightMutex.Broadcast()
+		c.inFlightMutex.L.Unlock()
+	})
+
+	tx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	id := uuid.New()
+	tx.EXPECT().GetID().Return(id).Maybe()
+	tx.EXPECT().HandleEvent(ctx, mock.MatchedBy(func(e common.Event) bool {
+		_, ok := e.(*transaction.DispatchedEvent)
+		return ok
+	})).Return(nil)
+	tx.EXPECT().HasDispatchedPublicTransaction().Return(true)
+
+	c.dispatchQueue <- tx
+	go c.dispatchLoop(ctx)
+
+	// Wait for the loop to dispatch the tx and enter the second wait
+	time.Sleep(50 * time.Millisecond)
+
+	// Simulate the state machine confirming the tx is in-flight, then signal
+	c.inFlightMutex.L.Lock()
+	c.inFlightTxns[id] = tx
+	c.inFlightMutex.Signal()
+	c.inFlightMutex.L.Unlock()
+
+	// Give the loop time to exit the second wait (default: branch) and reset dispatchedAhead
+	time.Sleep(50 * time.Millisecond)
+
+	cancel()
+	select {
+	case <-c.dispatchLoopStopped:
+	case <-time.After(time.Second):
+		t.Fatal("dispatch loop did not stop within timeout")
+	}
 }

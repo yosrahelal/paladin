@@ -849,6 +849,38 @@ func TestCoordinator_PropagateEventToAllTransactions_HandleEventReturnsError(t *
 	assert.Equal(t, expectedError, err)
 }
 
+func TestStart_Idempotent_SecondCallReturnsNil(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	// Mark as already started without launching goroutines
+	c.started = true
+	err := c.Start(ctx)
+	require.NoError(t, err)
+	// Confirm no goroutines were started by verifying dispatchLoopStopped is not closed
+	select {
+	case <-c.dispatchLoopStopped:
+		t.Fatal("dispatchLoopStopped should not be closed")
+	default:
+	}
+}
+
+func TestWaitForDone_NotStarted_ReturnsImmediately(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	// c.started is false by default — WaitForDone should return immediately
+	done := make(chan struct{})
+	go func() {
+		c.WaitForDone(ctx)
+		close(done)
+	}()
+	select {
+	case <-done:
+		// expected
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("WaitForDone should have returned immediately when not started")
+	}
+}
+
 func TestCoordinator_WaitForDone_ReturnsEarlyWhenContextCancelled(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	ctx, cancel := context.WithCancel(t.Context())

@@ -244,3 +244,17 @@ func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1000), c.currentBlockHeight)
 }
+
+func Test_guard_IsNewBlockRangeEpoch_WhenNewEpoch_ReturnsTrue(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	c.newBlockRangeEpoch = true
+	assert.True(t, guard_IsNewBlockRangeEpoch(ctx, c))
+}
+
+func Test_guard_IsNewBlockRangeEpoch_WhenSameEpoch_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	c.newBlockRangeEpoch = false
+	assert.False(t, guard_IsNewBlockRangeEpoch(ctx, c))
+}
