@@ -121,7 +121,7 @@ export const TransactionDetails: React.FC = () => {
                   <Typography align="center" variant="h6" sx={{ marginBottom: '5px' }}>{t('paladinTransaction')}</Typography>
                   <PaladinTransactionSection paladinTransactions={enrichedTransaction.paladinTransactions} />
                 </Box>}
-              {receipt !== undefined &&
+              {receipt !== undefined && enrichedTransaction.paladinTransactions.length === 0 &&
                 <Box>
                   <Typography align="center" variant="h6" sx={{ marginBottom: '5px' }}>{t('paladinTransaction')}</Typography>
                   <Accordion elevation={0} disableGutters defaultExpanded>

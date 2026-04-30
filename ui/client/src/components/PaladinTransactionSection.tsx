@@ -31,37 +31,38 @@ export const PaladinTransactionSection: React.FC<Props> = ({ paladinTransactions
   const { hashOrId } = useParams();
   const { t } = useTranslation();
   const navigate = useNavigate();
-  
+
   const [selectedPaladinTransactionId, setSelectedPaladinTransactionId] = useState<string>(
     (hashOrId !== undefined && isValidUUID(hashOrId)) ? hashOrId : paladinTransactions[0].id);
 
   return (
     <>
-      <Tabs
-        value={selectedPaladinTransactionId}
-        TabIndicatorProps={{ style: { display: 'none' } }}
-        onChange={(_event, value) => {
-          navigate(`/ui/transactions/${value}`, { replace: true });
-          setSelectedPaladinTransactionId(value);
-        }}
-      >
-        {paladinTransactions.map(paladinTransaction =>
-          <Tab key={paladinTransaction.id} value={paladinTransaction.id}
-            sx={{
-              backgroundColor:
-                selectedPaladinTransactionId === paladinTransaction.id ?
-                  theme => theme.palette.background.paper : 'inherit',
-              borderTopLeftRadius: '4px',
-              borderTopRightRadius: '4px'
-            }}
-            label={
-              <Box>
-                <span style={{ fontWeight: 600, marginRight: '6px' }}>{t(paladinTransaction.domain)}</span>
-                {getShortId(paladinTransaction.id)}
-              </Box>
-            } />
-        )}
-      </Tabs>
+      {paladinTransactions.length > 1 &&
+        <Tabs
+          value={selectedPaladinTransactionId}
+          TabIndicatorProps={{ style: { display: 'none' } }}
+          onChange={(_event, value) => {
+            navigate(`/ui/transactions/${value}`, { replace: true });
+            setSelectedPaladinTransactionId(value);
+          }}
+        >
+          {paladinTransactions.map(paladinTransaction =>
+            <Tab key={paladinTransaction.id} value={paladinTransaction.id}
+              sx={{
+                backgroundColor:
+                  selectedPaladinTransactionId === paladinTransaction.id ?
+                    theme => theme.palette.background.paper : 'inherit',
+                borderTopLeftRadius: '4px',
+                borderTopRightRadius: '4px'
+              }}
+              label={
+                <Box>
+                  <span style={{ fontWeight: 600, marginRight: '6px' }}>{t(paladinTransaction.domain)}</span>
+                  {getShortId(paladinTransaction.id)}
+                </Box>
+              } />
+          )}
+        </Tabs>}
       <Paper elevation={0} sx={{
         borderTopLeftRadius: 0
       }}>
