@@ -251,12 +251,6 @@ func (sMgr *sequencerManager) handleCoordinatorHeartbeatNotification(ctx context
 		return
 	}
 
-	heartbeatEvent := &originator.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = from
-	heartbeatEvent.ContractAddress = contractAddress
-	heartbeatEvent.CoordinatorSnapshot = *coordinatorSnapshot
-	heartbeatEvent.EventTime = time.Now()
-
 	// we only pass heartbeat notifications to sequencers that are already loaded in memory
 	seq, err := sMgr.GetSequencer(ctx, *contractAddress)
 	if seq == nil || err != nil {
@@ -264,7 +258,20 @@ func (sMgr *sequencerManager) handleCoordinatorHeartbeatNotification(ctx context
 		return
 	}
 
-	seq.GetOriginator().QueueEvent(ctx, heartbeatEvent)
+	// TODO AM: make these a common event- need to assess how many events should move to common
+	originatorHeartbeatEvent := &originator.HeartbeatReceivedEvent{}
+	originatorHeartbeatEvent.From = from
+	originatorHeartbeatEvent.ContractAddress = contractAddress
+	originatorHeartbeatEvent.CoordinatorSnapshot = *coordinatorSnapshot
+	originatorHeartbeatEvent.EventTime = time.Now()
+	seq.GetOriginator().QueueEvent(ctx, originatorHeartbeatEvent)
+
+	coordinatorHeartbeatEvent := &coordinator.HeartbeatReceivedEvent{}
+	coordinatorHeartbeatEvent.From = from
+	coordinatorHeartbeatEvent.ContractAddress = contractAddress
+	coordinatorHeartbeatEvent.CoordinatorSnapshot = *coordinatorSnapshot
+	coordinatorHeartbeatEvent.EventTime = time.Now()
+	seq.GetCoordinator().QueueEvent(ctx, coordinatorHeartbeatEvent)
 }
 
 func (sMgr *sequencerManager) handlePreDispatchRequest(ctx context.Context, message *components.ReceivedMessage) {

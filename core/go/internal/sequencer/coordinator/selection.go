@@ -29,6 +29,7 @@ import (
 func action_SelectActiveCoordinator(ctx context.Context, c *coordinator, _ common.Event) error {
 	selected := c.selectActiveCoordinatorNode(ctx)
 	if c.activeCoordinatorNode != selected {
+		c.previousActiveCoordinatorNode = c.activeCoordinatorNode
 		c.activeCoordinatorNode = selected
 		c.notifyOriginatorOfActiveCoordinator(selected)
 	}

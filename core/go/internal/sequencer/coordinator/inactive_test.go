@@ -46,37 +46,41 @@ func Test_action_ResetHeartbeatIntervalsSinceLastReceive(t *testing.T) {
 	assert.Equal(t, 0, c.heartbeatIntervalsSinceLastReceive)
 }
 
-func Test_action_IncrementHeartbeatIntervalsSinceLastReceive(t *testing.T) {
+func Test_action_IncrementHeartbeatIntervalCounts(t *testing.T) {
 	ctx := context.Background()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).HeartbeatIntervalsSinceLastReceive(3).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
+		HeartbeatIntervalsSinceLastReceive(3).
+		HeartbeatIntervalsSinceStateChange(2).
+		Build()
 
-	err := action_IncrementHeartbeatIntervalsSinceLastReceive(ctx, c, nil)
+	err := action_IncrementHeartbeatIntervalCounts(ctx, c, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 4, c.heartbeatIntervalsSinceLastReceive)
+	assert.Equal(t, 3, c.heartbeatIntervalsSinceStateChange)
 }
 
-func Test_guard_HeartbeatThresholdExceeded_NotExceeded(t *testing.T) {
+func Test_guard_ObservingIdleThresholdExceeded_NotExceeded(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
-		HeartbeatGracePeriod(10).HeartbeatIntervalsSinceLastReceive(5).Build()
+		InactiveToIdleGracePeriod(10).HeartbeatIntervalsSinceLastReceive(5).Build()
 
-	assert.False(t, guard_HeartbeatThresholdExceeded(ctx, c))
+	assert.False(t, guard_ObservingIdleThresholdExceeded(ctx, c))
 }
 
-func Test_guard_HeartbeatThresholdExceeded_ExactlyMet(t *testing.T) {
+func Test_guard_ObservingIdleThresholdExceeded_ExactlyMet(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
-		HeartbeatGracePeriod(10).HeartbeatIntervalsSinceLastReceive(10).Build()
+		InactiveToIdleGracePeriod(10).HeartbeatIntervalsSinceLastReceive(10).Build()
 
-	assert.True(t, guard_HeartbeatThresholdExceeded(ctx, c))
+	assert.True(t, guard_ObservingIdleThresholdExceeded(ctx, c))
 }
 
-func Test_guard_HeartbeatThresholdExceeded_Exceeded(t *testing.T) {
+func Test_guard_ObservingIdleThresholdExceeded_Exceeded(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
-		HeartbeatGracePeriod(10).HeartbeatIntervalsSinceLastReceive(15).Build()
+		InactiveToIdleGracePeriod(10).HeartbeatIntervalsSinceLastReceive(15).Build()
 
-	assert.True(t, guard_HeartbeatThresholdExceeded(ctx, c))
+	assert.True(t, guard_ObservingIdleThresholdExceeded(ctx, c))
 }
 
 func Test_action_RejectDelegatedTransactions_Success(t *testing.T) {

@@ -114,6 +114,17 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
+			common.Event_TransactionStateTransition: {
+				Actions: []ActionRule{
+					{
+						// There is a small chance we have come here from State_Closing and still have transactions in terminal
+						// states from the previous block range that we haven't cleaned up from memory yet, so we handle that here.
+						// We need to keep heartbeating if we have these transactions in memory.
+						Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
+						Action:    action_CleanUpTransaction,
+					},
+				},
+			},
 		},
 	},
 	State_Observing: {
@@ -130,11 +141,11 @@ var stateDefinitionsMap = StateDefinitions{
 			},
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
-					{Action: action_IncrementHeartbeatIntervalsSinceLastReceive},
+					{Action: action_IncrementHeartbeatIntervalCounts},
 				},
 				Transitions: []Transition{{
 					To: State_Idle,
-					If: guard_HeartbeatThresholdExceeded,
+					If: guard_ObservingIdleThresholdExceeded,
 				}},
 			},
 			Event_NewBlock: {
@@ -160,7 +171,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
 			},
 			Event_HeartbeatReceived: {
-				Validator: validator_IsHeartbeatFromActiveCoordinator,
+				Validator: validator_IsHeartbeatFromPreviousActiveCoordinator,
 				Actions: []ActionRule{
 					{Action: action_HeartbeatReceived},
 					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
@@ -183,11 +194,12 @@ var stateDefinitionsMap = StateDefinitions{
 			},
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
-					{Action: action_IncrementHeartbeatIntervalsSinceLastReceive},
+					{Action: action_IncrementHeartbeatIntervalCounts},
 					{
 						// Sending a heartbeat only if we have in memory transactions from a previous block range which hadn't yet
 						// been cleaned up when we moved from State_Closing to State_Selected. This is very unlikely to occur, but
 						// it is technically possible if we are configured with a small block range but a long closing grace period.
+						// TODO AM: is anyone even listening to these? If they are we should do this on the equivalent block in idle too
 						Action: action_SendHeartbeat,
 						If:     guard_HasTransactionsInflight,
 					},
@@ -198,7 +210,7 @@ var stateDefinitionsMap = StateDefinitions{
 				// we will have state contention on the base ledger, but this should eventually be resolved with retries.
 				Transitions: []Transition{{
 					To: State_Active,
-					If: guard_HeartbeatThresholdExceeded,
+					If: guard_ElectGracePeriodExpired,
 				}},
 			},
 			Event_NewBlock: {
@@ -282,8 +294,9 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			},
 			// TODO: We are periodically flushing in all coordinator selection modes, not just coordinator endorser, where the preferred
-			// active coordinator can change. This allows us to rotate the signing key on a regular basis, but we might want to consider
-			// making this behaviour configurable via the domain
+			// active coordinator can change. This allows us to rotate the signing identity on a regular basis, but we might want to consider
+			// making this behaviour configurable via the domain (e.g. when the domain will provide the signing identity, or is configured to
+			// use a fixed signing identity)
 			Event_NewBlock: {
 				Actions: []ActionRule{
 					{
@@ -326,7 +339,8 @@ var stateDefinitionsMap = StateDefinitions{
 					),
 				}, {
 					// We don't have any dispatched transactions in memory and we are not the new preferred active coordinator.
-					To: State_Observing,
+					// We move straight to State_Closing so that the new active coordinator knows that we have stood down
+					To: State_Closing,
 					If: statemachine.GuardAnd(
 						guard_IsNewBlockRangeEpoch,
 						statemachine.GuardNot(guard_HasTransactionsInflight),
@@ -394,11 +408,14 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Closing: {
 		// Send a heartbeat here, outside of the usual heartbeat interval, so that other nodes see that we've finished our flush without delay.
-		// TODO AM: can this heartbeat include our state locks so the new coordinator can start assembling immediately even if they
-		// haven't yet indexed the transaction(s) that have just been confirmed?
-		// I don't see how we can load them into the grapher without the transactions that go with them too? Is it enough that the new coordinator
-		// waits until it is at the block height of the previous coordinator at the end of the flush?
-		OnTransitionTo: []ActionRule{{Action: action_SendHeartbeat}},
+		// We forget all transaction locks before sending the heartbeat so that if we become the active coordinator again before these
+		// transactions have been removed from memory, we don't have a stale grapher.
+		// TODO AM: This wouldn't be necessary if we can pass the full set of locks to the new coordinator, but I haven't worked out how
+		// we do that when we don't have all the transactions in memory to understand when to clear the locks
+		OnTransitionTo: []ActionRule{
+			{Action: action_GrapherForgetAllTransactions},
+			{Action: action_SendHeartbeat},
+		},
 		Events: map[EventType]EventHandler{
 			Event_TransactionsDelegated: {
 				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
@@ -416,17 +433,21 @@ var stateDefinitionsMap = StateDefinitions{
 					{Action: action_SendHeartbeat},
 					{Action: action_PropagateHeartbeatIntervalToTransactions},
 				},
+				// Regardless of whether we have transactions in memory or not, we stay in closing until the closing grace period
+				// has expired so that we can continue to send heartbeats to the other nodes, including the new active coordinator.
 				Transitions: []Transition{{
 					To: State_Idle,
 					If: statemachine.GuardAnd(
 						statemachine.GuardNot(guard_HasTransactionsInflight),
-						guard_HeartbeatThresholdExceeded,
+						guard_ClosingGracePeriodExpired,
+						guard_ObservingIdleThresholdExceeded,
 					),
 				}, {
 					To: State_Observing,
 					If: statemachine.GuardAnd(
 						statemachine.GuardNot(guard_HasTransactionsInflight),
-						statemachine.GuardNot(guard_HeartbeatThresholdExceeded),
+						guard_ClosingGracePeriodExpired,
+						statemachine.GuardNot(guard_ObservingIdleThresholdExceeded),
 					),
 				}},
 			},
@@ -449,13 +470,18 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 				Transitions: []Transition{{
-					// If we're now the preferred active coordinator again but we haven't been receiving heartbeats
-					// then we don't need to make a transition here, we can just wait until we move to State_Idle
-					// once we have no transactions in memory.
+					// If we're now the preferred active coordinator again we need to transition into a state that allows us to
+					// (eventually) process delegated transactions again.
 					To: State_Elect,
 					If: statemachine.GuardAnd(
 						guard_IsActiveCoordinator,
-						statemachine.GuardNot(guard_HeartbeatThresholdExceeded),
+						statemachine.GuardNot(guard_ObservingIdleThresholdExceeded),
+					),
+				}, {
+					To: State_Idle, // TODO AM: this means that idle needs to be able to clean up transactions too
+					If: statemachine.GuardAnd(
+						guard_IsActiveCoordinator,
+						guard_ObservingIdleThresholdExceeded,
 					),
 				}},
 			},

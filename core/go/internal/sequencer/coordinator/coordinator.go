@@ -76,6 +76,7 @@ type coordinator struct {
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop              *statemachine.StateMachineEventLoop[State, *coordinator]
 	activeCoordinatorNode              string
+	previousActiveCoordinatorNode      string
 	activeCoordinatorState             State // only used when we are not the active coordinator
 	heartbeatIntervalsSinceStateChange int
 	heartbeatIntervalsSinceLastReceive int
@@ -92,7 +93,8 @@ type coordinator struct {
 	contractAddress                   *pldtypes.EthAddress
 	blockHeightTolerance              uint64
 	closingGracePeriod                int // expressed as a multiple of heartbeat intervals
-	heartbeatGracePeriod              int // expressed as a multiple of heartbeat intervals
+	electGracePeriod                  int // expressed as a multiple of heartbeat intervals
+	inactiveToIdleGracePeriod         int // expressed as a multiple of heartbeat intervals
 	confirmedLockRetentionGracePeriod int // expressed as a multiple of heartbeat intervals
 	baseLedgerRevertRetryThreshold    int
 	assembleErrorRetryThreshhold      int
@@ -170,7 +172,8 @@ func NewCoordinator(
 	c.stateTimeout = confutil.DurationMin(configuration.StateTimeout, pldconf.SequencerMinimum.StateTimeout, *pldconf.SequencerDefaults.StateTimeout)
 	c.blockHeightTolerance = confutil.Uint64Min(configuration.BlockHeightTolerance, pldconf.SequencerMinimum.BlockHeightTolerance, *pldconf.SequencerDefaults.BlockHeightTolerance)
 	c.closingGracePeriod = confutil.IntMin(configuration.ClosingGracePeriod, pldconf.SequencerMinimum.ClosingGracePeriod, *pldconf.SequencerDefaults.ClosingGracePeriod)
-	c.heartbeatGracePeriod = confutil.IntMin(configuration.HeartbeatGracePeriod, pldconf.SequencerMinimum.HeartbeatGracePeriod, *pldconf.SequencerDefaults.HeartbeatGracePeriod)
+	c.electGracePeriod = confutil.IntMin(configuration.ElectGracePeriod, pldconf.SequencerMinimum.ElectGracePeriod, *pldconf.SequencerDefaults.ElectGracePeriod)
+	c.inactiveToIdleGracePeriod = confutil.IntMin(configuration.InactiveToIdleGracePeriod, pldconf.SequencerMinimum.InactiveToIdleGracePeriod, *pldconf.SequencerDefaults.InactiveToIdleGracePeriod)
 	c.confirmedLockRetentionGracePeriod = confutil.IntMin(configuration.ConfirmedLockRetentionGracePeriod, pldconf.SequencerMinimum.ConfirmedLockRetentionGracePeriod, *pldconf.SequencerDefaults.ConfirmedLockRetentionGracePeriod)
 	c.baseLedgerRevertRetryThreshold = confutil.IntMin(configuration.BaseLedgerRevertRetryThreshold, pldconf.SequencerMinimum.BaseLedgerRevertRetryThreshold, *pldconf.SequencerDefaults.BaseLedgerRevertRetryThreshold)
 	c.assembleErrorRetryThreshhold = confutil.IntMin(configuration.AssembleErrorRetryThreshold, pldconf.SequencerMinimum.AssembleErrorRetryThreshold, *pldconf.SequencerDefaults.AssembleErrorRetryThreshold)

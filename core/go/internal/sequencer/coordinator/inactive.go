@@ -31,6 +31,11 @@ func validator_IsHeartbeatFromActiveCoordinator(_ context.Context, c *coordinato
 	return c.activeCoordinatorNode == e.From, nil
 }
 
+func validator_IsHeartbeatFromPreviousActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
+	e := event.(*HeartbeatReceivedEvent)
+	return c.previousActiveCoordinatorNode == e.From, nil
+}
+
 func action_HeartbeatReceived(_ context.Context, c *coordinator, event common.Event) error {
 	e := event.(*HeartbeatReceivedEvent)
 	c.activeCoordinatorState = State(e.CoordinatorState)
@@ -42,11 +47,12 @@ func action_ResetHeartbeatIntervalsSinceLastReceive(_ context.Context, c *coordi
 	return nil
 }
 
-func action_IncrementHeartbeatIntervalsSinceLastReceive(_ context.Context, c *coordinator, _ common.Event) error {
+func action_IncrementHeartbeatIntervalCounts(_ context.Context, c *coordinator, _ common.Event) error {
 	c.heartbeatIntervalsSinceLastReceive++
+	c.heartbeatIntervalsSinceStateChange++
 	return nil
 }
 
-func guard_HeartbeatThresholdExceeded(_ context.Context, c *coordinator) bool {
-	return c.heartbeatIntervalsSinceLastReceive >= c.heartbeatGracePeriod
+func guard_ObservingIdleThresholdExceeded(_ context.Context, c *coordinator) bool {
+	return c.heartbeatIntervalsSinceLastReceive >= c.inactiveToIdleGracePeriod
 }

@@ -87,7 +87,7 @@ func guard_IdleThresholdExceeded(_ context.Context, o *originator) bool {
 	return o.heartbeatIntervalsSinceLastReceive >= o.idleThreshold
 }
 
-func action_IncrementHeartbeatIntervalsSinceLastReceive(_ context.Context, o *originator, _ common.Event) error {
+func action_IncrementHeartbeatIntervalCounts(_ context.Context, o *originator, _ common.Event) error {
 	o.heartbeatIntervalsSinceLastReceive++
 	return nil
 }

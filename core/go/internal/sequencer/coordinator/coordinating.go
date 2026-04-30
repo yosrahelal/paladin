@@ -333,6 +333,14 @@ func action_QueueTransactionForDispatch(ctx context.Context, c *coordinator, eve
 	return nil
 }
 
+func action_GrapherForgetAllTransactions(ctx context.Context, c *coordinator, _ common.Event) error {
+	log.L(ctx).Debugf("forgetting all transaction locks in grapher on transition to closing (%d transactions)", len(c.transactionsByID))
+	for txID := range c.transactionsByID {
+		c.grapher.Forget(ctx, txID)
+	}
+	return nil
+}
+
 func action_CleanUpTransactionsNotYetDispatched(ctx context.Context, c *coordinator, _ common.Event) error {
 	txns := c.getTransactionsNotInStates(ctx, []transaction.State{
 		transaction.State_Ready_For_Dispatch,

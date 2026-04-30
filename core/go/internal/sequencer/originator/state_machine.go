@@ -94,7 +94,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_ActiveCoordinatorUpdated}},
 			},
 			common.Event_HeartbeatInterval: {
-				Actions:     []ActionRule{{Action: action_IncrementHeartbeatIntervalsSinceLastReceive}},
+				Actions:     []ActionRule{{Action: action_IncrementHeartbeatIntervalCounts}},
 				Transitions: []Transition{{To: State_Idle, If: guard_IdleThresholdExceeded}},
 			},
 			Event_TransactionCreated: {
@@ -149,7 +149,7 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
 					{
-						Action: action_IncrementHeartbeatIntervalsSinceLastReceive,
+						Action: action_IncrementHeartbeatIntervalCounts,
 					},
 					{
 						// Resend all the delegation requests if we have not seen a heartbeat in a while

@@ -23,7 +23,7 @@ import (
 
 // Guard type is defined as a type alias in state_machine.go using statemachine.Guard[*coordinator]
 
-func guard_ActiveCoordinatorFlushComplete(ctx context.Context, c *coordinator) bool {
+func guard_ActiveCoordinatorFlushComplete(_ context.Context, c *coordinator) bool {
 	return c.activeCoordinatorState != State_Flush
 }
 
@@ -39,8 +39,16 @@ func guard_FlushComplete(ctx context.Context, c *coordinator) bool {
 
 // Function noTransactionsInflight returns true if all transactions that have been delegated to this coordinator have been confirmed/reverted
 // and since removed from memory
-func guard_HasTransactionsInflight(ctx context.Context, c *coordinator) bool {
+func guard_HasTransactionsInflight(_ context.Context, c *coordinator) bool {
 	return len(c.transactionsByID) > 0
+}
+
+func guard_ClosingGracePeriodExpired(_ context.Context, c *coordinator) bool {
+	return c.heartbeatIntervalsSinceStateChange >= c.closingGracePeriod
+}
+
+func guard_ElectGracePeriodExpired(_ context.Context, c *coordinator) bool {
+	return c.heartbeatIntervalsSinceStateChange >= c.electGracePeriod
 }
 
 func guard_HasTransactionAssembling(ctx context.Context, c *coordinator) bool {
