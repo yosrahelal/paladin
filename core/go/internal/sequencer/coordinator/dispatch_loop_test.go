@@ -40,7 +40,7 @@ func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
 	txnID := uuid.New()
 	txn.EXPECT().GetID().Return(txnID)
 
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn)
+	builder := NewCoordinatorBuilderForTesting(t, State_Active).Transactions(txn)
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(1)
 	builder.OverrideSequencerConfig(config)
@@ -70,7 +70,7 @@ func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
 // TestDispatchLoop_StopAtSelect covers the path where the dispatch loop is in the top-level
 // select and exits when the context is cancelled.
 func TestDispatchLoop_StopAtSelect(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	builder := NewCoordinatorBuilderForTesting(t, State_Active)
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1) // no dispatch progress, so loop stays in select
 	builder.OverrideSequencerConfig(config)
@@ -88,7 +88,7 @@ func TestDispatchLoop_HandleEventError_ContinuesLoop(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).Build()
 
 	// Register the same AfterFunc that Start() would register, so ctx cancellation wakes the loop
 	context.AfterFunc(ctx, func() {
@@ -143,7 +143,7 @@ func TestDispatchLoop_TxnWithoutPublicDispatch_DoesNotCountAhead(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).Build()
 
 	context.AfterFunc(ctx, func() {
 		c.inFlightMutex.L.Lock()
@@ -178,7 +178,7 @@ func TestDispatchLoop_TxnWithoutPublicDispatch_DoesNotCountAhead(t *testing.T) {
 // second wait (waiting for the state machine to confirm the tx is in-flight) and the context
 // is cancelled, the loop exits cleanly.
 func TestDispatchLoop_CtxCancelledDuringSecondWait_Exits(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	builder := NewCoordinatorBuilderForTesting(t, State_Active)
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(1) // exactly 1 slot — second wait fires after first dispatch
 	builder.OverrideSequencerConfig(config)
@@ -231,7 +231,7 @@ func TestAction_NudgeDispatchLoop_TxnWithoutPublicDispatch_NotCountedAsInFlight(
 	tx.EXPECT().GetCurrentState().Return(transaction.State_Dispatched)
 	tx.EXPECT().HasDispatchedPublicTransaction().Return(false)
 
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).Transactions(tx).Build()
 
 	err := action_NudgeDispatchLoop(ctx, c, nil)
 	require.NoError(t, err)
@@ -250,7 +250,7 @@ func TestAction_NudgeDispatchLoop_TxnWithPublicDispatch_CountedAsInFlight(t *tes
 	tx.EXPECT().GetCurrentState().Return(transaction.State_Dispatched)
 	tx.EXPECT().HasDispatchedPublicTransaction().Return(true)
 
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).Transactions(tx).Build()
 
 	err := action_NudgeDispatchLoop(ctx, c, nil)
 	require.NoError(t, err)
@@ -262,7 +262,7 @@ func TestAction_NudgeDispatchLoop_TxnWithPublicDispatch_CountedAsInFlight(t *tes
 // (dispatchedAhead hits maxDispatchAhead), then the state machine signals inFlightTxns is updated
 // while ctx is still active (taking the default: case), exits the for loop, and resets dispatchedAhead.
 func TestDispatchLoop_SecondWait_NormalExit(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	builder := NewCoordinatorBuilderForTesting(t, State_Active)
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(1)
 	builder.OverrideSequencerConfig(config)

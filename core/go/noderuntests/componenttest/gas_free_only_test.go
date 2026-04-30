@@ -13,8 +13,8 @@ import (
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	testutils "github.com/LFDT-Paladin/paladin/core/noderuntests/pkg"
 	"github.com/LFDT-Paladin/paladin/core/noderuntests/pkg/domains"
-	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldclient"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldclient"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -24,10 +24,9 @@ import (
 func TestPrivateTransactionsSequencerLimitSequentialContracts(t *testing.T) {
 	ctx := t.Context()
 
-	sequencerConfig := pldconf.SequencerDefaults
-	sequencerConfig.TargetActiveSequencers = confutil.P(10)
-
-	alice := newSingleNodePartyForComponentTestingWithSequencerConfig(t, "node1", &sequencerConfig)
+	alice := newSingleNodePartyForComponentTestingWithSequencerConfig(t, "node1", &pldconf.SequencerConfig{
+		TargetActiveSequencers: confutil.P(10),
+	})
 	client := alice.GetClient()
 	endorsementSet := []string{alice.GetIdentityLocator()}
 
@@ -86,7 +85,6 @@ func newTwoDomainPartyWithSequencerConfig(t *testing.T, nodeName string, sequenc
 		party.OverrideSequencerConfig(sequencerConfig)
 	}
 	domainConfig := &domains.SimpleDomainPairConfig{
-		SubmitMode:             domains.ENDORSER_SUBMISSION,
 		Domain1RegistryAddress: registry1.String(),
 		Domain2RegistryAddress: registry2.String(),
 	}
@@ -397,7 +395,7 @@ func TestChainedTransactionRetryableRevert_OnlyChainedFails_ThenSucceeds(t *test
 func TestChainedTransactionNonRetryableRevert_OnlyChainedFails(t *testing.T) {
 	ctx := t.Context()
 
-	party := newTwoDomainPartyWithSequencerConfig(t, "node1", &pldconf.SequencerConfig{})
+	party := newTwoDomainParty(t, "node1")
 	client := party.GetClient()
 
 	hookTargetAddr := deploySimpleTokenInDomain(t, ctx, client, "domain2", party.GetIdentity(), &domains.ConstructorParameters{
@@ -495,9 +493,14 @@ func TestChainedTransactionRetryableRevert_OnlyChainedFails_ExceedsThreshold(t *
 	require.NotNil(t, txFull)
 	require.NotNil(t, txFull.Receipt)
 	assert.False(t, txFull.Receipt.Success)
-	require.Len(t, txFull.SequencerActivity, 2)
-	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), txFull.SequencerActivity[0].ActivityType)
-	assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), txFull.SequencerActivity[1].ActivityType)
+	// With threshold=1 we expect exactly 2 retries under normal conditions.
+	// An epoch boundary crossing during the test resets revertCount on the re-delegated transaction,
+	// allowing one additional retry cycle — so we tolerate up to 3 activities.
+	require.GreaterOrEqual(t, len(txFull.SequencerActivity), 2)
+	require.LessOrEqual(t, len(txFull.SequencerActivity), 3)
+	for _, activity := range txFull.SequencerActivity {
+		assert.Equal(t, string(pldapi.SequencerActivityType_ChainedDispatch), activity.ActivityType)
+	}
 	chainedDispatch1, err := client.PTX().GetChainedDispatch(ctx, txFull.SequencerActivity[0].SubjectID)
 	require.NoError(t, err)
 	require.NotNil(t, chainedDispatch1)

@@ -31,9 +31,9 @@ func action_HeartbeatReceived(ctx context.Context, o *originator, event common.E
 	return o.applyHeartbeatReceived(ctx, e)
 }
 
+// TODO AM: this will need thought for how it handles active vs flushing vs closing vs elect snapshots
 func (o *originator) applyHeartbeatReceived(ctx context.Context, event *HeartbeatReceivedEvent) error {
 	o.heartbeatIntervalsSinceLastReceive = 0
-	o.activeCoordinatorNode = event.From
 	o.latestCoordinatorSnapshot = &event.CoordinatorSnapshot
 	for _, dispatchedTransaction := range event.DispatchedTransactions {
 		//if any of the dispatched transactions were sent by this originator, ensure that we have an up to date view of its state

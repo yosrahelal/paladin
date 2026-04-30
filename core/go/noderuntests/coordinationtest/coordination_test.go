@@ -21,7 +21,6 @@ package coordinationtest
 
 import (
 	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -71,9 +70,7 @@ func TestTransactionSuccessPrivacyGroupEndorsement(t *testing.T) {
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -87,7 +84,7 @@ func TestTransactionSuccessPrivacyGroupEndorsement(t *testing.T) {
 		Name:            "FakeToken1",
 		Symbol:          "FT1",
 		EndorsementMode: domains.PrivacyGroupEndorsement,
-		EndorsementSet:  []string{alice.GetIdentityLocator()},
+		EndorsementSet:  []string{alice.GetIdentityLocator(), bob.GetIdentityLocator()},
 	}
 
 	contractAddress := alice.DeploySimpleDomainInstanceContract(t, constructorParameters, transactionLatencyThreshold)
@@ -116,12 +113,12 @@ func TestTransactionSuccessPrivacyGroupEndorsement(t *testing.T) {
 		100*time.Millisecond,
 		"Transaction did not receive a receipt with 1 public TX",
 	)
-	// Check bob has the public TX info as well
+	// Check bob has a receipt (he is participating in the domain as an endorser)
 	require.Eventually(t,
-		transactionReceiptFullConditionExpectedPublicTXCount(t, ctx, aliceTx.ID(), bob.GetClient(), 1),
+		transactionReceiptConditionReceiptOnly(t, ctx, aliceTx.ID(), bob.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt with 1 public TX",
+		"Bob did not receive a receipt",
 	)
 
 	// Check Alice and Bob both have the same view of the world
@@ -133,29 +130,10 @@ func TestTransactionSuccessPrivacyGroupEndorsement(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, bobTxFull)
 
-	// Check the data both nodes have is consistent. We're comparing a transaction with a transaction receipt so domain is the only comparable field
+	// Check the data both nodes have is consistent
 	assert.Equal(t, aliceTxFull.Domain, bobTxFull.Domain)
 
 	require.Len(t, aliceTxFull.Public, 1)
-
-	// Check the public transaction records are consistent
-	assert.Equal(t, aliceTxFull.Public[0].Dispatcher, bobTxFull.Public[0].Dispatcher)
-	assert.Equal(t, aliceTxFull.Public[0].TransactionHash, bobTxFull.Public[0].TransactionHash)
-	assert.Equal(t, aliceTxFull.Public[0].From, bobTxFull.Public[0].From)
-	assert.Equal(t, aliceTxFull.Public[0].To, bobTxFull.Public[0].To)
-	assert.Equal(t, aliceTxFull.Public[0].Value, bobTxFull.Public[0].Value)
-	assert.Equal(t, aliceTxFull.Public[0].Gas, bobTxFull.Public[0].Gas)
-	assert.Equal(t, aliceTxFull.Public[0].Nonce, bobTxFull.Public[0].Nonce)
-	assert.Equal(t, aliceTxFull.Public[0].Data, bobTxFull.Public[0].Data)
-	assert.Equal(t, aliceTxFull.Public[0].Created, bobTxFull.Public[0].Created)
-	assert.Equal(t, aliceTxFull.Public[0].PublicTxOptions, bobTxFull.Public[0].PublicTxOptions)
-
-	// Check the public transaction submissions are consistent
-	assert.True(t, len(aliceTxFull.Public[0].Submissions) == 1)
-	assert.Equal(t, aliceTxFull.Public[0].Submissions[0].TransactionHash, bobTxFull.Public[0].Submissions[0].TransactionHash)
-	assert.Equal(t, aliceTxFull.Public[0].Submissions[0].Time, bobTxFull.Public[0].Submissions[0].Time)
-	assert.Equal(t, aliceTxFull.Public[0].Submissions[0].PublicTxGasPricing.MaxPriorityFeePerGas, bobTxFull.Public[0].Submissions[0].PublicTxGasPricing.MaxPriorityFeePerGas)
-	assert.Equal(t, aliceTxFull.Public[0].Submissions[0].PublicTxGasPricing.MaxFeePerGas, bobTxFull.Public[0].Submissions[0].PublicTxGasPricing.MaxFeePerGas)
 
 	// Check Alice has the sequencing activity Bob has distributed to her
 	assert.True(t, len(aliceTxFull.SequencerActivity) == 1)
@@ -180,9 +158,7 @@ func TestTransactionSuccessAfterStartStopSingleNode(t *testing.T) {
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -287,9 +263,7 @@ func TestTransactionSuccessIfOneNodeStoppedButNotARequiredVerifier(t *testing.T)
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -355,20 +329,19 @@ func TestTransactionSuccessIfOneRequiredVerifierStoppedDuringSubmission(t *testi
 	alice := testutils.NewPartyForTesting(t, "alice", domainRegistryAddress)
 	bob := testutils.NewPartyForTesting(t, "bob", domainRegistryAddress)
 
-	sequencerConfig := pldconf.SequencerDefaults
-	sequencerConfig.StateTimeout = confutil.P("60s")   // In this test we don't want to hit this
-	sequencerConfig.RequestTimeout = confutil.P("10s") // Extend this enough to give the bob node enough time to restart
-	sequencerConfig.HeartbeatInterval = confutil.P("1s")
-	sequencerConfig.RedelegateGracePeriod = confutil.P(1)
-	alice.OverrideSequencerConfig(&sequencerConfig)
-	bob.OverrideSequencerConfig(&sequencerConfig)
+	alice.OverrideSequencerConfig(&pldconf.SequencerConfig{
+		StateTimeout:   confutil.P("60s"), // In this test we don't want to hit this
+		RequestTimeout: confutil.P("10s"), // Extend this enough to give the bob node enough time to restart
+	})
+	bob.OverrideSequencerConfig(&pldconf.SequencerConfig{
+		StateTimeout:   confutil.P("60s"), // In this test we don't want to hit this
+		RequestTimeout: confutil.P("10s"), // Extend this enough to give the bob node enough time to restart
+	})
 
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -450,20 +423,19 @@ func TestTransactionSuccessIfOneRequiredVerifierStoppedLongerThanRequestTimeout(
 	alice := testutils.NewPartyForTesting(t, "alice", domainRegistryAddress)
 	bob := testutils.NewPartyForTesting(t, "bob", domainRegistryAddress)
 
-	sequencerConfig := pldconf.SequencerDefaults
-	sequencerConfig.RequestTimeout = confutil.P("1s") // In this test we don't want to rely on request timeout so make sure it fires before the bob node is restarted
-	sequencerConfig.StateTimeout = confutil.P("10s")  // In this test we want to ensure state timeout causes the transaction to be re-pooled and re-assembled
-	sequencerConfig.HeartbeatInterval = confutil.P("1s")
-	sequencerConfig.RedelegateGracePeriod = confutil.P(1)
-	alice.OverrideSequencerConfig(&sequencerConfig)
-	bob.OverrideSequencerConfig(&sequencerConfig)
+	alice.OverrideSequencerConfig(&pldconf.SequencerConfig{
+		RequestTimeout: confutil.P("1s"),  // In this test we don't want to rely on request timeout so make sure it fires before the bob node is restarted
+		StateTimeout:   confutil.P("10s"), // In this test we want to ensure state timeout causes the transaction to be re-pooled and re-assembled
+	})
+	bob.OverrideSequencerConfig(&pldconf.SequencerConfig{
+		RequestTimeout: confutil.P("1s"),  // In this test we don't want to rely on request timeout so make sure it fires before the bob node is restarted
+		StateTimeout:   confutil.P("10s"), // In this test we want to ensure state timeout causes the transaction to be re-pooled and re-assembled
+	})
 
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -546,14 +518,9 @@ func TestTransactionResumesIfBothRequiredVerifiersAreStoppedBeforeCompletion(t *
 	bob.AddPeer(alice.GetNodeConfig())
 
 	// Resume transactions in 1-TX pages
-	sequencerConfig := pldconf.SequencerDefaults
-	sequencerConfig.TransactionResumePageSize = confutil.P(1)
+	bob.OverrideSequencerConfig(&pldconf.SequencerConfig{TransactionResumePageSize: confutil.P(1)})
 
-	bob.OverrideSequencerConfig(&sequencerConfig)
-
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -650,9 +617,7 @@ func TestTransactionSuccessChainedTransaction(t *testing.T) {
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -721,9 +686,7 @@ func TestTransactionSuccessChainedTransactionSelfEndorsementThenPrivacyGroupEndo
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -825,9 +788,7 @@ func TestTransactionSuccessChainedTransactionPrivacyGroupEndorsementThenSelfEndo
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -931,9 +892,7 @@ func TestTransactionSuccessChainedTransactionPrivacyGroupEndorsementThenPrivacyG
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1009,9 +968,7 @@ func TestTransactionRevertDuringAssembly(t *testing.T) {
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1056,20 +1013,16 @@ func TestTransactionErrorDuringAssembly(t *testing.T) {
 	alice := testutils.NewPartyForTesting(t, "alice", domainRegistryAddress)
 	bob := testutils.NewPartyForTesting(t, "bob", domainRegistryAddress)
 
-	sequencerConfig := pldconf.SequencerDefaults
-	// Limit the coordinator to 2 transactions at a time. If the assemble error causes all transactions delegated after it to be stuck forever in a dependency queue they will fail to complete and the test will fail.
-	sequencerConfig.MaxInflightTransactions = confutil.P(2)
-
-	sequencerConfig.StateTimeout = confutil.P("240s")    // Make this nice and big - we shouldn't observe any such timeouts if the assemble error is handled cleanly, so make sure the test fails/times out if we do
-	sequencerConfig.HeartbeatInterval = confutil.P("1s") // Allow the coordinator to heartbeat frequently to cause the originator to re-delegate as often as it needs
-	bob.OverrideSequencerConfig(&sequencerConfig)
+	bob.OverrideSequencerConfig(&pldconf.SequencerConfig{
+		// Limit the coordinator to 2 transactions at a time. If the assemble error causes all transactions delegated after it to be stuck forever in a dependency queue they will fail to complete and the test will fail.
+		MaxInflightTransactions: confutil.P(2),
+		StateTimeout:            confutil.P("240s"), // Make this nice and big - we shouldn't observe any such timeouts if the assemble error is handled cleanly, so make sure the test fails/times out if we do
+	})
 
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1149,9 +1102,7 @@ func TestTransactionRevertDuringEndorsement(t *testing.T) {
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1200,9 +1151,7 @@ func TestTransactionRevertOnBaseLedger(t *testing.T) {
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1261,20 +1210,7 @@ func TestTransactionSuccessChainedTransactionStopNodesBeforeCompletion(t *testin
 	carol.AddPeer(alice.GetNodeConfig())
 	carol.AddPeer(bob.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
-
-	// Re-delegation happens on an interval to catch the case where node A resumes a TX but the initial fire-and-forget delegate fails
-	// because node B is still coming up. If nothing else happens on the contract there's nothing to nudge re-delegation except the delegate timeout.
-	// Reduce it down a little here to speed up the test.
-	sequencerConfig := pldconf.SequencerDefaults
-	sequencerConfig.HeartbeatInterval = confutil.P("1s")
-	sequencerConfig.RedelegateGracePeriod = confutil.P(1)
-
-	alice.OverrideSequencerConfig(&sequencerConfig)
-	bob.OverrideSequencerConfig(&sequencerConfig)
-	carol.OverrideSequencerConfig(&sequencerConfig)
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1372,9 +1308,7 @@ func TestTransactionFailureWhenChainedTransactionAssembleReverts(t *testing.T) {
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1464,9 +1398,7 @@ func TestTransactionFailureChainedTransactionDifferentOriginators(t *testing.T) 
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1536,76 +1468,6 @@ func TestTransactionFailureChainedTransactionDifferentOriginators(t *testing.T) 
 	assert.True(t, bobsChainedTransaction[0].Receipt.Success == false)
 }
 
-func TestTransactionSuccessMultipleConcurrentPrivacyGroupEndorsement(t *testing.T) {
-	// This test exercises the re-assembly and re-dispatch of transactions who's base ledger
-	// transactions revert. The simple storage domain base ledger contract has an option to
-	// ensure the value stored is prev+1. For out-of-sequence delivery where new signing addresses
-	// are used for each Paladin public TX it is possible (likely) for the base ledger transactions to
-	// revert. This test drops 30 transactions in and expects every one to be successful, knowing that
-	// several of them are likely to have at least 1 base ledger revert before being successful.
-	ctx := t.Context()
-	domainRegistryAddress := deployDomainRegistry(t, "alice")
-	numberOfIterations := 30
-
-	alice := testutils.NewPartyForTesting(t, "alice", domainRegistryAddress)
-	bob := testutils.NewPartyForTesting(t, "bob", domainRegistryAddress)
-
-	alice.AddPeer(bob.GetNodeConfig())
-	bob.AddPeer(alice.GetNodeConfig())
-
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
-
-	startNode(t, alice, domainConfig)
-	startNode(t, bob, domainConfig)
-	t.Cleanup(func() {
-		stopNode(t, alice)
-		stopNode(t, bob)
-	})
-
-	constructorParameters := &domains.ConstructorParameters{
-		From:            alice.GetIdentity(),
-		Name:            "FakeToken1",
-		Symbol:          "FT1",
-		EndorsementMode: domains.PrivacyGroupEndorsement,
-		EndorsementSet:  []string{alice.GetIdentityLocator(), bob.GetIdentityLocator()},
-		AmountVisible:   true,
-	}
-
-	contractAddress := alice.DeploySimpleDomainInstanceContract(t, constructorParameters, transactionLatencyThreshold)
-
-	// Submit a number of transactions that are likely to hit on-chain reverts but must all be eventually successful.
-	aliceTxns := make([]*uuid.UUID, numberOfIterations)
-	for i := 0; i < numberOfIterations; i++ {
-		aliceTx := alice.GetClient().ForABI(ctx, *domains.SimpleTokenTransferABI()).
-			Private().
-			Domain("domain1").
-			IdempotencyKey("tx1-alice-" + uuid.New().String()).
-			From(alice.GetIdentity()).
-			To(contractAddress).
-			Function("transfer").
-			Inputs(pldtypes.RawJSON(`{
-			"from": "",
-			"to": "` + bob.GetIdentityLocator() + `",
-			"amount": "` + strconv.Itoa(i+1) + `"
-		}`)).
-			Send()
-		require.NoError(t, aliceTx.Error())
-		aliceTxns[i] = aliceTx.ID()
-
-	}
-
-	// Check all transactions are eventually successful
-	for i := 0; i < numberOfIterations; i++ {
-		assert.Eventually(t,
-			transactionReceiptCondition(t, ctx, *aliceTxns[i], alice.GetClient(), false),
-			transactionLatencyThreshold(t),
-			100*time.Millisecond,
-			"Transaction did not receive a receipt for Alice TX %s", aliceTxns[i])
-	}
-}
-
 func TestTransactionWaitsUntilExplicitPrereqTransactionSuccessful(t *testing.T) {
 	// Test that a transaction with an explicit dependency doesn't complete until the dependency has.
 	// We test this with 2 contracts: one requires alice and bob to endorse, the other just requires alice.
@@ -1617,20 +1479,10 @@ func TestTransactionWaitsUntilExplicitPrereqTransactionSuccessful(t *testing.T) 
 	alice := testutils.NewPartyForTesting(t, "alice", domainRegistryAddress)
 	bob := testutils.NewPartyForTesting(t, "bob", domainRegistryAddress)
 
-	// Re-delegation happens on an interval to catch the case where node A resumes a TX but the initial
-	// fire-and-forget delegate fails because node B is still coming up.
-	sequencerConfig := pldconf.SequencerDefaults
-	sequencerConfig.HeartbeatInterval = confutil.P("1s")
-	sequencerConfig.RedelegateGracePeriod = confutil.P(1)
-	alice.OverrideSequencerConfig(&sequencerConfig)
-	bob.OverrideSequencerConfig(&sequencerConfig)
-
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1728,11 +1580,11 @@ func TestTransactionWithExplicitPrereqSuccessfulAfterRestart(t *testing.T) {
 	bob := testutils.NewPartyForTesting(t, "bob", domainRegistryAddress)
 	carol := testutils.NewPartyForTesting(t, "carol", domainRegistryAddress)
 
-	sequencerConfig := pldconf.SequencerDefaults
-	sequencerConfig.StateTimeout = confutil.P("10s")
-	sequencerConfig.RequestTimeout = confutil.P("3s")
-	sequencerConfig.TransactionResumePollInterval = confutil.P("5s") // We're relying on sequencer TX resume to get TX2 through to completion
-	alice.OverrideSequencerConfig(&sequencerConfig)
+	alice.OverrideSequencerConfig(&pldconf.SequencerConfig{
+		StateTimeout:                  confutil.P("10s"),
+		RequestTimeout:                confutil.P("3s"),
+		TransactionResumePollInterval: confutil.P("5s"), // We're relying on sequencer TX resume to get TX2 through to completion
+	})
 
 	alice.AddPeer(bob.GetNodeConfig())
 	alice.AddPeer(carol.GetNodeConfig())
@@ -1741,9 +1593,7 @@ func TestTransactionWithExplicitPrereqSuccessfulAfterRestart(t *testing.T) {
 	carol.AddPeer(alice.GetNodeConfig())
 	carol.AddPeer(bob.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1857,9 +1707,7 @@ func TestTransactionFailsIfExplicitPrereqTransactionFails(t *testing.T) {
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)

@@ -27,7 +27,11 @@ import (
 )
 
 func action_SelectActiveCoordinator(ctx context.Context, c *coordinator, _ common.Event) error {
-	c.activeCoordinatorNode = c.selectActiveCoordinatorNode(ctx)
+	selected := c.selectActiveCoordinatorNode(ctx)
+	if c.activeCoordinatorNode != selected {
+		c.activeCoordinatorNode = selected
+		c.notifyOriginatorOfActiveCoordinator(selected)
+	}
 	return nil
 }
 
@@ -74,7 +78,7 @@ func action_UpdateBlockHeight(ctx context.Context, c *coordinator, event common.
 	blockRange := c.coordinatorSelectionBlockRange
 
 	// integer division tells us which block range epoch we're in and allows us to compare old with new
-	c.newBlockRangeEpoch = newHeight/blockRange == c.currentBlockHeight/blockRange
+	c.newBlockRangeEpoch = newHeight/blockRange != c.currentBlockHeight/blockRange
 	c.currentBlockHeight = newHeight
 	return nil
 }

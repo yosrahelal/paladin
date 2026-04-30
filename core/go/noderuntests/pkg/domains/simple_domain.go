@@ -66,11 +66,6 @@ const (
 )
 
 const (
-	ONE_TIME_USE_KEYS   = "ONE_TIME_USE_KEYS"
-	ENDORSER_SUBMISSION = "ENDORSER_SUBMISSION"
-)
-
-const (
 	// SelfEndorsement is kinda like zeto
 	//  There is a single endorser which is the same as the sender.
 	//Unlike zeto, this does *not* imply a domain provided signer algo.
@@ -380,12 +375,9 @@ type simpleTokenParser struct {
 	Amount *ethtypes.HexInteger  `json:"amount"`
 }
 
-type SimpleDomainConfig struct {
-	SubmitMode string `json:"submitMode"`
-}
+type SimpleDomainConfig struct{}
 
 type SimpleDomainPairConfig struct {
-	SubmitMode             string
 	Domain1RegistryAddress string
 	Domain2RegistryAddress string
 }
@@ -762,6 +754,7 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 					//This combination is less common on a token based domain but may use it in some tests
 					contractConfig.CoordinatorSelection = prototk.ContractConfig_COORDINATOR_ENDORSER
 					contractConfig.SubmitterSelection = prototk.ContractConfig_SUBMITTER_COORDINATOR
+					contractConfig.CoordinatorEndorserCandidates = constructorParameters.EndorsementSet
 				default:
 					return nil, fmt.Errorf("unknown endorsement mode %s", constructorParameters.EndorsementMode)
 				}

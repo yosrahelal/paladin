@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -156,15 +157,13 @@ func NewInstanceForTesting(t *testing.T, domainRegistryAddress *pldtypes.EthAddr
 	}
 	i.ctx, i.cancelCtx = context.WithCancel(log.WithLogField(t.Context(), "node-name", binding.name))
 	if binding.sequencerConfig != nil {
-		i.conf.SequencerManager = *binding.sequencerConfig
+		mergeSequencerConfig(&i.conf.SequencerManager, binding.sequencerConfig)
 	}
 
 	i.conf.BlockIndexer.FromBlock = json.RawMessage(`"latest"`)
 	i.conf.Domains = make(map[string]*pldconf.DomainConfig, 1)
 	if domainConfig == nil {
-		domainConfig = &domains.SimpleDomainConfig{
-			SubmitMode: domains.ENDORSER_SUBMISSION,
-		}
+		domainConfig = &domains.SimpleDomainConfig{}
 	}
 
 	switch domainConfig := domainConfig.(type) {
@@ -175,7 +174,7 @@ func NewInstanceForTesting(t *testing.T, domainRegistryAddress *pldtypes.EthAddr
 				Type:    string(pldtypes.LibraryTypeCShared),
 				Library: "loaded/via/unit/test/loader",
 			},
-			Config:          map[string]any{"submitMode": domainConfig.SubmitMode},
+			Config:          map[string]any{},
 			RegistryAddress: domainRegistryAddress.String(),
 		}
 	case *domains.SimpleStorageDomainConfig:
@@ -191,7 +190,6 @@ func NewInstanceForTesting(t *testing.T, domainRegistryAddress *pldtypes.EthAddr
 				Library: "loaded/via/unit/test/loader",
 			},
 			Config: map[string]any{
-				"submitMode":     domainConfig.SubmitMode,
 				"endorsementSet": endorsementSet,
 			},
 			RegistryAddress: domainRegistryAddress.String(),
@@ -204,13 +202,13 @@ func NewInstanceForTesting(t *testing.T, domainRegistryAddress *pldtypes.EthAddr
 		i.conf.Domains["domain1"] = &pldconf.DomainConfig{
 			AllowSigning:    true,
 			Plugin:          domainPlugin,
-			Config:          map[string]any{"submitMode": domainConfig.SubmitMode},
+			Config:          map[string]any{},
 			RegistryAddress: domainConfig.Domain1RegistryAddress,
 		}
 		i.conf.Domains["domain2"] = &pldconf.DomainConfig{
 			AllowSigning:    true,
 			Plugin:          domainPlugin,
-			Config:          map[string]any{"submitMode": domainConfig.SubmitMode},
+			Config:          map[string]any{},
 			RegistryAddress: domainConfig.Domain2RegistryAddress,
 		}
 	}
@@ -572,6 +570,27 @@ func (p *partyForTesting) GetIdentityLocator() string {
 
 func (p *partyForTesting) OverrideSequencerConfig(config *pldconf.SequencerConfig) {
 	p.nodeConfig.sequencerConfig = config
+}
+
+// mergeSequencerConfig copies only the non-nil pointer fields from override into base,
+// leaving fields that are nil in override untouched. Struct fields are merged recursively.
+func mergeSequencerConfig(base, override *pldconf.SequencerConfig) {
+	mergeStructByPointerFields(reflect.ValueOf(base).Elem(), reflect.ValueOf(override).Elem())
+}
+
+func mergeStructByPointerFields(base, override reflect.Value) {
+	for i := 0; i < override.NumField(); i++ {
+		src := override.Field(i)
+		dst := base.Field(i)
+		switch src.Kind() {
+		case reflect.Ptr:
+			if !src.IsNil() {
+				dst.Set(src)
+			}
+		case reflect.Struct:
+			mergeStructByPointerFields(dst, src)
+		}
+	}
 }
 
 func (p *partyForTesting) DeploySimpleDomainInstanceContract(t *testing.T, constructorParameters *domains.ConstructorParameters,

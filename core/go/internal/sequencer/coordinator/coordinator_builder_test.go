@@ -303,6 +303,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		b.sequencerConfig,
 		"node1",
 		b.metrics,
+		func(_ string) {},
 	)
 
 	// Loops are not started yet — set state and seed transactions directly.

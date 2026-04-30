@@ -214,6 +214,12 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				sMgr.config,
 				sMgr.nodeName,
 				sMgr.metrics,
+				func(coordinatorNode string) {
+					seqOriginator.QueueEvent(sMgr.ctx, &originator.ActiveCoordinatorUpdatedEvent{
+						BaseEvent:   common.BaseEvent{EventTime: time.Now()},
+						Coordinator: coordinatorNode,
+					})
+				},
 			)
 			if err := seqCoordinator.Start(seqCtx); err != nil {
 				cancelCtx()

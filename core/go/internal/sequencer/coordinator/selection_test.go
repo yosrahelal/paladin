@@ -245,6 +245,28 @@ func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
 	assert.Equal(t, uint64(1000), c.currentBlockHeight)
 }
 
+func Test_action_UpdateBlockHeight_NewEpoch_SetsNewBlockRangeEpochTrue(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	c.coordinatorSelectionBlockRange = 10
+	c.currentBlockHeight = 9
+
+	err := action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 10})
+	require.NoError(t, err)
+	assert.True(t, c.newBlockRangeEpoch, "crossing a block range boundary should set newBlockRangeEpoch=true")
+}
+
+func Test_action_UpdateBlockHeight_SameEpoch_SetsNewBlockRangeEpochFalse(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	c.coordinatorSelectionBlockRange = 10
+	c.currentBlockHeight = 0
+
+	err := action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1})
+	require.NoError(t, err)
+	assert.False(t, c.newBlockRangeEpoch, "staying within the same block range should set newBlockRangeEpoch=false")
+}
+
 func Test_guard_IsNewBlockRangeEpoch_WhenNewEpoch_ReturnsTrue(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()

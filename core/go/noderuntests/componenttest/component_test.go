@@ -847,9 +847,7 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1432,9 +1430,7 @@ func TestPrivacyGroupEndorsement(t *testing.T) {
 	bob.AddPeer(alice.GetNodeConfig(), carol.GetNodeConfig())
 	carol.AddPeer(alice.GetNodeConfig(), bob.GetNodeConfig())
 
-	domainConfig := &domains.SimpleStorageDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleStorageDomainConfig{}
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
 	startNode(t, carol, domainConfig)
@@ -1531,9 +1527,7 @@ func TestPrivacyGroupEndorsementConcurrent(t *testing.T) {
 	bob.AddPeer(alice.GetNodeConfig(), carol.GetNodeConfig())
 	carol.AddPeer(alice.GetNodeConfig(), bob.GetNodeConfig())
 
-	domainConfig := &domains.SimpleStorageDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleStorageDomainConfig{}
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
 	startNode(t, carol, domainConfig)

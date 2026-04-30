@@ -286,26 +286,57 @@ var stateDefinitionsMap = StateDefinitions{
 			// making this behaviour configurable via the domain
 			Event_NewBlock: {
 				Actions: []ActionRule{
-					{Action: action_UpdateBlockHeight},
-					{Action: action_SelectActiveCoordinator},
+					{
+						Action: action_UpdateBlockHeight,
+					},
+					{
+						Action: action_SelectActiveCoordinator,
+					},
+					// If we are entering a new block range we clean up transactions that have not reached point of no return.
+					// They will disappear from our heartbeats which will trigger the originator to start trying to redelegate to the new
+					// active coordinator (which could be us). The new coordinator should be rejecting these delegations until it is in
+					// State_Active (e.g. while it waits for the flush to complete). If it doesn't, the base ledger still protects against
+					// duplicate submissions and double spends; we tolerate the inefficiency this causes in the protocol.
+					//
+					// We clean up ahead of transitioning out of State_Active so that we can make a decision about where we need to go next.
+					// E.g. we don't need to flush if we don't have any dispatched transactions.
+					{
+						If:     guard_IsNewBlockRangeEpoch,
+						Action: action_CleanUpTransactionsNotYetDispatched,
+					},
 				},
-				// We have entered a new block range. Regardless of whether or not we are the preferred active coordinator for
-				// this block range, we still need to flush all the dispatched transactions from the previous block range.
+				// All of these transitions only apply if we are enterring a new block range.
+				// If we reach these transitions without having any inflight transactions, we must have just cleaned up the transactions
+				// that hadn't yet reached the point of no return, otherwise we would have been in State_Idle, not State_Active. This is why
+				// we preemptively transition to State_Active/State_Observing, since we know the transactions we cleaned up should be immediately
+				// redelegated to the new preferred active coordinator.
 				Transitions: []Transition{{
+					// We still have dispatched transactions in memory. Regardless of whether or not we are the preferred active coordinator
+					// for this block range, we still need to flush all the dispatched transactions from the previous block range.
 					To: State_Flush,
-					If: guard_IsNewBlockRangeEpoch,
+					If: statemachine.GuardAnd(guard_IsNewBlockRangeEpoch, guard_HasTransactionsInflight),
+				}, {
+					// We don't have any dispatched transactions in memory and we are also the new preferred active coordinator.
+					// We "reenter" State_Active so that we can trigger a signing key rotation.
+					To: State_Active,
+					If: statemachine.GuardAnd(
+						guard_IsNewBlockRangeEpoch,
+						statemachine.GuardNot(guard_HasTransactionsInflight),
+						guard_IsActiveCoordinator,
+					),
+				}, {
+					// We don't have any dispatched transactions in memory and we are not the new preferred active coordinator.
+					To: State_Observing,
+					If: statemachine.GuardAnd(
+						guard_IsNewBlockRangeEpoch,
+						statemachine.GuardNot(guard_HasTransactionsInflight),
+						statemachine.GuardNot(guard_IsActiveCoordinator),
+					),
 				}},
 			},
 		},
 	},
 	State_Flush: {
-		OnTransitionTo: []ActionRule{{
-			// Clean up transactions that have not reached point of no return. They will disappear from heartbeats which means that the
-			// the originator will start trying to redelegate to the new active coordinator. The new coordinator should be rejecting
-			// these delegations while it waits for the flush to complete. If it doesn't, the base ledger still protects against duplicate
-			// submissions and double spends; we tolerate the inefficiency this causes in the protocol.
-			Action: action_CleanUpTransactionsNotYetDispatched,
-		}},
 		Events: map[EventType]EventHandler{
 			Event_TransactionsDelegated: {
 				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},

@@ -104,16 +104,17 @@ type coordinator struct {
 	maxDispatchAhead                  int
 
 	/* Dependencies */
-	domainAPI             components.DomainSmartContract
-	dCtx                  components.DomainContext
-	components            components.AllComponents
-	transportWriter       transport.TransportWriter
-	clock                 common.Clock
-	engineIntegration     common.EngineIntegration
-	buildNullifiers       func(context.Context, []*components.StateDistributionWithData) ([]*components.NullifierUpsert, error)
-	newPrivateTransaction func(context.Context, []*components.ValidatedTransaction) error
-	syncPoints            syncpoints.SyncPoints
-	metrics               metrics.DistributedSequencerMetrics
+	domainAPI                           components.DomainSmartContract
+	dCtx                                components.DomainContext
+	components                          components.AllComponents
+	transportWriter                     transport.TransportWriter
+	clock                               common.Clock
+	engineIntegration                   common.EngineIntegration
+	buildNullifiers                     func(context.Context, []*components.StateDistributionWithData) ([]*components.NullifierUpsert, error)
+	newPrivateTransaction               func(context.Context, []*components.ValidatedTransaction) error
+	syncPoints                          syncpoints.SyncPoints
+	notifyOriginatorOfActiveCoordinator func(coordinatorNode string)
+	metrics                             metrics.DistributedSequencerMetrics
 
 	/* Dispatch loop */
 	dispatchQueue       chan transaction.CoordinatorTransaction
@@ -136,26 +137,28 @@ func NewCoordinator(
 	configuration *pldconf.SequencerConfig,
 	nodeName string,
 	metrics metrics.DistributedSequencerMetrics,
+	notifyOriginatorOfActiveCoordinator func(coordinatorNode string),
 ) *coordinator {
 	dependencyTracker := dependencytracker.NewDependencyTracker()
 	c := &coordinator{
-		heartbeatIntervalsSinceStateChange: 0,
-		transactionsByID:                   make(map[uuid.UUID]transaction.CoordinatorTransaction),
-		domainAPI:                          domainAPI,
-		dCtx:                               dCtx,
-		components:                         allComponents,
-		buildNullifiers:                    buildNullifiers,
-		newPrivateTransaction:              newPrivateTransaction,
-		transportWriter:                    transportWriter,
-		contractAddress:                    contractAddress,
-		dependencyTracker:                  dependencyTracker,
-		grapher:                            grapher.NewGrapher(dependencyTracker),
-		clock:                              clock,
-		engineIntegration:                  engineIntegration,
-		syncPoints:                         syncPoints,
-		nodeName:                           nodeName,
-		metrics:                            metrics,
-		dispatchLoopStopped:                make(chan struct{}),
+		heartbeatIntervalsSinceStateChange:  0,
+		transactionsByID:                    make(map[uuid.UUID]transaction.CoordinatorTransaction),
+		domainAPI:                           domainAPI,
+		dCtx:                                dCtx,
+		components:                          allComponents,
+		buildNullifiers:                     buildNullifiers,
+		newPrivateTransaction:               newPrivateTransaction,
+		transportWriter:                     transportWriter,
+		contractAddress:                     contractAddress,
+		dependencyTracker:                   dependencyTracker,
+		grapher:                             grapher.NewGrapher(dependencyTracker),
+		clock:                               clock,
+		engineIntegration:                   engineIntegration,
+		syncPoints:                          syncPoints,
+		nodeName:                            nodeName,
+		metrics:                             metrics,
+		notifyOriginatorOfActiveCoordinator: notifyOriginatorOfActiveCoordinator,
+		dispatchLoopStopped:                 make(chan struct{}),
 	}
 
 	// Configuration
