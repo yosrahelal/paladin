@@ -66,12 +66,17 @@ export const TransactionDetails: React.FC = () => {
     queryFn: () => fetchTransactionReceiptFull(id!),
     enabled: id !== undefined
   });
-  
+
   useEffect(() => {
-    if (hash === undefined && paladinTransaction !== undefined) {
-      setHash(paladinTransaction?.receipt?.transactionHash);
+    if (hash === undefined) {
+      if (paladinTransaction !== undefined) {
+        setHash(paladinTransaction?.receipt?.transactionHash);
+      }
+      if (receipt !== undefined) {
+        setHash(receipt.transactionHash);
+      }
     }
-  }, [hash, paladinTransaction]);
+  }, [hash, paladinTransaction, receipt]);
 
   if (hash === undefined && id === undefined) {
     return <></>;
@@ -111,14 +116,26 @@ export const TransactionDetails: React.FC = () => {
               </Box>
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 12, md: 8, lg: 9 }}>
-              {enrichedTransaction.paladinTransactions.length > 0 ?
+              {enrichedTransaction.paladinTransactions.length > 0 &&
                 <Box>
                   <Typography align="center" variant="h6" sx={{ marginBottom: '5px' }}>{t('paladinTransaction')}</Typography>
                   <PaladinTransactionSection paladinTransactions={enrichedTransaction.paladinTransactions} />
-                </Box>
-                :
-                <Typography align="center" variant="h6" sx={{ marginBottom: '5px' }}>{t('noPaladinTransaction')}</Typography>
-              }
+                </Box>}
+              {receipt !== undefined &&
+                <Box>
+                  <Typography align="center" variant="h6" sx={{ marginBottom: '5px' }}>{t('paladinTransaction')}</Typography>
+                  <Accordion elevation={0} disableGutters defaultExpanded>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      {t('receipt')}
+                    </AccordionSummary>
+                    <AccordionDetails >
+                      <JSONBox data={receipt} />
+                    </AccordionDetails>
+                  </Accordion>
+                </Box>}
+              {enrichedTransaction.paladinTransactions.length === 0 && receipt === undefined &&
+                <Typography align="center" variant="h6" sx={{ marginBottom: '5px' }}>{t('noPaladinTransaction')}</Typography>}
+
             </Grid2>
           </Grid2>}
         {enrichedTransaction === undefined && paladinTransaction !== undefined && paladinTransaction !== null &&
@@ -127,16 +144,7 @@ export const TransactionDetails: React.FC = () => {
             <PaladinTransactionSection paladinTransactions={[paladinTransaction]} />
           </Box>
         }
-        {enrichedTransaction === undefined && receipt !== undefined &&
-          <Accordion elevation={0} disableGutters>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            {t('receipt')}
-          </AccordionSummary>
-          <AccordionDetails >
-            <JSONBox data={receipt} />
-          </AccordionDetails>
-        </Accordion>
-        }
+
       </Box>
     </Fade>
   );
