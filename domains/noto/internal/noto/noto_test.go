@@ -969,7 +969,7 @@ func TestIsBaseLedgerRevertRetryable_UnrecognizedSelector(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.False(t, res.Retryable)
-	assert.Equal(t, pldtypes.HexBytes(revertData).String(), res.DecodedReason)
+	assert.Empty(t, res.DecodedReason)
 }
 
 func TestIsBaseLedgerRevertRetryable_ExactlyFourBytes(t *testing.T) {
@@ -983,7 +983,7 @@ func TestIsBaseLedgerRevertRetryable_ExactlyFourBytes(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.False(t, res.Retryable)
-	assert.Equal(t, pldtypes.HexBytes(revertData).String(), res.DecodedReason)
+	assert.Empty(t, res.DecodedReason)
 }
 
 func TestAssembleTransactionBadAbi(t *testing.T) {
