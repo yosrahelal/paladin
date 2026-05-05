@@ -7,8 +7,9 @@ import {Noto} from "./Noto.sol";
 uint256 constant MAX_SMT_DEPTH = 64;
 
 contract NotoNullifiers is Noto {
-    SmtLib.Data internal _commitmentsTree;
     using SmtLib for SmtLib.Data;
+
+    SmtLib.Data internal _commitmentsTree;
 
     uint64 public constant NotoVariantNullifiers = 0x0002;
 
@@ -58,35 +59,76 @@ contract NotoNullifiers is Noto {
         emit Transfer(txId, msg.sender, inputs, outputs, _signature, data);
     }
 
-    function _updateLock(
-        NotoLockOperation memory lockOp,
+    function _createLock(
+        NotoCreateLockOperation memory lockOp,
         LockParams calldata params,
         bytes32 lockId,
+        LockInfo storage lock,
         bytes calldata data
-    ) internal override {
+    ) internal virtual override {
         useTxId(lockOp.txId);
-        (uint256 root, bytes memory signature) = abi.decode(
-            lockOp.proof,
-            (uint256, bytes)
-        );
+
+        (uint256 root, ) = abi.decode(lockOp.proof, (uint256, bytes));
         if (!_commitmentsTree.rootExists(root)) {
             revert NotoInvalidRoot(root);
         }
 
         _processNullifiers(lockOp.inputs);
         _processOutputs(lockOp.outputs);
-        _processLockedOutputs(lockId, lockOp.lockedOutputs);
+        _processLockContents(lockId, lockOp.contents);
 
-        // Initially, owner and spender are both the notary
-        LockInfo storage lock = _locks[lockId];
+        _processOutput(lockOp.newLockState);
+        _lockStates[lockId] = lockOp.newLockState;
+
         lock.spendHash = params.spendHash;
         lock.cancelHash = params.cancelHash;
 
-        if (params.options.length > 0) {
-            _setLockOptions(lockId, params.options);
+        if (params.options.length != 0) {
+            _setLockOptions(lockId, lock, params.options);
         }
 
-        emit LockUpdated(lockId, lock, data);
+        emit LockUpdated(lockId, msg.sender, lock, data);
+    }
+
+    function _updateLock(
+        NotoUpdateLockOperation memory lockOp,
+        LockParams calldata params,
+        bytes32 lockId,
+        LockInfo storage lock,
+        bytes calldata data
+    ) internal virtual override {
+        if (lockOp.proof.length > 0) {
+            (uint256 root, ) = abi.decode(lockOp.proof, (uint256, bytes));
+            if (!_commitmentsTree.rootExists(root)) {
+                revert NotoInvalidRoot(root);
+            }
+        }
+        super._updateLock(lockOp, params, lockId, lock, data);
+    }
+
+    /**
+     * @dev Lock state IDs and other outputs live in the commitment tree, not _unspent.
+     *      Base Noto spends lock states via _processInput; accept tree membership there.
+     */
+    function _processInput(bytes32 input) internal virtual override {
+        uint256 inputUint = uint256(input);
+        if (existsAsUnlocked(inputUint)) {
+            return;
+        }
+        super._processInput(input);
+    }
+
+    /**
+     * @dev Append-only commitment tree instead of _unspent for public outputs.
+     */
+    function _processOutput(bytes32 output) internal virtual override {
+        uint256 outputUint = uint256(output);
+        if (
+            existsAsUnlocked(outputUint) || getLockId(output) != bytes32(0)
+        ) {
+            revert NotoInvalidOutput(output);
+        }
+        _commitmentsTree.addLeaf(outputUint, outputUint);
     }
 
     /**
@@ -104,21 +146,6 @@ contract NotoNullifiers is Noto {
         }
     }
 
-    /**
-     * @dev Check the outputs are all new UTXOs, and add them to the commitments tree
-     */
-    function _processOutputs(bytes32[] memory outputs) internal override {
-        for (uint256 i = 0; i < outputs.length; ++i) {
-            uint256 output = uint256(outputs[i]);
-            if (
-                existsAsUnlocked(output) || getLockId(outputs[i]) != bytes32(0)
-            ) {
-                revert NotoInvalidOutput(outputs[i]);
-            }
-            _commitmentsTree.addLeaf(output, output);
-        }
-    }
-
     // check the existence of a UTXO in the commitments tree. we take a shortcut
     // by checking the list of nodes by their node hash, because the commitments
     // tree is append-only, no updates or deletions are allowed. As a result, all
@@ -132,7 +159,7 @@ contract NotoNullifiers is Noto {
     function getLeafNodeHash(
         uint256 index,
         uint256 value
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
         uint256[3] memory params = [index, value, uint256(1)];
         bytes memory encoded = abi.encode(params);
         return uint256(keccak256(encoded));

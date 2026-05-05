@@ -396,17 +396,21 @@ export async function doLockWithNullifiers(
   outputs: string[],
   lockedOutputs: string[],
   root: string,
-  data: string
-): Promise<string> {
+  data: string,
+  newLockState?: string
+): Promise<{ lockId: string; newLockState: string }> {
   const proof = encodeToBytes(root, "0x");
-  const lockOp = {
+  const lockStateId = newLockState ?? randomBytes32();
+  const lockOp: NotoCreateLockOperation = {
     txId,
     inputs: nullifiers,
-    outputs: outputs,
-    lockedOutputs: lockedOutputs,
+    outputs,
+    contents: lockedOutputs,
+    newLockState: lockStateId,
     proof,
-  } as NotoLockOperation;
-  const encodedParams = encodeLockParams(lockOp);
+  };
+  const encodedParams = encodeCreateLockParams(lockOp);
+  const lockId = await noto.computeLockId(encodedParams);
 
   const unpreparedLockParams = {
     spendHash: ZeroHash,
@@ -415,26 +419,28 @@ export async function doLockWithNullifiers(
   } as ILockableCapability.LockInfoStruct;
 
   const tx = await noto
-    .connect(notary).createLock(encodedParams, unpreparedLockParams, data);
+    .connect(notary)
+    .createLock(encodedParams, unpreparedLockParams, data);
   const results = await tx.wait();
   expect(results).to.exist;
 
-  let lockId = "";
   for (const log of results?.logs || []) {
     const event = noto.interface.parseLog(log);
     expect(event).to.exist;
     if (event?.name == "LockUpdated") {
       expect(event?.args.lock.content).to.not.empty;
-      const decoded = AbiCoder.defaultAbiCoder().decode(["bytes32[]"], event?.args.lock.content);
+      const decoded = AbiCoder.defaultAbiCoder().decode(
+        ["bytes32[]"],
+        event?.args.lock.content
+      );
       expect(decoded[0]).to.deep.equal(lockedOutputs);
       expect(event?.args.data).to.deep.equal(data);
-      if (event?.args.lockId) {
-        lockId = event.args.lockId;
-      }
+      expect(event?.args.lockId).to.equal(lockId);
     } else if (event?.name == "NotoLockCreated") {
       expect(event?.args.inputs).to.deep.equal(nullifiers);
       expect(event?.args.outputs).to.deep.equal(outputs);
-      expect(event?.args.lockedOutputs).to.deep.equal(lockedOutputs);
+      expect(event?.args.contents).to.deep.equal(lockedOutputs);
+      expect(event?.args.newLockState).to.equal(lockStateId);
       expect(event?.args.proof).to.deep.equal(proof);
       expect(event?.args.data).to.deep.equal(data);
     }
@@ -449,7 +455,7 @@ export async function doLockWithNullifiers(
     expect(await noto.getLockId(output)).to.not.empty;
     expect(await noto.isUnspent(output)).to.equal(false);
   }
-  return lockId;
+  return { lockId, newLockState: lockStateId };
 }
 
 export async function doUnlock(

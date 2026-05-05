@@ -41,15 +41,15 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
             "Unlock(bytes32 txId,bytes32[] lockedInputs,bytes32[] outputs,bytes data)"
         );
 
-    string private _name;
-    string private _symbol;
+    string internal _name;
+    string internal _symbol;
     address public notary;
 
     mapping(bytes32 => bool) private _unspent;
     mapping(bytes32 => bytes32) private _locked; // state ID => lock ID
     mapping(bytes32 => LockInfo) private _locks; // lock ID => lock details
     mapping(bytes32 => bool) private _txIds; // track used transaction IDs
-    mapping(bytes32 => bytes32) private _lockStates; // track the current lockState ID for any active lock
+    mapping(bytes32 => bytes32) internal _lockStates; // track the current lockState ID for any active lock
     mapping(bytes32 => bytes32) private _lockTxIds; // tx ID => lock ID (for prepared transactions)
 
     function requireNotary(address addr) internal view {
@@ -126,7 +126,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
 
     function buildConfig(
         bytes calldata data
-    ) external view returns (bytes memory) {
+    ) external view virtual returns (bytes memory) {
         return
             _encodeConfig(
                 NotoConfig_V1({
@@ -294,7 +294,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     /**
      * @dev Check that the input is unspent, and remove it.
      */
-    function _processInput(bytes32 input) internal {
+    function _processInput(bytes32 input) internal virtual {
         if (!isUnspent(input)) {
             revert NotoInvalidInput(input);
         }
@@ -313,7 +313,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     /**
      * @dev Check that an individual output is new, and mark it as unspent.
      */
-    function _processOutput(bytes32 output) internal {
+    function _processOutput(bytes32 output) internal virtual {
         if (isUnspent(output) || getLockId(output) != 0) {
             revert NotoInvalidOutput(output);
         }
