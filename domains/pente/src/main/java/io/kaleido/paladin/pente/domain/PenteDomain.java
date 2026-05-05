@@ -33,20 +33,31 @@
  import io.kaleido.paladin.toolkit.JsonHex.Bytes32;
 
  import org.apache.logging.log4j.Logger;
+ import org.apache.logging.log4j.ThreadContext;
  import org.apache.logging.log4j.message.FormattedMessage;
  import org.jetbrains.annotations.NotNull;
 
  import java.io.ByteArrayOutputStream;
  import java.io.IOException;
+ import java.nio.ByteBuffer;
  import java.nio.charset.StandardCharsets;
  import java.util.*;
  import java.util.concurrent.CompletableFuture;
+import java.util.HexFormat;
 import java.util.concurrent.ExecutionException;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 
  public class PenteDomain extends DomainInstance {
      private static final Logger LOGGER = PaladinLogging.getLogger(PenteDomain.class);
+
+     // Error selectors for retryable base ledger reverts (all take a single bytes32 parameter)
+     // PenteInputNotAvailable(bytes32 input)
+     private static final byte[] SELECTOR_INPUT_NOT_AVAILABLE = new byte[]{(byte)0xa8, (byte)0x0f, (byte)0x89, (byte)0xf4};
+     // PenteReadNotAvailable(bytes32 read)
+     private static final byte[] SELECTOR_READ_NOT_AVAILABLE = new byte[]{(byte)0xa7, (byte)0xa3, (byte)0xac, (byte)0xe3};
+     // PenteOutputAlreadyUnspent(bytes32 output)
+     private static final byte[] SELECTOR_OUTPUT_ALREADY_UNSPENT = new byte[]{(byte)0xf6, (byte)0xb3, (byte)0x93, (byte)0x1c};
 
      private final PenteConfiguration config = new PenteConfiguration();
 
@@ -181,14 +192,21 @@ import com.fasterxml.jackson.core.JsonProcessingException;
              var onChainConfig = PenteConfiguration.decodeConfig(request.getContractConfig().toByteArray());
 
              var contractConfigObj = new PenteConfiguration.ContractConfig(onChainConfig.evmVersion());
-             var contractConfig = ContractConfig.newBuilder().
+            var contractConfig = ContractConfig.newBuilder().
                      setContractConfigJson(new ObjectMapper().writeValueAsString(contractConfigObj)).
                      setCoordinatorSelection(ContractConfig.CoordinatorSelection.COORDINATOR_ENDORSER).
-                     setSubmitterSelection(ContractConfig.SubmitterSelection.SUBMITTER_COORDINATOR).
-                     build();
+                    setSubmitterSelection(ContractConfig.SubmitterSelection.SUBMITTER_COORDINATOR);
+            if (request.hasPrivacyGroup()) {
+                var privacyGroup = request.getPrivacyGroup();
+                var members = privacyGroup.getMembersList().toArray(new String[0]);
+                if (members.length > 0) {
+                    var lookups = PenteTransaction.buildGroupScopeIdentityLookups(new JsonHex.Bytes32(privacyGroup.getGenesisSalt()), members);
+                    contractConfig.addAllCoordinatorEndorserCandidates(lookups);
+                }
+            }
              return CompletableFuture.completedFuture(InitContractResponse.newBuilder().
                      setValid(true).
-                     setContractConfig(contractConfig).
+                    setContractConfig(contractConfig.build()).
                      build());
 
          } catch (Exception e) {
@@ -247,9 +265,29 @@ import com.fasterxml.jackson.core.JsonProcessingException;
          return ex.getErrorType() == Header.ErrorType.INVALID_INPUT;
      }
 
+    static String txIdForLog(String txId) {
+         try {
+             var txIdBytes = HexFormat.of().parseHex(JsonHex.trimOxPrefix(txId));
+             if (txIdBytes.length == 32) {
+                 var bb = ByteBuffer.wrap(txIdBytes, 0, 16);
+                 return new UUID(bb.getLong(), bb.getLong()).toString();
+             }
+         } catch (IllegalArgumentException ignored) {
+         }
+         return txId;
+     }
+
+     private void setTransactionLogContext(TransactionSpecification txSpec) {
+         ThreadContext.put("tx", txIdForLog(txSpec.getTransactionId()));
+         ThreadContext.put("contract", txSpec.getContractInfo().getContractAddress());
+     }
+
      @Override
      protected CompletableFuture<AssembleTransactionResponse> assembleTransaction(AssembleTransactionRequest request) {
+         setTransactionLogContext(request.getTransaction());
          try {
+             LOGGER.info("Assembling transaction");
+
              var tx = new PenteTransaction(this, request.getTransaction());
 
              // Execution throws an EVMExecutionException if fails
@@ -289,13 +327,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
              // Note unlike a base ledger, we do not write a nonce update to the sender's account
              // (which would be a UTXO spend + mint) for a revert during assembly of a transaction,
              // as endorsing and submitting that would be lots of work.
-             LOGGER.error(new FormattedMessage("EVM execution failed during assemble for TX {}", request.getTransaction().getTransactionId()), e);
+             LOGGER.error("EVM execution failed during assemble", e);
              return CompletableFuture.completedFuture(AssembleTransactionResponse.newBuilder().
                      setAssemblyResult(AssembleTransactionResponse.Result.REVERT).
                      setRevertReason(e.getMessage()).
                      build());
          } catch (IllegalArgumentException e) {
-             LOGGER.error(new FormattedMessage("Illegal argument during assemble for TX {}", request.getTransaction().getTransactionId()), e);
+             LOGGER.error("Illegal argument during assemble", e);
              return CompletableFuture.completedFuture(AssembleTransactionResponse.newBuilder().
                      setAssemblyResult(AssembleTransactionResponse.Result.REVERT).
                      setRevertReason(e.getMessage()).
@@ -304,7 +342,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
              if (e.getCause() instanceof ErrorResponseException && isPermanentFailure((ErrorResponseException) e.getCause())) {
                 // Any error response from a plugin during assembly is considered a revert.
                 // These can stem from things like an invalid ABI or inputs.
-                LOGGER.error(new FormattedMessage("Error response from plugin during assemble for TX {}", request.getTransaction().getTransactionId()), e);
+                LOGGER.error("Error response from plugin during assemble", e);
                 return CompletableFuture.completedFuture(AssembleTransactionResponse.newBuilder().
                         setAssemblyResult(AssembleTransactionResponse.Result.REVERT).
                         setRevertReason(e.getMessage()).
@@ -314,12 +352,17 @@ import com.fasterxml.jackson.core.JsonProcessingException;
          } catch (IOException | InterruptedException | ClassNotFoundException e) {
             // These exceptions will not revert, but will retry assembly
             return CompletableFuture.failedFuture(e);
+         } finally {
+             ThreadContext.clearAll();
          }
      }
 
      @Override
      protected CompletableFuture<EndorseTransactionResponse> endorseTransaction(EndorseTransactionRequest request) {
+         setTransactionLogContext(request.getTransaction());
          try {
+             LOGGER.info("Endorsing transaction");
+
              // Parse all the inputs/reads supplied into inputs
              var inputAccounts = new ArrayList<PersistedAccount>(request.getInputsCount());
              for (var input : request.getInputsList()) {
@@ -395,18 +438,21 @@ import com.fasterxml.jackson.core.JsonProcessingException;
                      setPayload(ByteString.copyFrom(endorsementPayload)).
                      build());
          } catch (PenteEVMTransaction.EVMExecutionException e) {
-             LOGGER.error(new FormattedMessage("EVM execution failed during endorsement TX {}", request.getTransaction().getTransactionId()), e);
+             LOGGER.error("EVM execution failed during endorsement", e);
              return CompletableFuture.completedFuture(EndorseTransactionResponse.newBuilder().
                      setEndorsementResult(EndorseTransactionResponse.Result.SIGN).
                      setRevertReason(e.getMessage()).
                      build());
          } catch (Exception e) {
              return CompletableFuture.failedFuture(e);
+         } finally {
+             ThreadContext.clearAll();
          }
      }
 
      @Override
      protected CompletableFuture<PrepareTransactionResponse> prepareTransaction(PrepareTransactionRequest request) {
+         setTransactionLogContext(request.getTransaction());
          try {
              var signatures = request.getAttestationResultList().stream().
                      filter(r -> r.getAttestationType() == AttestationType.ENDORSE).
@@ -487,6 +533,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
              return CompletableFuture.completedFuture(result.build());
          } catch (Exception e) {
              return CompletableFuture.failedFuture(e);
+         } finally {
+             ThreadContext.clearAll();
          }
      }
 
@@ -578,6 +626,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 
      @Override
      protected CompletableFuture<ExecCallResponse> execCall(ExecCallRequest request) {
+         setTransactionLogContext(request.getTransaction());
          try {
              var tx = new PenteTransaction(this, request.getTransaction());
              var accountLoader = new AssemblyAccountLoader(request.getStateQueryContext());
@@ -589,11 +638,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
              return CompletableFuture.completedFuture(response.build());
          } catch (Exception e) {
              return CompletableFuture.failedFuture(e);
+         } finally {
+             ThreadContext.clearAll();
          }
      }
 
      @Override
      protected CompletableFuture<BuildReceiptResponse> buildReceipt(BuildReceiptRequest request) {
+         ThreadContext.put("tx", txIdForLog(request.getTransactionId()));
          try {
              if (request.getUnavailableStates()) {
                  throw new IllegalStateException("all states must be available to build an EVM receipt");
@@ -628,6 +680,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
                      build());
          } catch (Exception e) {
              return CompletableFuture.failedFuture(e);
+         } finally {
+             ThreadContext.clearAll();
          }
      }
 
@@ -850,9 +904,96 @@ import com.fasterxml.jackson.core.JsonProcessingException;
          // first unavailable ID that Paladin provided us
          var res = CheckStateCompletionResponse.newBuilder();
          if (request.getUnavailableStates().hasFirstUnavailableId()) {
-             res.setPrimaryMissingStateId(request.getUnavailableStates().getFirstUnavailableId());
+             res.setNextMissingStateId(request.getUnavailableStates().getFirstUnavailableId());
          }
          return CompletableFuture.completedFuture(res.build());
+     }
+
+     @Override
+     protected CompletableFuture<IsBaseLedgerRevertRetryableResponse> isBaseLedgerRevertRetryable(IsBaseLedgerRevertRetryableRequest request) {
+         byte[] revertData = request.getRevertData().toByteArray();
+         if (revertData.length < 4) {
+             return CompletableFuture.completedFuture(
+                 IsBaseLedgerRevertRetryableResponse.newBuilder().setRetryable(true).build()
+             );
+         }
+         boolean retryable = matchesSelector(revertData, SELECTOR_INPUT_NOT_AVAILABLE) ||
+                     matchesSelector(revertData, SELECTOR_READ_NOT_AVAILABLE) ||
+                     matchesSelector(revertData, SELECTOR_OUTPUT_ALREADY_UNSPENT);
+         String decodedReason = decodeRevertReason(revertData);
+         return CompletableFuture.completedFuture(
+             IsBaseLedgerRevertRetryableResponse.newBuilder().setRetryable(retryable).setDecodedReason(decodedReason).build()
+         );
+     }
+
+     @Override
+     protected CompletableFuture<InvokeRPCResponse> invokeRPC(InvokeRPCRequest request) {
+         try {
+             var params = new ObjectMapper().readTree(request.getParamsJson());
+             return switch (request.getMethod()) {
+                 case "pente_getCodeHash" -> invokeGetCodeHash(request.getStateQueryContext(), params);
+                 case "pente_getCode" -> invokeGetCode(request.getStateQueryContext(), params);
+                 default -> CompletableFuture.failedFuture(
+                         new UnsupportedOperationException("unknown RPC method: " + request.getMethod()));
+             };
+         } catch (Exception e) {
+             return CompletableFuture.failedFuture(e);
+         }
+     }
+
+     private CompletableFuture<InvokeRPCResponse> invokeGetCodeHash(String stateQueryContext, com.fasterxml.jackson.databind.JsonNode params) {
+         try {
+             var address = org.hyperledger.besu.datatypes.Address.fromHexString(params.get(0).asText());
+             var accountLoader = new AssemblyAccountLoader(stateQueryContext);
+             var codeHash = accountLoader.load(address)
+                     .map(PersistedAccount::getCodeHashOrZero)
+                     .orElse(org.hyperledger.besu.datatypes.Hash.ZERO);
+             var resultJson = new ObjectMapper().writeValueAsString(codeHash.toHexString());
+             return CompletableFuture.completedFuture(
+                     InvokeRPCResponse.newBuilder().setResultJson(resultJson).build());
+         } catch (Exception e) {
+             return CompletableFuture.failedFuture(e);
+         }
+     }
+
+     private CompletableFuture<InvokeRPCResponse> invokeGetCode(String stateQueryContext, com.fasterxml.jackson.databind.JsonNode params) {
+         try {
+             var address = org.hyperledger.besu.datatypes.Address.fromHexString(params.get(0).asText());
+             var accountLoader = new AssemblyAccountLoader(stateQueryContext);
+             var codeBytes = accountLoader.load(address)
+                     .map(PersistedAccount::getCode)
+                     .orElse(null);
+             var codeHex = (codeBytes != null) ? codeBytes.toHexString() : "";
+             var resultJson = new ObjectMapper().writeValueAsString(codeHex);
+             return CompletableFuture.completedFuture(
+                     InvokeRPCResponse.newBuilder().setResultJson(resultJson).build());
+         } catch (Exception e) {
+             return CompletableFuture.failedFuture(e);
+         }
+     }
+
+     private static boolean matchesSelector(byte[] data, byte[] selector) {
+         return data[0] == selector[0] && data[1] == selector[1] && data[2] == selector[2] && data[3] == selector[3];
+     }
+
+     private static String decodeBytes32Param(byte[] revertData) {
+         if (revertData.length >= 36) {
+             return "0x" + HexFormat.of().formatHex(revertData, 4, 36);
+         }
+         return "0x" + HexFormat.of().formatHex(revertData, 4, revertData.length);
+     }
+
+     private static String decodeRevertReason(byte[] revertData) {
+         if (matchesSelector(revertData, SELECTOR_INPUT_NOT_AVAILABLE)) {
+             return "PenteInputNotAvailable(input=" + decodeBytes32Param(revertData) + ")";
+         }
+         if (matchesSelector(revertData, SELECTOR_READ_NOT_AVAILABLE)) {
+             return "PenteReadNotAvailable(read=" + decodeBytes32Param(revertData) + ")";
+         }
+         if (matchesSelector(revertData, SELECTOR_OUTPUT_ALREADY_UNSPENT)) {
+             return "PenteOutputAlreadyUnspent(output=" + decodeBytes32Param(revertData) + ")";
+         }
+        return "";
      }
 
      @NotNull
@@ -899,6 +1040,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
  
          public Optional<PersistedAccount> load(org.hyperledger.besu.datatypes.Address address) throws IOException {
              return withIOException(() -> {
+                 LOGGER.debug("Loading account state for address={}", address);
                  var queryJson = JsonQuery.newBuilder().
                          limit(1).
                          isEqual("address", address.toString()).
@@ -909,10 +1051,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
                          setQueryJson(queryJson).
                          build()).get();
                  if (response.getStatesCount() != 1) {
+                     LOGGER.debug("No existing account state found for address={}", address);
                      loadedAccountStates.put(address, null);
                      return Optional.empty();
                  }
                  var state = response.getStates(0);
+                 LOGGER.debug("Loaded account state for address={} stateId={}", address, state.getId());
                  loadedAccountStates.put(address, state);
                  return Optional.of(PersistedAccount.deserialize(state.getDataJsonBytes().toByteArray()));
              });
@@ -938,12 +1082,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
          public Optional<PersistedAccount> load(org.hyperledger.besu.datatypes.Address address) {
              var account = inputAccounts.remove(address);
              if (account != null) {
+                 LOGGER.debug("Loaded account address={} from inputs", address);
                  return Optional.of(account);
              }
              account = readAccounts.remove(address);
              if (account != null) {
+                 LOGGER.debug("Loaded account address={} from reads", address);
                  return Optional.of(account);
              }
+             LOGGER.debug("No account found for address={} in inputs or reads", address);
              return Optional.empty();
          }
  

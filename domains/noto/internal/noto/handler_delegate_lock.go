@@ -75,25 +75,35 @@ func (h *delegateLockHandler) Assemble(ctx context.Context, tx *types.ParsedTran
 	}
 
 	// Load the existing lock
+	var lockedInputStates []*prototk.StateRef // V0 only
 	var existingLock *loadedLockInfo
-	if !tx.DomainConfig.IsV0() {
-		existingLock, err = h.noto.loadLockInfoV1(ctx, req.StateQueryContext, params.LockID)
+	if tx.DomainConfig.IsV0() {
+		// In V0 at least one locked input was always present here, to confirm lock ownership - not required in V1 due to lock state check.
+		lockedInputs, revert, err := h.noto.prepareLockedInputs(ctx, req.StateQueryContext, params.LockID, senderID.address, big.NewInt(1), false)
 		if err != nil {
+			if revert {
+				message := err.Error()
+				return &prototk.AssembleTransactionResponse{
+					AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+					RevertReason:   &message,
+				}, nil
+			}
 			return nil, err
 		}
-	}
-
-	// Requester must own at least one locked coin state to show ownership of the lock
-	lockedInputs, revert, err := h.noto.prepareLockedInputs(ctx, req.StateQueryContext, params.LockID, senderID.address, big.NewInt(1), false)
-	if err != nil {
-		if revert {
-			message := err.Error()
-			return &prototk.AssembleTransactionResponse{
-				AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
-				RevertReason:   &message,
-			}, nil
+		lockedInputStates = lockedInputs.states
+	} else {
+		var revert bool
+		existingLock, revert, err = h.noto.loadLockInfoV1(ctx, req.StateQueryContext, params.LockID)
+		if err != nil {
+			if revert {
+				message := err.Error()
+				return &prototk.AssembleTransactionResponse{
+					AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+					RevertReason:   &message,
+				}, nil
+			}
+			return nil, err
 		}
-		return nil, err
 	}
 
 	infoDistribution := identityList{notaryID, senderID}
@@ -126,8 +136,8 @@ func (h *delegateLockHandler) Assemble(ctx context.Context, tx *types.ParsedTran
 		return nil, err
 	}
 
-	// This approval may leak the requesting signature on-chain, as all the inputs are visible on-chain
-	// TODO: need to include the spend of the UTXO state for the lock in this as that masks the delegate
+	// This approval may leak the requesting signing identity on-chain, if the data is empty/static.
+	// As apart from the 'data' (which is held off-chain in an info-state) all other parameters are written directly.
 	encodedApproval, err := h.noto.encodeDelegateLock(ctx, tx.ContractAddress, params.LockID, params.Delegate, params.Data)
 	if err != nil {
 		return nil, err
@@ -147,7 +157,7 @@ func (h *delegateLockHandler) Assemble(ctx context.Context, tx *types.ParsedTran
 	return &prototk.AssembleTransactionResponse{
 		AssemblyResult: prototk.AssembleTransactionResponse_OK,
 		AssembledTransaction: &prototk.AssembledTransaction{
-			ReadStates:   lockedInputs.states,
+			ReadStates:   lockedInputStates,
 			InputStates:  inputStates,
 			OutputStates: outputStates,
 			InfoStates:   infoStates,
@@ -182,10 +192,24 @@ func (h *delegateLockHandler) Endorse(ctx context.Context, tx *types.ParsedTrans
 		return nil, err
 	}
 
-	// Sender must specify at least one locked state, to show that they own the lock
-	if len(inputs.lockedCoins) == 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgNoStatesSpecified)
+	if tx.DomainConfig.IsV0() {
+		// Sender must specify at least one locked state, to show that they own the lock
+		if len(inputs.lockedCoins) == 0 {
+			return nil, i18n.NewError(ctx, msgs.MsgNoStatesSpecified)
+		}
+	} else {
+		senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
+		if err != nil {
+			return nil, err
+		}
+
+		// In V1 onwards the lock itself needs to be checked (which can be empty for a mint lock)
+		_, err = h.noto.validateV1LockTransition(ctx, LOCK_UPDATE, senderID, &params.LockID, req.Inputs, req.Outputs)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	if err := h.noto.validateLockOwners(ctx, tx.Transaction.From, req.ResolvedVerifiers, inputs.lockedCoins, inputs.lockedStates); err != nil {
 		return nil, err
 	}
@@ -216,6 +240,19 @@ func (h *delegateLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.Pa
 		return nil, err
 	}
 
+	var lt *lockTransition // v1 only
+	if !tx.DomainConfig.IsV0() {
+		senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
+		if err != nil {
+			return nil, err
+		}
+
+		lt, err = h.noto.validateV1LockTransition(ctx, LOCK_UPDATE, senderID, &inParams.LockID, req.InputStates, req.OutputStates)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var interfaceABI abi.ABI
 	var functionName string
 	var paramsJSON []byte
@@ -226,10 +263,10 @@ func (h *delegateLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.Pa
 
 		var delegateInputsEncoded pldtypes.HexBytes
 		delegateInputsEncoded, err = h.noto.encodeNotoDelegateOperation(ctx, &types.NotoDelegateOperation{
-			TxId:    req.Transaction.TransactionId,
-			Inputs:  endorsableStateIDs(req.InputStates, false),
-			Outputs: endorsableStateIDs(req.OutputStates, false),
-			Proof:   signature.Payload,
+			TxId:         req.Transaction.TransactionId,
+			OldLockState: lt.prevLockStateID,
+			NewLockState: lt.newLockStateID,
+			Proof:        signature.Payload,
 		})
 		if err == nil {
 			params := &DelegateLockParams{

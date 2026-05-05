@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -41,20 +42,18 @@ func (_m *MockClock) EXPECT() *MockClock_Expecter {
 }
 
 // Duration provides a mock function for the type MockClock
-func (_mock *MockClock) Duration(milliseconds int) Duration {
+func (_mock *MockClock) Duration(milliseconds int) time.Duration {
 	ret := _mock.Called(milliseconds)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Duration")
 	}
 
-	var r0 Duration
-	if returnFunc, ok := ret.Get(0).(func(int) Duration); ok {
+	var r0 time.Duration
+	if returnFunc, ok := ret.Get(0).(func(int) time.Duration); ok {
 		r0 = returnFunc(milliseconds)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(Duration)
-		}
+		r0 = ret.Get(0).(time.Duration)
 	}
 	return r0
 }
@@ -83,27 +82,27 @@ func (_c *MockClock_Duration_Call) Run(run func(milliseconds int)) *MockClock_Du
 	return _c
 }
 
-func (_c *MockClock_Duration_Call) Return(duration Duration) *MockClock_Duration_Call {
+func (_c *MockClock_Duration_Call) Return(duration time.Duration) *MockClock_Duration_Call {
 	_c.Call.Return(duration)
 	return _c
 }
 
-func (_c *MockClock_Duration_Call) RunAndReturn(run func(milliseconds int) Duration) *MockClock_Duration_Call {
+func (_c *MockClock_Duration_Call) RunAndReturn(run func(milliseconds int) time.Duration) *MockClock_Duration_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // HasExpired provides a mock function for the type MockClock
-func (_mock *MockClock) HasExpired(time Time, duration Duration) bool {
-	ret := _mock.Called(time, duration)
+func (_mock *MockClock) HasExpired(time1 time.Time, duration time.Duration) bool {
+	ret := _mock.Called(time1, duration)
 
 	if len(ret) == 0 {
 		panic("no return value specified for HasExpired")
 	}
 
 	var r0 bool
-	if returnFunc, ok := ret.Get(0).(func(Time, Duration) bool); ok {
-		r0 = returnFunc(time, duration)
+	if returnFunc, ok := ret.Get(0).(func(time.Time, time.Duration) bool); ok {
+		r0 = returnFunc(time1, duration)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
@@ -116,21 +115,21 @@ type MockClock_HasExpired_Call struct {
 }
 
 // HasExpired is a helper method to define mock.On call
-//   - time Time
-//   - duration Duration
-func (_e *MockClock_Expecter) HasExpired(time interface{}, duration interface{}) *MockClock_HasExpired_Call {
-	return &MockClock_HasExpired_Call{Call: _e.mock.On("HasExpired", time, duration)}
+//   - time1 time.Time
+//   - duration time.Duration
+func (_e *MockClock_Expecter) HasExpired(time1 interface{}, duration interface{}) *MockClock_HasExpired_Call {
+	return &MockClock_HasExpired_Call{Call: _e.mock.On("HasExpired", time1, duration)}
 }
 
-func (_c *MockClock_HasExpired_Call) Run(run func(time Time, duration Duration)) *MockClock_HasExpired_Call {
+func (_c *MockClock_HasExpired_Call) Run(run func(time1 time.Time, duration time.Duration)) *MockClock_HasExpired_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 Time
+		var arg0 time.Time
 		if args[0] != nil {
-			arg0 = args[0].(Time)
+			arg0 = args[0].(time.Time)
 		}
-		var arg1 Duration
+		var arg1 time.Duration
 		if args[1] != nil {
-			arg1 = args[1].(Duration)
+			arg1 = args[1].(time.Duration)
 		}
 		run(
 			arg0,
@@ -145,26 +144,24 @@ func (_c *MockClock_HasExpired_Call) Return(b bool) *MockClock_HasExpired_Call {
 	return _c
 }
 
-func (_c *MockClock_HasExpired_Call) RunAndReturn(run func(time Time, duration Duration) bool) *MockClock_HasExpired_Call {
+func (_c *MockClock_HasExpired_Call) RunAndReturn(run func(time1 time.Time, duration time.Duration) bool) *MockClock_HasExpired_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Now provides a mock function for the type MockClock
-func (_mock *MockClock) Now() Time {
+func (_mock *MockClock) Now() time.Time {
 	ret := _mock.Called()
 
 	if len(ret) == 0 {
 		panic("no return value specified for Now")
 	}
 
-	var r0 Time
-	if returnFunc, ok := ret.Get(0).(func() Time); ok {
+	var r0 time.Time
+	if returnFunc, ok := ret.Get(0).(func() time.Time); ok {
 		r0 = returnFunc()
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(Time)
-		}
+		r0 = ret.Get(0).(time.Time)
 	}
 	return r0
 }
@@ -186,18 +183,18 @@ func (_c *MockClock_Now_Call) Run(run func()) *MockClock_Now_Call {
 	return _c
 }
 
-func (_c *MockClock_Now_Call) Return(time Time) *MockClock_Now_Call {
-	_c.Call.Return(time)
+func (_c *MockClock_Now_Call) Return(time1 time.Time) *MockClock_Now_Call {
+	_c.Call.Return(time1)
 	return _c
 }
 
-func (_c *MockClock_Now_Call) RunAndReturn(run func() Time) *MockClock_Now_Call {
+func (_c *MockClock_Now_Call) RunAndReturn(run func() time.Time) *MockClock_Now_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ScheduleTimer provides a mock function for the type MockClock
-func (_mock *MockClock) ScheduleTimer(context1 context.Context, duration Duration, fn func()) func() {
+func (_mock *MockClock) ScheduleTimer(context1 context.Context, duration time.Duration, fn func()) func() {
 	ret := _mock.Called(context1, duration, fn)
 
 	if len(ret) == 0 {
@@ -205,7 +202,7 @@ func (_mock *MockClock) ScheduleTimer(context1 context.Context, duration Duratio
 	}
 
 	var r0 func()
-	if returnFunc, ok := ret.Get(0).(func(context.Context, Duration, func()) func()); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Duration, func()) func()); ok {
 		r0 = returnFunc(context1, duration, fn)
 	} else {
 		if ret.Get(0) != nil {
@@ -222,21 +219,21 @@ type MockClock_ScheduleTimer_Call struct {
 
 // ScheduleTimer is a helper method to define mock.On call
 //   - context1 context.Context
-//   - duration Duration
+//   - duration time.Duration
 //   - fn func()
 func (_e *MockClock_Expecter) ScheduleTimer(context1 interface{}, duration interface{}, fn interface{}) *MockClock_ScheduleTimer_Call {
 	return &MockClock_ScheduleTimer_Call{Call: _e.mock.On("ScheduleTimer", context1, duration, fn)}
 }
 
-func (_c *MockClock_ScheduleTimer_Call) Run(run func(context1 context.Context, duration Duration, fn func())) *MockClock_ScheduleTimer_Call {
+func (_c *MockClock_ScheduleTimer_Call) Run(run func(context1 context.Context, duration time.Duration, fn func())) *MockClock_ScheduleTimer_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 Duration
+		var arg1 time.Duration
 		if args[1] != nil {
-			arg1 = args[1].(Duration)
+			arg1 = args[1].(time.Duration)
 		}
 		var arg2 func()
 		if args[2] != nil {
@@ -256,63 +253,9 @@ func (_c *MockClock_ScheduleTimer_Call) Return(cancel func()) *MockClock_Schedul
 	return _c
 }
 
-func (_c *MockClock_ScheduleTimer_Call) RunAndReturn(run func(context1 context.Context, duration Duration, fn func()) func()) *MockClock_ScheduleTimer_Call {
+func (_c *MockClock_ScheduleTimer_Call) RunAndReturn(run func(context1 context.Context, duration time.Duration, fn func()) func()) *MockClock_ScheduleTimer_Call {
 	_c.Call.Return(run)
 	return _c
-}
-
-// NewMockDuration creates a new instance of MockDuration. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewMockDuration(t interface {
-	mock.TestingT
-	Cleanup(func())
-}) *MockDuration {
-	mock := &MockDuration{}
-	mock.Mock.Test(t)
-
-	t.Cleanup(func() { mock.AssertExpectations(t) })
-
-	return mock
-}
-
-// MockDuration is an autogenerated mock type for the Duration type
-type MockDuration struct {
-	mock.Mock
-}
-
-type MockDuration_Expecter struct {
-	mock *mock.Mock
-}
-
-func (_m *MockDuration) EXPECT() *MockDuration_Expecter {
-	return &MockDuration_Expecter{mock: &_m.Mock}
-}
-
-// NewMockTime creates a new instance of MockTime. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewMockTime(t interface {
-	mock.TestingT
-	Cleanup(func())
-}) *MockTime {
-	mock := &MockTime{}
-	mock.Mock.Test(t)
-
-	t.Cleanup(func() { mock.AssertExpectations(t) })
-
-	return mock
-}
-
-// MockTime is an autogenerated mock type for the Time type
-type MockTime struct {
-	mock.Mock
-}
-
-type MockTime_Expecter struct {
-	mock *mock.Mock
-}
-
-func (_m *MockTime) EXPECT() *MockTime_Expecter {
-	return &MockTime_Expecter{mock: &_m.Mock}
 }
 
 // NewMockHooks creates a new instance of MockHooks. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -603,120 +546,86 @@ func (_c *MockEngineIntegration_GetBlockHeight_Call) RunAndReturn(run func(ctx c
 	return _c
 }
 
-// GetStateLocks provides a mock function for the type MockEngineIntegration
-func (_mock *MockEngineIntegration) GetStateLocks(ctx context.Context) ([]byte, error) {
-	ret := _mock.Called(ctx)
+// MapPotentialStates provides a mock function for the type MockEngineIntegration
+func (_mock *MockEngineIntegration) MapPotentialStates(ctx context.Context, potentialStates []*prototk.NewState, createdByTX *components.PrivateTransaction) ([]*components.StateUpsert, error) {
+	ret := _mock.Called(ctx, potentialStates, createdByTX)
 
 	if len(ret) == 0 {
-		panic("no return value specified for GetStateLocks")
+		panic("no return value specified for MapPotentialStates")
 	}
 
-	var r0 []byte
+	var r0 []*components.StateUpsert
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]byte, error)); ok {
-		return returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []*prototk.NewState, *components.PrivateTransaction) ([]*components.StateUpsert, error)); ok {
+		return returnFunc(ctx, potentialStates, createdByTX)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) []byte); ok {
-		r0 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []*prototk.NewState, *components.PrivateTransaction) []*components.StateUpsert); ok {
+		r0 = returnFunc(ctx, potentialStates, createdByTX)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]byte)
+			r0 = ret.Get(0).([]*components.StateUpsert)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []*prototk.NewState, *components.PrivateTransaction) error); ok {
+		r1 = returnFunc(ctx, potentialStates, createdByTX)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockEngineIntegration_GetStateLocks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetStateLocks'
-type MockEngineIntegration_GetStateLocks_Call struct {
+// MockEngineIntegration_MapPotentialStates_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MapPotentialStates'
+type MockEngineIntegration_MapPotentialStates_Call struct {
 	*mock.Call
 }
 
-// GetStateLocks is a helper method to define mock.On call
+// MapPotentialStates is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockEngineIntegration_Expecter) GetStateLocks(ctx interface{}) *MockEngineIntegration_GetStateLocks_Call {
-	return &MockEngineIntegration_GetStateLocks_Call{Call: _e.mock.On("GetStateLocks", ctx)}
+//   - potentialStates []*prototk.NewState
+//   - createdByTX *components.PrivateTransaction
+func (_e *MockEngineIntegration_Expecter) MapPotentialStates(ctx interface{}, potentialStates interface{}, createdByTX interface{}) *MockEngineIntegration_MapPotentialStates_Call {
+	return &MockEngineIntegration_MapPotentialStates_Call{Call: _e.mock.On("MapPotentialStates", ctx, potentialStates, createdByTX)}
 }
 
-func (_c *MockEngineIntegration_GetStateLocks_Call) Run(run func(ctx context.Context)) *MockEngineIntegration_GetStateLocks_Call {
+func (_c *MockEngineIntegration_MapPotentialStates_Call) Run(run func(ctx context.Context, potentialStates []*prototk.NewState, createdByTX *components.PrivateTransaction)) *MockEngineIntegration_MapPotentialStates_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		run(
-			arg0,
-		)
-	})
-	return _c
-}
-
-func (_c *MockEngineIntegration_GetStateLocks_Call) Return(bytes []byte, err error) *MockEngineIntegration_GetStateLocks_Call {
-	_c.Call.Return(bytes, err)
-	return _c
-}
-
-func (_c *MockEngineIntegration_GetStateLocks_Call) RunAndReturn(run func(ctx context.Context) ([]byte, error)) *MockEngineIntegration_GetStateLocks_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ResetTransactions provides a mock function for the type MockEngineIntegration
-func (_mock *MockEngineIntegration) ResetTransactions(ctx context.Context, transactionID uuid.UUID) {
-	_mock.Called(ctx, transactionID)
-	return
-}
-
-// MockEngineIntegration_ResetTransactions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResetTransactions'
-type MockEngineIntegration_ResetTransactions_Call struct {
-	*mock.Call
-}
-
-// ResetTransactions is a helper method to define mock.On call
-//   - ctx context.Context
-//   - transactionID uuid.UUID
-func (_e *MockEngineIntegration_Expecter) ResetTransactions(ctx interface{}, transactionID interface{}) *MockEngineIntegration_ResetTransactions_Call {
-	return &MockEngineIntegration_ResetTransactions_Call{Call: _e.mock.On("ResetTransactions", ctx, transactionID)}
-}
-
-func (_c *MockEngineIntegration_ResetTransactions_Call) Run(run func(ctx context.Context, transactionID uuid.UUID)) *MockEngineIntegration_ResetTransactions_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 uuid.UUID
+		var arg1 []*prototk.NewState
 		if args[1] != nil {
-			arg1 = args[1].(uuid.UUID)
+			arg1 = args[1].([]*prototk.NewState)
+		}
+		var arg2 *components.PrivateTransaction
+		if args[2] != nil {
+			arg2 = args[2].(*components.PrivateTransaction)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockEngineIntegration_ResetTransactions_Call) Return() *MockEngineIntegration_ResetTransactions_Call {
-	_c.Call.Return()
+func (_c *MockEngineIntegration_MapPotentialStates_Call) Return(stateUpserts []*components.StateUpsert, err error) *MockEngineIntegration_MapPotentialStates_Call {
+	_c.Call.Return(stateUpserts, err)
 	return _c
 }
 
-func (_c *MockEngineIntegration_ResetTransactions_Call) RunAndReturn(run func(ctx context.Context, transactionID uuid.UUID)) *MockEngineIntegration_ResetTransactions_Call {
-	_c.Run(run)
+func (_c *MockEngineIntegration_MapPotentialStates_Call) RunAndReturn(run func(ctx context.Context, potentialStates []*prototk.NewState, createdByTX *components.PrivateTransaction) ([]*components.StateUpsert, error)) *MockEngineIntegration_MapPotentialStates_Call {
+	_c.Call.Return(run)
 	return _c
 }
 
-// WriteLockStatesForTransaction provides a mock function for the type MockEngineIntegration
-func (_mock *MockEngineIntegration) WriteLockStatesForTransaction(ctx context.Context, txn *components.PrivateTransaction) error {
+// WriteStatesForTransaction provides a mock function for the type MockEngineIntegration
+func (_mock *MockEngineIntegration) WriteStatesForTransaction(ctx context.Context, txn *components.PrivateTransaction) error {
 	ret := _mock.Called(ctx, txn)
 
 	if len(ret) == 0 {
-		panic("no return value specified for WriteLockStatesForTransaction")
+		panic("no return value specified for WriteStatesForTransaction")
 	}
 
 	var r0 error
@@ -728,19 +637,19 @@ func (_mock *MockEngineIntegration) WriteLockStatesForTransaction(ctx context.Co
 	return r0
 }
 
-// MockEngineIntegration_WriteLockStatesForTransaction_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WriteLockStatesForTransaction'
-type MockEngineIntegration_WriteLockStatesForTransaction_Call struct {
+// MockEngineIntegration_WriteStatesForTransaction_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WriteStatesForTransaction'
+type MockEngineIntegration_WriteStatesForTransaction_Call struct {
 	*mock.Call
 }
 
-// WriteLockStatesForTransaction is a helper method to define mock.On call
+// WriteStatesForTransaction is a helper method to define mock.On call
 //   - ctx context.Context
 //   - txn *components.PrivateTransaction
-func (_e *MockEngineIntegration_Expecter) WriteLockStatesForTransaction(ctx interface{}, txn interface{}) *MockEngineIntegration_WriteLockStatesForTransaction_Call {
-	return &MockEngineIntegration_WriteLockStatesForTransaction_Call{Call: _e.mock.On("WriteLockStatesForTransaction", ctx, txn)}
+func (_e *MockEngineIntegration_Expecter) WriteStatesForTransaction(ctx interface{}, txn interface{}) *MockEngineIntegration_WriteStatesForTransaction_Call {
+	return &MockEngineIntegration_WriteStatesForTransaction_Call{Call: _e.mock.On("WriteStatesForTransaction", ctx, txn)}
 }
 
-func (_c *MockEngineIntegration_WriteLockStatesForTransaction_Call) Run(run func(ctx context.Context, txn *components.PrivateTransaction)) *MockEngineIntegration_WriteLockStatesForTransaction_Call {
+func (_c *MockEngineIntegration_WriteStatesForTransaction_Call) Run(run func(ctx context.Context, txn *components.PrivateTransaction)) *MockEngineIntegration_WriteStatesForTransaction_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -758,12 +667,12 @@ func (_c *MockEngineIntegration_WriteLockStatesForTransaction_Call) Run(run func
 	return _c
 }
 
-func (_c *MockEngineIntegration_WriteLockStatesForTransaction_Call) Return(err error) *MockEngineIntegration_WriteLockStatesForTransaction_Call {
+func (_c *MockEngineIntegration_WriteStatesForTransaction_Call) Return(err error) *MockEngineIntegration_WriteStatesForTransaction_Call {
 	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockEngineIntegration_WriteLockStatesForTransaction_Call) RunAndReturn(run func(ctx context.Context, txn *components.PrivateTransaction) error) *MockEngineIntegration_WriteLockStatesForTransaction_Call {
+func (_c *MockEngineIntegration_WriteStatesForTransaction_Call) RunAndReturn(run func(ctx context.Context, txn *components.PrivateTransaction) error) *MockEngineIntegration_WriteStatesForTransaction_Call {
 	_c.Call.Return(run)
 	return _c
 }

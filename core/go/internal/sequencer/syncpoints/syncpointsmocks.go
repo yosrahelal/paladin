@@ -75,16 +75,16 @@ func (_c *MockSyncPoints_Close_Call) RunAndReturn(run func()) *MockSyncPoints_Cl
 }
 
 // PersistDeployDispatchBatch provides a mock function for the type MockSyncPoints
-func (_mock *MockSyncPoints) PersistDeployDispatchBatch(ctx context.Context, dispatchBatch *DispatchBatch) error {
-	ret := _mock.Called(ctx, dispatchBatch)
+func (_mock *MockSyncPoints) PersistDeployDispatchBatch(ctx context.Context, transactionID uuid.UUID, dispatchBatch *DispatchBatch) error {
+	ret := _mock.Called(ctx, transactionID, dispatchBatch)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PersistDeployDispatchBatch")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *DispatchBatch) error); ok {
-		r0 = returnFunc(ctx, dispatchBatch)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, *DispatchBatch) error); ok {
+		r0 = returnFunc(ctx, transactionID, dispatchBatch)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -98,24 +98,30 @@ type MockSyncPoints_PersistDeployDispatchBatch_Call struct {
 
 // PersistDeployDispatchBatch is a helper method to define mock.On call
 //   - ctx context.Context
+//   - transactionID uuid.UUID
 //   - dispatchBatch *DispatchBatch
-func (_e *MockSyncPoints_Expecter) PersistDeployDispatchBatch(ctx interface{}, dispatchBatch interface{}) *MockSyncPoints_PersistDeployDispatchBatch_Call {
-	return &MockSyncPoints_PersistDeployDispatchBatch_Call{Call: _e.mock.On("PersistDeployDispatchBatch", ctx, dispatchBatch)}
+func (_e *MockSyncPoints_Expecter) PersistDeployDispatchBatch(ctx interface{}, transactionID interface{}, dispatchBatch interface{}) *MockSyncPoints_PersistDeployDispatchBatch_Call {
+	return &MockSyncPoints_PersistDeployDispatchBatch_Call{Call: _e.mock.On("PersistDeployDispatchBatch", ctx, transactionID, dispatchBatch)}
 }
 
-func (_c *MockSyncPoints_PersistDeployDispatchBatch_Call) Run(run func(ctx context.Context, dispatchBatch *DispatchBatch)) *MockSyncPoints_PersistDeployDispatchBatch_Call {
+func (_c *MockSyncPoints_PersistDeployDispatchBatch_Call) Run(run func(ctx context.Context, transactionID uuid.UUID, dispatchBatch *DispatchBatch)) *MockSyncPoints_PersistDeployDispatchBatch_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 *DispatchBatch
+		var arg1 uuid.UUID
 		if args[1] != nil {
-			arg1 = args[1].(*DispatchBatch)
+			arg1 = args[1].(uuid.UUID)
+		}
+		var arg2 *DispatchBatch
+		if args[2] != nil {
+			arg2 = args[2].(*DispatchBatch)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -126,22 +132,22 @@ func (_c *MockSyncPoints_PersistDeployDispatchBatch_Call) Return(err error) *Moc
 	return _c
 }
 
-func (_c *MockSyncPoints_PersistDeployDispatchBatch_Call) RunAndReturn(run func(ctx context.Context, dispatchBatch *DispatchBatch) error) *MockSyncPoints_PersistDeployDispatchBatch_Call {
+func (_c *MockSyncPoints_PersistDeployDispatchBatch_Call) RunAndReturn(run func(ctx context.Context, transactionID uuid.UUID, dispatchBatch *DispatchBatch) error) *MockSyncPoints_PersistDeployDispatchBatch_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // PersistDispatchBatch provides a mock function for the type MockSyncPoints
-func (_mock *MockSyncPoints) PersistDispatchBatch(dCtx components.DomainContext, contractAddress pldtypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*components.StateDistribution, preparedTxnDistributions []*components.PreparedTransactionWithRefs) error {
-	ret := _mock.Called(dCtx, contractAddress, dispatchBatch, stateDistributions, preparedTxnDistributions)
+func (_mock *MockSyncPoints) PersistDispatchBatch(dCtx components.DomainContext, contractAddress pldtypes.EthAddress, transactionID uuid.UUID, dispatchBatch *DispatchBatch, stateDistributions []*components.StateDistribution, preparedTxnDistributions []*components.PreparedTransactionWithRefs) error {
+	ret := _mock.Called(dCtx, contractAddress, transactionID, dispatchBatch, stateDistributions, preparedTxnDistributions)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PersistDispatchBatch")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(components.DomainContext, pldtypes.EthAddress, *DispatchBatch, []*components.StateDistribution, []*components.PreparedTransactionWithRefs) error); ok {
-		r0 = returnFunc(dCtx, contractAddress, dispatchBatch, stateDistributions, preparedTxnDistributions)
+	if returnFunc, ok := ret.Get(0).(func(components.DomainContext, pldtypes.EthAddress, uuid.UUID, *DispatchBatch, []*components.StateDistribution, []*components.PreparedTransactionWithRefs) error); ok {
+		r0 = returnFunc(dCtx, contractAddress, transactionID, dispatchBatch, stateDistributions, preparedTxnDistributions)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -156,14 +162,15 @@ type MockSyncPoints_PersistDispatchBatch_Call struct {
 // PersistDispatchBatch is a helper method to define mock.On call
 //   - dCtx components.DomainContext
 //   - contractAddress pldtypes.EthAddress
+//   - transactionID uuid.UUID
 //   - dispatchBatch *DispatchBatch
 //   - stateDistributions []*components.StateDistribution
 //   - preparedTxnDistributions []*components.PreparedTransactionWithRefs
-func (_e *MockSyncPoints_Expecter) PersistDispatchBatch(dCtx interface{}, contractAddress interface{}, dispatchBatch interface{}, stateDistributions interface{}, preparedTxnDistributions interface{}) *MockSyncPoints_PersistDispatchBatch_Call {
-	return &MockSyncPoints_PersistDispatchBatch_Call{Call: _e.mock.On("PersistDispatchBatch", dCtx, contractAddress, dispatchBatch, stateDistributions, preparedTxnDistributions)}
+func (_e *MockSyncPoints_Expecter) PersistDispatchBatch(dCtx interface{}, contractAddress interface{}, transactionID interface{}, dispatchBatch interface{}, stateDistributions interface{}, preparedTxnDistributions interface{}) *MockSyncPoints_PersistDispatchBatch_Call {
+	return &MockSyncPoints_PersistDispatchBatch_Call{Call: _e.mock.On("PersistDispatchBatch", dCtx, contractAddress, transactionID, dispatchBatch, stateDistributions, preparedTxnDistributions)}
 }
 
-func (_c *MockSyncPoints_PersistDispatchBatch_Call) Run(run func(dCtx components.DomainContext, contractAddress pldtypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*components.StateDistribution, preparedTxnDistributions []*components.PreparedTransactionWithRefs)) *MockSyncPoints_PersistDispatchBatch_Call {
+func (_c *MockSyncPoints_PersistDispatchBatch_Call) Run(run func(dCtx components.DomainContext, contractAddress pldtypes.EthAddress, transactionID uuid.UUID, dispatchBatch *DispatchBatch, stateDistributions []*components.StateDistribution, preparedTxnDistributions []*components.PreparedTransactionWithRefs)) *MockSyncPoints_PersistDispatchBatch_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 components.DomainContext
 		if args[0] != nil {
@@ -173,17 +180,21 @@ func (_c *MockSyncPoints_PersistDispatchBatch_Call) Run(run func(dCtx components
 		if args[1] != nil {
 			arg1 = args[1].(pldtypes.EthAddress)
 		}
-		var arg2 *DispatchBatch
+		var arg2 uuid.UUID
 		if args[2] != nil {
-			arg2 = args[2].(*DispatchBatch)
+			arg2 = args[2].(uuid.UUID)
 		}
-		var arg3 []*components.StateDistribution
+		var arg3 *DispatchBatch
 		if args[3] != nil {
-			arg3 = args[3].([]*components.StateDistribution)
+			arg3 = args[3].(*DispatchBatch)
 		}
-		var arg4 []*components.PreparedTransactionWithRefs
+		var arg4 []*components.StateDistribution
 		if args[4] != nil {
-			arg4 = args[4].([]*components.PreparedTransactionWithRefs)
+			arg4 = args[4].([]*components.StateDistribution)
+		}
+		var arg5 []*components.PreparedTransactionWithRefs
+		if args[5] != nil {
+			arg5 = args[5].([]*components.PreparedTransactionWithRefs)
 		}
 		run(
 			arg0,
@@ -191,6 +202,7 @@ func (_c *MockSyncPoints_PersistDispatchBatch_Call) Run(run func(dCtx components
 			arg2,
 			arg3,
 			arg4,
+			arg5,
 		)
 	})
 	return _c
@@ -201,14 +213,14 @@ func (_c *MockSyncPoints_PersistDispatchBatch_Call) Return(err error) *MockSyncP
 	return _c
 }
 
-func (_c *MockSyncPoints_PersistDispatchBatch_Call) RunAndReturn(run func(dCtx components.DomainContext, contractAddress pldtypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*components.StateDistribution, preparedTxnDistributions []*components.PreparedTransactionWithRefs) error) *MockSyncPoints_PersistDispatchBatch_Call {
+func (_c *MockSyncPoints_PersistDispatchBatch_Call) RunAndReturn(run func(dCtx components.DomainContext, contractAddress pldtypes.EthAddress, transactionID uuid.UUID, dispatchBatch *DispatchBatch, stateDistributions []*components.StateDistribution, preparedTxnDistributions []*components.PreparedTransactionWithRefs) error) *MockSyncPoints_PersistDispatchBatch_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // QueueTransactionFinalize provides a mock function for the type MockSyncPoints
-func (_mock *MockSyncPoints) QueueTransactionFinalize(ctx context.Context, domain string, contractAddress pldtypes.EthAddress, originator string, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error)) {
-	_mock.Called(ctx, domain, contractAddress, originator, transactionID, failureMessage, onCommit, onRollback)
+func (_mock *MockSyncPoints) QueueTransactionFinalize(ctx context.Context, req *TransactionFinalizeRequest, onCommit func(context.Context), onRollback func(context.Context, error)) {
+	_mock.Called(ctx, req, onCommit, onRollback)
 	return
 }
 
@@ -219,60 +231,36 @@ type MockSyncPoints_QueueTransactionFinalize_Call struct {
 
 // QueueTransactionFinalize is a helper method to define mock.On call
 //   - ctx context.Context
-//   - domain string
-//   - contractAddress pldtypes.EthAddress
-//   - originator string
-//   - transactionID uuid.UUID
-//   - failureMessage string
+//   - req *TransactionFinalizeRequest
 //   - onCommit func(context.Context)
 //   - onRollback func(context.Context, error)
-func (_e *MockSyncPoints_Expecter) QueueTransactionFinalize(ctx interface{}, domain interface{}, contractAddress interface{}, originator interface{}, transactionID interface{}, failureMessage interface{}, onCommit interface{}, onRollback interface{}) *MockSyncPoints_QueueTransactionFinalize_Call {
-	return &MockSyncPoints_QueueTransactionFinalize_Call{Call: _e.mock.On("QueueTransactionFinalize", ctx, domain, contractAddress, originator, transactionID, failureMessage, onCommit, onRollback)}
+func (_e *MockSyncPoints_Expecter) QueueTransactionFinalize(ctx interface{}, req interface{}, onCommit interface{}, onRollback interface{}) *MockSyncPoints_QueueTransactionFinalize_Call {
+	return &MockSyncPoints_QueueTransactionFinalize_Call{Call: _e.mock.On("QueueTransactionFinalize", ctx, req, onCommit, onRollback)}
 }
 
-func (_c *MockSyncPoints_QueueTransactionFinalize_Call) Run(run func(ctx context.Context, domain string, contractAddress pldtypes.EthAddress, originator string, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error))) *MockSyncPoints_QueueTransactionFinalize_Call {
+func (_c *MockSyncPoints_QueueTransactionFinalize_Call) Run(run func(ctx context.Context, req *TransactionFinalizeRequest, onCommit func(context.Context), onRollback func(context.Context, error))) *MockSyncPoints_QueueTransactionFinalize_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 *TransactionFinalizeRequest
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(*TransactionFinalizeRequest)
 		}
-		var arg2 pldtypes.EthAddress
+		var arg2 func(context.Context)
 		if args[2] != nil {
-			arg2 = args[2].(pldtypes.EthAddress)
+			arg2 = args[2].(func(context.Context))
 		}
-		var arg3 string
+		var arg3 func(context.Context, error)
 		if args[3] != nil {
-			arg3 = args[3].(string)
-		}
-		var arg4 uuid.UUID
-		if args[4] != nil {
-			arg4 = args[4].(uuid.UUID)
-		}
-		var arg5 string
-		if args[5] != nil {
-			arg5 = args[5].(string)
-		}
-		var arg6 func(context.Context)
-		if args[6] != nil {
-			arg6 = args[6].(func(context.Context))
-		}
-		var arg7 func(context.Context, error)
-		if args[7] != nil {
-			arg7 = args[7].(func(context.Context, error))
+			arg3 = args[3].(func(context.Context, error))
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
-			arg4,
-			arg5,
-			arg6,
-			arg7,
 		)
 	})
 	return _c
@@ -283,7 +271,7 @@ func (_c *MockSyncPoints_QueueTransactionFinalize_Call) Return() *MockSyncPoints
 	return _c
 }
 
-func (_c *MockSyncPoints_QueueTransactionFinalize_Call) RunAndReturn(run func(ctx context.Context, domain string, contractAddress pldtypes.EthAddress, originator string, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error))) *MockSyncPoints_QueueTransactionFinalize_Call {
+func (_c *MockSyncPoints_QueueTransactionFinalize_Call) RunAndReturn(run func(ctx context.Context, req *TransactionFinalizeRequest, onCommit func(context.Context), onRollback func(context.Context, error))) *MockSyncPoints_QueueTransactionFinalize_Call {
 	_c.Run(run)
 	return _c
 }

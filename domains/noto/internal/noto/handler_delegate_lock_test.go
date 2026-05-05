@@ -61,16 +61,22 @@ func TestDelegateLock(t *testing.T) {
 			Amount: pldtypes.Int64ToInt256(100),
 		},
 	}
-	inputLockState := &prototk.StoredState{
+	inputLockInfoSalt := pldtypes.RandBytes32()
+	inputLockInfo := &prototk.StoredState{
 		Id:       "0xa7c7fa6677f6938bb90f9f0ccb3487707fe6a93c527d899f09af497ece2e603b",
 		SchemaId: hashName("lockInfo_v1"),
-		DataJson: fmt.Sprintf(`{"lockId":"%s"}`, lockID),
+		DataJson: fmt.Sprintf(`{
+			"lockId": "%s",
+			"salt": "%s",
+			"owner": "%s",
+			"spender": "%s"
+		}`, lockID, inputLockInfoSalt, senderKey.Address, senderKey.Address),
 	}
 	mockCallbacks.MockFindAvailableStates = func(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
 		switch req.SchemaId {
 		case hashName("lockInfo_v1"):
 			return &prototk.FindAvailableStatesResponse{
-				States: []*prototk.StoredState{inputLockState},
+				States: []*prototk.StoredState{inputLockInfo},
 			}, nil
 		case hashName("lockedCoin"):
 			return &prototk.FindAvailableStatesResponse{
@@ -137,14 +143,14 @@ func TestDelegateLock(t *testing.T) {
 	assert.Equal(t, prototk.AssembleTransactionResponse_OK, assembleRes.AssemblyResult)
 	require.Len(t, assembleRes.AssembledTransaction.InputStates, 1)  // old info
 	require.Len(t, assembleRes.AssembledTransaction.OutputStates, 1) // new info
-	require.Len(t, assembleRes.AssembledTransaction.ReadStates, 1)
-	require.Len(t, assembleRes.AssembledTransaction.InfoStates, 2) // manifest + txData
-	assert.Equal(t, inputLockState.Id, assembleRes.AssembledTransaction.InputStates[0].Id)
+	require.Len(t, assembleRes.AssembledTransaction.ReadStates, 0)   // in V1 there are no read states (the lockState is consumed as an input)
+	require.Len(t, assembleRes.AssembledTransaction.InfoStates, 2)   // manifest + txData
+	assert.Equal(t, inputLockInfo.Id, assembleRes.AssembledTransaction.InputStates[0].Id)
 	assert.Equal(t, hashName("lockInfo_v1"), assembleRes.AssembledTransaction.OutputStates[0].SchemaId)
-	assert.Equal(t, inputLockedCoin.ID.String(), assembleRes.AssembledTransaction.ReadStates[0].Id)
 	outputInfo, err := n.unmarshalInfo(assembleRes.AssembledTransaction.InfoStates[1].StateDataJson)
 	require.NoError(t, err)
 	assert.Equal(t, "0x1234", outputInfo.Data.String())
+	lockInfoState := assembleRes.AssembledTransaction.OutputStates[0]
 
 	encodedDelegate, err := n.encodeDelegateLock(ctx, ethtypes.MustNewAddress(contractAddress), lockID, pldtypes.MustEthAddress(delegateAddress), pldtypes.MustParseHexBytes("0x1234"))
 	require.NoError(t, err)
@@ -154,9 +160,9 @@ func TestDelegateLock(t *testing.T) {
 
 	inputStates := []*prototk.EndorsableState{
 		{
-			SchemaId:      hashName("lockInfo_v1"),
-			Id:            inputLockState.Id,
-			StateDataJson: mustParseJSON(inputLockState.DataJson),
+			SchemaId:      inputLockInfo.SchemaId,
+			Id:            inputLockInfo.Id,
+			StateDataJson: inputLockInfo.DataJson,
 		},
 	}
 	readStates := []*prototk.EndorsableState{
@@ -181,8 +187,8 @@ func TestDelegateLock(t *testing.T) {
 	outputStates := []*prototk.EndorsableState{
 		{
 			SchemaId:      hashName("lockInfo_v1"),
-			Id:            "0x4da2191dc83d31196a735d8df477c1a588f1a5a15c084e7d66b7157ab539019f",
-			StateDataJson: assembleRes.AssembledTransaction.OutputStates[0].StateDataJson,
+			Id:            *lockInfoState.Id,
+			StateDataJson: lockInfoState.StateDataJson,
 		},
 	}
 
@@ -211,7 +217,9 @@ func TestDelegateLock(t *testing.T) {
 	prepareRes, err := n.PrepareTransaction(ctx, &prototk.PrepareTransactionRequest{
 		Transaction:       tx,
 		ResolvedVerifiers: verifiers,
+		InputStates:       inputStates,
 		ReadStates:        readStates,
+		OutputStates:      outputStates,
 		InfoStates:        infoStates,
 		AttestationResult: []*prototk.AttestationResult{
 			{
@@ -237,10 +245,10 @@ func TestDelegateLock(t *testing.T) {
 	params := decodeFnParams[DelegateLockParams](t, delegateLockABI, prepareRes.Transaction.ParamsJson)
 	notoParams := decodeSingleABITuple[types.NotoDelegateOperation](t, types.NotoDelegateOperationABI, params.DelegateInputs)
 	require.Equal(t, &types.NotoDelegateOperation{
-		TxId:    "0x015e1881f2ba769c22d05c841f06949ec6e1bd573f5e1e0328885494212f077d",
-		Inputs:  []string{},
-		Outputs: []string{},
-		Proof:   signatureBytes,
+		TxId:         "0x015e1881f2ba769c22d05c841f06949ec6e1bd573f5e1e0328885494212f077d",
+		OldLockState: pldtypes.MustParseBytes32(inputLockInfo.Id),
+		NewLockState: pldtypes.MustParseBytes32(*lockInfoState.Id),
+		Proof:        signatureBytes,
 	}, notoParams)
 	data, err := n.decodeTransactionDataV1(ctx, params.Data)
 	require.NoError(t, err)
@@ -273,7 +281,9 @@ func TestDelegateLock(t *testing.T) {
 	prepareRes, err = n.PrepareTransaction(ctx, &prototk.PrepareTransactionRequest{
 		Transaction:       tx,
 		ResolvedVerifiers: verifiers,
+		InputStates:       inputStates,
 		ReadStates:        readStates,
+		OutputStates:      outputStates,
 		InfoStates:        infoStates,
 		AttestationResult: []*prototk.AttestationResult{
 			{

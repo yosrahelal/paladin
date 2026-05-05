@@ -103,7 +103,8 @@ func (n *Noto) handleV1Event(ctx context.Context, ev *prototk.OnChainEvent, res 
 			n.recordTransactionInfo(ev, lockCreated.TxId, txData.InfoStates, res)
 			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockCreated.TxId, lockCreated.Inputs)...)
 			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockCreated.TxId, lockCreated.Outputs)...)
-			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockCreated.TxId, lockCreated.LockedOutputs)...)
+			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockCreated.TxId, lockCreated.Contents)...)
+			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockCreated.TxId, []pldtypes.Bytes32{lockCreated.NewLockState})...)
 		} else {
 			log.L(ctx).Warnf("Ignoring malformed LockCreated event in batch %s: %s", req.BatchId, err)
 		}
@@ -117,9 +118,9 @@ func (n *Noto) handleV1Event(ctx context.Context, ev *prototk.OnChainEvent, res 
 				return err
 			}
 			n.recordTransactionInfo(ev, lockUpdated.TxId, txData.InfoStates, res)
-			res.ReadStates = append(res.ReadStates, n.parseStatesFromEvent(lockUpdated.TxId, lockUpdated.LockContents)...)
-			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockUpdated.TxId, lockUpdated.Inputs)...)
-			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockUpdated.TxId, lockUpdated.Outputs)...)
+			res.ReadStates = append(res.ReadStates, n.parseStatesFromEvent(lockUpdated.TxId, lockUpdated.Contents)...)
+			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockUpdated.TxId, []pldtypes.Bytes32{lockUpdated.OldLockState})...)
+			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockUpdated.TxId, []pldtypes.Bytes32{lockUpdated.NewLockState})...)
 		} else {
 			log.L(ctx).Warnf("Ignoring malformed LockUpdated event in batch %s: %s", req.BatchId, err)
 		}
@@ -134,6 +135,7 @@ func (n *Noto) handleV1Event(ctx context.Context, ev *prototk.OnChainEvent, res 
 			}
 			n.recordTransactionInfo(ev, lockSpent.TxId, txData.InfoStates, res)
 			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockSpent.TxId, lockSpent.Inputs)...)
+			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockSpent.TxId, []pldtypes.Bytes32{lockSpent.OldLockState})...)
 			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockSpent.TxId, lockSpent.Outputs)...)
 
 			if req.ContractInfo != nil {
@@ -165,8 +167,8 @@ func (n *Noto) handleV1Event(ctx context.Context, ev *prototk.OnChainEvent, res 
 				return err
 			}
 			n.recordTransactionInfo(ev, lockDelegated.TxId, txData.InfoStates, res)
-			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockDelegated.TxId, lockDelegated.Inputs)...)
-			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockDelegated.TxId, lockDelegated.Outputs)...)
+			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockDelegated.TxId, []pldtypes.Bytes32{lockDelegated.OldLockState})...)
+			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockDelegated.TxId, []pldtypes.Bytes32{lockDelegated.NewLockState})...)
 		} else {
 			log.L(ctx).Warnf("Ignoring malformed LockDelegated event in batch %s: %s", req.BatchId, err)
 		}
@@ -193,6 +195,7 @@ func (n *Noto) handleV1Event(ctx context.Context, ev *prototk.OnChainEvent, res 
 // back to the Pente hooks
 // TODO: this method should not be invoked directly on the event loop, but rather via a queue
 func (n *Noto) handleNotaryPrivateUnlock(ctx context.Context, stateQueryContext string, domainConfig *types.NotoParsedConfig, lockedInputs []pldtypes.Bytes32, outputs []pldtypes.Bytes32, spender *pldtypes.EthAddress, data pldtypes.HexBytes, lockID pldtypes.Bytes32) error {
+
 	lockedInputsStr := make([]string, len(lockedInputs))
 	for i, input := range lockedInputs {
 		lockedInputsStr[i] = input.String()
@@ -202,11 +205,15 @@ func (n *Noto) handleNotaryPrivateUnlock(ctx context.Context, stateQueryContext 
 		unlockedOutputsStr[i] = output.String()
 	}
 
+	lockStates, err := n.getStates(ctx, stateQueryContext, n.lockInfoSchemaV1.Id, lockedInputsStr)
+	if err != nil {
+		return err
+	}
 	inputStates, err := n.getStates(ctx, stateQueryContext, n.lockedCoinSchema.Id, lockedInputsStr)
 	if err != nil {
 		return err
 	}
-	if len(inputStates) != len(lockedInputsStr) {
+	if (len(inputStates) + len(lockStates)) != len(lockedInputsStr) {
 		return i18n.NewError(ctx, msgs.MsgMissingStateData, lockedInputs)
 	}
 

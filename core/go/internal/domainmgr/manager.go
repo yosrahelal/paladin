@@ -40,6 +40,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/cache"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/inflight"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/plugintk"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcserver"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/signerapi"
 	"gorm.io/gorm"
@@ -94,6 +95,7 @@ type domainManager struct {
 	domainSigner     *domainSigner
 	rpcModule        *rpcserver.RPCModule
 	publicTxManager  components.PublicTxManager
+	groupManager     components.GroupManager
 
 	domainsByName    map[string]*domain
 	domainsByAddress map[pldtypes.EthAddress]*domain
@@ -126,6 +128,7 @@ func (dm *domainManager) PostInit(c components.AllComponents) error {
 	dm.keyManager = c.KeyManager()
 	dm.transportMgr = c.TransportManager()
 	dm.publicTxManager = c.PublicTxManager()
+	dm.groupManager = c.GroupManager()
 
 	for name, d := range dm.conf.Domains {
 		if _, err := pldtypes.ParseEthAddress(d.RegistryAddress); err != nil {
@@ -332,7 +335,16 @@ func (dm *domainManager) getSmartContractCached(ctx context.Context, dbTX persis
 	return dm.dbGetSmartContract(ctx, dbTX, func(db *gorm.DB) *gorm.DB { return db.Where("address = ?", addr) })
 }
 
-func (dm *domainManager) querySmartContracts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.DomainSmartContract, error) {
+func (dm *domainManager) populateContractConfig(result *pldapi.DomainSmartContract, config *prototk.ContractConfig) {
+	if config != nil {
+		result.Config = &pldapi.ContractConfig{}
+		if config.ContractConfigJson != "" {
+			result.Config.ContractConfig = pldtypes.RawJSON(config.ContractConfigJson)
+		}
+	}
+}
+
+func (dm *domainManager) querySmartContracts(ctx context.Context, dbTX persistence.DBTX, jq *query.QueryJSON) ([]*pldapi.DomainSmartContract, error) {
 	qw := &filters.QueryWrapper[PrivateSmartContract, pldapi.DomainSmartContract]{
 		P:           dm.persistence,
 		Table:       "private_smart_contracts",
@@ -340,7 +352,7 @@ func (dm *domainManager) querySmartContracts(ctx context.Context, jq *query.Quer
 		Filters:     smartContractFilters,
 		Query:       jq,
 		MapResult: func(pt *PrivateSmartContract) (result *pldapi.DomainSmartContract, err error) {
-			_, dc, err := dm.enrichContractWithDomain(ctx, pt)
+			_, dc, err := dm.enrichContractWithDomain(ctx, dbTX, pt)
 			if err == nil {
 				result = &pldapi.DomainSmartContract{
 					DomainAddress: &pt.RegistryAddress,
@@ -348,12 +360,13 @@ func (dm *domainManager) querySmartContracts(ctx context.Context, jq *query.Quer
 				}
 				if dc != nil {
 					result.DomainName = dc.Domain().Name()
+					dm.populateContractConfig(result, dc.config)
 				}
 			}
 			return result, err
 		},
 	}
-	return qw.Run(ctx, nil)
+	return qw.Run(ctx, dbTX)
 }
 
 func (dm *domainManager) dbGetSmartContract(ctx context.Context, dbTX persistence.DBTX, setWhere func(db *gorm.DB) *gorm.DB) (pscLoadResult, *domainContract, error) {
@@ -371,7 +384,7 @@ func (dm *domainManager) dbGetSmartContract(ctx context.Context, dbTX persistenc
 
 	// At this point it's possible we have a matching smart contract in our DB, for which we
 	// no longer recognize the domain registry (as it's not one that is configured any longer)
-	loadResult, dc, err := dm.enrichContractWithDomain(ctx, contracts[0])
+	loadResult, dc, err := dm.enrichContractWithDomain(ctx, dbTX, contracts[0])
 	if err != nil {
 		return loadResult, nil, err
 	}
@@ -381,7 +394,7 @@ func (dm *domainManager) dbGetSmartContract(ctx context.Context, dbTX persistenc
 	return loadResult, dc, nil
 }
 
-func (dm *domainManager) enrichContractWithDomain(ctx context.Context, contract *PrivateSmartContract) (pscLoadResult, *domainContract, error) {
+func (dm *domainManager) enrichContractWithDomain(ctx context.Context, dbTX persistence.DBTX, contract *PrivateSmartContract) (pscLoadResult, *domainContract, error) {
 
 	// Get the domain by address
 	d := dm.getDomainByAddressOrNil(&contract.RegistryAddress)
@@ -389,7 +402,7 @@ func (dm *domainManager) enrichContractWithDomain(ctx context.Context, contract 
 		return pscDomainNotFound, nil, nil
 	}
 
-	return d.initSmartContract(ctx, contract)
+	return d.initSmartContract(ctx, dbTX, contract)
 }
 
 // If an embedded ABI is broken, we don't even run the tests / start the runtime

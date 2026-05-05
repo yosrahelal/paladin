@@ -61,17 +61,26 @@ const (
 	pscValid
 )
 
-func (d *domain) initSmartContract(ctx context.Context, def *PrivateSmartContract) (pscLoadResult, *domainContract, error) {
+func (d *domain) initSmartContract(ctx context.Context, dbTX persistence.DBTX, def *PrivateSmartContract) (pscLoadResult, *domainContract, error) {
 	dc := &domainContract{
 		dm:   d.dm,
 		d:    d,
 		api:  d.api,
 		info: def,
 	}
+	var privacyGroup *prototk.PrivacyGroup
+	pg, err := d.dm.groupManager.QueryGroups(ctx, dbTX, query.NewQueryBuilder().Equal("domain", d.name).Equal("contractAddress", &def.Address).Limit(1).Query())
+	if err != nil {
+		return pscInitError, nil, err
+	}
+	if len(pg) > 0 {
+		privacyGroup = mapPrivacyGroupToProto(pg[0].ID, pg[0].GenesisStateData())
+	}
 
 	res, err := d.api.InitContract(ctx, &prototk.InitContractRequest{
 		ContractAddress: def.Address.String(),
 		ContractConfig:  def.ConfigBytes,
+		PrivacyGroup:    privacyGroup,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("Error initializing smart contract address: %s with config %s :  %s", def.Address, def.ConfigBytes.HexString(), err.Error())
@@ -96,8 +105,7 @@ func (dc *domainContract) buildTransactionSpecification(ctx context.Context, loc
 		return nil, i18n.NewError(ctx, msgs.MsgDomainTxnInputDefinitionInvalid)
 	}
 
-	// Query the base block height to inform the assembly step that comes later
-	confirmedBlockHeight, err := dc.dm.blockIndexer.GetConfirmedBlockHeight(ctx)
+	latestConfirmedBlock, err := dc.dm.blockIndexer.GetLatestConfirmedBlockMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -126,8 +134,9 @@ func (dc *domainContract) buildTransactionSpecification(ctx context.Context, loc
 		FunctionAbiJson:    string(abiJSON),
 		FunctionParamsJson: string(paramsJSON),
 		FunctionSignature:  fnDef.SolString(), // we use the proprietary "Solidity inspired" form that is very specific, including param names and nested struct defs
-		BaseBlock:          int64(confirmedBlockHeight),
+		BaseBlock:          latestConfirmedBlock.Number,
 		Intent:             intent,
+		BaseBlockTimestamp: latestConfirmedBlock.Timestamp,
 	}, nil
 }
 
@@ -294,11 +303,11 @@ func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, re
 		log.L(dCtx.Ctx()).Debugf("WritePotentialStates: Writing %+v info potentialstates", len(postAssembly.InfoStatesPotential))
 		postAssembly.InfoStates, err = dc.upsertPotentialStates(dCtx, readTX, tx, postAssembly.InfoStatesPotential, false)
 	}
-
-	log.L(dCtx.Ctx()).Debugf("WritePotentialStates: %d post assembly output states", len(postAssembly.OutputStates))
-	log.L(dCtx.Ctx()).Debugf("WritePotentialStates: %d post assembly info states", len(postAssembly.InfoStates))
 	return err
+}
 
+func (dc *domainContract) MapPotentialStates(dCtx components.DomainContext, potentialStates []*prototk.NewState, outputStates bool, createdByTX *components.PrivateTransaction) (stateUpserts []*components.StateUpsert, err error) {
+	return dc.d.mapPotentialStates(dCtx, potentialStates, outputStates, createdByTX)
 }
 
 func (dc *domainContract) upsertPotentialStates(dCtx components.DomainContext, readTX persistence.DBTX, tx *components.PrivateTransaction, potentialStates []*prototk.NewState, isOutput bool) (writtenStates []*components.FullState, err error) {
@@ -650,7 +659,7 @@ func (dc *domainContract) loadStatesFromContext(dCtx components.DomainContext, r
 	statesByID := make(map[string]*pldapi.State)
 	for schemaID, stateIDs := range rawIDsBySchema {
 		log.L(dCtx.Ctx()).Debugf("Finding available states for state IDs %+v", stateIDs)
-		_, statesForSchema, err := dCtx.FindAvailableStates(readTX, schemaID, &query.QueryJSON{
+		_, statesForSchema, err := dCtx.FindAvailableStates(dCtx.Ctx(), readTX, schemaID, &query.QueryJSON{
 			Statements: query.Statements{
 				Ops: query.Ops{
 					In: []*query.OpMultiVal{
@@ -791,4 +800,27 @@ func (dc *domainContract) WrapPrivacyGroupEVMTX(ctx context.Context, pg *pldapi.
 
 	return ptx, nil
 
+}
+func (dc *domainContract) IsBaseLedgerRevertRetryable(ctx context.Context, revertData []byte) (bool, string, error) {
+	res, err := dc.api.IsBaseLedgerRevertRetryable(ctx, &prototk.IsBaseLedgerRevertRetryableRequest{
+		RevertData: revertData,
+	})
+	if err != nil {
+		return false, "", err
+	}
+	return res.Retryable, res.DecodedReason, nil
+}
+
+func (dc *domainContract) InvokeRPC(ctx context.Context, dCtx components.DomainContext, dbTX persistence.DBTX, rpcCall pldapi.DomainInvokeRPC) (pldtypes.RawJSON, error) {
+	c := dc.d.newInFlightDomainRequest(dbTX, dCtx, false)
+	defer c.close()
+	res, err := dc.api.InvokeRPC(ctx, &prototk.InvokeRPCRequest{
+		StateQueryContext: c.id,
+		Method:            rpcCall.Method,
+		ParamsJson:        string(rpcCall.Params),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return pldtypes.RawJSON(res.ResultJson), nil
 }

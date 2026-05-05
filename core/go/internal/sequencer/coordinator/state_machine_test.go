@@ -16,9 +16,12 @@
 package coordinator
 
 import (
+	"context"
 	"testing"
 
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestState_String_Idle(t *testing.T) {
@@ -69,4 +72,32 @@ func TestState_String_InvalidState(t *testing.T) {
 func TestState_String_NegativeState(t *testing.T) {
 	result := State(-1).String()
 	assert.Equal(t, "Unknown", result, "State.String() should return the correct string representation")
+}
+
+func Test_queueEventInternal_QueuesPriorityEvent(t *testing.T) {
+	ctx := context.Background()
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	c, _, done := builder.Build(ctx)
+	defer done()
+
+	syncEvent := statemachine.NewSyncEvent()
+	c.queueEventInternal(ctx, syncEvent)
+	<-syncEvent.Done
+	require.False(t, c.stateMachineEventLoop.IsStopped(), "event loop should still be running")
+}
+
+func Test_TryQueueEvent_QueuesToEventLoop(t *testing.T) {
+	ctx := context.Background()
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	c, _, done := builder.Build(ctx)
+	defer done()
+
+	event := &CoordinatorCreatedEvent{}
+	ok := c.TryQueueEvent(ctx, event)
+	require.True(t, ok, "TryQueueEvent should return true when event is queued")
+
+	// Drain the event so the loop can process it and we can cleanly stop
+	syncEvent := statemachine.NewSyncEvent()
+	c.QueueEvent(ctx, syncEvent)
+	<-syncEvent.Done
 }

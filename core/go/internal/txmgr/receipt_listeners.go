@@ -115,11 +115,12 @@ type receiptListener struct {
 
 	newReceipts chan bool
 
-	nextBatchID  uint64
-	newReceivers chan bool
-	receiverLock sync.Mutex
-	receivers    []*registeredReceiptReceiver
-	done         chan struct{}
+	nextBatchID      uint64
+	newReceivers     chan bool
+	receiverLock     sync.Mutex
+	receivers        []*registeredReceiptReceiver
+	pendingReceivers []*registeredReceiptReceiver
+	done             chan struct{}
 }
 
 type registeredReceiptReceiver struct {
@@ -231,6 +232,10 @@ func (tm *txManager) CreateReceiptListener(ctx context.Context, spec *pldapi.Tra
 
 func (rr *registeredReceiptReceiver) Close() {
 	rr.l.removeReceiver(rr.id)
+}
+
+func (rr *registeredReceiptReceiver) SetActive() {
+	rr.l.setActive(rr)
 }
 
 func (tm *txManager) AddReceiptReceiver(ctx context.Context, name string, r components.ReceiptReceiver) (components.ReceiverCloser, error) {
@@ -582,29 +587,51 @@ func (l *receiptListener) addReceiver(r components.ReceiptReceiver) *registeredR
 		l:               l,
 		ReceiptReceiver: r,
 	}
-	l.receivers = append(l.receivers, registered)
+	l.pendingReceivers = append(l.pendingReceivers, registered)
+	log.L(l.tm.bgCtx).Debugf("receipt listener '%s': receiver added id=%s pending=%d active=%d", l.spec.Name, registered.id, len(l.pendingReceivers), len(l.receivers))
+
+	return registered
+}
+
+func (l *receiptListener) setActive(receiver *registeredReceiptReceiver) {
+	l.receiverLock.Lock()
+	defer l.receiverLock.Unlock()
+
+	for _, existing := range l.receivers {
+		if existing.id == receiver.id {
+			return // already active
+		}
+	}
+	l.receivers = append(l.receivers, receiver)
+	l.pendingReceivers = l.removeReceiverFromList(l.pendingReceivers, receiver.id)
+	log.L(l.tm.bgCtx).Debugf("receipt listener '%s': receiver activated id=%s pending=%d active=%d", l.spec.Name, receiver.id, len(l.pendingReceivers), len(l.receivers))
 
 	select {
 	case l.newReceivers <- true:
 	default:
 	}
-
-	return registered
 }
 
 func (l *receiptListener) removeReceiver(rid uuid.UUID) {
 	l.receiverLock.Lock()
 	defer l.receiverLock.Unlock()
 
-	if len(l.receivers) > 0 {
-		newReceivers := make([]*registeredReceiptReceiver, 0, len(l.receivers)-1)
-		for _, existing := range l.receivers {
-			if existing.id != rid {
-				newReceivers = append(newReceivers, existing)
-			}
-		}
-		l.receivers = newReceivers
+	l.receivers = l.removeReceiverFromList(l.receivers, rid)
+	l.pendingReceivers = l.removeReceiverFromList(l.pendingReceivers, rid)
+	log.L(l.tm.bgCtx).Debugf("receipt listener '%s': receiver removed id=%s pending=%d active=%d", l.spec.Name, rid, len(l.pendingReceivers), len(l.receivers))
+}
+
+func (l *receiptListener) removeReceiverFromList(receivers []*registeredReceiptReceiver, rid uuid.UUID) []*registeredReceiptReceiver {
+	if len(receivers) == 0 {
+		return receivers
 	}
+	newReceivers := make([]*registeredReceiptReceiver, 0, len(receivers))
+	for _, existing := range receivers {
+		if existing.id != rid {
+			newReceivers = append(newReceivers, existing)
+		}
+	}
+	return newReceivers
 }
 
 func (l *receiptListener) loadCheckpoint() error {
@@ -705,7 +732,7 @@ func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *t
 			return err
 		}
 
-		var primaryMissingStateID pldtypes.HexBytes
+		var nextMissingStateID pldtypes.HexBytes
 		if fr.States != nil && d != nil && fr.States.FirstUnavailable() != nil {
 			// Domains supporting PARTIAL completion processing use the FIRST "info" state for
 			// the manifest of the transaction. This allows us to determine that:
@@ -717,7 +744,7 @@ func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *t
 			if len(fr.States.Info) == 0 && len(fr.States.Unavailable.Info) > 0 {
 				// We don't have the manifest - no point in calling the domain.
 				// Trigger again when the first info state is available.
-				primaryMissingStateID = fr.States.Unavailable.Info[0]
+				nextMissingStateID = fr.States.Unavailable.Info[0]
 			} else {
 				// Otherwise:
 				// - There are > 0 unavailable states
@@ -726,7 +753,7 @@ func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *t
 				// We need the domain to get involved to determine if the transaction is complete,
 				// or we need to wait for at least one more state. It just needs to return the ID
 				// of one state we're waiting for (any one that we know is required).
-				primaryMissingStateID, err = d.CheckStateCompletion(l.ctx, l.tm.p.NOTX(), pr.TransactionID, fr.States)
+				nextMissingStateID, err = d.CheckStateCompletion(l.ctx, l.tm.p.NOTX(), pr.TransactionID, fr.States)
 				if err != nil {
 					return err
 				}
@@ -734,7 +761,7 @@ func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *t
 		}
 
 		// Handle incomplete state based on the configured behavior
-		if primaryMissingStateID != nil {
+		if nextMissingStateID != nil {
 			behavior := l.spec.Options.IncompleteStateReceiptBehavior.V()
 			switch behavior {
 			case pldapi.IncompleteStateReceiptBehaviorBlockContract:
@@ -744,7 +771,7 @@ func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *t
 					Source:      &fr.Source,
 					Sequence:    pr.Sequence,
 					DomainName:  fr.Domain,
-					StateID:     primaryMissingStateID,
+					StateID:     nextMissingStateID,
 					Transaction: fr.ID,
 				})
 				return nil
@@ -754,7 +781,7 @@ func (l *receiptListener) processPersistedReceipt(b *receiptDeliveryBatch, pr *t
 					Listener:   l.spec.Name,
 					Sequence:   pr.Sequence,
 					DomainName: fr.Domain,
-					StateID:    primaryMissingStateID,
+					StateID:    nextMissingStateID,
 				})
 				return nil
 			}

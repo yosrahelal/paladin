@@ -43,28 +43,23 @@ interface ILockableCapability {
         bytes content;
         // When delegation has been performed, this is a different address to the owner - mutable by current spender
         address spender;
-        // A hash of the prepared transaction that will be performed as the spending operation for this lock - mutable until delegation
+        // A hash of the prepared transaction that will be performed as the spending operation for this lock, or a zero hash to allow any operation - mutable until delegation
         bytes32 spendHash;
-        // A hash of the prepared transaction that will be performed as the cancel operation for this lock - mutable until delegation
+        // A hash of the prepared transaction that will be performed as the cancel operation for this lock, or a zero hash to allow any operation - mutable until delegation
         bytes32 cancelHash;
-        // Implementation-specific options that control how the lock may be utilized - mutable
+        // Implementation-specific options that control how the lock may be utilized - mutability can be determined by the implementation
         bytes options;
     }
 
-    /**
-     * @dev Thrown when a lock does not exist or is no longer active.
-     */
-    error LockNotActive(bytes32 lockId);
-
-    /**
-     * @dev Thrown when the caller is not the current spender for the given lock.
-     */
-    error LockUnauthorized(bytes32 lockId, address caller);
-
-    /**
-     * @dev Thrown when an attempt is made to update a lock that has been delegated, so the current spender is not the owner
-     */
-    error LockSpenderNotOwner(bytes32 lockId, address spender, address owner);
+    // Fields of the lock that can be set on create or update
+    struct LockParams {
+        // A hash of the prepared transaction that will be performed as the spending operation for this lock, or a zero hash to allow any operation - mutable until delegation
+        bytes32 spendHash;
+        // A hash of the prepared transaction that will be performed as the cancel operation for this lock, or a zero hash to allow any operation - mutable until delegation
+        bytes32 cancelHash;
+        // Implementation-specific options that control how the lock may be utilized
+        bytes options;        
+    }
 
     /**
      * @dev Emitted when a lock is successfully spent.
@@ -83,30 +78,38 @@ interface ILockableCapability {
         bytes32 indexed lockId,
         address indexed from,
         address indexed to,
+        address operator,
         bytes data
     );
-
-    // Fields of the lock that can be set on create or update
-    struct LockParams {
-        // A hash of the prepared transaction that will be performed as the spending operation for this lock - mutable until delegation
-        bytes32 spendHash;
-        // A hash of the prepared transaction that will be performed as the cancel operation for this lock - mutable until delegation
-        bytes32 cancelHash;
-        // Implementation-specific options that control how the lock may be utilized - mutable until delegation
-        bytes options;        
-    }
 
     /**
      * @dev Emitted when a lock is successfully created or updated.
      * @param lockId the lock identifier
+     * @param operator the sender that updated the lock
      * @param lock the new state of the lock after the update
      * @param data the data parameter passed to the createLock, updateLock, or delegateLock call
      */
     event LockUpdated(
         bytes32 indexed lockId,
+        address operator,
         LockInfo lock,
         bytes data
     );
+
+    /**
+     * @dev Thrown when a lock does not exist or is no longer active.
+     */
+    error LockNotActive(bytes32 lockId);
+
+    /**
+     * @dev Thrown when the caller is not the current spender for the given lock.
+     */
+    error LockUnauthorized(bytes32 lockId, address spender, address caller);
+
+    /**
+     * @dev Thrown when an attempt is made to update a lock that has been delegated, so the current spender is not the owner
+     */
+    error LockSpenderNotOwner(bytes32 lockId, address spender, address owner);
 
     /**
      * @dev Create a new lock, moving control of the value/states/coins/activity to be locked under the control of the new lock.
@@ -129,8 +132,8 @@ interface ILockableCapability {
     ) external returns (bytes32 lockId);
 
     /**
-     * @dev Update the current options for a lock (non-normative method aligned with ILockableCapability recommendations).
-     *      Should only be allowed if the lock has not been delegated.
+     * @dev Updates an existing lock. The spendHash and cancelHash can be updated until delegation (owner != spender).
+     *      The lock contents cannot be updated. Mutability of the options is implementation specific.
      *
      * Requirements:
      *  - MUST revert with LockSpenderNotOwner(lockId, spender, owner) if the lock is currently
@@ -138,7 +141,7 @@ interface ILockableCapability {
      *
      * @param lockId Unique identifier for the lock.
      * @param updateInputs Implementation-specific information needed to perform the update operation
-     * @param params The parameters that will all be replaced on the lock as a result of the update (see UpdateLockParams struct).
+     * @param params The parameters that will all be replaced on the lock as a result of the update (see LockParams struct).
      * @param data Any additional transaction data (opaque to the blockchain).
      *
      * Emits a {LockUpdated} event.
@@ -171,6 +174,8 @@ interface ILockableCapability {
      *    is not the current spender for lockId.
      *  - MUST revert with LockNotActive(lockId) if the lock does not exist or
      *    is no longer active.
+     * 
+     * Emits a {LockDelegated} event.
      *
      * @param lockId     The identifier of the lock.
      * @param delegateInputs  Implementation-specific information needed to perform the update operation
@@ -253,48 +258,4 @@ interface ILockableCapability {
         bytes32 lockId
     ) external view returns (LockInfo memory info);
 
-    // ------------------------------------------------------------------------
-    // Non-normative examples
-    // ------------------------------------------------------------------------
-    //
-    // The events and methods below are illustrative only. The core interface does
-    // not prescribe how locks are created or updated. Implementations are expected
-    // to provide one or more ways to create and manage locks, and may choose
-    // to use a deterministic lockId derivation pattern as shown below.
-    //
-    // struct LockParams { ... }
-    // struct UpdateLockParams { ... }
-    //
-    // event LockCreated(
-    //     bytes32 indexed lockId,
-    //     address indexed owner,
-    //     address indexed spender,
-    //     ...
-    // );
-    //
-    // event LockUpdated(
-    //     bytes32 indexed lockId,
-    //     address indexed operator,
-    //     ...
-    // );
-    //
-    // function createLock(
-    //     LockParams calldata params,
-    //     bytes32 salt,
-    //     bytes calldata data
-    // ) external returns (bytes32 lockId);
-    //
-    // function updateLock(
-    //     bytes32 lockId,
-    //     UpdateLockParams calldata params,
-    //     bytes calldata data
-    // ) external;
-    //
-    // function computeLockId(LockParams calldata params, bytes32 salt)
-    //     public
-    //     view
-    //     returns (bytes32 lockId)
-    // {
-    //     return keccak256(abi.encode(address(this), msg.sender, params, salt));
-    // }
 }

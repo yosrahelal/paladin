@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024 Kaleido, Inc.
+ * Copyright © 2025 Kaleido, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -111,19 +111,21 @@ func (h *createMintLockHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		return nil, err
 	}
 
-	// Build the info for the initiating transaction
-	infoDistribution := identityList{notaryID, senderID}
-	infoStates, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	// Build and encode the unlock data (separate to the data for this TX)
+	encodedUnlockData, infoStates, infoDistribution, err := h.buildUnlockData(ctx, notaryID, senderID, nil, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create the txData that would be emitted for either cancel or spend
-	err = h.noto.allocateStateIDs(ctx, req.StateQueryContext, spendOutputs.states)
-	var txData pldtypes.HexBytes
-	if err == nil {
-		txData, err = h.noto.encodeTransactionDataV1(ctx, []*prototk.EndorsableState{}, false)
+	// Build the info for the initiating transaction
+	createDataInfo, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	if err != nil {
+		return nil, err
 	}
+	infoStates = append(infoStates, createDataInfo...)
+
+	// Allocate ids to all the new outputs, so we can build the transaction we need to hash
+	err = h.noto.allocateStateIDs(ctx, req.StateQueryContext, spendOutputs.states)
 	// ... and the new lock state as an output
 	var lock *preparedLockInfo
 	if err == nil {
@@ -133,9 +135,9 @@ func (h *createMintLockHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 			Owner:         senderID.address,
 			Spender:       senderID.address,
 			SpendOutputs:  newStateAllocatedIDs(spendOutputs.states),
-			SpendData:     txData,
+			SpendData:     encodedUnlockData,
 			CancelOutputs: []pldtypes.Bytes32{ /* nothing to return */ },
-			CancelData:    txData,
+			CancelData:    encodedUnlockData,
 			SpendTxId:     spendTxId,
 		}, identityList{notaryID, senderID})
 	}
@@ -294,13 +296,13 @@ func (h *createMintLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.
 func (h *createMintLockHandler) hookInvoke(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
 	inParams := tx.Params.(*types.CreateMintLockParams)
 
-	fromID, err := h.noto.findEthAddressVerifier(ctx, "from", tx.Transaction.From, req.ResolvedVerifiers)
+	senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
 	// We should have a valid lock transition, from which we can obtain the spend and cancel outputs
-	lockTransition, err := h.noto.validateV1LockTransition(ctx, LOCK_CREATE, fromID, nil, req.InputStates, req.OutputStates)
+	lockTransition, err := h.noto.validateV1LockTransition(ctx, LOCK_CREATE, senderID, nil, req.InputStates, req.OutputStates)
 	if err != nil {
 		return nil, err
 	}
@@ -319,7 +321,7 @@ func (h *createMintLockHandler) hookInvoke(ctx context.Context, tx *types.Parsed
 		return nil, err
 	}
 	params := &CreateMintLockHookParams{
-		Sender:     fromID.address,
+		Sender:     senderID.address,
 		LockID:     lockTransition.newLockInfo.LockID,
 		Recipients: recipients,
 		Data:       inParams.Data,

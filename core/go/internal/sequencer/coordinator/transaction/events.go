@@ -37,22 +37,21 @@ func (e *BaseCoordinatorEvent) GetTransactionID() uuid.UUID {
 	return e.TransactionID
 }
 
-// TransactionReceivedEvent is "emitted" when the coordinator receives a transaction.
+// TransactionDelegatedEvent is "emitted" when the coordinator receives a transaction.
 // Feels slightly artificial to model this as an event because it happens every time we create a transaction object
 // but rather than bury the logic in NewTransaction func, modeling this event allows us to define the initial state transition rules in the same declarative stateDefinitions structure as all other state transitions
-type ReceivedEvent struct {
+type DelegatedEvent struct {
 	BaseCoordinatorEvent
 }
 
-func (*ReceivedEvent) Type() EventType {
-	return Event_Received
+func (*DelegatedEvent) Type() EventType {
+	return Event_Delegated
 }
 
-func (*ReceivedEvent) TypeString() string {
-	return "Event_Received"
+func (*DelegatedEvent) TypeString() string {
+	return "Event_Delegated"
 }
 
-// TransactionSelectedEvent
 type SelectedEvent struct {
 	BaseCoordinatorEvent
 }
@@ -65,7 +64,18 @@ func (*SelectedEvent) TypeString() string {
 	return "Event_Selected"
 }
 
-// AssembleRequestSentEvent
+type AssembleCancelledEvent struct {
+	BaseCoordinatorEvent
+}
+
+func (*AssembleCancelledEvent) Type() EventType {
+	return Event_Assemble_Cancelled
+}
+
+func (*AssembleCancelledEvent) TypeString() string {
+	return "Event_Assemble_Cancelled"
+}
+
 type AssembleRequestSentEvent struct {
 	BaseCoordinatorEvent
 }
@@ -78,7 +88,6 @@ func (*AssembleRequestSentEvent) TypeString() string {
 	return "Event_AssembleRequestSent"
 }
 
-// AssembleSuccessEvent
 type AssembleSuccessEvent struct {
 	BaseCoordinatorEvent
 	PostAssembly *components.TransactionPostAssembly
@@ -94,7 +103,6 @@ func (*AssembleSuccessEvent) TypeString() string {
 	return "Event_Assemble_Success"
 }
 
-// AssembleRevertResponseEvent
 type AssembleRevertResponseEvent struct {
 	BaseCoordinatorEvent
 	PostAssembly *components.TransactionPostAssembly
@@ -109,7 +117,19 @@ func (*AssembleRevertResponseEvent) TypeString() string {
 	return "Event_Assemble_Revert_Response"
 }
 
-// EndorsedEvent
+type AssembleErrorResponseEvent struct {
+	BaseCoordinatorEvent
+	RequestID uuid.UUID
+}
+
+func (*AssembleErrorResponseEvent) Type() EventType {
+	return Event_Assemble_Error_Response
+}
+
+func (*AssembleErrorResponseEvent) TypeString() string {
+	return "Event_Assemble_Error_Response"
+}
+
 type EndorsedEvent struct {
 	BaseCoordinatorEvent
 	Endorsement *prototk.AttestationResult
@@ -124,7 +144,6 @@ func (*EndorsedEvent) TypeString() string {
 	return "Event_Endorsed"
 }
 
-// EndorsedRejectedEvent
 type EndorsedRejectedEvent struct {
 	BaseCoordinatorEvent
 	RevertReason           string
@@ -141,7 +160,6 @@ func (*EndorsedRejectedEvent) TypeString() string {
 	return "Event_EndorsedRejected"
 }
 
-// DispatchRequestApprovedEvent
 type DispatchRequestApprovedEvent struct {
 	BaseCoordinatorEvent
 	RequestID uuid.UUID
@@ -155,20 +173,6 @@ func (*DispatchRequestApprovedEvent) TypeString() string {
 	return "Event_DispatchRequestApproved"
 }
 
-// DispatchRequestRejectedEvent
-type DispatchRequestRejectedEvent struct {
-	BaseCoordinatorEvent
-}
-
-func (*DispatchRequestRejectedEvent) Type() EventType {
-	return Event_DispatchRequestRejected
-}
-
-func (*DispatchRequestRejectedEvent) TypeString() string {
-	return "Event_DispatchRequestRejected"
-}
-
-// CollectedEvent
 // Collected by the public transaction manager after being dispatched
 type CollectedEvent struct {
 	BaseCoordinatorEvent
@@ -183,7 +187,6 @@ func (*CollectedEvent) TypeString() string {
 	return "Event_Collected"
 }
 
-// DispatchedEvent
 // Collected by the dispatcher thread and dispatched to the public transaction manager
 type DispatchedEvent struct {
 	BaseCoordinatorEvent
@@ -197,7 +200,6 @@ func (*DispatchedEvent) TypeString() string {
 	return "Event_Dispatched"
 }
 
-// NonceAllocatedEvent
 type NonceAllocatedEvent struct {
 	BaseCoordinatorEvent
 	Nonce uint64
@@ -211,7 +213,6 @@ func (*NonceAllocatedEvent) TypeString() string {
 	return "Event_NonceAllocated"
 }
 
-// SubmittedEvent
 type SubmittedEvent struct {
 	BaseCoordinatorEvent
 	SubmissionHash pldtypes.Bytes32
@@ -225,51 +226,78 @@ func (*SubmittedEvent) TypeString() string {
 	return "Event_Submitted"
 }
 
-// ConfirmedEvent
-type ConfirmedEvent struct {
+type ConfirmedSuccessEvent struct {
 	BaseCoordinatorEvent
-	Nonce        uint64
-	Hash         pldtypes.Bytes32
-	RevertReason pldtypes.HexBytes
+	Nonce *pldtypes.HexUint64
+	Hash  pldtypes.Bytes32
 }
 
-func (*ConfirmedEvent) Type() EventType {
-	return Event_Confirmed
+func (*ConfirmedSuccessEvent) Type() EventType {
+	return Event_ConfirmedSuccess
 }
 
-func (*ConfirmedEvent) TypeString() string {
-	return "Event_Confirmed"
+func (*ConfirmedSuccessEvent) TypeString() string {
+	return "Event_ConfirmedSuccess"
 }
 
-type DependencyAssembledEvent struct {
+type ConfirmedRevertedEvent struct {
 	BaseCoordinatorEvent
-	DependencyID uuid.UUID
+	Nonce          *pldtypes.HexUint64
+	Hash           pldtypes.Bytes32
+	FailureMessage string
+	RevertReason   pldtypes.HexBytes
+	OnChain        pldtypes.OnChainLocation
 }
 
-func (*DependencyAssembledEvent) Type() EventType {
-	return Event_DependencyAssembled
+func (*ConfirmedRevertedEvent) Type() EventType {
+	return Event_ConfirmedReverted
 }
 
-func (*DependencyAssembledEvent) TypeString() string {
-	return "Event_DependencyAssembled"
+func (*ConfirmedRevertedEvent) TypeString() string {
+	return "Event_ConfirmedReverted"
 }
 
-type DependencyRevertedEvent struct {
+type DependencySelectedForAssemblyEvent struct {
 	BaseCoordinatorEvent
-	DependencyID uuid.UUID
+	SourceTransactionID uuid.UUID // The dependency that was selected
 }
 
-func (*DependencyRevertedEvent) Type() EventType {
-	return Event_DependencyReverted
+func (*DependencySelectedForAssemblyEvent) Type() EventType {
+	return Event_DependencySelectedForAssemble
 }
 
-func (*DependencyRevertedEvent) TypeString() string {
-	return "Event_DependencyReverted"
+func (*DependencySelectedForAssemblyEvent) TypeString() string {
+	return "Event_DependencySelectedForAssembly"
+}
+
+type DependencyResetEvent struct {
+	BaseCoordinatorEvent
+	SourceTransactionID uuid.UUID // The dependency that was reset
+}
+
+func (*DependencyResetEvent) Type() EventType {
+	return Event_DependencyReset
+}
+
+func (*DependencyResetEvent) TypeString() string {
+	return "Event_DependencyReset"
+}
+
+type DependencyConfirmedRevertedEvent struct {
+	BaseCoordinatorEvent
+	SourceTransactionID uuid.UUID // The dependency that was confirmed as reverted
+}
+
+func (*DependencyConfirmedRevertedEvent) Type() EventType {
+	return Event_DependencyConfirmedReverted
+}
+
+func (*DependencyConfirmedRevertedEvent) TypeString() string {
+	return "Event_DependencyConfirmedReverted"
 }
 
 type DependencyReadyEvent struct {
 	BaseCoordinatorEvent
-	DependencyID uuid.UUID
 }
 
 func (*DependencyReadyEvent) Type() EventType {
@@ -290,6 +318,18 @@ func (*RequestTimeoutIntervalEvent) Type() EventType {
 
 func (*RequestTimeoutIntervalEvent) TypeString() string {
 	return "Event_RequestTimeoutInterval"
+}
+
+type StateTimeoutIntervalEvent struct {
+	BaseCoordinatorEvent
+}
+
+func (*StateTimeoutIntervalEvent) Type() EventType {
+	return Event_StateTimeoutInterval
+}
+
+func (*StateTimeoutIntervalEvent) TypeString() string {
+	return "Event_StateTimeoutInterval"
 }
 
 // events emitted by the transaction state machine whenever a state transition occurs
@@ -321,4 +361,42 @@ func (*TransactionUnknownByOriginatorEvent) Type() EventType {
 
 func (*TransactionUnknownByOriginatorEvent) TypeString() string {
 	return "Event_TransactionUnknownByOriginator"
+}
+
+type ChainedDependencyFailedEvent struct {
+	BaseCoordinatorEvent
+	FailedTxID uuid.UUID
+}
+
+func (*ChainedDependencyFailedEvent) Type() EventType {
+	return Event_ChainedDependencyFailed
+}
+
+func (*ChainedDependencyFailedEvent) TypeString() string {
+	return "Event_ChainedDependencyFailed"
+}
+
+type ChainedDependencyEvictedEvent struct {
+	BaseCoordinatorEvent
+	EvictedTxID uuid.UUID
+}
+
+func (*ChainedDependencyEvictedEvent) Type() EventType {
+	return Event_ChainedDependencyEvicted
+}
+
+func (*ChainedDependencyEvictedEvent) TypeString() string {
+	return "Event_ChainedDependencyEvicted"
+}
+
+type PreAssembleDependencyTerminatedEvent struct {
+	BaseCoordinatorEvent
+}
+
+func (*PreAssembleDependencyTerminatedEvent) Type() EventType {
+	return Event_PreAssembleDependencyTerminated
+}
+
+func (*PreAssembleDependencyTerminatedEvent) TypeString() string {
+	return "Event_PreAssembleDependencyTerminated"
 }

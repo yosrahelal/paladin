@@ -10,98 +10,44 @@ import {ILockableCapability} from "../interfaces/ILockableCapability.sol";
  */
 interface INoto is IConfidentialToken, ILockableCapability {
 
-    // The Noto event for creation of a lock contains the inputs,outputs an lockedOutputs
-    event NotoLockCreated(
-        bytes32 indexed txId,
-        bytes32 indexed lockId,
-        address owner,
-        bytes32[] inputs,
-        bytes32[] outputs,
-        bytes32[] lockedOutputs,
-        bytes proof,
-        bytes data
-    );
-
-    // The Noto event for creation of a lock contains the inputs,outputs an lockedOutputs
-    // Note: The lockedInputs cannot be changed in this operation, they are emitted to allow preparing of the unlock operation
-    event NotoLockUpdated(
-        bytes32 indexed txId,
-        bytes32 indexed lockId,
-        address indexed operator,
-        bytes32[] lockContents,
-        bytes32[] inputs,
-        bytes32[] outputs,
-        bytes proof,
-        bytes data
-    );
-
-    // The Noto event for spending of a lock, contains the inputs, outputs and data.
-    // Note: the spendHash/cancelHash only cover the txId, inputs, outputs, data
-    event NotoLockSpent(
-        bytes32 indexed txId,
-        bytes32 indexed lockId,
-        address indexed spender,
-        bytes32[] inputs,
-        bytes32[] outputs,
-        bytes txData,
-        bytes proof,
-        bytes data
-    );
-
-    // The Noto event for cancelling a lock, contains the inputs, outputs and data.
-    // Note: the spendHash/cancelHash only cover the txId, inputs, outputs, data
-    event NotoLockCancelled(
-        bytes32 indexed txId,
-        bytes32 indexed lockId,
-        address indexed spender,
-        bytes32[] inputs,
-        bytes32[] outputs,
-        bytes txData,
-        bytes proof,
-        bytes data
-    );
-
-    // The Noto event for delegating the lock, including the txId and proof
-    event NotoLockDelegated(
-        bytes32 indexed txId,
-        bytes32 indexed lockId,
-        address indexed from,
-        address to,
-        bytes32[] inputs,
-        bytes32[] outputs,
-        bytes proof,
-        bytes data
-    );
-
-    // The structure definition for a Noto lock operation, which defines
-    // the inputs that will be turned into lockedOutputs.
-    // The same input is used for both createLock and updateLock, however the updateLock
-    // must not output lockedOutputs (as the contents of the lock are not mutable).
-    // A UTXO state is used to track the lock itself, thus the need to have inputs/outputs
-    // on the update operation.
-    struct NotoLockOperation {
+    // The structure definition for a Noto create lock operation, which includes:
+    // - The input states to be consumed in this operation. e.g. the value to be locked
+    // - The output states to be generated in this operation. e.g. if there is any change to return
+    // - The contents that were stored in the lock. e.g. the locked value states
+    struct NotoCreateLockOperation {
         bytes32 txId;
         bytes32[] inputs; // spent in the transaction
         bytes32[] outputs; // created outside the lock by the transaction
-        bytes32[] lockedOutputs; // created inside of the lock - this array ABI encoded is the lock contents (can be empty for mint-locks)
+        bytes32[] contents; // created inside of the lock - this array ABI encoded is the lock contents (can be empty for mint-locks)
+        bytes32 newLockState; 
+        bytes proof; // recorded signature for the lock operation
+    }
+
+    // The structure definition for a Noto update lock operation, which includes:
+    // - The input states to be consumed in this operation. e.g. the old lock record
+    // - The output states to be generated in this operation. e.g. the new lock record
+    struct NotoUpdateLockOperation {
+        bytes32 txId;
+        bytes32 oldLockState;
+        bytes32 newLockState;
         bytes proof; // recorded signature for the lock operation
     }
 
     // The structure definition for a Noto unlock operation, which can be hashed
-    // in order to construct a spendHash or a cancelHash
+    // in order to construct a spendHash or a cancelHash.
     struct NotoUnlockOperation {
         bytes32 txId;
-        bytes32[] inputs;
-        bytes32[] outputs;
-        bytes data; // this is the inner-data of the prepared transaction (not the unlock)
+        bytes32[] inputs; // exactly per the spendHash/cancelHash, if set in the lock state
+        bytes32[] outputs; // exactly per the spendHash/cancelHash, if set in the lock state
+        bytes data; // exactly per the spendHash/cancelHash, meaning this is the data from the time of the prepare
         bytes proof; // does not contribute to the hash
     }
 
     // The structure definition for a Noto delegate operation
     struct NotoDelegateOperation {
         bytes32 txId;
-        bytes32[] inputs;
-        bytes32[] outputs;
+        bytes32 oldLockState;
+        bytes32 newLockState;
         bytes proof;
     }
 
@@ -110,6 +56,72 @@ interface INoto is IConfidentialToken, ILockableCapability {
         // A unique transaction ID that must be used to spend or cancel the lock.
         bytes32 spendTxId;
     }
+    
+    // The Noto event for creation of a lock contains the inputs,outputs and contents
+    event NotoLockCreated(
+        bytes32 indexed txId,
+        bytes32 indexed lockId,
+        address indexed owner,
+        bytes32[] inputs,
+        bytes32[] outputs,
+        bytes32[] contents,
+        bytes32 newLockState,
+        bytes proof,
+        bytes data
+    );
+
+    // The Noto event for updating of a lock contains lockState transition
+    // Note: The contents cannot be changed in this operation, they are emitted to allow preparing of the unlock operation
+    event NotoLockUpdated(
+        bytes32 indexed txId,
+        bytes32 indexed lockId,
+        address indexed operator,
+        bytes32[] contents,
+        bytes32 oldLockState,
+        bytes32 newLockState,
+        bytes proof,
+        bytes data
+    );
+
+    // The Noto event for spending of a lock, contains the inputs, outputs, data and consumed lockState.
+    // Note: the spendHash/cancelHash only cover the txId, inputs, outputs, data
+    event NotoLockSpent(
+        bytes32 indexed txId,
+        bytes32 indexed lockId,
+        address indexed spender,
+        bytes32[] inputs,
+        bytes32[] outputs,
+        bytes txData,
+        bytes32 oldLockState,
+        bytes proof,
+        bytes data
+    );
+
+    // The Noto event for cancelling a lock, contains the inputs, outputs, data and consumed lockState.
+    // Note: the spendHash/cancelHash only cover the txId, inputs, outputs, data
+    event NotoLockCancelled(
+        bytes32 indexed txId,
+        bytes32 indexed lockId,
+        address indexed spender,
+        bytes32[] inputs,
+        bytes32[] outputs,
+        bytes txData,
+        bytes32 oldLockState,
+        bytes proof,
+        bytes data
+    );
+
+    // The Noto event for delegating the lock, including the txId, proof and lockState transition
+    event NotoLockDelegated(
+        bytes32 indexed txId,
+        bytes32 indexed lockId,
+        address indexed from,
+        address to,
+        bytes32 oldLockState,
+        bytes32 newLockState,
+        bytes proof,
+        bytes data
+    );
 
     function initialize(
         string memory name_,

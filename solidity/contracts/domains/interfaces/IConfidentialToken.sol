@@ -53,7 +53,7 @@ interface IConfidentialToken {
     ) external;
 
     /**
-     * @dev query whether a TXO is currently in the unspent list
+     * @dev query whether a state is currently in the unspent list
      * @param id the state identifier
      * @return unspent true or false depending on whether the identifier is in the unspent map
      */

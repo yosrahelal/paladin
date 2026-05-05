@@ -199,6 +199,7 @@ public class NotoHelper {
                                     put("amount", amount);
                                 }});
                             }});
+                            put("unlockData", "0x");
                             put("data", "0x");
                         }},
                         abi,

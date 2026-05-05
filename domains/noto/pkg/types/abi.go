@@ -33,6 +33,8 @@ var notoV0PrivateJSON []byte
 var NotoABI = solutils.MustParseBuildABI(notoPrivateJSON)
 var NotoV0ABI = solutils.MustParseBuildABI(notoV0PrivateJSON)
 
+var NotoABIFunctionsBySolSignature = abiFunctionsBySolSignature(NotoV0ABI, NotoABI)
+
 type ConstructorParams struct {
 	Name           string      `json:"name,omitempty"`           // Name of the token
 	Symbol         string      `json:"symbol,omitempty"`         // Symbol of the token
@@ -48,6 +50,18 @@ const (
 	NotaryModeBasic NotaryMode = "basic"
 	NotaryModeHooks NotaryMode = "hooks"
 )
+
+func abiFunctionsBySolSignature(abis ...abi.ABI) map[string]*abi.Entry {
+	bySignature := make(map[string]*abi.Entry)
+	for _, a := range abis {
+		for _, entry := range a {
+			if entry.Type == abi.Function {
+				bySignature[entry.SolString()] = entry
+			}
+		}
+	}
+	return bySignature
+}
 
 func (tt NotaryMode) Enum() pldtypes.Enum[NotaryMode] {
 	return pldtypes.Enum[NotaryMode](tt)
@@ -102,6 +116,12 @@ type LockParams struct {
 	Data   pldtypes.HexBytes    `json:"data"`
 }
 
+type PrepareUnlockParams struct {
+	UnlockParams
+	UnlockData pldtypes.HexBytes `json:"unlockData"`
+	Data       pldtypes.HexBytes `json:"data"`
+}
+
 type UnlockParams struct {
 	LockID     pldtypes.Bytes32   `json:"lockId"`
 	From       string             `json:"from"`
@@ -112,31 +132,36 @@ type UnlockParams struct {
 type CreateTransferLockParams struct {
 	From       string             `json:"from"`
 	Recipients []*UnlockRecipient `json:"recipients"`
+	UnlockData pldtypes.HexBytes  `json:"unlockData"`
 	Data       pldtypes.HexBytes  `json:"data"`
 }
 
 type CreateMintLockParams struct {
 	Recipients []*UnlockRecipient `json:"recipients"`
+	UnlockData pldtypes.HexBytes  `json:"unlockData"`
 	Data       pldtypes.HexBytes  `json:"data"`
 }
 
 type CreateBurnLockParams struct {
-	From   string               `json:"from"`
-	Amount *pldtypes.HexUint256 `json:"amount"`
-	Data   pldtypes.HexBytes    `json:"data"`
+	From       string               `json:"from"`
+	Amount     *pldtypes.HexUint256 `json:"amount"`
+	UnlockData pldtypes.HexBytes    `json:"unlockData"`
+	Data       pldtypes.HexBytes    `json:"data"`
 }
 
 type PrepareMintUnlockParams struct {
 	LockID     pldtypes.Bytes32   `json:"lockId"`
 	Recipients []*UnlockRecipient `json:"recipients"`
+	UnlockData pldtypes.HexBytes  `json:"unlockData"`
 	Data       pldtypes.HexBytes  `json:"data"`
 }
 
 type PrepareBurnUnlockParams struct {
-	LockID pldtypes.Bytes32     `json:"lockId"`
-	From   string               `json:"from"`
-	Amount *pldtypes.HexUint256 `json:"amount"`
-	Data   pldtypes.HexBytes    `json:"data"`
+	LockID     pldtypes.Bytes32     `json:"lockId"`
+	From       string               `json:"from"`
+	Amount     *pldtypes.HexUint256 `json:"amount"`
+	UnlockData pldtypes.HexBytes    `json:"unlockData"`
+	Data       pldtypes.HexBytes    `json:"data"`
 }
 
 type DelegateLockParams struct {
@@ -175,13 +200,22 @@ type BalanceOfResult struct {
 	Overflow     bool                 `json:"overflow"`
 }
 
-// Encoded params for Noto implementation of ILockableCapability.createLock() / ILockableCapability.updateLock()
-type NotoLockOperation struct {
-	TxId          string            `json:"txId"`
-	Inputs        []string          `json:"inputs"`
-	Outputs       []string          `json:"outputs"`
-	LockedOutputs []string          `json:"lockedOutputs"`
-	Proof         pldtypes.HexBytes `json:"proof"`
+// Encoded params for Noto implementation of ILockableCapability.createLock()
+type NotoCreateLockOperation struct {
+	TxId         string            `json:"txId"`
+	Inputs       []string          `json:"inputs"`
+	Outputs      []string          `json:"outputs"`
+	Contents     []string          `json:"contents"`
+	NewLockState pldtypes.Bytes32  `json:"newLockState"`
+	Proof        pldtypes.HexBytes `json:"proof"`
+}
+
+// Encoded params for Noto implementation of ILockableCapability.updateLock()
+type NotoUpdateLockOperation struct {
+	TxId         string            `json:"txId"`
+	OldLockState pldtypes.Bytes32  `json:"oldLockState"`
+	NewLockState pldtypes.Bytes32  `json:"newLockState"`
+	Proof        pldtypes.HexBytes `json:"proof"`
 }
 
 // Encoded params for Noto implementation of ILockableCapability.spendLock() / ILockableCapability.cancelLock()
@@ -195,21 +229,35 @@ type NotoUnlockOperation struct {
 
 // Encoded params for Noto implementation of ILockableCapability.delegateLock()
 type NotoDelegateOperation struct {
-	TxId    string            `json:"txId"`
-	Inputs  []string          `json:"inputs"`
-	Outputs []string          `json:"outputs"`
-	Proof   pldtypes.HexBytes `json:"proof"`
+	TxId         string            `json:"txId"`
+	OldLockState pldtypes.Bytes32  `json:"oldLockState"`
+	NewLockState pldtypes.Bytes32  `json:"newLockState"`
+	Proof        pldtypes.HexBytes `json:"proof"`
 }
 
-var NotoLockOperationABI = abi.ParameterArray{
+var NotoCreateLockOperationABI = abi.ParameterArray{
 	{
 		Type:         "tuple",
-		InternalType: "struct NotoLockOperation",
+		InternalType: "struct NotoCreateLockOperation",
 		Components: abi.ParameterArray{
 			{Name: "txId", Type: "bytes32"},
 			{Name: "inputs", Type: "bytes32[]"},
 			{Name: "outputs", Type: "bytes32[]"},
-			{Name: "lockedOutputs", Type: "bytes32[]"},
+			{Name: "contents", Type: "bytes32[]"},
+			{Name: "newLockState", Type: "bytes32"},
+			{Name: "proof", Type: "bytes"},
+		},
+	},
+}
+
+var NotoUpdateLockOperationABI = abi.ParameterArray{
+	{
+		Type:         "tuple",
+		InternalType: "struct NotoUpdateLockOperation",
+		Components: abi.ParameterArray{
+			{Name: "txId", Type: "bytes32"},
+			{Name: "oldLockState", Type: "bytes32"},
+			{Name: "newLockState", Type: "bytes32"},
 			{Name: "proof", Type: "bytes"},
 		},
 	},
@@ -221,8 +269,8 @@ var NotoDelegateOperationABI = abi.ParameterArray{
 		InternalType: "struct NotoDelegateOperation",
 		Components: abi.ParameterArray{
 			{Name: "txId", Type: "bytes32"},
-			{Name: "inputs", Type: "bytes32[]"},
-			{Name: "outputs", Type: "bytes32[]"},
+			{Name: "oldLockState", Type: "bytes32"},
+			{Name: "newLockState", Type: "bytes32"},
 			{Name: "proof", Type: "bytes"},
 		},
 	},

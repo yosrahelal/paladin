@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -315,6 +316,9 @@ public class PenteDomainTests {
                         var domainReceipt = mapper.convertValue(tx.domainReceipt(),
                                         PenteEVMTransaction.JSONReceipt.class);
                         var expectedContractAddress = domainReceipt.receipt().contractAddress();
+                        var receiptLogs = domainReceipt.receipt().logs();
+                        assertEquals(1, receiptLogs.size());
+                        assertEquals(0, receiptLogs.get(0).logIndex());
 
                         // Prepare a "set" on Simple Storage
                         Map<String, Object> setValues = new HashMap<>() {
@@ -392,7 +396,8 @@ public class PenteDomainTests {
                                                                 }
                                                         });
                                                 }
-                                        });
+                                        })
+                                ;
                         var setReceipt = waitForReceipt(testbed, setTx, 5000);
                         assertEquals(true, setReceipt.get("success"));
                 }
@@ -466,7 +471,6 @@ public class PenteDomainTests {
                         var domainReceipt = mapper.convertValue(tx.domainReceipt(),
                                         PenteEVMTransaction.JSONReceipt.class);
                         var ssLinkedAddr = domainReceipt.receipt().contractAddress();
-
                         testbed.getRpcClient().request("testbed_invoke",
                                         new Testbed.TransactionInput(
                                                         "private",
@@ -540,5 +544,18 @@ public class PenteDomainTests {
                         var timestampTestAddr = domainReceipt.receipt().contractAddress();
                         assertFalse(timestampTestAddr.toString().isBlank());
                 }
+        }
+
+        @Test
+        void testTxIdForLogConvertsBytes32IdToUuid() {
+                String txId = "0x6fda3bc284c74ddab6029d20d4d63d3900000000000000000000000000000000";
+                String logValue = PenteDomain.txIdForLog(txId);
+                assertEquals(UUID.fromString("6fda3bc2-84c7-4dda-b602-9d20d4d63d39").toString(), logValue);
+        }
+
+        @Test
+        void testTxIdForLogFallsBackToOriginalValueForInvalidHex() {
+                String txId = "not-a-hex-id";
+                assertEquals(txId, PenteDomain.txIdForLog(txId));
         }
 }

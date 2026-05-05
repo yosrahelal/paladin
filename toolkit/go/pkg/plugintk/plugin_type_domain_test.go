@@ -153,16 +153,16 @@ func TestDomainCallback_GetStates(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestDomainCallback_LookupKeyIdentifiers(t *testing.T) {
+func TestDomainCallback_ReverseKeyLookup(t *testing.T) {
 	ctx, _, _, callbacks, inOutMap, done := setupDomainTests(t)
 	defer done()
 
-	inOutMap[fmt.Sprintf("%T", &prototk.DomainMessage_LookupKeyIdentifiers{})] = func(dm *prototk.DomainMessage) {
-		dm.ResponseToDomain = &prototk.DomainMessage_LookupKeyIdentifiersRes{
-			LookupKeyIdentifiersRes: &prototk.LookupKeyIdentifiersResponse{},
+	inOutMap[fmt.Sprintf("%T", &prototk.DomainMessage_ReverseKeyLookup{})] = func(dm *prototk.DomainMessage) {
+		dm.ResponseToDomain = &prototk.DomainMessage_ReverseKeyLookupRes{
+			ReverseKeyLookupRes: &prototk.ReverseKeyLookupResponse{},
 		}
 	}
-	_, err := callbacks.LookupKeyIdentifiers(ctx, &prototk.LookupKeyIdentifiersRequest{})
+	_, err := callbacks.ReverseKeyLookup(ctx, &prototk.ReverseKeyLookupRequest{})
 	require.NoError(t, err)
 }
 
@@ -526,5 +526,38 @@ func TestDomainFunction_CheckStateCompletion(t *testing.T) {
 		}
 	}, func(res *prototk.DomainMessage) {
 		assert.IsType(t, &prototk.DomainMessage_CheckStateCompletionRes{}, res.ResponseFromDomain)
+	})
+}
+
+func TestDomainFunction_IsBaseLedgerRevertRetryable(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	funcs.IsBaseLedgerRevertRetryable = func(ctx context.Context, req *prototk.IsBaseLedgerRevertRetryableRequest) (*prototk.IsBaseLedgerRevertRetryableResponse, error) {
+		return &prototk.IsBaseLedgerRevertRetryableResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_IsBaseLedgerRevertRetryable{
+			IsBaseLedgerRevertRetryable: &prototk.IsBaseLedgerRevertRetryableRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_IsBaseLedgerRevertRetryableRes{}, res.ResponseFromDomain)
+	})
+}
+
+func TestDomainFunction_InvokeRPC(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	funcs.InvokeRPC = func(ctx context.Context, req *prototk.InvokeRPCRequest) (*prototk.InvokeRPCResponse, error) {
+		return &prototk.InvokeRPCResponse{ResultJson: `"0x1234"`}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_InvokeRpc{
+			InvokeRpc: &prototk.InvokeRPCRequest{Method: "pente_getCodeHash", ParamsJson: `["0xabcd"]`},
+		}
+	}, func(res *prototk.DomainMessage) {
+		r := res.ResponseFromDomain.(*prototk.DomainMessage_InvokeRpcRes)
+		assert.Equal(t, `"0x1234"`, r.InvokeRpcRes.ResultJson)
 	})
 }

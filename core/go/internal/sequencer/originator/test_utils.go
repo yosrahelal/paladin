@@ -62,6 +62,10 @@ func (r *SentMessageRecorder) HasDelegatedTransaction(txid uuid.UUID) bool {
 	return false
 }
 
+func (r *SentMessageRecorder) GetDelegatedTransactions() []*components.PrivateTransaction {
+	return r.delegatedTransactions
+}
+
 func (r *SentMessageRecorder) Reset(ctx context.Context) {
 	r.SentMessageRecorder.Reset(ctx)
 	r.hasSentDelegationRequest = false
@@ -69,18 +73,17 @@ func (r *SentMessageRecorder) Reset(ctx context.Context) {
 }
 
 type OriginatorBuilderForTesting struct {
-	state            State
-	nodeName         *string
-	committeeMembers []string
-	contractAddress  *pldtypes.EthAddress
-	transactions     []*transaction.Transaction
-	metrics          metrics.DistributedSequencerMetrics
-	sequencerConfig  *pldconf.SequencerConfig
+	state               State
+	nodeName            *string
+	committeeMembers    []string
+	contractAddress     *pldtypes.EthAddress
+	transactionBuilders []*transaction.TransactionBuilderForTesting
+	metrics             metrics.DistributedSequencerMetrics
+	sequencerConfig     *pldconf.SequencerConfig
 }
 
 type OriginatorDependencyMocks struct {
 	SentMessageRecorder *SentMessageRecorder
-	Clock               *common.FakeClockForTesting
 	EngineIntegration   *common.FakeEngineIntegrationForTesting
 }
 
@@ -107,8 +110,8 @@ func (b *OriginatorBuilderForTesting) CommitteeMembers(committeeMembers ...strin
 	return b
 }
 
-func (b *OriginatorBuilderForTesting) Transactions(transactions ...*transaction.Transaction) *OriginatorBuilderForTesting {
-	b.transactions = transactions
+func (b *OriginatorBuilderForTesting) TransactionBuilders(builders ...*transaction.TransactionBuilderForTesting) *OriginatorBuilderForTesting {
+	b.transactionBuilders = builders
 	return b
 }
 
@@ -128,7 +131,7 @@ func (b *OriginatorBuilderForTesting) OverrideSequencerConfig(config *pldconf.Se
 	b.sequencerConfig = config
 }
 
-func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *OriginatorDependencyMocks) {
+func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *OriginatorDependencyMocks, func()) {
 
 	if b.nodeName == nil {
 		b.nodeName = ptrTo("member1@node1")
@@ -143,48 +146,44 @@ func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *
 	}
 	mocks := &OriginatorDependencyMocks{
 		SentMessageRecorder: NewSentMessageRecorder(),
-		Clock:               &common.FakeClockForTesting{},
 		EngineIntegration:   &common.FakeEngineIntegrationForTesting{},
 	}
 
 	var originator *originator
 
 	var err error
+	buildCtx, cancel := context.WithCancel(ctx)
 	originator, err = NewOriginator(
-		ctx,
+		buildCtx,
 		*b.nodeName,
 		mocks.SentMessageRecorder,
-		mocks.Clock,
 		mocks.EngineIntegration,
 		b.contractAddress,
 		&pldconf.SequencerDefaults,
-		TestDefault_HeartbeatIntervalMs,
-		TestDefault_HeartbeatThreshold,
 		b.metrics,
 	)
 
-	for _, tx := range b.transactions {
-		originator.transactionsByID[tx.ID] = tx
-		originator.transactionsOrdered = append(originator.transactionsOrdered, &tx.ID)
-		switch tx.GetCurrentState() {
-		case transaction.State_Submitted:
-			originator.submittedTransactionsByHash[*tx.GetLatestSubmissionHash()] = &tx.ID
-		}
+	for _, txBuilder := range b.transactionBuilders {
+		tx := txBuilder.QueueEventsTo(originator.queueEventInternal).Build()
+		txID := tx.GetID()
+		originator.transactionsByID[txID] = tx
+		originator.transactionsOrdered = append(originator.transactionsOrdered, tx)
 	}
 
 	if err != nil {
 		panic(err)
 	}
 
-	originator.stateMachine.currentState = b.state
+	originator.stateMachineEventLoop.StateMachine().SetCurrentState(b.state)
 	switch b.state {
 	// Any state specific setup can be done here
 	}
 
-	err = originator.SetActiveCoordinator(ctx, "coordinator")
-	if err != nil {
-		return nil, nil
-	}
+	originator.activeCoordinatorNode = "coordinator"
 
-	return originator, mocks
+	done := func() {
+		cancel()
+		originator.WaitForDone(context.Background())
+	}
+	return originator, mocks, done
 }

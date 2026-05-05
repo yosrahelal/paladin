@@ -22,11 +22,17 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 )
 
+func action_HeartbeatReceived(ctx context.Context, o *originator, event common.Event) error {
+	e := event.(*HeartbeatReceivedEvent)
+	return o.applyHeartbeatReceived(ctx, e)
+}
+
 func (o *originator) applyHeartbeatReceived(ctx context.Context, event *HeartbeatReceivedEvent) error {
-	o.timeOfMostRecentHeartbeat = o.clock.Now()
+	o.heartbeatIntervalsSinceLastReceive = 0
 	o.activeCoordinatorNode = event.From
 	o.latestCoordinatorSnapshot = &event.CoordinatorSnapshot
 	for _, dispatchedTransaction := range event.DispatchedTransactions {
@@ -50,11 +56,9 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *Heartbea
 
 				err := txn.HandleEvent(ctx, txnSubmittedEvent)
 				if err != nil {
-					msg := fmt.Sprintf("error handling transaction submitted event for transaction %s: %v", txn.ID, err)
-					log.L(ctx).Error(msg)
+					msg := fmt.Errorf("error handling transaction submitted event for transaction %s: %v", txn.GetID(), err)
 					return i18n.NewError(ctx, msgs.MsgSequencerInternalError, msg)
 				}
-				o.submittedTransactionsByHash[*dispatchedTransaction.LatestSubmissionHash] = &dispatchedTransaction.ID
 			} else if dispatchedTransaction.Nonce != nil {
 				//if the dispatched transaction has a nonce but no hash, then it is sequenced
 				err := txn.HandleEvent(ctx, &transaction.NonceAssignedEvent{
@@ -65,8 +69,7 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *Heartbea
 				})
 
 				if err != nil {
-					msg := fmt.Sprintf("error handling nonce assigned event for transaction %s: %v", txn.ID, err)
-					log.L(ctx).Error(msg)
+					msg := fmt.Errorf("error handling nonce assigned event for transaction %s: %v", txn.GetID(), err)
 					return i18n.NewError(ctx, msgs.MsgSequencerInternalError, msg)
 				}
 			}
@@ -80,13 +83,11 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *Heartbea
 	return nil
 }
 
-func guard_HeartbeatThresholdExceeded(ctx context.Context, o *originator) bool {
-	if o.timeOfMostRecentHeartbeat == nil {
-		//we have never seen a heartbeat so that was a really long time ago, certainly longer than any threshold
-		return true
-	}
-	if o.clock.HasExpired(o.timeOfMostRecentHeartbeat, o.heartbeatThresholdMs) {
-		return true
-	}
-	return false
+func guard_IdleThresholdExceeded(_ context.Context, o *originator) bool {
+	return o.heartbeatIntervalsSinceLastReceive >= o.idleThreshold
+}
+
+func action_IncrementHeartbeatIntervalsSinceLastReceive(_ context.Context, o *originator, _ common.Event) error {
+	o.heartbeatIntervalsSinceLastReceive++
+	return nil
 }

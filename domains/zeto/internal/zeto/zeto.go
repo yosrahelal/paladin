@@ -216,8 +216,7 @@ func (z *Zeto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (
 }
 
 func (z *Zeto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
-	ctx = log.WithComponent(ctx, "zeto")
-	_, err := z.validateDeploy(req.Transaction)
+	ctx, _, err := z.validateDeployAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateInitDeployParams, err)
 	}
@@ -233,8 +232,7 @@ func (z *Zeto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (
 }
 
 func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
-	ctx = log.WithComponent(ctx, "zeto")
-	initParams, err := z.validateDeploy(req.Transaction)
+	ctx, initParams, err := z.validateDeployAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorValidatePrepDeployParams, err)
 	}
@@ -306,8 +304,7 @@ func (z *Zeto) InitContract(ctx context.Context, req *prototk.InitContractReques
 }
 
 func (z *Zeto) InitTransaction(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
-	ctx = log.WithComponent(ctx, "zeto")
-	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
+	ctx, tx, handler, err := z.validateTransactionAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateInitTxSpec, err)
 	}
@@ -315,8 +312,7 @@ func (z *Zeto) InitTransaction(ctx context.Context, req *prototk.InitTransaction
 }
 
 func (z *Zeto) AssembleTransaction(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
-	ctx = log.WithComponent(ctx, "zeto")
-	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
+	ctx, tx, handler, err := z.validateTransactionAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateAssembleTxSpec, err)
 	}
@@ -324,8 +320,7 @@ func (z *Zeto) AssembleTransaction(ctx context.Context, req *prototk.AssembleTra
 }
 
 func (z *Zeto) EndorseTransaction(ctx context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
-	ctx = log.WithComponent(ctx, "zeto")
-	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
+	ctx, tx, handler, err := z.validateTransactionAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateEndorseTxParams, err)
 	}
@@ -333,8 +328,7 @@ func (z *Zeto) EndorseTransaction(ctx context.Context, req *prototk.EndorseTrans
 }
 
 func (z *Zeto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
-	ctx = log.WithComponent(ctx, "zeto")
-	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
+	ctx, tx, handler, err := z.validateTransactionAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorValidatePrepTxSpec, err)
 	}
@@ -397,6 +391,17 @@ func (z *Zeto) validateDeploy(tx *prototk.DeployTransactionSpecification) (*type
 	var params types.InitializerParams
 	err := json.Unmarshal([]byte(tx.ConstructorParamsJson), &params)
 	return &params, err
+}
+
+func (z *Zeto) validateDeployAndGetLogContext(ctx context.Context, txSpec *prototk.DeployTransactionSpecification) (context.Context, *types.InitializerParams, error) {
+	ctx = log.WithComponent(ctx, "zeto")
+	ctx = log.WithLogField(ctx, "tx", txSpec.TransactionId)
+
+	params, err := z.validateDeploy(txSpec)
+	if err != nil {
+		return ctx, nil, err
+	}
+	return ctx, params, nil
 }
 
 func validateTransactionCommon[T any](
@@ -475,6 +480,30 @@ func (z *Zeto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 	)
 }
 
+func (z *Zeto) validateTransactionAndGetLogContext(ctx context.Context, txSpec *prototk.TransactionSpecification) (context.Context, *types.ParsedTransaction, types.DomainHandler, error) {
+	ctx = log.WithComponent(ctx, "zeto")
+	tx, handler, err := z.validateTransaction(ctx, txSpec)
+	if err != nil {
+		return ctx, nil, nil, err
+	}
+
+	ctx = log.WithLogField(ctx, "tx", tx.Transaction.TransactionId)
+	ctx = log.WithLogField(ctx, "contract", tx.Transaction.ContractInfo.ContractAddress)
+	return ctx, tx, handler, nil
+}
+
+func (z *Zeto) validateCallAndGetLogContext(ctx context.Context, callSpec *prototk.TransactionSpecification) (context.Context, *types.ParsedTransaction, types.DomainCallHandler, error) {
+	ctx = log.WithComponent(ctx, "zeto")
+	call, handler, err := z.validateCall(ctx, callSpec)
+	if err != nil {
+		return ctx, nil, nil, err
+	}
+
+	ctx = log.WithLogField(ctx, "tx", call.Transaction.TransactionId)
+	ctx = log.WithLogField(ctx, "contract", call.Transaction.ContractInfo.ContractAddress)
+	return ctx, call, handler, nil
+}
+
 func (z *Zeto) validateCall(ctx context.Context, call *prototk.TransactionSpecification) (*types.ParsedTransaction, types.DomainCallHandler, error) {
 	return validateTransactionCommon(
 		ctx,
@@ -504,6 +533,8 @@ func (z *Zeto) registerEventSignatures(eventAbis abi.ABI) {
 
 func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 	ctx = log.WithComponent(ctx, "zeto")
+	ctx = log.WithLogField(ctx, "contract", req.ContractInfo.ContractAddress)
+
 	var domainConfig *types.DomainInstanceConfig
 	err := json.Unmarshal([]byte(req.ContractInfo.ContractConfigJson), &domainConfig)
 	if err != nil {
@@ -703,8 +734,7 @@ func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateSta
 }
 
 func (z *Zeto) InitCall(ctx context.Context, req *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {
-	ctx = log.WithComponent(ctx, "zeto")
-	ptx, handler, err := z.validateCall(ctx, req.Transaction)
+	ctx, ptx, handler, err := z.validateCallAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateInitCallTxSpec, err)
 	}
@@ -712,8 +742,7 @@ func (z *Zeto) InitCall(ctx context.Context, req *prototk.InitCallRequest) (*pro
 }
 
 func (z *Zeto) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
-	ctx = log.WithComponent(ctx, "zeto")
-	ptx, handler, err := z.validateCall(ctx, req.Transaction)
+	ctx, ptx, handler, err := z.validateCallAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateExecCallTxSpec, err)
 	}
@@ -740,6 +769,15 @@ func (z *Zeto) WrapPrivacyGroupEVMTX(ctx context.Context, req *prototk.WrapPriva
 func (z *Zeto) CheckStateCompletion(ctx context.Context, req *prototk.CheckStateCompletionRequest) (*prototk.CheckStateCompletionResponse, error) {
 	return &prototk.CheckStateCompletionResponse{
 		// TODO: Implement manifests similar to noto, to allow receipts to be delivered to listeners reliably with partial state avaialability.
-		PrimaryMissingStateId: req.UnavailableStates.FirstUnavailableId,
+		NextMissingStateId: req.UnavailableStates.FirstUnavailableId,
 	}, nil
+}
+
+func (z *Zeto) IsBaseLedgerRevertRetryable(_ context.Context, _ *prototk.IsBaseLedgerRevertRetryableRequest) (*prototk.IsBaseLedgerRevertRetryableResponse, error) {
+	// TODO: this is just defaulting to the sequencer retry threshold and could be customized by the domain
+	return &prototk.IsBaseLedgerRevertRetryableResponse{Retryable: true}, nil
+}
+
+func (z *Zeto) InvokeRPC(ctx context.Context, _ *prototk.InvokeRPCRequest) (*prototk.InvokeRPCResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }

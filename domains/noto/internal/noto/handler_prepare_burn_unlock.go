@@ -101,7 +101,6 @@ func (h *prepareBurnUnlockHandler) Init(ctx context.Context, tx *types.ParsedTra
 func (h *prepareBurnUnlockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.PrepareBurnUnlockParams)
 	notary := tx.DomainConfig.NotaryLookup
-	useNullifiers := tx.DomainConfig.IsNullifierVariant()
 	spendTxId := pldtypes.Bytes32UUIDFirst16(uuid.New())
 
 	notaryID, err := h.noto.findEthAddressVerifier(ctx, "notary", notary, req.ResolvedVerifiers)
@@ -118,8 +117,15 @@ func (h *prepareBurnUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	}
 
 	// Load the existing lock
-	existingLock, err := h.noto.loadLockInfoV1(ctx, req.StateQueryContext, params.LockID)
+	existingLock, revert, err := h.noto.loadLockInfoV1(ctx, req.StateQueryContext, params.LockID)
 	if err != nil {
+		if revert {
+			message := err.Error()
+			return &prototk.AssembleTransactionResponse{
+				AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+				RevertReason:   &message,
+			}, nil
+		}
 		return nil, err
 	}
 
@@ -141,12 +147,18 @@ func (h *prepareBurnUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 		return nil, i18n.NewError(ctx, msgs.MsgInvalidAmount, "prepareBurnUnlock", params.Amount.Int().Text(10), lockedInputStates.total.Text(10))
 	}
 
-	// Build the data info for the parent transaction
-	infoDistribution := identityList{notaryID, senderID, fromID}
-	infoStates, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	// Build and encode the unlock data (separate to the data for this TX)
+	encodedUnlockData, infoStates, infoDistribution, err := h.buildUnlockData(ctx, notaryID, senderID, fromID, tx, nil, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData)
 	if err != nil {
 		return nil, err
 	}
+
+	// Build the data info for this prepare transaction
+	prepareDataInfo, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	if err != nil {
+		return nil, err
+	}
+	infoStates = append(infoStates, prepareDataInfo...)
 
 	// We build the cancel outputs
 	cancelOutputs, err := h.noto.prepareOutputs(fromID, (*pldtypes.HexUint256)(lockedInputStates.total), identityList{notaryID, fromID})
@@ -158,20 +170,14 @@ func (h *prepareBurnUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	}
 	infoStates = append(infoStates, cancelOutputs.states...)
 
-	// Build the data info for the prepared transaction
-	txData, err := h.noto.encodeTransactionDataV1(ctx, []*prototk.EndorsableState{}, useNullifiers)
-	if err != nil {
-		return nil, err
-	}
-
 	// Build the prepared lock
 	newLockInfo := *existingLock.lockInfo
 	newLockInfo.Replaces = existingLock.id
 	newLockInfo.Salt = pldtypes.RandBytes32()
 	newLockInfo.SpendOutputs = []pldtypes.Bytes32{} // no outputs from burn
-	newLockInfo.SpendData = txData
+	newLockInfo.SpendData = encodedUnlockData
 	newLockInfo.CancelOutputs = newStateAllocatedIDs(cancelOutputs.states)
-	newLockInfo.CancelData = txData
+	newLockInfo.CancelData = encodedUnlockData
 	newLockInfo.SpendTxId = spendTxId
 	lock, err := h.noto.prepareLockInfo_V1(&newLockInfo, identityList{notaryID, senderID, fromID})
 	if err != nil {
@@ -247,8 +253,22 @@ func (h *prepareBurnUnlockHandler) Endorse(ctx context.Context, tx *types.Parsed
 	if inputs.lockedTotal.Cmp(params.Amount.Int()) != 0 {
 		return nil, i18n.NewError(ctx, msgs.MsgInvalidAmount, "prepareBurnUnlock", params.Amount.Int().Text(10), inputs.lockedTotal.Text(10))
 	}
-	if err := h.noto.validateLockOwners(ctx, params.From, req.ResolvedVerifiers, inputs.lockedCoins, inputs.lockedStates); err != nil {
-		return nil, err
+
+	if tx.DomainConfig.IsV0() {
+		if err := h.noto.validateLockOwners(ctx, params.From, req.ResolvedVerifiers, inputs.lockedCoins, inputs.lockedStates); err != nil {
+			return nil, err
+		}
+	} else {
+		senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
+		if err != nil {
+			return nil, err
+		}
+
+		// In V1 onwards the lock itself needs to be checked
+		_, err = h.noto.validateV1LockTransition(ctx, LOCK_UPDATE, senderID, &params.LockID, req.Inputs, req.Outputs)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Notary checks the signature from the sender, then submits the transaction

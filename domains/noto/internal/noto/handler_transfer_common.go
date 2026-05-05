@@ -246,9 +246,6 @@ func (h *transferCommon) baseLedgerInvokeTransfer(ctx context.Context, tx *types
 	case types.NotoVariantDefault, types.NotoVariantNullifier:
 		interfaceABI = h.noto.getInterfaceABI(types.NotoVariantDefault)
 		functionName = "transfer"
-		if withApproval {
-			functionName = "transferWithApproval"
-		}
 		params := &NotoTransferParams{
 			TxId:    req.Transaction.TransactionId,
 			Inputs:  endorsableStateIDs(req.InputStates, useNullifiers),

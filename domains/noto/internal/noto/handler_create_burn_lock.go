@@ -57,7 +57,7 @@ func (h *createBurnLockHandler) ValidateParams(ctx context.Context, config *type
 func (h *createBurnLockHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	params := tx.Params.(*types.CreateBurnLockParams)
 	notary := tx.DomainConfig.NotaryLookup
-	if err := h.checkAllowed(ctx, tx, params.From); err != nil {
+	if err := h.checkAllowed(ctx, tx); err != nil {
 		return nil, err
 	}
 
@@ -66,7 +66,7 @@ func (h *createBurnLockHandler) Init(ctx context.Context, tx *types.ParsedTransa
 	}, nil
 }
 
-func (h *burnCommon) checkAllowed(ctx context.Context, tx *types.ParsedTransaction) error {
+func (h *createBurnLockHandler) checkAllowed(ctx context.Context, tx *types.ParsedTransaction) error {
 	if tx.DomainConfig.NotaryMode != types.NotaryModeBasic.Enum() {
 		return nil
 	}
@@ -130,23 +130,24 @@ func (h *createBurnLockHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		}
 	}
 
-	// Build the info for the initiating transaction
-	infoDistribution := identityList{notaryID, senderID, fromID}
-	infoStates, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	// Build and encode the unlock data (separate to the data for this TX)
+	encodedUnlockData, infoStates, infoDistribution, err := h.buildUnlockData(ctx, notaryID, senderID, nil, tx, nil, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData)
 	if err != nil {
 		return nil, err
 	}
+
+	// Build the info for the initiating transaction
+	createDataInfo, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	if err != nil {
+		return nil, err
+	}
+	infoStates = append(infoStates, createDataInfo...)
 
 	// We build the cancel outputs
 	cancelOutputs, err := h.noto.prepareOutputs(fromID, (*pldtypes.HexUint256)(params.Amount), identityList{notaryID, senderID, fromID})
 	// ... and allocate ids to all the new outputs, so we can build the transaction we need to hash
 	if err == nil {
 		err = h.noto.allocateStateIDs(ctx, req.StateQueryContext, []*prototk.NewState{}, cancelOutputs.states)
-	}
-	// ... and the txData that would be emitted for either cancel or spend
-	var txData pldtypes.HexBytes
-	if err == nil {
-		txData, err = h.noto.encodeTransactionDataV1(ctx, []*prototk.EndorsableState{}, useNullifiers)
 	}
 	// ... and the new lock state as an output
 	var lock *preparedLockInfo
@@ -157,9 +158,9 @@ func (h *createBurnLockHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 			Owner:         senderID.address,
 			Spender:       senderID.address,
 			SpendOutputs:  []pldtypes.Bytes32{ /* none for burn */ },
-			SpendData:     txData,
+			SpendData:     encodedUnlockData,
 			CancelOutputs: newStateAllocatedIDs(cancelOutputs.states),
-			CancelData:    txData,
+			CancelData:    encodedUnlockData,
 			SpendTxId:     spendTxId,
 		}, identityList{notaryID, senderID, fromID})
 	}
@@ -220,18 +221,17 @@ func (h *createBurnLockHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 }
 
 func (h *createBurnLockHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
-	params := tx.Params.(*types.CreateBurnLockParams)
-	if err := h.checkAllowed(ctx, tx, params.From); err != nil {
+	if err := h.checkAllowed(ctx, tx); err != nil {
 		return nil, err
 	}
 
-	fromID, err := h.noto.findEthAddressVerifier(ctx, "from", params.From, req.ResolvedVerifiers)
+	senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
 	// We should have a valid lock transition, from which we can obtain the spend and cancel outputs
-	_, spendOutputs, cancelOutputs, err := h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_CREATE, fromID, nil, req.Inputs, req.Outputs, req.Info)
+	_, spendOutputs, cancelOutputs, err := h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_CREATE, senderID, nil, req.Inputs, req.Outputs, req.Info)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ func (h *createBurnLockHandler) Endorse(ctx context.Context, tx *types.ParsedTra
 	if outputs.lockedTotal.Cmp(parsedCancelOutputs.total) != 0 {
 		return nil, i18n.NewError(ctx, msgs.MsgInvalidAmount, "cancelOutputs", inputs.total, parsedCancelOutputs.total)
 	}
-	if err := h.noto.validateOwners(ctx, fromID.identifier, req.ResolvedVerifiers, inputs.coins, inputs.states); err != nil {
+	if err := h.noto.validateOwners(ctx, senderID.identifier, req.ResolvedVerifiers, inputs.coins, inputs.states); err != nil {
 		return nil, err
 	}
 
@@ -282,18 +282,17 @@ func (h *createBurnLockHandler) Endorse(ctx context.Context, tx *types.ParsedTra
 }
 
 func (h *createBurnLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (_ *TransactionWrapper, err error) {
-	inParams := tx.Params.(*types.CreateBurnLockParams)
 	inputCoinStates := h.noto.filterSchema(req.InputStates, []string{h.noto.coinSchema.Id})
 	lockedCoinStates := h.noto.filterSchema(req.OutputStates, []string{h.noto.lockedCoinSchema.Id})
 	remainderCoinStates := h.noto.filterSchema(req.OutputStates, []string{h.noto.coinSchema.Id})
 
-	fromID, err := h.noto.findEthAddressVerifier(ctx, "from", inParams.From, req.ResolvedVerifiers)
+	senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
 	// We should have a valid lock transition, from which we can obtain the spend and cancel outputs
-	lockTransition, _, cancelOutputs, err := h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_CREATE, fromID, nil, req.InputStates, req.OutputStates, req.InfoStates)
+	lockTransition, _, cancelOutputs, err := h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_CREATE, senderID, nil, req.InputStates, req.OutputStates, req.InfoStates)
 	if err != nil {
 		return nil, err
 	}
@@ -340,13 +339,13 @@ func (h *createBurnLockHandler) baseLedgerInvoke(ctx context.Context, tx *types.
 func (h *createBurnLockHandler) hookInvoke(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
 	inParams := tx.Params.(*types.CreateBurnLockParams)
 
-	fromID, err := h.noto.findEthAddressVerifier(ctx, "from", tx.Transaction.From, req.ResolvedVerifiers)
+	senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
 	// We should have a valid lock transition, from which we can obtain the spend and cancel outputs
-	lockTransition, err := h.noto.validateV1LockTransition(ctx, LOCK_CREATE, fromID, nil, req.InputStates, req.OutputStates)
+	lockTransition, err := h.noto.validateV1LockTransition(ctx, LOCK_CREATE, senderID, nil, req.InputStates, req.OutputStates)
 	if err != nil {
 		return nil, err
 	}
@@ -356,9 +355,9 @@ func (h *createBurnLockHandler) hookInvoke(ctx context.Context, tx *types.Parsed
 		return nil, err
 	}
 	params := &CreateBurnLockHookParams{
-		Sender: fromID.address,
+		Sender: senderID.address,
 		LockID: lockTransition.newLockInfo.LockID,
-		From:   fromID.address,
+		From:   senderID.address,
 		Amount: inParams.Amount,
 		Data:   inParams.Data,
 		Prepared: PreparedTransaction{

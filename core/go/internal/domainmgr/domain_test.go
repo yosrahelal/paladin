@@ -253,7 +253,15 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 }
 
 func registerTestDomain(t *testing.T, dm *domainManager, tp *testPlugin) {
-	d, err := dm.registerDomain("test1", tp)
+	// Extract domain name from the domain manager's config (assumes single domain)
+	var domainName string
+	for name := range dm.conf.Domains {
+		domainName = name
+		break
+	}
+	require.NotEmpty(t, domainName, "Domain manager must have at least one domain configured")
+
+	d, err := dm.registerDomain(domainName, tp)
 	require.NoError(t, err)
 
 	// For unit tests, we want any errors to pop out - rather than the actual runtime behavior of infinite retry
@@ -262,7 +270,7 @@ func registerTestDomain(t *testing.T, dm *domainManager, tp *testPlugin) {
 	// Kick off the init (as would happen in DomainRegistered callback otherwise)
 	go d.init()
 
-	da, err := dm.getDomainByName(context.Background(), "test1")
+	da, err := dm.getDomainByName(context.Background(), domainName)
 	require.NoError(t, err)
 	tp.d = da
 	<-tp.d.initDone
@@ -514,7 +522,7 @@ func TestDomainFindAvailableStatesFail(t *testing.T) {
 	defer done()
 
 	schemaID := pldtypes.RandBytes32()
-	td.mdc.On("FindAvailableStates", mock.Anything, schemaID, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
+	td.mdc.On("FindAvailableStates", mock.Anything, mock.Anything, schemaID, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
 
 	assert.Nil(t, td.d.initError.Load())
 	_, err := td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
@@ -1093,7 +1101,7 @@ func TestGetStatesFailCases(t *testing.T) {
 	require.ErrorContains(t, err, "PD011641")
 
 	schemaID := pldtypes.Bytes32(pldtypes.RandBytes(32))
-	td.mdc.On("GetStatesByID", mock.Anything, schemaID, []string{"id1"}).Return(nil, nil, fmt.Errorf("pop"))
+	td.mdc.On("GetStatesByID", mock.Anything, mock.Anything, schemaID, []string{"id1"}).Return(nil, nil, fmt.Errorf("pop"))
 
 	_, err = td.d.GetStatesByID(td.ctx, &prototk.GetStatesByIDRequest{
 		StateQueryContext: td.c.id,
@@ -1578,14 +1586,14 @@ func TestCheckStateCompletionOk(t *testing.T) {
 			},
 		}, cscr)
 		return &prototk.CheckStateCompletionResponse{
-			PrimaryMissingStateId: cscr.UnavailableStates.FirstUnavailableId,
+			NextMissingStateId: cscr.UnavailableStates.FirstUnavailableId,
 		}, nil
 	}
 
 	domain := td.d
-	primaryMissingStateID, err := domain.CheckStateCompletion(td.ctx, td.c.dbTX, txID, statesInput)
+	nextMissingStateID, err := domain.CheckStateCompletion(td.ctx, td.c.dbTX, txID, statesInput)
 	require.NoError(t, err)
-	require.Equal(t, statesInput.Unavailable.Info[0].String(), primaryMissingStateID.String())
+	require.Equal(t, statesInput.Unavailable.Info[0].String(), nextMissingStateID.String())
 }
 
 func TestCheckStateCompletionBadIDReturned(t *testing.T) {
@@ -1595,7 +1603,7 @@ func TestCheckStateCompletionBadIDReturned(t *testing.T) {
 
 	td.tp.Functions.CheckStateCompletion = func(ctx context.Context, cscr *prototk.CheckStateCompletionRequest) (*prototk.CheckStateCompletionResponse, error) {
 		return &prototk.CheckStateCompletionResponse{
-			PrimaryMissingStateId: confutil.P("wrong"),
+			NextMissingStateId: confutil.P("wrong"),
 		}, nil
 	}
 
@@ -1609,7 +1617,7 @@ func TestCheckStateCompletionBadIDReturned(t *testing.T) {
 	require.Regexp(t, "PD020007", err)
 }
 
-func TestLookupKeyIdentifiersMixedResult(t *testing.T) {
+func TestReverseKeyLookupMixedResult(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 		mc.keyManager.On("ReverseKeyLookup", mock.Anything, mock.Anything, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS,
 			"0x44b6dc58be64be0852e609aee1d7a0a0db674019",
@@ -1632,28 +1640,34 @@ func TestLookupKeyIdentifiersMixedResult(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	res, err := td.d.LookupKeyIdentifiers(td.ctx, &prototk.LookupKeyIdentifiersRequest{
-		Algorithm:    algorithms.ECDSA_SECP256K1,
-		VerifierType: verifiers.ETH_ADDRESS,
-		Verifiers: []string{
-			"0x44b6dc58be64be0852e609aee1d7a0a0db674019",
-			"0x4d2a5f9ac7672fe5036bac105a3a840db7e8af2a",
+	res, err := td.d.ReverseKeyLookup(td.ctx, &prototk.ReverseKeyLookupRequest{
+		Lookups: []*prototk.ReverseKeyLookup{
+			{
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
+				Verifier:     "0x44b6dc58be64be0852e609aee1d7a0a0db674019",
+			},
+			{
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
+				Verifier:     "0x4d2a5f9ac7672fe5036bac105a3a840db7e8af2a",
+			},
 		},
 	})
 	require.NoError(t, err)
 	require.Len(t, res.Results, 2)
-	require.Equal(t, &prototk.LookupKeyIdentifierResult{
+	require.Equal(t, &prototk.ReverseKeyLookupResult{
 		Verifier: "0x44b6dc58be64be0852e609aee1d7a0a0db674019",
 		Found:    false,
 	}, res.Results[0])
-	require.Equal(t, &prototk.LookupKeyIdentifierResult{
+	require.Equal(t, &prototk.ReverseKeyLookupResult{
 		Verifier:      "0x4d2a5f9ac7672fe5036bac105a3a840db7e8af2a",
 		Found:         true,
 		KeyIdentifier: confutil.P("key.one"),
 	}, res.Results[1])
 }
 
-func TestLookupKeyIdentifiersFail(t *testing.T) {
+func TestReverseKeyLookupFail(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 		mc.keyManager.On("ReverseKeyLookup", mock.Anything, mock.Anything, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS,
 			"0x44b6dc58be64be0852e609aee1d7a0a0db674019",
@@ -1662,12 +1676,18 @@ func TestLookupKeyIdentifiersFail(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	_, err := td.d.LookupKeyIdentifiers(td.ctx, &prototk.LookupKeyIdentifiersRequest{
-		Algorithm:    algorithms.ECDSA_SECP256K1,
-		VerifierType: verifiers.ETH_ADDRESS,
-		Verifiers: []string{
-			"0x44b6dc58be64be0852e609aee1d7a0a0db674019",
-			"0x4d2a5f9ac7672fe5036bac105a3a840db7e8af2a",
+	_, err := td.d.ReverseKeyLookup(td.ctx, &prototk.ReverseKeyLookupRequest{
+		Lookups: []*prototk.ReverseKeyLookup{
+			{
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
+				Verifier:     "0x44b6dc58be64be0852e609aee1d7a0a0db674019",
+			},
+			{
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
+				Verifier:     "0x4d2a5f9ac7672fe5036bac105a3a840db7e8af2a",
+			},
 		},
 	})
 	require.Regexp(t, "pop", err)
@@ -1733,4 +1753,69 @@ func TestValidateStatesBadSchmea(t *testing.T) {
 		},
 	})
 	require.Regexp(t, "PD011613.*schema1", err)
+}
+
+func TestDomainFixedSigningIdentity(t *testing.T) {
+	// Test with FixedSigningIdentity set
+	_, dm, mc, dmDone := newTestDomainManager(t, false, &pldconf.DomainManagerInlineConfig{
+		Domains: map[string]*pldconf.DomainConfig{
+			"test1": {
+				Config:               map[string]any{"some": "conf"},
+				RegistryAddress:      pldtypes.RandHex(20),
+				DefaultGasLimit:      confutil.P(uint64(100000)),
+				FixedSigningIdentity: "test-signer@node1",
+				Init:                 pldconf.DomainInitConfig{},
+			},
+		},
+	})
+	defer dmDone()
+
+	mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+
+	tp := newTestPlugin(nil)
+	tp.Functions = &plugintk.DomainAPIFunctions{
+		ConfigureDomain: func(ctx context.Context, cdr *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
+			assert.Equal(t, "test-signer@node1", cdr.FixedSigningIdentity)
+			return &prototk.ConfigureDomainResponse{
+				DomainConfig: goodDomainConf(),
+			}, nil
+		},
+		InitDomain: func(ctx context.Context, idr *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error) {
+			return &prototk.InitDomainResponse{}, nil
+		},
+	}
+
+	registerTestDomain(t, dm, tp)
+	assert.Equal(t, "test-signer@node1", tp.d.FixedSigningIdentity())
+
+	// Test with empty FixedSigningIdentity
+	_, dm2, mc2, dmDone2 := newTestDomainManager(t, false, &pldconf.DomainManagerInlineConfig{
+		Domains: map[string]*pldconf.DomainConfig{
+			"test2": {
+				Config:          map[string]any{"some": "conf"},
+				RegistryAddress: pldtypes.RandHex(20),
+				DefaultGasLimit: confutil.P(uint64(100000)),
+				Init:            pldconf.DomainInitConfig{},
+			},
+		},
+	})
+	defer dmDone2()
+
+	mc2.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+
+	tp2 := newTestPlugin(nil)
+	tp2.Functions = &plugintk.DomainAPIFunctions{
+		ConfigureDomain: func(ctx context.Context, cdr *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
+			assert.Equal(t, "", cdr.FixedSigningIdentity)
+			return &prototk.ConfigureDomainResponse{
+				DomainConfig: goodDomainConf(),
+			}, nil
+		},
+		InitDomain: func(ctx context.Context, idr *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error) {
+			return &prototk.InitDomainResponse{}, nil
+		},
+	}
+
+	registerTestDomain(t, dm2, tp2)
+	assert.Equal(t, "", tp2.d.FixedSigningIdentity())
 }

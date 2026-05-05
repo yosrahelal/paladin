@@ -351,7 +351,7 @@ func TestUnlock(t *testing.T) {
 	mt.withMissingNewStates(dataState).
 		incompleteForIdentity(notaryAddress).
 		incompleteForIdentity(senderKey.Address.String()).
-		completeForIdentity(receiverAddress) // receivers don't get the data
+		incompleteForIdentity(receiverAddress)
 	mt.withMissingNewStates(outputCoinState).
 		incompleteForIdentity(notaryAddress).
 		incompleteForIdentity(senderKey.Address.String()).

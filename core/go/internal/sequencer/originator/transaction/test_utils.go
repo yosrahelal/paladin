@@ -17,14 +17,15 @@ package transaction
 
 import (
 	"context"
-	"fmt"
 	"math/rand/v2"
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
+	"github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -37,6 +38,7 @@ type SentMessageRecorder struct {
 	hasSentAssembleSuccessResponse bool
 	hasSentAssembleRevertResponse  bool
 	hasSentAssembleParkResponse    bool
+	hasSentAssembleErrorResponse   bool
 	hasSentTransactionUnknown      bool
 	transactionUnknownTxID         uuid.UUID
 	transactionUnknownCoordinator  string
@@ -46,10 +48,10 @@ func NewSentMessageRecorder() *SentMessageRecorder {
 	return &SentMessageRecorder{}
 }
 
-func (r *SentMessageRecorder) StartLoopbackWriter(ctx context.Context) {
+func (r *SentMessageRecorder) StartLoopbackWriter() {
 }
 
-func (r *SentMessageRecorder) StopLoopbackWriter() {
+func (r *SentMessageRecorder) WaitForDone(ctx context.Context) {
 }
 
 func (r *SentMessageRecorder) SendPreDispatchResponse(ctx context.Context, transactionOriginator string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification) error {
@@ -73,7 +75,11 @@ func (r *SentMessageRecorder) HasSentAssembleParkResponse() bool {
 	return r.hasSentAssembleParkResponse
 }
 
-func (r *SentMessageRecorder) SendAssembleRequest(ctx context.Context, assemblingNode string, transactionID uuid.UUID, idempotencyID uuid.UUID, transactionPreassembly *components.TransactionPreAssembly, stateLocksJSON []byte, blockHeight int64) error {
+func (r *SentMessageRecorder) HasSentAssembleErrorResponse() bool {
+	return r.hasSentAssembleErrorResponse
+}
+
+func (r *SentMessageRecorder) SendAssembleRequest(ctx context.Context, assemblingNode string, transactionID uuid.UUID, idempotencyID uuid.UUID, transactionPreassembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, blockHeight int64) error {
 	return nil
 }
 
@@ -81,7 +87,7 @@ func (r *SentMessageRecorder) SendDelegationRequest(ctx context.Context, coordin
 	return nil
 }
 
-func (r *SentMessageRecorder) SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, delegateNodeName string, transactionID string) error {
+func (r *SentMessageRecorder) SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64) error {
 	return nil
 }
 
@@ -109,7 +115,7 @@ func (r *SentMessageRecorder) SendTransactionSubmitted(ctx context.Context, txID
 	return nil
 }
 
-func (r *SentMessageRecorder) SendTransactionConfirmed(ctx context.Context, txID uuid.UUID, transactionOriginator string, contractAddress *pldtypes.EthAddress, nonce *pldtypes.HexUint64, revertReason pldtypes.HexBytes) error {
+func (r *SentMessageRecorder) SendTransactionConfirmed(ctx context.Context, txID uuid.UUID, transactionOriginator string, contractAddress *pldtypes.EthAddress, nonce *pldtypes.HexUint64, outcome engine.TransactionConfirmed_Outcome, revertReason pldtypes.HexBytes, failureMessage string, willRetry bool) error {
 	return nil
 }
 
@@ -148,11 +154,16 @@ func (r *SentMessageRecorder) SendAssembleResponse(ctx context.Context, txID uui
 	return nil
 }
 
+func (r *SentMessageRecorder) SendAssembleErrorResponse(ctx context.Context, txID uuid.UUID, requestID uuid.UUID, recipient string) error {
+	r.hasSentAssembleErrorResponse = true
+	return nil
+}
 func (r *SentMessageRecorder) Reset(_ context.Context) {
 	r.hasSentConfirmationResponse = false
 	r.hasSentAssembleSuccessResponse = false
 	r.hasSentAssembleRevertResponse = false
 	r.hasSentAssembleParkResponse = false
+	r.hasSentAssembleErrorResponse = false
 	r.hasSentTransactionUnknown = false
 	r.transactionUnknownTxID = uuid.UUID{}
 	r.transactionUnknownCoordinator = ""
@@ -162,11 +173,10 @@ type TransactionBuilderForTesting struct {
 	privateTransactionBuilder *testutil.PrivateTransactionBuilderForTesting
 	state                     State
 	currentDelegate           string
-	txn                       *Transaction
+	txn                       *originatorTransaction
 	sentMessageRecorder       *SentMessageRecorder
-	fakeClock                 *common.FakeClockForTesting
 	fakeEngineIntegration     *common.FakeEngineIntegrationForTesting
-	eventHandler              func(ctx context.Context, event common.Event) error
+	queueEventForOriginator   func(ctx context.Context, event common.Event)
 
 	/* Assembling State*/
 	assembleRequestID uuid.UUID
@@ -188,7 +198,6 @@ func NewTransactionBuilderForTesting(t *testing.T, state State) *TransactionBuil
 		state:                     state,
 		currentDelegate:           uuid.New().String(),
 		privateTransactionBuilder: testutil.NewPrivateTransactionBuilderForTesting(),
-		fakeClock:                 &common.FakeClockForTesting{},
 		fakeEngineIntegration:     &common.FakeEngineIntegrationForTesting{},
 		sentMessageRecorder:       NewSentMessageRecorder(),
 		metrics:                   metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
@@ -230,40 +239,49 @@ func (b *TransactionBuilderForTesting) GetLatestSubmissionHash() pldtypes.Bytes3
 	return *b.latestSubmissionHash
 }
 
+func (b *TransactionBuilderForTesting) QueueEventsTo(emit func(ctx context.Context, event common.Event)) *TransactionBuilderForTesting {
+	b.queueEventForOriginator = emit
+	return b
+}
+
+func (b *TransactionBuilderForTesting) GetBuiltTransaction() *originatorTransaction {
+	return b.txn
+}
+
 type TransactionDependencyFakes struct {
 	SentMessageRecorder *SentMessageRecorder
-	Clock               *common.FakeClockForTesting
 	EngineIntegration   *common.FakeEngineIntegrationForTesting
 	transactionBuilder  *TransactionBuilderForTesting
 	emittedEvents       []common.Event
 }
 
-func (b *TransactionBuilderForTesting) BuildWithMocks() (*Transaction, *TransactionDependencyFakes) {
+func (b *TransactionBuilderForTesting) BuildWithMocks() (*originatorTransaction, *TransactionDependencyFakes) {
 	mocks := &TransactionDependencyFakes{
 		SentMessageRecorder: b.sentMessageRecorder,
-		Clock:               b.fakeClock,
 		EngineIntegration:   b.fakeEngineIntegration,
 		transactionBuilder:  b,
 	}
-	b.eventHandler = func(ctx context.Context, event common.Event) error {
+	b.queueEventForOriginator = func(ctx context.Context, event common.Event) {
 		mocks.emittedEvents = append(mocks.emittedEvents, event)
-		return nil
 	}
 	return b.Build(), mocks
 }
 
-func (b *TransactionBuilderForTesting) Build() *Transaction {
+func (b *TransactionBuilderForTesting) Build() *originatorTransaction {
 	ctx := context.Background()
 
 	privateTransaction := b.privateTransactionBuilder.Build()
-	if b.eventHandler == nil {
-		b.eventHandler = func(ctx context.Context, event common.Event) error {
-			return nil
-		}
+	if b.queueEventForOriginator == nil {
+		b.queueEventForOriginator = func(ctx context.Context, event common.Event) {}
 	}
-	txn, err := NewTransaction(ctx, privateTransaction, b.sentMessageRecorder, b.eventHandler, b.fakeEngineIntegration, b.metrics, func(ctx context.Context) {})
+	txn := newTransaction(ctx,
+		privateTransaction,
+		b.fakeEngineIntegration,
+		b.sentMessageRecorder,
+		b.queueEventForOriginator,
+		b.metrics)
 
-	txn.stateMachine.currentState = b.state
+	txn.stateMachine.SetCurrentState(b.state)
 
 	// Update the private transaction struct to the accumulation that resulted from what ever events that we expect to have happened leading up to the current state
 	// We don't attempt to emulate any other history of those past events but rather assert that the state machine's behavior is determined purely by its current finite state
@@ -286,7 +304,7 @@ func (b *TransactionBuilderForTesting) Build() *Transaction {
 		b.latestFulfilledAssembleRequestID = uuid.New()
 		txn.latestFulfilledAssembleRequestID = b.latestFulfilledAssembleRequestID
 
-		txn.PostAssembly = &components.TransactionPostAssembly{
+		txn.pt.PostAssembly = &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
 			RevertReason:   ptrTo("test revert reason"),
 		}
@@ -294,7 +312,7 @@ func (b *TransactionBuilderForTesting) Build() *Transaction {
 		b.latestFulfilledAssembleRequestID = uuid.New()
 		txn.latestFulfilledAssembleRequestID = b.latestFulfilledAssembleRequestID
 
-		txn.PostAssembly = &components.TransactionPostAssembly{
+		txn.pt.PostAssembly = &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_PARK,
 		}
 	case State_Prepared:
@@ -312,12 +330,9 @@ func (b *TransactionBuilderForTesting) Build() *Transaction {
 
 	}
 
-	if err != nil {
-		panic(fmt.Sprintf("Error from NewTransaction: %v", err))
-	}
 	b.txn = txn
 
-	b.txn.stateMachine.currentState = b.state
+	b.txn.stateMachine.SetCurrentState(b.state)
 	return b.txn
 
 }
@@ -327,7 +342,7 @@ func (m *TransactionDependencyFakes) MockForAssembleAndSignRequestOK() *mock.Cal
 	return m.EngineIntegration.On(
 		"AssembleAndSign",
 		mock.Anything, //ctx context.Contex
-		m.transactionBuilder.txn.ID,
+		m.transactionBuilder.txn.pt.ID,
 		mock.Anything, //preAssembly *components.TransactionPreAssembly
 		mock.Anything, //stateLocksJSON []byte
 		mock.Anything, //blockHeight int64
@@ -341,7 +356,7 @@ func (m *TransactionDependencyFakes) MockForAssembleAndSignRequestRevert() *mock
 	return m.EngineIntegration.On(
 		"AssembleAndSign",
 		mock.Anything, //ctx context.Contex
-		m.transactionBuilder.txn.ID,
+		m.transactionBuilder.txn.pt.ID,
 		mock.Anything, //preAssembly *components.TransactionPreAssembly
 		mock.Anything, //stateLocksJSON []byte
 		mock.Anything, //blockHeight int64
@@ -356,7 +371,7 @@ func (m *TransactionDependencyFakes) MockForAssembleAndSignRequestPark() *mock.C
 	return m.EngineIntegration.On(
 		"AssembleAndSign",
 		mock.Anything, //ctx context.Contex
-		m.transactionBuilder.txn.ID,
+		m.transactionBuilder.txn.pt.ID,
 		mock.Anything, //preAssembly *components.TransactionPreAssembly
 		mock.Anything, //stateLocksJSON []byte
 		mock.Anything, //blockHeight int64

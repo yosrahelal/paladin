@@ -68,22 +68,6 @@ func (h *prepareMintUnlockHandler) checkAllowed(ctx context.Context, tx *types.P
 	return nil
 }
 
-func (h *prepareMintUnlockHandler) checkAllowedForFrom(ctx context.Context, tx *types.ParsedTransaction, from string) error {
-	if tx.DomainConfig.NotaryMode != types.NotaryModeBasic.Enum() {
-		return nil
-	}
-
-	localNodeName, _ := h.noto.Callbacks.LocalNodeName(ctx, &prototk.LocalNodeNameRequest{})
-	fromQualified, err := pldtypes.PrivateIdentityLocator(from).FullyQualified(ctx, localNodeName.Name)
-	if err != nil {
-		return err
-	}
-	if tx.Transaction.From == fromQualified.String() {
-		return nil
-	}
-	return i18n.NewError(ctx, msgs.MsgUnlockOnlyCreator, tx.Transaction.From, from)
-}
-
 func (h *prepareMintUnlockHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	params := tx.Params.(*types.PrepareMintUnlockParams)
 	notary := tx.DomainConfig.NotaryLookup
@@ -104,7 +88,6 @@ func (h *prepareMintUnlockHandler) Init(ctx context.Context, tx *types.ParsedTra
 func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.PrepareMintUnlockParams)
 	notary := tx.DomainConfig.NotaryLookup
-	useNullifiers := tx.DomainConfig.IsNullifierVariant()
 	spendTxId := pldtypes.Bytes32UUIDFirst16(uuid.New())
 
 	notaryID, err := h.noto.findEthAddressVerifier(ctx, "notary", notary, req.ResolvedVerifiers)
@@ -117,17 +100,30 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	}
 
 	// Load the existing lock
-	existingLock, err := h.noto.loadLockInfoV1(ctx, req.StateQueryContext, params.LockID)
+	existingLock, revert, err := h.noto.loadLockInfoV1(ctx, req.StateQueryContext, params.LockID)
+	if err != nil {
+		if revert {
+			message := err.Error()
+			return &prototk.AssembleTransactionResponse{
+				AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+				RevertReason:   &message,
+			}, nil
+		}
+		return nil, err
+	}
+
+	// Build and encode the unlock data (separate to the data for this TX)
+	encodedUnlockData, infoStates, infoDistribution, err := h.buildUnlockData(ctx, notaryID, senderID, nil, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build the data info for the parent transaction
-	infoDistribution := identityList{notaryID, senderID}
-	infoStates, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	// Build the data info for this prepare transaction
+	prepareDataInfo, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
 	if err != nil {
 		return nil, err
 	}
+	infoStates = append(infoStates, prepareDataInfo...)
 
 	// Prepare the outputs to mint
 	outputs := &preparedOutputs{}
@@ -146,12 +142,6 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	}
 	infoStates = append(infoStates, outputs.states...)
 
-	// Build the data info for the prepared transaction
-	txData, err := h.noto.encodeTransactionDataV1(ctx, []*prototk.EndorsableState{}, useNullifiers)
-	if err != nil {
-		return nil, err
-	}
-
 	err = h.noto.allocateStateIDs(ctx, req.StateQueryContext, outputs.states)
 	if err != nil {
 		return nil, err
@@ -162,16 +152,16 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	newLockInfo.Replaces = existingLock.id
 	newLockInfo.Salt = pldtypes.RandBytes32()
 	newLockInfo.SpendOutputs = newStateAllocatedIDs(outputs.states)
-	newLockInfo.SpendData = txData
+	newLockInfo.SpendData = encodedUnlockData
 	newLockInfo.CancelOutputs = []pldtypes.Bytes32{} // no cancel outputs
-	newLockInfo.CancelData = txData
+	newLockInfo.CancelData = encodedUnlockData
 	newLockInfo.SpendTxId = spendTxId
 	lock, err := h.noto.prepareLockInfo_V1(&newLockInfo, identityList{notaryID, senderID})
 	if err != nil {
 		return nil, err
 	}
 
-	// Prepare unlock with no outputs (for burning)
+	// Prepare unlock with no inputs (for minting)
 	encodedUnlock, err := h.noto.encodeUnlock(ctx, tx.ContractAddress, nil, nil, outputs.coins)
 	if err != nil {
 		return nil, err
@@ -245,7 +235,7 @@ func (h *prepareMintUnlockHandler) Endorse(ctx context.Context, tx *types.Parsed
 	}
 
 	// Notary checks the signature from the sender, then submits the transaction
-	// No outputs - this will burn when unlocked
+	// No inputs - this will mint when unlocked
 	encodedUnlock, err := h.noto.encodeUnlock(ctx, tx.ContractAddress, nil, nil, parsedSpendOutputs.coins)
 	if err != nil {
 		return nil, err

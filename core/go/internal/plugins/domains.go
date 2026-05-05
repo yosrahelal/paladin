@@ -125,12 +125,12 @@ func (br *domainBridge) RequestReply(ctx context.Context, reqMsg plugintk.Plugin
 				}
 			},
 		)
-	case *prototk.DomainMessage_LookupKeyIdentifiers:
-		return callManagerImpl(ctx, req.LookupKeyIdentifiers,
-			br.manager.LookupKeyIdentifiers,
-			func(resMsg *prototk.DomainMessage, res *prototk.LookupKeyIdentifiersResponse) {
-				resMsg.ResponseToDomain = &prototk.DomainMessage_LookupKeyIdentifiersRes{
-					LookupKeyIdentifiersRes: res,
+	case *prototk.DomainMessage_ReverseKeyLookup:
+		return callManagerImpl(ctx, req.ReverseKeyLookup,
+			br.manager.ReverseKeyLookup,
+			func(resMsg *prototk.DomainMessage, res *prototk.ReverseKeyLookupResponse) {
+				resMsg.ResponseToDomain = &prototk.DomainMessage_ReverseKeyLookupRes{
+					ReverseKeyLookupRes: res,
 				}
 			},
 		)
@@ -441,6 +441,36 @@ func (br *domainBridge) CheckStateCompletion(ctx context.Context, req *prototk.C
 		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
 			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_CheckStateCompletionRes); ok {
 				res = r.CheckStateCompletionRes
+			}
+			return res != nil
+		},
+	)
+	return
+}
+
+func (br *domainBridge) IsBaseLedgerRevertRetryable(ctx context.Context, req *prototk.IsBaseLedgerRevertRetryableRequest) (res *prototk.IsBaseLedgerRevertRetryableResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_IsBaseLedgerRevertRetryable{IsBaseLedgerRevertRetryable: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_IsBaseLedgerRevertRetryableRes); ok {
+				res = r.IsBaseLedgerRevertRetryableRes
+			}
+			return res != nil
+		},
+	)
+	return
+}
+
+func (br *domainBridge) InvokeRPC(ctx context.Context, req *prototk.InvokeRPCRequest) (res *prototk.InvokeRPCResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_InvokeRpc{InvokeRpc: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_InvokeRpcRes); ok {
+				res = r.InvokeRpcRes
 			}
 			return res != nil
 		},

@@ -14,19 +14,17 @@ interface INotoErrors {
 
     error NotoNotNotary(address sender);
 
-    error NotoInvalidDelegate(bytes32 txhash, address delegate, address sender); // V0 only
-
     error NotoDuplicateLock(bytes32 lockId);
 
     error NotoInvalidUnlockHash(bytes32 expected, bytes32 actual);
 
     error NotoInvalidUnlockInputs(uint256 expected, uint256 actual);
 
-    error NotoNotPrepared(bytes32 lockId);
+    error NotoDelegationConditionsNotSet(bytes32 lockId);
 
-    error NotoLockedOutputsInUpdate(bytes32 lockId);
+    error NotoInvalidLockState(bytes32 lockId, bytes32 expected, bytes32 actual);
 
-    error NotoAlreadyPrepared(bytes32 lockId);
+    error NotoAlreadyDelegated(bytes32 lockId, address owner, address spender);
 
     error NotoDuplicateTransaction(bytes32 txId);
 

@@ -1,4 +1,4 @@
-// Copyright © 2025 Kaleido, Inc.
+// Copyright © 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -38,12 +38,11 @@ import { SettingsMenu } from '../menus/Settings';
 import { AppRoutes } from '../routes';
 
 enum HeaderTab {
-  Activity = 0,
+  Transactions = 0,
   Submissions = 1,
-  Peers = 2,
-  Keys = 3,
-  Registry = 4,
-  Domains = 5,
+  Keys = 2,
+  Registry = 3,
+  Domains = 4,
 }
 
 export const Header: React.FC = () => {
@@ -56,12 +55,10 @@ export const Header: React.FC = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const getTabFromPath = (path: string) => {
-    if (path.startsWith(AppRoutes.Activity)) {
-      return HeaderTab.Activity;
+    if (path.startsWith(AppRoutes.Transactions)) {
+      return HeaderTab.Transactions;
     } else if (path.startsWith(AppRoutes.Submissions)) {
       return HeaderTab.Submissions;
-    } else if (path.startsWith(AppRoutes.Peers)) {
-      return HeaderTab.Peers;
     } else if (path.startsWith(AppRoutes.Keys)) {
       return HeaderTab.Keys;
     } else if (path.startsWith(AppRoutes.Registry)) {
@@ -69,7 +66,7 @@ export const Header: React.FC = () => {
     } else if (path.startsWith(AppRoutes.Domains)) {
       return HeaderTab.Domains;
     }
-    return HeaderTab.Activity;
+    return HeaderTab.Transactions;
   };
 
   const [tab, setTab] = useState(getTabFromPath(pathname));
@@ -77,14 +74,8 @@ export const Header: React.FC = () => {
   const handleNavigation = (tab: number) => {
     setTab(tab);
     switch (tab) {
-      case HeaderTab.Activity:
-        navigate(AppRoutes.Activity);
-        break;
       case HeaderTab.Submissions:
         navigate(AppRoutes.Submissions);
-        break;
-      case HeaderTab.Peers:
-        navigate(AppRoutes.Peers);
         break;
       case HeaderTab.Keys:
         navigate(AppRoutes.Keys);
@@ -129,12 +120,11 @@ export const Header: React.FC = () => {
                   onChange={(_event, value) => handleNavigation(value)}
                   centered
                 >
-                  <Tab label={t('activity')} />
-                  <Tab label={t('submissions')} />
-                  <Tab label={t('peers')} />
-                  <Tab label={t('keys')} />
-                  <Tab label={t('registry')} />
-                  <Tab label={t('domains')} />
+                  <Tab sx={{ minWidth: '120px'}} label={t('transactions')} onClick={() => navigate(AppRoutes.Transactions)} />
+                  <Tab sx={{ minWidth: '120px'}} label={t('submissions')} onClick={() => navigate(AppRoutes.Submissions)} />
+                  <Tab sx={{ minWidth: '120px'}} label={t('localKeys')} />
+                  <Tab sx={{ minWidth: '120px'}} label={t('registry')} />
+                  <Tab sx={{ minWidth: '120px'}} label={t('domains')} />
                 </Tabs>
               </Grid2>
               <Grid2 size={{ xs: 12, sm: 12, md: 3 }}>

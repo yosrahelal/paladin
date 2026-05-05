@@ -1,4 +1,4 @@
-// Copyright © 2025 Kaleido, Inc.
+// Copyright © 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -30,11 +30,12 @@ import { ApplicationContextProvider } from "./contexts/ApplicationContext";
 import { AppRoutes } from "./routes";
 import { darkThemeOptions, lightThemeOptions } from "./themes/default";
 import { getBasePath } from "./utils";
-import { Activity } from "./views/Activity";
 import { Domains } from "./views/Domains";
 import { Keys } from "./views/Keys";
-import { Nodes } from "./views/Peers";
 import { Registries } from "./views/Registries";
+import { Transactions } from "./views/Transactions";
+import { TransactionDetails } from "./views/TransactionDetails";
+import { IPaladinTransactionPagingReference, ITransactionPagingReference } from "./interfaces";
 import { Submissions } from "./views/Submissions";
 
 const queryClient = new QueryClient({
@@ -43,6 +44,17 @@ const queryClient = new QueryClient({
 });
 
 function App() {
+
+  const [txRefEntries, setTxRefEntries] = useState<ITransactionPagingReference[]>([]);
+  const [txPage, txSetPage] = useState(0);
+  const [txRowsPerPage, txSetRowsPerPage] = useState(10);
+  const [txFromBlock, setTxFromBlock] = useState<number>();
+  const [submissionsSection, setSubmissionsSection] = useState<'pending' | 'failed'>('pending');
+
+
+  const [submissionsRefEntries, setSubmissionsSetRefEntries] = useState<IPaladinTransactionPagingReference[]>([]);
+  const [submissionsPage, setSubmissionsPage] = useState(0);
+  const [submissionsRowsPerPage, setSubmissionsRowsPerPage] = useState(10);
 
   const [systemTheme, setSystemTheme] = useState(
     window.matchMedia &&
@@ -101,13 +113,31 @@ function App() {
             <BrowserRouter basename={basePath}>
               <Header />
               <Routes>
-                <Route path={AppRoutes.Activity} element={<Activity />} />
-                <Route path={AppRoutes.Submissions} element={<Submissions />} />
-                <Route path={AppRoutes.Peers} element={<Nodes />} />
+                <Route path={AppRoutes.Transactions} element={<Transactions
+                  refEntries={txRefEntries}
+                  setRefEntries={setTxRefEntries}
+                  page={txPage}
+                  setPage={txSetPage}
+                  rowsPerPage={txRowsPerPage}
+                  setRowsPerPage={txSetRowsPerPage}
+                  fromBlock={txFromBlock}
+                  setFromBlock={setTxFromBlock}
+                />} />
+                <Route path={AppRoutes.Submissions} element={<Submissions
+                  section={submissionsSection}
+                  setSection={setSubmissionsSection}
+                  page={submissionsPage}
+                  setPage={setSubmissionsPage}
+                  rowsPerPage={submissionsRowsPerPage}
+                  setRowsPerPage={setSubmissionsRowsPerPage}
+                  refEntries={submissionsRefEntries}
+                  setRefEntries={setSubmissionsSetRefEntries}
+                />} />
+                <Route path={AppRoutes.Transaction} element={<TransactionDetails />} />
                 <Route path={AppRoutes.Keys} element={<Keys />} />
                 <Route path={AppRoutes.Registry} element={<Registries />} />
                 <Route path={AppRoutes.Domains} element={<Domains />} />
-                <Route path="*" element={<Navigate to={AppRoutes.Activity} replace />} />
+                <Route path="*" element={<Navigate to={AppRoutes.Transactions} replace />} />
               </Routes>
             </BrowserRouter>
           </ThemeProvider>

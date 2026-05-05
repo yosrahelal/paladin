@@ -48,7 +48,7 @@ type testDomainManager struct {
 	sendTransaction      func(context.Context, *prototk.SendTransactionRequest) (*prototk.SendTransactionResponse, error)
 	localNodeName        func(context.Context, *prototk.LocalNodeNameRequest) (*prototk.LocalNodeNameResponse, error)
 	getStates            func(context.Context, *prototk.GetStatesByIDRequest) (*prototk.GetStatesByIDResponse, error)
-	lookupKeyIdentifiers func(context.Context, *prototk.LookupKeyIdentifiersRequest) (*prototk.LookupKeyIdentifiersResponse, error)
+	lookupKeyIdentifiers func(context.Context, *prototk.ReverseKeyLookupRequest) (*prototk.ReverseKeyLookupResponse, error)
 	validateStates       func(context.Context, *prototk.ValidateStatesRequest) (*prototk.ValidateStatesResponse, error)
 }
 
@@ -80,7 +80,7 @@ func (tp *testDomainManager) GetStatesByID(ctx context.Context, req *prototk.Get
 	return tp.getStates(ctx, req)
 }
 
-func (tp *testDomainManager) LookupKeyIdentifiers(ctx context.Context, req *prototk.LookupKeyIdentifiersRequest) (*prototk.LookupKeyIdentifiersResponse, error) {
+func (tp *testDomainManager) ReverseKeyLookup(ctx context.Context, req *prototk.ReverseKeyLookupRequest) (*prototk.ReverseKeyLookupResponse, error) {
 	return tp.lookupKeyIdentifiers(ctx, req)
 }
 
@@ -280,7 +280,7 @@ func TestDomainRequestsOK(t *testing.T) {
 		CheckStateCompletion: func(ctx context.Context, cscr *prototk.CheckStateCompletionRequest) (*prototk.CheckStateCompletionResponse, error) {
 			assert.Equal(t, `tx1`, cscr.TransactionId)
 			return &prototk.CheckStateCompletionResponse{
-				PrimaryMissingStateId: confutil.P("state1"),
+				NextMissingStateId: confutil.P("state1"),
 			}, nil
 		},
 	}
@@ -349,11 +349,11 @@ func TestDomainRequestsOK(t *testing.T) {
 		}, nil
 	}
 
-	tdm.lookupKeyIdentifiers = func(ctx context.Context, lkir *prototk.LookupKeyIdentifiersRequest) (*prototk.LookupKeyIdentifiersResponse, error) {
-		assert.Equal(t, "type1", lkir.VerifierType)
-		assert.Equal(t, "v1", lkir.Verifiers[0])
-		return &prototk.LookupKeyIdentifiersResponse{
-			Results: []*prototk.LookupKeyIdentifierResult{{Verifier: "v1", Found: false}},
+	tdm.lookupKeyIdentifiers = func(ctx context.Context, lkir *prototk.ReverseKeyLookupRequest) (*prototk.ReverseKeyLookupResponse, error) {
+		assert.Equal(t, "type1", lkir.Lookups[0].VerifierType)
+		assert.Equal(t, "v1", lkir.Lookups[0].Verifier)
+		return &prototk.ReverseKeyLookupResponse{
+			Results: []*prototk.ReverseKeyLookupResult{{Verifier: "v1", Found: false}},
 		}, nil
 	}
 
@@ -515,7 +515,7 @@ func TestDomainRequestsOK(t *testing.T) {
 		TransactionId: "tx1",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, `state1`, *cscr.PrimaryMissingStateId)
+	assert.Equal(t, `state1`, *cscr.NextMissingStateId)
 
 	// Add timeout for callbacks
 	var callbacks plugintk.DomainCallbacks
@@ -567,9 +567,13 @@ func TestDomainRequestsOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, gsr.States, 1)
 
-	lkir, err := callbacks.LookupKeyIdentifiers(ctx, &prototk.LookupKeyIdentifiersRequest{
-		VerifierType: "type1",
-		Verifiers:    []string{"v1"},
+	lkir, err := callbacks.ReverseKeyLookup(ctx, &prototk.ReverseKeyLookupRequest{
+		Lookups: []*prototk.ReverseKeyLookup{
+			{
+				VerifierType: "type1",
+				Verifier:     "v1",
+			},
+		},
 	})
 	require.NoError(t, err)
 	require.Len(t, lkir.Results, 1)
@@ -593,15 +597,6 @@ func TestDomainRegisterFail(t *testing.T) {
 				t:              t,
 				connectFactory: domainConnectFactory,
 				headerAccessor: domainHeaderAccessor,
-				preRegister: func(domainID string) *prototk.DomainMessage {
-					return &prototk.DomainMessage{
-						Header: &prototk.Header{
-							MessageType: prototk.Header_REGISTER,
-							PluginId:    domainID,
-							MessageId:   uuid.NewString(),
-						},
-					}
-				},
 			},
 		},
 	}

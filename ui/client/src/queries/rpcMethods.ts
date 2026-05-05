@@ -1,4 +1,4 @@
-// Copyright © 2025 Kaleido, Inc.
+// Copyright © 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -21,12 +21,15 @@ export const RpcEndpoint = getBasePath();
 export const RpcMethods = {
   bidx_QueryIndexedEvents: 'bidx_queryIndexedEvents',
   bidx_QueryIndexedTransactions: 'bidx_queryIndexedTransactions',
+  bidx_getTransactionByHash: 'bidx_getTransactionByHash',
+  bidx_getBlockByNumber: 'bidx_getBlockByNumber',
   domain_listDomains: 'domain_listDomains',
   domain_getDomain: 'domain_getDomain',
   domain_querySmartContracts: 'domain_querySmartContracts',
   ptx_QueryPendingTransactions: 'ptx_queryPendingTransactions',
   ptx_QueryTransactionReceipts: 'ptx_queryTransactionReceipts',
   ptx_getTransactionReceipt: 'ptx_getTransactionReceipt',
+  ptx_getTransactionReceiptFull: 'ptx_getTransactionReceiptFull',
   ptx_QueryTransactions: 'ptx_queryTransactions',
   ptx_QueryTransactionsFull: 'ptx_queryTransactionsFull',
   ptx_getStateReceipt: 'ptx_getStateReceipt',
@@ -36,6 +39,7 @@ export const RpcMethods = {
   ptx_storeABI: 'ptx_storeABI',
   ptx_resolveVerifier: 'ptx_resolveVerifier',
   ptx_sendTransaction: 'ptx_sendTransaction',
+  ptx_getTransactionFull: 'ptx_getTransactionFull',
   reg_QueryEntriesWithProps: 'reg_queryEntriesWithProps',
   reg_Registries: 'reg_registries',
   transport_nodeName: 'transport_nodeName',

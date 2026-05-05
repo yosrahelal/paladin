@@ -31,11 +31,11 @@ type StateDistributionBuilder interface {
 	Build(ctx context.Context, txn *components.PrivateTransaction) (sds *components.StateDistributionSet, err error)
 }
 
-func NewStateDistributionBuilder(c components.AllComponents, tx *components.PrivateTransaction) *stateDistributionBuilder {
+func NewStateDistributionBuilder(localNodeName string, tx *components.PrivateTransaction) *stateDistributionBuilder {
 	return &stateDistributionBuilder{
 		tx: tx,
 		StateDistributionSet: components.StateDistributionSet{
-			LocalNode: c.TransportManager().LocalNodeName(),
+			LocalNode: localNodeName,
 			Remote:    []*components.StateDistributionWithData{},
 			Local:     []*components.StateDistributionWithData{},
 		},
@@ -107,7 +107,7 @@ func (sd *stateDistributionBuilder) processStateForDistribution(ctx context.Cont
 			log.L(ctx).Debugf("new state %s will be written locally for recipient %s hasNullifier=%t", fullState.ID, recipient, matchedNullifier != nil)
 			sd.Local = append(sd.Local, distribution)
 		} else {
-			log.L(ctx).Debugf("new state %s will be written distributed to recipient %s hasNullifier=%t", fullState.ID, recipient, matchedNullifier != nil)
+			log.L(ctx).Debugf("new state %s will be distributed to recipient %s hasNullifier=%t", fullState.ID, recipient, matchedNullifier != nil)
 			sd.Remote = append(sd.Remote, distribution)
 		}
 	}

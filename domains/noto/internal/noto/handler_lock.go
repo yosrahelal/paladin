@@ -273,7 +273,6 @@ func (h *lockHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, 
 	if !tx.DomainConfig.IsV0() {
 		lockID, err := h.noto.computeLockIDForLockTX(ctx, tx, notaryID)
 		if err == nil {
-			// TODO: Support preparation of target operation directly during lock (avoiding extra call)
 			_, _, _, err = h.noto.decodeV1LockTransitionWithOutputs(ctx, LOCK_CREATE, senderID, &lockID, req.Inputs, req.Outputs, req.Info)
 		}
 		if err != nil {
@@ -322,6 +321,19 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 		return nil, err
 	}
 
+	var lt *lockTransition // v1 only
+	if !tx.DomainConfig.IsV0() {
+		senderID, err := h.noto.findEthAddressVerifier(ctx, "sender", tx.Transaction.From, req.ResolvedVerifiers)
+		if err != nil {
+			return nil, err
+		}
+
+		lt, err = h.noto.validateV1LockTransition(ctx, LOCK_CREATE, senderID, nil, req.InputStates, req.OutputStates)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var interfaceABI abi.ABI
 	var functionName string
 	var paramsJSON []byte
@@ -329,13 +341,13 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 	switch tx.DomainConfig.Variant {
 	case types.NotoVariantDefault:
 		var notoLockOpEncoded []byte
-		lockStates := h.noto.filterSchema(req.OutputStates, []string{h.noto.lockInfoSchemaV1.Id})
-		notoLockOpEncoded, err = h.noto.encodeNotoLockOperation(ctx, &types.NotoLockOperation{
-			TxId:          req.Transaction.TransactionId,
-			Inputs:        endorsableStateIDs(inputs, false),
-			Outputs:       append(endorsableStateIDs(lockStates, false), endorsableStateIDs(outputs, false)...),
-			LockedOutputs: endorsableStateIDs(lockedOutputs, false),
-			Proof:         lockSignature.Payload,
+		notoLockOpEncoded, err = h.noto.encodeNotoCreateLockOperation(ctx, &types.NotoCreateLockOperation{
+			TxId:         req.Transaction.TransactionId,
+			Inputs:       endorsableStateIDs(inputs, useNullifiers),
+			Outputs:      endorsableStateIDs(outputs, false),
+			Contents:     endorsableStateIDs(lockedOutputs, false),
+			NewLockState: lt.newLockStateID,
+			Proof:        lockSignature.Payload,
 		})
 		if err == nil {
 			interfaceABI = h.noto.getInterfaceABI(types.NotoVariantDefault)
@@ -413,7 +425,7 @@ func (h *lockHandler) hookInvoke(ctx context.Context, lockID pldtypes.Bytes32, t
 func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (_ *prototk.PrepareTransactionResponse, err error) {
 	var lockID *pldtypes.Bytes32
 	if tx.DomainConfig.IsV0() {
-		lockID, _, _, err = h.noto.extractLockInfoV0(ctx, req.InfoStates, true)
+		lockID, _, err = h.noto.extractLockInfoV0(ctx, req.InfoStates, true)
 		if err != nil {
 			return nil, err
 		}

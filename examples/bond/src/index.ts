@@ -271,6 +271,7 @@ async function main(): Promise<boolean> {
       lockId: cashLockId,
       from: investor,
       recipients: [{ to: bondCustodian, amount: 100 }],
+      unlockData: "0x",
       data: "0x",
     })
     .waitForReceipt(DEFAULT_POLL_TIMEOUT, true);
@@ -313,6 +314,7 @@ async function main(): Promise<boolean> {
       lockId: bondLockId,
       from: bondCustodian,
       recipients: [{ to: investor, amount: 100 }],
+      unlockData: "0x",
       data: "0x",
     })
     .waitForReceipt(DEFAULT_POLL_TIMEOUT, true);

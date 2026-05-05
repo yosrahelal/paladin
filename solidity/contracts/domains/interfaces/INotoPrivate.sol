@@ -62,17 +62,20 @@ interface INotoPrivate {
     function createTransferLock(
         string calldata from,
         UnlockRecipient[] calldata recipients,
+        bytes calldata unlockData,
         bytes calldata data
     ) external;
 
     function createMintLock(
         UnlockRecipient[] calldata recipients,
+        bytes calldata unlockData,
         bytes calldata data
     ) external;
 
     function createBurnLock(
         string calldata from,
         uint256 amount,
+        bytes calldata unlockData,
         bytes calldata data
     ) external;
 
@@ -80,12 +83,14 @@ interface INotoPrivate {
         bytes32 lockId,
         string calldata from,
         UnlockRecipient[] calldata recipients,
+        bytes calldata unlockData,
         bytes calldata data
     ) external;
 
     function prepareMintUnlock(
         bytes32 lockId,
-        uint256 amount,
+        UnlockRecipient[] calldata recipients,
+        bytes calldata unlockData,
         bytes calldata data
     ) external;
 
@@ -93,6 +98,7 @@ interface INotoPrivate {
         bytes32 lockId,
         string calldata from,
         uint256 amount,
+        bytes calldata unlockData,
         bytes calldata data
     ) external;
 

@@ -19,23 +19,10 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
-	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 )
 
 type Event interface {
 	common.Event
-}
-
-type HeartbeatIntervalEvent struct {
-	common.BaseEvent
-}
-
-func (*HeartbeatIntervalEvent) Type() EventType {
-	return Event_HeartbeatInterval
-}
-
-func (*HeartbeatIntervalEvent) TypeString() string {
-	return "Event_HeartbeatInterval"
 }
 
 type HeartbeatReceivedEvent struct {
@@ -51,18 +38,6 @@ func (*HeartbeatReceivedEvent) TypeString() string {
 	return "Event_HeartbeatReceived"
 }
 
-type DelegateTimeoutEvent struct {
-	common.BaseEvent
-}
-
-func (*DelegateTimeoutEvent) Type() EventType {
-	return Event_Delegate_Timeout
-}
-
-func (*DelegateTimeoutEvent) TypeString() string {
-	return "Event_Delegate_Timeout"
-}
-
 type TransactionCreatedEvent struct {
 	common.BaseEvent
 	Transaction *components.PrivateTransaction
@@ -76,18 +51,15 @@ func (*TransactionCreatedEvent) TypeString() string {
 	return "Event_TransactionCreated"
 }
 
-type TransactionConfirmedEvent struct {
+type ActiveCoordinatorUpdatedEvent struct {
 	common.BaseEvent
-	From         *pldtypes.EthAddress
-	Nonce        uint64
-	Hash         pldtypes.Bytes32
-	RevertReason pldtypes.HexBytes
+	Coordinator string
 }
 
-func (*TransactionConfirmedEvent) Type() EventType {
-	return Event_TransactionConfirmed
+func (*ActiveCoordinatorUpdatedEvent) Type() EventType {
+	return Event_ActiveCoordinatorUpdated
 }
 
-func (*TransactionConfirmedEvent) TypeString() string {
-	return "Event_TransactionConfirmed"
+func (*ActiveCoordinatorUpdatedEvent) TypeString() string {
+	return "Event_ActiveCoordinatorUpdated"
 }

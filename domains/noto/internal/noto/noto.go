@@ -74,10 +74,12 @@ var (
 )
 
 var (
-	// ILockableCapability standardized events
-	EventTransfer      = "Transfer"
-	EventLockUpdated   = "LockUpdated"
-	EventLockDelegated = "LockDelegated"
+	// IConfidentialToken standardized events
+	EventTransfer = "Transfer"
+
+	// ILockableCapability standardized events - not used by Noto, as we have events with full details
+	// EventLockUpdated   = "LockUpdated"
+	// EventLockDelegated = "LockDelegated"
 
 	// Noto additional lock related events that include the transaction/UTXO details
 	EventNotoLockCreated   = "NotoLockCreated"
@@ -100,8 +102,6 @@ var allEvents = []string{
 	EventNotoLockSpent,
 	EventNotoLockCancelled,
 	EventNotoLockDelegated,
-	EventLockUpdated,
-	EventLockDelegated,
 }
 
 var allEventsV0 = []string{
@@ -129,6 +129,10 @@ var allSchemas = []*abi.Parameter{
 }
 
 var schemasJSON = mustParseSchemas(allSchemas)
+
+var retryableNotoErrors = map[string]bool{
+	"NotoInvalidInput": true,
+}
 
 type Noto struct {
 	Callbacks plugintk.DomainCallbacks
@@ -262,33 +266,35 @@ type NotoTransfer_Event struct {
 }
 
 type LockStates struct {
-	Inputs        []pldtypes.Bytes32 `json:"inputs"`
-	Outputs       []pldtypes.Bytes32 `json:"outputs"`
-	LockedOutputs []pldtypes.Bytes32 `json:"lockedOutputs"`
+	Inputs   []pldtypes.Bytes32 `json:"inputs"`
+	Outputs  []pldtypes.Bytes32 `json:"outputs"`
+	Contents []pldtypes.Bytes32 `json:"contents"`
 }
 
-// INoto.NotoLockUpdated event JSON schema - describes the UTXO transaction that accompanies a lock create
+// INoto.NotoLockCreated event JSON schema - describes the UTXO transaction that accompanies a lock create
 type NotoLockCreated_Event struct {
-	TxId          pldtypes.Bytes32     `json:"txId"`
-	LockID        pldtypes.Bytes32     `json:"lockId"`
-	Owner         *pldtypes.EthAddress `json:"owner"`
-	Inputs        []pldtypes.Bytes32   `json:"inputs"`
-	Outputs       []pldtypes.Bytes32   `json:"outputs"`
-	LockedOutputs []pldtypes.Bytes32   `json:"lockedOutputs"`
-	Proof         pldtypes.HexBytes    `json:"proof"`
-	Data          pldtypes.HexBytes    `json:"data"`
+	TxId         pldtypes.Bytes32     `json:"txId"`
+	LockID       pldtypes.Bytes32     `json:"lockId"`
+	Owner        *pldtypes.EthAddress `json:"owner"`
+	Inputs       []pldtypes.Bytes32   `json:"inputs"`
+	Outputs      []pldtypes.Bytes32   `json:"outputs"`
+	Contents     []pldtypes.Bytes32   `json:"contents"`
+	NewLockState pldtypes.Bytes32     `json:"newLockState"`
+	Proof        pldtypes.HexBytes    `json:"proof"`
+	Data         pldtypes.HexBytes    `json:"data"`
 }
 
 // INoto.NotoLockSpent and INoto.NotoLockCancelled event JSON schema
 type NotoLockSpentOrCancelled_Event struct {
-	TxId    pldtypes.Bytes32     `json:"txId"`
-	LockID  pldtypes.Bytes32     `json:"lockId"`
-	Spender *pldtypes.EthAddress `json:"spender"`
-	Inputs  []pldtypes.Bytes32   `json:"inputs"`
-	Outputs []pldtypes.Bytes32   `json:"outputs"`
-	TxData  pldtypes.HexBytes    `json:"txData"`
-	Proof   pldtypes.HexBytes    `json:"proof"`
-	Data    pldtypes.HexBytes    `json:"data"`
+	TxId         pldtypes.Bytes32     `json:"txId"`
+	LockID       pldtypes.Bytes32     `json:"lockId"`
+	Spender      *pldtypes.EthAddress `json:"spender"`
+	Inputs       []pldtypes.Bytes32   `json:"inputs"`
+	Outputs      []pldtypes.Bytes32   `json:"outputs"`
+	TxData       pldtypes.HexBytes    `json:"txData"`
+	OldLockState pldtypes.Bytes32     `json:"oldLockState"`
+	Proof        pldtypes.HexBytes    `json:"proof"`
+	Data         pldtypes.HexBytes    `json:"data"`
 }
 
 // INoto.NotoLockUpdated event JSON schema - describes the UTXO transaction that accompanies a lock update
@@ -296,23 +302,23 @@ type NotoLockUpdated_Event struct {
 	TxId         pldtypes.Bytes32     `json:"txId"`
 	LockID       pldtypes.Bytes32     `json:"lockId"`
 	Operator     *pldtypes.EthAddress `json:"operator"`
-	LockContents []pldtypes.Bytes32   `json:"lockContents"`
-	Inputs       []pldtypes.Bytes32   `json:"inputs"`
-	Outputs      []pldtypes.Bytes32   `json:"outputs"`
+	Contents     []pldtypes.Bytes32   `json:"contents"`
+	OldLockState pldtypes.Bytes32     `json:"oldLockState"`
+	NewLockState pldtypes.Bytes32     `json:"newLockState"`
 	Proof        pldtypes.HexBytes    `json:"proof"`
 	Data         pldtypes.HexBytes    `json:"data"`
 }
 
-// INoto.LockDelegated event JSON schema
+// INoto.NotoLockDelegated event JSON schema
 type NotoLockDelegated_Event struct {
-	TxId    pldtypes.Bytes32     `json:"txId"`
-	LockID  pldtypes.Bytes32     `json:"lockId"`
-	From    *pldtypes.EthAddress `json:"from"`
-	To      *pldtypes.EthAddress `json:"to"`
-	Inputs  []pldtypes.Bytes32   `json:"inputs"`
-	Outputs []pldtypes.Bytes32   `json:"outputs"`
-	Proof   pldtypes.HexBytes    `json:"proof"`
-	Data    pldtypes.HexBytes    `json:"data"`
+	TxId         pldtypes.Bytes32     `json:"txId"`
+	LockID       pldtypes.Bytes32     `json:"lockId"`
+	From         *pldtypes.EthAddress `json:"from"`
+	To           *pldtypes.EthAddress `json:"to"`
+	OldLockState pldtypes.Bytes32     `json:"oldLockState"`
+	NewLockState pldtypes.Bytes32     `json:"newLockState"`
+	Proof        pldtypes.HexBytes    `json:"proof"`
+	Data         pldtypes.HexBytes    `json:"data"`
 }
 
 type parsedCoins struct {
@@ -535,8 +541,7 @@ func (n *Noto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (
 }
 
 func (n *Noto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
-	ctx = log.WithComponent(ctx, "noto")
-	params, err := n.validateDeploy(req.Transaction)
+	ctx, params, err := n.validateDeployAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
 	}
@@ -575,8 +580,7 @@ func (n *Noto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (
 }
 
 func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
-	ctx = log.WithComponent(ctx, "noto")
-	params, err := n.validateDeploy(req.Transaction)
+	ctx, params, err := n.validateDeployAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
 	}
@@ -675,6 +679,7 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 
 func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
 	ctx = log.WithComponent(ctx, "noto")
+	ctx = log.WithLogField(ctx, "contract", req.ContractAddress)
 	var notoContractConfigJSON []byte
 
 	domainConfig, decodedData, err := n.decodeConfig(ctx, req.ContractConfig)
@@ -728,8 +733,7 @@ func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractReques
 }
 
 func (n *Noto) InitTransaction(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
-	ctx = log.WithComponent(ctx, "noto")
-	tx, handler, err := n.validateTransaction(ctx, req.Transaction)
+	ctx, tx, handler, err := n.validateTransactionAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
 	}
@@ -737,8 +741,7 @@ func (n *Noto) InitTransaction(ctx context.Context, req *prototk.InitTransaction
 }
 
 func (n *Noto) AssembleTransaction(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
-	ctx = log.WithComponent(ctx, "noto")
-	tx, handler, err := n.validateTransaction(ctx, req.Transaction)
+	ctx, tx, handler, err := n.validateTransactionAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
 	}
@@ -746,8 +749,7 @@ func (n *Noto) AssembleTransaction(ctx context.Context, req *prototk.AssembleTra
 }
 
 func (n *Noto) EndorseTransaction(ctx context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
-	ctx = log.WithComponent(ctx, "noto")
-	tx, handler, err := n.validateTransaction(ctx, req.Transaction)
+	ctx, tx, handler, err := n.validateTransactionAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
 	}
@@ -755,8 +757,7 @@ func (n *Noto) EndorseTransaction(ctx context.Context, req *prototk.EndorseTrans
 }
 
 func (n *Noto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
-	ctx = log.WithComponent(ctx, "noto")
-	tx, handler, err := n.validateTransaction(ctx, req.Transaction)
+	ctx, tx, handler, err := n.validateTransactionAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
 	}
@@ -798,11 +799,22 @@ func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.No
 	return &config, &decodedData, err
 }
 
-func (n *Noto) validateDeploy(tx *prototk.DeployTransactionSpecification) (*types.ConstructorParams, error) {
+func (n *Noto) validateDeployAndGetLogContext(ctx context.Context, txSpec *prototk.DeployTransactionSpecification) (context.Context, *types.ConstructorParams, error) {
+	ctx = log.WithComponent(ctx, "noto")
+	ctx = log.WithLogField(ctx, "tx", txSpec.TransactionId)
+
+	params, err := n.validateDeploy(ctx, txSpec)
+	if err != nil {
+		return ctx, nil, err
+	}
+	return ctx, params, nil
+}
+
+func (n *Noto) validateDeploy(ctx context.Context, tx *prototk.DeployTransactionSpecification) (*types.ConstructorParams, error) {
 	var params types.ConstructorParams
 	err := json.Unmarshal([]byte(tx.ConstructorParamsJson), &params)
 	if err == nil && params.Notary == "" {
-		err = i18n.NewError(context.Background(), msgs.MsgParameterRequired, "notary")
+		err = i18n.NewError(ctx, msgs.MsgParameterRequired, "notary")
 	}
 	return &params, err
 }
@@ -815,62 +827,60 @@ func validateTransactionCommon[T comparable](
 	var functionABI abi.Entry
 	err := json.Unmarshal([]byte(tx.FunctionAbiJson), &functionABI)
 	if err != nil {
-		var zero T
-		return nil, zero, err
+		return nil, *new(T), err
 	}
 
 	var domainConfig types.NotoParsedConfig
 	err = json.Unmarshal([]byte(tx.ContractInfo.ContractConfigJson), &domainConfig)
 	if err != nil {
-		var zero T
-		return nil, zero, err
+		return nil, *new(T), err
 	}
 
-	// Get the expected ABI for validation
-	var abi *abi.Entry
-	if functionABI.Name == "delegateLock" {
-		// delegateLock has different signatures in V0 and V1
-		if domainConfig.IsV0() {
-			abi = types.NotoV0ABI.Functions()[functionABI.Name]
-		} else {
-			abi = types.NotoABI.Functions()[functionABI.Name]
-		}
-	} else {
-		abi = types.NotoABI.Functions()[functionABI.Name]
+	// Lookup the function by signature. Noting below we're even more precise and throw
+	// MsgUnexpectedFunctionSignature if even the parameter names mismatch.
+	abiFn := types.NotoABIFunctionsBySolSignature[tx.FunctionSignature]
+	exactSignatureMatch := abiFn != nil
+	if !exactSignatureMatch {
+		// If we don't find a full signature match, we do a name lookup.
+		// Noting because the signature is wrong (or the direct lookup would have worked),
+		// we'll fail the lower check and return MsgUnexpectedFunctionSignature.
+		// But this lets us only give MsgUnknownFunction if the name of the function is completely wrong.
+		abiFn = types.NotoABI.Functions()[functionABI.Name]
 	}
 
 	var unsetT T
 	handler := getHandler(functionABI.Name)
-	if abi == nil || handler == unsetT {
+	if abiFn == nil || handler == unsetT {
 		return nil, unsetT, i18n.NewError(ctx, msgs.MsgUnknownFunction, functionABI.Name)
 	}
 
 	// check if the handler implements the ValidateParams method cause generic T
 	validator, ok := any(handler).(ParamValidator)
 	if !ok {
-		var zero T
-		return nil, zero, i18n.NewError(ctx, msgs.MsgErrorHandlerImplementationNotFound)
+		return nil, *new(T), i18n.NewError(ctx, msgs.MsgErrorHandlerImplementationNotFound)
 	}
 
 	params, err := validator.ValidateParams(ctx, &domainConfig, tx.FunctionParamsJson)
 	if err != nil {
-		var zero T
-		return nil, zero, err
+		return nil, *new(T), err
 	}
 
-	signature, err := abi.SolidityStringCtx(ctx)
-	if err == nil && tx.FunctionSignature != signature {
-		err = i18n.NewError(ctx, msgs.MsgUnexpectedFunctionSignature, functionABI.Name, signature, tx.FunctionSignature)
+	// If we reach here they called a function that exists, and encoded their parameters, but
+	// the signature isn't an exact match - variable naming, missing var etc.
+	// We give them an error telling them a signature of a function with the same name that they
+	// likely meant to call.
+	// In the case we have multiple function definitions for a particular name (like prepareUnlock)
+	// we give an arbitrary one of the defined ones - so this isn't prefect.
+	if !exactSignatureMatch {
+		err = i18n.NewError(ctx, msgs.MsgUnexpectedFunctionSignature, functionABI.Name, abiFn.SolString(), tx.FunctionSignature)
 	}
 	if err != nil {
-		var zero T
-		return nil, zero, err
+		return nil, *new(T), err
 	}
 
 	contractAddress, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
 	if err != nil {
-		var zero T
-		return nil, zero, err
+		return nil, *new(T), err
 	}
 
 	return &types.ParsedTransaction{
@@ -888,6 +898,30 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		tx,
 		n.GetHandler,
 	)
+}
+
+func (n *Noto) validateTransactionAndGetLogContext(ctx context.Context, txSpec *prototk.TransactionSpecification) (context.Context, *types.ParsedTransaction, types.DomainHandler, error) {
+	ctx = log.WithComponent(ctx, "noto")
+	tx, handler, err := n.validateTransaction(ctx, txSpec)
+	if err != nil {
+		return ctx, nil, nil, err
+	}
+
+	ctx = log.WithLogField(ctx, "tx", tx.Transaction.TransactionId)
+	ctx = log.WithLogField(ctx, "contract", tx.Transaction.ContractInfo.ContractAddress)
+	return ctx, tx, handler, nil
+}
+
+func (n *Noto) validateCallAndGetLogContext(ctx context.Context, callSpec *prototk.TransactionSpecification) (context.Context, *types.ParsedTransaction, types.DomainCallHandler, error) {
+	ctx = log.WithComponent(ctx, "noto")
+	call, handler, err := n.validateCall(ctx, callSpec)
+	if err != nil {
+		return ctx, nil, nil, err
+	}
+
+	ctx = log.WithLogField(ctx, "tx", call.Transaction.TransactionId)
+	ctx = log.WithLogField(ctx, "contract", call.Transaction.ContractInfo.ContractAddress)
+	return ctx, call, handler, nil
 }
 
 func (n *Noto) validateCall(ctx context.Context, call *prototk.TransactionSpecification) (*types.ParsedTransaction, types.DomainCallHandler, error) {
@@ -972,10 +1006,18 @@ func (n *Noto) parseCoinList(ctx context.Context, label string, states []*protot
 	return result, nil
 }
 
-func (n *Noto) encodeNotoLockOperation(ctx context.Context, lockOp *types.NotoLockOperation) (abiData pldtypes.HexBytes, err error) {
+func (n *Noto) encodeNotoCreateLockOperation(ctx context.Context, lockOp *types.NotoCreateLockOperation) (abiData pldtypes.HexBytes, err error) {
 	dataJSON, err := json.Marshal([]any{lockOp})
 	if err == nil {
-		abiData, err = types.NotoLockOperationABI.EncodeABIDataJSONCtx(ctx, dataJSON)
+		abiData, err = types.NotoCreateLockOperationABI.EncodeABIDataJSONCtx(ctx, dataJSON)
+	}
+	return abiData, err
+}
+
+func (n *Noto) encodeNotoUpdateLockOperation(ctx context.Context, lockOp *types.NotoUpdateLockOperation) (abiData pldtypes.HexBytes, err error) {
+	dataJSON, err := json.Marshal([]any{lockOp})
+	if err == nil {
+		abiData, err = types.NotoUpdateLockOperationABI.EncodeABIDataJSONCtx(ctx, dataJSON)
 	}
 	return abiData, err
 }
@@ -1175,8 +1217,7 @@ func (n *Noto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateSta
 }
 
 func (n *Noto) InitCall(ctx context.Context, req *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {
-	ctx = log.WithComponent(ctx, "noto")
-	ptx, handler, err := n.validateCall(ctx, req.Transaction)
+	ctx, ptx, handler, err := n.validateCallAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateInitCallTxSpec, err)
 	}
@@ -1184,8 +1225,7 @@ func (n *Noto) InitCall(ctx context.Context, req *prototk.InitCallRequest) (*pro
 }
 
 func (n *Noto) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
-	ctx = log.WithComponent(ctx, "noto")
-	ptx, handler, err := n.validateCall(ctx, req.Transaction)
+	ctx, ptx, handler, err := n.validateCallAndGetLogContext(ctx, req.Transaction)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateExecCallTxSpec, err)
 	}
@@ -1201,6 +1241,10 @@ func (n *Noto) InitPrivacyGroup(ctx context.Context, req *prototk.InitPrivacyGro
 }
 
 func (n *Noto) WrapPrivacyGroupEVMTX(ctx context.Context, req *prototk.WrapPrivacyGroupEVMTXRequest) (*prototk.WrapPrivacyGroupEVMTXResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}
+
+func (n *Noto) InvokeRPC(ctx context.Context, req *prototk.InvokeRPCRequest) (*prototk.InvokeRPCResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
 
@@ -1221,8 +1265,8 @@ func (n *Noto) CheckStateCompletion(ctx context.Context, req *prototk.CheckState
 	// If we don't (Noto V0, or just not available yet) then we return the pre-calculated FirstUnavailableId
 	// provided by us by Paladin.
 	if manifestState == nil {
-		res.PrimaryMissingStateId = req.UnavailableStates.FirstUnavailableId
-		log.L(ctx).Debugf("No manifest available. Returning pre-calculated first unavailable state for transaction %s: %s", req.TransactionId, *res.PrimaryMissingStateId)
+		res.NextMissingStateId = req.UnavailableStates.FirstUnavailableId
+		log.L(ctx).Debugf("No manifest available. Returning pre-calculated first unavailable state for transaction %s: %s", req.TransactionId, *res.NextMissingStateId)
 		return res, nil
 	}
 	// Decode the manifest
@@ -1235,10 +1279,7 @@ func (n *Noto) CheckStateCompletion(ctx context.Context, req *prototk.CheckState
 	// Note we only get to this point if we're involved in the transaction in some way, and
 	// don't have the whole state set (Notary always has full set before submit).
 	// So a bit of efficient in-memory processing overhead is perfectly acceptable.
-	lookupReq := &prototk.LookupKeyIdentifiersRequest{
-		Algorithm:    algorithms.ECDSA_SECP256K1,
-		VerifierType: verifiers.ETH_ADDRESS,
-	}
+	lookupReq := &prototk.ReverseKeyLookupRequest{}
 	uniqueAddresses := make(map[string]struct{})
 	for _, state := range manifest.States {
 		for _, target := range state.Participants {
@@ -1246,9 +1287,13 @@ func (n *Noto) CheckStateCompletion(ctx context.Context, req *prototk.CheckState
 		}
 	}
 	for addr := range uniqueAddresses {
-		lookupReq.Verifiers = append(lookupReq.Verifiers, addr)
+		lookupReq.Lookups = append(lookupReq.Lookups, &prototk.ReverseKeyLookup{
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+			Verifier:     addr,
+		})
 	}
-	lookupRes, err := n.Callbacks.LookupKeyIdentifiers(ctx, lookupReq)
+	lookupRes, err := n.Callbacks.ReverseKeyLookup(ctx, lookupReq)
 	if err != nil {
 		return nil, err
 	}
@@ -1269,25 +1314,25 @@ func (n *Noto) CheckStateCompletion(ctx context.Context, req *prototk.CheckState
 		for _, unavailableID := range req.UnavailableStates.InfoStateIds {
 			if unavailableID == requiredStateID {
 				log.L(ctx).Warnf("Required info state %s unavailable for transaction %s", unavailableID, req.TransactionId)
-				return &prototk.CheckStateCompletionResponse{PrimaryMissingStateId: &requiredStateID}, nil
+				return &prototk.CheckStateCompletionResponse{NextMissingStateId: &requiredStateID}, nil
 			}
 		}
 		for _, unavailableID := range req.UnavailableStates.InputStateIds {
 			if unavailableID == requiredStateID {
 				log.L(ctx).Warnf("Required input state %s unavailable for transaction %s", unavailableID, req.TransactionId)
-				return &prototk.CheckStateCompletionResponse{PrimaryMissingStateId: &requiredStateID}, nil
+				return &prototk.CheckStateCompletionResponse{NextMissingStateId: &requiredStateID}, nil
 			}
 		}
 		for _, unavailableID := range req.UnavailableStates.OutputStateIds {
 			if unavailableID == requiredStateID {
 				log.L(ctx).Warnf("Required output state %s unavailable for transaction %s", unavailableID, req.TransactionId)
-				return &prototk.CheckStateCompletionResponse{PrimaryMissingStateId: &requiredStateID}, nil
+				return &prototk.CheckStateCompletionResponse{NextMissingStateId: &requiredStateID}, nil
 			}
 		}
 		for _, unavailableID := range req.UnavailableStates.ReadStateIds {
 			if unavailableID == requiredStateID {
 				log.L(ctx).Warnf("Required read state %s unavailable for transaction %s", unavailableID, req.TransactionId)
-				return &prototk.CheckStateCompletionResponse{PrimaryMissingStateId: &requiredStateID}, nil
+				return &prototk.CheckStateCompletionResponse{NextMissingStateId: &requiredStateID}, nil
 			}
 		}
 	}
@@ -1330,27 +1375,19 @@ func (n *Noto) computeLockId(ctx context.Context, contractAddress *pldtypes.EthA
 	return pldtypes.Bytes32Keccak(encoded), nil
 }
 
-func (n *Noto) extractLockInfoV0(ctx context.Context, infoStates []*prototk.EndorsableState, required bool) (lockID *pldtypes.Bytes32, spendTxId *pldtypes.Bytes32, delegate *pldtypes.EthAddress, err error) {
-	lockStates := n.filterSchema(infoStates, []string{n.lockInfoSchemaV0.Id, n.lockInfoSchemaV1.Id})
+func (n *Noto) extractLockInfoV0(ctx context.Context, infoStates []*prototk.EndorsableState, required bool) (lockID *pldtypes.Bytes32, delegate *pldtypes.EthAddress, err error) {
+	lockStates := n.filterSchema(infoStates, []string{n.lockInfoSchemaV0.Id})
 	if len(lockStates) != 1 {
 		if !required {
-			return nil, nil, nil, nil
+			return nil, nil, nil
 		}
-		return nil, nil, nil, i18n.NewError(ctx, msgs.MsgLockIDNotFound)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgLockIDNotFound)
 	}
-	state := lockStates[0]
-	if state.SchemaId == n.lockInfoSchemaV0.Id {
-		lock, err := n.unmarshalLockV0(lockStates[0].StateDataJson)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		return &lock.LockID, nil /* no spendTxId in V0 lock info */, lock.Delegate, nil
-	}
-	lock, err := n.unmarshalLockV1(lockStates[0].StateDataJson)
+	lock, err := n.unmarshalLockV0(lockStates[0].StateDataJson)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	return &lock.LockID, &lock.SpendTxId, nil /* no delegate in V1 lock info */, nil
+	return &lock.LockID, lock.Delegate, nil
 }
 
 func (n *Noto) encodeNotoLockOptions(ctx context.Context, notoLockOptions *types.NotoLockOptions) (encoded pldtypes.HexBytes, err error) {
@@ -1369,6 +1406,23 @@ func (n *Noto) encodeNotoDelegateOperation(ctx context.Context, notoDelegateOp *
 	return encoded, err
 }
 
+func (n *Noto) IsBaseLedgerRevertRetryable(ctx context.Context, req *prototk.IsBaseLedgerRevertRetryableRequest) (*prototk.IsBaseLedgerRevertRetryableResponse, error) {
+	if len(req.RevertData) < 4 {
+		return &prototk.IsBaseLedgerRevertRetryableResponse{Retryable: true}, nil
+	}
+	entry, cv, ok := errorsBuild.ABI.ParseErrorCtx(ctx, req.RevertData)
+	if ok {
+		return &prototk.IsBaseLedgerRevertRetryableResponse{
+			Retryable:     retryableNotoErrors[entry.Name],
+			DecodedReason: abi.FormatErrorStringCtx(ctx, entry, cv),
+		}, nil
+	}
+	return &prototk.IsBaseLedgerRevertRetryableResponse{
+		Retryable:     false,
+		DecodedReason: "",
+	}, nil
+}
+
 func (n *Noto) computeLockIDForLockTX(ctx context.Context, tx *types.ParsedTransaction, notaryID *identityPair) (pldtypes.Bytes32, error) {
 	notaryAddress := notaryID.address
 	var senderAddress *pldtypes.EthAddress
@@ -1382,3 +1436,4 @@ func (n *Noto) computeLockIDForLockTX(ctx context.Context, tx *types.ParsedTrans
 	}
 	return n.computeLockId(ctx, contractAddress, senderAddress, tx.Transaction.TransactionId)
 }
+

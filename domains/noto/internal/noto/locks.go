@@ -34,24 +34,26 @@ type loadedLockInfo struct {
 	lockInfo *types.NotoLockInfo_V1
 }
 
-type lockTransitionType int
+type lockTransitionType string
 
 const (
-	LOCK_DECODE_ANY lockTransitionType = iota
-	LOCK_CREATE
-	LOCK_UPDATE
-	LOCK_SPEND
+	LOCK_DECODE_ANY lockTransitionType = "LOCK_DECODE_ANY"
+	LOCK_CREATE     lockTransitionType = "LOCK_CREATE"
+	LOCK_UPDATE     lockTransitionType = "LOCK_UPDATE"
+	LOCK_SPEND      lockTransitionType = "LOCK_SPEND"
 )
 
 type lockTransition struct {
-	noto          *Noto
-	prevLockState *prototk.EndorsableState
-	prevLockInfo  types.NotoLockInfo_V1
-	newLockState  *prototk.EndorsableState
-	newLockInfo   types.NotoLockInfo_V1
+	noto            *Noto
+	prevLockState   *prototk.EndorsableState
+	prevLockStateID pldtypes.Bytes32
+	prevLockInfo    types.NotoLockInfo_V1
+	newLockState    *prototk.EndorsableState
+	newLockStateID  pldtypes.Bytes32
+	newLockInfo     types.NotoLockInfo_V1
 }
 
-func (n *Noto) loadLockInfoV1(ctx context.Context, stateQueryContext string, lockID pldtypes.Bytes32) (*loadedLockInfo, error) {
+func (n *Noto) loadLockInfoV1(ctx context.Context, stateQueryContext string, lockID pldtypes.Bytes32) (info *loadedLockInfo, revert bool, err error) {
 	queryBuilder := query.NewQueryBuilder().
 		Limit(1).
 		Sort("-.created").
@@ -59,10 +61,10 @@ func (n *Noto) loadLockInfoV1(ctx context.Context, stateQueryContext string, loc
 	log.L(ctx).Debugf("Lock query: %s", queryBuilder.Query())
 	states, err := n.findAvailableStates(ctx, stateQueryContext, n.lockInfoSchemaV1.Id, queryBuilder.Query().String(), false)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if len(states) == 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgLockIDNotFound)
+		return nil, true, i18n.NewError(ctx, msgs.MsgLockIDNotFound)
 	}
 	var lockState = states[0]
 	var lockInfo types.NotoLockInfo_V1
@@ -71,20 +73,19 @@ func (n *Noto) loadLockInfoV1(ctx context.Context, stateQueryContext string, loc
 		err = json.Unmarshal([]byte(lockState.DataJson), &lockInfo)
 	}
 	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidLockState, lockState.Id)
+		return nil, false, i18n.WrapError(ctx, err, msgs.MsgInvalidLockState, lockState.Id)
 	}
 	return &loadedLockInfo{
 		id:       lockStateID,
 		stateRef: &prototk.StateRef{Id: lockState.Id, SchemaId: lockState.SchemaId},
 		lockInfo: &lockInfo,
-	}, nil
+	}, false, nil
 }
 
 // takes an assembled V1 lock transition (including a new lock), does basic validation & parsing,
 // then returns the parsed result for further checking/processing.
-func (n *Noto) validateV1LockTransition(ctx context.Context, transitionType lockTransitionType, fromID *identityPair, lockID *pldtypes.Bytes32, inputs []*prototk.EndorsableState, outputs []*prototk.EndorsableState) (*lockTransition, error) {
-	var lt lockTransition
-	lt.noto = n
+func (n *Noto) validateV1LockTransition(ctx context.Context, transitionType lockTransitionType, senderID *identityPair, lockID *pldtypes.Bytes32, inputs []*prototk.EndorsableState, outputs []*prototk.EndorsableState) (lt *lockTransition, err error) {
+	lt = &lockTransition{noto: n}
 
 	inputLockInfoStates := n.filterSchema(inputs, []string{n.lockInfoSchemaV1.Id})
 	outputLockInfoStates := n.filterSchema(outputs, []string{n.lockInfoSchemaV1.Id})
@@ -106,19 +107,27 @@ func (n *Noto) validateV1LockTransition(ctx context.Context, transitionType lock
 
 	if len(inputLockInfoStates) == 1 {
 		lt.prevLockState = inputLockInfoStates[0]
-		if err := json.Unmarshal([]byte(lt.prevLockState.StateDataJson), &lt.prevLockInfo); err != nil {
+		err := json.Unmarshal([]byte(lt.prevLockState.StateDataJson), &lt.prevLockInfo)
+		if err == nil {
+			lt.prevLockStateID, err = pldtypes.ParseBytes32Ctx(ctx, lt.prevLockState.Id)
+		}
+		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidLockState, lt.prevLockState.Id)
 		}
 
 		// Check ownership of the input lock is the from address of the transaction
-		if fromID != nil && !lt.prevLockInfo.Owner.Equals(fromID.address) {
-			return nil, i18n.NewError(ctx, msgs.MsgStateWrongOwner, lt.prevLockState.Id, fromID.address)
+		if senderID != nil && !lt.prevLockInfo.Owner.Equals(senderID.address) {
+			return nil, i18n.NewError(ctx, msgs.MsgStateWrongOwner, lt.prevLockState.Id, senderID.address)
 		}
 	}
 
 	if len(outputLockInfoStates) == 1 {
 		lt.newLockState = outputLockInfoStates[0]
-		if err := json.Unmarshal([]byte(lt.newLockState.StateDataJson), &lt.newLockInfo); err != nil {
+		err := json.Unmarshal([]byte(lt.newLockState.StateDataJson), &lt.newLockInfo)
+		if err == nil {
+			lt.newLockStateID, err = pldtypes.ParseBytes32Ctx(ctx, lt.newLockState.Id)
+		}
+		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidLockState, lt.newLockState.Id)
 		}
 
@@ -144,7 +153,9 @@ func (n *Noto) validateV1LockTransition(ctx context.Context, transitionType lock
 		}
 	}
 
-	return &lt, nil
+	log.L(ctx).Debugf("Lock transition %s type=%s oldLockState=%s newLockState=%s", lt.newLockInfo.LockID, transitionType, lt.prevLockStateID, lt.newLockStateID)
+
+	return lt, nil
 }
 
 func (lt *lockTransition) splitOutputs(ctx context.Context, infoStates []*prototk.EndorsableState) (spendOutputs, cancelOutputs []*prototk.EndorsableState, err error) {

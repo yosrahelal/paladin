@@ -40,21 +40,26 @@ type identityForTesting struct {
 }
 
 type PrivateTransactionBuilderForTesting struct {
-	id                     uuid.UUID
-	originatorName         string
-	originatorNode         string
-	originator             *identityForTesting
-	domain                 string
-	address                pldtypes.EthAddress
-	signerAddress          *pldtypes.EthAddress
-	numberOfEndorsers      int
-	numberOfEndorsements   int
-	numberOfOutputStates   int
-	inputStateIDs          []pldtypes.HexBytes
-	readStateIDs           []pldtypes.HexBytes
-	endorsers              []*identityForTesting
-	revertReason           *string
-	predefinedDependencies []uuid.UUID
+	id                         uuid.UUID
+	originatorName             string
+	originatorNode             string
+	originator                 *identityForTesting
+	domain                     string
+	address                    pldtypes.EthAddress
+	signerAddress              *pldtypes.EthAddress
+	numberOfEndorsers          int
+	numberOfEndorsements       int
+	numberOfOutputStates       int
+	inputStateIDs              []pldtypes.HexBytes
+	readStateIDs               []pldtypes.HexBytes
+	endorsers                  []*identityForTesting
+	revertReason               *string
+	chainedDependencies        []uuid.UUID
+	preAssemblyOverride        *components.TransactionPreAssembly
+	postAssemblyOverride       *components.TransactionPostAssembly
+	preparedPrivateTransaction *pldapi.TransactionInput
+	preparedPublicTransaction  *pldapi.TransactionInput
+	signer                     *string
 }
 
 // useful for creating multiple transactions in a test, from the same originator
@@ -128,10 +133,15 @@ func NewPrivateTransactionBuilderForTesting() *PrivateTransactionBuilderForTesti
 		signerAddress:        nil,
 		numberOfEndorsers:    3,
 		numberOfEndorsements: 0,
-		numberOfOutputStates: 1,
+		numberOfOutputStates: 0,
 	}
 
 	return builder
+}
+
+func (b *PrivateTransactionBuilderForTesting) Domain(domain string) *PrivateTransactionBuilderForTesting {
+	b.domain = domain
+	return b
 }
 
 func (b *PrivateTransactionBuilderForTesting) Address(address pldtypes.EthAddress) *PrivateTransactionBuilderForTesting {
@@ -191,13 +201,49 @@ func (b *PrivateTransactionBuilderForTesting) ReadStateIDs(stateIDs ...pldtypes.
 	return b
 }
 
-func (b *PrivateTransactionBuilderForTesting) PredefinedDependencies(transactionIDs ...uuid.UUID) *PrivateTransactionBuilderForTesting {
-	b.predefinedDependencies = transactionIDs
+func (b *PrivateTransactionBuilderForTesting) ChainedDependencies(transactionIDs ...uuid.UUID) *PrivateTransactionBuilderForTesting {
+	b.chainedDependencies = transactionIDs
 	return b
 }
 
 func (b *PrivateTransactionBuilderForTesting) Reverts(revertReason string) *PrivateTransactionBuilderForTesting {
 	b.revertReason = &revertReason
+	return b
+}
+
+// ID sets the transaction ID used when Build() or BuildSparse() is called.
+func (b *PrivateTransactionBuilderForTesting) ID(id uuid.UUID) *PrivateTransactionBuilderForTesting {
+	b.id = id
+	return b
+}
+
+// PreAssembly sets an optional override; when set, Build() uses this instead of BuildPreAssembly().
+func (b *PrivateTransactionBuilderForTesting) PreAssembly(pa *components.TransactionPreAssembly) *PrivateTransactionBuilderForTesting {
+	b.preAssemblyOverride = pa
+	return b
+}
+
+// PostAssembly sets an optional override; when set, Build() uses this instead of BuildPostAssembly().
+func (b *PrivateTransactionBuilderForTesting) PostAssembly(pa *components.TransactionPostAssembly) *PrivateTransactionBuilderForTesting {
+	b.postAssemblyOverride = pa
+	return b
+}
+
+// PreparedPrivateTransaction sets the prepared private transaction on the built PrivateTransaction.
+func (b *PrivateTransactionBuilderForTesting) PreparedPrivateTransaction(tx *pldapi.TransactionInput) *PrivateTransactionBuilderForTesting {
+	b.preparedPrivateTransaction = tx
+	return b
+}
+
+// PreparedPublicTransaction sets the prepared public transaction on the built PrivateTransaction.
+func (b *PrivateTransactionBuilderForTesting) PreparedPublicTransaction(tx *pldapi.TransactionInput) *PrivateTransactionBuilderForTesting {
+	b.preparedPublicTransaction = tx
+	return b
+}
+
+// Signer sets the signer identity on the built PrivateTransaction.
+func (b *PrivateTransactionBuilderForTesting) Signer(signer string) *PrivateTransactionBuilderForTesting {
+	b.signer = &signer
 	return b
 }
 
@@ -244,25 +290,49 @@ func (b *PrivateTransactionBuilderForTesting) Build() *components.PrivateTransac
 
 	b.initializeOriginator()
 	b.initializeEndorsers()
-	return &components.PrivateTransaction{
+	preAssembly := b.BuildPreAssembly()
+	if b.preAssemblyOverride != nil {
+		preAssembly = b.preAssemblyOverride
+	}
+	postAssembly := b.BuildPostAssembly()
+	if b.postAssemblyOverride != nil {
+		postAssembly = b.postAssemblyOverride
+	}
+	if len(b.chainedDependencies) > 0 {
+		preAssembly.ChainedDependsOn = b.chainedDependencies
+	}
+	pt := &components.PrivateTransaction{
 		ID:           b.id,
 		Domain:       b.domain,
 		Address:      b.address,
-		PreAssembly:  b.BuildPreAssembly(),
-		PostAssembly: b.BuildPostAssembly(),
+		PreAssembly:  preAssembly,
+		PostAssembly: postAssembly,
 	}
-
+	if b.preparedPrivateTransaction != nil {
+		pt.PreparedPrivateTransaction = b.preparedPrivateTransaction
+	}
+	if b.preparedPublicTransaction != nil {
+		pt.PreparedPublicTransaction = b.preparedPublicTransaction
+	}
+	if b.signer != nil {
+		pt.Signer = *b.signer
+	}
+	return pt
 }
 
 // Function BuildSparse creates a new private transaction with only the PreAssembly populated
 func (b *PrivateTransactionBuilderForTesting) BuildSparse() *components.PrivateTransaction {
 	b.initializeOriginator()
 	b.initializeEndorsers()
+	preAssembly := b.BuildPreAssembly()
+	if b.preAssemblyOverride != nil {
+		preAssembly = b.preAssemblyOverride
+	}
 	return &components.PrivateTransaction{
 		ID:          b.id,
 		Domain:      b.domain,
 		Address:     b.address,
-		PreAssembly: b.BuildPreAssembly(),
+		PreAssembly: preAssembly,
 	}
 }
 
@@ -298,11 +368,6 @@ func (b *PrivateTransactionBuilderForTesting) BuildPreAssembly() *components.Tra
 			VerifierType: verifiers.ETH_ADDRESS,
 			Verifier:     b.endorsers[i].verifier,
 		}
-	}
-
-	if b.predefinedDependencies != nil {
-		preAssembly.Dependencies = &pldapi.TransactionDependencies{}
-		preAssembly.Dependencies.DependsOn = append(preAssembly.Dependencies.DependsOn, b.predefinedDependencies...)
 	}
 
 	return preAssembly
