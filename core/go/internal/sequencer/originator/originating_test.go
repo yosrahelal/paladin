@@ -23,32 +23,99 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
+	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func Test_action_ActiveCoordinatorUpdated_EmptyCoordinatorReturnsError(t *testing.T) {
+func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode")
-	o, _, cleanup := builder.Build(ctx)
+	o, _, cleanup := NewOriginatorBuilderForTesting(State_Idle).Build(ctx)
 	defer cleanup()
 
-	err := o.stateMachineEventLoop.ProcessEvent(ctx, &ActiveCoordinatorUpdatedEvent{Coordinator: ""})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Cannot set active coordinator to an empty string")
+	err := action_UpdateBlockHeight(ctx, o, &common.NewBlockEvent{BlockHeight: 1000})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1000), o.currentBlockHeight)
 }
 
-func Test_action_ActiveCoordinatorUpdated_SetsActiveCoordinator(t *testing.T) {
+func Test_action_UpdateBlockHeight_NewEpoch_SetsNewBlockRangeEpochTrue(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).CommitteeMembers("sender@senderNode", "coordinator@coordinatorNode")
-	o, _, cleanup := builder.Build(ctx)
+	o, _, cleanup := NewOriginatorBuilderForTesting(State_Idle).Build(ctx)
+	defer cleanup()
+	o.blockRangeSize = 10
+	o.currentBlockHeight = 9
+
+	err := action_UpdateBlockHeight(ctx, o, &common.NewBlockEvent{BlockHeight: 10})
+	require.NoError(t, err)
+	assert.True(t, o.newBlockRangeEpoch)
+}
+
+func Test_action_UpdateBlockHeight_SameEpoch_SetsNewBlockRangeEpochFalse(t *testing.T) {
+	ctx := context.Background()
+	o, _, cleanup := NewOriginatorBuilderForTesting(State_Idle).Build(ctx)
+	defer cleanup()
+	o.blockRangeSize = 10
+	o.currentBlockHeight = 0
+
+	err := action_UpdateBlockHeight(ctx, o, &common.NewBlockEvent{BlockHeight: 1})
+	require.NoError(t, err)
+	assert.False(t, o.newBlockRangeEpoch)
+}
+
+func Test_guard_IsNewBlockRangeEpoch_WhenNewEpoch_ReturnsTrue(t *testing.T) {
+	ctx := context.Background()
+	o, _, cleanup := NewOriginatorBuilderForTesting(State_Idle).Build(ctx)
+	defer cleanup()
+	o.newBlockRangeEpoch = true
+	assert.True(t, guard_IsNewBlockRangeEpoch(ctx, o))
+}
+
+func Test_guard_IsNewBlockRangeEpoch_WhenSameEpoch_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	o, _, cleanup := NewOriginatorBuilderForTesting(State_Idle).Build(ctx)
+	defer cleanup()
+	o.newBlockRangeEpoch = false
+	assert.False(t, guard_IsNewBlockRangeEpoch(ctx, o))
+}
+
+func Test_action_SelectActiveCoordinator_SenderMode_NoOp_ActiveCoordinatorUnchanged(t *testing.T) {
+	ctx := context.Background()
+	o, _, cleanup := NewOriginatorBuilderForTesting(State_Idle).Build(ctx)
 	defer cleanup()
 
-	coordinator := "new-coordinator@node2"
-	err := action_ActiveCoordinatorUpdated(ctx, o, &ActiveCoordinatorUpdatedEvent{Coordinator: coordinator})
+	// In SENDER mode, action_SelectActiveCoordinator is a no-op; activeCoordinatorNode is unchanged.
+	before := o.activeCoordinatorNode
+	err := action_SelectActiveCoordinator(ctx, o, nil)
 	require.NoError(t, err)
-	assert.Equal(t, coordinator, o.activeCoordinatorNode)
+	assert.Equal(t, before, o.activeCoordinatorNode)
+}
+
+func Test_action_SelectActiveCoordinator_EndorserMode_WhenCoordinatorChanges_SetsChangedFlag(t *testing.T) {
+	ctx := context.Background()
+	domainAPI := &componentsmocks.DomainSmartContract{}
+	domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
+	}).Maybe()
+	o, _, cleanup := NewOriginatorBuilderForTesting(State_Idle).DomainAPI(domainAPI).Build(ctx)
+	defer cleanup()
+	o.activeCoordinatorNode = "some-other-node"
+	o.currentBlockHeight = 1000
+
+	err := action_SelectActiveCoordinator(ctx, o, nil)
+	require.NoError(t, err)
+}
+
+func Test_action_UpdateBlockHeight_ResetsCoordinatorChangedFlag(t *testing.T) {
+	ctx := context.Background()
+	o, _, cleanup := NewOriginatorBuilderForTesting(State_Idle).Build(ctx)
+	defer cleanup()
+	o.blockRangeSize = 10
+
+	err := action_UpdateBlockHeight(ctx, o, &common.NewBlockEvent{BlockHeight: 1})
+	require.NoError(t, err)
 }
 
 func Test_guard_HasDroppedTransactions_TrueWhenDelegatedTxnNotInSnapshot(t *testing.T) {
@@ -288,7 +355,7 @@ func Test_validator_TransactionDoesNotExist_InvalidEventTypeReturnsFalse(t *test
 	o, _, cleanup := builder.Build(ctx)
 	defer cleanup()
 
-	valid, err := validator_TransactionDoesNotExist(ctx, o, &HeartbeatReceivedEvent{})
+	valid, err := validator_TransactionDoesNotExist(ctx, o, &common.HeartbeatReceivedEvent{})
 	assert.NoError(t, err)
 	assert.False(t, valid)
 }

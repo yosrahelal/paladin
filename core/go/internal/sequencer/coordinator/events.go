@@ -18,7 +18,6 @@ package coordinator
 import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 )
 
 type Event interface {
@@ -52,30 +51,4 @@ func (*TransactionsDelegatedEvent) Type() EventType {
 
 func (*TransactionsDelegatedEvent) TypeString() string {
 	return "Event_TransactionsDelegated"
-}
-
-type HeartbeatReceivedEvent struct {
-	common.BaseEvent
-	transport.CoordinatorHeartbeatNotification
-}
-
-func (*HeartbeatReceivedEvent) Type() EventType {
-	return Event_HeartbeatReceived
-}
-
-func (*HeartbeatReceivedEvent) TypeString() string {
-	return "Event_HeartbeatReceived"
-}
-
-type NewBlockEvent struct {
-	common.BaseEvent
-	BlockHeight uint64
-}
-
-func (*NewBlockEvent) Type() EventType {
-	return Event_NewBlock
-}
-
-func (*NewBlockEvent) TypeString() string {
-	return "Event_NewBlock"
 }

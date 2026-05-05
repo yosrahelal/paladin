@@ -20,13 +20,14 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
-func Test_action_SelectActiveCoordinator_StaticMode_ReturnsStoredNode(t *testing.T) {
+func Test_initializeActiveCoordinatorFromContractConfig_StaticMode_SetsActiveCoordinatorNode(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -34,9 +35,8 @@ func Test_action_SelectActiveCoordinator_StaticMode_ReturnsStoredNode(t *testing
 		StaticCoordinator:    proto.String("identity@node1"),
 	})
 	c, _ := builder.Build()
-	require.NoError(t, c.initializeStaticCoordinatorFromContractConfig(ctx))
+	require.NoError(t, c.initializeFromContractConfig(ctx))
 
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
 	assert.Equal(t, "node1", c.activeCoordinatorNode)
 }
 
@@ -51,7 +51,7 @@ func Test_action_SelectActiveCoordinator_EndorserMode_SingleNodeInPool_ReturnsNo
 	config.BlockRange = confutil.P(uint64(100))
 	builder.OverrideSequencerConfig(config)
 	c, _ := builder.CurrentBlockHeight(1000).Build()
-	require.NoError(t, c.initializeOriginatorNodePoolFromContractConfig(ctx))
+	require.NoError(t, c.initializeFromContractConfig(ctx))
 
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
 	assert.Equal(t, "node1", c.activeCoordinatorNode)
@@ -68,7 +68,7 @@ func Test_action_SelectActiveCoordinator_EndorserMode_MultipleNodesInPool_Return
 	config.BlockRange = confutil.P(uint64(100))
 	builder.OverrideSequencerConfig(config)
 	c, _ := builder.CurrentBlockHeight(1000).Build()
-	require.NoError(t, c.initializeOriginatorNodePoolFromContractConfig(ctx))
+	require.NoError(t, c.initializeFromContractConfig(ctx))
 
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
 	assert.Contains(t, []string{"node1", "node2", "node3"}, c.activeCoordinatorNode)
@@ -85,24 +85,24 @@ func Test_action_SelectActiveCoordinator_EndorserMode_BlockHeightRounding_SameRa
 	config.BlockRange = confutil.P(uint64(100))
 	builder.OverrideSequencerConfig(config)
 	c, _ := builder.Build()
-	require.NoError(t, c.initializeOriginatorNodePoolFromContractConfig(ctx))
+	require.NoError(t, c.initializeFromContractConfig(ctx))
 
-	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1000}))
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1000}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
 	coordinatorNode1 := c.activeCoordinatorNode
 
-	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1001}))
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1001}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
 	coordinatorNode2 := c.activeCoordinatorNode
 
-	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1099}))
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1099}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
 	coordinatorNode3 := c.activeCoordinatorNode
 
 	assert.Equal(t, coordinatorNode1, coordinatorNode2)
 	assert.Equal(t, coordinatorNode2, coordinatorNode3)
 
-	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1100}))
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1100}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
 	assert.Contains(t, []string{"node1", "node2", "node3"}, c.activeCoordinatorNode)
 }
@@ -118,13 +118,13 @@ func Test_action_SelectActiveCoordinator_EndorserMode_DifferentBlockRanges_CanSe
 	config.BlockRange = confutil.P(uint64(50))
 	builder.OverrideSequencerConfig(config)
 	c, _ := builder.Build()
-	require.NoError(t, c.initializeOriginatorNodePoolFromContractConfig(ctx))
+	require.NoError(t, c.initializeFromContractConfig(ctx))
 
-	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 100}))
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 100}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
 	coordinatorNode1 := c.activeCoordinatorNode
 
-	require.NoError(t, action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 150}))
+	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 150}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
 	coordinatorNode2 := c.activeCoordinatorNode
 
@@ -132,7 +132,7 @@ func Test_action_SelectActiveCoordinator_EndorserMode_DifferentBlockRanges_CanSe
 	assert.Contains(t, []string{"node1", "node2"}, coordinatorNode2)
 }
 
-func Test_action_SelectActiveCoordinator_SenderMode_ReturnsCurrentNodeName(t *testing.T) {
+func Test_initializeActiveCoordinatorFromContractConfig_SenderMode_SetsActiveCoordinatorToSelf(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -140,7 +140,7 @@ func Test_action_SelectActiveCoordinator_SenderMode_ReturnsCurrentNodeName(t *te
 	})
 	c, _ := builder.Build()
 
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	require.NoError(t, c.initializeFromContractConfig(ctx))
 	assert.Equal(t, "node1", c.activeCoordinatorNode)
 }
 
@@ -240,7 +240,7 @@ func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.Build()
 
-	err := action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1000})
+	err := action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1000})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1000), c.currentBlockHeight)
 }
@@ -251,7 +251,7 @@ func Test_action_UpdateBlockHeight_NewEpoch_SetsNewBlockRangeEpochTrue(t *testin
 	c.coordinatorSelectionBlockRange = 10
 	c.currentBlockHeight = 9
 
-	err := action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 10})
+	err := action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 10})
 	require.NoError(t, err)
 	assert.True(t, c.newBlockRangeEpoch, "crossing a block range boundary should set newBlockRangeEpoch=true")
 }
@@ -262,7 +262,7 @@ func Test_action_UpdateBlockHeight_SameEpoch_SetsNewBlockRangeEpochFalse(t *test
 	c.coordinatorSelectionBlockRange = 10
 	c.currentBlockHeight = 0
 
-	err := action_UpdateBlockHeight(ctx, c, &NewBlockEvent{BlockHeight: 1})
+	err := action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1})
 	require.NoError(t, err)
 	assert.False(t, c.newBlockRangeEpoch, "staying within the same block range should set newBlockRangeEpoch=false")
 }

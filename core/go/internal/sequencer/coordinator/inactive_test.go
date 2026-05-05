@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,9 +29,11 @@ func Test_action_HeartbeatReceived_SetsActiveCoordinatorState(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Observing)
 	c, _ := builder.Build()
-	event := &HeartbeatReceivedEvent{}
+	event := &common.HeartbeatReceivedEvent{}
 	event.From = "node1"
-	event.CoordinatorState = int(State_Active)
+	event.CoordinatorSnapshot = &common.CoordinatorSnapshot{
+		CoordinatorState: int(State_Active),
+	}
 
 	err := action_HeartbeatReceived(ctx, c, event)
 	require.NoError(t, err)
@@ -120,7 +123,7 @@ func Test_validator_IsHeartbeatFromActiveCoordinator_FromActiveNode_ReturnsTrue(
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).ActiveCoordinatorNode("nodeA").Build()
 
-	event := &HeartbeatReceivedEvent{}
+	event := &common.HeartbeatReceivedEvent{}
 	event.From = "nodeA"
 
 	result, err := validator_IsHeartbeatFromActiveCoordinator(ctx, c, event)
@@ -132,7 +135,7 @@ func Test_validator_IsHeartbeatFromActiveCoordinator_FromOtherNode_ReturnsFalse(
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).ActiveCoordinatorNode("nodeA").Build()
 
-	event := &HeartbeatReceivedEvent{}
+	event := &common.HeartbeatReceivedEvent{}
 	event.From = "nodeB"
 
 	result, err := validator_IsHeartbeatFromActiveCoordinator(ctx, c, event)

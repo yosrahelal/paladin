@@ -18,6 +18,7 @@ package common
 import (
 	"time"
 
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
 )
 
@@ -29,6 +30,8 @@ type EmitEvent func(event Event)
 const (
 	Event_HeartbeatInterval          EventType = iota // emitted on a regular basis, interval defined by the sequencer config
 	Event_TransactionStateTransition                  // transaction state machine transition; originator/coordinator handle cleanup and side effects
+	Event_NewBlock                                    // a new block has been confirmed on the base ledger
+	Event_HeartbeatReceived                           // a heartbeat notification was received from the active coordinator
 )
 
 type BaseEvent struct {
@@ -72,4 +75,32 @@ func (*TransactionStateTransitionEvent[S]) Type() EventType {
 
 func (*TransactionStateTransitionEvent[S]) TypeString() string {
 	return "Event_TransactionStateTransition"
+}
+
+type NewBlockEvent struct {
+	BaseEvent
+	BlockHeight uint64
+}
+
+func (*NewBlockEvent) Type() EventType {
+	return Event_NewBlock
+}
+
+func (*NewBlockEvent) TypeString() string {
+	return "Event_NewBlock"
+}
+
+type HeartbeatReceivedEvent struct {
+	BaseEvent
+	From                string               `json:"from"`
+	ContractAddress     *pldtypes.EthAddress `json:"contractAddress"`
+	CoordinatorSnapshot *CoordinatorSnapshot `json:"coordinatorSnapshot"`
+}
+
+func (*HeartbeatReceivedEvent) Type() EventType {
+	return Event_HeartbeatReceived
+}
+
+func (*HeartbeatReceivedEvent) TypeString() string {
+	return "Event_HeartbeatReceived"
 }

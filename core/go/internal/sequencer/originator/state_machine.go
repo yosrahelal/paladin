@@ -37,10 +37,7 @@ const (
 )
 
 const (
-	Event_HeartbeatReceived        EventType = iota + 300 // a heartbeat message was received from the current active coordinator
-	Event_TransactionCreated                              // a new transaction has been created and is ready to be sent to the coordinator TODO maybe name something like Intent created?
-	Event_NewBlock                                        // a new block has been mined on the base ledger
-	Event_ActiveCoordinatorUpdated                        // a new active coordinator is available
+	Event_TransactionCreated EventType = iota + 300 // a new transaction has been created and is ready to be sent to the coordinator TODO maybe name something like Intent created?
 )
 
 // Type aliases for the generic statemachine types, specialized for originator
@@ -57,10 +54,18 @@ type (
 var stateDefinitionsMap = StateDefinitions{
 	State_Idle: {
 		Events: map[EventType]EventHandler{
-			Event_ActiveCoordinatorUpdated: {
-				Actions: []ActionRule{{Action: action_ActiveCoordinatorUpdated}},
+			common.Event_NewBlock: {
+				Actions: []ActionRule{
+					{
+						Action: action_UpdateBlockHeight,
+					},
+					{
+						If:     guard_IsNewBlockRangeEpoch,
+						Action: action_SelectActiveCoordinator,
+					},
+				},
 			},
-			Event_HeartbeatReceived: {
+			common.Event_HeartbeatReceived: {
 				Actions:     []ActionRule{{Action: action_HeartbeatReceived}},
 				Transitions: []Transition{{To: State_Observing}},
 			},
@@ -90,8 +95,14 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Observing: {
 		Events: map[EventType]EventHandler{
-			Event_ActiveCoordinatorUpdated: {
-				Actions: []ActionRule{{Action: action_ActiveCoordinatorUpdated}},
+			common.Event_NewBlock: {
+				Actions: []ActionRule{
+					{Action: action_UpdateBlockHeight},
+					{
+						If:     guard_IsNewBlockRangeEpoch,
+						Action: action_SelectActiveCoordinator,
+					},
+				},
 			},
 			common.Event_HeartbeatInterval: {
 				Actions:     []ActionRule{{Action: action_IncrementHeartbeatIntervalCounts}},
@@ -104,7 +115,7 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Sending,
 				}},
 			},
-			Event_HeartbeatReceived: {Actions: []ActionRule{{Action: action_HeartbeatReceived}}},
+			common.Event_HeartbeatReceived: {Actions: []ActionRule{{Action: action_HeartbeatReceived}}},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
 					{
@@ -127,10 +138,20 @@ var stateDefinitionsMap = StateDefinitions{
 			{Action: action_SendDelegationRequest},
 		},
 		Events: map[EventType]EventHandler{
-			Event_ActiveCoordinatorUpdated: {
+			common.Event_NewBlock: {
 				Actions: []ActionRule{
-					{Action: action_ActiveCoordinatorUpdated},
-					{Action: action_SendDelegationRequest},
+					{Action: action_UpdateBlockHeight},
+					{
+						If:     guard_IsNewBlockRangeEpoch,
+						Action: action_SelectActiveCoordinator,
+					},
+					{
+						// TODO AM: this will need a bunch of work through to the transaction so they know they've been
+						// redelegated
+						// Re-delegate to the new coordinator if selection changed this block
+						If:     guard_CoordinatorChanged,
+						Action: action_SendDelegationRequest,
+					},
 				},
 			},
 			Event_TransactionCreated: {
@@ -140,7 +161,7 @@ var stateDefinitionsMap = StateDefinitions{
 					{Action: action_SendDelegationRequest},
 				},
 			},
-			Event_HeartbeatReceived: {
+			common.Event_HeartbeatReceived: {
 				Actions: []ActionRule{
 					{Action: action_HeartbeatReceived},
 					{Action: action_SendDelegationRequest, If: guard_HasDroppedTransactions},

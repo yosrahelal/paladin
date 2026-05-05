@@ -26,7 +26,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator"
 	coordTransaction "github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator"
 	originatorTransaction "github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
@@ -258,20 +257,13 @@ func (sMgr *sequencerManager) handleCoordinatorHeartbeatNotification(ctx context
 		return
 	}
 
-	// TODO AM: make these a common event- need to assess how many events should move to common
-	originatorHeartbeatEvent := &originator.HeartbeatReceivedEvent{}
-	originatorHeartbeatEvent.From = from
-	originatorHeartbeatEvent.ContractAddress = contractAddress
-	originatorHeartbeatEvent.CoordinatorSnapshot = *coordinatorSnapshot
-	originatorHeartbeatEvent.EventTime = time.Now()
-	seq.GetOriginator().QueueEvent(ctx, originatorHeartbeatEvent)
-
-	coordinatorHeartbeatEvent := &coordinator.HeartbeatReceivedEvent{}
-	coordinatorHeartbeatEvent.From = from
-	coordinatorHeartbeatEvent.ContractAddress = contractAddress
-	coordinatorHeartbeatEvent.CoordinatorSnapshot = *coordinatorSnapshot
-	coordinatorHeartbeatEvent.EventTime = time.Now()
-	seq.GetCoordinator().QueueEvent(ctx, coordinatorHeartbeatEvent)
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
+	heartbeatEvent.From = from
+	heartbeatEvent.ContractAddress = contractAddress
+	heartbeatEvent.CoordinatorSnapshot = coordinatorSnapshot
+	heartbeatEvent.EventTime = time.Now()
+	seq.GetOriginator().QueueEvent(ctx, heartbeatEvent)
+	seq.GetCoordinator().QueueEvent(ctx, heartbeatEvent)
 }
 
 func (sMgr *sequencerManager) handlePreDispatchRequest(ctx context.Context, message *components.ReceivedMessage) {

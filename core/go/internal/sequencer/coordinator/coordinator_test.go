@@ -520,7 +520,7 @@ func TestCoordinator_NewCoordinator_StaticMode_ValidStaticCoordinator_StoresNode
 		cancel()
 		c.WaitForDone(t.Context())
 	}()
-	assert.Equal(t, "nodeA", c.staticCoordinatorNode)
+	assert.Equal(t, "nodeA", c.activeCoordinatorNode)
 }
 
 func TestCoordinator_NewCoordinator_EndorserMode_FailsOnInvalidConfiguredCandidate(t *testing.T) {

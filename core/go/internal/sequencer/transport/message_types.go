@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -44,12 +43,6 @@ const (
 	MessageType_TransactionUnknown               = "TransactionUnknown"
 )
 
-type CoordinatorHeartbeatNotification struct {
-	From            string               `json:"from"`
-	ContractAddress *pldtypes.EthAddress `json:"contractAddress"`
-	common.CoordinatorSnapshot
-}
-
 type EndorsementResponse struct {
 	TransactionID          uuid.UUID                  `json:"transactionId"`
 	IdempotencyKey         string                     `json:"idempotencyKey"`
@@ -58,12 +51,6 @@ type EndorsementResponse struct {
 	RevertReason           *string                    `json:"revertReason"`
 	Party                  string                     `json:"party"`
 	AttestationRequestName string                     `json:"attestationRequestName"`
-}
-
-func ParseCoordinatorHeartbeatNotification(bytes []byte) (*CoordinatorHeartbeatNotification, error) {
-	chn := &CoordinatorHeartbeatNotification{}
-	err := json.Unmarshal(bytes, chn)
-	return chn, err
 }
 
 type TransactionRequest struct {

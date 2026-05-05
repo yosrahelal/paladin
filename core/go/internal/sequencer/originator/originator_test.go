@@ -42,7 +42,7 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 
 	// Ensure the originator is in observing mode by queuing a heartbeat from an active coordinator
 	contractAddress := builder.GetContractAddress()
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	heartbeatEvent.ContractAddress = &contractAddress
 	s.QueueEvent(ctx, heartbeatEvent)
@@ -95,16 +95,18 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	nonce := uint64(42)
 	// Originator must match the originator's nodeName so the heartbeat is applied
 	// (builder defaults nodeName to "member1@node1").
-	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
-		{
-			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-				ID:         txn.ID,
-				Originator: "member1@node1",
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+			{
+				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+					ID:         txn.ID,
+					Originator: "member1@node1",
+				},
+				Signer:               *signerAddress,
+				SignerLocator:        "signer@node2",
+				Nonce:                &nonce,
+				LatestSubmissionHash: &submissionHash,
 			},
-			Signer:               *signerAddress,
-			SignerLocator:        "signer@node2",
-			Nonce:                &nonce,
-			LatestSubmissionHash: &submissionHash,
 		},
 	}
 	s.QueueEvent(ctx, heartbeatEvent)
@@ -182,7 +184,7 @@ func TestOriginator_CreateTransaction_ErrorFromNewTransaction(t *testing.T) {
 	defer cleanup()
 
 	contractAddress := builder.GetContractAddress()
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	heartbeatEvent.ContractAddress = &contractAddress
 	s.QueueEvent(ctx, heartbeatEvent)
@@ -209,7 +211,7 @@ func TestOriginator_EventLoop_ErrorHandling(t *testing.T) {
 
 	// Ensure the originator is in observing mode by emulating a heartbeat from an active coordinator
 	contractAddress := builder.GetContractAddress()
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	heartbeatEvent.ContractAddress = &contractAddress
 	s.QueueEvent(ctx, heartbeatEvent)

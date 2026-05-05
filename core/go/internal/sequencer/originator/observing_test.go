@@ -38,11 +38,11 @@ func Test_applyHeartbeatReceived_BasicUpdate(t *testing.T) {
 	o, _, cleanup := builder.Build(ctx)
 	defer cleanup()
 
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.CoordinatorSnapshot = common.CoordinatorSnapshot{
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
 		BlockHeight: 1000,
 	}
 
@@ -109,18 +109,20 @@ func Test_applyHeartbeatReceived_DispatchedTransactionNotFoundLogsAndContinues(t
 	o, _, cleanup := builder.Build(ctx)
 	defer cleanup()
 
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
 
 	// Create a dispatched transaction that doesn't exist in memory
 	unknownTxID := uuid.New()
-	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
-		{
-			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-				ID:         unknownTxID,
-				Originator: originatorLocator,
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+			{
+				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+					ID:         unknownTxID,
+					Originator: originatorLocator,
+				},
 			},
 		},
 	}
@@ -154,19 +156,21 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithHashUpdatesSubmitted(t
 	submissionHash := pldtypes.RandBytes32()
 	nonce := uint64(42)
 
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
-		{
-			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-				ID:         txn.ID,
-				Originator: originatorLocator,
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+			{
+				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+					ID:         txn.ID,
+					Originator: originatorLocator,
+				},
+				Signer:               *signerAddress,
+				LatestSubmissionHash: &submissionHash,
+				Nonce:                &nonce,
 			},
-			Signer:               *signerAddress,
-			LatestSubmissionHash: &submissionHash,
-			Nonce:                &nonce,
 		},
 	}
 
@@ -196,18 +200,20 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithNonceOnlySendsNonceAss
 	// Create heartbeat with dispatched transaction that has a nonce but no hash
 	nonce := uint64(42)
 
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
-		{
-			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-				ID:         txn.ID,
-				Originator: originatorLocator,
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+			{
+				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+					ID:         txn.ID,
+					Originator: originatorLocator,
+				},
+				Nonce: &nonce,
+				// No LatestSubmissionHash
 			},
-			Nonce: &nonce,
-			// No LatestSubmissionHash
 		},
 	}
 
@@ -224,15 +230,17 @@ func Test_applyHeartbeatReceived_DispatchedTransactionFromDifferentOriginatorIgn
 	o, _, cleanup := builder.Build(ctx)
 	defer cleanup()
 
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
-		{
-			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-				ID:         uuid.New(),
-				Originator: otherOriginatorLocator, // Different originator
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+			{
+				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+					ID:         uuid.New(),
+					Originator: otherOriginatorLocator, // Different originator
+				},
 			},
 		},
 	}
@@ -263,18 +271,20 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithHashAndNonceSucceeds(t
 	submissionHash := pldtypes.RandBytes32()
 	nonce := uint64(42)
 
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
-		{
-			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-				ID:         txn.ID,
-				Originator: originatorLocator,
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+			{
+				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+					ID:         txn.ID,
+					Originator: originatorLocator,
+				},
+				LatestSubmissionHash: &submissionHash,
+				Nonce:                &nonce,
 			},
-			LatestSubmissionHash: &submissionHash,
-			Nonce:                &nonce,
 		},
 	}
 
@@ -305,18 +315,20 @@ func Test_applyHeartbeatReceived_DispatchedTransactionNonceOnlySucceeds(t *testi
 	// Create heartbeat with dispatched transaction that has a nonce but no hash
 	nonce := uint64(42)
 
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
-		{
-			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-				ID:         txn.ID,
-				Originator: originatorLocator,
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+			{
+				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+					ID:         txn.ID,
+					Originator: originatorLocator,
+				},
+				Nonce: &nonce,
+				// No LatestSubmissionHash
 			},
-			Nonce: &nonce,
-			// No LatestSubmissionHash
 		},
 	}
 
@@ -347,18 +359,20 @@ func Test_applyHeartbeatReceived_SubmittedHandleEventError_ReturnsWrappedError(t
 	signerAddress := pldtypes.RandAddress()
 	submissionHash := pldtypes.RandBytes32()
 
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
-		{
-			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-				ID:         txnID,
-				Originator: originatorLocator,
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+			{
+				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+					ID:         txnID,
+					Originator: originatorLocator,
+				},
+				Signer:               *signerAddress,
+				LatestSubmissionHash: &submissionHash,
 			},
-			Signer:               *signerAddress,
-			LatestSubmissionHash: &submissionHash,
 		},
 	}
 
@@ -388,17 +402,19 @@ func Test_applyHeartbeatReceived_NonceAssignedHandleEventError_ReturnsWrappedErr
 	o.transactionsByID[txnID] = mockTxn
 
 	nonce := uint64(99)
-	heartbeatEvent := &HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.DispatchedTransactions = []*common.SnapshotDispatchedTransaction{
-		{
-			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-				ID:         txnID,
-				Originator: originatorLocator,
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+			{
+				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+					ID:         txnID,
+					Originator: originatorLocator,
+				},
+				Nonce: &nonce,
 			},
-			Nonce: &nonce,
 		},
 	}
 

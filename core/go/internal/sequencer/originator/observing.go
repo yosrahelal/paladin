@@ -27,15 +27,23 @@ import (
 )
 
 func action_HeartbeatReceived(ctx context.Context, o *originator, event common.Event) error {
-	e := event.(*HeartbeatReceivedEvent)
+	e := event.(*common.HeartbeatReceivedEvent)
 	return o.applyHeartbeatReceived(ctx, e)
 }
 
 // TODO AM: this will need thought for how it handles active vs flushing vs closing vs elect snapshots
-func (o *originator) applyHeartbeatReceived(ctx context.Context, event *HeartbeatReceivedEvent) error {
+func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.HeartbeatReceivedEvent) error {
 	o.heartbeatIntervalsSinceLastReceive = 0
-	o.latestCoordinatorSnapshot = &event.CoordinatorSnapshot
-	for _, dispatchedTransaction := range event.DispatchedTransactions {
+	o.latestCoordinatorSnapshot = event.CoordinatorSnapshot
+
+	// TODO AM: this is wrong- we need the heartbeat to match what we think the active coordinator is
+	// Update the active coordinator from the heartbeat sender; the heartbeat is authoritative evidence
+	// that the sender is currently acting as coordinator, complementing the block-based selection.
+	if event.From != "" && o.activeCoordinatorNode != event.From {
+		o.activeCoordinatorNode = event.From
+		log.L(ctx).Debugf("active coordinator updated to %s from heartbeat", event.From)
+	}
+	for _, dispatchedTransaction := range event.CoordinatorSnapshot.DispatchedTransactions {
 		//if any of the dispatched transactions were sent by this originator, ensure that we have an up to date view of its state
 		if dispatchedTransaction.Originator == o.nodeName {
 			txn := o.transactionsByID[dispatchedTransaction.ID]

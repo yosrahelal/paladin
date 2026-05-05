@@ -43,7 +43,7 @@ func TestStateMachine_Idle_ToObserving_OnHeartbeatReceived(t *testing.T) {
 	defer cleanup()
 	assert.Equal(t, originator.State_Idle, o.GetCurrentState())
 
-	heartbeatEvent := &originator.HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = "coordinator"
 	ca := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &ca
@@ -119,14 +119,16 @@ func TestStateMachine_Sending_DoDelegateTransactions_OnHeartbeatReceived_IfHasDr
 	mocks.SentMessageRecorder.Reset(ctx)
 
 	// Only one of the delegated transactions are included in the heartbeat
-	heartbeatEvent := &originator.HeartbeatReceivedEvent{}
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
 	ca := builder.GetContractAddress()
 	heartbeatEvent.ContractAddress = &ca
-	heartbeatEvent.PooledTransactions = []*common.SnapshotPooledTransaction{
-		{
-			ID:         txn1.ID,
-			Originator: "sender@node1",
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
+		PooledTransactions: []*common.SnapshotPooledTransaction{
+			{
+				ID:         txn1.ID,
+				Originator: "sender@node1",
+			},
 		},
 	}
 

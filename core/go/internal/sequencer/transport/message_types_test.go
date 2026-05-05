@@ -20,84 +20,11 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// ===== ParseCoordinatorHeartbeatNotification Tests =====
-
-func TestParseCoordinatorHeartbeatNotification_Success(t *testing.T) {
-	from := "coordinator-node"
-	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
-	snapshot := common.CoordinatorSnapshot{
-		CoordinatorState:       1, // coordinator.State_Idle
-		BlockHeight:            100,
-		PooledTransactions:     []*common.SnapshotPooledTransaction{},
-		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{},
-		ConfirmedTransactions:  []*common.SnapshotConfirmedTransaction{},
-	}
-
-	notification := CoordinatorHeartbeatNotification{
-		From:                from,
-		ContractAddress:     contractAddress,
-		CoordinatorSnapshot: snapshot,
-	}
-
-	bytes, err := json.Marshal(notification)
-	require.NoError(t, err)
-
-	parsed, err := ParseCoordinatorHeartbeatNotification(bytes)
-	require.NoError(t, err)
-	assert.NotNil(t, parsed)
-	assert.Equal(t, from, parsed.From)
-	assert.NotNil(t, parsed.ContractAddress)
-	assert.Equal(t, contractAddress.HexString(), parsed.ContractAddress.HexString())
-	assert.Equal(t, snapshot.CoordinatorState, parsed.CoordinatorState)
-	assert.Equal(t, snapshot.BlockHeight, parsed.BlockHeight)
-}
-
-func TestParseCoordinatorHeartbeatNotification_InvalidJSON(t *testing.T) {
-	invalidJSON := []byte(`{invalid json syntax}`)
-
-	parsed, err := ParseCoordinatorHeartbeatNotification(invalidJSON)
-	assert.Error(t, err)
-	assert.NotNil(t, parsed) // Function returns struct even on error
-}
-
-func TestParseCoordinatorHeartbeatNotification_EmptyJSON(t *testing.T) {
-	emptyJSON := []byte(`{}`)
-
-	parsed, err := ParseCoordinatorHeartbeatNotification(emptyJSON)
-	require.NoError(t, err)
-	assert.NotNil(t, parsed)
-	assert.Equal(t, "", parsed.From)
-	assert.Nil(t, parsed.ContractAddress)
-}
-
-func TestParseCoordinatorHeartbeatNotification_NilContractAddress(t *testing.T) {
-	from := "coordinator-node"
-	snapshot := common.CoordinatorSnapshot{
-		CoordinatorState: 1, // coordinator.State_Idle
-		BlockHeight:      100,
-	}
-
-	notification := CoordinatorHeartbeatNotification{
-		From:                from,
-		ContractAddress:     nil,
-		CoordinatorSnapshot: snapshot,
-	}
-
-	bytes, err := json.Marshal(notification)
-	require.NoError(t, err)
-
-	parsed, err := ParseCoordinatorHeartbeatNotification(bytes)
-	require.NoError(t, err)
-	assert.NotNil(t, parsed)
-	assert.Nil(t, parsed.ContractAddress)
-}
 
 // ===== ParseTransactionRequest Tests =====
 

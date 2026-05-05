@@ -25,6 +25,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 )
 
@@ -201,14 +202,32 @@ func (o *originator) removeTransaction(ctx context.Context, txnID uuid.UUID) {
 	}
 }
 
-func action_ActiveCoordinatorUpdated(ctx context.Context, o *originator, event common.Event) error {
-	e := event.(*ActiveCoordinatorUpdatedEvent)
-	if e.Coordinator == "" {
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "Cannot set active coordinator to an empty string")
-	}
-	o.activeCoordinatorNode = e.Coordinator
-	log.L(ctx).Debugf("active coordinator updated to %s", e.Coordinator)
+func action_UpdateBlockHeight(_ context.Context, o *originator, event common.Event) error {
+	o.currentBlockHeight, o.newBlockRangeEpoch = common.DecodeNewBlockHeight(o.currentBlockHeight, o.blockRangeSize, event)
 	return nil
+}
+
+func guard_IsNewBlockRangeEpoch(_ context.Context, o *originator) bool {
+	return o.newBlockRangeEpoch
+}
+
+func action_SelectActiveCoordinator(ctx context.Context, o *originator, _ common.Event) error {
+	if o.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
+		// For STATIC and SENDER modes, activeCoordinatorNode is set once at construction time and never changes.
+		return nil
+	}
+	o.previousActiveCoordinatorNode = o.activeCoordinatorNode
+	o.activeCoordinatorNode = common.SelectCoordinatorNode(
+		ctx,
+		o.coordinatorEndorserPool,
+		o.currentBlockHeight,
+		o.blockRangeSize,
+	)
+	return nil
+}
+
+func guard_CoordinatorChanged(_ context.Context, o *originator) bool {
+	return o.newBlockRangeEpoch && o.activeCoordinatorNode != o.previousActiveCoordinatorNode
 }
 
 func guard_RedelegateThresholdExceeded(_ context.Context, o *originator) bool {

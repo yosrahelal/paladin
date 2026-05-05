@@ -1759,28 +1759,28 @@ func TestOnNewBlockHeight_DispatchesNewBlockToAllSequencers(t *testing.T) {
 	origReceived := make(chan struct{}, 2)
 
 	mocks.coordinator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*coordinator.NewBlockEvent)
+		ev, ok := e.(*common.NewBlockEvent)
 		return ok && ev.BlockHeight == uint64(expectedHeight)
 	})).Run(func(_ context.Context, _ common.Event) {
 		coordReceived <- struct{}{}
 	}).Return().Once()
 
 	mocks.originator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*originator.NewBlockEvent)
+		ev, ok := e.(*common.NewBlockEvent)
 		return ok && ev.BlockHeight == uint64(expectedHeight)
 	})).Run(func(_ context.Context, _ common.Event) {
 		origReceived <- struct{}{}
 	}).Return().Once()
 
 	coord2.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*coordinator.NewBlockEvent)
+		ev, ok := e.(*common.NewBlockEvent)
 		return ok && ev.BlockHeight == uint64(expectedHeight)
 	})).Run(func(_ context.Context, _ common.Event) {
 		coordReceived <- struct{}{}
 	}).Return().Once()
 
 	orig2.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*originator.NewBlockEvent)
+		ev, ok := e.(*common.NewBlockEvent)
 		return ok && ev.BlockHeight == uint64(expectedHeight)
 	})).Run(func(_ context.Context, _ common.Event) {
 		origReceived <- struct{}{}

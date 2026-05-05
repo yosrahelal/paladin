@@ -85,8 +85,8 @@ type coordinator struct {
 	currentBlockHeight                 uint64
 	dependencyTracker                  dependencytracker.DependencyTracker
 	grapher                            grapher.Grapher
-	originatorNodePool                 []string // The (possibly changing) list of originator nodes
-	staticCoordinatorNode              string   // Validated at construction for COORDINATOR_STATIC mode
+	coordinatorEndorserPool            []string // Fixed set of endorser candidates used for coordinator selection (COORDINATOR_ENDORSER mode only)
+	originatorNodePool                 []string // Dynamic set of originator nodes used for heartbeat fan-out
 	newBlockRangeEpoch                 bool
 
 	/* Config */
@@ -106,17 +106,16 @@ type coordinator struct {
 	maxDispatchAhead                  int
 
 	/* Dependencies */
-	domainAPI                           components.DomainSmartContract
-	dCtx                                components.DomainContext
-	components                          components.AllComponents
-	transportWriter                     transport.TransportWriter
-	clock                               common.Clock
-	engineIntegration                   common.EngineIntegration
-	buildNullifiers                     func(context.Context, []*components.StateDistributionWithData) ([]*components.NullifierUpsert, error)
-	newPrivateTransaction               func(context.Context, []*components.ValidatedTransaction) error
-	syncPoints                          syncpoints.SyncPoints
-	notifyOriginatorOfActiveCoordinator func(coordinatorNode string)
-	metrics                             metrics.DistributedSequencerMetrics
+	domainAPI             components.DomainSmartContract
+	dCtx                  components.DomainContext
+	components            components.AllComponents
+	transportWriter       transport.TransportWriter
+	clock                 common.Clock
+	engineIntegration     common.EngineIntegration
+	buildNullifiers       func(context.Context, []*components.StateDistributionWithData) ([]*components.NullifierUpsert, error)
+	newPrivateTransaction func(context.Context, []*components.ValidatedTransaction) error
+	syncPoints            syncpoints.SyncPoints
+	metrics               metrics.DistributedSequencerMetrics
 
 	/* Dispatch loop */
 	dispatchQueue       chan transaction.CoordinatorTransaction
@@ -139,28 +138,26 @@ func NewCoordinator(
 	configuration *pldconf.SequencerConfig,
 	nodeName string,
 	metrics metrics.DistributedSequencerMetrics,
-	notifyOriginatorOfActiveCoordinator func(coordinatorNode string),
 ) *coordinator {
 	dependencyTracker := dependencytracker.NewDependencyTracker()
 	c := &coordinator{
-		heartbeatIntervalsSinceStateChange:  0,
-		transactionsByID:                    make(map[uuid.UUID]transaction.CoordinatorTransaction),
-		domainAPI:                           domainAPI,
-		dCtx:                                dCtx,
-		components:                          allComponents,
-		buildNullifiers:                     buildNullifiers,
-		newPrivateTransaction:               newPrivateTransaction,
-		transportWriter:                     transportWriter,
-		contractAddress:                     contractAddress,
-		dependencyTracker:                   dependencyTracker,
-		grapher:                             grapher.NewGrapher(dependencyTracker),
-		clock:                               clock,
-		engineIntegration:                   engineIntegration,
-		syncPoints:                          syncPoints,
-		nodeName:                            nodeName,
-		metrics:                             metrics,
-		notifyOriginatorOfActiveCoordinator: notifyOriginatorOfActiveCoordinator,
-		dispatchLoopStopped:                 make(chan struct{}),
+		heartbeatIntervalsSinceStateChange: 0,
+		transactionsByID:                   make(map[uuid.UUID]transaction.CoordinatorTransaction),
+		domainAPI:                          domainAPI,
+		dCtx:                               dCtx,
+		components:                         allComponents,
+		buildNullifiers:                    buildNullifiers,
+		newPrivateTransaction:              newPrivateTransaction,
+		transportWriter:                    transportWriter,
+		contractAddress:                    contractAddress,
+		dependencyTracker:                  dependencyTracker,
+		grapher:                            grapher.NewGrapher(dependencyTracker),
+		clock:                              clock,
+		engineIntegration:                  engineIntegration,
+		syncPoints:                         syncPoints,
+		nodeName:                           nodeName,
+		metrics:                            metrics,
+		dispatchLoopStopped:                make(chan struct{}),
 	}
 
 	// Configuration
@@ -200,12 +197,15 @@ func (c *coordinator) Start(ctx context.Context) error {
 	coordCtx := log.WithLogField(ctx, "role", "coordinator")
 	c.ctx = coordCtx
 
-	if err := c.initializeStaticCoordinatorFromContractConfig(coordCtx); err != nil {
+	if err := c.initializeFromContractConfig(coordCtx); err != nil {
 		return err
 	}
-	if err := c.initializeOriginatorNodePoolFromContractConfig(coordCtx); err != nil {
+
+	blockHeight, err := c.engineIntegration.GetBlockHeight(ctx)
+	if err != nil {
 		return err
 	}
+	c.currentBlockHeight = uint64(blockHeight)
 
 	c.started = true
 
@@ -251,43 +251,48 @@ func (c *coordinator) WaitForDone(ctx context.Context) {
 	c.transportWriter.WaitForDone(ctx)
 }
 
-func (c *coordinator) initializeStaticCoordinatorFromContractConfig(ctx context.Context) error {
-	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_STATIC {
-		return nil
-	}
-	staticCoordinator := c.domainAPI.ContractConfig().GetStaticCoordinator()
-	if staticCoordinator == "" {
-		return i18n.NewError(ctx, msgs.MsgSequencerStaticCoordinatorNotSet, c.contractAddress.String())
-	}
-	node, err := pldtypes.PrivateIdentityLocator(staticCoordinator).Node(ctx, false)
-	if err != nil {
-		return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidStaticCoordinator, c.contractAddress.String(), staticCoordinator)
-	}
-	c.staticCoordinatorNode = node
-	log.L(ctx).Debugf("static coordinator node for contract %s validated and stored: %s", c.contractAddress.String(), node)
-	return nil
-}
-
-func (c *coordinator) initializeOriginatorNodePoolFromContractConfig(ctx context.Context) error {
-	contractConfig := c.domainAPI.ContractConfig()
-	if contractConfig.GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
-		return nil
-	}
-	candidates := contractConfig.GetCoordinatorEndorserCandidates()
-	if len(candidates) == 0 {
-		return i18n.NewError(ctx, msgs.MsgSequencerEndorserNoCandidates, c.contractAddress.String())
-	}
-
-	c.originatorNodePool = make([]string, 0, len(candidates))
-	for _, locator := range candidates {
-		_, node, err := pldtypes.PrivateIdentityLocator(locator).Validate(ctx, "", false)
-		if err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidEndorserCandidate, locator)
+func (c *coordinator) initializeFromContractConfig(ctx context.Context) error {
+	switch c.domainAPI.ContractConfig().GetCoordinatorSelection() {
+	case prototk.ContractConfig_COORDINATOR_STATIC:
+		staticCoordinator := c.domainAPI.ContractConfig().GetStaticCoordinator()
+		if staticCoordinator == "" {
+			return i18n.NewError(ctx, msgs.MsgSequencerStaticCoordinatorNotSet, c.contractAddress.String())
 		}
-		c.originatorNodePool = append(c.originatorNodePool, node)
+		node, err := pldtypes.PrivateIdentityLocator(staticCoordinator).Node(ctx, false)
+		if err != nil {
+			return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidStaticCoordinator, c.contractAddress.String(), staticCoordinator)
+		}
+		c.activeCoordinatorNode = node
+		log.L(ctx).Debugf("static coordinator node for contract %s validated and set: %s", c.contractAddress.String(), node)
+	case prototk.ContractConfig_COORDINATOR_SENDER:
+		c.activeCoordinatorNode = c.nodeName
+		log.L(ctx).Debugf("coordinator selection is SENDER mode; active coordinator set to self: %s", c.nodeName)
+	case prototk.ContractConfig_COORDINATOR_ENDORSER:
+		candidates := c.domainAPI.ContractConfig().GetCoordinatorEndorserCandidates()
+		if len(candidates) == 0 {
+			return i18n.NewError(ctx, msgs.MsgSequencerEndorserNoCandidates, c.contractAddress.String())
+		}
+		nodes := make([]string, 0, len(candidates))
+		for _, locator := range candidates {
+			_, node, err := pldtypes.PrivateIdentityLocator(locator).Validate(ctx, "", false)
+			if err != nil {
+				return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidEndorserCandidate, locator)
+			}
+			nodes = append(nodes, node)
+		}
+		slices.Sort(nodes)
+
+		// coordinatorEndorserPool is the fixed set used for deterministic coordinator selection; never mutated after init.
+		c.coordinatorEndorserPool = nodes
+
+		// originatorNodePool is the heartbeat fan-out set; starts from the same endorser candidates.
+		// In COORDINATOR_ENDORSER mode all valid candidates are already known, so updateOriginatorNodePool
+		// becomes a no-op (see selection.go).
+		c.originatorNodePool = make([]string, len(nodes))
+		copy(c.originatorNodePool, nodes)
+
+		log.L(ctx).Debugf("initialized coordinator endorser pool: %+v", c.coordinatorEndorserPool)
 	}
-	slices.Sort(c.originatorNodePool)
-	log.L(ctx).Debugf("initialized originator node pool from coordinator endorser candidates: %+v", c.originatorNodePool)
 	return nil
 }
 

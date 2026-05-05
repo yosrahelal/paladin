@@ -23,7 +23,9 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
+	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	uuid "github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -80,11 +82,13 @@ type OriginatorBuilderForTesting struct {
 	transactionBuilders []*transaction.TransactionBuilderForTesting
 	metrics             metrics.DistributedSequencerMetrics
 	sequencerConfig     *pldconf.SequencerConfig
+	domainAPI           *componentsmocks.DomainSmartContract
 }
 
 type OriginatorDependencyMocks struct {
 	SentMessageRecorder *SentMessageRecorder
 	EngineIntegration   *common.FakeEngineIntegrationForTesting
+	DomainAPI           *componentsmocks.DomainSmartContract
 }
 
 func NewOriginatorBuilderForTesting(state State) *OriginatorBuilderForTesting {
@@ -107,6 +111,11 @@ func (b *OriginatorBuilderForTesting) NodeName(nodeName string) *OriginatorBuild
 
 func (b *OriginatorBuilderForTesting) CommitteeMembers(committeeMembers ...string) *OriginatorBuilderForTesting {
 	b.committeeMembers = committeeMembers
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) DomainAPI(api *componentsmocks.DomainSmartContract) *OriginatorBuilderForTesting {
+	b.domainAPI = api
 	return b
 }
 
@@ -149,6 +158,13 @@ func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *
 		EngineIntegration:   &common.FakeEngineIntegrationForTesting{},
 	}
 
+	if b.domainAPI == nil {
+		b.domainAPI = &componentsmocks.DomainSmartContract{}
+		b.domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
+			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
+		}).Maybe()
+	}
+
 	var originator *originator
 
 	var err error
@@ -161,6 +177,7 @@ func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *
 		b.contractAddress,
 		&pldconf.SequencerDefaults,
 		b.metrics,
+		b.domainAPI,
 	)
 
 	for _, txBuilder := range b.transactionBuilders {
@@ -185,5 +202,6 @@ func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *
 		cancel()
 		originator.WaitForDone(context.Background())
 	}
+	mocks.DomainAPI = b.domainAPI
 	return originator, mocks, done
 }

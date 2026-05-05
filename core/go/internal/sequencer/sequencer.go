@@ -23,7 +23,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator"
 	coordinatorTx "github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator"
@@ -541,9 +540,15 @@ func (sMgr *sequencerManager) OnNewBlockHeight(ctx context.Context, blockHeight 
 func (sMgr *sequencerManager) notifySequencersNewBlock(ctx context.Context, blockHeight int64) {
 	sMgr.sequencersLock.RLock()
 	defer sMgr.sequencersLock.RUnlock()
+	event := &common.NewBlockEvent{
+		BaseEvent: common.BaseEvent{
+			EventTime: time.Now(),
+		},
+		BlockHeight: uint64(blockHeight),
+	}
 	for _, seq := range sMgr.sequencers {
-		seq.coordinator.QueueEvent(ctx, &coordinator.NewBlockEvent{BlockHeight: uint64(blockHeight)})
-		seq.originator.QueueEvent(ctx, &originator.NewBlockEvent{BlockHeight: uint64(blockHeight)})
+		seq.coordinator.QueueEvent(ctx, event)
+		seq.originator.QueueEvent(ctx, event)
 	}
 }
 

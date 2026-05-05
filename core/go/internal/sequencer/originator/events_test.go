@@ -18,15 +18,16 @@ package originator
 import (
 	"testing"
 
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_ActiveCoordinatorUpdatedEvent_Type(t *testing.T) {
-	event := &ActiveCoordinatorUpdatedEvent{}
-	assert.Equal(t, Event_ActiveCoordinatorUpdated, event.Type())
+func Test_NewBlockEvent_Type(t *testing.T) {
+	event := &common.NewBlockEvent{}
+	assert.Equal(t, common.Event_NewBlock, event.Type())
 }
 
-func Test_ActiveCoordinatorUpdatedEvent_TypeString(t *testing.T) {
-	event := &ActiveCoordinatorUpdatedEvent{}
-	assert.Equal(t, "Event_ActiveCoordinatorUpdated", event.TypeString())
+func Test_NewBlockEvent_TypeString(t *testing.T) {
+	event := &common.NewBlockEvent{}
+	assert.Equal(t, "Event_NewBlock", event.TypeString())
 }

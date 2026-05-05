@@ -193,7 +193,7 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				domainContext:   dCtx,
 			}
 
-			seqOriginator, err := originator.NewOriginator(seqCtx, sMgr.nodeName, transportWriter, engineIntegration, &contractAddr, sMgr.config, sMgr.metrics)
+			seqOriginator, err := originator.NewOriginator(seqCtx, sMgr.nodeName, transportWriter, engineIntegration, &contractAddr, sMgr.config, sMgr.metrics, domainAPI)
 			if err != nil {
 				cancelCtx()
 				log.L(ctx).Errorf("failed to create sequencer originator for contract %s: %s", contractAddr.String(), err)
@@ -214,12 +214,6 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				sMgr.config,
 				sMgr.nodeName,
 				sMgr.metrics,
-				func(coordinatorNode string) {
-					seqOriginator.QueueEvent(sMgr.ctx, &originator.ActiveCoordinatorUpdatedEvent{
-						BaseEvent:   common.BaseEvent{EventTime: time.Now()},
-						Coordinator: coordinatorNode,
-					})
-				},
 			)
 			if err := seqCoordinator.Start(seqCtx); err != nil {
 				cancelCtx()

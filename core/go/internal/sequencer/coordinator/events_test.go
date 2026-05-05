@@ -21,8 +21,6 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
-	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
@@ -77,55 +75,18 @@ func TestTransactionsDelegatedEvent_Fields(t *testing.T) {
 	assert.Equal(t, txID, event.Transactions[0].ID)
 }
 
-func TestHeartbeatReceivedEvent_Type(t *testing.T) {
-	event := &HeartbeatReceivedEvent{}
-	assert.Equal(t, Event_HeartbeatReceived, event.Type())
-}
-
-func TestHeartbeatReceivedEvent_TypeString(t *testing.T) {
-	event := &HeartbeatReceivedEvent{}
-	assert.Equal(t, "Event_HeartbeatReceived", event.TypeString())
-}
-
-func TestHeartbeatReceivedEvent_GetEventTime(t *testing.T) {
-	event := &HeartbeatReceivedEvent{
-		BaseEvent: common.BaseEvent{
-			EventTime: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC),
-		},
-	}
-	assert.Equal(t, time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC), event.GetEventTime())
-}
-
-func TestHeartbeatReceivedEvent_EmbeddedNotification(t *testing.T) {
-	contractAddress := pldtypes.RandAddress()
-	notification := transport.CoordinatorHeartbeatNotification{
-		From:            "coordinator@node",
-		ContractAddress: contractAddress,
-	}
-	notification.BlockHeight = 100
-	event := &HeartbeatReceivedEvent{
-		BaseEvent: common.BaseEvent{
-			EventTime: time.Now(),
-		},
-		CoordinatorHeartbeatNotification: notification,
-	}
-	assert.Equal(t, notification.From, event.From)
-	assert.Equal(t, notification.ContractAddress, event.ContractAddress)
-	assert.Equal(t, uint64(100), event.BlockHeight)
-}
-
 func TestNewBlockEvent_Type(t *testing.T) {
-	event := &NewBlockEvent{}
-	assert.Equal(t, Event_NewBlock, event.Type())
+	event := &common.NewBlockEvent{}
+	assert.Equal(t, common.Event_NewBlock, event.Type())
 }
 
 func TestNewBlockEvent_TypeString(t *testing.T) {
-	event := &NewBlockEvent{}
+	event := &common.NewBlockEvent{}
 	assert.Equal(t, "Event_NewBlock", event.TypeString())
 }
 
 func TestNewBlockEvent_GetEventTime(t *testing.T) {
-	event := &NewBlockEvent{
+	event := &common.NewBlockEvent{
 		BaseEvent: common.BaseEvent{
 			EventTime: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC),
 		},
@@ -135,7 +96,7 @@ func TestNewBlockEvent_GetEventTime(t *testing.T) {
 
 func TestNewBlockEvent_Fields(t *testing.T) {
 	blockHeight := uint64(200)
-	event := &NewBlockEvent{
+	event := &common.NewBlockEvent{
 		BaseEvent: common.BaseEvent{
 			EventTime: time.Now(),
 		},
@@ -147,9 +108,8 @@ func TestNewBlockEvent_Fields(t *testing.T) {
 func TestEvent_InterfaceCompliance(t *testing.T) {
 	// Test that all events with BaseEvent implement the Event interface
 	events := []Event{
+		&CoordinatorCreatedEvent{},
 		&TransactionsDelegatedEvent{},
-		&HeartbeatReceivedEvent{},
-		&NewBlockEvent{},
 	}
 
 	for _, event := range events {

@@ -27,18 +27,18 @@ func action_RejectDelegatedTransactions(ctx context.Context, c *coordinator, eve
 }
 
 func validator_IsHeartbeatFromActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
-	e := event.(*HeartbeatReceivedEvent)
+	e := event.(*common.HeartbeatReceivedEvent)
 	return c.activeCoordinatorNode == e.From, nil
 }
 
 func validator_IsHeartbeatFromPreviousActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
-	e := event.(*HeartbeatReceivedEvent)
+	e := event.(*common.HeartbeatReceivedEvent)
 	return c.previousActiveCoordinatorNode == e.From, nil
 }
 
 func action_HeartbeatReceived(_ context.Context, c *coordinator, event common.Event) error {
-	e := event.(*HeartbeatReceivedEvent)
-	c.activeCoordinatorState = State(e.CoordinatorState)
+	e := event.(*common.HeartbeatReceivedEvent)
+	c.activeCoordinatorState = State(e.CoordinatorSnapshot.CoordinatorState)
 	return nil
 }
 

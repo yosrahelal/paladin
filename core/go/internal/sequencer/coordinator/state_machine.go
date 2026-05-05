@@ -42,10 +42,8 @@ const (
 )
 
 const (
-	Event_CoordinatorCreated EventType = iota + common.Event_TransactionStateTransition + 1
+	Event_CoordinatorCreated EventType = iota + common.Event_HeartbeatReceived + 1
 	Event_TransactionsDelegated
-	Event_HeartbeatReceived
-	Event_NewBlock
 )
 
 // Type aliases for the generic statemachine types, specialized for coordinator
@@ -93,14 +91,14 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Active,
 				}},
 			},
-			Event_HeartbeatReceived: {
+			common.Event_HeartbeatReceived: {
 				Validator: validator_IsHeartbeatFromActiveCoordinator,
 				Actions:   []ActionRule{{Action: action_HeartbeatReceived}},
 				Transitions: []Transition{{
 					To: State_Observing,
 				}},
 			},
-			Event_NewBlock: {
+			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{
 						Action: action_UpdateBlockHeight,
@@ -132,7 +130,7 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_TransactionsDelegated: {
 				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
 			},
-			Event_HeartbeatReceived: {
+			common.Event_HeartbeatReceived: {
 				Validator: validator_IsHeartbeatFromActiveCoordinator,
 				Actions: []ActionRule{
 					{Action: action_HeartbeatReceived},
@@ -148,7 +146,7 @@ var stateDefinitionsMap = StateDefinitions{
 					If: guard_ObservingIdleThresholdExceeded,
 				}},
 			},
-			Event_NewBlock: {
+			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{
 						Action: action_UpdateBlockHeight,
@@ -170,7 +168,7 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_TransactionsDelegated: {
 				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
 			},
-			Event_HeartbeatReceived: {
+			common.Event_HeartbeatReceived: {
 				Validator: validator_IsHeartbeatFromPreviousActiveCoordinator,
 				Actions: []ActionRule{
 					{Action: action_HeartbeatReceived},
@@ -213,7 +211,7 @@ var stateDefinitionsMap = StateDefinitions{
 					If: guard_ElectGracePeriodExpired,
 				}},
 			},
-			Event_NewBlock: {
+			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{
 						Action: action_UpdateBlockHeight,
@@ -297,7 +295,7 @@ var stateDefinitionsMap = StateDefinitions{
 			// active coordinator can change. This allows us to rotate the signing identity on a regular basis, but we might want to consider
 			// making this behaviour configurable via the domain (e.g. when the domain will provide the signing identity, or is configured to
 			// use a fixed signing identity)
-			Event_NewBlock: {
+			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{
 						Action: action_UpdateBlockHeight,
@@ -362,7 +360,7 @@ var stateDefinitionsMap = StateDefinitions{
 					{Action: action_PropagateHeartbeatIntervalToTransactions},
 				},
 			},
-			Event_NewBlock: {
+			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{
 						Action: action_UpdateBlockHeight,
@@ -420,7 +418,7 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_TransactionsDelegated: {
 				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
 			},
-			Event_HeartbeatReceived: {
+			common.Event_HeartbeatReceived: {
 				Validator: validator_IsHeartbeatFromActiveCoordinator,
 				Actions: []ActionRule{
 					{Action: action_HeartbeatReceived},
@@ -459,7 +457,7 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
-			Event_NewBlock: {
+			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{
 						Action: action_UpdateBlockHeight,
@@ -478,7 +476,7 @@ var stateDefinitionsMap = StateDefinitions{
 						statemachine.GuardNot(guard_ObservingIdleThresholdExceeded),
 					),
 				}, {
-					To: State_Idle, // TODO AM: this means that idle needs to be able to clean up transactions too
+					To: State_Idle,
 					If: statemachine.GuardAnd(
 						guard_IsActiveCoordinator,
 						guard_ObservingIdleThresholdExceeded,

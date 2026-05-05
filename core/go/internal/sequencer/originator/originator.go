@@ -17,18 +17,22 @@ package originator
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
+	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 
+	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 )
@@ -57,11 +61,14 @@ type originator struct {
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop              *statemachine.StateMachineEventLoop[State, *originator]
 	activeCoordinatorNode              string
+	previousActiveCoordinatorNode      string
 	heartbeatIntervalsSinceLastReceive int
 	transactionsByID                   map[uuid.UUID]transaction.OriginatorTransaction
 	transactionsOrdered                []transaction.OriginatorTransaction
 	currentBlockHeight                 uint64
 	latestCoordinatorSnapshot          *common.CoordinatorSnapshot
+	newBlockRangeEpoch                 bool
+	coordinatorEndorserPool            []string // Fixed sorted set of endorser candidates for COORDINATOR_ENDORSER mode
 
 	/* Config */
 	nodeName            string
@@ -71,11 +78,13 @@ type originator struct {
 	redelegateThreshold int // expressed as a multiple of heartbeat intervals
 
 	/* Dependencies */
+	domainAPI         components.DomainSmartContract
 	transportWriter   transport.TransportWriter
 	engineIntegration common.EngineIntegration
 	metrics           metrics.DistributedSequencerMetrics
 }
 
+// TODO AM: separate to have a separate start function- also need starting event to drive first selection- how is that working in the coordinator?
 func NewOriginator(
 	ctx context.Context,
 	nodeName string,
@@ -84,6 +93,7 @@ func NewOriginator(
 	contractAddress *pldtypes.EthAddress,
 	configuration *pldconf.SequencerConfig,
 	metrics metrics.DistributedSequencerMetrics,
+	domainAPI components.DomainSmartContract,
 ) (*originator, error) {
 	origCtx := log.WithLogField(ctx, "role", "originator")
 	o := &originator{
@@ -97,6 +107,11 @@ func NewOriginator(
 		metrics:             metrics,
 		idleThreshold:       confutil.IntMin(configuration.InactiveToIdleGracePeriod, pldconf.SequencerMinimum.InactiveToIdleGracePeriod, *pldconf.SequencerDefaults.InactiveToIdleGracePeriod),
 		redelegateThreshold: confutil.IntMin(configuration.RedelegateGracePeriod, pldconf.SequencerMinimum.RedelegateGracePeriod, *pldconf.SequencerDefaults.RedelegateGracePeriod),
+		domainAPI:           domainAPI,
+	}
+
+	if err := o.initializeFromContractConfig(origCtx); err != nil {
+		return nil, err
 	}
 
 	originatorEventQueueSize := confutil.IntMin(configuration.OriginatorEventQueueSize, pldconf.SequencerMinimum.OriginatorEventQueueSize, *pldconf.SequencerDefaults.OriginatorEventQueueSize)
@@ -106,6 +121,42 @@ func NewOriginator(
 	go o.stateMachineEventLoop.Start(origCtx)
 
 	return o, nil
+}
+
+func (o *originator) initializeFromContractConfig(ctx context.Context) error {
+	switch o.domainAPI.ContractConfig().GetCoordinatorSelection() {
+	case prototk.ContractConfig_COORDINATOR_STATIC:
+		staticCoordinator := o.domainAPI.ContractConfig().GetStaticCoordinator()
+		if staticCoordinator == "" {
+			return i18n.NewError(ctx, msgs.MsgSequencerStaticCoordinatorNotSet, o.contractAddress.String())
+		}
+		node, err := pldtypes.PrivateIdentityLocator(staticCoordinator).Node(ctx, false)
+		if err != nil {
+			return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidStaticCoordinator, o.contractAddress.String(), staticCoordinator)
+		}
+		o.activeCoordinatorNode = node
+		log.L(ctx).Debugf("static coordinator node for contract %s validated and set: %s", o.contractAddress.String(), node)
+	case prototk.ContractConfig_COORDINATOR_SENDER:
+		o.activeCoordinatorNode = o.nodeName
+		log.L(ctx).Debugf("coordinator selection is SENDER mode; active coordinator set to self: %s", o.nodeName)
+	case prototk.ContractConfig_COORDINATOR_ENDORSER:
+		candidates := o.domainAPI.ContractConfig().GetCoordinatorEndorserCandidates()
+		if len(candidates) == 0 {
+			return i18n.NewError(ctx, msgs.MsgSequencerEndorserNoCandidates, o.contractAddress.String())
+		}
+		nodes := make([]string, 0, len(candidates))
+		for _, locator := range candidates {
+			_, node, err := pldtypes.PrivateIdentityLocator(locator).Validate(ctx, "", false)
+			if err != nil {
+				return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidEndorserCandidate, locator)
+			}
+			nodes = append(nodes, node)
+		}
+		slices.Sort(nodes)
+		o.coordinatorEndorserPool = nodes
+		log.L(ctx).Debugf("initialized coordinator endorser pool for originator: %+v", o.coordinatorEndorserPool)
+	}
+	return nil
 }
 
 func (o *originator) WaitForDone(ctx context.Context) {
