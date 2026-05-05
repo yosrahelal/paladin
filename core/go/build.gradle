@@ -155,18 +155,26 @@ task protoc(type: ProtoCompile, dependsOn: [
     }
 }
 
+// Invoke mockery v3 via `go run`: GOBIN/PATH often has an unrelated v2 binary also named `mockery`,
+// which rejects this repo's v3-format YAML (pkgname/template at top level).
+def mockeryGoPkg = 'github.com/vektra/mockery/v3@v3.3.2' // keep in sync with root :installMockery
+
 task makeMocksComponents(type: Exec, dependsOn: [":installMockery", protoc]) {
-   executable "mockery"
+    workingDir projectDir
+    executable 'go'
+    args 'run', mockeryGoPkg
 }
 
 task makeMocksTransport(type: Exec, dependsOn: [makeMocksComponents]) {
-   executable "mockery"
-   args '--config=.mockery.sequencer.transport.yml'
+    workingDir projectDir
+    executable 'go'
+    args 'run', mockeryGoPkg, '--config=.mockery.sequencer.transport.yml'
 }
 
 task makeMocksSyncpoints(type: Exec, dependsOn: [makeMocksTransport]) {
-   executable "mockery"
-   args '--config=.mockery.sequencer.syncpoints.yml'
+    workingDir projectDir
+    executable 'go'
+    args 'run', mockeryGoPkg, '--config=.mockery.sequencer.syncpoints.yml'
 }
 
 // Make mocks for components first, then for sequencer. Mockery doesn't
@@ -174,8 +182,9 @@ task makeMocksSyncpoints(type: Exec, dependsOn: [makeMocksTransport]) {
 // of trying to generate component mocks after sequencer mocks even though the
 // latter pre-reqs the former.
 task makeMocks(type: Exec, dependsOn: [makeMocksSyncpoints]) {
-   executable "mockery"
-   args '--config=.mockery.sequencer.yml'
+    workingDir projectDir
+    executable 'go'
+    args 'run', mockeryGoPkg, '--config=.mockery.sequencer.yml'
 }
 
 
