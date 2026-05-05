@@ -172,9 +172,6 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_HeartbeatReceived: {
 				Actions: []ActionRule{
 					{Action: action_HeartbeatReceived},
-					// TODO AM A: has dropped transactions should only apply if we're receiving active heartbeats
-					// it should also be triggered if we've just received a closing heartbeat
-					// need to also think about the case where the coordinator hasn't changed but we have entered a new block range
 					{Action: action_SendDelegationRequest, If: guard_HasDroppedTransactions},
 				},
 			},
@@ -184,9 +181,12 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_IncrementHeartbeatIntervalCounts,
 					},
 					{
-						// Resend all the delegation requests if we have not seen a heartbeat in a while
-						// It could be that no one thinks they are coordinating, so this will nudge the node who
-						// we think should be the active coordinator.
+						// Resend all the delegation requests
+						// - if the last heartbeat we received was a closing heartbeat TODO AM implement this
+						//  we need to detect the transition to closing
+						// - if we have not seen a heartbeat in a while It could be that no one thinks they are coordinating, so this will
+						//   nudge the node who we think should be the active coordinator.
+						//
 						// If we have been seeing heartbeats, the handling for Event_HeartbeatReceived will ensure we
 						// are resending delegation requests only if we have transactions that the active coordinator
 						// does not know about.

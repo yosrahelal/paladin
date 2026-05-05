@@ -33,6 +33,7 @@ func action_HeartbeatReceived(ctx context.Context, o *originator, event common.E
 
 func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.HeartbeatReceivedEvent) error {
 	o.heartbeatIntervalsSinceLastReceive = 0
+	o.latestCoordinatorSnapshot = nil
 
 	// Process confirmed transactions (success or revert) from ALL coordinator heartbeats (any node).
 	// We may hear of confirmations from a flushing or closing coordinator, and updating our state machine
@@ -75,7 +76,7 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.H
 		return nil
 	}
 
-	// TODO AM A: this is for dropped transaction tracking-  need to think about this more
+	// The latest snapshot is used for dropped transaction tracking
 	o.latestCoordinatorSnapshot = event.CoordinatorSnapshot
 
 	for _, dispatchedTransaction := range event.CoordinatorSnapshot.DispatchedTransactions {
