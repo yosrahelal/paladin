@@ -655,7 +655,7 @@ func (s *notoTestSuite) TestNotoCreateMintLock() {
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
-	noto := helpers.DeployNoto(ctx, t, rpc, s.domainName, notary, nil)
+	noto := helpers.DeployNoto(ctx, t, rpc, s.domainName, "", notary, nil)
 	log.L(ctx).Infof("Noto deployed to %s", noto.Address)
 
 	balanceOfResult := noto.BalanceOf(ctx, &types.BalanceOfParam{Account: recipient1Name}).SignAndCall(notaryName).Wait()
@@ -746,7 +746,7 @@ func (s *notoTestSuite) TestNotoCreateBurnLock() {
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
-	noto := helpers.DeployNoto(ctx, t, rpc, s.domainName, notary, nil)
+	noto := helpers.DeployNoto(ctx, t, rpc, s.domainName, "", notary, nil)
 	log.L(ctx).Infof("Noto deployed to %s", noto.Address)
 
 	log.L(ctx).Infof("Mint 100 from notary to recipient1")
