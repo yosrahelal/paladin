@@ -31,13 +31,15 @@ type State int
 type EventType = common.EventType
 
 const (
-	State_Idle      State = iota //Not acting as a originator and not aware of any active coordinators
-	State_Observing              //Not acting as a originator but aware of a node (which may be the same node) acting as a coordinator
-	State_Sending                //Has some transactions that have been sent to a coordinator but not yet confirmed TODO should this be named State_Monitoring or State_Delegated or even State_Sent.  Sending sounds like it is in the process of sending the request message.
+	State_Initial   State = iota // Waiting for OriginatorCreatedEvent to fire initial coordinator selection
+	State_Idle                   // Not acting as an originator and not aware of any active coordinators
+	State_Observing              // Not acting as an originator but aware of a node (which may be the same node) acting as a coordinator
+	State_Sending                // Has some transactions that have been sent to a coordinator but not yet confirmed TODO should this be named State_Monitoring or State_Delegated or even State_Sent.  Sending sounds like it is in the process of sending the request message.
 )
 
 const (
-	Event_TransactionCreated EventType = iota + 300 // a new transaction has been created and is ready to be sent to the coordinator TODO maybe name something like Intent created?
+	Event_OriginatorCreated  EventType = iota + 300 // fired once by Start to drive the initial coordinator selection
+	Event_TransactionCreated                        // a new transaction has been created and is ready to be sent to the coordinator TODO maybe name something like Intent created?
 )
 
 // Type aliases for the generic statemachine types, specialized for originator
@@ -52,6 +54,14 @@ type (
 )
 
 var stateDefinitionsMap = StateDefinitions{
+	State_Initial: {
+		Events: map[EventType]EventHandler{
+			Event_OriginatorCreated: {
+				Actions:     []ActionRule{{Action: action_SelectActiveCoordinator}},
+				Transitions: []Transition{{To: State_Idle}},
+			},
+		},
+	},
 	State_Idle: {
 		Events: map[EventType]EventHandler{
 			common.Event_NewBlock: {
@@ -240,6 +250,8 @@ func (o *originator) GetTxStatus(ctx context.Context, txID uuid.UUID) (status co
 
 func (s State) String() string {
 	switch s {
+	case State_Initial:
+		return "Initial"
 	case State_Idle:
 		return "Idle"
 	case State_Observing:

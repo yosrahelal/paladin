@@ -75,14 +75,25 @@ func (r *SentMessageRecorder) Reset(ctx context.Context) {
 }
 
 type OriginatorBuilderForTesting struct {
-	state               State
-	nodeName            *string
-	committeeMembers    []string
-	contractAddress     *pldtypes.EthAddress
-	transactionBuilders []*transaction.TransactionBuilderForTesting
-	metrics             metrics.DistributedSequencerMetrics
-	sequencerConfig     *pldconf.SequencerConfig
-	domainAPI           *componentsmocks.DomainSmartContract
+	state                              State
+	nodeName                           *string
+	committeeMembers                   []string
+	contractAddress                    *pldtypes.EthAddress
+	transactionBuilders                []*transaction.TransactionBuilderForTesting
+	metrics                            metrics.DistributedSequencerMetrics
+	sequencerConfig                    *pldconf.SequencerConfig
+	domainAPI                          *componentsmocks.DomainSmartContract
+	blockRangeSize                     *uint64
+	currentBlockHeight                 *uint64
+	newBlockRangeEpoch                 *bool
+	coordinatorEndorserPool            []string
+	activeCoordinatorNode              *string
+	latestCoordinatorSnapshot          *common.CoordinatorSnapshot
+	latestCoordinatorSnapshotFactory   func([]transaction.OriginatorTransaction) *common.CoordinatorSnapshot
+	heartbeatIntervalsSinceLastReceive *int
+	redelegateThreshold                *int
+	idleThreshold                      *int
+	transactions                       []transaction.OriginatorTransaction
 }
 
 type OriginatorDependencyMocks struct {
@@ -140,7 +151,62 @@ func (b *OriginatorBuilderForTesting) OverrideSequencerConfig(config *pldconf.Se
 	b.sequencerConfig = config
 }
 
-func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *OriginatorDependencyMocks, func()) {
+func (b *OriginatorBuilderForTesting) BlockRangeSize(n uint64) *OriginatorBuilderForTesting {
+	b.blockRangeSize = &n
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) CurrentBlockHeight(n uint64) *OriginatorBuilderForTesting {
+	b.currentBlockHeight = &n
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) NewBlockRangeEpoch(v bool) *OriginatorBuilderForTesting {
+	b.newBlockRangeEpoch = &v
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) CoordinatorEndorserPool(nodes ...string) *OriginatorBuilderForTesting {
+	b.coordinatorEndorserPool = nodes
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) ActiveCoordinatorNode(node string) *OriginatorBuilderForTesting {
+	b.activeCoordinatorNode = &node
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) LatestCoordinatorSnapshot(s *common.CoordinatorSnapshot) *OriginatorBuilderForTesting {
+	b.latestCoordinatorSnapshot = s
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) LatestCoordinatorSnapshotFactory(f func([]transaction.OriginatorTransaction) *common.CoordinatorSnapshot) *OriginatorBuilderForTesting {
+	b.latestCoordinatorSnapshotFactory = f
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) HeartbeatIntervalsSinceLastReceive(n int) *OriginatorBuilderForTesting {
+	b.heartbeatIntervalsSinceLastReceive = &n
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) RedelegateThreshold(n int) *OriginatorBuilderForTesting {
+	b.redelegateThreshold = &n
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) IdleThreshold(n int) *OriginatorBuilderForTesting {
+	b.idleThreshold = &n
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) Transactions(txns ...transaction.OriginatorTransaction) *OriginatorBuilderForTesting {
+	b.transactions = txns
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependencyMocks) {
 
 	if b.nodeName == nil {
 		b.nodeName = ptrTo("member1@node1")
@@ -165,12 +231,7 @@ func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *
 		}).Maybe()
 	}
 
-	var originator *originator
-
-	var err error
-	buildCtx, cancel := context.WithCancel(ctx)
-	originator, err = NewOriginator(
-		buildCtx,
+	originator := NewOriginator(
 		*b.nodeName,
 		mocks.SentMessageRecorder,
 		mocks.EngineIntegration,
@@ -187,8 +248,10 @@ func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *
 		originator.transactionsOrdered = append(originator.transactionsOrdered, tx)
 	}
 
-	if err != nil {
-		panic(err)
+	for _, tx := range b.transactions {
+		txID := tx.GetID()
+		originator.transactionsByID[txID] = tx
+		originator.transactionsOrdered = append(originator.transactionsOrdered, tx)
 	}
 
 	originator.stateMachineEventLoop.StateMachine().SetCurrentState(b.state)
@@ -196,12 +259,40 @@ func (b *OriginatorBuilderForTesting) Build(ctx context.Context) (*originator, *
 	// Any state specific setup can be done here
 	}
 
-	originator.activeCoordinatorNode = "coordinator"
-
-	done := func() {
-		cancel()
-		originator.WaitForDone(context.Background())
+	if b.activeCoordinatorNode != nil {
+		originator.activeCoordinatorNode = *b.activeCoordinatorNode
+	} else {
+		originator.activeCoordinatorNode = "coordinator"
 	}
+	if b.blockRangeSize != nil {
+		originator.blockRangeSize = *b.blockRangeSize
+	}
+	if b.currentBlockHeight != nil {
+		originator.currentBlockHeight = *b.currentBlockHeight
+	}
+	if b.newBlockRangeEpoch != nil {
+		originator.newBlockRangeEpoch = *b.newBlockRangeEpoch
+	}
+	if b.coordinatorEndorserPool != nil {
+		originator.coordinatorEndorserPool = b.coordinatorEndorserPool
+	}
+	if b.latestCoordinatorSnapshot != nil {
+		originator.latestCoordinatorSnapshot = b.latestCoordinatorSnapshot
+	}
+	if b.latestCoordinatorSnapshotFactory != nil {
+		allTxns := originator.transactionsOrdered
+		originator.latestCoordinatorSnapshot = b.latestCoordinatorSnapshotFactory(allTxns)
+	}
+	if b.heartbeatIntervalsSinceLastReceive != nil {
+		originator.heartbeatIntervalsSinceLastReceive = *b.heartbeatIntervalsSinceLastReceive
+	}
+	if b.redelegateThreshold != nil {
+		originator.redelegateThreshold = *b.redelegateThreshold
+	}
+	if b.idleThreshold != nil {
+		originator.idleThreshold = *b.idleThreshold
+	}
+
 	mocks.DomainAPI = b.domainAPI
-	return originator, mocks, done
+	return originator, mocks
 }

@@ -36,6 +36,7 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.H
 	o.heartbeatIntervalsSinceLastReceive = 0
 	o.latestCoordinatorSnapshot = event.CoordinatorSnapshot
 
+	// TODO AM: we can accept confirmations from a closing coordinator
 	// TODO AM: this is wrong- we need the heartbeat to match what we think the active coordinator is
 	// Update the active coordinator from the heartbeat sender; the heartbeat is authoritative evidence
 	// that the sender is currently acting as coordinator, complementing the block-based selection.

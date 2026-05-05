@@ -36,3 +36,15 @@ func (*TransactionCreatedEvent) Type() EventType {
 func (*TransactionCreatedEvent) TypeString() string {
 	return "Event_TransactionCreated"
 }
+
+type OriginatorCreatedEvent struct {
+	common.BaseEvent
+}
+
+func (*OriginatorCreatedEvent) Type() EventType {
+	return Event_OriginatorCreated
+}
+
+func (*OriginatorCreatedEvent) TypeString() string {
+	return "Event_OriginatorCreated"
+}

@@ -39,6 +39,9 @@ import (
 
 // Originator is the interface that consumers use to interact with the originator.
 type Originator interface {
+	// Start begins the event loop. It must be called once after construction before any events are queued.
+	Start(ctx context.Context) error
+
 	// Asynchronously update the state machine by queueing an event to be processed
 	// This the only interface by which consumers should update the state of the originator
 	QueueEvent(ctx context.Context, event common.Event)
@@ -56,7 +59,8 @@ type originator struct {
 	// Any functions that expose non atomic state outside of the originator must
 	// take the read lock when called.
 	sync.RWMutex
-	ctx context.Context
+	ctx     context.Context
+	started bool
 
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop              *statemachine.StateMachineEventLoop[State, *originator]
@@ -84,9 +88,7 @@ type originator struct {
 	metrics           metrics.DistributedSequencerMetrics
 }
 
-// TODO AM: separate to have a separate start function- also need starting event to drive first selection- how is that working in the coordinator?
 func NewOriginator(
-	ctx context.Context,
 	nodeName string,
 	transportWriter transport.TransportWriter,
 	engineIntegration common.EngineIntegration,
@@ -94,10 +96,8 @@ func NewOriginator(
 	configuration *pldconf.SequencerConfig,
 	metrics metrics.DistributedSequencerMetrics,
 	domainAPI components.DomainSmartContract,
-) (*originator, error) {
-	origCtx := log.WithLogField(ctx, "role", "originator")
+) *originator {
 	o := &originator{
-		ctx:                 origCtx,
 		nodeName:            nodeName,
 		transactionsByID:    make(map[uuid.UUID]transaction.OriginatorTransaction),
 		transportWriter:     transportWriter,
@@ -110,17 +110,36 @@ func NewOriginator(
 		domainAPI:           domainAPI,
 	}
 
-	if err := o.initializeFromContractConfig(origCtx); err != nil {
-		return nil, err
-	}
-
 	originatorEventQueueSize := confutil.IntMin(configuration.OriginatorEventQueueSize, pldconf.SequencerMinimum.OriginatorEventQueueSize, *pldconf.SequencerDefaults.OriginatorEventQueueSize)
 	originatorPriorityEventQueueSize := confutil.IntMin(configuration.OriginatorPriorityEventQueueSize, pldconf.SequencerMinimum.OriginatorPriorityEventQueueSize, *pldconf.SequencerDefaults.OriginatorPriorityEventQueueSize)
-	o.initializeStateMachineEventLoop(State_Idle, originatorEventQueueSize, originatorPriorityEventQueueSize)
+	o.initializeStateMachineEventLoop(State_Initial, originatorEventQueueSize, originatorPriorityEventQueueSize)
 
-	go o.stateMachineEventLoop.Start(origCtx)
+	return o
+}
 
-	return o, nil
+func (o *originator) Start(ctx context.Context) error {
+	if o.started {
+		return nil
+	}
+	o.ctx = log.WithLogField(ctx, "role", "originator")
+
+	if err := o.initializeFromContractConfig(o.ctx); err != nil {
+		return err
+	}
+
+	blockHeight, err := o.engineIntegration.GetBlockHeight(ctx)
+	if err != nil {
+		return err
+	}
+	o.currentBlockHeight = uint64(blockHeight)
+
+	o.started = true
+
+	go o.stateMachineEventLoop.Start(o.ctx)
+
+	o.QueueEvent(o.ctx, &OriginatorCreatedEvent{})
+
+	return nil
 }
 
 func (o *originator) initializeFromContractConfig(ctx context.Context) error {
@@ -160,6 +179,9 @@ func (o *originator) initializeFromContractConfig(ctx context.Context) error {
 }
 
 func (o *originator) WaitForDone(ctx context.Context) {
+	if !o.started {
+		return
+	}
 	o.stateMachineEventLoop.WaitForDone(ctx)
 }
 
