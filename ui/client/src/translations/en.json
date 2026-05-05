@@ -226,6 +226,7 @@
 	"transactionNotFound": "Transaction Not Found",
 	"transactions": "Transactions",
 	"transactionsAndEvents": "Transactions & Events",
+	"transactionsEmptyState": "There are no transactions",
 	"transfer": "Transfer",
 	"transferFailed": "Transfer failed",
 	"transport": "Transport",

@@ -230,7 +230,7 @@ export const fetchTransactionReceipts = async (
     method: RpcMethods.ptx_QueryTransactionReceipts,
     params: [
       {
-        limit: transactions.length * constants.RECEIPTS_PER_TRANSACTION_DEFAULT_LIMIT,
+        limit: (transactions.length + 1) * constants.RECEIPTS_PER_TRANSACTION_DEFAULT_LIMIT,
         in: [
           {
             field: 'transactionHash',
@@ -260,7 +260,7 @@ export const fetchPaladinTransactions = async (
     method: RpcMethods.ptx_QueryTransactionsFull,
     params: [
       {
-        limit: transactionReceipts.length,
+        limit: transactionReceipts.length + 1,
         in: [
           {
             field: 'id',
@@ -288,7 +288,7 @@ export const fetchTransactionEvents = async (
     method: RpcMethods.bidx_QueryIndexedEvents,
     params: [
       {
-        limit: transactions.length * constants.EVENTS_PER_TRANSACTION_DEFAULT_LIMIT,
+        limit: (transactions.length + 1) * constants.EVENTS_PER_TRANSACTION_DEFAULT_LIMIT,
         in: [
           {
             field: 'transactionHash',
