@@ -400,3 +400,18 @@ func (*PreAssembleDependencyTerminatedEvent) Type() EventType {
 func (*PreAssembleDependencyTerminatedEvent) TypeString() string {
 	return "Event_PreAssembleDependencyTerminated"
 }
+
+// NotActiveCoordinatorEvent is received by the coordinator when the originator informs it
+// that this node is not the active coordinator for the given transaction. The coordinator
+// should reset the transaction to pooled state so it can be re-delegated to the correct coordinator.
+type NotActiveCoordinatorEvent struct {
+	BaseCoordinatorEvent
+}
+
+func (*NotActiveCoordinatorEvent) Type() EventType {
+	return Event_NotActiveCoordinator
+}
+
+func (*NotActiveCoordinatorEvent) TypeString() string {
+	return "Event_NotActiveCoordinator"
+}

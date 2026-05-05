@@ -13,19 +13,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 package originator
+
 import (
 	"context"
 	"fmt"
 	"testing"
+
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
 func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(State_Idle).Build()
@@ -222,25 +227,7 @@ func Test_sendDelegationRequest_NoActiveCoordinatorDefersAndReturnsNil(t *testin
 	assert.False(t, mocks.SentMessageRecorder.HasSentDelegationRequest(),
 		"delegation request should not be sent when there is no active coordinator")
 }
-type mockOriginatorTransactionForDelegation struct {
-	id        uuid.UUID
-	pt        *components.PrivateTransaction
-	handleErr error
-}
-func (m *mockOriginatorTransactionForDelegation) HandleEvent(_ context.Context, _ common.Event) error {
-	return m.handleErr
-}
-func (m *mockOriginatorTransactionForDelegation) GetID() uuid.UUID           { return m.id }
-func (m *mockOriginatorTransactionForDelegation) GetAssembleErrorCount() int { return 0 }
-func (m *mockOriginatorTransactionForDelegation) GetPrivateTransaction() *components.PrivateTransaction {
-	return m.pt
-}
-func (m *mockOriginatorTransactionForDelegation) GetCurrentState() transaction.State {
-	return transaction.State_Pending
-}
-func (m *mockOriginatorTransactionForDelegation) GetStatus(_ context.Context) components.PrivateTxStatus {
-	return components.PrivateTxStatus{TxID: m.id.String(), Status: "pending"}
-}
+
 func Test_addToTransactions_HandleCreatedEventError_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(State_Idle)
@@ -248,11 +235,8 @@ func Test_addToTransactions_HandleCreatedEventError_ReturnsError(t *testing.T) {
 	txnID := uuid.New()
 	pt := &components.PrivateTransaction{ID: txnID}
 	expectedErr := fmt.Errorf("created event handling failed")
-	mockTxn := &mockOriginatorTransactionForDelegation{
-		id:        txnID,
-		pt:        pt,
-		handleErr: expectedErr,
-	}
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(expectedErr)
 	createTransaction := func(context.Context, *components.PrivateTransaction) (transaction.OriginatorTransaction, error) {
 		return mockTxn, nil
 	}
@@ -263,12 +247,12 @@ func Test_addToTransactions_HandleCreatedEventError_ReturnsError(t *testing.T) {
 func Test_sendDelegationRequest_HandleEventError_ReturnsWrappedError(t *testing.T) {
 	ctx := context.Background()
 	txnID := uuid.New()
+	pt := &components.PrivateTransaction{ID: txnID}
 	expectedErr := fmt.Errorf("delegated event handling failed")
-	mockTxn := &mockOriginatorTransactionForDelegation{
-		id:        txnID,
-		pt:        &components.PrivateTransaction{ID: txnID},
-		handleErr: expectedErr,
-	}
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetPrivateTransaction").Return(pt)
+	mockTxn.On("GetID").Return(txnID)
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(expectedErr)
 	o, _ := NewOriginatorBuilderForTesting(State_Sending).
 		Transactions(mockTxn).
 		ActiveCoordinatorNode("coordinator@coordinatorNode").

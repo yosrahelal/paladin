@@ -74,6 +74,7 @@ const (
 	Event_ChainedDependencyFailed                                                               // a chained (same-coordinator) dependency has been permanently finalized as failed
 	Event_ChainedDependencyEvicted                                                              // a chained (same-coordinator) dependency has been evicted (e.g. assembly failure threshold exceeded)
 	Event_PreAssembleDependencyTerminated                                                       // the pre-assemble (FIFO ordering) predecessor has reached a terminal state
+	Event_NotActiveCoordinator                                                                  // originator has reported that this node is not the active coordinator for the transaction
 )
 
 // Type aliases for the generic statemachine types, specialized for Transaction
@@ -272,6 +273,14 @@ var stateDefinitionsMap = StateDefinitions{
 						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
 					},
 				},
+			},
+			// Originator has informed us that no longer thinks we are the active coordinator for this transaction.
+			// Evict the transaction so it is cleaned up; State_Evicted.OnTransitionTo handles
+			// cascading eviction of dependents via action_CascadeChainedDependencyEviction.
+			Event_NotActiveCoordinator: {
+				Transitions: []Transition{{
+					To: State_Evicted,
+				}},
 			},
 			Event_Assemble_Revert_Response: {
 				Validator: validator_MatchesPendingAssembleRequest,
@@ -508,6 +517,14 @@ var stateDefinitionsMap = StateDefinitions{
 						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
 					},
 				},
+			},
+			// Originator has informed us that no longer thinks we are the active coordinator for this transaction.
+			// Evict the transaction so it is cleaned up; State_Evicted.OnTransitionTo handles
+			// cascading eviction of dependents via action_CascadeChainedDependencyEviction.
+			Event_NotActiveCoordinator: {
+				Transitions: []Transition{{
+					To: State_Evicted,
+				}},
 			},
 			Event_RequestTimeoutInterval: {
 				Actions: []ActionRule{{

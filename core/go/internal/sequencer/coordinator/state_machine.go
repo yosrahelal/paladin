@@ -197,7 +197,6 @@ var stateDefinitionsMap = StateDefinitions{
 						// Sending a heartbeat only if we have in memory transactions from a previous block range which hadn't yet
 						// been cleaned up when we moved from State_Closing to State_Selected. This is very unlikely to occur, but
 						// it is technically possible if we are configured with a small block range but a long closing grace period.
-						// TODO AM: is anyone even listening to these? If they are we should do this on the equivalent block in idle too
 						Action: action_SendHeartbeat,
 						If:     guard_HasTransactionsInflight,
 					},
@@ -415,8 +414,20 @@ var stateDefinitionsMap = StateDefinitions{
 			{Action: action_SendHeartbeat},
 		},
 		Events: map[EventType]EventHandler{
+			// TODO AM A: not sure this is correct- really need to think about all the routes out of closing if we
+			// become the active coordinator while in closing
 			Event_TransactionsDelegated: {
-				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
+				Actions: []ActionRule{{
+					If:     guard_IsActiveCoordinator,
+					Action: action_ProcessDelegatedTransactions,
+				}, {
+					If:     statemachine.GuardNot(guard_IsActiveCoordinator),
+					Action: action_RejectDelegatedTransactions,
+				}},
+				Transitions: []Transition{{
+					If: guard_IsActiveCoordinator,
+					To: State_Active,
+				}},
 			},
 			common.Event_HeartbeatReceived: {
 				Validator: validator_IsHeartbeatFromActiveCoordinator,
@@ -473,13 +484,8 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Elect,
 					If: statemachine.GuardAnd(
 						guard_IsActiveCoordinator,
+						// TODO AM: is this right?
 						statemachine.GuardNot(guard_ObservingIdleThresholdExceeded),
-					),
-				}, {
-					To: State_Idle,
-					If: statemachine.GuardAnd(
-						guard_IsActiveCoordinator,
-						guard_ObservingIdleThresholdExceeded,
 					),
 				}},
 			},

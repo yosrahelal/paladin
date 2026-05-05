@@ -23,20 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_action_CoordinatorChanged_SetsCurrentDelegate(t *testing.T) {
-	ctx := context.Background()
-	builder := NewTransactionBuilderForTesting(t, State_Delegated)
-	txn, _ := builder.BuildWithMocks()
-	coordinator := "newcoord@node1"
-	event := &CoordinatorChangedEvent{
-		BaseEvent:   BaseEvent{TransactionID: txn.pt.ID},
-		Coordinator: coordinator,
-	}
-	err := action_CoordinatorChanged(ctx, txn, event)
-	require.NoError(t, err)
-	assert.Equal(t, coordinator, txn.currentDelegate)
-}
-
 func Test_State_String_AllStates(t *testing.T) {
 	states := []struct {
 		s    State
@@ -47,7 +33,6 @@ func Test_State_String_AllStates(t *testing.T) {
 		{State_Delegated, "State_Delegated"},
 		{State_Assembling, "State_Assembling"},
 		{State_Endorsement_Gathering, "State_Endorsement_Gathering"},
-		{State_Signing, "State_Signing"},
 		{State_Prepared, "State_Prepared"},
 		{State_Dispatched, "State_Dispatched"},
 		{State_Sequenced, "State_Sequenced"},

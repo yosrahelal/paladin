@@ -206,6 +206,7 @@ func (t *originatorTransaction) GetCurrentState() State {
 	return t.stateMachine.GetCurrentState()
 }
 
+
 func (t *originatorTransaction) GetSignerAddress() *pldtypes.EthAddress {
 	t.RLock()
 	defer t.RUnlock()

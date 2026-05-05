@@ -53,6 +53,7 @@ type TransportWriter interface {
 	SendPreDispatchResponse(ctx context.Context, transactionOriginator string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification) error
 	SendDispatched(ctx context.Context, transactionOriginator string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification) error
 	SendTransactionUnknown(ctx context.Context, coordinatorNode string, txID uuid.UUID) error
+	SendNotActiveCoordinator(ctx context.Context, coordinatorNode string, txID uuid.UUID) error
 }
 
 func NewTransportWriter(ctx context.Context, contractAddress *pldtypes.EthAddress, nodeID string, transportManager components.TransportManager, loopbackHandler func(ctx context.Context, message *components.ReceivedMessage)) TransportWriter {
@@ -692,6 +693,36 @@ func (tw *transportWriter) SendTransactionUnknown(ctx context.Context, coordinat
 		Node:        coordinatorNode,
 	}); err != nil {
 		log.L(ctx).Errorf("error sending transaction unknown message: %s", err)
+	}
+	return err
+}
+
+// SendNotActiveCoordinator is called by an originator when it receives an AssembleRequest or
+// PreDispatchRequest from a coordinator that is not this transaction's current active delegate.
+// The coordinator should evict the transaction rather than continuing to coordinate it.
+func (tw *transportWriter) SendNotActiveCoordinator(ctx context.Context, coordinatorNode string, txID uuid.UUID) error {
+	log.L(ctx).Debugf("transport writer sending not-active-coordinator message for tx %s to coordinator %s", txID, coordinatorNode)
+
+	if tw.contractAddress == nil {
+		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "attempt to send not-active-coordinator without specifying contract address")
+	}
+
+	msgBytes, err := proto.Marshal(&engineProto.NotActiveCoordinatorNotification{
+		ContractAddress: tw.contractAddress.HexString(),
+		TransactionId:   txID.String(),
+	})
+	if err != nil {
+		log.L(ctx).Errorf("error marshalling not-active-coordinator message: %s", err)
+		return err
+	}
+
+	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
+		MessageType: MessageType_NotActiveCoordinator,
+		Payload:     msgBytes,
+		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
+		Node:        coordinatorNode,
+	}); err != nil {
+		log.L(ctx).Errorf("error sending not-active-coordinator message: %s", err)
 	}
 	return err
 }

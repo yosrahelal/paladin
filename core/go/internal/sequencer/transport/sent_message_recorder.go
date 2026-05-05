@@ -232,6 +232,10 @@ func (r *SentMessageRecorder) SendTransactionUnknown(ctx context.Context, coordi
 	return nil
 }
 
+func (r *SentMessageRecorder) SendNotActiveCoordinator(ctx context.Context, coordinatorNode string, txID uuid.UUID) error {
+	return nil
+}
+
 func (r *SentMessageRecorder) SendDelegationRequest(ctx context.Context, coordinatorLocator string, transactions []*components.PrivateTransaction, blockHeight uint64) error {
 	return nil
 }

@@ -31,19 +31,53 @@ func action_HeartbeatReceived(ctx context.Context, o *originator, event common.E
 	return o.applyHeartbeatReceived(ctx, e)
 }
 
-// TODO AM: this will need thought for how it handles active vs flushing vs closing vs elect snapshots
 func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.HeartbeatReceivedEvent) error {
 	o.heartbeatIntervalsSinceLastReceive = 0
+
+	// Process confirmed transactions (success or revert) from ALL coordinator heartbeats (any node).
+	// We may hear of confirmations from a flushing or closing coordinator, and updating our state machine
+	// to reflect as soon as possible will minimise duplicate submissions to the base ledger.
+	// We should have been notified by a fire and forget message that a transaction has been confirmed, before
+	// it is included in a heartbeat, so most the time this code should be redundant.
+	for _, confirmedTransaction := range event.CoordinatorSnapshot.ConfirmedTransactions {
+		if confirmedTransaction.Originator != o.nodeName {
+			continue
+		}
+		txn := o.transactionsByID[confirmedTransaction.ID]
+		if txn == nil {
+			log.L(ctx).Debugf("received confirmed transaction %s in heartbeat from %s but no transaction found in memory", confirmedTransaction.ID, event.From)
+			continue
+		}
+		if len(confirmedTransaction.RevertReason) > 0 {
+			err := txn.HandleEvent(ctx, &transaction.ConfirmedRevertedEvent{
+				BaseEvent:    transaction.BaseEvent{TransactionID: confirmedTransaction.ID},
+				RevertReason: confirmedTransaction.RevertReason,
+				WillRetry:    false,
+			})
+			if err != nil {
+				msg := fmt.Errorf("error handling confirmed reverted event for transaction %s: %v", txn.GetID(), err)
+				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, msg)
+			}
+		} else {
+			err := txn.HandleEvent(ctx, &transaction.ConfirmedSuccessEvent{
+				BaseEvent: transaction.BaseEvent{TransactionID: confirmedTransaction.ID},
+			})
+			if err != nil {
+				msg := fmt.Errorf("error handling confirmed success event for transaction %s: %v", txn.GetID(), err)
+				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, msg)
+			}
+		}
+	}
+
+	// Only process dispatch state updates from the active coordinator.
+	if event.From != o.activeCoordinatorNode {
+		log.L(ctx).Debugf("ignoring non-active coordinator heartbeat from %s (active: %s)", event.From, o.activeCoordinatorNode)
+		return nil
+	}
+
+	// TODO AM A: this is for dropped transaction tracking-  need to think about this more
 	o.latestCoordinatorSnapshot = event.CoordinatorSnapshot
 
-	// TODO AM: we can accept confirmations from a closing coordinator
-	// TODO AM: this is wrong- we need the heartbeat to match what we think the active coordinator is
-	// Update the active coordinator from the heartbeat sender; the heartbeat is authoritative evidence
-	// that the sender is currently acting as coordinator, complementing the block-based selection.
-	if event.From != "" && o.activeCoordinatorNode != event.From {
-		o.activeCoordinatorNode = event.From
-		log.L(ctx).Debugf("active coordinator updated to %s from heartbeat", event.From)
-	}
 	for _, dispatchedTransaction := range event.CoordinatorSnapshot.DispatchedTransactions {
 		//if any of the dispatched transactions were sent by this originator, ensure that we have an up to date view of its state
 		if dispatchedTransaction.Originator == o.nodeName {
@@ -59,6 +93,7 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.H
 				txnSubmittedEvent.TransactionID = dispatchedTransaction.ID
 				txnSubmittedEvent.SignerAddress = dispatchedTransaction.Signer
 				txnSubmittedEvent.LatestSubmissionHash = *dispatchedTransaction.LatestSubmissionHash
+				txnSubmittedEvent.Coordinator = event.From
 				if dispatchedTransaction.Nonce != nil {
 					txnSubmittedEvent.Nonce = *dispatchedTransaction.Nonce
 				}
@@ -74,7 +109,8 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.H
 					BaseEvent: transaction.BaseEvent{
 						TransactionID: dispatchedTransaction.ID,
 					},
-					Nonce: *dispatchedTransaction.Nonce,
+					Nonce:       *dispatchedTransaction.Nonce,
+					Coordinator: event.From,
 				})
 
 				if err != nil {
@@ -85,8 +121,7 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.H
 		}
 	}
 
-	// TODO process other lists in the heartbeat event.
-	// Note: sending dropped transaction re-delegations (i.e. those we are tracking but which th heartbeat doesn't mention)
+	// Note: sending dropped transaction re-delegations (i.e. those we are tracking but which the heartbeat doesn't mention)
 	// is handled by state machine guards
 
 	return nil

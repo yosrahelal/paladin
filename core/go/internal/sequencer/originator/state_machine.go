@@ -156,8 +156,6 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_SelectActiveCoordinator,
 					},
 					{
-						// TODO AM: this will need a bunch of work through to the transaction so they know they've been
-						// redelegated
 						// Re-delegate to the new coordinator if selection changed this block
 						If:     guard_CoordinatorChanged,
 						Action: action_SendDelegationRequest,
@@ -174,6 +172,9 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_HeartbeatReceived: {
 				Actions: []ActionRule{
 					{Action: action_HeartbeatReceived},
+					// TODO AM A: has dropped transactions should only apply if we're receiving active heartbeats
+					// it should also be triggered if we've just received a closing heartbeat
+					// need to also think about the case where the coordinator hasn't changed but we have entered a new block range
 					{Action: action_SendDelegationRequest, If: guard_HasDroppedTransactions},
 				},
 			},

@@ -35,6 +35,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// TODO AM: lots of these functions load a sequencer even if they rely on the transaction existing in memory. They
+// should switch to using the get version instead
 func (sMgr *sequencerManager) HandlePaladinMsg(ctx context.Context, message *components.ReceivedMessage) {
 	//TODO this need to become an ultra low latency, non blocking, handover to the event loop thread.
 	// need some thought on how to handle errors, retries, buffering, swapping idle sequencers in and out of memory etc...
@@ -73,6 +75,8 @@ func (sMgr *sequencerManager) HandlePaladinMsg(ctx context.Context, message *com
 		go sMgr.handleTransactionConfirmed(sMgr.ctx, message)
 	case transport.MessageType_TransactionUnknown:
 		go sMgr.handleTransactionUnknown(sMgr.ctx, message)
+	case transport.MessageType_NotActiveCoordinator:
+		go sMgr.handleNotActiveCoordinator(sMgr.ctx, message)
 	default:
 		log.L(ctx).Errorf("Unknown message type: %s", message.MessageType)
 	}
@@ -355,6 +359,7 @@ func (sMgr *sequencerManager) handleDispatchedEvent(ctx context.Context, message
 
 	dispatchConfirmedEvent := &originatorTransaction.DispatchedEvent{}
 	dispatchConfirmedEvent.TransactionID = uuid.MustParse(dispatchedEvent.TransactionId[2:34])
+	dispatchConfirmedEvent.Coordinator = message.FromNode
 	dispatchConfirmedEvent.EventTime = time.Now()
 
 	seq.GetOriginator().QueueEvent(ctx, dispatchConfirmedEvent)
@@ -702,6 +707,7 @@ func (sMgr *sequencerManager) handleNonceAssigned(ctx context.Context, message *
 	nonceAssignedEvent := &originatorTransaction.NonceAssignedEvent{}
 	nonceAssignedEvent.TransactionID = uuid.MustParse(nonceAssigned.TransactionId)
 	nonceAssignedEvent.Nonce = uint64(nonceAssigned.Nonce)
+	nonceAssignedEvent.Coordinator = message.FromNode
 	nonceAssignedEvent.EventTime = time.Now()
 
 	seq.GetOriginator().QueueEvent(ctx, nonceAssignedEvent)
@@ -729,6 +735,7 @@ func (sMgr *sequencerManager) handleTransactionSubmitted(ctx context.Context, me
 	transactionSubmittedEvent := &originatorTransaction.SubmittedEvent{}
 	transactionSubmittedEvent.TransactionID = uuid.MustParse(transactionSubmitted.TransactionId)
 	transactionSubmittedEvent.LatestSubmissionHash = pldtypes.Bytes32(transactionSubmitted.Hash)
+	transactionSubmittedEvent.Coordinator = message.FromNode
 	transactionSubmittedEvent.EventTime = time.Now()
 
 	seq.GetOriginator().QueueEvent(ctx, transactionSubmittedEvent)
@@ -767,6 +774,42 @@ func (sMgr *sequencerManager) handleTransactionConfirmed(ctx context.Context, me
 		transactionSubmittedEvent.EventTime = time.Now()
 		seq.GetOriginator().QueueEvent(ctx, transactionSubmittedEvent)
 	}
+}
+
+func (sMgr *sequencerManager) handleNotActiveCoordinator(ctx context.Context, message *components.ReceivedMessage) {
+	// Handle a response from an originator indicating that this node is not the active coordinator
+	// for the given transaction. The coordinator should evict the transaction.
+	notActiveMsg := &engineProto.NotActiveCoordinatorNotification{}
+	if err := proto.Unmarshal(message.Payload, notActiveMsg); err != nil {
+		sMgr.logPaladinMessageUnmarshalError(ctx, message, err)
+		return
+	}
+
+	contractAddress := sMgr.parseContractAddressString(ctx, notActiveMsg.ContractAddress, message)
+	if contractAddress == nil {
+		return
+	}
+
+	txID, err := uuid.Parse(notActiveMsg.TransactionId)
+	if err != nil {
+		log.L(ctx).Errorf("handleNotActiveCoordinator: invalid transaction ID %q: %v", notActiveMsg.TransactionId, err)
+		return
+	}
+
+	seq, err := sMgr.LoadSequencer(ctx, sMgr.components.Persistence().NOTX(), *contractAddress, nil, nil)
+	if seq == nil || err != nil {
+		log.L(ctx).Errorf("handleNotActiveCoordinator failed to obtain sequencer: %v", err)
+		return
+	}
+
+	log.L(ctx).Debugf("received not-active-coordinator notification for tx %s from originator %s, queuing eviction event", txID, message.FromNode)
+
+	notActiveEvent := &coordTransaction.NotActiveCoordinatorEvent{
+		BaseCoordinatorEvent: coordTransaction.BaseCoordinatorEvent{
+			TransactionID: txID,
+		},
+	}
+	seq.GetCoordinator().QueueEvent(ctx, notActiveEvent)
 }
 
 func (sMgr *sequencerManager) handleTransactionUnknown(ctx context.Context, message *components.ReceivedMessage) {

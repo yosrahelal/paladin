@@ -42,6 +42,7 @@ type SentMessageRecorder struct {
 	hasSentTransactionUnknown      bool
 	transactionUnknownTxID         uuid.UUID
 	transactionUnknownCoordinator  string
+	hasSentNotActiveCoordinator    bool
 }
 
 func NewSentMessageRecorder() *SentMessageRecorder {
@@ -136,6 +137,15 @@ func (r *SentMessageRecorder) HasSentTransactionUnknown() bool {
 
 func (r *SentMessageRecorder) GetTransactionUnknownDetails() (txID uuid.UUID, coordinator string) {
 	return r.transactionUnknownTxID, r.transactionUnknownCoordinator
+}
+
+func (r *SentMessageRecorder) SendNotActiveCoordinator(_ context.Context, coordinatorNode string, txID uuid.UUID) error {
+	r.hasSentNotActiveCoordinator = true
+	return nil
+}
+
+func (r *SentMessageRecorder) HasSentNotActiveCoordinator() bool {
+	return r.hasSentNotActiveCoordinator
 }
 
 func (r *SentMessageRecorder) SendHeartbeat(ctx context.Context, targetNode string, contractAddress *pldtypes.EthAddress, coordinatorSnapshot *common.CoordinatorSnapshot) error {
