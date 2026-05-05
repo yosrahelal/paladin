@@ -11,8 +11,8 @@ const config: HardhatUserConfig = {
         settings: {
           evmVersion: "shanghai",
           optimizer: {
-            enabled: false,
-            runs: 1000,
+            enabled: true,
+            runs: 200,
           },
           viaIR: true,
         },
@@ -22,8 +22,8 @@ const config: HardhatUserConfig = {
         settings: {
           evmVersion: "shanghai",
           optimizer: {
-            enabled: false,
-            runs: 1000,
+            enabled: true,
+            runs: 200,
           },
           viaIR: true,
         },
