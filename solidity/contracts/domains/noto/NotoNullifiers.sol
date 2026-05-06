@@ -11,7 +11,7 @@ contract NotoNullifiers is Noto {
 
     SmtLib.Data internal _commitmentsTree;
 
-    uint64 public constant NotoVariantNullifiers = 0x0003;
+    uint64 public constant NotoVariantV2Nullifiers = 0x0003;
 
     mapping(bytes32 => bool) private _nullifiers;
 
@@ -34,7 +34,7 @@ contract NotoNullifiers is Noto {
                     symbol: _symbol,
                     decimals: decimals(),
                     notary: notary,
-                    variant: NotoVariantNullifiers,
+                    variant: NotoVariantV2Nullifiers,
                     data: data
                 })
             );

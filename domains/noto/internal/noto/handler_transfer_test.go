@@ -684,7 +684,7 @@ func TestTransfer_Nullifiers(t *testing.T) {
 						AllowLock:    &pTrue,
 					},
 				},
-				Variant: types.NotoVariantNullifier,
+				Variant: types.NotoVariantV2Nullifiers,
 			}),
 		},
 		FunctionAbiJson:   mustParseJSON(fn),

@@ -108,7 +108,7 @@ func TestHandleEventBatch_NotoTransfer_Nullifiers(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
-		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantNullifier}),
+		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantV2Nullifiers}),
 	})
 	require.NoError(t, err)
 
@@ -134,7 +134,7 @@ func TestHandleEventBatch_NotoTransfer_Nullifiers(t *testing.T) {
 		},
 		ContractInfo: &prototk.ContractInfo{
 			ContractConfigJson: mustParseJSON(&types.NotoParsedConfig{
-				Variant: types.NotoVariantNullifier,
+				Variant: types.NotoVariantV2Nullifiers,
 			}),
 		},
 	}

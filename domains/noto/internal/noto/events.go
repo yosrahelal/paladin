@@ -52,7 +52,7 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				return nil, err
 			}
 		} else {
-			if err := n.handleV1Event(ctx, ev, &res, req, variant == types.NotoVariantNullifiers); err != nil {
+			if err := n.handleV1Event(ctx, ev, &res, req, variant == types.NotoVariantV2Nullifiers); err != nil {
 				log.L(ctx).Warnf("Error handling V1 event: %s", err)
 				return nil, err
 			}

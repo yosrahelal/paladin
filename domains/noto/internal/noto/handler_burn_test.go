@@ -549,7 +549,7 @@ func TestBurn_Nullifiers(t *testing.T) {
 			ContractAddress: contractAddress,
 			ContractConfigJson: mustParseJSON(&types.NotoParsedConfig{
 				NotaryLookup: "notary@node1",
-				Variant:      types.NotoVariantNullifier,
+				Variant:      types.NotoVariantV2Nullifiers,
 			}),
 		},
 		FunctionAbiJson:   mustParseJSON(fn),
