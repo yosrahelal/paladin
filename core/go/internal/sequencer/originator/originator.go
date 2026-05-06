@@ -79,9 +79,7 @@ type originator struct {
 	nodeName            string
 	blockRangeSize      uint64
 	contractAddress     *pldtypes.EthAddress
-	idleThreshold       int // expressed as a multiple of heartbeat intervals
-	redelegateThreshold int // expressed as a multiple of heartbeat intervals
-	electGracePeriod    int // expressed as a multiple of heartbeat intervals
+	inactiveGracePeriod int // expressed as a multiple of heartbeat intervals
 
 	/* Dependencies */
 	domainAPI         components.DomainSmartContract
@@ -107,9 +105,7 @@ func NewOriginator(
 		contractAddress:     contractAddress,
 		engineIntegration:   engineIntegration,
 		metrics:             metrics,
-		idleThreshold:       confutil.IntMin(configuration.InactiveToIdleGracePeriod, pldconf.SequencerMinimum.InactiveToIdleGracePeriod, *pldconf.SequencerDefaults.InactiveToIdleGracePeriod),
-		redelegateThreshold: confutil.IntMin(configuration.RedelegateGracePeriod, pldconf.SequencerMinimum.RedelegateGracePeriod, *pldconf.SequencerDefaults.RedelegateGracePeriod),
-		electGracePeriod:    confutil.IntMin(configuration.ElectGracePeriod, pldconf.SequencerMinimum.ElectGracePeriod, *pldconf.SequencerDefaults.ElectGracePeriod),
+		inactiveGracePeriod: confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod),
 		domainAPI:           domainAPI,
 	}
 

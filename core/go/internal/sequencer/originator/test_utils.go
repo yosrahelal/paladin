@@ -51,8 +51,7 @@ type OriginatorBuilderForTesting struct {
 	previousActiveCoordinatorNode        *string
 	watchingPreviousCoordinatorFlush     *bool
 	heartbeatIntervalsSinceLastReceive   *int
-	redelegateThreshold                  *int
-	idleThreshold                        *int
+	inactiveGracePeriod                  *int
 	transactions                         []transaction.OriginatorTransaction
 }
 
@@ -151,13 +150,8 @@ func (b *OriginatorBuilderForTesting) HeartbeatIntervalsSinceLastReceive(n int) 
 	return b
 }
 
-func (b *OriginatorBuilderForTesting) RedelegateThreshold(n int) *OriginatorBuilderForTesting {
-	b.redelegateThreshold = &n
-	return b
-}
-
-func (b *OriginatorBuilderForTesting) IdleThreshold(n int) *OriginatorBuilderForTesting {
-	b.idleThreshold = &n
+func (b *OriginatorBuilderForTesting) InactiveGracePeriod(n int) *OriginatorBuilderForTesting {
+	b.inactiveGracePeriod = &n
 	return b
 }
 
@@ -245,11 +239,8 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	if b.heartbeatIntervalsSinceLastReceive != nil {
 		originator.heartbeatIntervalsSinceLastReceive = *b.heartbeatIntervalsSinceLastReceive
 	}
-	if b.redelegateThreshold != nil {
-		originator.redelegateThreshold = *b.redelegateThreshold
-	}
-	if b.idleThreshold != nil {
-		originator.idleThreshold = *b.idleThreshold
+	if b.inactiveGracePeriod != nil {
+		originator.inactiveGracePeriod = *b.inactiveGracePeriod
 	}
 
 	mocks.DomainAPI = b.domainAPI

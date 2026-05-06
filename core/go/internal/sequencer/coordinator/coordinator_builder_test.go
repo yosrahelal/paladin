@@ -52,7 +52,7 @@ type CoordinatorBuilderForTesting struct {
 	originatorNodePool                       *[]string
 	activeCoordinatorNode                    string
 	heartbeatIntervalsSinceLastReceive       *int
-	inactiveToIdleGracePeriod                *int
+	inactiveGracePeriod                      *int
 	heartbeatIntervalsSinceStateChange       *int
 	useMockTransportWriter                   bool
 }
@@ -213,8 +213,8 @@ func (b *CoordinatorBuilderForTesting) HeartbeatIntervalsSinceLastReceive(n int)
 	return b
 }
 
-func (b *CoordinatorBuilderForTesting) InactiveToIdleGracePeriod(n int) *CoordinatorBuilderForTesting {
-	b.inactiveToIdleGracePeriod = &n
+func (b *CoordinatorBuilderForTesting) InactiveGracePeriod(n int) *CoordinatorBuilderForTesting {
+	b.inactiveGracePeriod = &n
 	return b
 }
 
@@ -308,8 +308,8 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	if b.heartbeatIntervalsSinceLastReceive != nil {
 		coordinator.heartbeatIntervalsSinceLastReceive = *b.heartbeatIntervalsSinceLastReceive
 	}
-	if b.inactiveToIdleGracePeriod != nil {
-		coordinator.inactiveToIdleGracePeriod = *b.inactiveToIdleGracePeriod
+	if b.inactiveGracePeriod != nil {
+		coordinator.inactiveGracePeriod = *b.inactiveGracePeriod
 	}
 	if b.heartbeatIntervalsSinceStateChange != nil {
 		coordinator.heartbeatIntervalsSinceStateChange = *b.heartbeatIntervalsSinceStateChange

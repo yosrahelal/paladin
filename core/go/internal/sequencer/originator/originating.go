@@ -112,8 +112,8 @@ func guard_WatchingPreviousCoordinatorFlush(_ context.Context, o *originator) bo
 	return o.watchingPreviousCoordinatorFlush
 }
 
-func guard_WatchingGracePeriodExpired(_ context.Context, o *originator) bool {
-	return o.heartbeatIntervalsSinceLastReceive >= o.electGracePeriod
+func guard_InactiveGracePeriodExceeded(_ context.Context, o *originator) bool {
+	return o.heartbeatIntervalsSinceLastReceive >= o.inactiveGracePeriod
 }
 
 // Validate that the transaction doesn't already exist. When we resume transactions from the DB, e.g. after a restart or a timeout, we may already be processing
@@ -210,10 +210,4 @@ func action_SelectActiveCoordinator(ctx context.Context, o *originator, _ common
 	return nil
 }
 
-func guard_CoordinatorChanged(_ context.Context, o *originator) bool {
-	return o.newBlockRangeEpoch && o.activeCoordinatorNode != o.previousActiveCoordinatorNode
-}
 
-func guard_RedelegateThresholdExceeded(_ context.Context, o *originator) bool {
-	return o.heartbeatIntervalsSinceLastReceive >= o.redelegateThreshold
-}

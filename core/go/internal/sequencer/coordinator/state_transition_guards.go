@@ -47,8 +47,8 @@ func guard_ClosingGracePeriodExpired(_ context.Context, c *coordinator) bool {
 	return c.heartbeatIntervalsSinceStateChange >= c.closingGracePeriod
 }
 
-func guard_ElectGracePeriodExpired(_ context.Context, c *coordinator) bool {
-	return c.heartbeatIntervalsSinceStateChange >= c.electGracePeriod
+func guard_InactiveGracePeriodExpiredSinceStateChange(_ context.Context, c *coordinator) bool {
+	return c.heartbeatIntervalsSinceStateChange >= c.inactiveGracePeriod
 }
 
 func guard_HasTransactionAssembling(ctx context.Context, c *coordinator) bool {

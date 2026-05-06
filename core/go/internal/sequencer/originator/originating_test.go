@@ -87,12 +87,6 @@ func Test_action_SelectActiveCoordinator_EndorserMode_WhenCoordinatorChanges_Set
 	err := action_SelectActiveCoordinator(ctx, o, nil)
 	require.NoError(t, err)
 }
-func Test_action_UpdateBlockHeight_ResetsCoordinatorChangedFlag(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(State_Idle).BlockRangeSize(10).Build()
-	err := action_UpdateBlockHeight(ctx, o, &common.NewBlockEvent{BlockHeight: 1})
-	require.NoError(t, err)
-}
 func Test_hasDroppedTransactions_TrueWhenDelegatedTxnNotInSnapshot(t *testing.T) {
 	ctx := context.Background()
 	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
@@ -315,19 +309,19 @@ func Test_validator_OriginatorTransactionStateTransitionToReverted(t *testing.T)
 	require.NoError(t, err)
 	assert.False(t, valid)
 }
-func Test_guard_RedelegateThresholdExceeded_TrueWhenCounterExceedsThreshold(t *testing.T) {
+func Test_guard_InactiveGracePeriodExceeded_WhileSending_TrueWhenCounterExceedsThreshold(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(State_Sending).
 		HeartbeatIntervalsSinceLastReceive(2).
-		RedelegateThreshold(2).
+		InactiveGracePeriod(2).
 		Build()
-	assert.True(t, guard_RedelegateThresholdExceeded(ctx, o))
+	assert.True(t, guard_InactiveGracePeriodExceeded(ctx, o))
 }
-func Test_guard_RedelegateThresholdExceeded_FalseWhenCounterBelowThreshold(t *testing.T) {
+func Test_guard_InactiveGracePeriodExceeded_WhileSending_FalseWhenCounterBelowThreshold(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(State_Sending).
 		HeartbeatIntervalsSinceLastReceive(1).
-		RedelegateThreshold(2).
+		InactiveGracePeriod(2).
 		Build()
-	assert.False(t, guard_RedelegateThresholdExceeded(ctx, o))
+	assert.False(t, guard_InactiveGracePeriodExceeded(ctx, o))
 }

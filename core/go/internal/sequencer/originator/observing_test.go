@@ -51,27 +51,27 @@ func Test_applyHeartbeatReceived_BasicUpdate(t *testing.T) {
 	// Verify active coordinator node remains unchanged (heartbeat does NOT update it)
 	assert.Equal(t, coordinatorLocator, o.activeCoordinatorNode)
 }
-func Test_guard_IdleThresholdExceeded_TrueWhenCounterExceedsThreshold(t *testing.T) {
+func Test_guard_InactiveGracePeriodExceeded_WhileObserving_TrueWhenCounterExceedsThreshold(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(State_Observing).
 		HeartbeatIntervalsSinceLastReceive(10).
-		IdleThreshold(10).
+		InactiveGracePeriod(10).
 		Build()
-	assert.True(t, guard_IdleThresholdExceeded(ctx, o))
+	assert.True(t, guard_InactiveGracePeriodExceeded(ctx, o))
 }
-func Test_guard_IdleThresholdExceeded_FalseWhenCounterBelowThreshold(t *testing.T) {
+func Test_guard_InactiveGracePeriodExceeded_WhileObserving_FalseWhenCounterBelowThreshold(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(State_Observing).
 		HeartbeatIntervalsSinceLastReceive(5).
-		IdleThreshold(10).
+		InactiveGracePeriod(10).
 		Build()
-	assert.False(t, guard_IdleThresholdExceeded(ctx, o))
+	assert.False(t, guard_InactiveGracePeriodExceeded(ctx, o))
 }
 func Test_ProcessEvent_HeartbeatIntervalWhileObserving_IncrementsHeartbeatIntervalsSinceLastReceive(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(State_Observing).
 		HeartbeatIntervalsSinceLastReceive(4).
-		IdleThreshold(100).
+		InactiveGracePeriod(100).
 		Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
 	assert.Equal(t, 5, o.heartbeatIntervalsSinceLastReceive)

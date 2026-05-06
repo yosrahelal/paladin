@@ -143,7 +143,7 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 				Transitions: []Transition{{
 					To: State_Idle,
-					If: guard_ObservingIdleThresholdExceeded,
+					If: guard_InactiveGracePeriodExceeded,
 				}},
 			},
 			common.Event_NewBlock: {
@@ -207,7 +207,7 @@ var stateDefinitionsMap = StateDefinitions{
 				// we will have state contention on the base ledger, but this should eventually be resolved with retries.
 				Transitions: []Transition{{
 					To: State_Active,
-					If: guard_ElectGracePeriodExpired,
+					If: guard_InactiveGracePeriodExpiredSinceStateChange,
 				}},
 			},
 			common.Event_NewBlock: {
@@ -439,14 +439,14 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardAnd(
 						statemachine.GuardNot(guard_HasTransactionsInflight),
 						guard_ClosingGracePeriodExpired,
-						guard_ObservingIdleThresholdExceeded,
+						guard_InactiveGracePeriodExceeded,
 					),
 				}, {
 					To: State_Observing,
 					If: statemachine.GuardAnd(
 						statemachine.GuardNot(guard_HasTransactionsInflight),
 						guard_ClosingGracePeriodExpired,
-						statemachine.GuardNot(guard_ObservingIdleThresholdExceeded),
+						statemachine.GuardNot(guard_InactiveGracePeriodExceeded),
 					),
 				}},
 			},
@@ -478,20 +478,20 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Elect,
 					If: statemachine.GuardAnd(
 						guard_IsActiveCoordinator,
-						statemachine.GuardNot(guard_ElectGracePeriodExpired),
+						statemachine.GuardNot(guard_InactiveGracePeriodExpiredSinceStateChange),
 					),
 				}, {
 					To: State_Active,
 					If: statemachine.GuardAnd(
 						guard_IsActiveCoordinator,
-						guard_ElectGracePeriodExpired,
+						guard_InactiveGracePeriodExpiredSinceStateChange,
 						guard_HasTransactionsInflight,
 					),
 				}, {
 					To: State_Idle,
 					If: statemachine.GuardAnd(
 						guard_IsActiveCoordinator,
-						guard_ElectGracePeriodExpired,
+						guard_InactiveGracePeriodExpiredSinceStateChange,
 						statemachine.GuardNot(guard_HasTransactionsInflight),
 					),
 				}},

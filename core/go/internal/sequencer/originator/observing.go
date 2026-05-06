@@ -186,9 +186,6 @@ func transactionFoundInSnapshot(snapshot *common.CoordinatorSnapshot, txn transa
 	return false
 }
 
-func guard_IdleThresholdExceeded(_ context.Context, o *originator) bool {
-	return o.heartbeatIntervalsSinceLastReceive >= o.idleThreshold
-}
 
 func action_IncrementHeartbeatIntervalCounts(_ context.Context, o *originator, _ common.Event) error {
 	o.heartbeatIntervalsSinceLastReceive++

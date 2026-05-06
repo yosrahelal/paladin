@@ -116,7 +116,7 @@ var stateDefinitionsMap = StateDefinitions{
 			},
 			common.Event_HeartbeatInterval: {
 				Actions:     []ActionRule{{Action: action_IncrementHeartbeatIntervalCounts}},
-				Transitions: []Transition{{To: State_Idle, If: guard_IdleThresholdExceeded}},
+				Transitions: []Transition{{To: State_Idle, If: guard_InactiveGracePeriodExceeded}},
 			},
 			Event_TransactionCreated: {
 				Validator: validator_TransactionDoesNotExist,
@@ -160,15 +160,8 @@ var stateDefinitionsMap = StateDefinitions{
 						If:     guard_IsNewBlockRangeEpoch,
 						Action: action_SelectActiveCoordinator,
 					},
-					{
-						// TODO AM A: when the coordinator doesn't change we may still enter a flush to rotate a signing key - how are we going to pick that up?
-						// does it even matter - we will see rejections and dropped transactions but it doesn't carry the risk of a new coordinator accepting a just confirmed transaction
-						// Re-delegate to the new coordinator if selection changed this block.
-						// action_SelectActiveCoordinator runs first and may set watchingPreviousCoordinatorFlush,
-						// so this delegation is suppressed until the watching phase ends.
-						If:     statemachine.GuardAnd(guard_CoordinatorChanged, statemachine.GuardNot(guard_WatchingPreviousCoordinatorFlush)),
-						Action: action_SendDelegationRequest,
-					},
+					// We do not immediately delegate to the new coordinator as we need to see the previous coordinator flush and
+					// close first
 				},
 			},
 			Event_TransactionCreated: {
@@ -205,10 +198,7 @@ var stateDefinitionsMap = StateDefinitions{
 						// have selected an alternative
 						// sendDelegationRequest clears the watching phase and the needsRedelegate flag.
 						Action: action_SendDelegationRequest,
-						If: statemachine.GuardOr(
-							statemachine.GuardAnd(guard_WatchingPreviousCoordinatorFlush, guard_WatchingGracePeriodExpired),
-							statemachine.GuardAnd(guard_RedelegateThresholdExceeded, statemachine.GuardNot(guard_WatchingPreviousCoordinatorFlush)),
-						),
+						If: guard_InactiveGracePeriodExceeded,
 					},
 				},
 			},
