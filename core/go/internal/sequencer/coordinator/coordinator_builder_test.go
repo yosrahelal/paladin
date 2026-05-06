@@ -234,23 +234,6 @@ func (b *CoordinatorBuilderForTesting) AssembleErrorRetryThreshold(n int) *Coord
 }
 
 func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDependencyMocks) {
-	// TODO AM: now?
-	// TODO: This is a bit of a hack, but all this code gets substantial rework in the restructing PRs so
-	// it makes sense to clean this up as part of that merge
-	hasContractConfigExpectation := false
-	for _, call := range b.domainAPI.ExpectedCalls {
-		if call.Method == "ContractConfig" {
-			hasContractConfigExpectation = true
-			break
-		}
-	}
-	if !hasContractConfigExpectation {
-		b.domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-			SubmitterSelection:   prototk.ContractConfig_SUBMITTER_SENDER,
-		}).Maybe()
-	}
-
 	if b.contractAddress == nil {
 		b.contractAddress = pldtypes.RandAddress()
 	}
@@ -262,6 +245,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 
 	if b.useMockTransportWriter {
 		mockTransportWriter := sequencertransportmocks.NewTransportWriter(b.t)
+		mockTransportWriter.On("StartLoopbackWriter").Return().Maybe()
 		mockTransportWriter.On("StopLoopbackWriter").Return().Maybe()
 		mockTransportWriter.On("WaitForDone", mock.Anything).Return().Maybe()
 		mocks.TransportWriter = mockTransportWriter

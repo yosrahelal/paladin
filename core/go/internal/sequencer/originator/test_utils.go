@@ -19,14 +19,13 @@ import (
 	"context"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
-	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
-	uuid "github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -34,45 +33,6 @@ const (
 	TestDefault_HeartbeatThreshold  int = 5
 	TestDefault_HeartbeatIntervalMs int = 100
 )
-
-type SentMessageRecorder struct {
-	transaction.SentMessageRecorder
-	hasSentDelegationRequest bool
-	delegatedTransactions    []*components.PrivateTransaction
-}
-
-func NewSentMessageRecorder() *SentMessageRecorder {
-	return &SentMessageRecorder{}
-}
-
-func (r *SentMessageRecorder) SendDelegationRequest(ctx context.Context, coordinator string, transactions []*components.PrivateTransaction, originatorsBlockHeight uint64) error {
-	r.delegatedTransactions = transactions
-	r.hasSentDelegationRequest = true
-	return nil
-}
-
-func (r *SentMessageRecorder) HasSentDelegationRequest() bool {
-	return r.hasSentDelegationRequest
-}
-
-func (r *SentMessageRecorder) HasDelegatedTransaction(txid uuid.UUID) bool {
-	for _, tx := range r.delegatedTransactions {
-		if tx.ID == txid {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *SentMessageRecorder) GetDelegatedTransactions() []*components.PrivateTransaction {
-	return r.delegatedTransactions
-}
-
-func (r *SentMessageRecorder) Reset(ctx context.Context) {
-	r.SentMessageRecorder.Reset(ctx)
-	r.hasSentDelegationRequest = false
-	r.delegatedTransactions = nil
-}
 
 type OriginatorBuilderForTesting struct {
 	state                              State
@@ -97,7 +57,7 @@ type OriginatorBuilderForTesting struct {
 }
 
 type OriginatorDependencyMocks struct {
-	SentMessageRecorder *SentMessageRecorder
+	SentMessageRecorder *transport.SentMessageRecorder
 	EngineIntegration   *common.FakeEngineIntegrationForTesting
 	DomainAPI           *componentsmocks.DomainSmartContract
 }
@@ -220,7 +180,7 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		b.contractAddress = pldtypes.RandAddress()
 	}
 	mocks := &OriginatorDependencyMocks{
-		SentMessageRecorder: NewSentMessageRecorder(),
+		SentMessageRecorder: transport.NewSentMessageRecorder(),
 		EngineIntegration:   &common.FakeEngineIntegrationForTesting{},
 	}
 

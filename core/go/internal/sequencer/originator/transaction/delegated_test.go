@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -92,8 +91,8 @@ func TestAction_SendPreDispatchResponse_Success(t *testing.T) {
 func TestAction_SendPreDispatchResponse_TransportError(t *testing.T) {
 	// Test that action_SendPreDispatchResponse returns error when transport fails
 	ctx := context.Background()
-	builder := NewTransactionBuilderForTesting(t, State_Delegated)
-	txn, _ := builder.BuildWithMocks()
+	builder := NewTransactionBuilderForTesting(t, State_Delegated).WithMockTransportWriter()
+	txn, mocks := builder.BuildWithMocks()
 
 	// Set up required fields first
 	coordinator := "coordinator@node1"
@@ -111,20 +110,13 @@ func TestAction_SendPreDispatchResponse_TransportError(t *testing.T) {
 	}
 	txn.pt.PreAssembly.TransactionSpecification = transactionSpec
 
-	// Create a mock transport writer that returns an error
-	// TODO AM: and again- probably need to look at everywhere this mock is used- it looks like AI generated oddness
-	mockTransport := sequencertransportmocks.NewTransportWriter(t)
 	expectedError := errors.New("transport error")
-	mockTransport.EXPECT().SendPreDispatchResponse(
+	mocks.TransportWriter.EXPECT().SendPreDispatchResponse(
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
 	).Return(expectedError)
-
-	// Replace transport writer with mock
-	originalTransport := txn.transportWriter
-	txn.transportWriter = mockTransport
 
 	// Execute the action
 	err := action_SendPreDispatchResponse(ctx, txn, nil)
@@ -132,9 +124,6 @@ func TestAction_SendPreDispatchResponse_TransportError(t *testing.T) {
 	// Verify error is returned
 	assert.Error(t, err)
 	assert.Equal(t, expectedError, err)
-
-	// Restore original transport
-	txn.transportWriter = originalTransport
 }
 
 func TestValidator_AssembleRequestMatches_Matches(t *testing.T) {

@@ -28,9 +28,10 @@ import (
 )
 
 // SentMessageRecorder implements TransportWriter for use in tests.
-// It records outgoing coordinator messages so tests can assert on what was sent.
-// TODO: add test coverage for this type
+// TODO: add test coverage- or consider moving to its own package which we exclude from coverage
+// It records outgoing messages (both coordinator-side and originator-side) so tests can assert on what was sent.
 type SentMessageRecorder struct {
+	// Coordinator-side tracking
 	hasSentAssembleRequest                        bool
 	sentAssembleRequestIdempotencyKey             uuid.UUID
 	numberOfSentAssembleRequests                  int
@@ -47,6 +48,19 @@ type SentMessageRecorder struct {
 
 	hasSentHandoverRequest bool
 	sentHeartbeatCount     int
+
+	// Originator-side tracking
+	hasSentConfirmationResponse    bool
+	hasSentAssembleSuccessResponse bool
+	hasSentAssembleRevertResponse  bool
+	hasSentAssembleParkResponse    bool
+	hasSentAssembleErrorResponse   bool
+	hasSentTransactionUnknown      bool
+	transactionUnknownTxID         uuid.UUID
+	transactionUnknownCoordinator  string
+	hasSentNotActiveCoordinator    bool
+	hasSentDelegationRequest       bool
+	delegatedTransactions          []*components.PrivateTransaction
 }
 
 func NewSentMessageRecorder() *SentMessageRecorder {
@@ -71,7 +85,19 @@ func (r *SentMessageRecorder) Reset(ctx context.Context) {
 	r.numberOfSentDispatchConfirmationRequests = 0
 	r.hasSentHandoverRequest = false
 	r.sentHeartbeatCount = 0
+	r.hasSentConfirmationResponse = false
+	r.hasSentAssembleSuccessResponse = false
+	r.hasSentAssembleRevertResponse = false
+	r.hasSentAssembleParkResponse = false
+	r.hasSentAssembleErrorResponse = false
+	r.hasSentTransactionUnknown = false
+	r.transactionUnknownTxID = uuid.UUID{}
+	r.transactionUnknownCoordinator = ""
+	r.hasSentNotActiveCoordinator = false
+	r.hasSentDelegationRequest = false
+	r.delegatedTransactions = nil
 	// per-tx maps are NOT reset — they accumulate across the full test
+
 }
 
 func (r *SentMessageRecorder) StartLoopbackWriter() {}
@@ -205,15 +231,45 @@ func (r *SentMessageRecorder) SendHeartbeat(ctx context.Context, targetNode stri
 }
 
 func (r *SentMessageRecorder) SendAssembleResponse(ctx context.Context, txID uuid.UUID, requestID uuid.UUID, postAssembly *components.TransactionPostAssembly, preAssembly *components.TransactionPreAssembly, recipient string) error {
+	switch postAssembly.AssemblyResult {
+	case prototk.AssembleTransactionResponse_OK:
+		r.hasSentAssembleSuccessResponse = true
+	case prototk.AssembleTransactionResponse_REVERT:
+		r.hasSentAssembleRevertResponse = true
+	case prototk.AssembleTransactionResponse_PARK:
+		r.hasSentAssembleParkResponse = true
+	}
 	return nil
+}
+
+func (r *SentMessageRecorder) HasSentAssembleSuccessResponse() bool {
+	return r.hasSentAssembleSuccessResponse
+}
+
+func (r *SentMessageRecorder) HasSentAssembleRevertResponse() bool {
+	return r.hasSentAssembleRevertResponse
+}
+
+func (r *SentMessageRecorder) HasSentAssembleParkResponse() bool {
+	return r.hasSentAssembleParkResponse
 }
 
 func (r *SentMessageRecorder) SendAssembleErrorResponse(ctx context.Context, txID uuid.UUID, requestID uuid.UUID, recipient string) error {
+	r.hasSentAssembleErrorResponse = true
 	return nil
 }
 
+func (r *SentMessageRecorder) HasSentAssembleErrorResponse() bool {
+	return r.hasSentAssembleErrorResponse
+}
+
 func (r *SentMessageRecorder) SendPreDispatchResponse(ctx context.Context, transactionOriginator string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification) error {
+	r.hasSentConfirmationResponse = true
 	return nil
+}
+
+func (r *SentMessageRecorder) HasSentPreDispatchResponse() bool {
+	return r.hasSentConfirmationResponse
 }
 
 func (r *SentMessageRecorder) SendNonceAssigned(ctx context.Context, txID uuid.UUID, transactionOriginator string, contractAddress *pldtypes.EthAddress, nonce uint64) error {
@@ -229,15 +285,50 @@ func (r *SentMessageRecorder) SendTransactionConfirmed(ctx context.Context, txID
 }
 
 func (r *SentMessageRecorder) SendTransactionUnknown(ctx context.Context, coordinatorNode string, txID uuid.UUID) error {
+	r.hasSentTransactionUnknown = true
+	r.transactionUnknownTxID = txID
+	r.transactionUnknownCoordinator = coordinatorNode
 	return nil
+}
+
+func (r *SentMessageRecorder) HasSentTransactionUnknown() bool {
+	return r.hasSentTransactionUnknown
+}
+
+func (r *SentMessageRecorder) GetTransactionUnknownDetails() (txID uuid.UUID, coordinator string) {
+	return r.transactionUnknownTxID, r.transactionUnknownCoordinator
 }
 
 func (r *SentMessageRecorder) SendNotActiveCoordinator(ctx context.Context, coordinatorNode string, txID uuid.UUID) error {
+	r.hasSentNotActiveCoordinator = true
 	return nil
 }
 
+func (r *SentMessageRecorder) HasSentNotActiveCoordinator() bool {
+	return r.hasSentNotActiveCoordinator
+}
+
 func (r *SentMessageRecorder) SendDelegationRequest(ctx context.Context, coordinatorLocator string, transactions []*components.PrivateTransaction, blockHeight uint64) error {
+	r.hasSentDelegationRequest = true
+	r.delegatedTransactions = transactions
 	return nil
+}
+
+func (r *SentMessageRecorder) HasSentDelegationRequest() bool {
+	return r.hasSentDelegationRequest
+}
+
+func (r *SentMessageRecorder) HasDelegatedTransaction(txid uuid.UUID) bool {
+	for _, tx := range r.delegatedTransactions {
+		if tx.ID == txid {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *SentMessageRecorder) GetDelegatedTransactions() []*components.PrivateTransaction {
+	return r.delegatedTransactions
 }
 
 func (r *SentMessageRecorder) SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64, blockHeight uint64) error {

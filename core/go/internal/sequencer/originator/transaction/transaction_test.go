@@ -23,6 +23,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,7 +42,7 @@ func TestNewTransaction_Success_ReturnsOriginatorTransaction(t *testing.T) {
 	ctx := context.Background()
 	pt := testutil.NewPrivateTransactionBuilderForTesting().Build()
 	engine := &common.FakeEngineIntegrationForTesting{}
-	recorder := NewSentMessageRecorder()
+	recorder := transport.NewSentMessageRecorder()
 	queue := func(context.Context, common.Event) {}
 	m := metrics.InitMetrics(context.Background(), prometheus.NewRegistry())
 
