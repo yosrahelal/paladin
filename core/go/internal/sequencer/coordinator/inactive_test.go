@@ -32,7 +32,7 @@ func Test_action_HeartbeatReceived_SetsActiveCoordinatorState(t *testing.T) {
 	event := &common.HeartbeatReceivedEvent{}
 	event.From = "node1"
 	event.CoordinatorSnapshot = &common.CoordinatorSnapshot{
-		CoordinatorState: int(State_Active),
+		CoordinatorState: State_Active,
 	}
 
 	err := action_HeartbeatReceived(ctx, c, event)

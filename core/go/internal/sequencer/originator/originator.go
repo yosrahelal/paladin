@@ -70,9 +70,10 @@ type originator struct {
 	transactionsByID                   map[uuid.UUID]transaction.OriginatorTransaction
 	transactionsOrdered                []transaction.OriginatorTransaction
 	currentBlockHeight                 uint64
-	latestCoordinatorSnapshot          *common.CoordinatorSnapshot
 	newBlockRangeEpoch                 bool
 	coordinatorEndorserPool            []string // Fixed sorted set of endorser candidates for COORDINATOR_ENDORSER mode
+	watchingPreviousCoordinatorFlush   bool     // Watching-phase tracking: set when coordinator changes; cleared on first closing heartbeat or if inactive thresholds are exceeded
+	needsRedelegate                    bool     // Set by applyHeartbeatReceived when the heartbeat reveals a need to redelegate; cleared by sendDelegationRequest
 
 	/* Config */
 	nodeName            string
@@ -80,6 +81,7 @@ type originator struct {
 	contractAddress     *pldtypes.EthAddress
 	idleThreshold       int // expressed as a multiple of heartbeat intervals
 	redelegateThreshold int // expressed as a multiple of heartbeat intervals
+	electGracePeriod    int // expressed as a multiple of heartbeat intervals
 
 	/* Dependencies */
 	domainAPI         components.DomainSmartContract
@@ -107,6 +109,7 @@ func NewOriginator(
 		metrics:             metrics,
 		idleThreshold:       confutil.IntMin(configuration.InactiveToIdleGracePeriod, pldconf.SequencerMinimum.InactiveToIdleGracePeriod, *pldconf.SequencerDefaults.InactiveToIdleGracePeriod),
 		redelegateThreshold: confutil.IntMin(configuration.RedelegateGracePeriod, pldconf.SequencerMinimum.RedelegateGracePeriod, *pldconf.SequencerDefaults.RedelegateGracePeriod),
+		electGracePeriod:    confutil.IntMin(configuration.ElectGracePeriod, pldconf.SequencerMinimum.ElectGracePeriod, *pldconf.SequencerDefaults.ElectGracePeriod),
 		domainAPI:           domainAPI,
 	}
 

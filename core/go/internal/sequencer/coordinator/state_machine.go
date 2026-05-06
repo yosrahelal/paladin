@@ -25,20 +25,20 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 )
 
-// State represents the coordinator's state
-type State int
+// State is a local alias for common.CoordinatorState
+type State = common.CoordinatorState
 
 // EventType is an alias for common.EventType
 type EventType = common.EventType
 
 const (
-	State_Initial   State = iota // Coordinator created but not yet selected an active coordinator
-	State_Idle                   // Not acting as a coordinator and not aware of any other active coordinators
-	State_Observing              // Not acting as a coordinator but aware of another node acting as a coordinator
-	State_Elect                  // Selected to take over from another coordinator but waiting to see the previous coordinator's flush point
-	State_Active                 // Have seen the flush point or have reason to believe the old coordinator has become unavailable and am now assembling transactions based on available knowledge of the state of the base ledger and submitting transactions to the base ledger.
-	State_Flush                  // Stopped assembling and dispatching transactions but continue to submit transactions that are already dispatched
-	State_Closing                // Have flushed and are continuing to sent closing status for `x` heartbeats.
+	State_Initial   = common.CoordinatorState_Initial   // Coordinator created but not yet selected an active coordinator
+	State_Idle      = common.CoordinatorState_Idle      // Not acting as a coordinator and not aware of any other active coordinators
+	State_Observing = common.CoordinatorState_Observing // Not acting as a coordinator but aware of another node acting as a coordinator
+	State_Elect     = common.CoordinatorState_Elect     // Selected to take over from another coordinator but waiting to see the previous coordinator's flush point
+	State_Active    = common.CoordinatorState_Active    // Have seen the flush point or have reason to believe the old coordinator has become unavailable; now assembling and submitting transactions
+	State_Flush     = common.CoordinatorState_Flush     // Stopped assembling and dispatching transactions; continuing to submit already-dispatched transactions
+	State_Closing   = common.CoordinatorState_Closing   // Have flushed and are continuing to send closing status heartbeats
 )
 
 const (
@@ -324,14 +324,17 @@ var stateDefinitionsMap = StateDefinitions{
 					// We still have dispatched transactions in memory. Regardless of whether or not we are the preferred active coordinator
 					// for this block range, we still need to flush all the dispatched transactions from the previous block range.
 					To: State_Flush,
-					If: statemachine.GuardAnd(guard_IsNewBlockRangeEpoch, guard_HasTransactionsInflight),
+					If: statemachine.GuardAnd(
+						guard_IsNewBlockRangeEpoch,
+						statemachine.GuardNot(guard_FlushComplete),
+					),
 				}, {
 					// We don't have any dispatched transactions in memory and we are also the new preferred active coordinator.
 					// We "reenter" State_Active so that we can trigger a signing key rotation.
 					To: State_Active,
 					If: statemachine.GuardAnd(
 						guard_IsNewBlockRangeEpoch,
-						statemachine.GuardNot(guard_HasTransactionsInflight),
+						guard_FlushComplete,
 						guard_IsActiveCoordinator,
 					),
 				}, {
@@ -340,7 +343,7 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Closing,
 					If: statemachine.GuardAnd(
 						guard_IsNewBlockRangeEpoch,
-						statemachine.GuardNot(guard_HasTransactionsInflight),
+						guard_FlushComplete,
 						statemachine.GuardNot(guard_IsActiveCoordinator),
 					),
 				}},
@@ -414,28 +417,15 @@ var stateDefinitionsMap = StateDefinitions{
 			{Action: action_SendHeartbeat},
 		},
 		Events: map[EventType]EventHandler{
-			// TODO AM A: not sure this is correct- really need to think about all the routes out of closing if we
-			// become the active coordinator while in closing
 			Event_TransactionsDelegated: {
-				Actions: []ActionRule{{
-					If:     guard_IsActiveCoordinator,
-					Action: action_ProcessDelegatedTransactions,
-				}, {
-					If:     statemachine.GuardNot(guard_IsActiveCoordinator),
-					Action: action_RejectDelegatedTransactions,
-				}},
-				Transitions: []Transition{{
-					If: guard_IsActiveCoordinator,
-					To: State_Active,
-				}},
+				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
 			},
 			common.Event_HeartbeatReceived: {
 				Validator: validator_IsHeartbeatFromActiveCoordinator,
 				Actions: []ActionRule{
 					{Action: action_HeartbeatReceived},
 					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
-				},
-			},
+				}},
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
 					{Action: action_IncrementHeartbeatIntervalsSinceStateChange},
@@ -478,14 +468,31 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_SelectActiveCoordinator,
 					},
 				},
+				// If we're now the preferred active coordinator again we can leave closing earlier than the closing grace period
+				// These are all edge case transitions, likely to only be reached if there is a significant delay in confirming
+				// dispatched transactions, or if the block range is configured to be very short.
+				//
+				// In all cases we need to transition into a state that allows us to (eventually) process delegated transactions again.
+				// The key deciding factor is whether we have been receiving heartbeats from another active coordinator.
 				Transitions: []Transition{{
-					// If we're now the preferred active coordinator again we need to transition into a state that allows us to
-					// (eventually) process delegated transactions again.
 					To: State_Elect,
 					If: statemachine.GuardAnd(
 						guard_IsActiveCoordinator,
-						// TODO AM: is this right?
-						statemachine.GuardNot(guard_ObservingIdleThresholdExceeded),
+						statemachine.GuardNot(guard_ElectGracePeriodExpired),
+					),
+				}, {
+					To: State_Active,
+					If: statemachine.GuardAnd(
+						guard_IsActiveCoordinator,
+						guard_ElectGracePeriodExpired,
+						guard_HasTransactionsInflight,
+					),
+				}, {
+					To: State_Idle,
+					If: statemachine.GuardAnd(
+						guard_IsActiveCoordinator,
+						guard_ElectGracePeriodExpired,
+						statemachine.GuardNot(guard_HasTransactionsInflight),
 					),
 				}},
 			},
@@ -539,22 +546,3 @@ func (c *coordinator) queueEventInternal(ctx context.Context, event common.Event
 	c.stateMachineEventLoop.QueuePriorityEvent(ctx, event)
 }
 
-func (s State) String() string {
-	switch s {
-	case State_Initial:
-		return "Initial"
-	case State_Idle:
-		return "Idle"
-	case State_Observing:
-		return "Observing"
-	case State_Elect:
-		return "Elect"
-	case State_Active:
-		return "Active"
-	case State_Flush:
-		return "Flush"
-	case State_Closing:
-		return "Closing"
-	}
-	return "Unknown"
-}

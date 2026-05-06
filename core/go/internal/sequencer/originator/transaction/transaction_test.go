@@ -79,7 +79,7 @@ func TestTransaction_GetStatus_NilPostAssembly_ReturnsStatusWithNilEndorsements(
 	txn.stateMachine.SetCurrentState(State_Assembling)
 	status := txn.GetStatus(ctx)
 	assert.Equal(t, txn.pt.ID.String(), status.TxID)
-	assert.Equal(t, "State_Assembling", status.Status)
+	assert.Equal(t, "Assembling", status.Status)
 	assert.Nil(t, status.Endorsements)
 }
 
@@ -98,7 +98,7 @@ func TestTransaction_GetStatus_ReturnsStatusWithEndorsements(t *testing.T) {
 	txn.stateMachine.SetCurrentState(State_Assembling)
 	status := txn.GetStatus(ctx)
 	assert.Equal(t, txn.pt.ID.String(), status.TxID)
-	assert.Equal(t, "State_Assembling", status.Status)
+	assert.Equal(t, "Assembling", status.Status)
 	require.Len(t, status.Endorsements, 1)
 	assert.Equal(t, "party1", status.Endorsements[0].Party)
 	assert.True(t, status.Endorsements[0].EndorsementReceived)

@@ -62,11 +62,11 @@ func (o *originator) addToTransactions(
 }
 
 func sendDelegationRequest(ctx context.Context, o *originator) error {
-	if o.activeCoordinatorNode == "" {
-		// the delegation timeout loop ensures that this request will be retried when we have an active coordinator
-		log.L(ctx).Debugf("no active coordinator set yet; deferring delegation for contract %s", o.contractAddress.String())
-		return nil
-	}
+	// Sending a delegation request means we are no longer watching the previous coordinator flush —
+	// we have decided to act regardless of whether we saw a closing heartbeat.
+	o.watchingPreviousCoordinatorFlush = false
+	// Consume the redelegate flag; it has been actioned by this delegation.
+	o.needsRedelegate = false
 
 	// Re-delegate all transactions. Every delegation request must include all transaction, sent in the order they were created
 	// on the originating node.
@@ -104,41 +104,16 @@ func action_SendDelegationRequest(ctx context.Context, o *originator, _ common.E
 	return sendDelegationRequest(ctx, o)
 }
 
-func guard_HasDroppedTransactions(ctx context.Context, o *originator) bool {
-	// Are there any transactions that the current active coordinator seems to have dropped (as per its latest heartbeat)?
-	// NOTE: "dropped" is not a state in the transaction state machine, but rather a description of the originator's view of the world
-	// based on the heartbeats it receives from coordinators.
-	if o.latestCoordinatorSnapshot == nil {
-		// No snapshot received from the active coordinator yet; cannot determine dropped transactions.
-		return false
-	}
-	for _, txn := range o.getTransactionsNotInStates([]transaction.State{transaction.State_Final, transaction.State_Confirmed, transaction.State_Reverted}) {
-		// If any one of the transactions has been dropped, re-delegate everything
-		if !transactionFoundInHeartbeat(o, txn) {
-			log.L(ctx).Debugf("transaction %s is in Delegated state but not found in latest coordinator snapshot, assuming dropped", txn.GetID())
-			return true
-		}
-	}
-	return false
+func guard_NeedsRedelegate(_ context.Context, o *originator) bool {
+	return o.needsRedelegate
 }
 
-func transactionFoundInHeartbeat(o *originator, txn transaction.OriginatorTransaction) bool {
-	for _, dispatchedTransaction := range o.latestCoordinatorSnapshot.DispatchedTransactions {
-		if dispatchedTransaction.ID == txn.GetID() {
-			return true
-		}
-	}
-	for _, dispatchedTransaction := range o.latestCoordinatorSnapshot.PooledTransactions {
-		if dispatchedTransaction.ID == txn.GetID() {
-			return true
-		}
-	}
-	for _, dispatchedTransaction := range o.latestCoordinatorSnapshot.ConfirmedTransactions {
-		if dispatchedTransaction.ID == txn.GetID() {
-			return true
-		}
-	}
-	return false
+func guard_WatchingPreviousCoordinatorFlush(_ context.Context, o *originator) bool {
+	return o.watchingPreviousCoordinatorFlush
+}
+
+func guard_WatchingGracePeriodExpired(_ context.Context, o *originator) bool {
+	return o.heartbeatIntervalsSinceLastReceive >= o.electGracePeriod
 }
 
 // Validate that the transaction doesn't already exist. When we resume transactions from the DB, e.g. after a restart or a timeout, we may already be processing
@@ -227,6 +202,11 @@ func action_SelectActiveCoordinator(ctx context.Context, o *originator, _ common
 		o.currentBlockHeight,
 		o.blockRangeSize,
 	)
+	// If the coordinator has changed and there was a previous coordinator, start watching for their closing heartbeat
+	// before sending delegation requests to the new coordinator.
+	if o.activeCoordinatorNode != o.previousActiveCoordinatorNode && o.previousActiveCoordinatorNode != "" {
+		o.watchingPreviousCoordinatorFlush = true
+	}
 	return nil
 }
 

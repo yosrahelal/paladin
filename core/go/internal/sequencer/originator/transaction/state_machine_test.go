@@ -23,36 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_State_String_AllStates(t *testing.T) {
-	states := []struct {
-		s    State
-		want string
-	}{
-		{State_Initial, "State_Initial"},
-		{State_Pending, "State_Pending"},
-		{State_Delegated, "State_Delegated"},
-		{State_Assembling, "State_Assembling"},
-		{State_Endorsement_Gathering, "State_Endorsement_Gathering"},
-		{State_Prepared, "State_Prepared"},
-		{State_Dispatched, "State_Dispatched"},
-		{State_Sequenced, "State_Sequenced"},
-		{State_Submitted, "State_Submitted"},
-		{State_Confirmed, "State_Confirmed"},
-		{State_Reverted, "State_Reverted"},
-		{State_Parked, "State_Parked"},
-		{State_Final, "State_Final"},
-	}
-	for _, tc := range states {
-		t.Run(tc.want, func(t *testing.T) {
-			assert.Equal(t, tc.want, tc.s.String())
-		})
-	}
-}
-
-func Test_State_String_Unknown(t *testing.T) {
-	s := State(999)
-	assert.Equal(t, "Unknown", s.String())
-}
 
 func Test_HandleEvent_ProcessesEvent(t *testing.T) {
 	ctx := context.Background()

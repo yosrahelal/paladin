@@ -38,7 +38,7 @@ func validator_IsHeartbeatFromPreviousActiveCoordinator(_ context.Context, c *co
 
 func action_HeartbeatReceived(_ context.Context, c *coordinator, event common.Event) error {
 	e := event.(*common.HeartbeatReceivedEvent)
-	c.activeCoordinatorState = State(e.CoordinatorSnapshot.CoordinatorState)
+	c.activeCoordinatorState = e.CoordinatorSnapshot.CoordinatorState
 	return nil
 }
 

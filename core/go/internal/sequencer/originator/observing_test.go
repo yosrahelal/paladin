@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -49,9 +50,6 @@ func Test_applyHeartbeatReceived_BasicUpdate(t *testing.T) {
 	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
 	// Verify active coordinator node remains unchanged (heartbeat does NOT update it)
 	assert.Equal(t, coordinatorLocator, o.activeCoordinatorNode)
-	// Verify snapshot was updated
-	assert.NotNil(t, o.latestCoordinatorSnapshot)
-	assert.Equal(t, uint64(1000), o.latestCoordinatorSnapshot.BlockHeight)
 }
 func Test_guard_IdleThresholdExceeded_TrueWhenCounterExceedsThreshold(t *testing.T) {
 	ctx := context.Background()
@@ -293,6 +291,7 @@ func Test_applyHeartbeatReceived_SubmittedHandleEventError_ReturnsWrappedError(t
 	innerErr := fmt.Errorf("simulated submitted handling failure")
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.EXPECT().GetID().Return(txnID)
+	mockTxn.EXPECT().GetCurrentState().Return(transaction.State_Delegated)
 	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.SubmittedEvent")).Return(innerErr)
 	builder := NewOriginatorBuilderForTesting(State_Observing).
 		NodeName(originatorLocator).
@@ -331,6 +330,7 @@ func Test_applyHeartbeatReceived_NonceAssignedHandleEventError_ReturnsWrappedErr
 	innerErr := fmt.Errorf("simulated nonce handling failure")
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.EXPECT().GetID().Return(txnID)
+	mockTxn.EXPECT().GetCurrentState().Return(transaction.State_Delegated)
 	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.NonceAssignedEvent")).Return(innerErr)
 	builder := NewOriginatorBuilderForTesting(State_Observing).
 		NodeName(originatorLocator).

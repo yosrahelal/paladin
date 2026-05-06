@@ -37,8 +37,12 @@ type CoordinatorSnapshot struct {
 	DispatchedTransactions []*SnapshotDispatchedTransaction `json:"dispatchedTransactions"`
 	PooledTransactions     []*SnapshotPooledTransaction     `json:"pooledTransactions"`
 	ConfirmedTransactions  []*SnapshotConfirmedTransaction  `json:"confirmedTransactions"`
-	CoordinatorState       int                              `json:"coordinatorState"`
+	CoordinatorState       CoordinatorState                 `json:"coordinatorState"`
 	BlockHeight            uint64                           `json:"blockHeight"`
+}
+
+func (s *CoordinatorSnapshot) IsCoordinatorClosing() bool {
+	return s.CoordinatorState == CoordinatorState_Closing
 }
 
 type SnapshotPooledTransaction struct {

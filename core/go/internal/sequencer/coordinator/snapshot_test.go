@@ -80,7 +80,7 @@ func TestGetSnapshot_IncludesCoordinatorStateAndBlockHeight(t *testing.T) {
 
 	snapshot := c.getSnapshot(ctx)
 	require.NotNil(t, snapshot)
-	assert.Equal(t, c.GetCurrentState(), State(snapshot.CoordinatorState))
+	assert.Equal(t, c.GetCurrentState(), snapshot.CoordinatorState)
 	assert.Equal(t, blockHeight, snapshot.BlockHeight)
 }
 

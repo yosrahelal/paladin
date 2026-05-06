@@ -27,14 +27,14 @@ import (
 	"github.com/google/uuid"
 )
 
-type State int
+type State = common.OriginatorState
 type EventType = common.EventType
 
 const (
-	State_Initial   State = iota // Waiting for OriginatorCreatedEvent to fire initial coordinator selection
-	State_Idle                   // Not acting as an originator and not aware of any active coordinators
-	State_Observing              // Not acting as an originator but aware of a node (which may be the same node) acting as a coordinator
-	State_Sending                // Has some transactions that have been sent to a coordinator but not yet confirmed TODO should this be named State_Monitoring or State_Delegated or even State_Sent.  Sending sounds like it is in the process of sending the request message.
+	State_Initial   = common.OriginatorState_Initial   // Waiting for OriginatorCreatedEvent to fire initial coordinator selection
+	State_Idle      = common.OriginatorState_Idle      // Not acting as an originator and not aware of any active coordinators
+	State_Observing = common.OriginatorState_Observing // Not acting as an originator but aware of a node acting as a coordinator
+	State_Sending   = common.OriginatorState_Sending   // Has some transactions that have been sent to a coordinator but not yet confirmed
 )
 
 const (
@@ -145,7 +145,12 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Sending: {
 		OnTransitionTo: []ActionRule{
-			{Action: action_SendDelegationRequest},
+			// Do not delegate immediately if we are waiting for the previous coordinator to flush;
+			// the redelegate will be triggered when we finish watching.
+			{
+				Action: action_SendDelegationRequest,
+				If:     statemachine.GuardNot(guard_WatchingPreviousCoordinatorFlush),
+			},
 		},
 		Events: map[EventType]EventHandler{
 			common.Event_NewBlock: {
@@ -156,8 +161,12 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_SelectActiveCoordinator,
 					},
 					{
-						// Re-delegate to the new coordinator if selection changed this block
-						If:     guard_CoordinatorChanged,
+						// TODO AM A: when the coordinator doesn't change we may still enter a flush to rotate a signing key - how are we going to pick that up?
+						// does it even matter - we will see rejections and dropped transactions but it doesn't carry the risk of a new coordinator accepting a just confirmed transaction
+						// Re-delegate to the new coordinator if selection changed this block.
+						// action_SelectActiveCoordinator runs first and may set watchingPreviousCoordinatorFlush,
+						// so this delegation is suppressed until the watching phase ends.
+						If:     statemachine.GuardAnd(guard_CoordinatorChanged, statemachine.GuardNot(guard_WatchingPreviousCoordinatorFlush)),
 						Action: action_SendDelegationRequest,
 					},
 				},
@@ -166,32 +175,40 @@ var stateDefinitionsMap = StateDefinitions{
 				Validator: validator_TransactionDoesNotExist,
 				Actions: []ActionRule{
 					{Action: action_TransactionCreated},
-					{Action: action_SendDelegationRequest},
+					// Do not delegate the new transaction immediately if we are watching the previous coordinator flush.
+					{
+						Action: action_SendDelegationRequest,
+						If:     statemachine.GuardNot(guard_WatchingPreviousCoordinatorFlush),
+					},
 				},
 			},
 			common.Event_HeartbeatReceived: {
 				Actions: []ActionRule{
 					{Action: action_HeartbeatReceived},
-					{Action: action_SendDelegationRequest, If: guard_HasDroppedTransactions},
+					// Send a delegation request if applyHeartbeatReceived set needsRedelegate (dropped
+					// transactions detected, first closing heartbeat received, we thought we were waiting
+					// on a flush but we've already seen the new coordinator become active).
+					{Action: action_SendDelegationRequest, If: guard_NeedsRedelegate},
 				},
 			},
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
+					{Action: action_IncrementHeartbeatIntervalCounts},
 					{
-						Action: action_IncrementHeartbeatIntervalCounts,
-					},
-					{
-						// Resend all the delegation requests
-						// - if the last heartbeat we received was a closing heartbeat TODO AM implement this
-						//  we need to detect the transition to closing
-						// - if we have not seen a heartbeat in a while It could be that no one thinks they are coordinating, so this will
-						//   nudge the node who we think should be the active coordinator.
+						// Resend all the delegation requests if we have not seen a heartbeat in a while It could be that no one thinks
+						// they are coordinating, so this will nudge the node who we think should be the active coordinator.
 						//
 						// If we have been seeing heartbeats, the handling for Event_HeartbeatReceived will ensure we
 						// are resending delegation requests only if we have transactions that the active coordinator
 						// does not know about.
+						// TODO AM: I think this is a point where we would revert back to the preferred active coordinator if we
+						// have selected an alternative
+						// sendDelegationRequest clears the watching phase and the needsRedelegate flag.
 						Action: action_SendDelegationRequest,
-						If:     guard_RedelegateThresholdExceeded,
+						If: statemachine.GuardOr(
+							statemachine.GuardAnd(guard_WatchingPreviousCoordinatorFlush, guard_WatchingGracePeriodExpired),
+							statemachine.GuardAnd(guard_RedelegateThresholdExceeded, statemachine.GuardNot(guard_WatchingPreviousCoordinatorFlush)),
+						),
 					},
 				},
 			},
@@ -247,18 +264,4 @@ func (o *originator) GetTxStatus(ctx context.Context, txID uuid.UUID) (status co
 		TxID:   txID.String(),
 		Status: "unknown",
 	}, nil
-}
-
-func (s State) String() string {
-	switch s {
-	case State_Initial:
-		return "Initial"
-	case State_Idle:
-		return "Idle"
-	case State_Observing:
-		return "Observing"
-	case State_Sending:
-		return "Sending"
-	}
-	return "Unknown"
 }

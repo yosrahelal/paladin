@@ -77,7 +77,7 @@ func Test_action_SelectActiveCoordinator_EndorserMode_WhenCoordinatorChanges_Set
 	domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
 		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
-	}).Maybe()
+	})
 	o, _ := NewOriginatorBuilderForTesting(State_Idle).
 		DomainAPI(domainAPI).
 		CoordinatorEndorserPool("node1", "node2").
@@ -93,139 +93,124 @@ func Test_action_UpdateBlockHeight_ResetsCoordinatorChangedFlag(t *testing.T) {
 	err := action_UpdateBlockHeight(ctx, o, &common.NewBlockEvent{BlockHeight: 1})
 	require.NoError(t, err)
 }
-func Test_guard_HasDroppedTransactions_TrueWhenDelegatedTxnNotInSnapshot(t *testing.T) {
+func Test_hasDroppedTransactions_TrueWhenDelegatedTxnNotInSnapshot(t *testing.T) {
 	ctx := context.Background()
 	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
 	o, _ := NewOriginatorBuilderForTesting(State_Sending).
 		TransactionBuilders(txBuilder).
-		LatestCoordinatorSnapshot(&common.CoordinatorSnapshot{
-			PooledTransactions: []*common.SnapshotPooledTransaction{},
-		}).
 		Build()
 	txn := txBuilder.GetBuiltTransaction()
 	require.NotNil(t, txn)
-	assert.True(t, guard_HasDroppedTransactions(ctx, o))
+	snapshot := &common.CoordinatorSnapshot{
+		PooledTransactions: []*common.SnapshotPooledTransaction{},
+	}
+	assert.True(t, o.hasDroppedTransactions(ctx, snapshot))
 }
-func Test_guard_HasDroppedTransactions_FalseWhenDelegatedTxnInSnapshot(t *testing.T) {
+func Test_hasDroppedTransactions_FalseWhenDelegatedTxnInSnapshot(t *testing.T) {
 	ctx := context.Background()
 	originatorLocator := "sender@senderNode"
 	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
 	o, _ := NewOriginatorBuilderForTesting(State_Sending).
 		TransactionBuilders(txBuilder).
-		LatestCoordinatorSnapshotFactory(func(txns []transaction.OriginatorTransaction) *common.CoordinatorSnapshot {
-			return &common.CoordinatorSnapshot{
-				PooledTransactions: []*common.SnapshotPooledTransaction{
-					{ID: txns[0].GetID(), Originator: originatorLocator},
-				},
-			}
-		}).
 		Build()
 	txn := txBuilder.GetBuiltTransaction()
 	require.NotNil(t, txn)
-	assert.False(t, guard_HasDroppedTransactions(ctx, o))
+	snapshot := &common.CoordinatorSnapshot{
+		PooledTransactions: []*common.SnapshotPooledTransaction{
+			{ID: txn.GetID(), Originator: originatorLocator},
+		},
+	}
+	assert.False(t, o.hasDroppedTransactions(ctx, snapshot))
 }
-func Test_transactionFoundInHeartbeat_TrueWhenInDispatchedTransactions(t *testing.T) {
+func Test_transactionFoundInSnapshot_TrueWhenInDispatchedTransactions(t *testing.T) {
 	originatorLocator := "sender@senderNode"
 	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
 	o, _ := NewOriginatorBuilderForTesting(State_Sending).
 		TransactionBuilders(txBuilder).
-		LatestCoordinatorSnapshotFactory(func(txns []transaction.OriginatorTransaction) *common.CoordinatorSnapshot {
-			return &common.CoordinatorSnapshot{
-				DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
-					{SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txns[0].GetID(), Originator: originatorLocator}},
-				},
-				PooledTransactions:    []*common.SnapshotPooledTransaction{},
-				ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{},
-			}
-		}).
 		Build()
 	txn := txBuilder.GetBuiltTransaction()
 	require.NotNil(t, txn)
-	assert.True(t, transactionFoundInHeartbeat(o, txn))
+	snapshot := &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+			{SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txn.GetID(), Originator: originatorLocator}},
+		},
+		PooledTransactions:    []*common.SnapshotPooledTransaction{},
+		ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{},
+	}
+	_ = o
+	assert.True(t, transactionFoundInSnapshot(snapshot, txn))
 }
-func Test_transactionFoundInHeartbeat_TrueWhenInPooledTransactions(t *testing.T) {
+func Test_transactionFoundInSnapshot_TrueWhenInPooledTransactions(t *testing.T) {
 	originatorLocator := "sender@senderNode"
 	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
 	o, _ := NewOriginatorBuilderForTesting(State_Sending).
 		TransactionBuilders(txBuilder).
-		LatestCoordinatorSnapshotFactory(func(txns []transaction.OriginatorTransaction) *common.CoordinatorSnapshot {
-			return &common.CoordinatorSnapshot{
-				DispatchedTransactions: []*common.SnapshotDispatchedTransaction{},
-				PooledTransactions: []*common.SnapshotPooledTransaction{
-					{ID: txns[0].GetID(), Originator: originatorLocator},
-				},
-				ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{},
-			}
-		}).
 		Build()
 	txn := txBuilder.GetBuiltTransaction()
 	require.NotNil(t, txn)
-	assert.True(t, transactionFoundInHeartbeat(o, txn))
+	snapshot := &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{},
+		PooledTransactions: []*common.SnapshotPooledTransaction{
+			{ID: txn.GetID(), Originator: originatorLocator},
+		},
+		ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{},
+	}
+	_ = o
+	assert.True(t, transactionFoundInSnapshot(snapshot, txn))
 }
-func Test_transactionFoundInHeartbeat_TrueWhenInConfirmedTransactions(t *testing.T) {
+func Test_transactionFoundInSnapshot_TrueWhenInConfirmedTransactions(t *testing.T) {
 	originatorLocator := "sender@senderNode"
 	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
 	o, _ := NewOriginatorBuilderForTesting(State_Sending).
 		TransactionBuilders(txBuilder).
-		LatestCoordinatorSnapshotFactory(func(txns []transaction.OriginatorTransaction) *common.CoordinatorSnapshot {
-			return &common.CoordinatorSnapshot{
-				DispatchedTransactions: []*common.SnapshotDispatchedTransaction{},
-				PooledTransactions:     []*common.SnapshotPooledTransaction{},
-				ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
-					{SnapshotDispatchedTransaction: common.SnapshotDispatchedTransaction{
-						SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txns[0].GetID(), Originator: originatorLocator},
-					}},
-				},
-			}
-		}).
 		Build()
 	txn := txBuilder.GetBuiltTransaction()
 	require.NotNil(t, txn)
-	assert.True(t, transactionFoundInHeartbeat(o, txn))
+	snapshot := &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{},
+		PooledTransactions:     []*common.SnapshotPooledTransaction{},
+		ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
+			{SnapshotDispatchedTransaction: common.SnapshotDispatchedTransaction{
+				SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txn.GetID(), Originator: originatorLocator},
+			}},
+		},
+	}
+	_ = o
+	assert.True(t, transactionFoundInSnapshot(snapshot, txn))
 }
-func Test_transactionFoundInHeartbeat_FalseWhenNotInSnapshot(t *testing.T) {
+func Test_transactionFoundInSnapshot_FalseWhenNotInSnapshot(t *testing.T) {
 	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
 	o, _ := NewOriginatorBuilderForTesting(State_Sending).
 		TransactionBuilders(txBuilder).
-		LatestCoordinatorSnapshot(&common.CoordinatorSnapshot{
-			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{},
-			PooledTransactions:     []*common.SnapshotPooledTransaction{},
-			ConfirmedTransactions:  []*common.SnapshotConfirmedTransaction{},
-		}).
 		Build()
 	txn := txBuilder.GetBuiltTransaction()
 	require.NotNil(t, txn)
-	assert.False(t, transactionFoundInHeartbeat(o, txn))
+	snapshot := &common.CoordinatorSnapshot{
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{},
+		PooledTransactions:     []*common.SnapshotPooledTransaction{},
+		ConfirmedTransactions:  []*common.SnapshotConfirmedTransaction{},
+	}
+	_ = o
+	assert.False(t, transactionFoundInSnapshot(snapshot, txn))
 }
-func Test_transactionFoundInHeartbeat_FalseWhenOnlyOtherTxnsInSnapshot(t *testing.T) {
+func Test_transactionFoundInSnapshot_FalseWhenOnlyOtherTxnsInSnapshot(t *testing.T) {
 	originatorLocator := "sender@senderNode"
 	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
 	otherID := uuid.New()
 	o, _ := NewOriginatorBuilderForTesting(State_Sending).
 		TransactionBuilders(txBuilder).
-		LatestCoordinatorSnapshot(&common.CoordinatorSnapshot{
-			PooledTransactions: []*common.SnapshotPooledTransaction{
-				{ID: otherID, Originator: originatorLocator},
-			},
-			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{},
-			ConfirmedTransactions:  []*common.SnapshotConfirmedTransaction{},
-		}).
 		Build()
 	txn := txBuilder.GetBuiltTransaction()
 	require.NotNil(t, txn)
-	assert.False(t, transactionFoundInHeartbeat(o, txn))
-}
-func Test_sendDelegationRequest_NoActiveCoordinatorDefersAndReturnsNil(t *testing.T) {
-	ctx := context.Background()
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pending)
-	o, mocks := NewOriginatorBuilderForTesting(State_Sending).
-		TransactionBuilders(txBuilder).
-		ActiveCoordinatorNode("").
-		Build()
-	err := sendDelegationRequest(ctx, o)
-	require.NoError(t, err)
-	assert.False(t, mocks.SentMessageRecorder.HasSentDelegationRequest(),
-		"delegation request should not be sent when there is no active coordinator")
+	snapshot := &common.CoordinatorSnapshot{
+		PooledTransactions: []*common.SnapshotPooledTransaction{
+			{ID: otherID, Originator: originatorLocator},
+		},
+		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{},
+		ConfirmedTransactions:  []*common.SnapshotConfirmedTransaction{},
+	}
+	_ = o
+	assert.False(t, transactionFoundInSnapshot(snapshot, txn))
 }
 
 func Test_addToTransactions_HandleCreatedEventError_ReturnsError(t *testing.T) {

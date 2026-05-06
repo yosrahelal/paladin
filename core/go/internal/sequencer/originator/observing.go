@@ -32,8 +32,9 @@ func action_HeartbeatReceived(ctx context.Context, o *originator, event common.E
 }
 
 func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.HeartbeatReceivedEvent) error {
-	o.heartbeatIntervalsSinceLastReceive = 0
-	o.latestCoordinatorSnapshot = nil
+	// Reset at the start of each heartbeat: this function is the only place that sets needsRedelegate,
+	// and sendDelegationRequest is the only place that clears it after acting on it.
+	o.needsRedelegate = false
 
 	// Process confirmed transactions (success or revert) from ALL coordinator heartbeats (any node).
 	// We may hear of confirmations from a flushing or closing coordinator, and updating our state machine
@@ -70,62 +71,119 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.H
 		}
 	}
 
-	// Only process dispatch state updates from the active coordinator.
+	// Handle heartbeats from the previous coordinator while we are watching for its flush to complete.
+	if event.From == o.previousActiveCoordinatorNode && o.watchingPreviousCoordinatorFlush {
+		// Reset the liveness counter for as long as the previous coordinator keeps heartbeating (including
+		// its first closing heartbeat, at which point we stop watching).
+		o.heartbeatIntervalsSinceLastReceive = 0
+
+		if event.CoordinatorSnapshot.IsCoordinatorClosing() {
+			// First closing heartbeat from the previous coordinator: trigger a full redelegate to the new
+			// active coordinator so it can include any transactions the previous coordinator dropped.
+			log.L(ctx).Debugf("previous coordinator %s has entered closing state; triggering redelegate to %s", event.From, o.activeCoordinatorNode)
+			o.watchingPreviousCoordinatorFlush = false
+			o.needsRedelegate = true
+		}
+		// Whether closing or not, we are not interested in the previous coordinator's dispatch snapshot.
+		return nil
+	}
+
+	// Only process dispatch state updates and dropped-transaction detection from the active coordinator.
 	if event.From != o.activeCoordinatorNode {
 		log.L(ctx).Debugf("ignoring non-active coordinator heartbeat from %s (active: %s)", event.From, o.activeCoordinatorNode)
 		return nil
 	}
 
-	// The latest snapshot is used for dropped transaction tracking
-	o.latestCoordinatorSnapshot = event.CoordinatorSnapshot
+	// Active coordinator heartbeat: reset the liveness counter.
+	o.heartbeatIntervalsSinceLastReceive = 0
+
+	// If we were still watching the previous coordinator flush but the new active
+	// coordinator has already started heartbeating, we no longer need to wait.
+	if o.watchingPreviousCoordinatorFlush {
+		log.L(ctx).Debugf("active coordinator %s is heartbeating while watching previous coordinator flush; exiting watching phase", event.From)
+		o.watchingPreviousCoordinatorFlush = false
+		o.needsRedelegate = true
+	}
+
+	// Check for transactions that the active coordinator appears to have dropped (absent from its snapshot).
+	// If any are found we redelegate everything so the coordinator can reassemble them.
+	if o.hasDroppedTransactions(ctx, event.CoordinatorSnapshot) {
+		o.needsRedelegate = true
+	}
 
 	for _, dispatchedTransaction := range event.CoordinatorSnapshot.DispatchedTransactions {
-		//if any of the dispatched transactions were sent by this originator, ensure that we have an up to date view of its state
-		if dispatchedTransaction.Originator == o.nodeName {
-			txn := o.transactionsByID[dispatchedTransaction.ID]
-			if txn == nil {
-				//unexpected situation to be in.  We trust our memory of transactions over the coordinator's, so we ignore this transaction
-				log.L(ctx).Warnf("received heartbeat from %s with dispatched transaction %s but no transaction found in memory", o.activeCoordinatorNode, dispatchedTransaction.ID)
-				continue
+		// If any of the dispatched transactions were sent by this originator, ensure we have an up-to-date view.
+		if dispatchedTransaction.Originator != o.nodeName {
+			continue
+		}
+		txn := o.transactionsByID[dispatchedTransaction.ID]
+		if txn == nil {
+			// Unexpected: we trust our memory over the coordinator's snapshot; ignore this entry.
+			log.L(ctx).Warnf("received heartbeat from %s with dispatched transaction %s but no transaction found in memory", o.activeCoordinatorNode, dispatchedTransaction.ID)
+			continue
+		}
+		if dispatchedTransaction.LatestSubmissionHash != nil {
+			txnSubmittedEvent := &transaction.SubmittedEvent{}
+			txnSubmittedEvent.TransactionID = dispatchedTransaction.ID
+			txnSubmittedEvent.SignerAddress = dispatchedTransaction.Signer
+			txnSubmittedEvent.LatestSubmissionHash = *dispatchedTransaction.LatestSubmissionHash
+			txnSubmittedEvent.Coordinator = event.From
+			if dispatchedTransaction.Nonce != nil {
+				txnSubmittedEvent.Nonce = *dispatchedTransaction.Nonce
 			}
-			if dispatchedTransaction.LatestSubmissionHash != nil {
-				//if the dispatched transaction has a hash, then we can update our view of the transaction
-				txnSubmittedEvent := &transaction.SubmittedEvent{}
-				txnSubmittedEvent.TransactionID = dispatchedTransaction.ID
-				txnSubmittedEvent.SignerAddress = dispatchedTransaction.Signer
-				txnSubmittedEvent.LatestSubmissionHash = *dispatchedTransaction.LatestSubmissionHash
-				txnSubmittedEvent.Coordinator = event.From
-				if dispatchedTransaction.Nonce != nil {
-					txnSubmittedEvent.Nonce = *dispatchedTransaction.Nonce
-				}
-
-				err := txn.HandleEvent(ctx, txnSubmittedEvent)
-				if err != nil {
-					msg := fmt.Errorf("error handling transaction submitted event for transaction %s: %v", txn.GetID(), err)
-					return i18n.NewError(ctx, msgs.MsgSequencerInternalError, msg)
-				}
-			} else if dispatchedTransaction.Nonce != nil {
-				//if the dispatched transaction has a nonce but no hash, then it is sequenced
-				err := txn.HandleEvent(ctx, &transaction.NonceAssignedEvent{
-					BaseEvent: transaction.BaseEvent{
-						TransactionID: dispatchedTransaction.ID,
-					},
-					Nonce:       *dispatchedTransaction.Nonce,
-					Coordinator: event.From,
-				})
-
-				if err != nil {
-					msg := fmt.Errorf("error handling nonce assigned event for transaction %s: %v", txn.GetID(), err)
-					return i18n.NewError(ctx, msgs.MsgSequencerInternalError, msg)
-				}
+			err := txn.HandleEvent(ctx, txnSubmittedEvent)
+			if err != nil {
+				msg := fmt.Errorf("error handling transaction submitted event for transaction %s: %v", txn.GetID(), err)
+				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, msg)
+			}
+		} else if dispatchedTransaction.Nonce != nil {
+			err := txn.HandleEvent(ctx, &transaction.NonceAssignedEvent{
+				BaseEvent: transaction.BaseEvent{
+					TransactionID: dispatchedTransaction.ID,
+				},
+				Nonce:       *dispatchedTransaction.Nonce,
+				Coordinator: event.From,
+			})
+			if err != nil {
+				msg := fmt.Errorf("error handling nonce assigned event for transaction %s: %v", txn.GetID(), err)
+				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, msg)
 			}
 		}
 	}
 
-	// Note: sending dropped transaction re-delegations (i.e. those we are tracking but which the heartbeat doesn't mention)
-	// is handled by state machine guards
-
+	// Note: sending redelegate requests is handled by the state machine guard guard_NeedsRedelegate.
 	return nil
+}
+
+// hasDroppedTransactions returns true if any non-final transaction is absent from the coordinator's snapshot,
+// implying the coordinator has dropped it and we need to redelegate everything.
+func (o *originator) hasDroppedTransactions(ctx context.Context, snapshot *common.CoordinatorSnapshot) bool {
+	for _, txn := range o.getTransactionsNotInStates([]transaction.State{transaction.State_Final, transaction.State_Confirmed, transaction.State_Reverted}) {
+		if !transactionFoundInSnapshot(snapshot, txn) {
+			log.L(ctx).Debugf("transaction %s not found in latest coordinator snapshot, assuming dropped", txn.GetID())
+			return true
+		}
+	}
+	return false
+}
+
+func transactionFoundInSnapshot(snapshot *common.CoordinatorSnapshot, txn transaction.OriginatorTransaction) bool {
+	for _, t := range snapshot.DispatchedTransactions {
+		if t.ID == txn.GetID() {
+			return true
+		}
+	}
+	for _, t := range snapshot.PooledTransactions {
+		if t.ID == txn.GetID() {
+			return true
+		}
+	}
+	for _, t := range snapshot.ConfirmedTransactions {
+		if t.ID == txn.GetID() {
+			return true
+		}
+	}
+	return false
 }
 
 func guard_IdleThresholdExceeded(_ context.Context, o *originator) bool {

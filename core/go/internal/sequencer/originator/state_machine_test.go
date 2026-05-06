@@ -21,19 +21,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-func Test_State_String_Idle(t *testing.T) {
-	assert.Equal(t, "Idle", State_Idle.String())
-}
-func Test_State_String_Observing(t *testing.T) {
-	assert.Equal(t, "Observing", State_Observing.String())
-}
-func Test_State_String_Sending(t *testing.T) {
-	assert.Equal(t, "Sending", State_Sending.String())
-}
-func Test_State_String_Unknown(t *testing.T) {
-	var s State = 999
-	assert.Equal(t, "Unknown", s.String())
-}
 func Test_GetTxStatus_KnownTransactionReturnsStatus(t *testing.T) {
 	ctx := context.Background()
 	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pending)

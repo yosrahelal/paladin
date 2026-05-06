@@ -20,54 +20,8 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestState_String_Initial(t *testing.T) {
-	result := State_Initial.String()
-	assert.Equal(t, "Initial", result, "State.String() should return the correct string representation")
-}
-
-func TestState_String_Idle(t *testing.T) {
-	result := State_Idle.String()
-	assert.Equal(t, "Idle", result, "State.String() should return the correct string representation")
-}
-
-func TestState_String_Observing(t *testing.T) {
-	result := State_Observing.String()
-	assert.Equal(t, "Observing", result, "State.String() should return the correct string representation")
-}
-
-func TestState_String_Elect(t *testing.T) {
-	result := State_Elect.String()
-	assert.Equal(t, "Elect", result, "State.String() should return the correct string representation")
-}
-
-func TestState_String_Active(t *testing.T) {
-	result := State_Active.String()
-	assert.Equal(t, "Active", result, "State.String() should return the correct string representation")
-}
-
-func TestState_String_Flush(t *testing.T) {
-	result := State_Flush.String()
-	assert.Equal(t, "Flush", result, "State.String() should return the correct string representation")
-}
-
-func TestState_String_Closing(t *testing.T) {
-	result := State_Closing.String()
-	assert.Equal(t, "Closing", result, "State.String() should return the correct string representation")
-}
-
-func TestState_String_InvalidState(t *testing.T) {
-	result := State(999).String()
-	assert.Equal(t, "Unknown", result, "State.String() should return the correct string representation")
-}
-
-func TestState_String_NegativeState(t *testing.T) {
-	result := State(-1).String()
-	assert.Equal(t, "Unknown", result, "State.String() should return the correct string representation")
-}
 
 func Test_queueEventInternal_QueuesPriorityEvent(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)

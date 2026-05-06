@@ -25,22 +25,22 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 )
 
-type State int
+type State = common.CoordinatorTransactionState
 
 const (
-	State_Initial                 State = iota // Initial state before anything is calculated
-	State_Pooled                               // waiting in the pool to be assembled - TODO should rename to "Selectable" or "Selectable_Pooled".  Related to potential rename of `State_PreAssembly_Blocked`
-	State_PreAssembly_Blocked                  // has not been assembled yet and cannot be assembled because a dependency never got assembled successfully - i.e. it was either Parked or Reverted is also blocked
-	State_Assembling                           // an assemble request has been sent but we are waiting for the response
-	State_Reverted                             // the transaction has been reverted by the assembler/originator or on the base ledger
-	State_Endorsement_Gathering                // assembled and waiting for endorsement
-	State_Blocked                              // is fully endorsed but cannot proceed due to dependencies not being ready for dispatch
-	State_Confirming_Dispatchable              // endorsed and waiting for confirmation that were are OK to dispatch. The originator can still request not to proceed at this point.
-	State_Ready_For_Dispatch                   // dispatch confirmation received and waiting to be collected by the dispatcher thread.Going into this state is the point of no return
-	State_Dispatched                           // collected by the dispatcher/public TX manager and in-flight on base ledger
-	State_Confirmed                            // "recently" confirmed on the base ledger.  NOTE: confirmed transactions are not held in memory for ever so getting a list of confirmed transactions will only return those confirmed recently
-	State_Final                                // final state for the transaction. Transactions are removed from memory as soon as they enter this state
-	State_Evicted                              // evicted state for a problematic transaction. Transactions are removed from memory as soon as they enter this state. Distinct from State_Final because it might just used for memory or in-flight slot management
+	State_Initial                 = common.CoordinatorTransactionState_Initial                 // Initial state before anything is calculated
+	State_Pooled                  = common.CoordinatorTransactionState_Pooled                  // Waiting in the pool to be assembled
+	State_PreAssembly_Blocked     = common.CoordinatorTransactionState_PreAssembly_Blocked     // Cannot be assembled; a dependency was Parked or Reverted
+	State_Assembling              = common.CoordinatorTransactionState_Assembling              // Assemble request sent to the originator; waiting for response
+	State_Reverted                = common.CoordinatorTransactionState_Reverted                // Reverted by the assembler/originator or on the base ledger
+	State_Endorsement_Gathering   = common.CoordinatorTransactionState_Endorsement_Gathering   // Assembled and waiting for endorsement
+	State_Blocked                 = common.CoordinatorTransactionState_Blocked                 // Fully endorsed but dependencies not ready for dispatch
+	State_Confirming_Dispatchable = common.CoordinatorTransactionState_Confirming_Dispatchable // Endorsed; waiting for originator dispatch confirmation; originator can still decline
+	State_Ready_For_Dispatch      = common.CoordinatorTransactionState_Ready_For_Dispatch      // Dispatch confirmation received; point of no return; waiting to be collected by the dispatcher
+	State_Dispatched              = common.CoordinatorTransactionState_Dispatched              // Collected by the dispatcher/public TX manager; in-flight on the base ledger
+	State_Confirmed               = common.CoordinatorTransactionState_Confirmed               // Recently confirmed on the base ledger; not held in memory indefinitely
+	State_Final                   = common.CoordinatorTransactionState_Final                   // Final state; transactions are removed from memory on entry
+	State_Evicted                 = common.CoordinatorTransactionState_Evicted                 // Evicted for memory/in-flight slot management; distinct from Final
 )
 
 type EventType = common.EventType
@@ -827,36 +827,4 @@ func action_IncrementHeartbeatIntervalsSinceStateChange(ctx context.Context, t *
 	log.L(ctx).Tracef("coordinator transaction %s (%s) increasing heartbeatIntervalsSinceStateChange to %d", t.pt.ID.String(), t.stateMachine.GetCurrentState().String(), t.heartbeatIntervalsSinceStateChange+1)
 	t.heartbeatIntervalsSinceStateChange++
 	return nil
-}
-
-func (s State) String() string {
-	switch s {
-	case State_Initial:
-		return "State_Initial"
-	case State_Pooled:
-		return "State_Pooled"
-	case State_PreAssembly_Blocked:
-		return "State_PreAssembly_Blocked"
-	case State_Assembling:
-		return "State_Assembling"
-	case State_Reverted:
-		return "State_Reverted"
-	case State_Endorsement_Gathering:
-		return "State_Endorsement_Gathering"
-	case State_Blocked:
-		return "State_Blocked"
-	case State_Confirming_Dispatchable:
-		return "State_Confirming_Dispatchable"
-	case State_Ready_For_Dispatch:
-		return "State_Ready_For_Dispatch"
-	case State_Dispatched:
-		return "State_Dispatched"
-	case State_Confirmed:
-		return "State_Confirmed"
-	case State_Final:
-		return "State_Final"
-	case State_Evicted:
-		return "State_Evicted"
-	}
-	return fmt.Sprintf("Unknown (%d)", s)
 }

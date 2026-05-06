@@ -46,14 +46,14 @@ type OriginatorBuilderForTesting struct {
 	blockRangeSize                     *uint64
 	currentBlockHeight                 *uint64
 	newBlockRangeEpoch                 *bool
-	coordinatorEndorserPool            []string
-	activeCoordinatorNode              *string
-	latestCoordinatorSnapshot          *common.CoordinatorSnapshot
-	latestCoordinatorSnapshotFactory   func([]transaction.OriginatorTransaction) *common.CoordinatorSnapshot
-	heartbeatIntervalsSinceLastReceive *int
-	redelegateThreshold                *int
-	idleThreshold                      *int
-	transactions                       []transaction.OriginatorTransaction
+	coordinatorEndorserPool              []string
+	activeCoordinatorNode                *string
+	previousActiveCoordinatorNode        *string
+	watchingPreviousCoordinatorFlush     *bool
+	heartbeatIntervalsSinceLastReceive   *int
+	redelegateThreshold                  *int
+	idleThreshold                        *int
+	transactions                         []transaction.OriginatorTransaction
 }
 
 type OriginatorDependencyMocks struct {
@@ -136,13 +136,13 @@ func (b *OriginatorBuilderForTesting) ActiveCoordinatorNode(node string) *Origin
 	return b
 }
 
-func (b *OriginatorBuilderForTesting) LatestCoordinatorSnapshot(s *common.CoordinatorSnapshot) *OriginatorBuilderForTesting {
-	b.latestCoordinatorSnapshot = s
+func (b *OriginatorBuilderForTesting) PreviousActiveCoordinatorNode(node string) *OriginatorBuilderForTesting {
+	b.previousActiveCoordinatorNode = &node
 	return b
 }
 
-func (b *OriginatorBuilderForTesting) LatestCoordinatorSnapshotFactory(f func([]transaction.OriginatorTransaction) *common.CoordinatorSnapshot) *OriginatorBuilderForTesting {
-	b.latestCoordinatorSnapshotFactory = f
+func (b *OriginatorBuilderForTesting) WatchingPreviousCoordinatorFlush(watching bool) *OriginatorBuilderForTesting {
+	b.watchingPreviousCoordinatorFlush = &watching
 	return b
 }
 
@@ -236,12 +236,11 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	if b.coordinatorEndorserPool != nil {
 		originator.coordinatorEndorserPool = b.coordinatorEndorserPool
 	}
-	if b.latestCoordinatorSnapshot != nil {
-		originator.latestCoordinatorSnapshot = b.latestCoordinatorSnapshot
+	if b.previousActiveCoordinatorNode != nil {
+		originator.previousActiveCoordinatorNode = *b.previousActiveCoordinatorNode
 	}
-	if b.latestCoordinatorSnapshotFactory != nil {
-		allTxns := originator.transactionsOrdered
-		originator.latestCoordinatorSnapshot = b.latestCoordinatorSnapshotFactory(allTxns)
+	if b.watchingPreviousCoordinatorFlush != nil {
+		originator.watchingPreviousCoordinatorFlush = *b.watchingPreviousCoordinatorFlush
 	}
 	if b.heartbeatIntervalsSinceLastReceive != nil {
 		originator.heartbeatIntervalsSinceLastReceive = *b.heartbeatIntervalsSinceLastReceive
