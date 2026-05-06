@@ -152,7 +152,7 @@ var (
 )
 
 func (c *NotoParsedConfig) IsV2() bool {
-	return c.Variant == NotoVariantV2
+	return c.Variant == NotoVariantV2 || c.Variant == NotoVariantV2Nullifiers
 }
 
 // UsesFlatLockABI is true for modern Noto (standard or nullifiers): INoto / ILockableCapability parameter layout.
