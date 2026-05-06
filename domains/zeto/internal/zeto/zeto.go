@@ -589,35 +589,35 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		if err != nil {
 			errors = append(errors, err.Error())
 		}
+		if err == nil && common.IsNullifiersToken(domainConfig.TokenName) {
+			newStatesForSMT, smtErr := smtForStates.Storage.GetNewStates(ctx)
+			if smtErr != nil {
+				return nil, i18n.NewError(ctx, pldmsgs.MsgErrorGetNewSmtStates, smtForStates.Name, smtErr)
+			}
+			if len(newStatesForSMT) > 0 {
+				res.NewStates = append(res.NewStates, newStatesForSMT...)
+			}
+			newStatesForSMTForLocked, smtErr := smtForLockedStates.Storage.GetNewStates(ctx)
+			if smtErr != nil {
+				return nil, i18n.NewError(ctx, pldmsgs.MsgErrorGetNewSmtStates, smtForLockedStates.Name, smtErr)
+			}
+			if len(newStatesForSMTForLocked) > 0 {
+				res.NewStates = append(res.NewStates, newStatesForSMTForLocked...)
+			}
+			if common.IsKycToken(domainConfig.TokenName) {
+				newStatesForSMTForKyc, smtErr := smtForKyc.Storage.GetNewStates(ctx)
+				log.L(ctx).Debugf("New KYC states from SMT %s: %+v", smtForKyc.Name, newStatesForSMTForKyc)
+				if smtErr != nil {
+					return nil, i18n.NewError(ctx, pldmsgs.MsgErrorGetNewSmtStates, smtForKyc.Name, smtErr)
+				}
+				if len(newStatesForSMTForKyc) > 0 {
+					res.NewStates = append(res.NewStates, newStatesForSMTForKyc...)
+				}
+			}
+		}
 	}
 	if len(errors) > 0 {
 		return &res, i18n.NewError(ctx, msgs.MsgErrorHandleEvents, formatErrors(errors))
-	}
-	if common.IsNullifiersToken(domainConfig.TokenName) {
-		newStatesForSMT, err := smtForStates.Storage.GetNewStates(ctx)
-		if err != nil {
-			return nil, i18n.NewError(ctx, pldmsgs.MsgErrorGetNewSmtStates, smtForStates.Name, err)
-		}
-		if len(newStatesForSMT) > 0 {
-			res.NewStates = append(res.NewStates, newStatesForSMT...)
-		}
-		newStatesForSMTForLocked, err := smtForLockedStates.Storage.GetNewStates(ctx)
-		if err != nil {
-			return nil, i18n.NewError(ctx, pldmsgs.MsgErrorGetNewSmtStates, smtForLockedStates.Name, err)
-		}
-		if len(newStatesForSMTForLocked) > 0 {
-			res.NewStates = append(res.NewStates, newStatesForSMTForLocked...)
-		}
-		if common.IsKycToken(domainConfig.TokenName) {
-			newStatesForSMTForKyc, err := smtForKyc.Storage.GetNewStates(ctx)
-			log.L(ctx).Debugf("New KYC states from SMT %s: %+v", smtForKyc.Name, newStatesForSMTForKyc)
-			if err != nil {
-				return nil, i18n.NewError(ctx, pldmsgs.MsgErrorGetNewSmtStates, smtForKyc.Name, err)
-			}
-			if len(newStatesForSMTForKyc) > 0 {
-				res.NewStates = append(res.NewStates, newStatesForSMTForKyc...)
-			}
-		}
 	}
 	return &res, nil
 }
