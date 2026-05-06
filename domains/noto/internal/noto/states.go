@@ -603,56 +603,6 @@ func endorsableStateIDs(states []*prototk.EndorsableState, useNullifier bool) []
 	return inputs
 }
 
-// spentCoinsFromOnChainNullifierInputs maps nullifiers appearing in on-chain input arrays back to Paladin coin state IDs
-// so spends are indexed correctly (events carry nullifiers, not coin state IDs).
-func (n *Noto) spentCoinsFromOnChainNullifierInputs(ctx context.Context, stateQueryContext string, txID pldtypes.Bytes32, inputNullifiers []pldtypes.Bytes32) ([]*prototk.StateUpdate, error) {
-	if len(inputNullifiers) == 0 {
-		return nil, nil
-	}
-	if n.coinSchema == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgUnexpectedSchema, "coin schema unset")
-	}
-	want := make(map[pldtypes.Bytes32]struct{})
-	for _, nf := range inputNullifiers {
-		if !nf.IsZero() {
-			want[nf] = struct{}{}
-		}
-	}
-	if len(want) == 0 {
-		return nil, nil
-	}
-	q := query.NewQueryBuilder().Limit(1000).Query()
-	states, err := n.findAvailableStates(ctx, stateQueryContext, n.coinSchema.Id, q.String(), false)
-	if err != nil {
-		return nil, err
-	}
-	var spent []*prototk.StateUpdate
-	for _, st := range states {
-		coin, err := n.unmarshalCoin(st.DataJson)
-		if err != nil {
-			continue
-		}
-		nf, err := calculateNullifier(coin)
-		if err != nil {
-			continue
-		}
-		if _, ok := want[*nf]; ok {
-			spent = append(spent, &prototk.StateUpdate{
-				Id:            st.Id,
-				TransactionId: txID.String(),
-			})
-			delete(want, *nf)
-			if len(want) == 0 {
-				break
-			}
-		}
-	}
-	if len(want) > 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgNullifierSpendUnresolved, len(want))
-	}
-	return spent, nil
-}
-
 // IDs must previously have been allocated
 func newStateAllocatedIDs(states []*prototk.NewState) []pldtypes.Bytes32 {
 	inputs := make([]pldtypes.Bytes32, len(states))

@@ -81,5 +81,4 @@ var (
 	MsgInvalidLockTransition              = pde("PD200041", "Invalid lock transition")
 	MsgUnknownSignPayload                 = pde("PD200042", "Sign payload type '%s' not recognized")
 	MsgNullifierGenerationFailed          = pde("PD200043", "Failed to generate nullifier for coin")
-	MsgNullifierSpendUnresolved           = pde("PD200044", "Could not resolve %d on-chain nullifier input(s) to coin states while indexing")
 )

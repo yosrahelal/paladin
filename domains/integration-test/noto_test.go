@@ -183,9 +183,12 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 	assert.Equal(t, int64(100), mintReceipt.Transfers[0].Amount.Int().Int64())
 	assert.Equal(t, notaryKey, mintReceipt.Transfers[0].To.String())
 
-	// Noto (including nullifiers) still materializes Noto coin states for indexing; use contract states query.
-	method := "pstate_queryContractStates"
-	coins := findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), method, noto.Address, nil)
+	// Nullifier-backed contracts record spends on nullifier ids; list spendable coins via queryContractNullifiers. Others use queryContractStates.
+	coinQueryMethod := "pstate_queryContractStates"
+	if variant == "noto_nullifiers" {
+		coinQueryMethod = "pstate_queryContractNullifiers"
+	}
+	coins := findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), coinQueryMethod, noto.Address, nil)
 	require.Len(t, coins, 1)
 	assert.Equal(t, int64(100), coins[0].Data.Amount.Int().Int64())
 	assert.Equal(t, notaryKey, coins[0].Data.Owner.String())
@@ -210,7 +213,7 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr, "PD200009")
 
-	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), method, noto.Address, nil)
+	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), coinQueryMethod, noto.Address, nil)
 	require.Len(t, coins, 1)
 
 	log.L(ctx).Infof("Transfer 150 from notary (should fail)")
@@ -229,7 +232,7 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr, "assemble result was REVERT")
 
-	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), method, noto.Address, nil)
+	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), coinQueryMethod, noto.Address, nil)
 	require.Len(t, coins, 1)
 
 	log.L(ctx).Infof("Transfer 50 from notary to recipient1")
@@ -252,7 +255,7 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 	assert.Equal(t, int64(50), transferReceipt.Transfers[0].Amount.Int().Int64())
 	assert.Equal(t, recipient1Key, transferReceipt.Transfers[0].To.String())
 
-	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), method, noto.Address, nil)
+	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), coinQueryMethod, noto.Address, nil)
 	require.Len(t, coins, 2)
 
 	balanceOfResult = noto.BalanceOf(ctx, &types.BalanceOfParam{Account: notaryName}).SignAndCall(notaryName).Wait()
@@ -286,7 +289,7 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 	assert.Equal(t, int64(50), transferReceipt.Transfers[0].Amount.Int().Int64())
 	assert.Equal(t, recipient2Key, transferReceipt.Transfers[0].To.String())
 
-	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), method, noto.Address, nil)
+	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), coinQueryMethod, noto.Address, nil)
 	require.Len(t, coins, 2)
 
 	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
@@ -320,7 +323,7 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 	assert.Equal(t, recipient2Key, burnReceipt.Transfers[0].From.String())
 	assert.Nil(t, burnReceipt.Transfers[0].To)
 
-	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), method, noto.Address, nil)
+	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), coinQueryMethod, noto.Address, nil)
 	require.Len(t, coins, 2)
 
 	balanceOfResult = noto.BalanceOf(ctx, &types.BalanceOfParam{Account: recipient2Name}).SignAndCall(notaryName).Wait()

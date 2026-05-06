@@ -18,12 +18,10 @@ package noto
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/domains/noto/pkg/types"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/domain"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -91,34 +89,9 @@ func TestHandleEventBatch_NotoTransfer(t *testing.T) {
 }
 
 func TestHandleEventBatch_NotoTransfer_Nullifiers(t *testing.T) {
-	coin := &types.NotoCoin{
-		Salt:   pldtypes.RandBytes32(),
-		Owner:  pldtypes.MustEthAddress("0xf7b1c69f5690993f2c8ece56cc89d42b1e737180"),
-		Amount: pldtypes.MustParseHexUint256("0x64"),
-	}
-	nullifier, err := calculateNullifier(coin)
-	require.NoError(t, err)
-	input := *nullifier
-	coinStateID := pldtypes.RandBytes32()
-	coinJSON, err := json.Marshal(coin)
-	require.NoError(t, err)
-
-	mockCallbacks := &domain.MockDomainCallbacks{
-		MockFindAvailableStates: func(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
-			return &prototk.FindAvailableStatesResponse{
-				States: []*prototk.StoredState{
-					{
-						Id:       coinStateID.String(),
-						DataJson: string(coinJSON),
-					},
-				},
-			}, nil
-		},
-		MockLocalNodeName: func() (*prototk.LocalNodeNameResponse, error) {
-			return &prototk.LocalNodeNameResponse{
-				Name: "node1",
-			}, nil
-		},
+	mockCallbacks := newMockCallbacks()
+	mockCallbacks.MockFindAvailableStates = func(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
+		return &prototk.FindAvailableStatesResponse{}, nil
 	}
 	n := &Noto{
 		Callbacks: mockCallbacks,
@@ -134,13 +107,16 @@ func TestHandleEventBatch_NotoTransfer_Nullifiers(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	_, err = n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
+	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
 		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantNullifier}),
 	})
 	require.NoError(t, err)
 
+	txId := pldtypes.RandBytes32()
+	input := pldtypes.RandBytes32()
 	output := pldtypes.RandBytes32()
 	event := &NotoTransfer_Event{
+		TxId:    txId,
 		Inputs:  []pldtypes.Bytes32{input},
 		Outputs: []pldtypes.Bytes32{output},
 		Proof:   pldtypes.MustParseHexBytes("0x1234"),
@@ -166,71 +142,11 @@ func TestHandleEventBatch_NotoTransfer_Nullifiers(t *testing.T) {
 	res, err := n.HandleEventBatch(ctx, req)
 	require.NoError(t, err)
 	require.Len(t, res.TransactionsComplete, 1)
-	require.Len(t, res.SpentStates, 2)
+	require.Len(t, res.SpentStates, 1)
 	assert.Equal(t, input.String(), res.SpentStates[0].Id)
-	assert.Equal(t, coinStateID.String(), res.SpentStates[1].Id)
 	require.Len(t, res.ConfirmedStates, 1)
 	assert.Equal(t, output.String(), res.ConfirmedStates[0].Id)
 	require.Len(t, res.InfoStates, 1)
-}
-
-func TestHandleEventBatch_NotoTransfer_Nullifiers_Error1(t *testing.T) {
-	mockCallbacks := &domain.MockDomainCallbacks{
-		MockFindAvailableStates: func(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
-			return nil, errors.New("bad call")
-		},
-		MockLocalNodeName: func() (*prototk.LocalNodeNameResponse, error) {
-			return &prototk.LocalNodeNameResponse{
-				Name: "node1",
-			}, nil
-		},
-	}
-	n := &Noto{
-		Callbacks: mockCallbacks,
-		coinSchema: &prototk.StateSchema{
-			Id: "noto_coin",
-		},
-		merkleTreeRootSchema: &prototk.StateSchema{
-			Id: "merkle_tree_root",
-		},
-		merkleTreeNodeSchema: &prototk.StateSchema{
-			Id: "merkle_tree_node",
-		},
-	}
-	ctx := context.Background()
-
-	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
-		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantNullifier}),
-	})
-	require.NoError(t, err)
-
-	input := pldtypes.RandBytes32()
-	output := pldtypes.RandBytes32()
-	event := &NotoTransfer_Event{
-		Inputs:  []pldtypes.Bytes32{input},
-		Outputs: []pldtypes.Bytes32{output},
-		Proof:   pldtypes.MustParseHexBytes("0x1234"),
-		Data:    sampleV1Data(t, n),
-	}
-	notoEventJson, err := json.Marshal(event)
-	require.NoError(t, err)
-
-	req := &prototk.HandleEventBatchRequest{
-		Events: []*prototk.OnChainEvent{
-			{
-				SoliditySignature: eventSignatures[EventTransfer],
-				DataJson:          string(notoEventJson),
-			},
-		},
-		ContractInfo: &prototk.ContractInfo{
-			ContractConfigJson: mustParseJSON(&types.NotoParsedConfig{
-				Variant: types.NotoVariantNullifier,
-			}),
-		},
-	}
-
-	_, err = n.HandleEventBatch(ctx, req)
-	require.EqualError(t, err, "bad call")
 }
 
 func TestHandleEventBatch_NotoTransferBadData(t *testing.T) {
