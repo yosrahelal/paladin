@@ -11,7 +11,7 @@ contract NotoNullifiers is Noto {
 
     SmtLib.Data internal _commitmentsTree;
 
-    uint64 public constant NotoVariantNullifiers = 0x0002;
+    uint64 public constant NotoVariantNullifiers = 0x0003;
 
     mapping(bytes32 => bool) private _nullifiers;
 
@@ -60,50 +60,54 @@ contract NotoNullifiers is Noto {
     }
 
     function _createLock(
-        NotoCreateLockOperation memory lockOp,
-        LockParams calldata params,
+        NotoCreateLockArgs memory args,
+        bytes32 spendCommitment,
+        bytes32 cancelCommitment,
         bytes32 lockId,
-        LockInfo storage lock,
-        bytes calldata data
+        NotoLockInfo storage lock
     ) internal virtual override {
-        useTxId(lockOp.txId);
+        useTxId(args.txId);
 
-        (uint256 root, ) = abi.decode(lockOp.proof, (uint256, bytes));
+        (uint256 root, ) = abi.decode(args.proof, (uint256, bytes));
         if (!_commitmentsTree.rootExists(root)) {
             revert NotoInvalidRoot(root);
         }
 
-        _processNullifiers(lockOp.inputs);
-        _processOutputs(lockOp.outputs);
-        _processLockContents(lockId, lockOp.contents);
+        _processNullifiers(args.inputs);
+        _processOutputs(args.outputs);
+        _processLockContent(lockId, args.content);
 
-        _processOutput(lockOp.newLockState);
-        _lockStates[lockId] = lockOp.newLockState;
+        _processOutput(args.newLockState);
+        _lockStates[lockId] = args.newLockState;
 
-        lock.spendHash = params.spendHash;
-        lock.cancelHash = params.cancelHash;
+        lock.spendCommitment = spendCommitment;
+        lock.cancelCommitment = cancelCommitment;
 
-        if (params.options.length != 0) {
-            _setLockOptions(lockId, lock, params.options);
+        if (args.options.spendTxId != 0) {
+            _setLockOptions(lockId, lock, args.options);
         }
-
-        emit LockUpdated(lockId, msg.sender, lock, data);
     }
 
     function _updateLock(
-        NotoUpdateLockOperation memory lockOp,
-        LockParams calldata params,
+        NotoUpdateLockArgs memory args,
+        bytes32 spendCommitment,
+        bytes32 cancelCommitment,
         bytes32 lockId,
-        LockInfo storage lock,
-        bytes calldata data
+        NotoLockInfo storage lock
     ) internal virtual override {
-        if (lockOp.proof.length > 0) {
-            (uint256 root, ) = abi.decode(lockOp.proof, (uint256, bytes));
+        if (args.proof.length > 0) {
+            (uint256 root, ) = abi.decode(args.proof, (uint256, bytes));
             if (!_commitmentsTree.rootExists(root)) {
                 revert NotoInvalidRoot(root);
             }
         }
-        super._updateLock(lockOp, params, lockId, lock, data);
+        super._updateLock(
+            args,
+            spendCommitment,
+            cancelCommitment,
+            lockId,
+            lock
+        );
     }
 
     /**

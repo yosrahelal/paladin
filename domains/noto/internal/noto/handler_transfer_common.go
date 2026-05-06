@@ -29,7 +29,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/signpayloads"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/verifiers"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 )
 
 type transferCommon struct {
@@ -57,7 +56,7 @@ func (h *transferCommon) initTransfer(ctx context.Context, tx *types.ParsedTrans
 
 func (h *transferCommon) assembleTransfer(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest, from, to string, amount *pldtypes.HexUint256, data pldtypes.HexBytes) (*prototk.AssembleTransactionResponse, error) {
 	notary := tx.DomainConfig.NotaryLookup
-	useNullifiers := tx.DomainConfig.IsNullifierVariant()
+	useNullifiers := tx.DomainConfig.UsesNullifiers()
 
 	notaryID, err := h.noto.findEthAddressVerifier(ctx, "notary", notary, req.ResolvedVerifiers)
 	if err != nil {
@@ -216,7 +215,7 @@ func (h *transferCommon) endorseTransfer(ctx context.Context, tx *types.ParsedTr
 }
 
 func (h *transferCommon) baseLedgerInvokeTransfer(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, withApproval bool, useNullifier bool) (*TransactionWrapper, error) {
-	useNullifiers := tx.DomainConfig.IsNullifierVariant()
+	useNullifiers := tx.DomainConfig.UsesNullifiers()
 	// Include the signature from the sender
 	// This is not verified on the base ledger, but can be verified by anyone with the unmasked state data
 	signature := domain.FindAttestation("sender", req.AttestationResult)
@@ -231,40 +230,33 @@ func (h *transferCommon) baseLedgerInvokeTransfer(ctx context.Context, tx *types
 
 	payload := signature.Payload
 	if useNullifier {
-		encoded, err := h.noto.encodeRootAndSignature(ctx, tx.ContractAddress.String(), req.StateQueryContext, payload)
-		if err != nil {
-			return nil, err
+		encoded, encErr := h.noto.encodeRootAndSignature(ctx, tx.ContractAddress.String(), req.StateQueryContext, payload)
+		if encErr != nil {
+			return nil, encErr
 		}
 		payload = encoded
 	}
 
-	var interfaceABI abi.ABI
-	var functionName string
+	interfaceABI := h.noto.getInterfaceABI(tx.DomainConfig.Variant)
+	functionName := "transfer"
 	var paramsJSON []byte
 
-	switch tx.DomainConfig.Variant {
-	case types.NotoVariantDefault, types.NotoVariantNullifier:
-		interfaceABI = h.noto.getInterfaceABI(types.NotoVariantDefault)
-		functionName = "transfer"
-		params := &NotoTransferParams{
-			TxId:    req.Transaction.TransactionId,
-			Inputs:  endorsableStateIDs(req.InputStates, useNullifiers),
-			Outputs: endorsableStateIDs(req.OutputStates, false),
-			Proof:   payload,
-			Data:    data,
-		}
-		paramsJSON, err = json.Marshal(params)
-	default:
-		interfaceABI = h.noto.getInterfaceABI(types.NotoVariantLegacy)
-		functionName = "transfer"
-		params := &NotoTransfer_V0_Params{
+	if tx.DomainConfig.IsV0() {
+		paramsJSON, err = json.Marshal(&NotoTransfer_V0_Params{
 			TxId:      req.Transaction.TransactionId,
 			Inputs:    endorsableStateIDs(req.InputStates, false),
 			Outputs:   endorsableStateIDs(req.OutputStates, false),
 			Signature: signature.Payload,
 			Data:      data,
-		}
-		paramsJSON, err = json.Marshal(params)
+		})
+	} else {
+		paramsJSON, err = json.Marshal(&NotoTransferParams{
+			TxId:    req.Transaction.TransactionId,
+			Inputs:  endorsableStateIDs(req.InputStates, useNullifiers),
+			Outputs: endorsableStateIDs(req.OutputStates, false),
+			Proof:   payload,
+			Data:    data,
+		})
 	}
 	if err != nil {
 		return nil, err

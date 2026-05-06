@@ -29,7 +29,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/signpayloads"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/verifiers"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 )
 
 type burnCommon struct {
@@ -214,42 +213,35 @@ func (h *burnCommon) baseLedgerInvokeBurn(ctx context.Context, tx *types.ParsedT
 		return nil, err
 	}
 
-	var interfaceABI abi.ABI
-	var functionName string
+	interfaceABI := h.noto.getInterfaceABI(tx.DomainConfig.Variant)
+	functionName := "transfer"
 	var paramsJSON []byte
 
 	payload := sender.Payload
 	if useNullifier {
-		encoded, err := h.noto.encodeRootAndSignature(ctx, tx.ContractAddress.String(), req.StateQueryContext, payload)
-		if err != nil {
-			return nil, err
+		encoded, encErr := h.noto.encodeRootAndSignature(ctx, tx.ContractAddress.String(), req.StateQueryContext, payload)
+		if encErr != nil {
+			return nil, encErr
 		}
 		payload = encoded
 	}
 
-	switch tx.DomainConfig.Variant {
-	case types.NotoVariantDefault, types.NotoVariantNullifier:
-		interfaceABI = h.noto.getInterfaceABI(types.NotoVariantDefault)
-		functionName = "transfer"
-		params := &NotoBurnParams{
-			TxId:    req.Transaction.TransactionId,
-			Inputs:  endorsableStateIDs(req.InputStates, useNullifier),
-			Outputs: endorsableStateIDs(req.OutputStates, false),
-			Proof:   payload,
-			Data:    data,
-		}
-		paramsJSON, err = json.Marshal(params)
-	default:
-		interfaceABI = h.noto.getInterfaceABI(types.NotoVariantLegacy)
-		functionName = "transfer"
-		params := &NotoTransfer_V0_Params{
+	if tx.DomainConfig.IsV0() {
+		paramsJSON, err = json.Marshal(&NotoTransfer_V0_Params{
 			TxId:      req.Transaction.TransactionId,
 			Inputs:    endorsableStateIDs(req.InputStates, false),
 			Outputs:   endorsableStateIDs(req.OutputStates, false),
 			Signature: sender.Payload,
 			Data:      data,
-		}
-		paramsJSON, err = json.Marshal(params)
+		})
+	} else {
+		paramsJSON, err = json.Marshal(&NotoTransferParams{
+			TxId:    req.Transaction.TransactionId,
+			Inputs:  endorsableStateIDs(req.InputStates, tx.DomainConfig.UsesNullifiers()),
+			Outputs: endorsableStateIDs(req.OutputStates, false),
+			Proof:   payload,
+			Data:    data,
+		})
 	}
 	if err != nil {
 		return nil, err

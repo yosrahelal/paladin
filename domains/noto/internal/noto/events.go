@@ -46,14 +46,14 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	}
 
 	for _, ev := range req.Events {
-		if variant == types.NotoVariantDefault || variant == types.NotoVariantNullifier {
-			if err := n.handleV1Event(ctx, ev, &res, req, variant == types.NotoVariantNullifier); err != nil {
-				log.L(ctx).Warnf("Error handling V1 event: %s", err)
+		if variant == types.NotoVariantV0 {
+			if err := n.handleV0Event(ctx, ev, &res, req); err != nil {
+				log.L(ctx).Warnf("Error handling V0 event: %s", err)
 				return nil, err
 			}
 		} else {
-			if err := n.handleV0Event(ctx, ev, &res, req); err != nil {
-				log.L(ctx).Warnf("Error handling V0 event: %s", err)
+			if err := n.handleV1Event(ctx, ev, &res, req, variant == types.NotoVariantNullifiers); err != nil {
+				log.L(ctx).Warnf("Error handling V1 event: %s", err)
 				return nil, err
 			}
 		}
@@ -83,10 +83,23 @@ func (n *Noto) handleV1Event(ctx context.Context, ev *prototk.OnChainEvent, res 
 				return err
 			}
 			n.recordTransactionInfo(ev, transfer.TxId, txData.InfoStates, res)
-			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(transfer.TxId, transfer.Inputs)...)
+			if useNullifier {
+				// Nullifier spends (state_spend_records.state = nullifier id) drive FindAvailableNullifiers / balanceOf.
+				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(transfer.TxId, transfer.Inputs)...)
+				// Coin-state spends drive FindAvailableStates / pstate_queryContractStates "available".
+				coinSpent, spentErr := n.spentCoinsFromOnChainNullifierInputs(ctx, req.StateQueryContext, transfer.TxId, transfer.Inputs)
+				if spentErr != nil {
+					return spentErr
+				}
+				res.SpentStates = append(res.SpentStates, coinSpent...)
+			} else {
+				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(transfer.TxId, transfer.Inputs)...)
+			}
 			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(transfer.TxId, transfer.Outputs)...)
 			if useNullifier {
-				n.updateMerkleTree(ctx, smtForStates.Tree, smtForStates.Storage, transfer.TxId, convertToUint256(transfer.Outputs))
+				if err := n.updateMerkleTree(ctx, smtForStates.Tree, smtForStates.Storage, transfer.TxId, convertToUint256(transfer.Outputs)); err != nil {
+					return err
+				}
 			}
 		} else {
 			log.L(ctx).Warnf("Ignoring malformed Transfer event in batch %s: %s", req.BatchId, err)
@@ -101,7 +114,16 @@ func (n *Noto) handleV1Event(ctx context.Context, ev *prototk.OnChainEvent, res 
 				return err
 			}
 			n.recordTransactionInfo(ev, lockCreated.TxId, txData.InfoStates, res)
-			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockCreated.TxId, lockCreated.Inputs)...)
+			if useNullifier {
+				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockCreated.TxId, lockCreated.Inputs)...)
+				coinSpent, spentErr := n.spentCoinsFromOnChainNullifierInputs(ctx, req.StateQueryContext, lockCreated.TxId, lockCreated.Inputs)
+				if spentErr != nil {
+					return spentErr
+				}
+				res.SpentStates = append(res.SpentStates, coinSpent...)
+			} else {
+				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockCreated.TxId, lockCreated.Inputs)...)
+			}
 			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockCreated.TxId, lockCreated.Outputs)...)
 			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockCreated.TxId, lockCreated.Contents)...)
 			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockCreated.TxId, []pldtypes.Bytes32{lockCreated.NewLockState})...)
@@ -134,7 +156,16 @@ func (n *Noto) handleV1Event(ctx context.Context, ev *prototk.OnChainEvent, res 
 				return err
 			}
 			n.recordTransactionInfo(ev, lockSpent.TxId, txData.InfoStates, res)
-			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockSpent.TxId, lockSpent.Inputs)...)
+			if useNullifier {
+				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockSpent.TxId, lockSpent.Inputs)...)
+				coinSpent, spentErr := n.spentCoinsFromOnChainNullifierInputs(ctx, req.StateQueryContext, lockSpent.TxId, lockSpent.Inputs)
+				if spentErr != nil {
+					return spentErr
+				}
+				res.SpentStates = append(res.SpentStates, coinSpent...)
+			} else {
+				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockSpent.TxId, lockSpent.Inputs)...)
+			}
 			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockSpent.TxId, []pldtypes.Bytes32{lockSpent.OldLockState})...)
 			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockSpent.TxId, lockSpent.Outputs)...)
 

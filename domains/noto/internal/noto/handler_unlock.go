@@ -28,7 +28,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/signpayloads"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/verifiers"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 )
 
 type unlockHandler struct {
@@ -151,17 +150,25 @@ func (h *unlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTr
 		return nil, err
 	}
 
-	var interfaceABI abi.ABI
+	interfaceABI := h.noto.getInterfaceABI(tx.DomainConfig.Variant)
 	var functionName string
 	var paramsJSON []byte
 
-	useNullifiers := tx.DomainConfig.IsNullifierVariant()
-	switch tx.DomainConfig.Variant {
-	case types.NotoVariantDefault:
-		interfaceABI = h.noto.getInterfaceABI(types.NotoVariantDefault)
+	useNullifiers := tx.DomainConfig.UsesNullifiers()
+	if tx.DomainConfig.IsV0() {
+		functionName = "unlock"
+		paramsJSON, err = json.Marshal(&NotoUnlock_V0_Params{
+			TxId:          req.Transaction.TransactionId,
+			LockedInputs:  endorsableStateIDs(lockedInputs, false),
+			LockedOutputs: endorsableStateIDs(lockedOutputs, false),
+			Outputs:       endorsableStateIDs(outputs, false),
+			Signature:     unlockSignature.Payload,
+			Data:          txData,
+		})
+	} else {
 		functionName = "spendLock"
-		var notoUnlockOpEncoded []byte
-		notoUnlockOpEncoded, err = h.noto.encodeNotoUnlockOperation(ctx, inParams.LockID, &types.NotoUnlockOperation{
+		var spendLockArgs []byte
+		spendLockArgs, err = h.noto.encodeNotoSpendLockArgs(ctx, &types.NotoSpendLockArgs{
 			TxId:    req.Transaction.TransactionId,
 			Inputs:  endorsableStateIDs(lockedInputs, useNullifiers),
 			Outputs: endorsableStateIDs(outputs, false),
@@ -169,25 +176,12 @@ func (h *unlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTr
 			Proof:   unlockSignature.Payload,
 		})
 		if err == nil {
-			params := &SpendLockParams{
-				LockID:      inParams.LockID,
-				SpendInputs: notoUnlockOpEncoded,
-				Data:        []byte{}, // we don't need this outer data
-			}
-			paramsJSON, err = json.Marshal(params)
+			paramsJSON, err = json.Marshal(&SpendLockParams{
+				LockID:    inParams.LockID,
+				SpendArgs: spendLockArgs,
+				Data:      []byte{}, // we don't need this outer data
+			})
 		}
-	default:
-		interfaceABI = h.noto.getInterfaceABI(types.NotoVariantLegacy)
-		functionName = "unlock"
-		params := &NotoUnlock_V0_Params{
-			TxId:          req.Transaction.TransactionId,
-			LockedInputs:  endorsableStateIDs(lockedInputs, useNullifiers),
-			LockedOutputs: endorsableStateIDs(lockedOutputs, false),
-			Outputs:       endorsableStateIDs(outputs, false),
-			Signature:     unlockSignature.Payload,
-			Data:          txData,
-		}
-		paramsJSON, err = json.Marshal(params)
 	}
 	if err != nil {
 		return nil, err

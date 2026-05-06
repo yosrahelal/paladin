@@ -29,7 +29,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/signpayloads"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/verifiers"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 )
 
 type lockHandler struct {
@@ -305,7 +304,7 @@ func (h *lockHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, 
 }
 
 func (h *lockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTransaction, lockID pldtypes.Bytes32, req *prototk.PrepareTransactionRequest) (*TransactionWrapper, error) {
-	useNullifiers := tx.DomainConfig.IsNullifierVariant()
+	useNullifiers := tx.DomainConfig.UsesNullifiers()
 	inputs := req.InputStates
 	outputs, lockedOutputs := h.noto.splitStates(req.OutputStates)
 
@@ -334,43 +333,74 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 		}
 	}
 
-	var interfaceABI abi.ABI
+	interfaceABI := h.noto.getInterfaceABI(tx.DomainConfig.Variant)
 	var functionName string
 	var paramsJSON []byte
 
-	switch tx.DomainConfig.Variant {
-	case types.NotoVariantDefault:
-		var notoLockOpEncoded []byte
-		notoLockOpEncoded, err = h.noto.encodeNotoCreateLockOperation(ctx, &types.NotoCreateLockOperation{
+	if tx.DomainConfig.IsV0() {
+		functionName = "lock"
+		paramsJSON, err = json.Marshal(&NotoLock_V0_Params{
+			TxId:          req.Transaction.TransactionId,
+			Inputs:        endorsableStateIDs(inputs, false),
+			Outputs:       endorsableStateIDs(outputs, false),
+			LockedOutputs: endorsableStateIDs(lockedOutputs, false),
+			Signature:     lockSignature.Payload,
+			Data:          data,
+		})
+	} else if tx.DomainConfig.IsV1() {
+		functionName = "createLock"
+		var createLockArgs []byte
+		createLockArgs, err = h.noto.encodeNotoCreateLockArgsV1(ctx, &types.NotoCreateLockArgs_V1{
 			TxId:         req.Transaction.TransactionId,
-			Inputs:       endorsableStateIDs(inputs, useNullifiers),
+			Inputs:       endorsableStateIDs(inputs, false),
 			Outputs:      endorsableStateIDs(outputs, false),
 			Contents:     endorsableStateIDs(lockedOutputs, false),
 			NewLockState: lt.newLockStateID,
 			Proof:        lockSignature.Payload,
 		})
+
 		if err == nil {
-			interfaceABI = h.noto.getInterfaceABI(types.NotoVariantDefault)
-			functionName = "createLock"
-			params := &CreateLockParams{
-				CreateInputs: notoLockOpEncoded,
-				Params:       LockParams{},
-				Data:         data,
+			var optionsEncoded pldtypes.HexBytes
+			optionsEncoded, err = h.noto.encodeNotoLockOptions(ctx, &types.NotoLockOptions{
+				SpendTxId: lt.newLockInfo.SpendTxId,
+			})
+			if err != nil {
+				return nil, err
 			}
-			paramsJSON, err = json.Marshal(params)
+
+			paramsJSON, err = json.Marshal(&CreateLockParams_V1{
+				CreateArgs: createLockArgs,
+				Params: LockParams_V1{
+					SpendHash:  pldtypes.Bytes32{},
+					CancelHash: pldtypes.Bytes32{},
+					Options:    optionsEncoded,
+				},
+				Data: data,
+			})
 		}
-	default:
-		interfaceABI = h.noto.getInterfaceABI(types.NotoVariantLegacy)
-		functionName = "lock"
-		params := &NotoLock_V0_Params{
-			TxId:          req.Transaction.TransactionId,
-			Inputs:        endorsableStateIDs(inputs, useNullifiers),
-			Outputs:       endorsableStateIDs(outputs, false),
-			LockedOutputs: endorsableStateIDs(lockedOutputs, false),
-			Signature:     lockSignature.Payload,
-			Data:          data,
+	} else if tx.DomainConfig.UsesFlatLockABI() {
+		functionName = "createLock"
+		var createLockArgs []byte
+		createLockArgs, err = h.noto.encodeNotoCreateLockArgs(ctx, &types.NotoCreateLockArgs{
+			TxId:         req.Transaction.TransactionId,
+			Inputs:       endorsableStateIDs(inputs, useNullifiers),
+			Outputs:      endorsableStateIDs(outputs, false),
+			Contents:     endorsableStateIDs(lockedOutputs, false),
+			NewLockState: lt.newLockStateID,
+			Options: &types.NotoLockOptions{
+				SpendTxId: lt.newLockInfo.SpendTxId,
+			},
+			Proof: lockSignature.Payload,
+		})
+		if err != nil {
+			return nil, err
 		}
-		paramsJSON, err = json.Marshal(params)
+		paramsJSON, err = json.Marshal(&CreateLockParams{
+			CreateArgs:       createLockArgs,
+			SpendCommitment:  pldtypes.Bytes32{},
+			CancelCommitment: pldtypes.Bytes32{},
+			Data:             data,
+		})
 	}
 	if err != nil {
 		return nil, err

@@ -32,7 +32,7 @@ import (
 func sampleV1Data(t *testing.T, n *Noto) (data pldtypes.HexBytes) {
 	data, err := n.encodeTransactionData(
 		context.Background(),
-		&types.NotoParsedConfig{Variant: types.NotoVariantDefault},
+		&types.NotoParsedConfig{Variant: types.NotoVariantV2},
 		&prototk.TransactionSpecification{
 			TransactionId: pldtypes.RandBytes32().String(), // not used
 		}, []*prototk.EndorsableState{
@@ -49,7 +49,7 @@ func TestHandleEventBatch_NotoTransfer(t *testing.T) {
 	ctx := t.Context()
 
 	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
-		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantDefault}),
+		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantV2}),
 	})
 	require.NoError(t, err)
 
@@ -75,7 +75,7 @@ func TestHandleEventBatch_NotoTransfer(t *testing.T) {
 		},
 		ContractInfo: &prototk.ContractInfo{
 			ContractConfigJson: mustParseJSON(&types.NotoParsedConfig{
-				Variant: types.NotoVariantDefault,
+				Variant: types.NotoVariantV2,
 			}),
 		},
 	}
@@ -91,27 +91,28 @@ func TestHandleEventBatch_NotoTransfer(t *testing.T) {
 }
 
 func TestHandleEventBatch_NotoTransfer_Nullifiers(t *testing.T) {
-	callIdx := 0
+	coin := &types.NotoCoin{
+		Salt:   pldtypes.RandBytes32(),
+		Owner:  pldtypes.MustEthAddress("0xf7b1c69f5690993f2c8ece56cc89d42b1e737180"),
+		Amount: pldtypes.MustParseHexUint256("0x64"),
+	}
+	nullifier, err := calculateNullifier(coin)
+	require.NoError(t, err)
+	input := *nullifier
+	coinStateID := pldtypes.RandBytes32()
+	coinJSON, err := json.Marshal(coin)
+	require.NoError(t, err)
+
 	mockCallbacks := &domain.MockDomainCallbacks{
 		MockFindAvailableStates: func(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
-			defer func() { callIdx++ }()
-			if callIdx == 0 {
-				return &prototk.FindAvailableStatesResponse{
-					States: []*prototk.StoredState{
-						{
-							DataJson: `{"rootIndex":"0x9bc7adede8e6ef3f5a6a3a466a9d9f115d040e8891f77023ebc4825196b55726","smtName":"smt_noto_0xfc401339d61baabc22091432c1148d9ccd1088d0"}`,
-						},
+			return &prototk.FindAvailableStatesResponse{
+				States: []*prototk.StoredState{
+					{
+						Id:       coinStateID.String(),
+						DataJson: string(coinJSON),
 					},
-				}, nil
-			} else {
-				return &prototk.FindAvailableStatesResponse{
-					States: []*prototk.StoredState{
-						{
-							DataJson: `{"index":"0x78f5fe3a8fd47d7bb4e9f71c4c9318cf83df700499b683201491c9459194cff5","leftChild":"0x0000000000000000000000000000000000000000000000000000000000000000","refKey":"0xc95e1f2a738628320dbc9c5378df861ff2baf2343acc7b4ac8c043f2e6f58209","rightChild":"0x0000000000000000000000000000000000000000000000000000000000000000","type":"0x02"}`,
-						},
-					},
-				}, nil
-			}
+				},
+			}, nil
 		},
 		MockLocalNodeName: func() (*prototk.LocalNodeNameResponse, error) {
 			return &prototk.LocalNodeNameResponse{
@@ -121,6 +122,9 @@ func TestHandleEventBatch_NotoTransfer_Nullifiers(t *testing.T) {
 	}
 	n := &Noto{
 		Callbacks: mockCallbacks,
+		coinSchema: &prototk.StateSchema{
+			Id: "noto_coin",
+		},
 		merkleTreeRootSchema: &prototk.StateSchema{
 			Id: "merkle_tree_root",
 		},
@@ -130,12 +134,11 @@ func TestHandleEventBatch_NotoTransfer_Nullifiers(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
+	_, err = n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
 		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantNullifier}),
 	})
 	require.NoError(t, err)
 
-	input := pldtypes.RandBytes32()
 	output := pldtypes.RandBytes32()
 	event := &NotoTransfer_Event{
 		Inputs:  []pldtypes.Bytes32{input},
@@ -163,8 +166,9 @@ func TestHandleEventBatch_NotoTransfer_Nullifiers(t *testing.T) {
 	res, err := n.HandleEventBatch(ctx, req)
 	require.NoError(t, err)
 	require.Len(t, res.TransactionsComplete, 1)
-	require.Len(t, res.SpentStates, 1)
+	require.Len(t, res.SpentStates, 2)
 	assert.Equal(t, input.String(), res.SpentStates[0].Id)
+	assert.Equal(t, coinStateID.String(), res.SpentStates[1].Id)
 	require.Len(t, res.ConfirmedStates, 1)
 	assert.Equal(t, output.String(), res.ConfirmedStates[0].Id)
 	require.Len(t, res.InfoStates, 1)
@@ -183,6 +187,9 @@ func TestHandleEventBatch_NotoTransfer_Nullifiers_Error1(t *testing.T) {
 	}
 	n := &Noto{
 		Callbacks: mockCallbacks,
+		coinSchema: &prototk.StateSchema{
+			Id: "noto_coin",
+		},
 		merkleTreeRootSchema: &prototk.StateSchema{
 			Id: "merkle_tree_root",
 		},
@@ -232,7 +239,7 @@ func TestHandleEventBatch_NotoTransferBadData(t *testing.T) {
 	ctx := t.Context()
 
 	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
-		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantDefault}),
+		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantV2}),
 	})
 	require.NoError(t, err)
 
@@ -244,7 +251,7 @@ func TestHandleEventBatch_NotoTransferBadData(t *testing.T) {
 			}},
 		ContractInfo: &prototk.ContractInfo{
 			ContractConfigJson: mustParseJSON(&types.NotoParsedConfig{
-				Variant: types.NotoVariantDefault,
+				Variant: types.NotoVariantV2,
 			}),
 		},
 	}
@@ -262,7 +269,7 @@ func TestHandleEventBatch_NotoTransferBadTransactionData(t *testing.T) {
 	ctx := t.Context()
 
 	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
-		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantDefault}),
+		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantV2}),
 	})
 	require.NoError(t, err)
 
@@ -282,7 +289,7 @@ func TestHandleEventBatch_NotoTransferBadTransactionData(t *testing.T) {
 			}},
 		ContractInfo: &prototk.ContractInfo{
 			ContractConfigJson: mustParseJSON(&types.NotoParsedConfig{
-				Variant: types.NotoVariantDefault,
+				Variant: types.NotoVariantV2,
 			}),
 		},
 	}
@@ -297,7 +304,7 @@ func TestHandleEventBatch_NotoLock(t *testing.T) {
 	ctx := t.Context()
 
 	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
-		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantDefault}),
+		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantV2}),
 	})
 	require.NoError(t, err)
 
@@ -331,7 +338,7 @@ func TestHandleEventBatch_NotoLock(t *testing.T) {
 		},
 		ContractInfo: &prototk.ContractInfo{
 			ContractConfigJson: mustParseJSON(&types.NotoParsedConfig{
-				Variant: types.NotoVariantDefault,
+				Variant: types.NotoVariantV2,
 			}),
 		},
 	}
@@ -354,7 +361,7 @@ func TestHandleEventBatch_NotoLockBadData(t *testing.T) {
 	ctx := t.Context()
 
 	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
-		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantDefault}),
+		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantV2}),
 	})
 	require.NoError(t, err)
 
@@ -367,7 +374,7 @@ func TestHandleEventBatch_NotoLockBadData(t *testing.T) {
 		},
 		ContractInfo: &prototk.ContractInfo{
 			ContractConfigJson: mustParseJSON(&types.NotoParsedConfig{
-				Variant: types.NotoVariantDefault,
+				Variant: types.NotoVariantV2,
 			}),
 		},
 	}
@@ -385,7 +392,7 @@ func TestHandleEventBatch_NotoLockBadTransactionData(t *testing.T) {
 	ctx := t.Context()
 
 	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
-		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantDefault}),
+		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantV2}),
 	})
 	require.NoError(t, err)
 
@@ -413,7 +420,7 @@ func TestHandleEventBatch_NotoLockBadTransactionData(t *testing.T) {
 			}},
 		ContractInfo: &prototk.ContractInfo{
 			ContractConfigJson: mustParseJSON(&types.NotoParsedConfig{
-				Variant: types.NotoVariantDefault,
+				Variant: types.NotoVariantV2,
 			}),
 		},
 	}
@@ -428,7 +435,7 @@ func TestHandleEventBatch_LockSpent(t *testing.T) {
 	ctx := t.Context()
 
 	_, err := n.ConfigureDomain(context.Background(), &prototk.ConfigureDomainRequest{
-		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantDefault}),
+		ConfigJson: mustParseJSON(types.NotoParsedConfig{Variant: types.NotoVariantV2}),
 	})
 	require.NoError(t, err)
 
@@ -464,7 +471,7 @@ func TestHandleEventBatch_LockSpent(t *testing.T) {
 		},
 		ContractInfo: &prototk.ContractInfo{
 			ContractConfigJson: mustParseJSON(&types.NotoParsedConfig{
-				Variant: types.NotoVariantDefault,
+				Variant: types.NotoVariantV2,
 			}),
 		},
 	}

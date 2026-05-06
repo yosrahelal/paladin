@@ -252,7 +252,7 @@ describe("NotoNullifiers", function () {
             randomBytes32(),
             true
           )
-        ).to.be.rejectedWith("LockNotActive");
+        ).to.be.revertedWithCustomError(noto, "LockNotActive");
       });
 
       it("lock more UTXOs", async function () {

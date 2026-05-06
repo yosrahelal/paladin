@@ -183,10 +183,8 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 	assert.Equal(t, int64(100), mintReceipt.Transfers[0].Amount.Int().Int64())
 	assert.Equal(t, notaryKey, mintReceipt.Transfers[0].To.String())
 
+	// Noto (including nullifiers) still materializes Noto coin states for indexing; use contract states query.
 	method := "pstate_queryContractStates"
-	if variant == "noto_nullifiers" {
-		method = "pstate_queryContractNullifiers"
-	}
 	coins := findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), method, noto.Address, nil)
 	require.Len(t, coins, 1)
 	assert.Equal(t, int64(100), coins[0].Data.Amount.Int().Int64())
@@ -228,7 +226,7 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 		},
 		ABI: types.NotoABI,
 	}, true)
-	require.NotNil(t, false)
+	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr, "assemble result was REVERT")
 
 	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), method, noto.Address, nil)
@@ -255,7 +253,6 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 	assert.Equal(t, recipient1Key, transferReceipt.Transfers[0].To.String())
 
 	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), method, noto.Address, nil)
-	require.NoError(t, err)
 	require.Len(t, coins, 2)
 
 	balanceOfResult = noto.BalanceOf(ctx, &types.BalanceOfParam{Account: notaryName}).SignAndCall(notaryName).Wait()
@@ -290,7 +287,6 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 	assert.Equal(t, recipient2Key, transferReceipt.Transfers[0].To.String())
 
 	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), method, noto.Address, nil)
-	require.NoError(t, err)
 	require.Len(t, coins, 2)
 
 	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
@@ -325,7 +321,6 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 	assert.Nil(t, burnReceipt.Transfers[0].To)
 
 	coins = findAvailableCoins[types.NotoCoinState](t, ctx, paladinClient, notoDomain.Name(), notoDomain.CoinSchemaID(), method, noto.Address, nil)
-	require.NoError(t, err)
 	require.Len(t, coins, 2)
 
 	balanceOfResult = noto.BalanceOf(ctx, &types.BalanceOfParam{Account: recipient2Name}).SignAndCall(notaryName).Wait()
@@ -536,11 +531,11 @@ func (s *notoTestSuite) testNotoLock(version, variant string) {
 	var notoBuild *solutils.SolidityBuild
 	if version == "v1" {
 		notoBuild = solutils.MustLoadBuild(helpers.NotoInterfaceJSON)
-		spendInputs, err := types.NotoUnlockOperationABI.DecodeABIData(pldtypes.MustParseHexBytes(prepareUnlockReceipt.LockInfo.UnlockParams["spendInputs"].(string)), 0)
+		spendArgs, err := types.NotoSpendLockArgsABI.DecodeABIData(pldtypes.MustParseHexBytes(prepareUnlockReceipt.LockInfo.UnlockParams["spendArgs"].(string)), 0)
 		require.NoError(t, err)
-		spendInputsJSON, err := spendInputs.Children[0].JSON()
+		spendArgsJSON, err := spendArgs.Children[0].JSON()
 		require.NoError(t, err)
-		log.L(ctx).Infof("Test unlocking %s with spendInputs: %s", prepareUnlockReceipt.LockInfo.LockID, spendInputsJSON)
+		log.L(ctx).Infof("Test unlocking %s with spendArgs: %s", prepareUnlockReceipt.LockInfo.LockID, spendArgsJSON)
 	} else {
 		notoBuild = solutils.MustLoadBuild(helpers.NotoV0InterfaceJSON)
 	}
@@ -942,11 +937,11 @@ func (s *notoTestSuite) TestNotoPrepareMintUnlock() {
 
 	log.L(ctx).Infof("Unlock from notary")
 	notoBuild := solutils.MustLoadBuild(helpers.NotoInterfaceJSON)
-	spendInputs, err := types.NotoUnlockOperationABI.DecodeABIData(pldtypes.MustParseHexBytes(prepareMintUnlockReceipt.LockInfo.UnlockParams["spendInputs"].(string)), 0)
+	spendArgs, err := types.NotoSpendLockArgsABI.DecodeABIData(pldtypes.MustParseHexBytes(prepareMintUnlockReceipt.LockInfo.UnlockParams["spendArgs"].(string)), 0)
 	require.NoError(t, err)
-	spendInputsJSON, err := spendInputs.Children[0].JSON()
+	spendArgsJSON, err := spendArgs.Children[0].JSON()
 	require.NoError(t, err)
-	log.L(ctx).Infof("Test unlocking %s with spendInputs: %s", prepareMintUnlockReceipt.LockInfo.LockID, spendInputsJSON)
+	log.L(ctx).Infof("Test unlocking %s with spendArgs: %s", prepareMintUnlockReceipt.LockInfo.LockID, spendArgsJSON)
 	tx := pld.ForABI(ctx, notoBuild.ABI).
 		Public().
 		From(recipient1Name).
@@ -1086,11 +1081,11 @@ func (s *notoTestSuite) TestNotoPrepareBurnUnlock() {
 
 	log.L(ctx).Infof("Unlock from recipient1")
 	notoBuild := solutils.MustLoadBuild(helpers.NotoInterfaceJSON)
-	spendInputs, err := types.NotoUnlockOperationABI.DecodeABIData(pldtypes.MustParseHexBytes(prepareBurnUnlockReceipt.LockInfo.UnlockParams["spendInputs"].(string)), 0)
+	spendArgs, err := types.NotoSpendLockArgsABI.DecodeABIData(pldtypes.MustParseHexBytes(prepareBurnUnlockReceipt.LockInfo.UnlockParams["spendArgs"].(string)), 0)
 	require.NoError(t, err)
-	spendInputsJSON, err := spendInputs.Children[0].JSON()
+	spendArgsJSON, err := spendArgs.Children[0].JSON()
 	require.NoError(t, err)
-	log.L(ctx).Infof("Test unlocking %s with spendInputs: %s", prepareBurnUnlockReceipt.LockInfo.LockID, spendInputsJSON)
+	log.L(ctx).Infof("Test unlocking %s with spendArgs: %s", prepareBurnUnlockReceipt.LockInfo.LockID, spendArgsJSON)
 	tx := pld.ForABI(ctx, notoBuild.ABI).
 		Public().
 		From(recipient1Name).
