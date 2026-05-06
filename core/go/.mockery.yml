@@ -1,3 +1,4 @@
+build-tags: generate_mocks
 template: testify
 pkgname: "{{.SrcPackageName}}mocks"
 structname: "{{.InterfaceName}}"
