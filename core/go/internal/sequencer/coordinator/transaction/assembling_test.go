@@ -155,7 +155,7 @@ func Test_applyPostAssembly_Success_AddMinterError(t *testing.T) {
 	ctx := t.Context()
 	stateID := pldtypes.HexBytes(uuid.New().String())
 	mockGrapher := graphermocks.NewGrapher(t)
-	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(errors.New("add minter error"))
+	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("add minter error"))
 
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).Grapher(mockGrapher).Build()
 	postAssembly := &components.TransactionPostAssembly{
@@ -175,7 +175,7 @@ func Test_applyPostAssembly_Success_AddMinterError(t *testing.T) {
 func Test_applyPostAssembly_Success_MapPotentialStatesError(t *testing.T) {
 	ctx := t.Context()
 	mockGrapher := graphermocks.NewGrapher(t)
-	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
 		Grapher(mockGrapher).
@@ -245,7 +245,7 @@ func Test_sendAssembleRequest_GetBlockHeightError(t *testing.T) {
 func Test_sendAssembleRequest_ExportStatesAndLocksError(t *testing.T) {
 	ctx := t.Context()
 	mockGrapher := graphermocks.NewGrapher(t)
-	mockGrapher.EXPECT().ExportStatesAndLocks(mock.Anything).Return(grapher.ExportableStates{}, errors.New("export states and locks failed"))
+	mockGrapher.EXPECT().ExportStatesAndLocks(mock.Anything, mock.Anything).Return(grapher.ExportableStates{}, errors.New("export states and locks failed"))
 
 	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
 		Grapher(mockGrapher).

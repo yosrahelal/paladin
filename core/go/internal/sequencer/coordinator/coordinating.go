@@ -40,6 +40,21 @@ const (
 	DelegationAcknowledgementError_PreviousTransactionError
 )
 
+// action_ImportStatesAndLocks imports confirmed locks and private state data from the previous
+// coordinator's closing heartbeat into the grapher. This covers states confirmed within the block
+// height tolerance window whose coordinator has since stood down — without this the new coordinator's
+// grapher would be unaware of those locks and could wrongly reassemble dependent transactions.
+// Triggered as a transition action on State_Elect → State_Active when the closing heartbeat arrives.
+func action_ImportStatesAndLocks(ctx context.Context, c *coordinator, event common.Event) error {
+	e := event.(*common.HeartbeatReceivedEvent)
+	snapshot := e.CoordinatorSnapshot
+	if len(snapshot.Locks) > 0 || len(snapshot.OutputStates) > 0 {
+		log.L(ctx).Debugf("action_ImportStatesAndLocks: importing %d output states and %d locks from previous coordinator snapshot", len(snapshot.OutputStates), len(snapshot.Locks))
+		c.grapher.ImportStatesAndLocks(ctx, snapshot.OutputStates, snapshot.Locks)
+	}
+	return nil
+}
+
 // Originators send only the delegated transactions that they believe the coordinator needs to know/be reminded about. Which transactions are
 // included in this list depends on whether it is an intitial attempt or a scheduled retry, and whether individual delegation timeouts have
 // been exceeded. This means that the coordinator cannot infer any dependency or ordering between transactions based on the list of transactions
@@ -87,7 +102,6 @@ func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator 
 		c.requestTimeout,
 		c.stateTimeout,
 		c.closingGracePeriod,
-		c.confirmedLockRetentionGracePeriod,
 		c.baseLedgerRevertRetryThreshold,
 		c.assembleErrorRetryThreshhold,
 		c.grapher,
@@ -329,14 +343,6 @@ func action_QueueTransactionForDispatch(ctx context.Context, c *coordinator, eve
 		case c.dispatchQueue <- txn:
 		case <-ctx.Done():
 		}
-	}
-	return nil
-}
-
-func action_GrapherForgetAllTransactions(ctx context.Context, c *coordinator, _ common.Event) error {
-	log.L(ctx).Debugf("forgetting all transaction locks in grapher on transition to closing (%d transactions)", len(c.transactionsByID))
-	for txID := range c.transactionsByID {
-		c.grapher.Forget(ctx, txID)
 	}
 	return nil
 }

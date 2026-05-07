@@ -663,10 +663,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{Action: action_RecordConfirmation},
 					{Action: action_NotifyOriginatorOfConfirmation},
-					{
-						Action: action_ResetConfirmedTransactionLocksOnce,
-						If:     guard_HasConfirmedLockRetentionGracePeriodPassedSinceStateChange,
-					},
+					{Action: action_ConfirmTransactionInGrapher},
 				},
 				Transitions: []Transition{{To: State_Confirmed}},
 			},
@@ -697,6 +694,7 @@ var stateDefinitionsMap = StateDefinitions{
 						If: statemachine.GuardNot(guard_CanRetryRevert),
 						To: State_Reverted,
 						Actions: []ActionRule{
+							{Action: action_RevertTransactionInGrapher},
 							{Action: action_NotifyOriginatorOfNonRetryableRevert},
 							{Action: action_NotifyDependentsOfRevertedConfirmation},
 							{Action: action_FinalizeNonRetryableRevert},
@@ -761,14 +759,6 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{
 						Action: action_IncrementHeartbeatIntervalsSinceStateChange,
-					},
-					{
-						// TODO: this could be handled in a more sophisticated way using block height, either
-						// by resetting a number of blocks after confirmation, or by removing this grace period
-						// by only allowing originators to assemble if they are at the same block height as the
-						// coordinator
-						Action: action_ResetConfirmedTransactionLocksOnce,
-						If:     guard_HasConfirmedLockRetentionGracePeriodPassedSinceStateChange,
 					},
 				},
 				Transitions: []Transition{

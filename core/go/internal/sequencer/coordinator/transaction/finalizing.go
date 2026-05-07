@@ -27,24 +27,6 @@ func guard_HasFinalizingGracePeriodPassedSinceStateChange(ctx context.Context, t
 	return txn.heartbeatIntervalsSinceStateChange >= txn.finalizingGracePeriod
 }
 
-func guard_HasConfirmedLockRetentionGracePeriodPassedSinceStateChange(ctx context.Context, txn *coordinatorTransaction) bool {
-	return txn.heartbeatIntervalsSinceStateChange >= txn.confirmedLockRetentionGracePeriod
-}
-
-func action_ResetConfirmedTransactionLocksOnce(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
-	if txn.confirmedLocksReleased {
-		return nil
-	}
-	txn.releaseTransactionLocks(ctx)
-	return nil
-}
-
-func (t *coordinatorTransaction) releaseTransactionLocks(ctx context.Context) {
-	log.L(ctx).Debugf("releasing confirmed transaction locks for %s", t.pt.ID.String())
-	t.grapher.Forget(ctx, t.pt.ID)
-	t.confirmedLocksReleased = true
-}
-
 // action_FinalizeAsUnknownByOriginator is called when the originator reports that it doesn't recognize
 // a transaction. The most likely cause is that the transaction reached a terminal state (e.g. reverted
 // during assembly) but the response was lost, and the transaction has since been removed from memory

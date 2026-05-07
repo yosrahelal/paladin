@@ -24,7 +24,7 @@ import (
 // Guard type is defined as a type alias in state_machine.go using statemachine.Guard[*coordinator]
 
 func guard_ActiveCoordinatorFlushComplete(_ context.Context, c *coordinator) bool {
-	return c.activeCoordinatorState != State_Flush
+	return c.activeCoordinatorState == State_Closing
 }
 
 // Function flushComplete returns true if there are no transactions past the point of no return that haven't been confirmed yet

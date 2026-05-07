@@ -63,6 +63,11 @@ func action_UpdateBlockHeight(_ context.Context, c *coordinator, event common.Ev
 	return nil
 }
 
+func action_ExpireGrapherLocks(ctx context.Context, c *coordinator, _ common.Event) error {
+	c.grapher.CleanUpLocks(ctx, c.currentBlockHeight)
+	return nil
+}
+
 func guard_IsNewBlockRangeEpoch(_ context.Context, c *coordinator) bool {
 	// This is set when we update the block height, and remains valid until the next block height update
 	return c.newBlockRangeEpoch

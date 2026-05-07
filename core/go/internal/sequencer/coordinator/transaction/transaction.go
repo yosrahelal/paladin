@@ -68,7 +68,6 @@ type coordinatorTransaction struct {
 	revertCount                        int
 	lastCanRetryRevert                 bool
 	assembleErrorCount                 int
-	confirmedLocksReleased             bool
 	heartbeatIntervalsSinceStateChange int
 	stateEntryTime                     time.Time
 
@@ -79,12 +78,11 @@ type coordinatorTransaction struct {
 	pendingPreDispatchRequest    *common.IdempotentRequest
 
 	//Configuration
-	requestTimeout                    time.Duration
-	stateTimeout                      time.Duration
-	finalizingGracePeriod             int // number of heartbeat intervals that the transaction will remain in one of the terminal states ( Reverted or Confirmed) before it is removed from memory and no longer reported in heartbeats
-	confirmedLockRetentionGracePeriod int // number of heartbeat intervals after confirmation before we clear in-memory state locks
-	baseLedgerRevertRetryThreshold    int
-	assembleErrorRetryThreshhold      int // this is for rare errors (not assembly reverts, but assemble outright failed at the originator)
+	requestTimeout                 time.Duration
+	stateTimeout                   time.Duration
+	finalizingGracePeriod          int // number of heartbeat intervals that the transaction will remain in one of the terminal states ( Reverted or Confirmed) before it is removed from memory and no longer reported in heartbeats
+	baseLedgerRevertRetryThreshold int
+	assembleErrorRetryThreshhold   int // this is for rare errors (not assembly reverts, but assemble outright failed at the originator)
 
 	// Dependencies
 	clock                             common.Clock
@@ -121,7 +119,6 @@ func NewTransaction(ctx context.Context,
 	requestTimeout,
 	stateTimeout time.Duration,
 	finalizingGracePeriod int,
-	confirmedLockRetentionGracePeriod int,
 	baseLedgerRevertRetryThreshold int,
 	assembleErrorRetryThreshhold int,
 	grapher grapher.Grapher,
@@ -148,7 +145,6 @@ func NewTransaction(ctx context.Context,
 		requestTimeout,
 		stateTimeout,
 		finalizingGracePeriod,
-		confirmedLockRetentionGracePeriod,
 		baseLedgerRevertRetryThreshold,
 		assembleErrorRetryThreshhold,
 		grapher,
@@ -177,7 +173,6 @@ func newTransaction(
 	requestTimeout,
 	stateTimeout time.Duration,
 	finalizingGracePeriod int,
-	confirmedLockRetentionGracePeriod int,
 	baseLedgerRevertRetryThreshold int,
 	assembleErrorRetryThreshhold int,
 	grapher grapher.Grapher,
@@ -207,7 +202,6 @@ func newTransaction(
 		requestTimeout:                    requestTimeout,
 		stateTimeout:                      stateTimeout,
 		finalizingGracePeriod:             finalizingGracePeriod,
-		confirmedLockRetentionGracePeriod: confirmedLockRetentionGracePeriod,
 		baseLedgerRevertRetryThreshold:    baseLedgerRevertRetryThreshold,
 		assembleErrorRetryThreshhold:      assembleErrorRetryThreshhold,
 		grapher:                           grapher,

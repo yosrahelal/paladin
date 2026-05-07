@@ -21,13 +21,12 @@ import (
 )
 
 type SequencerConfig struct {
-	AssembleErrorRetryThreshold       *int              `json:"assembleErrorRetryThreshold"`
-	BaseLedgerRevertRetryThreshold    *int              `json:"baseLedgerRevertRetryThreshold"`
-	BlockHeightTolerance              *uint64           `json:"blockHeightTolerance"`
-	BlockRange                        *uint64           `json:"blockRange"`
-	ClosingGracePeriod                *int              `json:"closingGracePeriod"`
-	ConfirmedLockRetentionGracePeriod *int              `json:"confirmedLockRetentionGracePeriod"`
-	CoordinatorEventQueueSize         *int              `json:"coordinatorEventQueueSize"`
+	AssembleErrorRetryThreshold    *int              `json:"assembleErrorRetryThreshold"`
+	BaseLedgerRevertRetryThreshold *int              `json:"baseLedgerRevertRetryThreshold"`
+	BlockHeightTolerance           *uint64           `json:"blockHeightTolerance"`
+	BlockRange                     *uint64           `json:"blockRange"`
+	ClosingGracePeriod             *int              `json:"closingGracePeriod"`
+	CoordinatorEventQueueSize      *int              `json:"coordinatorEventQueueSize"`
 	CoordinatorPriorityEventQueueSize *int              `json:"coordinatorPriorityEventQueueSize"`
 	HeartbeatInterval                 *string           `json:"heartbeatInterval"`
 	IdleSequencerCleanupInterval      *string           `json:"idleSequencerCleanupInterval"`
@@ -46,13 +45,12 @@ type SequencerConfig struct {
 }
 
 type SequencerMinimumConfig struct {
-	AssembleErrorRetryThreshold       int
-	BaseLedgerRevertRetryThreshold    int
-	BlockHeightTolerance              uint64
-	BlockRange                        uint64
-	ClosingGracePeriod                int
-	ConfirmedLockRetentionGracePeriod int
-	CoordinatorEventQueueSize         int
+	AssembleErrorRetryThreshold    int
+	BaseLedgerRevertRetryThreshold int
+	BlockHeightTolerance           uint64
+	BlockRange                     uint64
+	ClosingGracePeriod             int
+	CoordinatorEventQueueSize      int
 	CoordinatorPriorityEventQueueSize int
 	HeartbeatInterval                 time.Duration
 	IdleSequencerCleanupInterval      time.Duration
@@ -70,13 +68,12 @@ type SequencerMinimumConfig struct {
 }
 
 var SequencerDefaults = SequencerConfig{
-	AssembleErrorRetryThreshold:       confutil.P(3),
-	BaseLedgerRevertRetryThreshold:    confutil.P(3),
-	BlockHeightTolerance:              confutil.P(uint64(5)),
-	BlockRange:                        confutil.P(uint64(100)),
-	ClosingGracePeriod:                confutil.P(2),
-	ConfirmedLockRetentionGracePeriod: confutil.P(2),
-	CoordinatorEventQueueSize:         confutil.P(100),
+	AssembleErrorRetryThreshold:    confutil.P(3),
+	BaseLedgerRevertRetryThreshold: confutil.P(3),
+	BlockHeightTolerance:           confutil.P(uint64(5)),
+	BlockRange:                     confutil.P(uint64(100)),
+	ClosingGracePeriod:             confutil.P(2),
+	CoordinatorEventQueueSize:      confutil.P(100),
 	CoordinatorPriorityEventQueueSize: confutil.P(500),
 	HeartbeatInterval:                 confutil.P("10s"),
 	IdleSequencerCleanupInterval:      confutil.P("1m"),
@@ -99,13 +96,12 @@ var SequencerDefaults = SequencerConfig{
 }
 
 var SequencerMinimum = SequencerMinimumConfig{
-	AssembleErrorRetryThreshold:       0,
-	BaseLedgerRevertRetryThreshold:    0,
-	BlockHeightTolerance:              1,
-	BlockRange:                        10,
-	ClosingGracePeriod:                1,
-	ConfirmedLockRetentionGracePeriod: 0,
-	CoordinatorEventQueueSize:         1,
+	AssembleErrorRetryThreshold:    0,
+	BaseLedgerRevertRetryThreshold: 0,
+	BlockHeightTolerance:           1,
+	BlockRange:                     10,
+	ClosingGracePeriod:             1,
+	CoordinatorEventQueueSize:      1,
 	CoordinatorPriorityEventQueueSize: 1,
 	HeartbeatInterval:                 1 * time.Second,
 	IdleSequencerCleanupInterval:      10 * time.Second,

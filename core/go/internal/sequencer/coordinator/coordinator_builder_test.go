@@ -54,6 +54,7 @@ type CoordinatorBuilderForTesting struct {
 	heartbeatIntervalsSinceLastReceive       *int
 	inactiveGracePeriod                      *int
 	heartbeatIntervalsSinceStateChange       *int
+	activeCoordinatorState                   *State
 	useMockTransportWriter                   bool
 }
 
@@ -223,6 +224,11 @@ func (b *CoordinatorBuilderForTesting) HeartbeatIntervalsSinceStateChange(n int)
 	return b
 }
 
+func (b *CoordinatorBuilderForTesting) ActiveCoordinatorState(state State) *CoordinatorBuilderForTesting {
+	b.activeCoordinatorState = &state
+	return b
+}
+
 func (b *CoordinatorBuilderForTesting) WithMockTransportWriter() *CoordinatorBuilderForTesting {
 	b.useMockTransportWriter = true
 	return b
@@ -313,6 +319,9 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	}
 	if b.heartbeatIntervalsSinceStateChange != nil {
 		coordinator.heartbeatIntervalsSinceStateChange = *b.heartbeatIntervalsSinceStateChange
+	}
+	if b.activeCoordinatorState != nil {
+		coordinator.activeCoordinatorState = *b.activeCoordinatorState
 	}
 
 	return coordinator, mocks

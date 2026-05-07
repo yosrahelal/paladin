@@ -27,34 +27,52 @@ func action_SendHeartbeat(ctx context.Context, c *coordinator, _ common.Event) e
 	return c.sendHeartbeat(ctx, c.contractAddress)
 }
 
+// sendHeartbeat builds the base snapshot once, then sends a per-node copy to each node in the
+// originator pool. In Flush/Closing states, the grapher is queried per-node: each node receives
+// all locks (unfiltered) plus only the OutputStates it is permitted to hold (filtered by AllowedNodes).
 func (c *coordinator) sendHeartbeat(ctx context.Context, contractAddress *pldtypes.EthAddress) error {
-	snapshot := c.getSnapshot(ctx)
-	log.L(ctx).Debugf("sending heartbeats for sequencer %s", contractAddress.String())
+	base := c.getSnapshot(ctx)
+	includeLocks := base.CoordinatorState == common.CoordinatorState_Flush || base.CoordinatorState == common.CoordinatorState_Closing
+	log.L(ctx).Debugf("sending heartbeats for sequencer %s (includeLocks=%v)", contractAddress.String(), includeLocks)
 	var err error
 	for _, node := range c.originatorNodePool {
 		if node != c.nodeName {
 			log.L(ctx).Debugf("sending heartbeat to %s", node)
-			err = c.transportWriter.SendHeartbeat(ctx, node, contractAddress, snapshot)
-			if err != nil {
-				log.L(ctx).Errorf("error sending heartbeat to %s: %v", node, err)
+			snapshot := base
+			if includeLocks {
+				statesAndLocks, exportErr := c.grapher.ExportStatesAndLocks(ctx, node)
+				if exportErr != nil {
+					log.L(ctx).Errorf("error exporting states and locks for node %s: %v", node, exportErr)
+					err = exportErr
+					continue
+				}
+				snapshot = &common.CoordinatorSnapshot{
+					DispatchedTransactions: base.DispatchedTransactions,
+					PooledTransactions:     base.PooledTransactions,
+					ConfirmedTransactions:  base.ConfirmedTransactions,
+					CoordinatorState:       base.CoordinatorState,
+					BlockHeight:            base.BlockHeight,
+					Locks:                  statesAndLocks.LockedState,
+					OutputStates:           statesAndLocks.OutputState,
+				}
+			}
+			if sendErr := c.transportWriter.SendHeartbeat(ctx, node, contractAddress, snapshot); sendErr != nil {
+				log.L(ctx).Errorf("error sending heartbeat to %s: %v", node, sendErr)
+				err = sendErr
 			}
 		}
 	}
 	return err
 }
 
+// getSnapshot builds the coordinator snapshot (without per-node lock data).
+// Locks are attached per-node in sendHeartbeat for Flush/Closing heartbeats.
 func (c *coordinator) getSnapshot(ctx context.Context) *common.CoordinatorSnapshot {
 	log.L(ctx).Debugf("creating snapshot for sequencer %s", c.contractAddress.String())
-	// This function is called from the sequencer loop so is safe to read internal state
 	pooledTransactions := make([]*common.SnapshotPooledTransaction, 0, len(c.transactionsByID))
 	dispatchedTransactions := make([]*common.SnapshotDispatchedTransaction, 0, len(c.transactionsByID))
 	confirmedTransactions := make([]*common.SnapshotConfirmedTransaction, 0, len(c.transactionsByID))
 
-	//Snapshot contains a coarse grained view of transactions state.
-	// All known transactions fall into one of 3 categories
-	// 1. Pooled transactions - these are transactions that have been delegated but not yet dispatched
-	// 2. Dispatched transactions - these are transactions that are past the point of no return, the precise status (ready for collection, dispatched, nonce assigned, submitted to a blockchain node) is dependent on parallel processing from this point onward
-	// 3. Confirmed transactions - these are transactions that have been confirmed by the network
 	for _, txn := range c.transactionsByID {
 		pooledTransaction, dispatchedTransaction, confirmedTransaction := txn.GetSnapshot(ctx)
 		if pooledTransaction != nil {
@@ -68,14 +86,16 @@ func (c *coordinator) getSnapshot(ctx context.Context) *common.CoordinatorSnapsh
 		}
 	}
 
-	log.L(ctx).Debugf("created snapshot for sequencer %s with %d transactions (%d pooled transactions, %d dispatched transactions, , %d confirmed transactions)",
+	coordinatorState := c.stateMachineEventLoop.GetCurrentState()
+	log.L(ctx).Debugf("created snapshot for sequencer %s with %d transactions (%d pooled, %d dispatched, %d confirmed)",
 		c.contractAddress.String(), len(pooledTransactions)+len(dispatchedTransactions)+len(confirmedTransactions),
 		len(pooledTransactions), len(dispatchedTransactions), len(confirmedTransactions))
+
 	return &common.CoordinatorSnapshot{
 		DispatchedTransactions: dispatchedTransactions,
 		PooledTransactions:     pooledTransactions,
 		ConfirmedTransactions:  confirmedTransactions,
-		CoordinatorState:       c.stateMachineEventLoop.GetCurrentState(),
+		CoordinatorState:       coordinatorState,
 		BlockHeight:            c.currentBlockHeight,
 	}
 }

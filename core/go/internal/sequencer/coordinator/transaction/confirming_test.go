@@ -177,20 +177,6 @@ func Test_action_RecordConfirmation_SuccessDifferentHash(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func Test_action_NotifyDependantsOfRevertedConfirmation_AlwaysResetsLocks(t *testing.T) {
-	ctx := t.Context()
-	mockGrapher := graphermocks.NewGrapher(t)
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
-		Grapher(mockGrapher).
-		ConfirmedLockRetentionGracePeriod(2).
-		Build()
-	mockGrapher.EXPECT().Forget(mock.Anything, txn.pt.ID)
-
-	err := action_NotifyDependentsOfRevertedConfirmation(ctx, txn, nil)
-	require.NoError(t, err)
-	assert.True(t, txn.confirmedLocksReleased)
-}
-
 func Test_ConfirmedSuccess_DispatchedStates_TransitionsToConfirmed(t *testing.T) {
 	ctx := t.Context()
 	dispatchedStates := []State{
@@ -573,7 +559,10 @@ func Test_action_NotifyDependantsOfRevertedConfirmation_SendsRevertedEvent(t *te
 
 	depTracker.GetChainedDeps().AddPrerequisites(ctx, dependentTx.pt.ID, txn.pt.ID)
 
-	mockGrapher.EXPECT().Forget(mock.Anything, txn.pt.ID)
+	// When dependentTx (State_Pooled) receives DependencyConfirmedRevertedEvent it transitions to
+	// State_PreAssembly_Blocked via action_NotifyDependentsOfReset, which calls Forget for dependentTx.
+	// The main txn's own Forget is NOT called here — that is action_RevertTransactionInGrapher's
+	// responsibility, which runs before this action in the state machine.
 	mockGrapher.EXPECT().Forget(mock.Anything, dependentTx.pt.ID)
 
 	err := action_NotifyDependentsOfRevertedConfirmation(ctx, txn, nil)

@@ -90,19 +90,18 @@ type coordinator struct {
 	newBlockRangeEpoch                 bool
 
 	/* Config */
-	contractAddress                   *pldtypes.EthAddress
-	blockHeightTolerance              uint64
-	closingGracePeriod                int // expressed as a multiple of heartbeat intervals
-	inactiveGracePeriod               int // expressed as a multiple of heartbeat intervals
-	confirmedLockRetentionGracePeriod int // expressed as a multiple of heartbeat intervals
-	baseLedgerRevertRetryThreshold    int
-	assembleErrorRetryThreshhold      int
-	requestTimeout                    time.Duration
-	stateTimeout                      time.Duration
-	nodeName                          string
-	coordinatorSelectionBlockRange    uint64
-	maxInflightTransactions           int
-	maxDispatchAhead                  int
+	contractAddress                *pldtypes.EthAddress
+	blockHeightTolerance           uint64
+	closingGracePeriod             int // expressed as a multiple of heartbeat intervals
+	inactiveGracePeriod            int // expressed as a multiple of heartbeat intervals
+	baseLedgerRevertRetryThreshold int
+	assembleErrorRetryThreshhold   int
+	requestTimeout                 time.Duration
+	stateTimeout                   time.Duration
+	nodeName                       string
+	coordinatorSelectionBlockRange uint64
+	maxInflightTransactions        int
+	maxDispatchAhead               int
 
 	/* Dependencies */
 	domainAPI             components.DomainSmartContract
@@ -150,7 +149,7 @@ func NewCoordinator(
 		transportWriter:                    transportWriter,
 		contractAddress:                    contractAddress,
 		dependencyTracker:                  dependencyTracker,
-		grapher:                            grapher.NewGrapher(dependencyTracker),
+		grapher:                            grapher.NewGrapher(dependencyTracker, confutil.Uint64Min(configuration.BlockHeightTolerance, pldconf.SequencerMinimum.BlockHeightTolerance, *pldconf.SequencerDefaults.BlockHeightTolerance)),
 		clock:                              clock,
 		engineIntegration:                  engineIntegration,
 		syncPoints:                         syncPoints,
@@ -169,7 +168,6 @@ func NewCoordinator(
 	c.blockHeightTolerance = confutil.Uint64Min(configuration.BlockHeightTolerance, pldconf.SequencerMinimum.BlockHeightTolerance, *pldconf.SequencerDefaults.BlockHeightTolerance)
 	c.closingGracePeriod = confutil.IntMin(configuration.ClosingGracePeriod, pldconf.SequencerMinimum.ClosingGracePeriod, *pldconf.SequencerDefaults.ClosingGracePeriod)
 	c.inactiveGracePeriod = confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod)
-	c.confirmedLockRetentionGracePeriod = confutil.IntMin(configuration.ConfirmedLockRetentionGracePeriod, pldconf.SequencerMinimum.ConfirmedLockRetentionGracePeriod, *pldconf.SequencerDefaults.ConfirmedLockRetentionGracePeriod)
 	c.baseLedgerRevertRetryThreshold = confutil.IntMin(configuration.BaseLedgerRevertRetryThreshold, pldconf.SequencerMinimum.BaseLedgerRevertRetryThreshold, *pldconf.SequencerDefaults.BaseLedgerRevertRetryThreshold)
 	c.assembleErrorRetryThreshhold = confutil.IntMin(configuration.AssembleErrorRetryThreshold, pldconf.SequencerMinimum.AssembleErrorRetryThreshold, *pldconf.SequencerDefaults.AssembleErrorRetryThreshold)
 	c.maxInflightTransactions = confutil.IntMin(configuration.MaxInflightTransactions, pldconf.SequencerMinimum.MaxInflightTransactions, *pldconf.SequencerDefaults.MaxInflightTransactions)

@@ -39,7 +39,7 @@ import (
 
 func newTestGrapher() (grapher.Grapher, dependencytracker.DependencyTracker) {
 	dt := dependencytracker.NewDependencyTracker()
-	return grapher.NewGrapher(dt), dt
+	return grapher.NewGrapher(dt, 5), dt
 }
 
 func TestTransaction_HasDependenciesNotReady_FalseIfNoDependencies(t *testing.T) {
@@ -273,7 +273,6 @@ func TestNewTransaction_Success_ReturnsTransaction(t *testing.T) {
 		5,
 		0,
 		3,
-		3,
 		nil,
 		nil,
 		metrics.InitMetrics(ctx, reg),
@@ -320,7 +319,6 @@ func TestNewTransaction_PublicAPI_ReturnsTransaction(t *testing.T) {
 		time.Duration(5000),
 		5,
 		0,
-		3,
 		3,
 		nil,
 		nil,

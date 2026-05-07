@@ -19,7 +19,6 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
-	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -37,28 +36,21 @@ func Test_action_IncrementHeartbeatIntervalsSinceStateChange_IncrementsCounter(t
 	assert.Equal(t, 3, txn.heartbeatIntervalsSinceStateChange)
 }
 
-func Test_StateConfirmed_HeartbeatResetsLocksOnlyAtRetentionThreshold(t *testing.T) {
+func Test_StateConfirmed_HeartbeatIncreasesIntervalCounter(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := graphermocks.NewGrapher(t)
 	txn, _ := NewTransactionBuilderForTesting(t, State_Confirmed).
-		Grapher(mockGrapher).
-		ConfirmedLockRetentionGracePeriod(2).
 		FinalizingGracePeriod(10).
 		Build()
-	mockGrapher.EXPECT().Forget(mock.Anything, txn.pt.ID).Once()
 
 	err := txn.HandleEvent(ctx, &common.HeartbeatIntervalEvent{})
 	require.NoError(t, err)
 	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
 	assert.Equal(t, 1, txn.heartbeatIntervalsSinceStateChange)
-	assert.False(t, txn.confirmedLocksReleased)
-	mockGrapher.AssertNotCalled(t, "Forget", txn.pt.ID)
 
 	err = txn.HandleEvent(ctx, &common.HeartbeatIntervalEvent{})
 	require.NoError(t, err)
 	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
 	assert.Equal(t, 2, txn.heartbeatIntervalsSinceStateChange)
-	assert.True(t, txn.confirmedLocksReleased)
 
 	err = txn.HandleEvent(ctx, &common.HeartbeatIntervalEvent{})
 	require.NoError(t, err)
@@ -68,7 +60,6 @@ func Test_StateConfirmed_HeartbeatResetsLocksOnlyAtRetentionThreshold(t *testing
 func Test_StateConfirmed_TransitionsToFinalBasedOnFinalizingGracePeriod(t *testing.T) {
 	ctx := t.Context()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Confirmed).
-		ConfirmedLockRetentionGracePeriod(100).
 		FinalizingGracePeriod(2).
 		Build()
 

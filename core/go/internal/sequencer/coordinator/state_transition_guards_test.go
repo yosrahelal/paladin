@@ -255,16 +255,14 @@ func TestGuard_HasTransactionAssembling_TransactionInOtherStates(t *testing.T) {
 
 func TestGuard_ActiveCoordinatorFlushComplete_WhenFlush_ReturnsFalse(t *testing.T) {
 	ctx := context.Background()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
-	c.activeCoordinatorState = State_Flush
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).ActiveCoordinatorState(State_Flush).Build()
 	result := guard_ActiveCoordinatorFlushComplete(ctx, c)
 	assert.False(t, result, "active coordinator in Flush state should return false")
 }
 
 func TestGuard_ActiveCoordinatorFlushComplete_WhenNotFlush_ReturnsTrue(t *testing.T) {
 	ctx := context.Background()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
-	c.activeCoordinatorState = State_Active
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).ActiveCoordinatorState(State_Closing).Build()
 	result := guard_ActiveCoordinatorFlushComplete(ctx, c)
 	assert.True(t, result, "active coordinator not in Flush state should return true")
 }

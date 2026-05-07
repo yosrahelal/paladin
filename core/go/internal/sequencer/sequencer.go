@@ -712,8 +712,9 @@ func (sMgr *sequencerManager) handleTransactionConfirmedSuccess(ctx context.Cont
 			},
 			TransactionID: confirmedTxn.TransactionID,
 		},
-		Hash:  confirmedTxn.OnChain.TransactionHash,
-		Nonce: nonce,
+		Hash:    confirmedTxn.OnChain.TransactionHash,
+		Nonce:   nonce,
+		OnChain: confirmedTxn.OnChain,
 	})
 	return nil
 }
@@ -769,6 +770,7 @@ func (sMgr *sequencerManager) HandleChainedTransactionOutcome(ctx context.Contex
 				},
 				TransactionID: txID,
 			},
+			OnChain: onChain,
 		})
 	case components.RT_FailedOnChainWithRevertData:
 		log.L(ctx).Infof("HandleChainedTransactionOutcome: queuing ConfirmedRevertedEvent (on-chain) for parent txID=%s on contract=%s hasRevertData=%t", txID, contractAddress, len(revertData) > 0)

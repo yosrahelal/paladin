@@ -75,14 +75,12 @@ type TransactionBuilderForTesting struct {
 	requestTimeout                     int
 	stateTimeout                       int
 	finalizingGracePeriod              int
-	confirmedLockRetentionGracePeriod  int
 	heartbeatIntervalsSinceStateChange int
 	cancelRequestTimeoutSchedule       func()
 	cancelStateTimeoutSchedule         func()
 	pendingAssembleRequestSend         func(context.Context, uuid.UUID) error // if set, builder builds IdempotentRequest from clock/requestTimeout
 	pendingEndorsementRequestAdditions []pendingEndorsementRequestAddition
 	pendingPreDispatchRequestSend      func(context.Context, uuid.UUID) error // if set, builder builds IdempotentRequest from clock/requestTimeout
-	confirmedLocksReleased             bool
 	submitterSelection                 prototk.ContractConfig_SubmitterSelection
 	nodeName                           string
 	baseLedgerRevertRetryThreshold     int
@@ -102,11 +100,10 @@ func NewTransactionBuilderForTesting(t *testing.T, state State) *TransactionBuil
 		signerAddress:                     nil,
 		latestSubmissionHash:              nil,
 		state:                             state,
-		stateTimeout:                      5000,
-		requestTimeout:                    1000,
-		finalizingGracePeriod:             5,
-		confirmedLockRetentionGracePeriod: 1,
-		privateTransactionBuilder:         testutil.NewPrivateTransactionBuilderForTesting(),
+		stateTimeout:              5000,
+		requestTimeout:            1000,
+		finalizingGracePeriod:     5,
+		privateTransactionBuilder: testutil.NewPrivateTransactionBuilderForTesting(),
 		submitterSelection:                prototk.ContractConfig_SUBMITTER_COORDINATOR,
 		nodeName:                          "node1",
 	}
@@ -260,11 +257,6 @@ func (b *TransactionBuilderForTesting) FinalizingGracePeriod(finalizingGracePeri
 	return b
 }
 
-func (b *TransactionBuilderForTesting) ConfirmedLockRetentionGracePeriod(gracePeriod int) *TransactionBuilderForTesting {
-	b.confirmedLockRetentionGracePeriod = gracePeriod
-	return b
-}
-
 func (b *TransactionBuilderForTesting) CurrentState(state State) *TransactionBuilderForTesting {
 	b.state = state
 	return b
@@ -347,11 +339,6 @@ func (b *TransactionBuilderForTesting) CancelRequestTimeoutSchedule(cancel func(
 
 func (b *TransactionBuilderForTesting) CancelStateTimeoutSchedule(cancel func()) *TransactionBuilderForTesting {
 	b.cancelStateTimeoutSchedule = cancel
-	return b
-}
-
-func (b *TransactionBuilderForTesting) ConfirmedLocksReleased(released bool) *TransactionBuilderForTesting {
-	b.confirmedLocksReleased = released
 	return b
 }
 
@@ -459,7 +446,7 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		b.dependencyTracker = dependencytracker.NewDependencyTracker()
 	}
 	if b.grapher == nil {
-		b.grapher = grapher.NewGrapher(b.dependencyTracker)
+		b.grapher = grapher.NewGrapher(b.dependencyTracker, 5)
 	}
 
 	mp, err := mockpersistence.NewSQLMockProvider()
@@ -535,7 +522,6 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		time.Duration(b.requestTimeout),
 		time.Duration(b.stateTimeout),
 		b.finalizingGracePeriod,
-		b.confirmedLockRetentionGracePeriod,
 		b.baseLedgerRevertRetryThreshold,
 		b.assembleErrorRetryThreshhold,
 		b.grapher,
@@ -551,7 +537,6 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 	txn.heartbeatIntervalsSinceStateChange = b.heartbeatIntervalsSinceStateChange
 	txn.cancelRequestTimeoutSchedule = b.cancelRequestTimeoutSchedule
 	txn.cancelStateTimeoutSchedule = b.cancelStateTimeoutSchedule
-	txn.confirmedLocksReleased = b.confirmedLocksReleased
 	txn.stateMachine.SetCurrentState(b.state)
 	txn.revertReason = b.revertReason
 	txn.revertCount = b.revertCount
@@ -577,7 +562,7 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 
 	if privateTransaction.PostAssembly != nil {
 		for _, state := range privateTransaction.PostAssembly.OutputStates {
-			err := b.grapher.AddMinter(ctx, []*components.FullState{state}, txn.pt.ID)
+			err := b.grapher.AddMinter(ctx, []*components.FullState{state}, txn.pt.ID, nil)
 			require.NoError(b.t, err)
 		}
 	}

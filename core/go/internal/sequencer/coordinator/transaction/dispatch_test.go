@@ -741,7 +741,7 @@ func Test_mapPreparedTransaction_StateRefs(t *testing.T) {
 func Test_buildDispatchBatch_ChainedPrivate_PropagatesPostAssembleDepChildIDs(t *testing.T) {
 	ctx := t.Context()
 	depTracker := dependencytracker.NewDependencyTracker()
-	g := grapher.NewGrapher(depTracker)
+	g := grapher.NewGrapher(depTracker, 5)
 
 	dep, _ := NewTransactionBuilderForTesting(t, State_Dispatched).
 		Grapher(g).
@@ -784,7 +784,7 @@ func Test_buildDispatchBatch_ChainedPrivate_PropagatesPostAssembleDepChildIDs(t 
 func Test_buildDispatchBatch_ChainedPrivate_PropagatesChainedDepChildIDs(t *testing.T) {
 	ctx := t.Context()
 	depTracker := dependencytracker.NewDependencyTracker()
-	g := grapher.NewGrapher(depTracker)
+	g := grapher.NewGrapher(depTracker, 5)
 
 	dep, _ := NewTransactionBuilderForTesting(t, State_Dispatched).
 		Grapher(g).
@@ -824,7 +824,7 @@ func Test_buildDispatchBatch_ChainedPrivate_PropagatesChainedDepChildIDs(t *test
 func Test_buildDispatchBatch_ChainedPrivate_DeduplicatesAcrossDepTypes(t *testing.T) {
 	ctx := t.Context()
 	depTracker := dependencytracker.NewDependencyTracker()
-	g := grapher.NewGrapher(depTracker)
+	g := grapher.NewGrapher(depTracker, 5)
 
 	dep, _ := NewTransactionBuilderForTesting(t, State_Dispatched).
 		Grapher(g).
@@ -866,7 +866,7 @@ func Test_buildDispatchBatch_ChainedPrivate_DeduplicatesAcrossDepTypes(t *testin
 func Test_buildDispatchBatch_ChainedPrivate_SkipsDepWithNoChild(t *testing.T) {
 	ctx := t.Context()
 	depTracker := dependencytracker.NewDependencyTracker()
-	g := grapher.NewGrapher(depTracker)
+	g := grapher.NewGrapher(depTracker, 5)
 
 	dep, _ := NewTransactionBuilderForTesting(t, State_Dispatched).
 		Grapher(g).
@@ -906,7 +906,7 @@ func Test_buildDispatchBatch_ChainedPrivate_SkipsDepNotInGrapher(t *testing.T) {
 	ctx := t.Context()
 	missingDepID := uuid.New()
 	depTracker := dependencytracker.NewDependencyTracker()
-	g := grapher.NewGrapher(depTracker)
+	g := grapher.NewGrapher(depTracker, 5)
 
 	childTxID := uuid.New()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Ready_For_Dispatch).

@@ -83,25 +83,50 @@ func (t *coordinatorTransaction) applyPostAssembly(ctx context.Context, postAsse
 		return err
 	}
 
-	// Add output states to the grapher for other transactions to use
-	err = t.grapher.AddMinter(ctx, postAssembly.OutputStates, t.pt.ID)
+	// AllowedNodes is derived directly from the assembly response DistributionList —
+	// the domain already knows who receives each state, no further resolution needed.
+	// Computed here so it can be recorded on the OutputState at the earliest opportunity.
+	allowedNodesByState := allowedNodesFromDistributionList(ctx, postAssembly.OutputStates, postAssembly.OutputStatesPotential)
+
+	// Add output states to the grapher for other transactions to use.
+	err = t.grapher.AddMinter(ctx, postAssembly.OutputStates, t.pt.ID, allowedNodesByState)
 	if err != nil {
 		return err
 	}
 
-	// Add a lock for every output we create
+	// Add a lock for every output we create.
 	createLocks, err := t.engineIntegration.MapPotentialStates(ctx, postAssembly.OutputStatesPotential, t.pt)
 	if err != nil {
 		return err
 	}
-
-	// Add a lock for every output we create
 	t.grapher.LockMintsOnCreate(ctx, createLocks, postAssembly.OutputStates, t.pt.ID)
 
-	// Add a lock for every read state and spent state to prevent other transactions using them
+	// Add a lock for every read state and spent state to prevent other transactions using them.
 	t.grapher.LockMintsOnReadAndSpend(ctx, postAssembly.ReadStates, postAssembly.InputStates, t.pt.ID)
 
 	return nil
+}
+
+// allowedNodesFromDistributionList builds the stateID → node names map for output states by
+// reading the DistributionList that the domain included in its assembly response. This is the
+// authoritative source — no PreAssembly or StateDistributionBuilder is required.
+func allowedNodesFromDistributionList(ctx context.Context, states []*components.FullState, potentials []*prototk.NewState) map[string][]string {
+	allowedNodes := make(map[string][]string)
+	for i, state := range states {
+		if i >= len(potentials) {
+			break
+		}
+		stateID := state.ID.String()
+		for _, recipient := range potentials[i].DistributionList {
+			node, err := pldtypes.PrivateIdentityLocator(recipient).Node(ctx, false)
+			if err != nil {
+				log.L(ctx).Warnf("allowedNodesFromDistributionList: could not extract node from locator %q: %s", recipient, err)
+				continue
+			}
+			allowedNodes[stateID] = append(allowedNodes[stateID], node)
+		}
+	}
+	return allowedNodes
 }
 
 func (t *coordinatorTransaction) sendAssembleRequest(ctx context.Context) error {
@@ -114,7 +139,7 @@ func (t *coordinatorTransaction) sendAssembleRequest(ctx context.Context) error 
 	// and nudge the request every requestTimeout event to implement the short retry.
 	// The state machine will deal with the longer state timeout via timeout guards.
 	t.pendingAssembleRequest = common.NewIdempotentRequest(ctx, t.clock, t.requestTimeout, func(ctx context.Context, idempotencyKey uuid.UUID) error {
-		grapherStatesAndLocks, err := t.grapher.ExportStatesAndLocks(ctx)
+		grapherStatesAndLocks, err := t.grapher.ExportStatesAndLocks(ctx, t.originatorNode)
 		if err != nil {
 			log.L(ctx).Errorf("failed to export grapher state locks: %s", err)
 			return err

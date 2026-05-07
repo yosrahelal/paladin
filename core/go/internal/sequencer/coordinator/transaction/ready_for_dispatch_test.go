@@ -491,7 +491,7 @@ func TestDependsOn_HasDependenciesNotReady_UnknownDepBlocksDispatch(t *testing.T
 func Test_Blocked_DependencyReady_TransitionsToConfirmingDispatchable(t *testing.T) {
 	ctx := t.Context()
 	mockGrapher := graphermocks.NewGrapher(t)
-	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	depTx, _ := NewTransactionBuilderForTesting(t, State_Ready_For_Dispatch).
 		Grapher(mockGrapher).
@@ -522,7 +522,7 @@ func Test_Blocked_DependencyReady_TransitionsToConfirmingDispatchable(t *testing
 func Test_Blocked_DependencyReady_StaysBlocked_WhenDepsNotReady(t *testing.T) {
 	ctx := t.Context()
 	mockGrapher := graphermocks.NewGrapher(t)
-	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	depTx, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
 		Grapher(mockGrapher).
@@ -553,7 +553,7 @@ func Test_Blocked_DependencyReady_StaysBlocked_WhenDepsNotReady(t *testing.T) {
 func TestDependsOn_NotifyDependentsOfReadiness(t *testing.T) {
 	ctx := t.Context()
 	depTracker := dependencytracker.NewDependencyTracker()
-	g := grapher.NewGrapher(depTracker)
+	g := grapher.NewGrapher(depTracker, 5)
 
 	depTx, _ := NewTransactionBuilderForTesting(t, State_Ready_For_Dispatch).
 		Grapher(g).

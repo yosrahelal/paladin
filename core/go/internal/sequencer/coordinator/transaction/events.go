@@ -228,8 +228,9 @@ func (*SubmittedEvent) TypeString() string {
 
 type ConfirmedSuccessEvent struct {
 	BaseCoordinatorEvent
-	Nonce *pldtypes.HexUint64
-	Hash  pldtypes.Bytes32
+	Nonce   *pldtypes.HexUint64
+	Hash    pldtypes.Bytes32
+	OnChain pldtypes.OnChainLocation
 }
 
 func (*ConfirmedSuccessEvent) Type() EventType {

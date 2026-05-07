@@ -140,7 +140,6 @@ func action_FinalizeNonRetryableRevert(ctx context.Context, t *coordinatorTransa
 
 func action_NotifyDependentsOfRevertedConfirmation(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
 	log.L(ctx).Debugf("notifying dependents of reverted confirmation for transaction %s", txn.pt.ID.String())
-	txn.releaseTransactionLocks(ctx)
 	return txn.notifyDependentsOfRevertedConfirmation(ctx)
 }
 
@@ -200,6 +199,20 @@ func action_FinalizeOnChainedDependencyFailure(ctx context.Context, t *coordinat
 			log.L(ctx).Errorf("error finalizing TX %s due to chained dependency failure: %s", t.pt.ID, err)
 		},
 	)
+	return nil
+}
+
+// action_ConfirmTransactionInGrapher removes the transaction from the grapher's dependency
+// tracking and converts its locks to detached locks stamped with confirmedAtBlock.
+func action_ConfirmTransactionInGrapher(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
+	e := event.(*ConfirmedSuccessEvent)
+	t.grapher.ConfirmTransaction(ctx, t.pt.ID, uint64(e.OnChain.BlockNumber))
+	return nil
+}
+
+func action_RevertTransactionInGrapher(ctx context.Context, t *coordinatorTransaction, _ common.Event) error {
+	log.L(ctx).Debugf("releasing transaction locks for %s (revert/failure path)", t.pt.ID.String())
+	t.grapher.Forget(ctx, t.pt.ID)
 	return nil
 }
 

@@ -104,6 +104,9 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_UpdateBlockHeight,
 					},
 					{
+						Action: action_ExpireGrapherLocks,
+					},
+					{
 						// If we have entered a new block range and we are the new coordinator, we stay in State_Idle
 						// since as far as we can see there is no active work for this domain instance. If we receive
 						// delegated transactions, we will now move to State_Active and process rather than reject them.
@@ -152,6 +155,9 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_UpdateBlockHeight,
 					},
 					{
+						Action: action_ExpireGrapherLocks,
+					},
+					{
 						If:     guard_IsNewBlockRangeEpoch,
 						Action: action_SelectActiveCoordinator,
 					},
@@ -168,17 +174,21 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_TransactionsDelegated: {
 				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
 			},
-			common.Event_HeartbeatReceived: {
-				Validator: validator_IsHeartbeatFromPreviousActiveCoordinator,
-				Actions: []ActionRule{
-					{Action: action_HeartbeatReceived},
-					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
-				},
-				Transitions: []Transition{{
-					To: State_Active,
-					If: guard_ActiveCoordinatorFlushComplete,
-				}},
+		common.Event_HeartbeatReceived: {
+			Validator: validator_IsHeartbeatFromPreviousActiveCoordinator,
+			Actions: []ActionRule{
+				{Action: action_HeartbeatReceived},
+				{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
 			},
+			Transitions: []Transition{{
+				To: State_Active,
+				If: guard_ActiveCoordinatorFlushComplete,
+				// Import confirmed locks and private state data from the closing heartbeat so
+				// the new coordinator's grapher has the ahead-of-chain view it needs to assemble
+				// new transactions correctly.
+				Actions: []ActionRule{{Action: action_ImportStatesAndLocks}},
+			}},
+		},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
 					{
@@ -214,6 +224,9 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{
 						Action: action_UpdateBlockHeight,
+					},
+					{
+						Action: action_ExpireGrapherLocks,
 					},
 					{
 						If:     guard_IsNewBlockRangeEpoch,
@@ -300,6 +313,9 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_UpdateBlockHeight,
 					},
 					{
+						Action: action_ExpireGrapherLocks,
+					},
+					{
 						Action: action_SelectActiveCoordinator,
 					},
 					// If we are entering a new block range we clean up transactions that have not reached point of no return.
@@ -368,6 +384,9 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_UpdateBlockHeight,
 					},
 					{
+						Action: action_ExpireGrapherLocks,
+					},
+					{
 						If:     guard_IsNewBlockRangeEpoch,
 						Action: action_SelectActiveCoordinator,
 					},
@@ -408,12 +427,7 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Closing: {
 		// Send a heartbeat here, outside of the usual heartbeat interval, so that other nodes see that we've finished our flush without delay.
-		// We forget all transaction locks before sending the heartbeat so that if we become the active coordinator again before these
-		// transactions have been removed from memory, we don't have a stale grapher.
-		// TODO AM: This wouldn't be necessary if we can pass the full set of locks to the new coordinator, but I haven't worked out how
-		// we do that when we don't have all the transactions in memory to understand when to clear the locks
 		OnTransitionTo: []ActionRule{
-			{Action: action_GrapherForgetAllTransactions},
 			{Action: action_SendHeartbeat},
 		},
 		Events: map[EventType]EventHandler{
@@ -462,6 +476,9 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{
 						Action: action_UpdateBlockHeight,
+					},
+					{
+						Action: action_ExpireGrapherLocks,
 					},
 					{
 						If:     guard_IsNewBlockRangeEpoch,
@@ -545,4 +562,3 @@ func (c *coordinator) TryQueueEvent(ctx context.Context, event common.Event) boo
 func (c *coordinator) queueEventInternal(ctx context.Context, event common.Event) {
 	c.stateMachineEventLoop.QueuePriorityEvent(ctx, event)
 }
-
