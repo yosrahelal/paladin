@@ -84,16 +84,6 @@ export const EnrichedTransaction: React.FC<Props> = ({
               </Box>
             </Grid2>
             <Grid2>
-              <Typography align="center" variant="body2" color="textSecondary">{t('contractAddress')}</Typography>
-              <Box sx={{ width: '140px' }}>
-                {enrichedTransaction.contractAddress ?
-                  <Hash Icon={<Captions size="18px" />} title={t('hash')} hash={enrichedTransaction.contractAddress} hideTitle />
-                  :
-                  <Typography align="center" variant="h6" color="textPrimary">--</Typography>
-                }
-              </Box>
-            </Grid2>
-            <Grid2>
               <Typography align="center" variant="body2" color="textSecondary">{t('status')}</Typography>
               <TransactionStatus transaction={enrichedTransaction} />
             </Grid2>
