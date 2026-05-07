@@ -17,7 +17,6 @@ package coordinator
 
 import (
 	"context"
-	"slices"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -39,23 +38,6 @@ func action_SelectActiveCoordinator(ctx context.Context, c *coordinator, _ commo
 		c.activeCoordinatorNode = selected
 	}
 	return nil
-}
-
-// TODO AM: not sure this lives in here- or that the function above needs a separate file now
-func (c *coordinator) updateOriginatorNodePool(originatorNode string) {
-	// In COORDINATOR_ENDORSER mode the pool is fixed at initialisation from the contract config
-	// (all valid endorser candidates are already known), so dynamic updates are skipped.
-	if c.domainAPI.ContractConfig().GetCoordinatorSelection() == prototk.ContractConfig_COORDINATOR_ENDORSER {
-		return
-	}
-	if !slices.Contains(c.originatorNodePool, originatorNode) {
-		c.originatorNodePool = append(c.originatorNodePool, originatorNode)
-	}
-	if !slices.Contains(c.originatorNodePool, c.nodeName) {
-		// As coordinator we should always be in the pool as it's used to select the next coordinator when necessary
-		c.originatorNodePool = append(c.originatorNodePool, c.nodeName)
-	}
-	slices.Sort(c.originatorNodePool)
 }
 
 func action_UpdateBlockHeight(_ context.Context, c *coordinator, event common.Event) error {

@@ -18,6 +18,7 @@ package coordinator
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
@@ -27,6 +28,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 )
 
@@ -42,8 +44,7 @@ const (
 
 // action_ImportStatesAndLocks imports confirmed locks and private state data from the previous
 // coordinator's closing heartbeat into the grapher. This covers states confirmed within the block
-// height tolerance window whose coordinator has since stood down — without this the new coordinator's
-// grapher would be unaware of those locks and could wrongly reassemble dependent transactions.
+// height tolerance window.
 // Triggered as a transition action on State_Elect → State_Active when the closing heartbeat arrives.
 func action_ImportStatesAndLocks(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*common.HeartbeatReceivedEvent)
@@ -63,6 +64,22 @@ func action_ProcessDelegatedTransactions(ctx context.Context, c *coordinator, ev
 	e := event.(*TransactionsDelegatedEvent)
 	c.updateOriginatorNodePool(e.FromNode)
 	return c.addToDelegatedTransactions(ctx, e.Originator, e.Transactions, e.DelegationID, c.newCoordinatorTransaction)
+}
+
+func (c *coordinator) updateOriginatorNodePool(originatorNode string) {
+	// In COORDINATOR_ENDORSER mode the pool is fixed at initialisation from the contract config
+	// (all valid endorser candidates are already known), so dynamic updates are skipped.
+	if c.domainAPI.ContractConfig().GetCoordinatorSelection() == prototk.ContractConfig_COORDINATOR_ENDORSER {
+		return
+	}
+	if !slices.Contains(c.originatorNodePool, originatorNode) {
+		c.originatorNodePool = append(c.originatorNodePool, originatorNode)
+	}
+	if !slices.Contains(c.originatorNodePool, c.nodeName) {
+		// As coordinator we should always be in the pool as it's used to select the next coordinator when necessary
+		c.originatorNodePool = append(c.originatorNodePool, c.nodeName)
+	}
+	slices.Sort(c.originatorNodePool)
 }
 
 func (c *coordinator) coordinatorTransactionHandleEvent(ctx context.Context, txID uuid.UUID, event common.Event) error {

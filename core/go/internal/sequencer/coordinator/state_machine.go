@@ -174,21 +174,21 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_TransactionsDelegated: {
 				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
 			},
-		common.Event_HeartbeatReceived: {
-			Validator: validator_IsHeartbeatFromPreviousActiveCoordinator,
-			Actions: []ActionRule{
-				{Action: action_HeartbeatReceived},
-				{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
+			common.Event_HeartbeatReceived: {
+				Validator: validator_IsHeartbeatFromPreviousActiveCoordinator,
+				Actions: []ActionRule{
+					{Action: action_HeartbeatReceived},
+					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
+				},
+				Transitions: []Transition{{
+					To: State_Active,
+					If: guard_ActiveCoordinatorFlushComplete,
+					// Import confirmed locks and private state data from the closing heartbeat so
+					// the new coordinator's grapher has the ahead-of-chain view it needs to assemble
+					// new transactions correctly.
+					Actions: []ActionRule{{Action: action_ImportStatesAndLocks}},
+				}},
 			},
-			Transitions: []Transition{{
-				To: State_Active,
-				If: guard_ActiveCoordinatorFlushComplete,
-				// Import confirmed locks and private state data from the closing heartbeat so
-				// the new coordinator's grapher has the ahead-of-chain view it needs to assemble
-				// new transactions correctly.
-				Actions: []ActionRule{{Action: action_ImportStatesAndLocks}},
-			}},
-		},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
 					{
@@ -316,6 +316,7 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_ExpireGrapherLocks,
 					},
 					{
+						If:     guard_IsNewBlockRangeEpoch,
 						Action: action_SelectActiveCoordinator,
 					},
 					// If we are entering a new block range we clean up transactions that have not reached point of no return.
