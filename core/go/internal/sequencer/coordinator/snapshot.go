@@ -36,30 +36,28 @@ func (c *coordinator) sendHeartbeat(ctx context.Context, contractAddress *pldtyp
 	log.L(ctx).Debugf("sending heartbeats for sequencer %s (includeLocks=%v)", contractAddress.String(), includeLocks)
 	var err error
 	for _, node := range c.originatorNodePool {
-		if node != c.nodeName {
-			log.L(ctx).Debugf("sending heartbeat to %s", node)
-			snapshot := base
-			if includeLocks {
-				statesAndLocks, exportErr := c.grapher.ExportStatesAndLocks(ctx, node)
-				if exportErr != nil {
-					log.L(ctx).Errorf("error exporting states and locks for node %s: %v", node, exportErr)
-					err = exportErr
-					continue
-				}
-				snapshot = &common.CoordinatorSnapshot{
-					DispatchedTransactions: base.DispatchedTransactions,
-					PooledTransactions:     base.PooledTransactions,
-					ConfirmedTransactions:  base.ConfirmedTransactions,
-					CoordinatorState:       base.CoordinatorState,
-					BlockHeight:            base.BlockHeight,
-					Locks:                  statesAndLocks.LockedState,
-					OutputStates:           statesAndLocks.OutputState,
-				}
+		log.L(ctx).Debugf("sending heartbeat to %s", node)
+		snapshot := base
+		if includeLocks {
+			statesAndLocks, exportErr := c.grapher.ExportStatesAndLocks(ctx, node)
+			if exportErr != nil {
+				log.L(ctx).Errorf("error exporting states and locks for node %s: %v", node, exportErr)
+				err = exportErr
+				continue
 			}
-			if sendErr := c.transportWriter.SendHeartbeat(ctx, node, contractAddress, snapshot); sendErr != nil {
-				log.L(ctx).Errorf("error sending heartbeat to %s: %v", node, sendErr)
-				err = sendErr
+			snapshot = &common.CoordinatorSnapshot{
+				DispatchedTransactions: base.DispatchedTransactions,
+				PooledTransactions:     base.PooledTransactions,
+				ConfirmedTransactions:  base.ConfirmedTransactions,
+				CoordinatorState:       base.CoordinatorState,
+				BlockHeight:            base.BlockHeight,
+				Locks:                  statesAndLocks.LockedState,
+				OutputStates:           statesAndLocks.OutputState,
 			}
+		}
+		if sendErr := c.transportWriter.SendHeartbeat(ctx, node, contractAddress, snapshot); sendErr != nil {
+			log.L(ctx).Errorf("error sending heartbeat to %s: %v", node, sendErr)
+			err = sendErr
 		}
 	}
 	return err

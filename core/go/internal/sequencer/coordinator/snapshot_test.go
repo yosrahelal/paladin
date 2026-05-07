@@ -95,7 +95,7 @@ func TestSendHeartbeat_Success(t *testing.T) {
 	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat())
 }
 
-func TestSendHeartbeat_SkipsCurrentNode(t *testing.T) {
+func TestSendHeartbeat_IncludesCurrentNode(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
 		OriginatorNodePool("node1").
@@ -103,8 +103,8 @@ func TestSendHeartbeat_SkipsCurrentNode(t *testing.T) {
 
 	err := c.sendHeartbeat(ctx, c.contractAddress)
 	assert.NoError(t, err)
-	// Should not send heartbeat since only node1 is in pool and it's the current node
-	assert.False(t, mocks.SentMessageRecorder.HasSentHeartbeat())
+	// Should send heartbeat to the current node so its originator can use inactive detection
+	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat())
 }
 
 func TestSendHeartbeat_HandlesError(t *testing.T) {
@@ -113,6 +113,8 @@ func TestSendHeartbeat_HandlesError(t *testing.T) {
 		OriginatorNodePool("node1", "node2").
 		WithMockTransportWriter().
 		Build()
+	mocks.TransportWriter.EXPECT().SendHeartbeat(mock.Anything, "node1", mock.Anything, mock.Anything).
+		Return(nil)
 	mocks.TransportWriter.EXPECT().SendHeartbeat(mock.Anything, "node2", mock.Anything, mock.Anything).
 		Return(fmt.Errorf("transport error"))
 
