@@ -48,16 +48,16 @@ type OriginatorBuilderForTesting struct {
 	blockRangeSize                     *uint64
 	currentBlockHeight                 *uint64
 	newBlockRangeEpoch                 *bool
-	coordinatorEndorserPool              []string
-	preferredActiveCoordinator           *string
-	currentActiveCoordinator             *string
-	previousActiveCoordinatorNode        *string
-	watchingPreviousCoordinatorFlush     *bool
-	failoverOffset                       *int
-	needsRedelegate                      *bool
-	heartbeatIntervalsSinceLastReceive   *int
-	inactiveGracePeriod                  *int
-	transactions                         []transaction.OriginatorTransaction
+	coordinatorEndorserPool            []string
+	preferredActiveCoordinator         *string
+	currentActiveCoordinator           *string
+	previousActiveCoordinatorNode      *string
+	watchingPreviousCoordinatorFlush   *bool
+	failoverOffset                     *int
+	needsRedelegate                    *bool
+	heartbeatIntervalsSinceLastReceive *int
+	inactiveGracePeriod                *int
+	transactions                       []transaction.OriginatorTransaction
 }
 
 type OriginatorDependencyMocks struct {
@@ -220,6 +220,7 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		seqConfig,
 		b.metrics,
 		domainAPI,
+		func(context.Context, string) error { return nil },
 	)
 
 	for _, txBuilder := range b.transactionBuilders {

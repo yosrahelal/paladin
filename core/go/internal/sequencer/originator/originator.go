@@ -85,10 +85,11 @@ type originator struct {
 	inactiveGracePeriod int // expressed as a multiple of heartbeat intervals
 
 	/* Dependencies */
-	domainAPI         components.DomainSmartContract
-	transportWriter   transport.TransportWriter
-	engineIntegration common.EngineIntegration
-	metrics           metrics.DistributedSequencerMetrics
+	domainAPI                         components.DomainSmartContract
+	transportWriter                   transport.TransportWriter
+	engineIntegration                 common.EngineIntegration
+	metrics                           metrics.DistributedSequencerMetrics
+	queueActiveCoordinatorUnavailable func(ctx context.Context, newActiveCoordinator string) error
 }
 
 func NewOriginator(
@@ -99,17 +100,19 @@ func NewOriginator(
 	configuration *pldconf.SequencerConfig,
 	metrics metrics.DistributedSequencerMetrics,
 	domainAPI components.DomainSmartContract,
+	queueActiveCoordinatorUnavailable func(ctx context.Context, newActiveCoordinator string) error,
 ) *originator {
 	o := &originator{
-		nodeName:            nodeName,
-		transactionsByID:    make(map[uuid.UUID]transaction.OriginatorTransaction),
-		transportWriter:     transportWriter,
-		blockRangeSize:      confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
-		contractAddress:     contractAddress,
-		engineIntegration:   engineIntegration,
-		metrics:             metrics,
-		inactiveGracePeriod: confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod),
-		domainAPI:           domainAPI,
+		nodeName:                          nodeName,
+		transactionsByID:                  make(map[uuid.UUID]transaction.OriginatorTransaction),
+		transportWriter:                   transportWriter,
+		blockRangeSize:                    confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
+		contractAddress:                   contractAddress,
+		engineIntegration:                 engineIntegration,
+		metrics:                           metrics,
+		inactiveGracePeriod:               confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod),
+		domainAPI:                         domainAPI,
+		queueActiveCoordinatorUnavailable: queueActiveCoordinatorUnavailable,
 	}
 
 	originatorEventQueueSize := confutil.IntMin(configuration.OriginatorEventQueueSize, pldconf.SequencerMinimum.OriginatorEventQueueSize, *pldconf.SequencerDefaults.OriginatorEventQueueSize)

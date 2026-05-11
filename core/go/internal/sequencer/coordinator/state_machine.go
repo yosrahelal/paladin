@@ -44,6 +44,7 @@ const (
 const (
 	Event_CoordinatorCreated EventType = iota + common.Event_HeartbeatReceived + 1
 	Event_TransactionsDelegated
+	Event_ActiveCoordinatorUnavailable
 )
 
 // Type aliases for the generic statemachine types, specialized for coordinator
@@ -58,8 +59,9 @@ type (
 	StateDefinitions = statemachine.StateDefinitions[State, *coordinator]
 )
 
-func guard_IsActiveCoordinator(ctx context.Context, c *coordinator) bool {
-	return c.nodeName == c.preferredActiveCoordinator
+// TODO AM : what file should this live in?
+func guard_IsCurrentActiveCoordinator(ctx context.Context, c *coordinator) bool {
+	return c.nodeName == c.currentActiveCoordinator
 }
 
 // TODO AM: something to think about
@@ -80,14 +82,14 @@ var stateDefinitionsMap = StateDefinitions{
 		Events: map[EventType]EventHandler{
 			Event_TransactionsDelegated: {
 				Actions: []ActionRule{{
-					If:     guard_IsActiveCoordinator,
+					If:     guard_IsCurrentActiveCoordinator,
 					Action: action_ProcessDelegatedTransactions,
 				}, {
-					If:     statemachine.GuardNot(guard_IsActiveCoordinator),
+					If:     statemachine.GuardNot(guard_IsCurrentActiveCoordinator),
 					Action: action_RejectDelegatedTransactions,
 				}},
 				Transitions: []Transition{{
-					If: guard_IsActiveCoordinator,
+					If: guard_IsCurrentActiveCoordinator,
 					To: State_Active,
 				}},
 			},
@@ -124,6 +126,11 @@ var stateDefinitionsMap = StateDefinitions{
 						Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
 						Action:    action_CleanUpTransaction,
 					},
+				},
+			},
+			Event_ActiveCoordinatorUnavailable: {
+				Actions: []ActionRule{
+					{Action: action_CoordinatorUnavailable},
 				},
 			},
 		},
@@ -164,7 +171,21 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 				Transitions: []Transition{{
 					To: State_Elect,
-					If: guard_IsActiveCoordinator,
+					If: guard_IsCurrentActiveCoordinator,
+				}},
+			},
+			Event_ActiveCoordinatorUnavailable: {
+				Actions: []ActionRule{
+					{Action: action_CoordinatorUnavailable},
+				},
+				// It should be impossible to receive this event in observing as our own inactive transition to
+				// idle should happen in response to lack of heartbeats before the originator can queue this event
+				// for us, but we include the path for completeness.
+				// From idle we can
+				// - accept delegations and move to active if we are the new active coordinator
+				// - accept heartbeats and move to observing if we are not the new active coordinator
+				Transitions: []Transition{{
+					To: State_Idle,
 				}},
 			},
 		},
@@ -237,7 +258,7 @@ var stateDefinitionsMap = StateDefinitions{
 				// coordinator is taking a very long time to flush (e.g. dispatched transactions but base ledger is unavailble).
 				Transitions: []Transition{{
 					To: State_Observing,
-					If: statemachine.GuardNot(guard_IsActiveCoordinator),
+					If: statemachine.GuardNot(guard_IsCurrentActiveCoordinator),
 				}},
 			},
 		},
@@ -352,7 +373,7 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardAnd(
 						guard_IsNewBlockRangeEpoch,
 						guard_FlushComplete,
-						guard_IsActiveCoordinator,
+						guard_IsCurrentActiveCoordinator,
 					),
 				}, {
 					// We don't have any dispatched transactions in memory and we are not the new preferred active coordinator.
@@ -361,7 +382,7 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardAnd(
 						guard_IsNewBlockRangeEpoch,
 						guard_FlushComplete,
-						statemachine.GuardNot(guard_IsActiveCoordinator),
+						statemachine.GuardNot(guard_IsCurrentActiveCoordinator),
 					),
 				}},
 			},
@@ -416,13 +437,18 @@ var stateDefinitionsMap = StateDefinitions{
 					// continue to send heartbeats with our confirmed transactions until they have all reached the end of their
 					// grace period.
 					To: State_Closing,
-					If: statemachine.GuardAnd(guard_FlushComplete, statemachine.GuardNot(guard_IsActiveCoordinator)),
+					If: statemachine.GuardAnd(guard_FlushComplete, statemachine.GuardNot(guard_IsCurrentActiveCoordinator)),
 				}, {
 					// We are still the preferred active coordinator for the new block range. We move back to State_Active
 					// so we can start accepting delegated transactions again, and submitting them using our new signing identity.
 					To: State_Active,
-					If: statemachine.GuardAnd(guard_FlushComplete, guard_IsActiveCoordinator),
+					If: statemachine.GuardAnd(guard_FlushComplete, guard_IsCurrentActiveCoordinator),
 				}},
+			},
+			Event_ActiveCoordinatorUnavailable: {
+				Actions: []ActionRule{
+					{Action: action_CoordinatorUnavailable},
+				},
 			},
 		},
 	},
@@ -495,21 +521,39 @@ var stateDefinitionsMap = StateDefinitions{
 				Transitions: []Transition{{
 					To: State_Elect,
 					If: statemachine.GuardAnd(
-						guard_IsActiveCoordinator,
+						guard_IsCurrentActiveCoordinator,
 						statemachine.GuardNot(guard_InactiveGracePeriodExpiredSinceStateChange),
 					),
 				}, {
 					To: State_Active,
 					If: statemachine.GuardAnd(
-						guard_IsActiveCoordinator,
+						guard_IsCurrentActiveCoordinator,
 						guard_InactiveGracePeriodExpiredSinceStateChange,
 						guard_HasTransactionsInflight,
 					),
 				}, {
 					To: State_Idle,
 					If: statemachine.GuardAnd(
-						guard_IsActiveCoordinator,
+						guard_IsCurrentActiveCoordinator,
 						guard_InactiveGracePeriodExpiredSinceStateChange,
+						statemachine.GuardNot(guard_HasTransactionsInflight),
+					),
+				}},
+			},
+			Event_ActiveCoordinatorUnavailable: {
+				Actions: []ActionRule{
+					{Action: action_CoordinatorUnavailable},
+				},
+				Transitions: []Transition{{
+					To: State_Active,
+					If: statemachine.GuardAnd(
+						guard_IsCurrentActiveCoordinator,
+						guard_HasTransactionsInflight,
+					),
+				}, {
+					To: State_Idle,
+					If: statemachine.GuardAnd(
+						guard_IsCurrentActiveCoordinator,
 						statemachine.GuardNot(guard_HasTransactionsInflight),
 					),
 				}},

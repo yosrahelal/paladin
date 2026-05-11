@@ -22,21 +22,30 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
 
+// action_CoordinatorUnavailable sets current from the originator's newly selected active coordinator
+// preferred coordinator does not change
+func action_CoordinatorUnavailable(ctx context.Context, c *coordinator, event common.Event) error {
+	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
+		return nil
+	}
+	ev := event.(*ActiveCoordinatorUnavailableEvent)
+
+	c.previousActiveCoordinatorNode = c.currentActiveCoordinator
+	c.currentActiveCoordinator = ev.NewActiveCoordinator
+	return nil
+}
+
 func action_SelectActiveCoordinator(ctx context.Context, c *coordinator, _ common.Event) error {
 	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
 		// For STATIC and SENDER modes, preferred/current coordinator are set once at Start time and never change.
 		return nil
-	}
-	if c.needsFailoverOffsetReset || c.preferredActiveCoordinator == "" {
-		c.failoverOffset = 0
-		c.needsFailoverOffsetReset = false
 	}
 	selectedPreferred, selectedCurrent := common.SelectCoordinatorNode(
 		ctx,
 		c.coordinatorEndorserPool,
 		c.currentBlockHeight,
 		c.coordinatorSelectionBlockRange,
-		c.failoverOffset,
+		0,
 	)
 	c.previousActiveCoordinatorNode = c.currentActiveCoordinator
 	c.preferredActiveCoordinator = selectedPreferred
@@ -47,7 +56,6 @@ func action_SelectActiveCoordinator(ctx context.Context, c *coordinator, _ commo
 
 func action_UpdateBlockHeight(_ context.Context, c *coordinator, event common.Event) error {
 	c.currentBlockHeight, c.newBlockRangeEpoch = common.DecodeNewBlockHeight(c.currentBlockHeight, c.coordinatorSelectionBlockRange, event)
-	c.needsFailoverOffsetReset = c.newBlockRangeEpoch && c.failoverOffset != 0
 	return nil
 }
 

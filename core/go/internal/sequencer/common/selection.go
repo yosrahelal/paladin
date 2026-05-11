@@ -39,9 +39,10 @@ func DedupeSortedCoordinatorEndorserNodes(nodes []string) []string {
 // delegation target for the given failoverOffset. The offset is applied on the sorted deduped pool
 // ring: current slot is (preferredIndex + failoverOffset) mod len(pool). Callers reset the offset
 // to 0 on a new epoch and increment it (e.g. on unavailability); they do not need to normalize.
-// Originators and coordinators each keep their own failoverOffset; both use this function with the
-// same pool and height inputs so preferred identity agrees, unavailability-driven offsets should
-// stay consistent as they are driven by the same heartbeats across both types.
+// The originator tracks failoverOffset for delegation stepping. The coordinator does not store
+// failoverOffset: it uses SelectCoordinatorNode(..., 0) for golden preferred+current, and sets
+// currentActiveCoordinator from ActiveCoordinatorUnavailableEvent.NewActiveCoordinator when the
+// originator fails over.
 //
 // For COORDINATOR_STATIC and COORDINATOR_SENDER modes, preferred/current coordinator fields are
 // set once at construction/Start time and this function is never invoked.

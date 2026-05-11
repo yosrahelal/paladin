@@ -58,9 +58,8 @@ type CoordinatorBuilderForTesting struct {
 	heartbeatIntervalsSinceLastReceive       *int
 	inactiveGracePeriod                      *int
 	heartbeatIntervalsSinceStateChange       *int
-	activeCoordinatorState                   *State
-	failoverOffset                           *int
-	useMockTransportWriter                   bool
+	activeCoordinatorState *State
+	useMockTransportWriter bool
 }
 
 type CoordinatorDependencyMocks struct {
@@ -264,11 +263,6 @@ func (b *CoordinatorBuilderForTesting) ActiveCoordinatorState(state State) *Coor
 	return b
 }
 
-func (b *CoordinatorBuilderForTesting) FailoverOffset(offset int) *CoordinatorBuilderForTesting {
-	b.failoverOffset = &offset
-	return b
-}
-
 func (b *CoordinatorBuilderForTesting) WithMockTransportWriter() *CoordinatorBuilderForTesting {
 	b.useMockTransportWriter = true
 	return b
@@ -373,7 +367,6 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	}
 	if b.newBlockRangeEpoch != nil {
 		coordinator.newBlockRangeEpoch = *b.newBlockRangeEpoch
-		coordinator.needsFailoverOffsetReset = *b.newBlockRangeEpoch
 	}
 	if b.heartbeatIntervalsSinceLastReceive != nil {
 		coordinator.heartbeatIntervalsSinceLastReceive = *b.heartbeatIntervalsSinceLastReceive
@@ -387,9 +380,5 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	if b.activeCoordinatorState != nil {
 		coordinator.activeCoordinatorState = *b.activeCoordinatorState
 	}
-	if b.failoverOffset != nil {
-		coordinator.failoverOffset = *b.failoverOffset
-	}
-
 	return coordinator, mocks
 }

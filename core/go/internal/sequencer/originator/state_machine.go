@@ -197,6 +197,10 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_SelectActiveCoordinator,
 					},
 					{
+						If:     guard_InactiveGracePeriodExceeded,
+						Action: action_QueueCoordinatorActiveCoordinatorUnavailable,
+					},
+					{
 						If: guard_InactiveGracePeriodExceeded,
 						// Resend all the delegation requests regardless of whether we have selected a new coordinator.
 						Action: action_SendDelegationRequest,

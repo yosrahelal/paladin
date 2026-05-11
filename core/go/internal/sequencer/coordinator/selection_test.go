@@ -40,7 +40,7 @@ func Test_initializeActiveCoordinatorFromContractConfig_StaticMode_SetsActiveCoo
 	assert.Equal(t, "node1", c.preferredActiveCoordinator)
 }
 
-func Test_action_SelectActiveCoordinator_EndorserMode_SingleNodeInPool_ReturnsNode(t *testing.T) {
+func Test_action_SelectActiveCoordinator_SingleNodeInPool_ReturnsNode(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -57,7 +57,7 @@ func Test_action_SelectActiveCoordinator_EndorserMode_SingleNodeInPool_ReturnsNo
 	assert.Equal(t, "node1", c.preferredActiveCoordinator)
 }
 
-func Test_action_SelectActiveCoordinator_EndorserMode_MultipleNodesInPool_ReturnsOneOfPool(t *testing.T) {
+func Test_action_SelectActiveCoordinator_MultipleNodesInPool_ReturnsOneOfPool(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -74,7 +74,7 @@ func Test_action_SelectActiveCoordinator_EndorserMode_MultipleNodesInPool_Return
 	assert.Contains(t, []string{"node1", "node2", "node3"}, c.preferredActiveCoordinator)
 }
 
-func Test_action_SelectActiveCoordinator_EndorserMode_BlockHeightRounding_SameRangeSameCoordinator(t *testing.T) {
+func Test_action_SelectActiveCoordinator_BlockHeightRounding_SameRangeSameCoordinator(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -107,34 +107,43 @@ func Test_action_SelectActiveCoordinator_EndorserMode_BlockHeightRounding_SameRa
 	assert.Contains(t, []string{"node1", "node2", "node3"}, c.preferredActiveCoordinator)
 }
 
-func Test_action_SelectActiveCoordinator_EndorserMode_AfterEpochSelectStickyEpochDoesNotResetFailoverAgain(t *testing.T) {
+func Test_action_ActiveCoordinatorUnavailable_SetsCurrentFromEvent(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
+		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2", "id@node3"},
 	})
 	config := builder.GetSequencerConfig()
 	config.BlockRange = confutil.P(uint64(100))
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.CurrentBlockHeight(0).Build()
+	c, _ := builder.CurrentBlockHeight(1000).Build()
 	require.NoError(t, c.initializeFromContractConfig(ctx))
 
-	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 50}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	c.failoverOffset = 2
+	preferred := c.preferredActiveCoordinator
+	require.Contains(t, []string{"node1", "node2", "node3"}, preferred)
 
-	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 150}))
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	assert.Equal(t, 0, c.failoverOffset, "epoch boundary should reset failover offset once")
+	var other string
+	for _, n := range []string{"node1", "node2", "node3"} {
+		if n != preferred {
+			other = n
+			break
+		}
+	}
+	require.NotEmpty(t, other)
 
-	c.failoverOffset = 2
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	assert.Equal(t, 2, c.failoverOffset, "sticky newBlockRangeEpoch must not imply a second epoch reset without a new UpdateBlockHeight")
-	assert.True(t, c.newBlockRangeEpoch, "guards still see epoch for the same NewBlock until the next height update")
+	ev := &ActiveCoordinatorUnavailableEvent{
+		BaseEvent:            common.BaseEvent{},
+		NewActiveCoordinator: other,
+	}
+	require.NoError(t, action_CoordinatorUnavailable(ctx, c, ev))
+
+	assert.Equal(t, preferred, c.preferredActiveCoordinator, "preferred stays hash-at-epoch (step zero)")
+	assert.Equal(t, other, c.currentActiveCoordinator, "current follows originator delegation target")
 }
 
-func Test_action_SelectActiveCoordinator_EndorserMode_DifferentBlockRanges_CanSelectDifferentCoordinators(t *testing.T) {
+func Test_action_SelectActiveCoordinator_DifferentBlockRanges_CanSelectDifferentCoordinators(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{

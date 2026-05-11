@@ -88,11 +88,7 @@ type coordinator struct {
 	grapher                            grapher.Grapher
 	coordinatorEndorserPool            []string // Fixed set of endorser candidates used for coordinator selection (COORDINATOR_ENDORSER mode only)
 	originatorNodePool                 []string // Dynamic set of originator nodes used for heartbeat fan-out
-	newBlockRangeEpoch                 bool     // sticky for the current NewBlock event: guards, cleanup, transitions
-	failoverOffset                     int      // starts at 0; increment on unavailability; reset on epoch
-
-	// One-shot flags: set when a condition is detected; cleared when the handler that performs the action runs.
-	needsFailoverOffsetReset bool // Set on new block range epoch in UpdateBlockHeight; cleared after endorser Select resets failover offset.
+	newBlockRangeEpoch                 bool
 
 	/* Config */
 	contractAddress                *pldtypes.EthAddress

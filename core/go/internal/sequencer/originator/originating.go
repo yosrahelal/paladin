@@ -98,10 +98,15 @@ func sendDelegationRequest(ctx context.Context, o *originator) error {
 	return o.transportWriter.SendDelegationRequest(ctx, o.currentActiveCoordinator, transactionsToDelegate, o.currentBlockHeight)
 }
 
-// TODO AM: the originator sends delegation requests to whoever it thinks is the active coordinator and never checks that it gets
-// a response. This is not going to work when we want to handle coordinator unavailability and failover.
 func action_SendDelegationRequest(ctx context.Context, o *originator, _ common.Event) error {
 	return sendDelegationRequest(ctx, o)
+}
+
+func action_QueueCoordinatorActiveCoordinatorUnavailable(ctx context.Context, o *originator, _ common.Event) error {
+	if o.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
+		return nil
+	}
+	return o.queueActiveCoordinatorUnavailable(ctx, o.currentActiveCoordinator)
 }
 
 func guard_NeedsRedelegate(_ context.Context, o *originator) bool {
