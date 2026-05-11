@@ -73,7 +73,7 @@ func (s *ChainedDependenciesSuite) SetupTest() {
 	config := s.builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1)
 	s.builder.OverrideSequencerConfig(config)
-	s.builder.ActiveCoordinatorNode("node1")
+	s.builder.CurrentActiveCoordinator("node1")
 
 	s.txBuilders = make(map[uuid.UUID]*testutil.PrivateTransactionBuilderForTesting)
 	s.txns = make(map[uuid.UUID]*components.PrivateTransaction)

@@ -121,7 +121,7 @@ func Test_action_RejectDelegatedTransactions_PropagatesError(t *testing.T) {
 
 func Test_validator_IsHeartbeatFromActiveCoordinator_FromActiveNode_ReturnsTrue(t *testing.T) {
 	ctx := context.Background()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).ActiveCoordinatorNode("nodeA").Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).CurrentActiveCoordinator("nodeA").Build()
 
 	event := &common.HeartbeatReceivedEvent{}
 	event.From = "nodeA"
@@ -133,7 +133,7 @@ func Test_validator_IsHeartbeatFromActiveCoordinator_FromActiveNode_ReturnsTrue(
 
 func Test_validator_IsHeartbeatFromActiveCoordinator_FromOtherNode_ReturnsFalse(t *testing.T) {
 	ctx := context.Background()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).ActiveCoordinatorNode("nodeA").Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).CurrentActiveCoordinator("nodeA").Build()
 
 	event := &common.HeartbeatReceivedEvent{}
 	event.From = "nodeB"

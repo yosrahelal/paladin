@@ -61,7 +61,7 @@ func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1) // Stop the dispatcher loop from progressing states - we're manually updating state throughout the test
 	builder.OverrideSequencerConfig(config)
-	builder.ActiveCoordinatorNode("node1")
+	builder.CurrentActiveCoordinator("node1")
 	c, mocks := builder.Build()
 	ctx, cancel := context.WithCancel(t.Context())
 	require.NoError(t, c.Start(ctx))
@@ -519,7 +519,8 @@ func TestCoordinator_NewCoordinator_StaticMode_ValidStaticCoordinator_StoresNode
 		cancel()
 		c.WaitForDone(t.Context())
 	}()
-	assert.Equal(t, "nodeA", c.activeCoordinatorNode)
+	assert.Equal(t, "nodeA", c.preferredActiveCoordinator)
+	assert.Equal(t, "nodeA", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_NewCoordinator_EndorserMode_FailsOnInvalidConfiguredCandidate(t *testing.T) {
@@ -547,7 +548,8 @@ func TestCoordinator_NewCoordinator_EndorserMode_InitializesPoolFromConfiguredCa
 		c.WaitForDone(t.Context())
 	}()
 	defer cancel()
-	assert.Equal(t, []string{"nodeA", "nodeB", "nodeB"}, c.originatorNodePool)
+	assert.Equal(t, []string{"nodeA", "nodeB"}, c.originatorNodePool)
+	assert.Equal(t, []string{"nodeA", "nodeB"}, c.coordinatorEndorserPool)
 }
 
 func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {

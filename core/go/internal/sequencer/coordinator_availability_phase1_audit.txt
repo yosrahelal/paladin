@@ -1,0 +1,22 @@
+Phase 1 audit (coordinator availability TDD)
+
+Existing coverage (not duplicated here in depth)
+- common/selection_test.go: SelectCoordinatorNode and DecodeNewBlockHeight table tests.
+- coordinator: coordinating_test.go, inactive_test.go, state_machine_test.go, state_transition_guards_test.go cover handover and guards.
+- originator: originating_test.go, observing paths, state machine tests.
+
+Harness fixes applied
+- OriginatorBuilderForTesting Build() passes b.sequencerConfig (or SequencerDefaults when nil) into NewOriginator.
+- CoordinatorBuilderForTesting Build() uses DomainContractConfig when set; otherwise COORDINATOR_SENDER default mock.
+
+Builder catalog
+- Coordinator: DomainContractConfig, NodeName, PreferredActiveCoordinator, CurrentActiveCoordinator, PreviousActiveCoordinatorNode, CoordinatorSelectionBlockRange, NewBlockRangeEpoch. No ActiveCoordinatorNode on the builder; tests use CurrentActiveCoordinator (or Preferred when modeling hash-selected leader).
+- Originator: same pattern; CurrentActiveCoordinator / PreferredActiveCoordinator; FailoverStep stored on builder until wired; NeedsRedelegate applied in Build. Delegation send failures are exercised via transport mock expectations in tests, not builder fields.
+
+Production rename
+- coordinator.activeCoordinatorNode and originator.activeCoordinatorNode remain until Phase 2 field split removes them per the availability plan.
+
+New Phase 1 test files
+- common/selection_test.go: SelectCoordinatorNode tests, DecodeNewBlockHeight tests, two determinism tests, and skipped next-candidate walk tests until the helper exists.
+- coordinator/coordinator_availability_fsm_test.go
+- originator/originator_availability_fsm_test.go

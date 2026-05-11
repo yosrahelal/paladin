@@ -75,7 +75,8 @@ type coordinator struct {
 
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop              *statemachine.StateMachineEventLoop[State, *coordinator]
-	activeCoordinatorNode              string
+	preferredActiveCoordinator         string
+	currentActiveCoordinator           string
 	previousActiveCoordinatorNode      string
 	activeCoordinatorState             State // only used when we are not the active coordinator
 	heartbeatIntervalsSinceStateChange int
@@ -87,7 +88,11 @@ type coordinator struct {
 	grapher                            grapher.Grapher
 	coordinatorEndorserPool            []string // Fixed set of endorser candidates used for coordinator selection (COORDINATOR_ENDORSER mode only)
 	originatorNodePool                 []string // Dynamic set of originator nodes used for heartbeat fan-out
-	newBlockRangeEpoch                 bool
+	newBlockRangeEpoch                 bool     // sticky for the current NewBlock event: guards, cleanup, transitions
+	failoverOffset                     int      // starts at 0; increment on unavailability; reset on epoch
+
+	// One-shot flags: set when a condition is detected; cleared when the handler that performs the action runs.
+	needsFailoverOffsetReset bool // Set on new block range epoch in UpdateBlockHeight; cleared after endorser Select resets failover offset.
 
 	/* Config */
 	contractAddress                *pldtypes.EthAddress
@@ -258,10 +263,12 @@ func (c *coordinator) initializeFromContractConfig(ctx context.Context) error {
 		if err != nil {
 			return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidStaticCoordinator, c.contractAddress.String(), staticCoordinator)
 		}
-		c.activeCoordinatorNode = node
+		c.preferredActiveCoordinator = node
+		c.currentActiveCoordinator = node
 		log.L(ctx).Debugf("static coordinator node for contract %s validated and set: %s", c.contractAddress.String(), node)
 	case prototk.ContractConfig_COORDINATOR_SENDER:
-		c.activeCoordinatorNode = c.nodeName
+		c.preferredActiveCoordinator = c.nodeName
+		c.currentActiveCoordinator = c.nodeName
 		log.L(ctx).Debugf("coordinator selection is SENDER mode; active coordinator set to self: %s", c.nodeName)
 	case prototk.ContractConfig_COORDINATOR_ENDORSER:
 		candidates := c.domainAPI.ContractConfig().GetCoordinatorEndorserCandidates()
@@ -276,16 +283,13 @@ func (c *coordinator) initializeFromContractConfig(ctx context.Context) error {
 			}
 			nodes = append(nodes, node)
 		}
-		slices.Sort(nodes)
-
-		// coordinatorEndorserPool is the fixed set used for deterministic coordinator selection; never mutated after init.
-		c.coordinatorEndorserPool = nodes
+		// coordinatorEndorserPool is sorted, deduped by node name, and never mutated after init.
+		c.coordinatorEndorserPool = common.DedupeSortedCoordinatorEndorserNodes(nodes)
 
 		// originatorNodePool is the heartbeat fan-out set; starts from the same endorser candidates.
 		// In COORDINATOR_ENDORSER mode all valid candidates are already known, so updateOriginatorNodePool
 		// becomes a no-op (see selection.go).
-		c.originatorNodePool = make([]string, len(nodes))
-		copy(c.originatorNodePool, nodes)
+		c.originatorNodePool = slices.Clone(c.coordinatorEndorserPool)
 
 		log.L(ctx).Debugf("initialized coordinator endorser pool: %+v", c.coordinatorEndorserPool)
 	}

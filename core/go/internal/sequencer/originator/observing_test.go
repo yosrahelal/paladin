@@ -33,9 +33,9 @@ import (
 func Test_applyHeartbeatReceived_BasicUpdate(t *testing.T) {
 	ctx := context.Background()
 	coordinatorLocator := "coordinator@coordinatorNode"
-	// Set activeCoordinatorNode to match the heartbeat sender so the active-coordinator path is exercised.
+	// Seed the current coordinator to match the heartbeat sender so the active-coordinator path is exercised.
 	builder := NewOriginatorBuilderForTesting(State_Observing).
-		ActiveCoordinatorNode(coordinatorLocator)
+		CurrentActiveCoordinator(coordinatorLocator)
 	o, _ := builder.Build()
 	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
@@ -49,7 +49,7 @@ func Test_applyHeartbeatReceived_BasicUpdate(t *testing.T) {
 	// Verify counter was reset
 	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
 	// Verify active coordinator node remains unchanged (heartbeat does NOT update it)
-	assert.Equal(t, coordinatorLocator, o.activeCoordinatorNode)
+	assert.Equal(t, coordinatorLocator, o.currentActiveCoordinator)
 }
 func Test_guard_InactiveGracePeriodExceeded_WhileObserving_TrueWhenCounterExceedsThreshold(t *testing.T) {
 	ctx := context.Background()
@@ -84,7 +84,7 @@ func Test_applyHeartbeatReceived_DispatchedTransactionNotFoundLogsAndContinues(t
 	// nodeName must match DispatchedTransactions[].Originator or the heartbeat entry is skipped entirely.
 	builder := NewOriginatorBuilderForTesting(State_Observing).
 		NodeName(originatorLocator).
-		ActiveCoordinatorNode(coordinatorLocator)
+		CurrentActiveCoordinator(coordinatorLocator)
 	o, _ := builder.Build()
 	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
@@ -111,7 +111,7 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithHashUpdatesSubmitted(t
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).
-		ActiveCoordinatorNode(coordinatorLocator)
+		CurrentActiveCoordinator(coordinatorLocator)
 	o, _ := builder.Build()
 	// Create a real transaction
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
@@ -151,7 +151,7 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithNonceOnlySendsNonceAss
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).
-		ActiveCoordinatorNode(coordinatorLocator)
+		CurrentActiveCoordinator(coordinatorLocator)
 	o, _ := builder.Build()
 	// Create a real transaction
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
@@ -188,7 +188,7 @@ func Test_applyHeartbeatReceived_DispatchedTransactionFromDifferentOriginatorIgn
 	otherOriginatorLocator := "otherSender@otherNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).
-		ActiveCoordinatorNode(coordinatorLocator)
+		CurrentActiveCoordinator(coordinatorLocator)
 	o, _ := builder.Build()
 	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = coordinatorLocator
@@ -212,7 +212,7 @@ func Test_applyHeartbeatReceived_DispatchedTransactionWithHashAndNonceSucceeds(t
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).
-		ActiveCoordinatorNode(coordinatorLocator)
+		CurrentActiveCoordinator(coordinatorLocator)
 	o, _ := builder.Build()
 	// Create a real transaction
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
@@ -250,7 +250,7 @@ func Test_applyHeartbeatReceived_DispatchedTransactionNonceOnlySucceeds(t *testi
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(State_Observing).
-		ActiveCoordinatorNode(coordinatorLocator)
+		CurrentActiveCoordinator(coordinatorLocator)
 	o, _ := builder.Build()
 	// Create a real transaction
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
@@ -295,7 +295,7 @@ func Test_applyHeartbeatReceived_SubmittedHandleEventError_ReturnsWrappedError(t
 	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.SubmittedEvent")).Return(innerErr)
 	builder := NewOriginatorBuilderForTesting(State_Observing).
 		NodeName(originatorLocator).
-		ActiveCoordinatorNode(coordinatorLocator).
+		CurrentActiveCoordinator(coordinatorLocator).
 		Transactions(mockTxn)
 	o, _ := builder.Build()
 	signerAddress := pldtypes.RandAddress()
@@ -334,7 +334,7 @@ func Test_applyHeartbeatReceived_NonceAssignedHandleEventError_ReturnsWrappedErr
 	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.NonceAssignedEvent")).Return(innerErr)
 	builder := NewOriginatorBuilderForTesting(State_Observing).
 		NodeName(originatorLocator).
-		ActiveCoordinatorNode(coordinatorLocator).
+		CurrentActiveCoordinator(coordinatorLocator).
 		Transactions(mockTxn)
 	o, _ := builder.Build()
 	nonce := uint64(99)

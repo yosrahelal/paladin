@@ -22,7 +22,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
-	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -65,23 +64,22 @@ func Test_guard_IsNewBlockRangeEpoch_WhenSameEpoch_ReturnsFalse(t *testing.T) {
 func Test_action_SelectActiveCoordinator_SenderMode_NoOp_ActiveCoordinatorUnchanged(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(State_Idle).Build()
-	// In SENDER mode, action_SelectActiveCoordinator is a no-op; activeCoordinatorNode is unchanged.
-	before := o.activeCoordinatorNode
+	// In SENDER mode, action_SelectActiveCoordinator is a no-op; the current coordinator identity is unchanged.
+	before := o.currentActiveCoordinator
 	err := action_SelectActiveCoordinator(ctx, o, nil)
 	require.NoError(t, err)
-	assert.Equal(t, before, o.activeCoordinatorNode)
+	assert.Equal(t, before, o.currentActiveCoordinator)
+	assert.Equal(t, before, o.preferredActiveCoordinator)
 }
 func Test_action_SelectActiveCoordinator_EndorserMode_WhenCoordinatorChanges_SetsChangedFlag(t *testing.T) {
 	ctx := context.Background()
-	domainAPI := &componentsmocks.DomainSmartContract{}
-	domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
-	})
 	o, _ := NewOriginatorBuilderForTesting(State_Idle).
-		DomainAPI(domainAPI).
+		DomainContractConfig(&prototk.ContractConfig{
+			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
+		}).
 		CoordinatorEndorserPool("node1", "node2").
-		ActiveCoordinatorNode("some-other-node").
+		CurrentActiveCoordinator("some-other-node").
 		CurrentBlockHeight(1000).
 		Build()
 	err := action_SelectActiveCoordinator(ctx, o, nil)
@@ -234,7 +232,7 @@ func Test_sendDelegationRequest_HandleEventError_ReturnsWrappedError(t *testing.
 	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(expectedErr)
 	o, _ := NewOriginatorBuilderForTesting(State_Sending).
 		Transactions(mockTxn).
-		ActiveCoordinatorNode("coordinator@coordinatorNode").
+		CurrentActiveCoordinator("coordinator@coordinatorNode").
 		Build()
 	err := sendDelegationRequest(ctx, o)
 	require.Error(t, err)

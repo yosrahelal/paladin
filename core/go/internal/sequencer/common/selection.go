@@ -18,37 +18,61 @@ package common
 import (
 	"context"
 	"hash/fnv"
+	"slices"
 	"strconv"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 )
 
-// SelectCoordinatorNode deterministically selects the active coordinator node in
-// COORDINATOR_ENDORSER mode. Both coordinator and originator call this function
-// independently so they arrive at the same result without any inter-process notification.
+// DedupeSortedCoordinatorEndorserNodes sorts node names in place and removes duplicate entries
+// (adjacent after sort). Use this when building the endorser pool so hash-modulus selection and
+// failover offsets see one slot per coordinator node.
+func DedupeSortedCoordinatorEndorserNodes(nodes []string) []string {
+	if len(nodes) == 0 {
+		return nodes
+	}
+	slices.Sort(nodes)
+	return slices.Compact(nodes)
+}
+
+// SelectCoordinatorNode returns the preferred coordinator for this height/range and the current
+// delegation target for the given failoverOffset. The offset is applied on the sorted deduped pool
+// ring: current slot is (preferredIndex + failoverOffset) mod len(pool). Callers reset the offset
+// to 0 on a new epoch and increment it (e.g. on unavailability); they do not need to normalize.
+// Originators and coordinators each keep their own failoverOffset; both use this function with the
+// same pool and height inputs so preferred identity agrees, unavailability-driven offsets should
+// stay consistent as they are driven by the same heartbeats across both types.
 //
-// For COORDINATOR_STATIC and COORDINATOR_SENDER modes, activeCoordinatorNode is set once
-// at construction/Start time and this function is never invoked.
-//
-// Parameters:
-//   - coordinatorEndorserPool: the sorted, fixed set of endorser candidates
-//   - currentBlockHeight: the current chain block height
-//   - blockRange: the block range granularity for epoch calculation
+// For COORDINATOR_STATIC and COORDINATOR_SENDER modes, preferred/current coordinator fields are
+// set once at construction/Start time and this function is never invoked.
 func SelectCoordinatorNode(
 	ctx context.Context,
 	coordinatorEndorserPool []string,
 	currentBlockHeight uint64,
 	blockRange uint64,
-) string {
-	// Round block number down to the nearest block range (e.g. block 1012, 1013, 1014 etc. all become 1000 for hashing)
+	failoverOffset int,
+) (preferred, current string) {
+	n := len(coordinatorEndorserPool)
+	if n == 0 {
+		return "", ""
+	}
+	if n == 1 {
+		return coordinatorEndorserPool[0], coordinatorEndorserPool[0]
+	}
 	effectiveBlockNumber := currentBlockHeight - (currentBlockHeight % blockRange)
 
 	// Take a numeric hash of the effective block number
 	h := fnv.New32a()
 	h.Write([]byte(strconv.FormatUint(effectiveBlockNumber, 10)))
-	selected := coordinatorEndorserPool[int(h.Sum32())%len(coordinatorEndorserPool)]
-	log.L(ctx).Debugf("coordinator %s selected based on hash modulus of the endorser pool %+v", selected, coordinatorEndorserPool)
-	return selected
+	p := int(h.Sum32()) % n
+	preferred = coordinatorEndorserPool[p]
+	s := (p + failoverOffset) % n
+	if s < 0 {
+		s += n
+	}
+	current = coordinatorEndorserPool[s]
+	log.L(ctx).Debugf("endorser coordinator preferred %q current %q (failoverOffset=%d preferredIndex=%d pool %+v)", preferred, current, failoverOffset, p, coordinatorEndorserPool)
+	return preferred, current
 }
 
 // DecodeNewBlockHeight extracts the new block height from a NewBlockEvent and determines

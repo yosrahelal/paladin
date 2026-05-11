@@ -17,7 +17,6 @@ package originator
 
 import (
 	"context"
-	"slices"
 	"sync"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
@@ -64,16 +63,20 @@ type originator struct {
 
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop              *statemachine.StateMachineEventLoop[State, *originator]
-	activeCoordinatorNode              string
+	preferredActiveCoordinator         string
+	currentActiveCoordinator           string
+	failoverOffset                     int // starts at 0; increment on unavailability; reset on epoch
 	previousActiveCoordinatorNode      string
 	heartbeatIntervalsSinceLastReceive int
 	transactionsByID                   map[uuid.UUID]transaction.OriginatorTransaction
 	transactionsOrdered                []transaction.OriginatorTransaction
 	currentBlockHeight                 uint64
-	newBlockRangeEpoch                 bool
-	coordinatorEndorserPool            []string // Fixed sorted set of endorser candidates for COORDINATOR_ENDORSER mode
+	newBlockRangeEpoch                 bool     // sticky for the current NewBlock event: guards on Select
+	coordinatorEndorserPool            []string // Sorted deduped endorser node names for COORDINATOR_ENDORSER mode
 	watchingPreviousCoordinatorFlush   bool     // Watching-phase tracking: set when coordinator changes; cleared on first closing heartbeat or if inactive thresholds are exceeded
-	needsRedelegate                    bool     // Set by applyHeartbeatReceived when the heartbeat reveals a need to redelegate; cleared by sendDelegationRequest
+	// One-shot flags: set when a condition is detected; cleared when the handler that performs the action runs.
+	needsRedelegate          bool // Set by applyHeartbeatReceived when the heartbeat reveals a need to redelegate; cleared by sendDelegationRequest
+	needsFailoverOffsetReset bool // Set on new block range epoch in UpdateBlockHeight; cleared after endorser Select resets failover offset.
 
 	/* Config */
 	nodeName            string
@@ -152,10 +155,12 @@ func (o *originator) initializeFromContractConfig(ctx context.Context) error {
 		if err != nil {
 			return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidStaticCoordinator, o.contractAddress.String(), staticCoordinator)
 		}
-		o.activeCoordinatorNode = node
+		o.preferredActiveCoordinator = node
+		o.currentActiveCoordinator = node
 		log.L(ctx).Debugf("static coordinator node for contract %s validated and set: %s", o.contractAddress.String(), node)
 	case prototk.ContractConfig_COORDINATOR_SENDER:
-		o.activeCoordinatorNode = o.nodeName
+		o.preferredActiveCoordinator = o.nodeName
+		o.currentActiveCoordinator = o.nodeName
 		log.L(ctx).Debugf("coordinator selection is SENDER mode; active coordinator set to self: %s", o.nodeName)
 	case prototk.ContractConfig_COORDINATOR_ENDORSER:
 		candidates := o.domainAPI.ContractConfig().GetCoordinatorEndorserCandidates()
@@ -170,8 +175,7 @@ func (o *originator) initializeFromContractConfig(ctx context.Context) error {
 			}
 			nodes = append(nodes, node)
 		}
-		slices.Sort(nodes)
-		o.coordinatorEndorserPool = nodes
+		o.coordinatorEndorserPool = common.DedupeSortedCoordinatorEndorserNodes(nodes)
 		log.L(ctx).Debugf("initialized coordinator endorser pool for originator: %+v", o.coordinatorEndorserPool)
 	}
 	return nil

@@ -22,7 +22,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
-	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -37,14 +36,11 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	// coordinatorNode is the node name that initializeFromContractConfig will extract from the static coordinator locator
 	coordinatorNode := "coordinatorNode"
 	staticCoordinatorLocator := "coordinator@coordinatorNode"
-	// Use COORDINATOR_STATIC mode so Start() → initializeFromContractConfig sets activeCoordinatorNode
-	// to "coordinatorNode" automatically, without any manual override needed.
-	domainAPI := &componentsmocks.DomainSmartContract{}
-	domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
+	// Use COORDINATOR_STATIC mode so Start() runs initializeFromContractConfig for coordinator selection.
+	builder := NewOriginatorBuilderForTesting(State_Idle).DomainContractConfig(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
 		StaticCoordinator:    &staticCoordinatorLocator,
-	}).Maybe()
-	builder := NewOriginatorBuilderForTesting(State_Idle).DomainAPI(domainAPI)
+	})
 	o, mocks := builder.Build()
 	require.NoError(t, o.Start(ctx))
 	defer func() {
@@ -315,7 +311,7 @@ func TestStateMachine_Sending_DoDelegateTransactions_OnHeartbeatReceived_IfHasDr
 	txn1Builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
 	txn2Builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
 	builder := NewOriginatorBuilderForTesting(State_Sending).
-		ActiveCoordinatorNode(coordinatorLocator).
+		CurrentActiveCoordinator(coordinatorLocator).
 		TransactionBuilders(txn1Builder, txn2Builder)
 	o, mocks := builder.Build()
 	txn1 := txn1Builder.GetBuiltTransaction()

@@ -43,18 +43,23 @@ type CoordinatorBuilderForTesting struct {
 	txManager                                *componentsmocks.TXManager
 	sequencerManager                         *componentsmocks.SequencerManager
 	contractAddress                          *pldtypes.EthAddress
+	contractConfig                           *prototk.ContractConfig
 	currentBlockHeight                       *uint64
-	activeCoordinator                        *string
 	transactions                             []transaction.CoordinatorTransaction
 	heartbeatsUntilClosingGracePeriodExpires *int
 	metrics                                  metrics.DistributedSequencerMetrics
 	sequencerConfig                          *pldconf.SequencerConfig
 	originatorNodePool                       *[]string
-	activeCoordinatorNode                    string
+	preferredActiveCoordinator               *string
+	currentActiveCoordinator                 *string
+	previousActiveCoordinatorNode            *string
+	newBlockRangeEpoch                       *bool
+	localNodeName                            string
 	heartbeatIntervalsSinceLastReceive       *int
 	inactiveGracePeriod                      *int
 	heartbeatIntervalsSinceStateChange       *int
 	activeCoordinatorState                   *State
+	failoverOffset                           *int
 	useMockTransportWriter                   bool
 }
 
@@ -204,8 +209,38 @@ func (b *CoordinatorBuilderForTesting) OriginatorNodePool(nodes ...string) *Coor
 	return b
 }
 
-func (b *CoordinatorBuilderForTesting) ActiveCoordinatorNode(node string) *CoordinatorBuilderForTesting {
-	b.activeCoordinatorNode = node
+func (b *CoordinatorBuilderForTesting) DomainContractConfig(cfg *prototk.ContractConfig) *CoordinatorBuilderForTesting {
+	b.contractConfig = cfg
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) NodeName(name string) *CoordinatorBuilderForTesting {
+	b.localNodeName = name
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) PreferredActiveCoordinator(node string) *CoordinatorBuilderForTesting {
+	b.preferredActiveCoordinator = &node
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) CurrentActiveCoordinator(node string) *CoordinatorBuilderForTesting {
+	b.currentActiveCoordinator = &node
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) PreviousActiveCoordinatorNode(node string) *CoordinatorBuilderForTesting {
+	b.previousActiveCoordinatorNode = &node
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) CoordinatorSelectionBlockRange(n uint64) *CoordinatorBuilderForTesting {
+	b.sequencerConfig.BlockRange = confutil.P(n)
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) NewBlockRangeEpoch(v bool) *CoordinatorBuilderForTesting {
+	b.newBlockRangeEpoch = &v
 	return b
 }
 
@@ -226,6 +261,11 @@ func (b *CoordinatorBuilderForTesting) HeartbeatIntervalsSinceStateChange(n int)
 
 func (b *CoordinatorBuilderForTesting) ActiveCoordinatorState(state State) *CoordinatorBuilderForTesting {
 	b.activeCoordinatorState = &state
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) FailoverOffset(offset int) *CoordinatorBuilderForTesting {
+	b.failoverOffset = &offset
 	return b
 }
 
@@ -257,9 +297,13 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		mocks.TransportWriter = mockTransportWriter
 	}
 
-	b.domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-	}).Maybe()
+	if b.contractConfig != nil {
+		b.domainAPI.On("ContractConfig").Return(b.contractConfig).Maybe()
+	} else {
+		b.domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
+			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
+		}).Maybe()
+	}
 
 	allComponents := componentsmocks.NewAllComponents(b.t)
 	mp, err := mockpersistence.NewSQLMockProvider()
@@ -267,8 +311,13 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		panic(err)
 	}
 
+	localNode := "node1"
+	if b.localNodeName != "" {
+		localNode = b.localNodeName
+	}
+
 	transportManager := componentsmocks.NewTransportManager(b.t)
-	transportManager.On("LocalNodeName").Return("node1").Maybe()
+	transportManager.On("LocalNodeName").Return(localNode).Maybe()
 	allComponents.On("TransportManager").Return(transportManager).Maybe()
 	allComponents.On("TxManager").Return(b.txManager).Maybe()
 	allComponents.On("SequencerManager").Return(b.sequencerManager).Maybe()
@@ -291,7 +340,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		mocks.EngineIntegration,
 		mocks.SyncPoints,
 		b.sequencerConfig,
-		"node1",
+		localNode,
 		b.metrics,
 	)
 
@@ -308,8 +357,23 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	if b.originatorNodePool != nil {
 		coordinator.originatorNodePool = *b.originatorNodePool
 	}
-	if b.activeCoordinatorNode != "" {
-		coordinator.activeCoordinatorNode = b.activeCoordinatorNode
+	switch {
+	case b.currentActiveCoordinator != nil && b.preferredActiveCoordinator != nil:
+		coordinator.currentActiveCoordinator = *b.currentActiveCoordinator
+		coordinator.preferredActiveCoordinator = *b.preferredActiveCoordinator
+	case b.currentActiveCoordinator != nil:
+		coordinator.currentActiveCoordinator = *b.currentActiveCoordinator
+		coordinator.preferredActiveCoordinator = *b.currentActiveCoordinator
+	case b.preferredActiveCoordinator != nil:
+		coordinator.preferredActiveCoordinator = *b.preferredActiveCoordinator
+		coordinator.currentActiveCoordinator = *b.preferredActiveCoordinator
+	}
+	if b.previousActiveCoordinatorNode != nil {
+		coordinator.previousActiveCoordinatorNode = *b.previousActiveCoordinatorNode
+	}
+	if b.newBlockRangeEpoch != nil {
+		coordinator.newBlockRangeEpoch = *b.newBlockRangeEpoch
+		coordinator.needsFailoverOffsetReset = *b.newBlockRangeEpoch
 	}
 	if b.heartbeatIntervalsSinceLastReceive != nil {
 		coordinator.heartbeatIntervalsSinceLastReceive = *b.heartbeatIntervalsSinceLastReceive
@@ -322,6 +386,9 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	}
 	if b.activeCoordinatorState != nil {
 		coordinator.activeCoordinatorState = *b.activeCoordinatorState
+	}
+	if b.failoverOffset != nil {
+		coordinator.failoverOffset = *b.failoverOffset
 	}
 
 	return coordinator, mocks

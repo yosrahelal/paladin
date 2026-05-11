@@ -44,14 +44,17 @@ type OriginatorBuilderForTesting struct {
 	transactionBuilders                []*transaction.TransactionBuilderForTesting
 	metrics                            metrics.DistributedSequencerMetrics
 	sequencerConfig                    *pldconf.SequencerConfig
-	domainAPI                          *componentsmocks.DomainSmartContract
+	contractConfig                     *prototk.ContractConfig
 	blockRangeSize                     *uint64
 	currentBlockHeight                 *uint64
 	newBlockRangeEpoch                 *bool
 	coordinatorEndorserPool              []string
-	activeCoordinatorNode                *string
+	preferredActiveCoordinator           *string
+	currentActiveCoordinator             *string
 	previousActiveCoordinatorNode        *string
 	watchingPreviousCoordinatorFlush     *bool
+	failoverOffset                       *int
+	needsRedelegate                      *bool
 	heartbeatIntervalsSinceLastReceive   *int
 	inactiveGracePeriod                  *int
 	transactions                         []transaction.OriginatorTransaction
@@ -83,11 +86,6 @@ func (b *OriginatorBuilderForTesting) NodeName(nodeName string) *OriginatorBuild
 
 func (b *OriginatorBuilderForTesting) CommitteeMembers(committeeMembers ...string) *OriginatorBuilderForTesting {
 	b.committeeMembers = committeeMembers
-	return b
-}
-
-func (b *OriginatorBuilderForTesting) DomainAPI(api *componentsmocks.DomainSmartContract) *OriginatorBuilderForTesting {
-	b.domainAPI = api
 	return b
 }
 
@@ -128,12 +126,32 @@ func (b *OriginatorBuilderForTesting) NewBlockRangeEpoch(v bool) *OriginatorBuil
 }
 
 func (b *OriginatorBuilderForTesting) CoordinatorEndorserPool(nodes ...string) *OriginatorBuilderForTesting {
-	b.coordinatorEndorserPool = nodes
+	b.coordinatorEndorserPool = common.DedupeSortedCoordinatorEndorserNodes(append([]string(nil), nodes...))
 	return b
 }
 
-func (b *OriginatorBuilderForTesting) ActiveCoordinatorNode(node string) *OriginatorBuilderForTesting {
-	b.activeCoordinatorNode = &node
+func (b *OriginatorBuilderForTesting) DomainContractConfig(cfg *prototk.ContractConfig) *OriginatorBuilderForTesting {
+	b.contractConfig = cfg
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) PreferredActiveCoordinator(node string) *OriginatorBuilderForTesting {
+	b.preferredActiveCoordinator = &node
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) CurrentActiveCoordinator(node string) *OriginatorBuilderForTesting {
+	b.currentActiveCoordinator = &node
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) FailoverOffset(offset int) *OriginatorBuilderForTesting {
+	b.failoverOffset = &offset
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) NeedsRedelegate(v bool) *OriginatorBuilderForTesting {
+	b.needsRedelegate = &v
 	return b
 }
 
@@ -180,11 +198,18 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		EngineIntegration:   &common.FakeEngineIntegrationForTesting{},
 	}
 
-	if b.domainAPI == nil {
-		b.domainAPI = &componentsmocks.DomainSmartContract{}
-		b.domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
+	domainAPI := &componentsmocks.DomainSmartContract{}
+	if b.contractConfig != nil {
+		domainAPI.On("ContractConfig").Return(b.contractConfig).Maybe()
+	} else {
+		domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 		}).Maybe()
+	}
+
+	seqConfig := b.sequencerConfig
+	if seqConfig == nil {
+		seqConfig = &pldconf.SequencerDefaults
 	}
 
 	originator := NewOriginator(
@@ -192,9 +217,9 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		mocks.SentMessageRecorder,
 		mocks.EngineIntegration,
 		b.contractAddress,
-		&pldconf.SequencerDefaults,
+		seqConfig,
 		b.metrics,
-		b.domainAPI,
+		domainAPI,
 	)
 
 	for _, txBuilder := range b.transactionBuilders {
@@ -215,10 +240,25 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	// Any state specific setup can be done here
 	}
 
-	if b.activeCoordinatorNode != nil {
-		originator.activeCoordinatorNode = *b.activeCoordinatorNode
-	} else {
-		originator.activeCoordinatorNode = "coordinator"
+	switch {
+	case b.currentActiveCoordinator != nil && b.preferredActiveCoordinator != nil:
+		originator.currentActiveCoordinator = *b.currentActiveCoordinator
+		originator.preferredActiveCoordinator = *b.preferredActiveCoordinator
+	case b.currentActiveCoordinator != nil:
+		originator.currentActiveCoordinator = *b.currentActiveCoordinator
+		originator.preferredActiveCoordinator = *b.currentActiveCoordinator
+	case b.preferredActiveCoordinator != nil:
+		originator.preferredActiveCoordinator = *b.preferredActiveCoordinator
+		originator.currentActiveCoordinator = *b.preferredActiveCoordinator
+	default:
+		originator.currentActiveCoordinator = "coordinator"
+		originator.preferredActiveCoordinator = "coordinator"
+	}
+	if b.failoverOffset != nil {
+		originator.failoverOffset = *b.failoverOffset
+	}
+	if b.needsRedelegate != nil {
+		originator.needsRedelegate = *b.needsRedelegate
 	}
 	if b.blockRangeSize != nil {
 		originator.blockRangeSize = *b.blockRangeSize
@@ -228,6 +268,7 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	}
 	if b.newBlockRangeEpoch != nil {
 		originator.newBlockRangeEpoch = *b.newBlockRangeEpoch
+		originator.needsFailoverOffsetReset = *b.newBlockRangeEpoch
 	}
 	if b.coordinatorEndorserPool != nil {
 		originator.coordinatorEndorserPool = b.coordinatorEndorserPool
@@ -245,6 +286,6 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		originator.inactiveGracePeriod = *b.inactiveGracePeriod
 	}
 
-	mocks.DomainAPI = b.domainAPI
+	mocks.DomainAPI = domainAPI
 	return originator, mocks
 }

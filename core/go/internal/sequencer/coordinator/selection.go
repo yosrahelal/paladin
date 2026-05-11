@@ -24,24 +24,30 @@ import (
 
 func action_SelectActiveCoordinator(ctx context.Context, c *coordinator, _ common.Event) error {
 	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
-		// For STATIC and SENDER modes, activeCoordinatorNode is set once at Start time and never changes.
+		// For STATIC and SENDER modes, preferred/current coordinator are set once at Start time and never change.
 		return nil
 	}
-	selected := common.SelectCoordinatorNode(
+	if c.needsFailoverOffsetReset || c.preferredActiveCoordinator == "" {
+		c.failoverOffset = 0
+		c.needsFailoverOffsetReset = false
+	}
+	selectedPreferred, selectedCurrent := common.SelectCoordinatorNode(
 		ctx,
 		c.coordinatorEndorserPool,
 		c.currentBlockHeight,
 		c.coordinatorSelectionBlockRange,
+		c.failoverOffset,
 	)
-	if c.activeCoordinatorNode != selected {
-		c.previousActiveCoordinatorNode = c.activeCoordinatorNode
-		c.activeCoordinatorNode = selected
-	}
+	c.previousActiveCoordinatorNode = c.currentActiveCoordinator
+	c.preferredActiveCoordinator = selectedPreferred
+	c.currentActiveCoordinator = selectedCurrent
+
 	return nil
 }
 
 func action_UpdateBlockHeight(_ context.Context, c *coordinator, event common.Event) error {
 	c.currentBlockHeight, c.newBlockRangeEpoch = common.DecodeNewBlockHeight(c.currentBlockHeight, c.coordinatorSelectionBlockRange, event)
+	c.needsFailoverOffsetReset = c.newBlockRangeEpoch && c.failoverOffset != 0
 	return nil
 }
 

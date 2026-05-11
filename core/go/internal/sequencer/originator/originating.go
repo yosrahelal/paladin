@@ -84,7 +84,7 @@ func sendDelegationRequest(ctx context.Context, o *originator) error {
 			BaseEvent: transaction.BaseEvent{
 				TransactionID: txn.GetID(),
 			},
-			Coordinator: o.activeCoordinatorNode,
+			Coordinator: o.currentActiveCoordinator,
 		})
 		if err != nil {
 			msg := fmt.Errorf("error handling delegated event for transaction %s: %v", txn.GetID(), err)
@@ -95,7 +95,7 @@ func sendDelegationRequest(ctx context.Context, o *originator) error {
 	log.L(ctx).Debugf("sending delegation request for %d transactions", len(o.transactionsOrdered))
 
 	// Don't send delegation request before internal TX state machine has been updated
-	return o.transportWriter.SendDelegationRequest(ctx, o.activeCoordinatorNode, transactionsToDelegate, o.currentBlockHeight)
+	return o.transportWriter.SendDelegationRequest(ctx, o.currentActiveCoordinator, transactionsToDelegate, o.currentBlockHeight)
 }
 
 // TODO AM: the originator sends delegation requests to whoever it thinks is the active coordinator and never checks that it gets
@@ -183,6 +183,7 @@ func (o *originator) removeTransaction(ctx context.Context, txnID uuid.UUID) {
 
 func action_UpdateBlockHeight(_ context.Context, o *originator, event common.Event) error {
 	o.currentBlockHeight, o.newBlockRangeEpoch = common.DecodeNewBlockHeight(o.currentBlockHeight, o.blockRangeSize, event)
+	o.needsFailoverOffsetReset = o.newBlockRangeEpoch
 	return nil
 }
 
@@ -192,22 +193,25 @@ func guard_IsNewBlockRangeEpoch(_ context.Context, o *originator) bool {
 
 func action_SelectActiveCoordinator(ctx context.Context, o *originator, _ common.Event) error {
 	if o.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
-		// For STATIC and SENDER modes, activeCoordinatorNode is set once at construction time and never changes.
+		// For STATIC and SENDER modes, preferred/current coordinator are set once at construction time and never change.
 		return nil
 	}
-	o.previousActiveCoordinatorNode = o.activeCoordinatorNode
-	o.activeCoordinatorNode = common.SelectCoordinatorNode(
+	if o.needsFailoverOffsetReset || o.preferredActiveCoordinator == "" {
+		o.failoverOffset = 0
+	}
+	o.previousActiveCoordinatorNode = o.currentActiveCoordinator
+	o.preferredActiveCoordinator, o.currentActiveCoordinator = common.SelectCoordinatorNode(
 		ctx,
 		o.coordinatorEndorserPool,
 		o.currentBlockHeight,
 		o.blockRangeSize,
+		o.failoverOffset,
 	)
+	o.needsFailoverOffsetReset = false
 	// If the coordinator has changed and there was a previous coordinator, start watching for their closing heartbeat
 	// before sending delegation requests to the new coordinator.
-	if o.activeCoordinatorNode != o.previousActiveCoordinatorNode && o.previousActiveCoordinatorNode != "" {
+	if o.currentActiveCoordinator != o.previousActiveCoordinatorNode && o.previousActiveCoordinatorNode != "" {
 		o.watchingPreviousCoordinatorFlush = true
 	}
 	return nil
 }
-
-

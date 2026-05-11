@@ -59,7 +59,7 @@ type (
 )
 
 func guard_IsActiveCoordinator(ctx context.Context, c *coordinator) bool {
-	return c.nodeName == c.activeCoordinatorNode
+	return c.nodeName == c.preferredActiveCoordinator
 }
 
 // TODO AM: something to think about

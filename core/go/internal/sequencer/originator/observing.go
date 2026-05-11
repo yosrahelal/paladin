@@ -80,7 +80,7 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.H
 		if event.CoordinatorSnapshot.IsCoordinatorClosing() {
 			// First closing heartbeat from the previous coordinator: trigger a full redelegate to the new
 			// active coordinator so it can include any transactions the previous coordinator dropped.
-			log.L(ctx).Debugf("previous coordinator %s has entered closing state; triggering redelegate to %s", event.From, o.activeCoordinatorNode)
+			log.L(ctx).Debugf("previous coordinator %s has entered closing state; triggering redelegate to %s", event.From, o.currentActiveCoordinator)
 			o.watchingPreviousCoordinatorFlush = false
 			o.needsRedelegate = true
 		}
@@ -89,8 +89,8 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.H
 	}
 
 	// Only process dispatch state updates and dropped-transaction detection from the active coordinator.
-	if event.From != o.activeCoordinatorNode {
-		log.L(ctx).Debugf("ignoring non-active coordinator heartbeat from %s (active: %s)", event.From, o.activeCoordinatorNode)
+	if event.From != o.currentActiveCoordinator {
+		log.L(ctx).Debugf("ignoring non-active coordinator heartbeat from %s (active: %s)", event.From, o.currentActiveCoordinator)
 		return nil
 	}
 
@@ -119,7 +119,7 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.H
 		txn := o.transactionsByID[dispatchedTransaction.ID]
 		if txn == nil {
 			// Unexpected: we trust our memory over the coordinator's snapshot; ignore this entry.
-			log.L(ctx).Warnf("received heartbeat from %s with dispatched transaction %s but no transaction found in memory", o.activeCoordinatorNode, dispatchedTransaction.ID)
+			log.L(ctx).Warnf("received heartbeat from %s with dispatched transaction %s but no transaction found in memory", o.currentActiveCoordinator, dispatchedTransaction.ID)
 			continue
 		}
 		if dispatchedTransaction.LatestSubmissionHash != nil {

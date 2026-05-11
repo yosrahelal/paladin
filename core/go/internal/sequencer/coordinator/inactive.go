@@ -28,7 +28,7 @@ func action_RejectDelegatedTransactions(ctx context.Context, c *coordinator, eve
 
 func validator_IsHeartbeatFromActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*common.HeartbeatReceivedEvent)
-	return c.activeCoordinatorNode == e.From, nil
+	return c.preferredActiveCoordinator == e.From, nil
 }
 
 func validator_IsHeartbeatFromPreviousActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
