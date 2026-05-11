@@ -98,9 +98,6 @@ export const fetchIndexedTransactions = async (
   );
 
   const receiptsResult = await fetchTransactionReceipts(transactions);
-  const paladinTransactionsResult = await fetchPaladinTransactions(
-    receiptsResult
-  );
   const events = await fetchTransactionEvents(transactions);
 
   let enrichedTransactions: IEnrichedTransaction[] = [];
@@ -110,16 +107,6 @@ export const fetchIndexedTransactions = async (
       ...transaction,
       receipts: receiptsResult.filter(
         (receiptResult) => receiptResult.transactionHash === transaction.hash
-      ),
-      paladinTransactions: paladinTransactionsResult.filter(
-        (paladinTransaction) =>
-          receiptsResult
-            ?.filter(
-              (transactionReceipt) =>
-                transactionReceipt.transactionHash === transaction.hash
-            )
-            .map((transactionReceipt) => transactionReceipt.id)
-            .includes(paladinTransaction.id)
       ),
       events: events.filter(event => event.transactionHash === transaction.hash)
     });
@@ -186,13 +173,13 @@ export const fetchSubmissions = async (
 };
 
 export const fetchTransactionReceipt = async (
-  transactionId: string
+  id: string
 ): Promise<ITransactionReceipt> => {
   const payload = {
     jsonrpc: '2.0',
     id: Date.now(),
     method: RpcMethods.ptx_getTransactionReceipt,
-    params: [transactionId],
+    params: [id],
   };
 
   return <Promise<ITransactionReceipt>>(
@@ -328,7 +315,7 @@ export const sendTransaction = async (
   );
 };
 
-export const fetchTransaction = async (
+export const fetchEnrichedTransaction = async (
   hash: string
 ): Promise<IEnrichedTransaction | undefined> => {
   const payload = {
@@ -349,9 +336,6 @@ export const fetchTransaction = async (
 
   const block = await fetchBlockByNumber(transaction.blockNumber);
   const receiptsResult = await fetchTransactionReceipts([transaction]);
-  const paladinTransactionsResult = receiptsResult.length === 0 ? [] : await fetchPaladinTransactions(
-    receiptsResult
-  );
   const events = await fetchTransactionEvents([transaction]);
 
   return {
@@ -359,16 +343,6 @@ export const fetchTransaction = async (
     block,
     receipts: receiptsResult.filter(
       (receiptResult) => receiptResult.transactionHash === transaction.hash
-    ),
-    paladinTransactions: paladinTransactionsResult.filter(
-      (paladinTransaction) =>
-        receiptsResult
-          ?.filter(
-            (transactionReceipt) =>
-              transactionReceipt.transactionHash === transaction.hash
-          )
-          .map((transactionReceipt) => transactionReceipt.id)
-          .includes(paladinTransaction.id)
     ),
     events: events.filter(event => event.transactionHash === transaction.hash)
   };
@@ -399,10 +373,26 @@ export const fetchPaladinTransaction = async (
   const payload = {
     jsonrpc: '2.0',
     id: Date.now(),
+    method: RpcMethods.ptx_getTransaction,
+    params: [id]
+  };
+  return <Promise<IPaladinTransaction>>(
+    returnResponse(
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
+      i18next.t('errorFetchingPaladinTransaction')
+    )
+  );
+};
+
+export const fetchPaladinTransactionFull = async (
+  id: string
+): Promise<IPaladinTransaction | null> => {
+  const payload = {
+    jsonrpc: '2.0',
+    id: Date.now(),
     method: RpcMethods.ptx_getTransactionFull,
     params: [id]
   };
-
   return <Promise<IPaladinTransaction>>(
     returnResponse(
       () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),

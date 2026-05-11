@@ -163,6 +163,7 @@
 	"numberSeconds": "{{number}} (seconds)",
 	"off": "Off",
 	"on": "On",
+	"open": "Open",
 	"openFolder": "Open folder",
 	"operator": "Operator",
 	"options": "Options",

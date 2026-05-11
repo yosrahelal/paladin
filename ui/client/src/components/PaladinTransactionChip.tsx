@@ -34,16 +34,15 @@ export const PaladinTransactionChip: React.FC<Props> = ({
 
   return (
     <Button variant="contained" size="small" disableElevation
-    color="info"
+      color="info"
       sx={{
         paddingTop: 0, paddingBottom: 0, fontWeight: '400', whiteSpace: 'nowrap',
-        minWidth: '155px'
+        minWidth: '170px'
       }}
-      onClick={() => navigate(`/ui/transactions/${paladinTransaction.id}`, { state: { from: 'transactions' }})}
+      onClick={() => navigate(`/ui/transactions/${paladinTransaction.id}`, { state: { from: 'transactions' } })}
       endIcon={<OpenInNewIcon />}
     >
-      {paladinTransaction.domain !== undefined &&
-        <span style={{ fontWeight: 600, marginRight: '6px' }}>{t(paladinTransaction.domain)}</span>}
+      <span style={{ fontWeight: 600, marginRight: '6px' }}>{t(paladinTransaction.domain ?? 'public')}</span>
       {getShortId(paladinTransaction.id)}
     </Button>
   );

@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Chip, Grid2, Typography, useTheme } from "@mui/material";
+import { Box, Chip, Grid2, IconButton, Tooltip, Typography, useTheme } from "@mui/material";
 import { IEnrichedTransaction } from "../interfaces"
 import { useTranslation } from "react-i18next";
 import { Hash } from "./Hash";
@@ -25,6 +25,8 @@ import iconLight from '../../public/paladin-icon-light.svg';
 import { PaladinTransactionChip } from "./PaladinTransactionChip";
 import DnsIcon from '@mui/icons-material/Dns';
 import { EventChip } from "./EventChip";
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { useNavigate } from "react-router-dom";
 
 type Props = {
   enrichedTransaction: IEnrichedTransaction
@@ -35,9 +37,8 @@ export const EnrichedTransaction: React.FC<Props> = ({
 }) => {
 
   const theme = useTheme();
+  const navigate = useNavigate();
   const { t } = useTranslation();
-
-  
 
   return (
     <>
@@ -91,6 +92,15 @@ export const EnrichedTransaction: React.FC<Props> = ({
               <Typography align="center" variant="body2" color="textSecondary">{t('time')}</Typography>
               <EllapsedTime icon={<></>} timestamp={enrichedTransaction.block.timestamp} />
             </Grid2>
+            <Grid2 alignContent="center">
+              <Tooltip arrow title={t('open')}>
+              <IconButton
+              onClick={() => navigate(`/ui/transactions/${enrichedTransaction.hash}`)}
+              >
+                <OpenInNewIcon color="secondary" fontSize="medium" />
+              </IconButton>
+              </Tooltip>
+            </Grid2>
           </Grid2>
         </Box>
         <Box
@@ -111,10 +121,10 @@ export const EnrichedTransaction: React.FC<Props> = ({
             <Chip label={enrichedTransaction.receipts.length} sx={{ borderRadius: '4px', height: '25px' }} />
             <Box sx={{ width: '20px' }} />
             {enrichedTransaction.receipts.map(receipt =>
-              <PaladinTransactionChip 
-              key={receipt.id} 
-              paladinTransaction={receipt}
-               />
+              <PaladinTransactionChip
+                key={receipt.id}
+                paladinTransaction={receipt}
+              />
             )}
           </Box>
         </Box>

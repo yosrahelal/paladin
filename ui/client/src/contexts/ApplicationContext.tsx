@@ -56,8 +56,7 @@ export const ApplicationContextProvider = ({ children, colorMode }: Props) => {
         return 0;
       }),
     refetchInterval: constants.UPDATE_FREQUENCY_MILLISECONDS,
-    retry: false,
-    enabled: false
+    retry: false
   });
 
   useEffect(() => {
