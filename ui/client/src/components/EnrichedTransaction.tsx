@@ -22,7 +22,7 @@ import { Captions } from "lucide-react";
 import { TransactionStatus } from "./TransactionStatus";
 import { EllapsedTime } from "./EllapsedTime";
 import iconLight from '../../public/paladin-icon-light.svg';
-import { PaladinTransactionChip } from "./PaladinTransactionChip";
+import { PaladinReceiptChip } from "./PaladinReceiptChip";
 import DnsIcon from '@mui/icons-material/Dns';
 import { EventChip } from "./EventChip";
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -121,9 +121,9 @@ export const EnrichedTransaction: React.FC<Props> = ({
             <Chip label={enrichedTransaction.receipts.length} sx={{ borderRadius: '4px', height: '25px' }} />
             <Box sx={{ width: '20px' }} />
             {enrichedTransaction.receipts.map(receipt =>
-              <PaladinTransactionChip
+              <PaladinReceiptChip
                 key={receipt.id}
-                paladinTransaction={receipt}
+                receipt={receipt}
               />
             )}
           </Box>

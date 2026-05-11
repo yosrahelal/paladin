@@ -14,20 +14,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Fade, Grid2, Tab, Tabs, Typography } from "@mui/material";
+import { Alert, Box, Button, Fade, Grid2, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { fetchPaladinTransaction, fetchEnrichedTransaction, fetchTransactionReceipt } from "../queries/transactions";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { getShortId, isValidTransactionHash, isValidUUID } from "../utils";
+import { isValidTransactionHash, isValidUUID } from "../utils";
 import { useTranslation } from "react-i18next";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { TransactionOverview } from "../components/TransactionOverview";
 import { EventsOverview } from "../components/EventsOverview";
 import { PaladinTransactionSection } from "../components/PaladinTransactionSection";
-import { JSONBox } from "../components/JSONBox";
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { ReceiptlessPaladinTransaction } from "../components/ReceiptLessPaladinTransaction";
+import { ReceiptlessPaladinTransaction } from "../components/ReceiptlessPaladinTransaction";
 
 export const TransactionDetails: React.FC = () => {
 
