@@ -85,6 +85,79 @@ func Test_action_SelectActiveCoordinator_EndorserMode_WhenCoordinatorChanges_Set
 	err := action_SelectActiveCoordinator(ctx, o, nil)
 	require.NoError(t, err)
 }
+
+func Test_action_SelectActiveCoordinator_EndorserMode_FailoverStepWithoutEpoch_DoesNotArmWatchingPreviousFlush(t *testing.T) {
+	ctx := context.Background()
+	pool := []string{"node1", "node2"}
+	blockRange := uint64(50)
+	height := uint64(150)
+	at100, _ := common.SelectCoordinatorNode(ctx, pool, 100, blockRange, 0)
+	at150, _ := common.SelectCoordinatorNode(ctx, pool, height, blockRange, 0)
+	require.NotEqual(t, at100, at150, "test expects different golden coordinators at heights 100 and 150")
+
+	o, _ := NewOriginatorBuilderForTesting(State_Idle).
+		DomainContractConfig(&prototk.ContractConfig{
+			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
+		}).
+		CoordinatorEndorserPool("node1", "node2").
+		BlockRangeSize(blockRange).
+		CurrentBlockHeight(height).
+		CurrentActiveCoordinator(at150).
+		NewBlockRangeEpoch(false).
+		Build()
+	o.failoverOffset = 1
+	require.NoError(t, action_SelectActiveCoordinator(ctx, o, nil))
+	assert.False(t, o.watchingPreviousCoordinatorFlush, "failover stepping must not arm golden flush-watch")
+}
+
+func Test_action_SelectActiveCoordinator_EndorserMode_NewEpochIdentityChange_ArmsWatchingPreviousFlush(t *testing.T) {
+	ctx := context.Background()
+	pool := []string{"node1", "node2"}
+	blockRange := uint64(50)
+	at100, _ := common.SelectCoordinatorNode(ctx, pool, 100, blockRange, 0)
+	at150, _ := common.SelectCoordinatorNode(ctx, pool, 150, blockRange, 0)
+	require.NotEqual(t, at100, at150, "test expects different golden coordinators at heights 100 and 150")
+
+	o, _ := NewOriginatorBuilderForTesting(State_Idle).
+		DomainContractConfig(&prototk.ContractConfig{
+			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
+		}).
+		CoordinatorEndorserPool("node1", "node2").
+		BlockRangeSize(blockRange).
+		CurrentBlockHeight(150).
+		CurrentActiveCoordinator(at100).
+		NewBlockRangeEpoch(true).
+		Build()
+	require.NoError(t, action_SelectActiveCoordinator(ctx, o, nil))
+	require.NotEqual(t, at100, o.currentActiveCoordinator)
+	assert.True(t, o.watchingPreviousCoordinatorFlush)
+}
+
+func Test_State_Sending_InactiveGracePeriodExceeded_RunsFailoverThenDelegateActions(t *testing.T) {
+	ctx := context.Background()
+	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
+	o, _ := NewOriginatorBuilderForTesting(State_Sending).
+		DomainContractConfig(&prototk.ContractConfig{
+			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
+		}).
+		CoordinatorEndorserPool("node1", "node2").
+		BlockRangeSize(50).
+		CurrentBlockHeight(150).
+		TransactionBuilders(txBuilder).
+		HeartbeatIntervalsSinceLastReceive(10).
+		InactiveGracePeriod(10).
+		Build()
+	require.Equal(t, 0, o.failoverOffset)
+	require.NoError(t, action_IncrementFailoverOffset(ctx, o, nil))
+	require.NoError(t, action_SelectActiveCoordinator(ctx, o, nil))
+	require.NoError(t, action_SendDelegationRequest(ctx, o, nil))
+	assert.Equal(t, 1, o.failoverOffset)
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
+}
+
 func Test_hasDroppedTransactions_TrueWhenDelegatedTxnNotInSnapshot(t *testing.T) {
 	ctx := context.Background()
 	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)

@@ -116,6 +116,15 @@ func guard_InactiveGracePeriodExceeded(_ context.Context, o *originator) bool {
 	return o.heartbeatIntervalsSinceLastReceive >= o.inactiveGracePeriod
 }
 
+// action_IncrementFailoverOffset advances the endorser ring step. No-op in STATIC/SENDER modes.
+func action_IncrementFailoverOffset(_ context.Context, o *originator, _ common.Event) error {
+	if o.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
+		return nil
+	}
+	o.failoverOffset++
+	return nil
+}
+
 // Validate that the transaction doesn't already exist. When we resume transactions from the DB, e.g. after a restart or a timeout, we may already be processing
 // the transaction and possibly taking a long time to complete them so we shouldn't restart the state machine from scratch for such in-progress transactions
 func validator_TransactionDoesNotExist(ctx context.Context, o *originator, event common.Event) (bool, error) {
@@ -207,10 +216,13 @@ func action_SelectActiveCoordinator(ctx context.Context, o *originator, _ common
 		o.blockRangeSize,
 		o.failoverOffset,
 	)
+	if o.currentActiveCoordinator != o.previousActiveCoordinatorNode {
+		o.heartbeatIntervalsSinceLastReceive = 0
+	}
 	o.needsFailoverOffsetReset = false
-	// If the coordinator has changed and there was a previous coordinator, start watching for their closing heartbeat
-	// before sending delegation requests to the new coordinator.
-	if o.currentActiveCoordinator != o.previousActiveCoordinatorNode && o.previousActiveCoordinatorNode != "" {
+	// If the coordinator has changed because of new block-range epoch, start watching for the previous coordinator's closing heartbeat.
+	// If we've selected a new coordinator because of inactivity, there will be no closing heartbeat to look for.
+	if o.newBlockRangeEpoch && o.currentActiveCoordinator != o.previousActiveCoordinatorNode && o.previousActiveCoordinatorNode != "" {
 		o.watchingPreviousCoordinatorFlush = true
 	}
 	return nil

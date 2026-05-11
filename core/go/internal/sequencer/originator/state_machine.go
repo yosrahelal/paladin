@@ -187,18 +187,19 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
 					{Action: action_IncrementHeartbeatIntervalCounts},
+					// Inactive grace (same guard on each): bump ring step, re-select (resets liveness if delegation target changes), delegate.
 					{
-						// Resend all the delegation requests if we have not seen a heartbeat in a while It could be that no one thinks
-						// they are coordinating, so this will nudge the node who we think should be the active coordinator.
-						//
-						// If we have been seeing heartbeats, the handling for Event_HeartbeatReceived will ensure we
-						// are resending delegation requests only if we have transactions that the active coordinator
-						// does not know about.
-						// TODO AM: I think this is a point where we would revert back to the preferred active coordinator if we
-						// have selected an alternative
-						// sendDelegationRequest clears the watching phase and the needsRedelegate flag.
-						Action: action_SendDelegationRequest,
+						If:     guard_InactiveGracePeriodExceeded,
+						Action: action_IncrementFailoverOffset,
+					},
+					{
+						If:     guard_InactiveGracePeriodExceeded,
+						Action: action_SelectActiveCoordinator,
+					},
+					{
 						If: guard_InactiveGracePeriodExceeded,
+						// Resend all the delegation requests regardless of whether we have selected a new coordinator.
+						Action: action_SendDelegationRequest,
 					},
 				},
 			},
