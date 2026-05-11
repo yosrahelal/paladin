@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const skipCoordinatorAvailabilityFollowUp = "waiting on preferred/current split, cyclic-walk helper, and local sync wiring — coordinator availability follow-up"
+const skipCoordinatorAvailabilityFollowUp = "waiting on cyclic-walk helper coverage and fuller FSM matrix — coordinator availability follow-up"
 
 func TestCoordinatorBuilder_WhenPreviousActiveCoordinatorSet_SeedsCoordinatorField(t *testing.T) {
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).PreviousActiveCoordinatorNode("prior-coordinator").Build()

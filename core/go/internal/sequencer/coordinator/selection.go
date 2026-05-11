@@ -22,9 +22,10 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
 
-// action_CoordinatorUnavailable sets current from the originator's newly selected active coordinator
+// action_CurrentActiveCoordinatorUnavailable sets current from the originator's newly selected active coordinator
 // preferred coordinator does not change
-func action_CoordinatorUnavailable(ctx context.Context, c *coordinator, event common.Event) error {
+// TODO AM: if we think we're the active coordinator, don't change it- just log a warning that orig and coord have diverged
+func action_CurrentActiveCoordinatorUnavailable(ctx context.Context, c *coordinator, event common.Event) error {
 	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
 		return nil
 	}

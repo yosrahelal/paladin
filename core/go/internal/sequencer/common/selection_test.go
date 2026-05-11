@@ -24,8 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// preferredCoordinatorPoolIndexViaSelect returns the pool index SelectCoordinatorNode uses at
-// failoverOffset 0 (golden preferred), for tests only.
+// preferredCoordinatorPoolIndexViaSelect returns the pool index of preferred at failoverOffset 0 for tests only.
 func preferredCoordinatorPoolIndexViaSelect(ctx context.Context, pool []string, currentBlockHeight, blockRange uint64) int {
 	pref, _ := SelectCoordinatorNode(ctx, pool, currentBlockHeight, blockRange, 0)
 	return slices.Index(pool, pref)

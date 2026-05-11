@@ -35,12 +35,12 @@ func DedupeSortedCoordinatorEndorserNodes(nodes []string) []string {
 	return slices.Compact(nodes)
 }
 
-// SelectCoordinatorNode returns the preferred coordinator for this height/range and the current
-// delegation target for the given failoverOffset. The offset is applied on the sorted deduped pool
+// SelectCoordinatorNode returns the preferred and current active coordinator for this height/range
+// and failoverOffset. The offset is applied on the sorted deduped pool
 // ring: current slot is (preferredIndex + failoverOffset) mod len(pool). Callers reset the offset
 // to 0 on a new epoch and increment it (e.g. on unavailability); they do not need to normalize.
 // The originator tracks failoverOffset for delegation stepping. The coordinator does not store
-// failoverOffset: it uses SelectCoordinatorNode(..., 0) for golden preferred+current, and sets
+// failoverOffset: it uses SelectCoordinatorNode(..., 0) so preferred and current match, and sets
 // currentActiveCoordinator from ActiveCoordinatorUnavailableEvent.NewActiveCoordinator when the
 // originator fails over.
 //

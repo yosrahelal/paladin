@@ -121,6 +121,33 @@ func guard_InactiveGracePeriodExceeded(_ context.Context, o *originator) bool {
 	return o.heartbeatIntervalsSinceLastReceive >= o.inactiveGracePeriod
 }
 
+func guard_PreferredAndCurrentDiffer(_ context.Context, o *originator) bool {
+	return o.preferredActiveCoordinator != o.currentActiveCoordinator
+}
+
+func validator_IsHeartbeatFromCurrentActiveCoordinator(_ context.Context, o *originator, event common.Event) (bool, error) {
+	e := event.(*common.HeartbeatReceivedEvent)
+	return o.currentActiveCoordinator == e.From, nil
+}
+
+func validator_IsHeartbeatFromPreferredActiveCoordinator(_ context.Context, o *originator, event common.Event) (bool, error) {
+	e := event.(*common.HeartbeatReceivedEvent)
+	return o.preferredActiveCoordinator == e.From && e.CoordinatorSnapshot.CoordinatorState == common.CoordinatorState_Active, nil
+}
+
+func action_ResetHeartbeatIntervalsSinceLastReceive(_ context.Context, o *originator, _ common.Event) error {
+	o.heartbeatIntervalsSinceLastReceive = 0
+	return nil
+}
+
+func action_ResetCurrentToPreferred(ctx context.Context, o *originator, _ common.Event) error {
+	log.L(ctx).Debugf("preferred coordinator %s is active again; realigning current from %s", o.preferredActiveCoordinator, o.currentActiveCoordinator)
+	o.currentActiveCoordinator = o.preferredActiveCoordinator
+	o.failoverOffset = 0
+	o.heartbeatIntervalsSinceLastReceive = 0
+	return nil
+}
+
 // action_IncrementFailoverOffset advances the endorser ring step. No-op in STATIC/SENDER modes.
 func action_IncrementFailoverOffset(_ context.Context, o *originator, _ common.Event) error {
 	if o.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {

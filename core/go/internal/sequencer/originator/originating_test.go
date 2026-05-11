@@ -71,7 +71,7 @@ func Test_action_SelectActiveCoordinator_SenderMode_NoOp_ActiveCoordinatorUnchan
 	assert.Equal(t, before, o.currentActiveCoordinator)
 	assert.Equal(t, before, o.preferredActiveCoordinator)
 }
-func Test_action_SelectActiveCoordinator_EndorserMode_WhenCoordinatorChanges_SetsChangedFlag(t *testing.T) {
+func Test_action_SelectActiveCoordinator_WhenCoordinatorChanges_SetsChangedFlag(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(State_Idle).
 		DomainContractConfig(&prototk.ContractConfig{
@@ -86,14 +86,12 @@ func Test_action_SelectActiveCoordinator_EndorserMode_WhenCoordinatorChanges_Set
 	require.NoError(t, err)
 }
 
-func Test_action_SelectActiveCoordinator_EndorserMode_FailoverStepWithoutEpoch_DoesNotArmWatchingPreviousFlush(t *testing.T) {
+func Test_action_SelectActiveCoordinator_FailoverWithoutNewEpoch_DoesNotSetWatchingPreviousCoordinatorFlush(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2"}
 	blockRange := uint64(50)
 	height := uint64(150)
-	at100, _ := common.SelectCoordinatorNode(ctx, pool, 100, blockRange, 0)
 	at150, _ := common.SelectCoordinatorNode(ctx, pool, height, blockRange, 0)
-	require.NotEqual(t, at100, at150, "test expects different golden coordinators at heights 100 and 150")
 
 	o, _ := NewOriginatorBuilderForTesting(State_Idle).
 		DomainContractConfig(&prototk.ContractConfig{
@@ -105,19 +103,22 @@ func Test_action_SelectActiveCoordinator_EndorserMode_FailoverStepWithoutEpoch_D
 		CurrentBlockHeight(height).
 		CurrentActiveCoordinator(at150).
 		NewBlockRangeEpoch(false).
+		FailoverOffset(1).
 		Build()
-	o.failoverOffset = 1
 	require.NoError(t, action_SelectActiveCoordinator(ctx, o, nil))
-	assert.False(t, o.watchingPreviousCoordinatorFlush, "failover stepping must not arm golden flush-watch")
+	require.Equal(t, at150, o.previousActiveCoordinatorNode)
+	require.NotEqual(t, at150, o.currentActiveCoordinator)
+	assert.False(t, o.watchingPreviousCoordinatorFlush,
+		"watchingPreviousCoordinatorFlush stays false when newBlockRangeEpoch is false even if current changes")
 }
 
-func Test_action_SelectActiveCoordinator_EndorserMode_NewEpochIdentityChange_ArmsWatchingPreviousFlush(t *testing.T) {
+func Test_action_SelectActiveCoordinator_NewEpochWithIdentityChange_SetsWatchingPreviousCoordinatorFlush(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2"}
 	blockRange := uint64(50)
 	at100, _ := common.SelectCoordinatorNode(ctx, pool, 100, blockRange, 0)
 	at150, _ := common.SelectCoordinatorNode(ctx, pool, 150, blockRange, 0)
-	require.NotEqual(t, at100, at150, "test expects different golden coordinators at heights 100 and 150")
+	require.NotEqual(t, at100, at150)
 
 	o, _ := NewOriginatorBuilderForTesting(State_Idle).
 		DomainContractConfig(&prototk.ContractConfig{
@@ -131,7 +132,8 @@ func Test_action_SelectActiveCoordinator_EndorserMode_NewEpochIdentityChange_Arm
 		NewBlockRangeEpoch(true).
 		Build()
 	require.NoError(t, action_SelectActiveCoordinator(ctx, o, nil))
-	require.NotEqual(t, at100, o.currentActiveCoordinator)
+	require.Equal(t, at100, o.previousActiveCoordinatorNode)
+	require.Equal(t, at150, o.currentActiveCoordinator)
 	assert.True(t, o.watchingPreviousCoordinatorFlush)
 }
 
@@ -151,9 +153,11 @@ func Test_State_Sending_InactiveGracePeriodExceeded_RunsFailoverThenDelegateActi
 		InactiveGracePeriod(10).
 		Build()
 	require.Equal(t, 0, o.failoverOffset)
+
 	require.NoError(t, action_IncrementFailoverOffset(ctx, o, nil))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, o, nil))
 	require.NoError(t, action_SendDelegationRequest(ctx, o, nil))
+
 	assert.Equal(t, 1, o.failoverOffset)
 	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
 }
@@ -395,4 +399,16 @@ func Test_guard_InactiveGracePeriodExceeded_WhileSending_FalseWhenCounterBelowTh
 		InactiveGracePeriod(2).
 		Build()
 	assert.False(t, guard_InactiveGracePeriodExceeded(ctx, o))
+}
+
+func Test_guard_InactiveGracePeriodExceeded_WhileSending_TrueEvenWhenWatchingPreviousCoordinatorFlush(t *testing.T) {
+	ctx := context.Background()
+	// Watching a previous coordinator flush does not suppress the failover step;
+	// if the current coordinator is also inactive, we step regardless.
+	o, _ := NewOriginatorBuilderForTesting(State_Sending).
+		HeartbeatIntervalsSinceLastReceive(2).
+		InactiveGracePeriod(2).
+		WatchingPreviousCoordinatorFlush(true).
+		Build()
+	assert.True(t, guard_InactiveGracePeriodExceeded(ctx, o))
 }

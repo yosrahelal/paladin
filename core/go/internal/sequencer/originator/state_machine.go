@@ -46,6 +46,7 @@ const (
 type (
 	Action           = statemachine.Action[*originator]
 	Guard            = statemachine.Guard[*originator]
+	Validator        = statemachine.Validator[*originator]
 	ActionRule       = statemachine.ActionRule[*originator]
 	Transition       = statemachine.Transition[State, *originator]
 	EventHandler     = statemachine.EventHandler[State, *originator]
@@ -76,8 +77,25 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			},
 			common.Event_HeartbeatReceived: {
-				Actions:     []ActionRule{{Action: action_HeartbeatReceived}},
-				Transitions: []Transition{{To: State_Observing}},
+				Validator: statemachine.ValidatorOr(
+					validator_IsHeartbeatFromPreferredActiveCoordinator,
+					validator_IsHeartbeatFromCurrentActiveCoordinator,
+				),
+				Actions: []ActionRule{
+					// If preferred has become active again and current is still a failover candidate,
+					// realign current back to preferred so we track the correct coordinator.
+					{
+						Validator: validator_IsHeartbeatFromPreferredActiveCoordinator,
+						If:        guard_PreferredAndCurrentDiffer,
+						Action:    action_ResetCurrentToPreferred,
+					}, {
+						Validator: validator_IsHeartbeatFromCurrentActiveCoordinator,
+						Action:    action_ResetHeartbeatIntervalsSinceLastReceive,
+					},
+				},
+				Transitions: []Transition{{
+					To: State_Observing,
+				}},
 			},
 			Event_TransactionCreated: {
 				Validator: validator_TransactionDoesNotExist,
@@ -125,7 +143,20 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Sending,
 				}},
 			},
-			common.Event_HeartbeatReceived: {Actions: []ActionRule{{Action: action_HeartbeatReceived}}},
+			common.Event_HeartbeatReceived: {
+				Actions: []ActionRule{
+					// If preferred has become active again and current is still a failover candidate,
+					// realign current back to preferred so we track the correct coordinator.
+					{
+						Validator: validator_IsHeartbeatFromPreferredActiveCoordinator,
+						If:        guard_PreferredAndCurrentDiffer,
+						Action:    action_ResetCurrentToPreferred,
+					}, {
+						Validator: validator_IsHeartbeatFromCurrentActiveCoordinator,
+						Action:    action_ResetHeartbeatIntervalsSinceLastReceive,
+					},
+				},
+			},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
 					{
@@ -177,17 +208,24 @@ var stateDefinitionsMap = StateDefinitions{
 			},
 			common.Event_HeartbeatReceived: {
 				Actions: []ActionRule{
+					// If preferred has become active again and current is a failover candidate, realign
+					// current back to preferred before processing the heartbeat. applyHeartbeatReceived
+					// will then see the heartbeat as being from current, find no delegated transactions
+					// in preferred's snapshot, and set needsRedelegate so we delegate to the new current.
+					{
+						// TODO AM A: I think there's another step to maybe only do this switch (coord and originator if within block range?)
+						// and also maybe to pick up the locks from the failover active?
+						Validator: validator_IsHeartbeatFromPreferredActiveCoordinator,
+						If:        guard_PreferredAndCurrentDiffer,
+						Action:    action_ResetCurrentToPreferred,
+					},
 					{Action: action_HeartbeatReceived},
-					// Send a delegation request if applyHeartbeatReceived set needsRedelegate (dropped
-					// transactions detected, first closing heartbeat received, we thought we were waiting
-					// on a flush but we've already seen the new coordinator become active).
 					{Action: action_SendDelegationRequest, If: guard_NeedsRedelegate},
 				},
 			},
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
 					{Action: action_IncrementHeartbeatIntervalCounts},
-					// Inactive grace (same guard on each): bump ring step, re-select (resets liveness if delegation target changes), delegate.
 					{
 						If:     guard_InactiveGracePeriodExceeded,
 						Action: action_IncrementFailoverOffset,
@@ -201,8 +239,7 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_QueueCoordinatorActiveCoordinatorUnavailable,
 					},
 					{
-						If: guard_InactiveGracePeriodExceeded,
-						// Resend all the delegation requests regardless of whether we have selected a new coordinator.
+						If:     guard_InactiveGracePeriodExceeded,
 						Action: action_SendDelegationRequest,
 					},
 				},

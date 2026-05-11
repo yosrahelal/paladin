@@ -26,19 +26,34 @@ func action_RejectDelegatedTransactions(ctx context.Context, c *coordinator, eve
 	return c.transportWriter.SendDelegationRequestRejection(ctx, e.FromNode, e.DelegationID, c.currentBlockHeight)
 }
 
-func validator_IsHeartbeatFromActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
+// When we validate who heartbeats are from, we must always exclude heartbeats from ourselves
+
+func validator_IsHeartbeatFromPreferredActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*common.HeartbeatReceivedEvent)
-	return c.preferredActiveCoordinator == e.From, nil
+	return c.nodeName != e.From && c.preferredActiveCoordinator == e.From &&
+		e.CoordinatorSnapshot.CoordinatorState == common.CoordinatorState_Active, nil
+}
+
+func validator_IsHeartbeatFromCurrentActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
+	e := event.(*common.HeartbeatReceivedEvent)
+	return c.nodeName != e.From && c.currentActiveCoordinator == e.From, nil
 }
 
 func validator_IsHeartbeatFromPreviousActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*common.HeartbeatReceivedEvent)
-	return c.previousActiveCoordinatorNode == e.From, nil
+	return c.nodeName != e.From && c.previousActiveCoordinatorNode == e.From, nil
 }
 
 func action_HeartbeatReceived(_ context.Context, c *coordinator, event common.Event) error {
 	e := event.(*common.HeartbeatReceivedEvent)
 	c.activeCoordinatorState = e.CoordinatorSnapshot.CoordinatorState
+	// is this a
+	if c.currentActiveCoordinator != c.preferredActiveCoordinator &&
+		c.activeCoordinatorState == common.CoordinatorState_Active &&
+		e.From == c.preferredActiveCoordinator {
+		c.previousActiveCoordinatorNode = c.currentActiveCoordinator
+		c.currentActiveCoordinator = c.preferredActiveCoordinator
+	}
 	return nil
 }
 

@@ -253,18 +253,57 @@ func TestStateMachine_InitializeOK(t *testing.T) {
 	assert.Equal(t, State_Idle, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
 }
 
-func TestStateMachine_Idle_ToObserving_OnHeartbeatReceived(t *testing.T) {
+func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromCurrentActiveCoordinator(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle)
+	builder := NewOriginatorBuilderForTesting(State_Idle).
+		CurrentActiveCoordinator("coordinator@node1").
+		NodeName("self@selfNode")
 	o, _ := builder.Build()
 	assert.Equal(t, State_Idle, o.GetCurrentState())
 	ca := builder.GetContractAddress()
 	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = "coordinator"
+	heartbeatEvent.From = "coordinator@node1"
 	heartbeatEvent.ContractAddress = &ca
 	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
-	assert.Equal(t, State_Observing, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
+}
+
+func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromPreferredActiveCoordinator_RealignsCurrentAndTransitions(t *testing.T) {
+	ctx := context.Background()
+	builder := NewOriginatorBuilderForTesting(State_Idle).
+		PreferredActiveCoordinator("nodeA").
+		CurrentActiveCoordinator("nodeB").
+		FailoverOffset(1).
+		NodeName("self@selfNode")
+	o, _ := builder.Build()
+	ca := builder.GetContractAddress()
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
+	heartbeatEvent.From = "nodeA"
+	heartbeatEvent.ContractAddress = &ca
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Equal(t, "nodeA", o.currentActiveCoordinator)
+	assert.Equal(t, 0, o.failoverOffset)
+}
+
+func TestStateMachine_Idle_StaysIdle_OnHeartbeatReceivedFromUnrelatedNode(t *testing.T) {
+	ctx := context.Background()
+	builder := NewOriginatorBuilderForTesting(State_Idle).
+		PreferredActiveCoordinator("nodeA").
+		CurrentActiveCoordinator("nodeB").
+		NodeName("self@selfNode")
+	o, _ := builder.Build()
+	ca := builder.GetContractAddress()
+	heartbeatEvent := &common.HeartbeatReceivedEvent{}
+	heartbeatEvent.From = "nodeC"
+	heartbeatEvent.ContractAddress = &ca
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
+	assert.Equal(t, State_Idle, o.GetCurrentState())
+	assert.Equal(t, "nodeB", o.currentActiveCoordinator)
 }
 
 func TestStateMachine_Idle_ToSending_OnTransactionCreated(t *testing.T) {
@@ -329,4 +368,31 @@ func TestStateMachine_Sending_DoDelegateTransactions_OnHeartbeatReceived_IfHasDr
 	}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
 	assert.True(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "Delegation request should be sent after heartbeat")
+}
+
+func TestStateMachine_Sending_OnHeartbeatReceivedFromPreferredActiveCoordinator_RealignsAndRedelegates(t *testing.T) {
+	ctx := context.Background()
+	preferred := "preferred@node1"
+	fallback := "fallback@node2"
+	txnBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
+	builder := NewOriginatorBuilderForTesting(State_Sending).
+		PreferredActiveCoordinator(preferred).
+		CurrentActiveCoordinator(fallback).
+		FailoverOffset(1).
+		NodeName("self@selfNode").
+		TransactionBuilders(txnBuilder)
+	o, mocks := builder.Build()
+	ca := builder.GetContractAddress()
+	// Preferred coordinator sends an Active heartbeat with an empty snapshot (our transactions are absent).
+	heartbeatEvent := &common.HeartbeatReceivedEvent{
+		From:            preferred,
+		ContractAddress: &ca,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	}
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
+	assert.Equal(t, preferred, o.currentActiveCoordinator)
+	assert.Equal(t, 0, o.failoverOffset)
+	assert.True(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "should redelegate to realigned preferred coordinator")
 }

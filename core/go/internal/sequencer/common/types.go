@@ -22,7 +22,6 @@ import (
 	"github.com/google/uuid"
 )
 
-
 type SnapshotFlushPoint struct {
 	From          pldtypes.EthAddress
 	Nonce         uint64
@@ -51,8 +50,13 @@ type CoordinatorSnapshot struct {
 	OutputStates []*grapher.OutputState `json:"outputStates,omitempty"`
 }
 
+// TODO AM: I don't think we have the import cycle that necessitated these anymore
 func (s *CoordinatorSnapshot) IsCoordinatorClosing() bool {
 	return s.CoordinatorState == CoordinatorState_Closing
+}
+
+func (s *CoordinatorSnapshot) IsCoordinatorActive() bool {
+	return s.CoordinatorState == CoordinatorState_Active
 }
 
 type SnapshotPooledTransaction struct {

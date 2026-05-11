@@ -137,10 +137,10 @@ func Test_action_ActiveCoordinatorUnavailable_SetsCurrentFromEvent(t *testing.T)
 		BaseEvent:            common.BaseEvent{},
 		NewActiveCoordinator: other,
 	}
-	require.NoError(t, action_CoordinatorUnavailable(ctx, c, ev))
+	require.NoError(t, action_CurrentActiveCoordinatorUnavailable(ctx, c, ev))
 
-	assert.Equal(t, preferred, c.preferredActiveCoordinator, "preferred stays hash-at-epoch (step zero)")
-	assert.Equal(t, other, c.currentActiveCoordinator, "current follows originator delegation target")
+	assert.Equal(t, preferred, c.preferredActiveCoordinator, "preferred unchanged")
+	assert.Equal(t, other, c.currentActiveCoordinator, "current matches originator currentActiveCoordinator after failover")
 }
 
 func Test_action_SelectActiveCoordinator_DifferentBlockRanges_CanSelectDifferentCoordinators(t *testing.T) {
