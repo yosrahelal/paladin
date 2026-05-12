@@ -59,3 +59,12 @@ func guard_HasTransactionAssembling(ctx context.Context, c *coordinator) bool {
 		}),
 	) > 0
 }
+
+// TODO AM : what file should these live in?
+func guard_IsCurrentActiveCoordinator(ctx context.Context, c *coordinator) bool {
+	return c.nodeName == c.currentActiveCoordinator
+}
+
+func guard_IsPreferredActiveCoordinator(_ context.Context, c *coordinator) bool {
+	return c.nodeName == c.preferredActiveCoordinator
+}

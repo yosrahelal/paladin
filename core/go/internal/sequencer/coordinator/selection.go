@@ -25,7 +25,6 @@ import (
 
 // action_CurrentActiveCoordinatorUnavailable sets current from the originator's newly selected active coordinator
 // preferred coordinator does not change
-// TODO AM: if we think we're the active coordinator, don't change it- just log a warning that orig and coord have diverged
 func action_CurrentActiveCoordinatorUnavailable(ctx context.Context, c *coordinator, event common.Event) error {
 	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
 		return nil

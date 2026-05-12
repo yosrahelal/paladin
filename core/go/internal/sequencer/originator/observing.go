@@ -77,7 +77,7 @@ func (o *originator) applyHeartbeatReceived(ctx context.Context, event *common.H
 		// its first closing heartbeat, at which point we stop watching).
 		o.heartbeatIntervalsSinceLastReceive = 0
 
-		if event.CoordinatorSnapshot.IsCoordinatorClosing() {
+		if event.CoordinatorSnapshot.CoordinatorState == common.CoordinatorState_Closing {
 			// First closing heartbeat from the previous coordinator: trigger a full redelegate to the new
 			// active coordinator so it can include any transactions the previous coordinator dropped.
 			log.L(ctx).Debugf("previous coordinator %s has entered closing state; triggering redelegate to %s", event.From, o.currentActiveCoordinator)
@@ -185,7 +185,6 @@ func transactionFoundInSnapshot(snapshot *common.CoordinatorSnapshot, txn transa
 	}
 	return false
 }
-
 
 func action_IncrementHeartbeatIntervalCounts(_ context.Context, o *originator, _ common.Event) error {
 	o.heartbeatIntervalsSinceLastReceive++

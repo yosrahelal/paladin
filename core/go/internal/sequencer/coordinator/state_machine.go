@@ -59,15 +59,6 @@ type (
 	StateDefinitions = statemachine.StateDefinitions[State, *coordinator]
 )
 
-// TODO AM : what file should these live in?
-func guard_IsCurrentActiveCoordinator(ctx context.Context, c *coordinator) bool {
-	return c.nodeName == c.currentActiveCoordinator
-}
-
-func guard_IsPreferredActiveCoordinator(_ context.Context, c *coordinator) bool {
-	return c.nodeName == c.preferredActiveCoordinator
-}
-
 // TODO AM: something to think about
 // does a node who is endorsing in a privacy group but not submitting need a way to understand that the preferred active
 // coordinator has become unavailable?
