@@ -225,3 +225,25 @@ func Test_guard_IsNewBlockRangeEpoch_WhenSameEpoch_ReturnsFalse(t *testing.T) {
 	c.newBlockRangeEpoch = false
 	assert.False(t, guard_IsNewBlockRangeEpoch(ctx, c))
 }
+
+func Test_action_CurrentActiveCoordinatorUnavailable_SelfIsActiveCoordinator_LogsWarnAndDoesNotUpdate(t *testing.T) {
+	ctx := context.Background()
+	builder := NewCoordinatorBuilderForTesting(t, State_Active)
+	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
+	})
+	c, _ := builder.NodeName("node1").Build()
+	// Set currentActiveCoordinator to be this node's own name — simulates the
+	// coordinator thinking it IS the active coordinator.
+	c.currentActiveCoordinator = "node1"
+	originalCurrent := c.currentActiveCoordinator
+
+	ev := &ActiveCoordinatorUnavailableEvent{
+		NewActiveCoordinator: "node2",
+	}
+	err := action_CurrentActiveCoordinatorUnavailable(ctx, c, ev)
+	require.NoError(t, err)
+	// The coordinator should NOT have updated currentActiveCoordinator.
+	assert.Equal(t, originalCurrent, c.currentActiveCoordinator)
+}

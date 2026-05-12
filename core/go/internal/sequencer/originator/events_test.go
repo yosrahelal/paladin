@@ -31,3 +31,27 @@ func Test_NewBlockEvent_TypeString(t *testing.T) {
 	event := &common.NewBlockEvent{}
 	assert.Equal(t, "Event_NewBlock", event.TypeString())
 }
+
+func Test_OriginatorEvents_InterfaceCompliance(t *testing.T) {
+	events := []Event{
+		&TransactionCreatedEvent{},
+		&OriginatorCreatedEvent{},
+	}
+	for _, event := range events {
+		assert.NotNil(t, event.Type())
+		assert.NotEmpty(t, event.TypeString())
+		_ = event.GetEventTime()
+	}
+}
+
+func Test_TransactionCreatedEvent_TypeAndTypeString(t *testing.T) {
+	e := &TransactionCreatedEvent{}
+	assert.Equal(t, Event_TransactionCreated, e.Type())
+	assert.Equal(t, "Event_TransactionCreated", e.TypeString())
+}
+
+func Test_OriginatorCreatedEvent_TypeAndTypeString(t *testing.T) {
+	e := &OriginatorCreatedEvent{}
+	assert.Equal(t, Event_OriginatorCreated, e.Type())
+	assert.Equal(t, "Event_OriginatorCreated", e.TypeString())
+}

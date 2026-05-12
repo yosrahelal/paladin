@@ -27,6 +27,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -41,10 +42,10 @@ type TransactionBuilderForTesting struct {
 	state                     State
 	currentDelegate           string
 	txn                       *originatorTransaction
-	sentMessageRecorder       *transport.SentMessageRecorder
+	sentMessageRecorder       *testutil.SentMessageRecorder
 	useMockTransportWriter    bool
 	mockTransportWriter       *sequencertransportmocks.TransportWriter
-	fakeEngineIntegration     *common.FakeEngineIntegrationForTesting
+	fakeEngineIntegration     *sequencercommonmocks.EngineIntegration
 	queueEventForOriginator   func(ctx context.Context, event common.Event)
 
 	/* Assembling State*/
@@ -68,8 +69,8 @@ func NewTransactionBuilderForTesting(t *testing.T, state State) *TransactionBuil
 		state:                     state,
 		currentDelegate:           uuid.New().String(),
 		privateTransactionBuilder: testutil.NewPrivateTransactionBuilderForTesting(),
-		fakeEngineIntegration:     &common.FakeEngineIntegrationForTesting{},
-		sentMessageRecorder:       transport.NewSentMessageRecorder(),
+		fakeEngineIntegration:     sequencercommonmocks.NewEngineIntegration(t),
+		sentMessageRecorder:       testutil.NewSentMessageRecorder(),
 		metrics:                   metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
 	}
 
@@ -124,9 +125,9 @@ func (b *TransactionBuilderForTesting) WithMockTransportWriter() *TransactionBui
 }
 
 type TransactionDependencyFakes struct {
-	SentMessageRecorder *transport.SentMessageRecorder
+	SentMessageRecorder *testutil.SentMessageRecorder
 	TransportWriter     *sequencertransportmocks.TransportWriter
-	EngineIntegration   *common.FakeEngineIntegrationForTesting
+	EngineIntegration   *sequencercommonmocks.EngineIntegration
 	transactionBuilder  *TransactionBuilderForTesting
 	emittedEvents       []common.Event
 }

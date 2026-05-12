@@ -45,7 +45,8 @@ func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
 	config.MaxDispatchAhead = confutil.P(1)
 	builder.OverrideSequencerConfig(config)
 
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
 
 	ctx, cancel := context.WithCancel(t.Context())
 	require.NoError(t, c.Start(ctx))
@@ -76,7 +77,8 @@ func TestDispatchLoop_StopAtSelect(t *testing.T) {
 	builder.OverrideSequencerConfig(config)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
 	require.NoError(t, c.Start(ctx))
 	cancel()
 	// Stop without ever queueing a tx; loop is blocked on the select waiting for dispatchQueue or ctx.Done()

@@ -874,3 +874,39 @@ func Test_action_NotifyPreAssembleDependentOfSelection_Success(t *testing.T) {
 	err := action_NotifyDependentsOfSelection(ctx, txn, nil)
 	require.NoError(t, err)
 }
+
+func Test_allowedNodesFromDistributionList_MoreStatesThanPotentials_Breaks(t *testing.T) {
+	ctx := t.Context()
+	// Two output states but only one potential: the second state must be silently skipped.
+	s1 := pldtypes.RandBytes32()
+	s2 := pldtypes.RandBytes32()
+	states := []*components.FullState{
+		{ID: pldtypes.HexBytes(s1[:])},
+		{ID: pldtypes.HexBytes(s2[:])},
+	}
+	potentials := []*prototk.NewState{
+		{DistributionList: []string{"node1@node1"}},
+		// no second potential — only one entry
+	}
+	// Slice potentials to length 1 to trigger the i >= len(potentials) break on the second state.
+	result := allowedNodesFromDistributionList(ctx, states, potentials[:1])
+	// First state should have a node; second state should have no entry because the loop broke.
+	assert.Len(t, result[s1.String()], 1)
+	assert.NotContains(t, result, s2.String())
+}
+
+func Test_allowedNodesFromDistributionList_InvalidLocator_WarnAndContinue(t *testing.T) {
+	ctx := t.Context()
+	s1 := pldtypes.RandBytes32()
+	states := []*components.FullState{
+		{ID: pldtypes.HexBytes(s1[:])},
+	}
+	// Mix of an invalid locator (no "@node" separator) and a valid one.
+	potentials := []*prototk.NewState{
+		{DistributionList: []string{"not-a-valid-locator", "valid@node2"}},
+	}
+	result := allowedNodesFromDistributionList(ctx, states, potentials)
+	// The invalid locator must have been skipped; the valid one must be present.
+	require.Contains(t, result, s1.String())
+	assert.Equal(t, []string{"node2"}, result[s1.String()])
+}

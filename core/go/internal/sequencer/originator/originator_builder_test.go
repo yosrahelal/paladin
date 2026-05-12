@@ -25,12 +25,15 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/mock"
 )
 
 const (
@@ -44,7 +47,6 @@ type OriginatorBuilderForTesting struct {
 	nodeName                           *string
 	committeeMembers                   []string
 	contractAddress                    *pldtypes.EthAddress
-	transactionBuilders                []*transaction.TransactionBuilderForTesting
 	metrics                            metrics.DistributedSequencerMetrics
 	sequencerConfig                    *pldconf.SequencerConfig
 	contractConfig                     *prototk.ContractConfig
@@ -65,14 +67,15 @@ type OriginatorBuilderForTesting struct {
 }
 
 type OriginatorDependencyMocks struct {
-	SentMessageRecorder *transport.SentMessageRecorder
-	EngineIntegration   *common.FakeEngineIntegrationForTesting
+	SentMessageRecorder *testutil.SentMessageRecorder
+	EngineIntegration   *sequencercommonmocks.EngineIntegration
 	DomainAPI           *componentsmocks.DomainSmartContract
 	TransportWriter     *sequencertransportmocks.TransportWriter
 }
 
-func NewOriginatorBuilderForTesting(state State) *OriginatorBuilderForTesting {
+func NewOriginatorBuilderForTesting(t *testing.T, state State) *OriginatorBuilderForTesting {
 	return &OriginatorBuilderForTesting{
+		t:               t,
 		state:           state,
 		metrics:         metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
 		sequencerConfig: &pldconf.SequencerDefaults,
@@ -91,11 +94,6 @@ func (b *OriginatorBuilderForTesting) NodeName(nodeName string) *OriginatorBuild
 
 func (b *OriginatorBuilderForTesting) CommitteeMembers(committeeMembers ...string) *OriginatorBuilderForTesting {
 	b.committeeMembers = committeeMembers
-	return b
-}
-
-func (b *OriginatorBuilderForTesting) TransactionBuilders(builders ...*transaction.TransactionBuilderForTesting) *OriginatorBuilderForTesting {
-	b.transactionBuilders = builders
 	return b
 }
 
@@ -194,6 +192,10 @@ func (b *OriginatorBuilderForTesting) WithMockTransportWriter(t *testing.T) *Ori
 	return b
 }
 
+func ptrTo[T any](v T) *T {
+	return &v
+}
+
 func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependencyMocks) {
 
 	if b.nodeName == nil {
@@ -208,9 +210,12 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		b.contractAddress = pldtypes.RandAddress()
 	}
 	mocks := &OriginatorDependencyMocks{
-		SentMessageRecorder: transport.NewSentMessageRecorder(),
-		EngineIntegration:   &common.FakeEngineIntegrationForTesting{},
+		SentMessageRecorder: testutil.NewSentMessageRecorder(),
+		EngineIntegration:   sequencercommonmocks.NewEngineIntegration(b.t),
 	}
+	// Default stub so tests that call Start() don't need to set up GetBlockHeight explicitly.
+	// Individual tests can override this with a more specific expectation.
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
 
 	if b.useMockTransportWriter {
 		mocks.TransportWriter = sequencertransportmocks.NewTransportWriter(b.t)
@@ -245,13 +250,6 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		domainAPI,
 		func(context.Context, string) {},
 	)
-
-	for _, txBuilder := range b.transactionBuilders {
-		tx := txBuilder.QueueEventsTo(originator.queueEventInternal).Build()
-		txID := tx.GetID()
-		originator.transactionsByID[txID] = tx
-		originator.transactionsOrdered = append(originator.transactionsOrdered, tx)
-	}
 
 	for _, tx := range b.transactions {
 		txID := tx.GetID()

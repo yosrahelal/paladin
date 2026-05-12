@@ -21,7 +21,9 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -161,4 +163,22 @@ func Test_action_PropagateHeartbeatToTransactions_WithTransactions(t *testing.T)
 
 	err := action_PropagateHeartbeatIntervalToTransactions(ctx, c, nil)
 	require.NoError(t, err)
+}
+
+func TestSendHeartbeat_ExportStatesAndLocksError_ReturnsError(t *testing.T) {
+	ctx := context.Background()
+
+	mockGrapher := graphermocks.NewGrapher(t)
+	mockGrapher.EXPECT().ExportStatesAndLocks(mock.Anything, "node1").
+		Return(grapher.ExportableStates{}, fmt.Errorf("export error"))
+
+	// Flush state means includeLocks=true, which causes ExportStatesAndLocks to be called.
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Flush).
+		OriginatorNodePool("node1").
+		Grapher(mockGrapher).
+		Build()
+
+	err := c.sendHeartbeat(ctx, c.contractAddress)
+	assert.Error(t, err)
+	assert.Equal(t, "export error", err.Error())
 }

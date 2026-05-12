@@ -22,11 +22,13 @@ import (
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/syncpointsmocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
@@ -62,12 +64,13 @@ type CoordinatorBuilderForTesting struct {
 	heartbeatIntervalsSinceStateChange       *int
 	activeCoordinatorState                   *State
 	useMockTransportWriter                   bool
+	grapher                                  grapher.Grapher
 }
 
 type CoordinatorDependencyMocks struct {
-	SentMessageRecorder *transport.SentMessageRecorder
-	EngineIntegration   *common.FakeEngineIntegrationForTesting
-	SyncPoints          syncpoints.SyncPoints
+	SentMessageRecorder *testutil.SentMessageRecorder
+	EngineIntegration   *sequencercommonmocks.EngineIntegration
+	SyncPoints          *syncpointsmocks.SyncPoints
 	TransportWriter     *sequencertransportmocks.TransportWriter
 }
 
@@ -290,14 +293,19 @@ func (b *CoordinatorBuilderForTesting) ClosingGracePeriod(n int) *CoordinatorBui
 	return b
 }
 
+func (b *CoordinatorBuilderForTesting) Grapher(grapher grapher.Grapher) *CoordinatorBuilderForTesting {
+	b.grapher = grapher
+	return b
+}
+
 func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDependencyMocks) {
 	if b.contractAddress == nil {
 		b.contractAddress = pldtypes.RandAddress()
 	}
 	mocks := &CoordinatorDependencyMocks{
-		SentMessageRecorder: transport.NewSentMessageRecorder(),
-		EngineIntegration:   &common.FakeEngineIntegrationForTesting{},
-		SyncPoints:          &syncpointsmocks.SyncPoints{},
+		SentMessageRecorder: testutil.NewSentMessageRecorder(),
+		EngineIntegration:   sequencercommonmocks.NewEngineIntegration(b.t),
+		SyncPoints:          syncpointsmocks.NewSyncPoints(b.t),
 	}
 
 	if b.useMockTransportWriter {
@@ -405,6 +413,9 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	}
 	if b.activeCoordinatorState != nil {
 		coordinator.activeCoordinatorState = *b.activeCoordinatorState
+	}
+	if b.grapher != nil {
+		coordinator.grapher = b.grapher
 	}
 	return coordinator, mocks
 }

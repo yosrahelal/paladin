@@ -110,6 +110,7 @@ func TestEvent_InterfaceCompliance(t *testing.T) {
 	events := []Event{
 		&CoordinatorCreatedEvent{},
 		&TransactionsDelegatedEvent{},
+		&ActiveCoordinatorUnavailableEvent{},
 	}
 
 	for _, event := range events {

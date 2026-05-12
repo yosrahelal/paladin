@@ -16,12 +16,17 @@ package originator
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
+	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -37,7 +42,7 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	coordinatorNode := "coordinatorNode"
 	staticCoordinatorLocator := "coordinator@coordinatorNode"
 	// Use COORDINATOR_STATIC mode so Start() runs initializeFromContractConfig for coordinator selection.
-	builder := NewOriginatorBuilderForTesting(State_Idle).DomainContractConfig(&prototk.ContractConfig{
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
 		StaticCoordinator:    &staticCoordinatorLocator,
 	})
@@ -141,9 +146,9 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 }
 
 func Test_propagateEventToTransaction_UnknownTransaction_AssembleRequestSendsUnknown(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(State_Observing)
+	builder := NewOriginatorBuilderForTesting(t, State_Observing)
 	o, mocks := builder.Build()
 	// Create a transaction event with a transaction ID that doesn't exist in the originator
 	unknownTxID := uuid.New()
@@ -166,8 +171,8 @@ func Test_propagateEventToTransaction_UnknownTransaction_AssembleRequestSendsUnk
 }
 
 func Test_propagateEventToTransaction_UnknownTransaction_NonRequestEventReturnsNil(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Observing)
+	ctx := t.Context()
+	builder := NewOriginatorBuilderForTesting(t, State_Observing)
 	o, mocks := builder.Build()
 	// Create a ConfirmedSuccessEvent for an unknown transaction
 	unknownTxID := uuid.New()
@@ -182,8 +187,8 @@ func Test_propagateEventToTransaction_UnknownTransaction_NonRequestEventReturnsN
 }
 
 func TestOriginator_CreateTransaction_ErrorFromNewTransaction(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Observing)
+	ctx := t.Context()
+	builder := NewOriginatorBuilderForTesting(t, State_Observing)
 	o, mocks := builder.Build()
 	// Nil transaction triggers a handled error; state should remain Observing
 	_ = o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{Transaction: nil})
@@ -192,9 +197,9 @@ func TestOriginator_CreateTransaction_ErrorFromNewTransaction(t *testing.T) {
 }
 
 func TestOriginator_EventLoop_ErrorHandling(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	originatorLocator := "sender@senderNode"
-	builder := NewOriginatorBuilderForTesting(State_Observing)
+	builder := NewOriginatorBuilderForTesting(t, State_Observing)
 	o, mocks := builder.Build()
 	// Process a TransactionCreatedEvent with a nil transaction to trigger an error
 	_ = o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{Transaction: nil})
@@ -209,35 +214,47 @@ func TestOriginator_EventLoop_ErrorHandling(t *testing.T) {
 }
 
 func Test_getTransactionsInStates_ReturnsOnlyTransactionsWhoseStateIsListed(t *testing.T) {
-	tbPending := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pending)
-	tbDelegated := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	tbAssembling := transaction.NewTransactionBuilderForTesting(t, transaction.State_Assembling)
-	builder := NewOriginatorBuilderForTesting(State_Sending).
-		TransactionBuilders(tbPending, tbDelegated, tbAssembling)
-	o, _ := builder.Build()
+	pendingID := uuid.New()
+	delegatedID := uuid.New()
+	assemblingID := uuid.New()
+	mockPending := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockPending.On("GetID").Return(pendingID)
+	mockPending.On("GetCurrentState").Return(transaction.State_Pending)
+	mockDelegated := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockDelegated.On("GetID").Return(delegatedID)
+	mockDelegated.On("GetCurrentState").Return(transaction.State_Delegated)
+	mockAssembling := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockAssembling.On("GetID").Return(assemblingID)
+	mockAssembling.On("GetCurrentState").Return(transaction.State_Assembling)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		Transactions(mockPending, mockDelegated, mockAssembling).
+		Build()
 	matching := o.getTransactionsInStates([]transaction.State{transaction.State_Pending, transaction.State_Delegated})
 	require.Len(t, matching, 2)
 	byID := make(map[uuid.UUID]transaction.State)
 	for _, txn := range matching {
 		byID[txn.GetID()] = txn.GetCurrentState()
 	}
-	assert.Equal(t, transaction.State_Pending, byID[tbPending.GetBuiltTransaction().GetID()])
-	assert.Equal(t, transaction.State_Delegated, byID[tbDelegated.GetBuiltTransaction().GetID()])
+	assert.Equal(t, transaction.State_Pending, byID[pendingID])
+	assert.Equal(t, transaction.State_Delegated, byID[delegatedID])
 }
 
 func Test_getTransactionsInStates_EmptyStateListReturnsNoTransactions(t *testing.T) {
-	tb := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pending)
-	builder := NewOriginatorBuilderForTesting(State_Sending).
-		TransactionBuilders(tb)
-	o, _ := builder.Build()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetCurrentState").Return(transaction.State_Pending)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		Transactions(mockTxn).
+		Build()
 	assert.Empty(t, o.getTransactionsInStates(nil))
 	assert.Empty(t, o.getTransactionsInStates([]transaction.State{}))
 }
 
 func Test_propagateEventToTransaction_UnknownTransaction_PreDispatchRequestSendsUnknown(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(State_Observing)
+	builder := NewOriginatorBuilderForTesting(t, State_Observing)
 	o, mocks := builder.Build()
 	unknownTxID := uuid.New()
 	postAssemblyHash := pldtypes.RandBytes32()
@@ -254,25 +271,160 @@ func Test_propagateEventToTransaction_UnknownTransaction_PreDispatchRequestSends
 }
 
 func Test_GetTxStatus_KnownTransactionReturnsStatus(t *testing.T) {
-	ctx := context.Background()
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pending)
-	builder := NewOriginatorBuilderForTesting(State_Observing).TransactionBuilders(txBuilder)
-	o, _ := builder.Build()
-	txn := txBuilder.GetBuiltTransaction()
-	require.NotNil(t, txn)
-	status, err := o.GetTxStatus(ctx, txn.GetID())
+	ctx := t.Context()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetStatus", mock.Anything).Return(components.PrivateTxStatus{TxID: txID.String(), Status: "pending"})
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).Transactions(mockTxn).Build()
+	status, err := o.GetTxStatus(ctx, txID)
 	require.NoError(t, err)
-	assert.Equal(t, txn.GetID().String(), status.TxID)
+	assert.Equal(t, txID.String(), status.TxID)
 	assert.NotEmpty(t, status.Status)
 }
 
 func Test_GetTxStatus_UnknownTransactionReturnsUnknown(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Observing)
+	ctx := t.Context()
+	builder := NewOriginatorBuilderForTesting(t, State_Observing)
 	o, _ := builder.Build()
 	unknownID := uuid.New()
 	status, err := o.GetTxStatus(ctx, unknownID)
 	require.NoError(t, err)
 	assert.Equal(t, unknownID.String(), status.TxID)
 	assert.Equal(t, "unknown", status.Status)
+}
+
+func TestOriginator_Start_Idempotent(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	staticLocator := "coord@node1"
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
+		StaticCoordinator:    &staticLocator,
+	})
+	o, _ := builder.Build()
+	require.NoError(t, o.Start(ctx))
+	defer func() {
+		cancel()
+		o.WaitForDone(t.Context())
+	}()
+	// Second call should be a no-op (idempotent).
+	require.NoError(t, o.Start(ctx))
+}
+
+func TestOriginator_Start_GetBlockHeightError(t *testing.T) {
+	ctx := t.Context()
+	staticLocator := "coord@node1"
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
+		StaticCoordinator:    &staticLocator,
+	})
+	o, _ := builder.Build()
+
+	mockEI := sequencercommonmocks.NewEngineIntegration(t)
+	mockEI.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0), fmt.Errorf("block height error"))
+	o.engineIntegration = mockEI
+
+	err := o.Start(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "block height error")
+	assert.False(t, o.started)
+}
+
+func TestOriginator_WaitForDone_NotStarted_ReturnsImmediately(t *testing.T) {
+	ctx := t.Context()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
+	// Without calling Start, WaitForDone should return immediately.
+	done := make(chan struct{})
+	go func() {
+		o.WaitForDone(ctx)
+		close(done)
+	}()
+	select {
+	case <-done:
+		// expected
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("WaitForDone should have returned immediately when not started")
+	}
+}
+
+func TestOriginator_Start_StaticCoordinator_EmptyLocator_ReturnsError(t *testing.T) {
+	ctx := t.Context()
+	emptyLocator := ""
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
+		StaticCoordinator:    &emptyLocator,
+	})
+	o, _ := builder.Build()
+	err := o.Start(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no configured coordinator node")
+}
+
+func TestOriginator_Start_StaticCoordinator_InvalidLocator_ReturnsError(t *testing.T) {
+	ctx := t.Context()
+	invalidLocator := "not-a-valid-locator"
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
+		StaticCoordinator:    &invalidLocator,
+	})
+	o, _ := builder.Build()
+	err := o.Start(ctx)
+	require.Error(t, err)
+}
+
+func TestOriginator_Start_EndorserMode_NoCandidates_ReturnsError(t *testing.T) {
+	ctx := t.Context()
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
+		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorEndorserCandidates: []string{},
+	})
+	o, _ := builder.Build()
+	err := o.Start(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no configured candidates")
+}
+
+func TestOriginator_Start_EndorserMode_InvalidCandidate_ReturnsError(t *testing.T) {
+	ctx := t.Context()
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
+		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorEndorserCandidates: []string{"not-a-valid-locator"},
+	})
+	o, _ := builder.Build()
+	err := o.Start(ctx)
+	require.Error(t, err)
+}
+
+func TestOriginator_Start_EndorserMode_ValidCandidates_Success(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
+		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
+	})
+	o, _ := builder.Build()
+	require.NoError(t, o.Start(ctx))
+	defer func() {
+		cancel()
+		o.WaitForDone(t.Context())
+	}()
+	assert.True(t, o.started)
+	assert.Len(t, o.coordinatorEndorserPool, 2)
+}
+
+func TestOriginator_Start_SenderMode_Success(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).
+		NodeName("senderNode").
+		DomainContractConfig(&prototk.ContractConfig{
+			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
+		})
+	o, _ := builder.Build()
+	require.NoError(t, o.Start(ctx))
+	defer func() {
+		cancel()
+		o.WaitForDone(t.Context())
+	}()
+	assert.True(t, o.started)
+	// SENDER mode sets currentActiveCoordinator to nodeName.
+	assert.Equal(t, "senderNode", o.currentActiveCoordinator)
 }

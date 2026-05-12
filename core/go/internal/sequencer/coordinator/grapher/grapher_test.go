@@ -784,3 +784,56 @@ func TestExportStatesAndLocks_LocksReturnedUnfiltered(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, forNode2.LockedState, 2, "all locks returned to node2")
 }
+
+func TestImportStatesAndLocks_ExistingOutputStatePreserved(t *testing.T) {
+	ctx := t.Context()
+	txID := uuid.New()
+	stateID := pldtypes.MustParseHexBytes("0x" + strings.Repeat("ae", 32))
+
+	g := testGrapherUnlocked(t)
+
+	// Seed an existing output state via AddMinter so it is already in outputStatesByStateID.
+	err := g.AddMinter(ctx, []*components.FullState{{ID: stateID}}, txID, map[string][]string{stateID.String(): {"node1"}})
+	require.NoError(t, err)
+
+	originalState := g.outputStatesByStateID[stateID.String()]
+	require.NotNil(t, originalState)
+
+	// Build an import with a confirmed lock for the same state ID but different AllowedNodes.
+	blockNum := uint64(10)
+	importState := &OutputState{
+		StateUpsert:  components.StateUpsert{ID: stateID},
+		AllowedNodes: []string{"node2"},
+	}
+	lock := &StateLock{
+		State:            stateID,
+		Type:             pldapi.StateLockTypeSpend.Enum(),
+		ConfirmedAtBlock: &blockNum,
+	}
+
+	// ImportStatesAndLocks should skip the state because an existing entry already exists.
+	g.ImportStatesAndLocks(ctx, []*OutputState{importState}, []*StateLock{lock})
+
+	// The original output state must not have been overwritten.
+	after := g.outputStatesByStateID[stateID.String()]
+	assert.Equal(t, originalState, after, "existing output state should take precedence over imported one")
+	assert.Equal(t, []string{"node1"}, after.AllowedNodes, "AllowedNodes should remain from original entry")
+}
+
+func TestAddMinter_DuplicateStateIDWithinOneCall_ReturnsError(t *testing.T) {
+	ctx := t.Context()
+	txID := uuid.New()
+	stateID := pldtypes.MustParseHexBytes("0x" + strings.Repeat("bf", 32))
+
+	g := testGrapher(t)
+
+	// Pass the same state ID twice in a single AddMinter call. The first iteration registers the
+	// state under transactionByOutputState; the second finds it already present and returns an error.
+	err := g.AddMinter(ctx, []*components.FullState{
+		{ID: stateID},
+		{ID: stateID},
+	}, txID, map[string][]string{})
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, string(msgs.MsgSequencerGrapherAddMinterAlreadyExistsError))
+}

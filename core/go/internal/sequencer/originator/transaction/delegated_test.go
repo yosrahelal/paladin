@@ -370,3 +370,113 @@ func TestValidator_PreDispatchRequestMatchesAssembledDelegation_HashError(t *tes
 	assert.False(t, matches, "Should return false when there's an error")
 	assert.Contains(t, err.Error(), "cannot hash transaction without PostAssembly", "Error should indicate missing PostAssembly")
 }
+
+func Test_action_ResetDelegationState_ClearsAssemblyAndDispatchState(t *testing.T) {
+	ctx := context.Background()
+	// Start in State_Assembling — state machine has a top-level validator for Event_Delegated in
+	// this state that checks ValidatorNot(validator_CoordinatorIsCurrentDelegate), so a re-delegation
+	// from a DIFFERENT coordinator triggers action_ResetDelegationState.
+	builder := NewTransactionBuilderForTesting(t, State_Assembling)
+	txn, _ := builder.BuildWithMocks()
+
+	// Populate assembly state that should be cleared on re-delegation.
+	txn.latestFulfilledAssembleRequestID = uuid.New()
+	txn.signerAddress = pldtypes.RandAddress()
+	nonce := uint64(42)
+	txn.nonce = &nonce
+	txn.latestPreDispatchRequestID = uuid.New()
+	submissionHash := pldtypes.RandBytes32()
+	txn.latestSubmissionHash = &submissionHash
+
+	// Send DelegatedEvent from a DIFFERENT coordinator than the current delegate.
+	// The ValidatorNot(validator_CoordinatorIsCurrentDelegate) passes because coordinator differs.
+	newCoordinator := "new-coordinator@node2"
+	err := txn.HandleEvent(ctx, &DelegatedEvent{
+		BaseEvent:   BaseEvent{TransactionID: txn.pt.ID},
+		Coordinator: newCoordinator,
+	})
+	require.NoError(t, err)
+
+	// State should transition back to Delegated.
+	assert.Equal(t, State_Delegated, txn.GetCurrentState())
+
+	// action_ResetDelegationState should have cleared all assembly/dispatch state.
+	assert.Nil(t, txn.latestAssembleRequest)
+	assert.Equal(t, uuid.Nil, txn.latestFulfilledAssembleRequestID)
+	assert.Equal(t, uuid.Nil, txn.latestPreDispatchRequestID)
+	assert.Nil(t, txn.signerAddress)
+	assert.Nil(t, txn.latestSubmissionHash)
+	assert.Nil(t, txn.nonce)
+	// currentDelegate should now be the new coordinator (set by action_Delegated).
+	assert.Equal(t, newCoordinator, txn.currentDelegate)
+}
+
+func Test_validator_CoordinatorIsCurrentDelegate_WrongCoordinator_ReturnsFalse(t *testing.T) {
+	// Exercises the return false, nil branch — event implements EventWithCoordinator but
+	// the coordinator doesn't match the current delegate.
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Delegated)
+	txn, _ := builder.BuildWithMocks()
+
+	txn.currentDelegate = "coord@node1"
+
+	// DispatchedEvent implements EventWithCoordinator.
+	event := &DispatchedEvent{
+		BaseEvent:     BaseEvent{TransactionID: txn.GetID()},
+		Coordinator:   "other@node2",
+		SignerAddress: *pldtypes.RandAddress(),
+	}
+
+	ok, err := validator_CoordinatorIsCurrentDelegate(ctx, txn, event)
+	require.NoError(t, err)
+	assert.False(t, ok, "should return false when coordinator does not match currentDelegate")
+}
+
+func TestValidator_AssembleRequestMatches_SendNotActiveCoordinatorError_LogsWarnAndReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Delegated).WithMockTransportWriter()
+	txn, mocks := builder.BuildWithMocks()
+
+	txn.currentDelegate = "coordinator@node1"
+
+	// Event comes from a DIFFERENT coordinator — triggers the SendNotActiveCoordinator call.
+	event := &AssembleRequestReceivedEvent{
+		BaseEvent:   BaseEvent{TransactionID: txn.GetID()},
+		Coordinator: "other@node2",
+		RequestID:   uuid.New(),
+	}
+
+	mocks.TransportWriter.EXPECT().
+		SendNotActiveCoordinator(mock.Anything, "other@node2", txn.pt.ID).
+		Return(errors.New("transport error"))
+
+	matches, err := validator_AssembleRequestMatches(ctx, txn, event)
+
+	require.NoError(t, err, "transport error must be logged and swallowed, not returned")
+	assert.False(t, matches)
+}
+
+func TestValidator_PreDispatchRequestMatchesAssembledDelegation_SendNotActiveCoordinatorError_LogsWarnAndReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).WithMockTransportWriter()
+	txn, mocks := builder.BuildWithMocks()
+
+	txn.currentDelegate = "coordinator@node1"
+
+	// Event comes from a DIFFERENT coordinator — triggers the SendNotActiveCoordinator call.
+	event := &PreDispatchRequestReceivedEvent{
+		BaseEvent:        BaseEvent{TransactionID: txn.GetID()},
+		Coordinator:      "other@node2",
+		PostAssemblyHash: ptrTo(pldtypes.RandBytes32()),
+		RequestID:        uuid.New(),
+	}
+
+	mocks.TransportWriter.EXPECT().
+		SendNotActiveCoordinator(mock.Anything, "other@node2", txn.pt.ID).
+		Return(errors.New("transport error"))
+
+	matches, err := validator_PreDispatchRequestMatchesAssembledDelegation(ctx, txn, event)
+
+	require.NoError(t, err, "transport error must be logged and swallowed, not returned")
+	assert.False(t, matches)
+}

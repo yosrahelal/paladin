@@ -26,7 +26,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
-	"github.com/LFDT-Paladin/paladin/core/mocks/syncpointsmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -45,7 +44,6 @@ type ChainedDependenciesSuite struct {
 	ctx        context.Context
 	c          *coordinator
 	mocks      *CoordinatorDependencyMocks
-	syncPoints *syncpointsmocks.SyncPoints
 	builder    *CoordinatorBuilderForTesting
 	originator string
 
@@ -81,9 +79,11 @@ func (s *ChainedDependenciesSuite) SetupTest() {
 
 func (s *ChainedDependenciesSuite) buildCoordinator() {
 	s.c, s.mocks = s.builder.Build()
-	s.syncPoints = s.mocks.SyncPoints.(*syncpointsmocks.SyncPoints)
-	s.syncPoints.On("PersistDispatchBatch", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	s.syncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	s.mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
+	s.mocks.EngineIntegration.On("WriteStatesForTransaction", mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.mocks.EngineIntegration.On("MapPotentialStates", mock.Anything, mock.Anything, mock.Anything).Return(([]*components.StateUpsert)(nil), nil).Maybe()
+	s.mocks.SyncPoints.On("PersistDispatchBatch", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.mocks.SyncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 }
 
 // ---------- helpers ----------
@@ -215,7 +215,7 @@ func (s *ChainedDependenciesSuite) assertEvicted(txIDs ...uuid.UUID) {
 
 func (s *ChainedDependenciesSuite) getFinalizeRequestForTx(txID uuid.UUID) *syncpoints.TransactionFinalizeRequest {
 	s.T().Helper()
-	for _, call := range s.syncPoints.Calls {
+	for _, call := range s.mocks.SyncPoints.Calls {
 		if call.Method == "QueueTransactionFinalize" {
 			req := call.Arguments.Get(1).(*syncpoints.TransactionFinalizeRequest)
 			if req.TransactionID == txID {
@@ -242,7 +242,7 @@ func (s *ChainedDependenciesSuite) TestNonRetriableRevertCascade() {
 	s.injectRevert(a, false)
 
 	s.assertInState(transaction.State_Reverted, a, b, c)
-	s.syncPoints.AssertNumberOfCalls(s.T(), "QueueTransactionFinalize", 3)
+	s.mocks.SyncPoints.AssertNumberOfCalls(s.T(), "QueueTransactionFinalize", 3)
 
 	reqA := s.getFinalizeRequestForTx(a)
 	s.Require().Contains(reqA.FailureMessage, "non-retriable")

@@ -271,7 +271,3 @@ func (o *originator) getTransactionsNotInStates(states []transaction.State) []tr
 	}
 	return matchingTxns
 }
-
-func ptrTo[T any](v T) *T {
-	return &v
-}

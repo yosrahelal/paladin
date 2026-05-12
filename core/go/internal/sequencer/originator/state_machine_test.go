@@ -18,10 +18,13 @@ import (
 	"context"
 	"testing"
 
+	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
+	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -30,7 +33,7 @@ import (
 // ── Initial / Idle state transitions ─────────────────────────────────────────
 
 func TestStateMachine_InitializeOK(t *testing.T) {
-	o, _ := NewOriginatorBuilderForTesting(State_Idle).Build()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
 	assert.Equal(t, State_Idle, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
 }
 
@@ -38,7 +41,7 @@ func TestStateMachine_InitializeOK(t *testing.T) {
 // action_SelectActiveCoordinator runs and seeds preferredActiveCoordinator from the pool.
 func TestStateMachine_WhenCreated_TransitionsToIdle(t *testing.T) {
 	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(State_Initial).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Initial).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
@@ -53,7 +56,7 @@ func TestStateMachine_WhenCreated_TransitionsToIdle(t *testing.T) {
 
 func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromCurrentActiveCoordinator(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).
 		CurrentActiveCoordinator("node2").
 		NodeName("node1")
 	o, _ := builder.Build()
@@ -74,7 +77,7 @@ func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromCurrentActiveCoord
 
 func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromPreferredActiveCoordinator_RealignsCurrentAndTransitions(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).
 		PreferredActiveCoordinator("node1").
 		CurrentActiveCoordinator("node2").
 		FailoverOffset(1).
@@ -94,7 +97,7 @@ func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromPreferredActiveCoo
 
 func TestStateMachine_Idle_StaysIdle_OnHeartbeatReceivedFromUnrelatedNode(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).
 		PreferredActiveCoordinator("node2").
 		CurrentActiveCoordinator("node2").
 		NodeName("node1")
@@ -112,7 +115,7 @@ func TestStateMachine_Idle_StaysIdle_OnHeartbeatReceivedFromUnrelatedNode(t *tes
 
 func TestStateMachine_Idle_ToSending_OnTransactionCreated(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
 	assert.Equal(t, State_Idle, o.GetCurrentState())
@@ -130,7 +133,7 @@ func TestStateMachine_WhenIdle_NewEpoch_RefreshesCoordinatorSelectionStaysIdle(t
 	ctx := context.Background()
 	blockRange := uint64(50)
 
-	o, _ := NewOriginatorBuilderForTesting(State_Idle).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
@@ -148,7 +151,7 @@ func TestStateMachine_WhenIdle_NewEpoch_RefreshesCoordinatorSelectionStaysIdle(t
 
 func TestStateMachine_Observing_ToSending_OnTransactionCreated(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Observing).
+	builder := NewOriginatorBuilderForTesting(t, State_Observing).
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
 	mocks.TransportWriter.EXPECT().
@@ -162,7 +165,7 @@ func TestStateMachine_Observing_ToSending_OnTransactionCreated(t *testing.T) {
 // HeartbeatInterval exceeding the inactive grace period transitions Observing → Idle.
 func TestStateMachine_Observing_TransitionsToIdle_OnHeartbeatIntervalInactiveGrace(t *testing.T) {
 	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(State_Observing).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
 		HeartbeatIntervalsSinceLastReceive(0).
 		InactiveGracePeriod(1).
 		Build()
@@ -175,17 +178,18 @@ func TestStateMachine_Observing_TransitionsToIdle_OnHeartbeatIntervalInactiveGra
 
 func TestStateMachine_Sending_NoTransition_OnTransactionConfirmed_IfHasTransactionsInflight(t *testing.T) {
 	ctx := context.Background()
-	txn1Builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted)
-	txn2Builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted)
-	o, _ := NewOriginatorBuilderForTesting(State_Sending).
-		TransactionBuilders(txn1Builder, txn2Builder).
+	txn1ID := uuid.New()
+	txn2ID := uuid.New()
+	mockTxn1 := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn1.On("GetID").Return(txn1ID)
+	mockTxn1.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	mockTxn2 := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn2.On("GetID").Return(txn2ID)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		Transactions(mockTxn1, mockTxn2).
 		Build()
-	txn1 := txn1Builder.GetBuiltTransaction()
-	txn2 := txn2Builder.GetBuiltTransaction()
-	require.NotNil(t, txn1)
-	require.NotNil(t, txn2)
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &transaction.ConfirmedSuccessEvent{
-		BaseEvent: transaction.BaseEvent{TransactionID: txn1.GetID()},
+		BaseEvent: transaction.BaseEvent{TransactionID: txn1ID},
 	}))
 	assert.Equal(t, State_Sending, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
 	// txn2 is still unconfirmed; both transactions must remain in the map
@@ -195,15 +199,23 @@ func TestStateMachine_Sending_NoTransition_OnTransactionConfirmed_IfHasTransacti
 func TestStateMachine_Sending_DoDelegateTransactions_OnHeartbeatReceived_IfHasDroppedTransaction(t *testing.T) {
 	ctx := context.Background()
 	coordinatorLocator := "node1"
-	txn1Builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	txn2Builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	builder := NewOriginatorBuilderForTesting(State_Sending).
+	txn1ID := uuid.New()
+	txn2ID := uuid.New()
+	mockTxn1 := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn1.On("GetID").Return(txn1ID)
+	mockTxn1.On("GetCurrentState").Return(transaction.State_Delegated)
+	mockTxn1.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txn1ID})
+	mockTxn1.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	mockTxn2 := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn2.On("GetID").Return(txn2ID)
+	mockTxn2.On("GetCurrentState").Return(transaction.State_Delegated)
+	mockTxn2.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txn2ID})
+	mockTxn2.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
 		CurrentActiveCoordinator(coordinatorLocator).
 		WithMockTransportWriter(t).
-		TransactionBuilders(txn1Builder, txn2Builder)
+		Transactions(mockTxn1, mockTxn2)
 	o, mocks := builder.Build()
-	txn1 := txn1Builder.GetBuiltTransaction()
-	require.NotNil(t, txn1)
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, coordinatorLocator, mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -214,7 +226,7 @@ func TestStateMachine_Sending_DoDelegateTransactions_OnHeartbeatReceived_IfHasDr
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			PooledTransactions: []*common.SnapshotPooledTransaction{
-				{ID: txn1.GetID(), Originator: "node1"},
+				{ID: txn1ID, Originator: "node1"},
 			},
 		},
 	}
@@ -224,14 +236,19 @@ func TestStateMachine_Sending_DoDelegateTransactions_OnHeartbeatReceived_IfHasDr
 
 func TestStateMachine_Sending_OnHeartbeatReceivedFromPreferredActiveCoordinator_RealignsAndRedelegates(t *testing.T) {
 	ctx := context.Background()
-	txnBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	builder := NewOriginatorBuilderForTesting(State_Sending).
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
 		PreferredActiveCoordinator("node1").
 		CurrentActiveCoordinator("node2").
 		FailoverOffset(1).
 		NodeName("node3").
 		WithMockTransportWriter(t).
-		TransactionBuilders(txnBuilder)
+		Transactions(mockTxn)
 	o, mocks := builder.Build()
 	ca := builder.GetContractAddress()
 	// action_ResetCurrentToPreferred realigns current → preferred ("node1") before delegation fires.
@@ -254,7 +271,7 @@ func TestStateMachine_Sending_OnHeartbeatReceivedFromPreferredActiveCoordinator_
 // A new transaction created in Sending while not watching a flush immediately delegates.
 func TestStateMachine_Sending_TransactionCreated_DelegatesImmediately_WhenNotWatching(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Sending).
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
 		WatchingPreviousCoordinatorFlush(false).
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
@@ -270,11 +287,12 @@ func TestStateMachine_Sending_TransactionCreated_DelegatesImmediately_WhenNotWat
 // When the last transaction reaches State_Final in Sending, the originator transitions to Observing.
 func TestStateMachine_Sending_TransitionsToObserving_WhenLastTransactionFinal(t *testing.T) {
 	ctx := context.Background()
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	o, _ := NewOriginatorBuilderForTesting(State_Sending).
-		TransactionBuilders(txBuilder).
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		Transactions(mockTxn).
 		Build()
-	txID := txBuilder.GetBuiltTransaction().GetID()
 	// Fire a Final state-transition event directly — action_CleanUpTransaction removes the tx,
 	// and with no remaining transactions GuardNot(guard_HasUnconfirmedTransactions) fires.
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
@@ -296,7 +314,7 @@ func TestOriginator_WhenNewEpochRuns_PreservesPreviousActiveAndRecomputesActiveW
 	blockRange := uint64(50)
 
 	// 3-node pool: coordinator changes → watchingPreviousCoordinatorFlush = true
-	o, _ := NewOriginatorBuilderForTesting(State_Sending).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
@@ -311,7 +329,7 @@ func TestOriginator_WhenNewEpochRuns_PreservesPreviousActiveAndRecomputesActiveW
 	assert.True(t, o.watchingPreviousCoordinatorFlush, "must watch when coordinator identity changes at epoch boundary")
 
 	// 1-node pool: coordinator stays the same → watchingPreviousCoordinatorFlush stays false
-	o2, _ := NewOriginatorBuilderForTesting(State_Sending).
+	o2, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
@@ -330,7 +348,7 @@ func TestOriginator_WhenNewEpochRuns_PreservesPreviousActiveAndRecomputesActiveW
 // Transitioning into Sending while watching and creating a new transaction both suppress delegation.
 func TestOriginator_WhenWatchingPreviousFlush_DelegationSuppressedOnTransitionInAndOnNewTransaction(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Observing).
+	builder := NewOriginatorBuilderForTesting(t, State_Observing).
 		WatchingPreviousCoordinatorFlush(true)
 	o, mocks := builder.Build()
 
@@ -350,7 +368,7 @@ func TestOriginator_WhenWatchingPreviousFlush_DelegationSuppressedOnTransitionIn
 // A closing heartbeat from the previous coordinator exits watching and triggers a full redelegate.
 func TestOriginator_WhenWatchingPreviousFlush_ExitsOnPreviousClosingHeartbeat(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Sending).
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
 		WatchingPreviousCoordinatorFlush(true).
 		PreviousActiveCoordinatorNode("node2").
 		CurrentActiveCoordinator("node1").
@@ -375,7 +393,7 @@ func TestOriginator_WhenWatchingPreviousFlush_ExitsOnPreviousClosingHeartbeat(t 
 // If the new active coordinator starts heartbeating before the previous has closed, watching exits.
 func TestOriginator_WhenWatchingPreviousFlush_ExitsOnHeartbeatFromNewActiveWhileWatching(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Sending).
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
 		WatchingPreviousCoordinatorFlush(true).
 		PreviousActiveCoordinatorNode("node2").
 		CurrentActiveCoordinator("node1").
@@ -398,7 +416,7 @@ func TestOriginator_WhenWatchingPreviousFlush_ExitsOnHeartbeatFromNewActiveWhile
 // The HeartbeatInterval inactive-grace path bypasses the watching guard and always delegates.
 func TestOriginator_WhenWatchingPreviousFlush_ExitsOnHeartbeatIntervalInactivePathThatNudgesNewCoordinator(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Sending).
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
 		WatchingPreviousCoordinatorFlush(true).
 		HeartbeatIntervalsSinceLastReceive(0).
 		InactiveGracePeriod(1).
@@ -420,11 +438,16 @@ func TestOriginator_WhenWatchingPreviousFlush_ExitsOnHeartbeatIntervalInactivePa
 // and a delegation request.
 func TestOriginator_WhenSnapshotShowsMissingNonFinalTransaction_SetsNeedsRedelegate(t *testing.T) {
 	ctx := context.Background()
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	builder := NewOriginatorBuilderForTesting(State_Sending).
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
 		CurrentActiveCoordinator("node1").
 		WithMockTransportWriter(t).
-		TransactionBuilders(txBuilder)
+		Transactions(mockTxn)
 	o, mocks := builder.Build()
 	ca := builder.GetContractAddress()
 	// Dropped transaction must trigger redelegate to the current active coordinator ("node1").
@@ -444,12 +467,16 @@ func TestOriginator_WhenSnapshotShowsMissingNonFinalTransaction_SetsNeedsRedeleg
 // In COORDINATOR_SENDER mode, action_IncrementFailoverOffset is a no-op — failoverOffset stays 0.
 func TestOriginator_WhenCoordinatorSenderMode_DoesNotMutateFailoverOffset(t *testing.T) {
 	ctx := context.Background()
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	o, _ := NewOriginatorBuilderForTesting(State_Sending).
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		// Default config is COORDINATOR_SENDER — no DomainContractConfig needed.
 		HeartbeatIntervalsSinceLastReceive(0).
 		InactiveGracePeriod(1).
-		TransactionBuilders(txBuilder).
+		Transactions(mockTxn).
 		Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
 	assert.Equal(t, 0, o.failoverOffset, "SENDER mode must not mutate failoverOffset")
@@ -458,8 +485,12 @@ func TestOriginator_WhenCoordinatorSenderMode_DoesNotMutateFailoverOffset(t *tes
 // In COORDINATOR_ENDORSER mode, action_IncrementFailoverOffset advances the offset by one.
 func TestOriginator_WhenCoordinatorEndorserMode_UsesCyclicWalkOnlyWhenConfigured(t *testing.T) {
 	ctx := context.Background()
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	o, _ := NewOriginatorBuilderForTesting(State_Sending).
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
@@ -468,7 +499,7 @@ func TestOriginator_WhenCoordinatorEndorserMode_UsesCyclicWalkOnlyWhenConfigured
 		CurrentBlockHeight(100).
 		HeartbeatIntervalsSinceLastReceive(0).
 		InactiveGracePeriod(1).
-		TransactionBuilders(txBuilder).
+		Transactions(mockTxn).
 		Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
 	assert.Equal(t, 1, o.failoverOffset, "ENDORSER mode must increment failoverOffset when grace exceeded")
@@ -479,8 +510,12 @@ func TestOriginator_WhenCoordinatorEndorserMode_UsesCyclicWalkOnlyWhenConfigured
 func TestOriginator_WhenHeartbeatFromCurrentStalePastInactive_AdvancedFailoverOffsetAndRedelegates(t *testing.T) {
 	ctx := context.Background()
 	blockRange := uint64(50)
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	o, mocks := NewOriginatorBuilderForTesting(State_Sending).
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	o, mocks := NewOriginatorBuilderForTesting(t, State_Sending).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
@@ -491,7 +526,7 @@ func TestOriginator_WhenHeartbeatFromCurrentStalePastInactive_AdvancedFailoverOf
 		HeartbeatIntervalsSinceLastReceive(0).
 		InactiveGracePeriod(1).
 		WithMockTransportWriter(t).
-		TransactionBuilders(txBuilder).
+		Transactions(mockTxn).
 		Build()
 	// After failover offset increments, action_SelectActiveCoordinator re-picks from the pool.
 	// The test already asserts o.currentActiveCoordinator == "node3"; delegation goes to that same node.
@@ -507,8 +542,12 @@ func TestOriginator_WhenHeartbeatFromCurrentStalePastInactive_AdvancedFailoverOf
 func TestOriginator_WhenRepeatedCurrentCoordinatorFailures_AdvanceFailoverOffsetAroundPool(t *testing.T) {
 	ctx := context.Background()
 	blockRange := uint64(50)
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	o, _ := NewOriginatorBuilderForTesting(State_Sending).
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
@@ -519,7 +558,7 @@ func TestOriginator_WhenRepeatedCurrentCoordinatorFailures_AdvanceFailoverOffset
 		PreferredActiveCoordinator("node2").
 		HeartbeatIntervalsSinceLastReceive(0).
 		InactiveGracePeriod(1).
-		TransactionBuilders(txBuilder).
+		Transactions(mockTxn).
 		Build()
 
 	// First HeartbeatInterval: offset 0→1, counter resets to 0 (new coordinator selected).
@@ -541,7 +580,7 @@ func TestOriginator_WhenRepeatedCurrentCoordinatorFailures_AdvanceFailoverOffset
 func TestOriginator_WhenNewEpochWhileOnFallback_ResetsFailoverOffsetToZero(t *testing.T) {
 	ctx := context.Background()
 	blockRange := uint64(50)
-	o, _ := NewOriginatorBuilderForTesting(State_Sending).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
@@ -561,14 +600,19 @@ func TestOriginator_WhenNewEpochWhileOnFallback_ResetsFailoverOffsetToZero(t *te
 // the originator realigns current to preferred and redelegates all inflight transactions.
 func TestOriginator_WhenFallbackObservesPreferredActive_RedelegatesPerSpec(t *testing.T) {
 	ctx := context.Background()
-	txnBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	builder := NewOriginatorBuilderForTesting(State_Sending).
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
 		PreferredActiveCoordinator("node1").
 		CurrentActiveCoordinator("node2").
 		FailoverOffset(1).
 		NodeName("node3").
 		WithMockTransportWriter(t).
-		TransactionBuilders(txnBuilder)
+		Transactions(mockTxn)
 	o, mocks := builder.Build()
 	ca := builder.GetContractAddress()
 	// After realignment current = "node1"; delegation must go to the preferred coordinator.
@@ -593,16 +637,18 @@ func TestOriginator_WhenFallbackNeverReceivesPreferredHeartbeat_RemainsOnFallbac
 	ctx := context.Background()
 	preferred := "node1"
 	fallback := "node2"
-	txnBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	builder := NewOriginatorBuilderForTesting(State_Sending).
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
 		PreferredActiveCoordinator(preferred).
 		CurrentActiveCoordinator(fallback).
 		FailoverOffset(1).
 		NodeName("node3").
-		TransactionBuilders(txnBuilder)
+		Transactions(mockTxn)
 	o, mocks := builder.Build()
 	ca := builder.GetContractAddress()
-	txID := txnBuilder.GetBuiltTransaction().GetID()
 	// Fallback sends heartbeat with the transaction in its snapshot — no drop detected, no redelegate.
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
 		From:            fallback,
@@ -624,14 +670,19 @@ func TestOriginator_WhenOnFallbackAndPreferredBecomesVisible_RedelegatesNewWorkT
 	ctx := context.Background()
 	preferred := "node1"
 	fallback := "node2"
-	txnBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	builder := NewOriginatorBuilderForTesting(State_Sending).
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
 		PreferredActiveCoordinator(preferred).
 		CurrentActiveCoordinator(fallback).
 		FailoverOffset(1).
 		NodeName("node3").
 		WithMockTransportWriter(t).
-		TransactionBuilders(txnBuilder)
+		Transactions(mockTxn)
 	o, mocks := builder.Build()
 	ca := builder.GetContractAddress()
 	// After realignment current = preferred; all work is redelegated to the preferred coordinator.
@@ -656,8 +707,12 @@ func TestOriginator_WhenOnFallbackAndPreferredBecomesVisible_RedelegatesNewWorkT
 func TestOriginator_WhenWatchingPreviousFlushWhileRepointingToFallback_ReconcilesPerSpec(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2", "node3"}
-	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	o, mocks := NewOriginatorBuilderForTesting(State_Sending).
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	o, mocks := NewOriginatorBuilderForTesting(t, State_Sending).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
@@ -669,7 +724,7 @@ func TestOriginator_WhenWatchingPreviousFlushWhileRepointingToFallback_Reconcile
 		HeartbeatIntervalsSinceLastReceive(0).
 		InactiveGracePeriod(1).
 		WithMockTransportWriter(t).
-		TransactionBuilders(txBuilder).
+		Transactions(mockTxn).
 		Build()
 	// After action_IncrementFailoverOffset (offset 1→2) and action_SelectActiveCoordinator, the
 	// new current coordinator is determined by SelectCoordinatorNode(pool, 100, 50, 2).

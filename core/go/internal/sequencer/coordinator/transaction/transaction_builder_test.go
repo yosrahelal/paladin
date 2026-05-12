@@ -427,7 +427,7 @@ type transactionDependencyMocks struct {
 	TransportWriter     *sequencertransportmocks.TransportWriter
 	Clock               *sequencercommonmocks.Clock
 	EngineIntegration   *sequencercommonmocks.EngineIntegration
-	SentMessageRecorder *transport.SentMessageRecorder
+	SentMessageRecorder *testutil.SentMessageRecorder
 	SyncPoints          *syncpointsmocks.SyncPoints
 	AllComponents       *componentsmocks.AllComponents
 	DomainAPI           *componentsmocks.DomainSmartContract
@@ -456,7 +456,7 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		TransportWriter:     sequencertransportmocks.NewTransportWriter(b.t),
 		Clock:               sequencercommonmocks.NewClock(b.t),
 		EngineIntegration:   sequencercommonmocks.NewEngineIntegration(b.t),
-		SentMessageRecorder: transport.NewSentMessageRecorder(),
+		SentMessageRecorder: testutil.NewSentMessageRecorder(),
 		SyncPoints:          syncpointsmocks.NewSyncPoints(b.t),
 		AllComponents:       componentsmocks.NewAllComponents(b.t),
 		KeyManager:          componentsmocks.NewKeyManager(b.t),

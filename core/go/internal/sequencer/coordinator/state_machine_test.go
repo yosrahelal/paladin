@@ -46,7 +46,8 @@ func newDispatchedTxMock(t *testing.T) (*coordinatortransactionmocks.Coordinator
 func Test_queueEventInternal_QueuesPriorityEvent(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	ctx, cancel := context.WithCancel(t.Context())
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
 	require.NoError(t, c.Start(ctx))
 	defer func() {
 		cancel()
@@ -62,7 +63,8 @@ func Test_queueEventInternal_QueuesPriorityEvent(t *testing.T) {
 func Test_TryQueueEvent_QueuesToEventLoop(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	ctx, cancel := context.WithCancel(t.Context())
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
 	require.NoError(t, c.Start(ctx))
 	defer func() {
 		cancel()

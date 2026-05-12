@@ -132,7 +132,7 @@ func TestDelegatedEvent_Fields(t *testing.T) {
 		Coordinator: coordinator,
 	}
 	assert.Equal(t, txID, event.GetTransactionID())
-	assert.Equal(t, coordinator, event.Coordinator)
+	assert.Equal(t, coordinator, event.GetCoordinator())
 }
 
 func TestAssembleRequestReceivedEvent_Type(t *testing.T) {
@@ -305,14 +305,17 @@ func TestDispatchedEvent_TypeString(t *testing.T) {
 func TestDispatchedEvent_Fields(t *testing.T) {
 	txID := uuid.New()
 	signerAddress := *pldtypes.RandAddress()
+	coordinator := "coordinator@node1"
 	event := &DispatchedEvent{
 		BaseEvent: BaseEvent{
 			TransactionID: txID,
 		},
 		SignerAddress: signerAddress,
+		Coordinator:   coordinator,
 	}
 	assert.Equal(t, txID, event.GetTransactionID())
 	assert.Equal(t, signerAddress, event.SignerAddress)
+	assert.Equal(t, coordinator, event.GetCoordinator())
 }
 
 func TestNonceAssignedEvent_Type(t *testing.T) {

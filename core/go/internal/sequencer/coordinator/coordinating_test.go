@@ -1152,3 +1152,20 @@ func Test_updateOriginatorNodePool_HandlesEmptyStringNode(t *testing.T) {
 	assert.Contains(t, c.originatorNodePool, "", "pool should contain empty string")
 	assert.Contains(t, c.originatorNodePool, "node1", "pool should contain coordinator's own node")
 }
+
+func Test_updateOriginatorNodePool_CoordinatorEndorserMode_PoolNotModified(t *testing.T) {
+	// In COORDINATOR_ENDORSER mode the pool is fixed at Start time; dynamic updates are skipped.
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+		CoordinatorEndorserCandidates: []string{"id@node1"},
+	})
+	c, _ := builder.OriginatorNodePool("node1").Build()
+
+	before := make([]string, len(c.originatorNodePool))
+	copy(before, c.originatorNodePool)
+
+	c.updateOriginatorNodePool("node2")
+
+	assert.Equal(t, before, c.originatorNodePool, "ENDORSER mode should not modify originatorNodePool on dynamic update")
+}
