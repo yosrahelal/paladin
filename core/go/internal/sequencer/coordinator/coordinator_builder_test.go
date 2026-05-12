@@ -46,6 +46,8 @@ type CoordinatorBuilderForTesting struct {
 	contractConfig                           *prototk.ContractConfig
 	currentBlockHeight                       *uint64
 	transactions                             []transaction.CoordinatorTransaction
+	pooledTransactions                       []transaction.CoordinatorTransaction
+	coordinatorEndorserPool                  []string
 	heartbeatsUntilClosingGracePeriodExpires *int
 	metrics                                  metrics.DistributedSequencerMetrics
 	sequencerConfig                          *pldconf.SequencerConfig
@@ -58,8 +60,8 @@ type CoordinatorBuilderForTesting struct {
 	heartbeatIntervalsSinceLastReceive       *int
 	inactiveGracePeriod                      *int
 	heartbeatIntervalsSinceStateChange       *int
-	activeCoordinatorState *State
-	useMockTransportWriter bool
+	activeCoordinatorState                   *State
+	useMockTransportWriter                   bool
 }
 
 type CoordinatorDependencyMocks struct {
@@ -182,6 +184,16 @@ func (b *CoordinatorBuilderForTesting) Transactions(transactions ...transaction.
 	return b
 }
 
+func (b *CoordinatorBuilderForTesting) PooledTransactions(transactions ...transaction.CoordinatorTransaction) *CoordinatorBuilderForTesting {
+	b.pooledTransactions = transactions
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) CoordinatorEndorserPool(nodes ...string) *CoordinatorBuilderForTesting {
+	b.coordinatorEndorserPool = nodes
+	return b
+}
+
 func (b *CoordinatorBuilderForTesting) GetDomainAPI() *componentsmocks.DomainSmartContract {
 	return b.domainAPI
 }
@@ -273,6 +285,11 @@ func (b *CoordinatorBuilderForTesting) AssembleErrorRetryThreshold(n int) *Coord
 	return b
 }
 
+func (b *CoordinatorBuilderForTesting) ClosingGracePeriod(n int) *CoordinatorBuilderForTesting {
+	b.sequencerConfig.ClosingGracePeriod = confutil.P(n)
+	return b
+}
+
 func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDependencyMocks) {
 	if b.contractAddress == nil {
 		b.contractAddress = pldtypes.RandAddress()
@@ -341,6 +358,15 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	// Loops are not started yet — set state and seed transactions directly.
 	for _, tx := range b.transactions {
 		coordinator.transactionsByID[tx.GetID()] = tx
+	}
+	if len(b.pooledTransactions) > 0 {
+		for _, tx := range b.pooledTransactions {
+			coordinator.transactionsByID[tx.GetID()] = tx
+			coordinator.pooledTransactions = append(coordinator.pooledTransactions, tx)
+		}
+	}
+	if len(b.coordinatorEndorserPool) > 0 {
+		coordinator.coordinatorEndorserPool = b.coordinatorEndorserPool
 	}
 
 	coordinator.stateMachineEventLoop.StateMachine().SetCurrentState(b.state)

@@ -295,7 +295,7 @@ var stateDefinitionsMap = StateDefinitions{
 			// We flush the transactions we have past the point of no return and track them through to completion; however,
 			// the protocol doesn't currently attempt any handover of locks, instead tolerating what will be retryable on chain
 			// failures.
-			// TODO AM: really need to think hard here about what sort of handover of locks we do if any
+			// TODO AM: think about checking block height tolerance and handover of locks here https://github.com/LFDT-Paladin/paladin/issues/1141
 			common.Event_HeartbeatReceived: {
 				Validator: validator_IsHeartbeatFromPreferredActiveCoordinator,
 				Actions: []ActionRule{

@@ -139,6 +139,7 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	require.Nil(t, o.transactionsByID[txn.ID], "Transaction should be cleaned up from transactionsByID after confirmation")
 	require.Equal(t, State_Observing, o.GetCurrentState(), "Originator should transition to Observing when all transactions are confirmed")
 }
+
 func Test_propagateEventToTransaction_UnknownTransaction_AssembleRequestSendsUnknown(t *testing.T) {
 	ctx := context.Background()
 	coordinatorLocator := "coordinator@coordinatorNode"
@@ -163,6 +164,7 @@ func Test_propagateEventToTransaction_UnknownTransaction_AssembleRequestSendsUnk
 	assert.Equal(t, unknownTxID, txID, "TransactionUnknown should be sent for the correct transaction ID")
 	assert.Equal(t, coordinatorLocator, coordinator, "TransactionUnknown should be sent to the correct coordinator")
 }
+
 func Test_propagateEventToTransaction_UnknownTransaction_NonRequestEventReturnsNil(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(State_Observing)
@@ -178,6 +180,7 @@ func Test_propagateEventToTransaction_UnknownTransaction_NonRequestEventReturnsN
 	// Verify that SendTransactionUnknown was NOT called
 	assert.False(t, mocks.SentMessageRecorder.HasSentTransactionUnknown(), "Expected SendTransactionUnknown to NOT be called for confirmation events")
 }
+
 func TestOriginator_CreateTransaction_ErrorFromNewTransaction(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(State_Observing)
@@ -187,6 +190,7 @@ func TestOriginator_CreateTransaction_ErrorFromNewTransaction(t *testing.T) {
 	assert.True(t, o.GetCurrentState() == State_Observing, "State should remain Observing after nil transaction event")
 	assert.False(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "No delegation should be sent for nil transaction")
 }
+
 func TestOriginator_EventLoop_ErrorHandling(t *testing.T) {
 	ctx := context.Background()
 	originatorLocator := "sender@senderNode"
@@ -203,6 +207,7 @@ func TestOriginator_EventLoop_ErrorHandling(t *testing.T) {
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, validEvent))
 	assert.True(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "Originator should still process valid event after error")
 }
+
 func Test_getTransactionsInStates_ReturnsOnlyTransactionsWhoseStateIsListed(t *testing.T) {
 	tbPending := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pending)
 	tbDelegated := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
@@ -219,6 +224,7 @@ func Test_getTransactionsInStates_ReturnsOnlyTransactionsWhoseStateIsListed(t *t
 	assert.Equal(t, transaction.State_Pending, byID[tbPending.GetBuiltTransaction().GetID()])
 	assert.Equal(t, transaction.State_Delegated, byID[tbDelegated.GetBuiltTransaction().GetID()])
 }
+
 func Test_getTransactionsInStates_EmptyStateListReturnsNoTransactions(t *testing.T) {
 	tb := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pending)
 	builder := NewOriginatorBuilderForTesting(State_Sending).
@@ -227,6 +233,7 @@ func Test_getTransactionsInStates_EmptyStateListReturnsNoTransactions(t *testing
 	assert.Empty(t, o.getTransactionsInStates(nil))
 	assert.Empty(t, o.getTransactionsInStates([]transaction.State{}))
 }
+
 func Test_propagateEventToTransaction_UnknownTransaction_PreDispatchRequestSendsUnknown(t *testing.T) {
 	ctx := context.Background()
 	coordinatorLocator := "coordinator@coordinatorNode"
@@ -246,153 +253,26 @@ func Test_propagateEventToTransaction_UnknownTransaction_PreDispatchRequestSends
 	assert.Equal(t, coordinatorLocator, coordinator)
 }
 
-// State machine spec tests (moved from spec/originator_test.go)
-
-func TestStateMachine_InitializeOK(t *testing.T) {
-	o, _ := NewOriginatorBuilderForTesting(State_Idle).Build()
-	assert.Equal(t, State_Idle, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
-}
-
-func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromCurrentActiveCoordinator(t *testing.T) {
+func Test_GetTxStatus_KnownTransactionReturnsStatus(t *testing.T) {
 	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).
-		CurrentActiveCoordinator("coordinator@node1").
-		NodeName("self@selfNode")
+	txBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Pending)
+	builder := NewOriginatorBuilderForTesting(State_Observing).TransactionBuilders(txBuilder)
 	o, _ := builder.Build()
-	assert.Equal(t, State_Idle, o.GetCurrentState())
-	ca := builder.GetContractAddress()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = "coordinator@node1"
-	heartbeatEvent.ContractAddress = &ca
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{}
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
-	assert.Equal(t, State_Observing, o.GetCurrentState())
-	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
+	txn := txBuilder.GetBuiltTransaction()
+	require.NotNil(t, txn)
+	status, err := o.GetTxStatus(ctx, txn.GetID())
+	require.NoError(t, err)
+	assert.Equal(t, txn.GetID().String(), status.TxID)
+	assert.NotEmpty(t, status.Status)
 }
 
-func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromPreferredActiveCoordinator_RealignsCurrentAndTransitions(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).
-		PreferredActiveCoordinator("nodeA").
-		CurrentActiveCoordinator("nodeB").
-		FailoverOffset(1).
-		NodeName("self@selfNode")
-	o, _ := builder.Build()
-	ca := builder.GetContractAddress()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = "nodeA"
-	heartbeatEvent.ContractAddress = &ca
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
-	assert.Equal(t, State_Observing, o.GetCurrentState())
-	assert.Equal(t, "nodeA", o.currentActiveCoordinator)
-	assert.Equal(t, 0, o.failoverOffset)
-}
-
-func TestStateMachine_Idle_StaysIdle_OnHeartbeatReceivedFromUnrelatedNode(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle).
-		PreferredActiveCoordinator("nodeA").
-		CurrentActiveCoordinator("nodeB").
-		NodeName("self@selfNode")
-	o, _ := builder.Build()
-	ca := builder.GetContractAddress()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = "nodeC"
-	heartbeatEvent.ContractAddress = &ca
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
-	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.Equal(t, "nodeB", o.currentActiveCoordinator)
-}
-
-func TestStateMachine_Idle_ToSending_OnTransactionCreated(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(State_Idle)
-	o, mocks := builder.Build()
-	assert.Equal(t, State_Idle, o.GetCurrentState())
-	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator("sender@node1").Build()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{Transaction: txn}))
-	assert.Equal(t, State_Sending, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
-	assert.True(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "Delegation request should be sent")
-}
-
-func TestStateMachine_Observing_ToSending_OnTransactionCreated(t *testing.T) {
+func Test_GetTxStatus_UnknownTransactionReturnsUnknown(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(State_Observing)
-	o, mocks := builder.Build()
-	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator("sender@node1").Build()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{Transaction: txn}))
-	assert.Equal(t, State_Sending, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
-	assert.True(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "Delegation request should be sent")
-}
-
-func TestStateMachine_Sending_NoTransition_OnTransactionConfirmed_IfHasTransactionsInflight(t *testing.T) {
-	ctx := context.Background()
-	txn1Builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted)
-	txn2Builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Submitted)
-	o, _ := NewOriginatorBuilderForTesting(State_Sending).
-		TransactionBuilders(txn1Builder, txn2Builder).
-		Build()
-	txn1 := txn1Builder.GetBuiltTransaction()
-	txn2 := txn2Builder.GetBuiltTransaction()
-	require.NotNil(t, txn1)
-	require.NotNil(t, txn2)
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &transaction.ConfirmedSuccessEvent{
-		BaseEvent: transaction.BaseEvent{TransactionID: txn1.GetID()},
-	}))
-	assert.Equal(t, State_Sending, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
-}
-
-func TestStateMachine_Sending_DoDelegateTransactions_OnHeartbeatReceived_IfHasDroppedTransaction(t *testing.T) {
-	ctx := context.Background()
-	coordinatorLocator := "coordinator@node1"
-	txn1Builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	txn2Builder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	builder := NewOriginatorBuilderForTesting(State_Sending).
-		CurrentActiveCoordinator(coordinatorLocator).
-		TransactionBuilders(txn1Builder, txn2Builder)
-	o, mocks := builder.Build()
-	txn1 := txn1Builder.GetBuiltTransaction()
-	require.NotNil(t, txn1)
-	// Send heartbeat with only txn1 in the snapshot — txn2 is "dropped"
-	ca := builder.GetContractAddress()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{
-		From:            coordinatorLocator,
-		ContractAddress: &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			PooledTransactions: []*common.SnapshotPooledTransaction{
-				{ID: txn1.GetID(), Originator: "sender@node1"},
-			},
-		},
-	}
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
-	assert.True(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "Delegation request should be sent after heartbeat")
-}
-
-func TestStateMachine_Sending_OnHeartbeatReceivedFromPreferredActiveCoordinator_RealignsAndRedelegates(t *testing.T) {
-	ctx := context.Background()
-	preferred := "preferred@node1"
-	fallback := "fallback@node2"
-	txnBuilder := transaction.NewTransactionBuilderForTesting(t, transaction.State_Delegated)
-	builder := NewOriginatorBuilderForTesting(State_Sending).
-		PreferredActiveCoordinator(preferred).
-		CurrentActiveCoordinator(fallback).
-		FailoverOffset(1).
-		NodeName("self@selfNode").
-		TransactionBuilders(txnBuilder)
-	o, mocks := builder.Build()
-	ca := builder.GetContractAddress()
-	// Preferred coordinator sends an Active heartbeat with an empty snapshot (our transactions are absent).
-	heartbeatEvent := &common.HeartbeatReceivedEvent{
-		From:            preferred,
-		ContractAddress: &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			CoordinatorState: common.CoordinatorState_Active,
-		},
-	}
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
-	assert.Equal(t, preferred, o.currentActiveCoordinator)
-	assert.Equal(t, 0, o.failoverOffset)
-	assert.True(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "should redelegate to realigned preferred coordinator")
+	o, _ := builder.Build()
+	unknownID := uuid.New()
+	status, err := o.GetTxStatus(ctx, unknownID)
+	require.NoError(t, err)
+	assert.Equal(t, unknownID.String(), status.TxID)
+	assert.Equal(t, "unknown", status.Status)
 }

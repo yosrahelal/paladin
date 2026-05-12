@@ -18,6 +18,7 @@ package coordinator
 import (
 	"context"
 
+	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
@@ -27,6 +28,10 @@ import (
 // TODO AM: if we think we're the active coordinator, don't change it- just log a warning that orig and coord have diverged
 func action_CurrentActiveCoordinatorUnavailable(ctx context.Context, c *coordinator, event common.Event) error {
 	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
+		return nil
+	}
+	if c.currentActiveCoordinator == c.nodeName {
+		log.L(ctx).Warnf("Received an active coordinator unavailable event while in State_Active.")
 		return nil
 	}
 	ev := event.(*ActiveCoordinatorUnavailableEvent)

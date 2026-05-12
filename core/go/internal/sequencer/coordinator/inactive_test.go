@@ -125,10 +125,24 @@ func Test_validator_IsHeartbeatFromPreferredActiveCoordinator_FromPreferredNode_
 
 	event := &common.HeartbeatReceivedEvent{}
 	event.From = "nodeA"
+	event.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
 
 	result, err := validator_IsHeartbeatFromPreferredActiveCoordinator(ctx, c, event)
 	require.NoError(t, err)
 	assert.True(t, result)
+}
+
+func Test_validator_IsHeartbeatFromPreferredActiveCoordinator_FromPreferredNode_NotActive_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).PreferredActiveCoordinator("nodeA").Build()
+
+	event := &common.HeartbeatReceivedEvent{}
+	event.From = "nodeA"
+	event.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Flush}
+
+	result, err := validator_IsHeartbeatFromPreferredActiveCoordinator(ctx, c, event)
+	require.NoError(t, err)
+	assert.False(t, result)
 }
 
 func Test_validator_IsHeartbeatFromPreferredActiveCoordinator_FromOtherNode_ReturnsFalse(t *testing.T) {
@@ -137,6 +151,7 @@ func Test_validator_IsHeartbeatFromPreferredActiveCoordinator_FromOtherNode_Retu
 
 	event := &common.HeartbeatReceivedEvent{}
 	event.From = "nodeB"
+	event.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
 
 	result, err := validator_IsHeartbeatFromPreferredActiveCoordinator(ctx, c, event)
 	require.NoError(t, err)

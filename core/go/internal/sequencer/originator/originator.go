@@ -89,7 +89,7 @@ type originator struct {
 	transportWriter                   transport.TransportWriter
 	engineIntegration                 common.EngineIntegration
 	metrics                           metrics.DistributedSequencerMetrics
-	queueActiveCoordinatorUnavailable func(ctx context.Context, newActiveCoordinator string) error
+	queueActiveCoordinatorUnavailable func(ctx context.Context, newActiveCoordinator string)
 }
 
 func NewOriginator(
@@ -100,7 +100,7 @@ func NewOriginator(
 	configuration *pldconf.SequencerConfig,
 	metrics metrics.DistributedSequencerMetrics,
 	domainAPI components.DomainSmartContract,
-	queueActiveCoordinatorUnavailable func(ctx context.Context, newActiveCoordinator string) error,
+	queueActiveCoordinatorUnavailable func(ctx context.Context, newActiveCoordinator string),
 ) *originator {
 	o := &originator{
 		nodeName:                          nodeName,

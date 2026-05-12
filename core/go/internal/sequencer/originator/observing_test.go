@@ -66,20 +66,6 @@ func Test_validator_IsHeartbeatFromCurrentActiveCoordinator_TrueWhenFromCurrent(
 	assert.True(t, ok)
 }
 
-func Test_validator_IsHeartbeatFromCurrentActiveCoordinator_FalseWhenFromSelf(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(State_Observing).
-		CurrentActiveCoordinator("self").
-		NodeName("self").
-		Build()
-	event := &common.HeartbeatReceivedEvent{}
-	event.From = "self"
-	event.CoordinatorSnapshot = &common.CoordinatorSnapshot{}
-	ok, err := validator_IsHeartbeatFromCurrentActiveCoordinator(ctx, o, event)
-	require.NoError(t, err)
-	assert.False(t, ok)
-}
-
 func Test_validator_IsHeartbeatFromCurrentActiveCoordinator_FalseWhenFromOtherNode(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(State_Observing).

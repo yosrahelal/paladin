@@ -213,8 +213,7 @@ var stateDefinitionsMap = StateDefinitions{
 					// will then see the heartbeat as being from current, find no delegated transactions
 					// in preferred's snapshot, and set needsRedelegate so we delegate to the new current.
 					{
-						// TODO AM A: I think there's another step to maybe only do this switch (coord and originator if within block range?)
-						// and also maybe to pick up the locks from the failover active?
+						// TODO AM: think about checking block height tolerance and handover of locks here https://github.com/LFDT-Paladin/paladin/issues/1141
 						Validator: validator_IsHeartbeatFromPreferredActiveCoordinator,
 						If:        guard_PreferredAndCurrentDiffer,
 						Action:    action_ResetCurrentToPreferred,
@@ -234,12 +233,10 @@ var stateDefinitionsMap = StateDefinitions{
 						If:     guard_InactiveGracePeriodExceeded,
 						Action: action_SelectActiveCoordinator,
 					},
+					// If we've failed over to a new coordinator in the actions above, the count of intervals since last received heartbeat
+					// will have been reset, but there should be a needsRedelegate flag set instead.
 					{
-						If:     guard_InactiveGracePeriodExceeded,
-						Action: action_QueueCoordinatorActiveCoordinatorUnavailable,
-					},
-					{
-						If:     guard_InactiveGracePeriodExceeded,
+						If:     statemachine.GuardOr(guard_InactiveGracePeriodExceeded, guard_NeedsRedelegate),
 						Action: action_SendDelegationRequest,
 					},
 				},

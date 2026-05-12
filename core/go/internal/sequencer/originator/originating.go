@@ -102,13 +102,6 @@ func action_SendDelegationRequest(ctx context.Context, o *originator, _ common.E
 	return sendDelegationRequest(ctx, o)
 }
 
-func action_QueueCoordinatorActiveCoordinatorUnavailable(ctx context.Context, o *originator, _ common.Event) error {
-	if o.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
-		return nil
-	}
-	return o.queueActiveCoordinatorUnavailable(ctx, o.currentActiveCoordinator)
-}
-
 func guard_NeedsRedelegate(_ context.Context, o *originator) bool {
 	return o.needsRedelegate
 }
@@ -149,10 +142,11 @@ func action_ResetCurrentToPreferred(ctx context.Context, o *originator, _ common
 }
 
 // action_IncrementFailoverOffset advances the endorser ring step. No-op in STATIC/SENDER modes.
-func action_IncrementFailoverOffset(_ context.Context, o *originator, _ common.Event) error {
+func action_IncrementFailoverOffset(ctx context.Context, o *originator, _ common.Event) error {
 	if o.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
 		return nil
 	}
+	log.L(ctx).Debugf("Current active coordinator %s is unavailable: incrementing failover offset from %d to %d", o.currentActiveCoordinator, o.failoverOffset, o.failoverOffset+1)
 	o.failoverOffset++
 	return nil
 }
@@ -250,6 +244,12 @@ func action_SelectActiveCoordinator(ctx context.Context, o *originator, _ common
 	)
 	if o.currentActiveCoordinator != o.previousActiveCoordinatorNode {
 		o.heartbeatIntervalsSinceLastReceive = 0
+		// When the coordinator changed due to inactivity failover (failoverOffset > 0, not an epoch reset),
+		// notify the coordinator so it can update its own currentActiveCoordinator and set a flag to redelegate
+		if o.failoverOffset > 0 {
+			o.needsRedelegate = true
+			o.queueActiveCoordinatorUnavailable(ctx, o.currentActiveCoordinator)
+		}
 	}
 	o.needsFailoverOffsetReset = false
 	// If the coordinator has changed because of new block-range epoch, start watching for the previous coordinator's closing heartbeat.

@@ -19,6 +19,7 @@ package originator
 
 import (
 	"context"
+	"testing"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
@@ -26,6 +27,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,6 +39,7 @@ const (
 )
 
 type OriginatorBuilderForTesting struct {
+	t                                  *testing.T
 	state                              State
 	nodeName                           *string
 	committeeMembers                   []string
@@ -58,12 +61,14 @@ type OriginatorBuilderForTesting struct {
 	heartbeatIntervalsSinceLastReceive *int
 	inactiveGracePeriod                *int
 	transactions                       []transaction.OriginatorTransaction
+	useMockTransportWriter             bool
 }
 
 type OriginatorDependencyMocks struct {
 	SentMessageRecorder *transport.SentMessageRecorder
 	EngineIntegration   *common.FakeEngineIntegrationForTesting
 	DomainAPI           *componentsmocks.DomainSmartContract
+	TransportWriter     *sequencertransportmocks.TransportWriter
 }
 
 func NewOriginatorBuilderForTesting(state State) *OriginatorBuilderForTesting {
@@ -180,6 +185,15 @@ func (b *OriginatorBuilderForTesting) Transactions(txns ...transaction.Originato
 	return b
 }
 
+// WithMockTransportWriter switches the transport writer from the default SentMessageRecorder to a
+// full testify mock. This enables per-call assertions (e.g. assert the exact coordinator node that
+// a delegation request was sent to). Requires a *testing.T for mock cleanup registration.
+func (b *OriginatorBuilderForTesting) WithMockTransportWriter(t *testing.T) *OriginatorBuilderForTesting {
+	b.t = t
+	b.useMockTransportWriter = true
+	return b
+}
+
 func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependencyMocks) {
 
 	if b.nodeName == nil {
@@ -198,6 +212,10 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		EngineIntegration:   &common.FakeEngineIntegrationForTesting{},
 	}
 
+	if b.useMockTransportWriter {
+		mocks.TransportWriter = sequencertransportmocks.NewTransportWriter(b.t)
+	}
+
 	domainAPI := &componentsmocks.DomainSmartContract{}
 	if b.contractConfig != nil {
 		domainAPI.On("ContractConfig").Return(b.contractConfig).Maybe()
@@ -212,15 +230,20 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		seqConfig = &pldconf.SequencerDefaults
 	}
 
+	var tw transport.TransportWriter = mocks.SentMessageRecorder
+	if mocks.TransportWriter != nil {
+		tw = mocks.TransportWriter
+	}
+
 	originator := NewOriginator(
 		*b.nodeName,
-		mocks.SentMessageRecorder,
+		tw,
 		mocks.EngineIntegration,
 		b.contractAddress,
 		seqConfig,
 		b.metrics,
 		domainAPI,
-		func(context.Context, string) error { return nil },
+		func(context.Context, string) {},
 	)
 
 	for _, txBuilder := range b.transactionBuilders {
