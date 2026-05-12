@@ -71,8 +71,33 @@ func (t *coordinatorTransaction) unfulfilledEndorsementRequirements(ctx context.
 	}
 	for _, attRequest := range t.pt.PostAssembly.AttestationPlan {
 		if attRequest.AttestationType == prototk.AttestationType_ENDORSE {
+			threshold := int(attRequest.GetThreshold())
+			if threshold == 0 {
+				threshold = len(attRequest.Parties)
+			}
+
+			// Count how many parties have already fulfilled this attestation request
+			fulfilledCount := 0
 			for _, party := range attRequest.Parties {
-				log.L(ctx).Debugf("party %s must endorse this request. Checking for endorsement", party)
+				for _, endorsement := range t.pt.PostAssembly.Endorsements {
+					if endorsement.Name == attRequest.Name &&
+						party == endorsement.Verifier.Lookup &&
+						attRequest.VerifierType == endorsement.Verifier.VerifierType {
+						fulfilledCount++
+						break
+					}
+				}
+			}
+
+			log.L(ctx).Debugf("attestation request %s: threshold=%d fulfilled=%d parties=%d", attRequest.Name, threshold, fulfilledCount, len(attRequest.Parties))
+
+			if fulfilledCount >= threshold {
+				log.L(ctx).Debugf("attestation request %s threshold met (%d/%d)", attRequest.Name, fulfilledCount, threshold)
+				continue
+			}
+
+			for _, party := range attRequest.Parties {
+				log.L(ctx).Debugf("party %s may endorse this request. Checking for endorsement", party)
 				found := false
 				for _, endorsement := range t.pt.PostAssembly.Endorsements {
 					log.L(ctx).Debugf("existing endorsement from party %s", endorsement.Verifier.Lookup)

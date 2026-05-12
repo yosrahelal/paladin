@@ -88,32 +88,37 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Active,
 				}},
 			},
-			common.Event_HeartbeatReceived: {
-				Validator: statemachine.ValidatorOr(
-					validator_IsHeartbeatFromCurrentActiveCoordinator,
-					validator_IsHeartbeatFromPreferredActiveCoordinator,
-				),
-				Actions: []ActionRule{{Action: action_HeartbeatReceived}},
-				Transitions: []Transition{{
-					To: State_Observing,
-				}},
-			},
-			common.Event_NewBlock: {
-				Actions: []ActionRule{
-					{
-						Action: action_UpdateBlockHeight,
-					},
-					{
-						Action: action_ExpireGrapherLocks,
-					},
-					{
-						// If we have entered a new block range, action_SelectActiveCoordinator refreshes preferred/current.
-						// We stay in Idle until delegated work arrives; then we accept if guard_IsCurrentActiveCoordinator.
-						If:     guard_IsNewBlockRangeEpoch,
-						Action: action_SelectActiveCoordinator,
-					},
+		common.Event_HeartbeatReceived: {
+			Validator: statemachine.ValidatorOr(
+				validator_IsHeartbeatFromCurrentActiveCoordinator,
+				validator_IsHeartbeatFromPreferredActiveCoordinator,
+				validator_IsHeartbeatFromActiveWhenWeArePreferred,
+			),
+			Actions: []ActionRule{{Action: action_HeartbeatReceived}},
+			Transitions: []Transition{{
+				// Preferred coordinator awakens directly to Active — no handover needed.
+				To: State_Active,
+				If: guard_IsPreferredActiveCoordinator,
+			}, {
+				To: State_Observing,
+			}},
+		},
+		common.Event_NewBlock: {
+			Actions: []ActionRule{
+				{
+					Action: action_UpdateBlockHeight,
+				},
+				{
+					Action: action_ExpireGrapherLocks,
+				},
+				{
+					// If we have entered a new block range, action_SelectActiveCoordinator refreshes preferred/current.
+					// We stay in Idle until delegated work arrives; then we accept if guard_IsCurrentActiveCoordinator.
+					If:     guard_IsNewBlockRangeEpoch,
+					Action: action_SelectActiveCoordinator,
 				},
 			},
+		},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
 					{

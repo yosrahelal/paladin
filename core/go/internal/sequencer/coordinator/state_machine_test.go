@@ -137,6 +137,26 @@ func TestCoordinator_WhenIdle_StaysIdle_OnHeartbeatFromUnrelatedNode(t *testing.
 	assert.Equal(t, common.CoordinatorState(0), c.activeCoordinatorState, "rejected heartbeat must not update activeCoordinatorState")
 }
 
+// When this node is the preferred coordinator and it is Idle, a heartbeat from an Active fallback
+// coordinator awakens it: Idle → Active (no handover needed, preferred asserts itself immediately).
+func TestCoordinator_WhenIdleAndWeArePreferred_TransitionsToActive_OnHeartbeatFromActiveFallback(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodeName("node1").
+		PreferredActiveCoordinator("node1"). // this node is the preferred coordinator
+		CurrentActiveCoordinator("node2").  // node2 is currently acting as fallback coordinator
+		Build()
+	event := &common.HeartbeatReceivedEvent{
+		From:                "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: State_Active},
+	}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+	// validator_IsHeartbeatFromActiveWhenWeArePreferred matches → guard_IsPreferredActiveCoordinator → Active
+	assert.Equal(t, State_Active, c.GetCurrentState())
+	// action_HeartbeatReceived ran and captured the observed coordinator state
+	assert.Equal(t, State_Active, c.activeCoordinatorState)
+}
+
 // When delegations arrive in Idle and this node IS the current coordinator, process and transition to Active.
 func TestCoordinator_WhenIdleAndTransactionsDelegatedToSelf_TransitionsToActive(t *testing.T) {
 	ctx := t.Context()
