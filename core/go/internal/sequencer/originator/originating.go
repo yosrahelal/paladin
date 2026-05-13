@@ -18,6 +18,7 @@ package originator
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
@@ -206,7 +207,7 @@ func action_SelectActiveCoordinator(ctx context.Context, o *originator, _ common
 	o.previousActiveCoordinatorNode = o.currentActiveCoordinator
 	o.currentActiveCoordinator = common.SelectCoordinatorNode(
 		ctx,
-		o.coordinatorEndorserPool,
+		o.originatorNodePool,
 		o.currentBlockHeight,
 		o.blockRangeSize,
 	)
@@ -216,5 +217,23 @@ func action_SelectActiveCoordinator(ctx context.Context, o *originator, _ common
 		// coordinator's closing heartbeat before sending a delegation request to the new one.
 		o.watchingPreviousCoordinatorFlush = true
 	}
+	return nil
+}
+
+func (o *originator) updateOriginatorNodePool(nodes ...string) {
+	for _, node := range nodes {
+		if !slices.Contains(o.originatorNodePool, node) {
+			o.originatorNodePool = append(o.originatorNodePool, node)
+		}
+	}
+	if !slices.Contains(o.originatorNodePool, o.nodeName) {
+		o.originatorNodePool = append(o.originatorNodePool, o.nodeName)
+	}
+	slices.Sort(o.originatorNodePool)
+}
+
+func action_UpdateOriginatorNodePool(_ context.Context, o *originator, event common.Event) error {
+	e := event.(*common.EndorserNodesDiscoveredEvent)
+	o.updateOriginatorNodePool(e.Nodes...)
 	return nil
 }

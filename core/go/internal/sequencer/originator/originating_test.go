@@ -78,7 +78,7 @@ func Test_action_SelectActiveCoordinator_WhenCoordinatorChanges_SetsChangedFlag(
 			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
 			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
 		}).
-		CoordinatorEndorserPool("node1", "node2").
+		OriginatorNodePool("node1", "node2").
 		CurrentActiveCoordinator("some-other-node").
 		CurrentBlockHeight(1000).
 		Build()
@@ -99,7 +99,7 @@ func Test_action_SelectActiveCoordinator_NewEpochWithIdentityChange_SetsWatching
 			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
 			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
 		}).
-		CoordinatorEndorserPool("node1", "node2").
+		OriginatorNodePool("node1", "node2").
 		BlockRangeSize(blockRange).
 		CurrentBlockHeight(150).
 		CurrentActiveCoordinator(at100).
@@ -348,4 +348,40 @@ func Test_sendDelegationRequest_TransportError_ReturnsError(t *testing.T) {
 	err := sendDelegationRequest(ctx, o)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "transport error")
+}
+
+func Test_updateOriginatorNodePool_AddsNewNode(t *testing.T) {
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).NodeName("node1").Build()
+
+	o.updateOriginatorNodePool("node2")
+
+	assert.Equal(t, []string{"node1", "node2"}, o.originatorNodePool)
+}
+
+func Test_updateOriginatorNodePool_DoesNotAddDuplicate(t *testing.T) {
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).NodeName("node1").OriginatorNodePool("node1", "node2").Build()
+
+	o.updateOriginatorNodePool("node2")
+
+	assert.Equal(t, []string{"node1", "node2"}, o.originatorNodePool)
+}
+
+func Test_updateOriginatorNodePool_EnsuresLocalNodeAlwaysPresent(t *testing.T) {
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).NodeName("node1").OriginatorNodePool().Build()
+
+	o.updateOriginatorNodePool("node2")
+
+	assert.Contains(t, o.originatorNodePool, "node1")
+}
+
+func Test_action_UpdateOriginatorNodePool_GrowsPool(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).NodeName("node1").Build()
+
+	err := action_UpdateOriginatorNodePool(ctx, o, &common.EndorserNodesDiscoveredEvent{
+		Nodes: []string{"node2", "node3"},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"node1", "node2", "node3"}, o.originatorNodePool)
 }

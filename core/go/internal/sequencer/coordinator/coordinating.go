@@ -28,7 +28,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 )
 
@@ -66,20 +65,20 @@ func action_ProcessDelegatedTransactions(ctx context.Context, c *coordinator, ev
 	return c.addToDelegatedTransactions(ctx, e.Originator, e.Transactions, e.DelegationID, c.newCoordinatorTransaction)
 }
 
-func (c *coordinator) updateOriginatorNodePool(originatorNode string) {
-	// In COORDINATOR_ENDORSER mode the pool is fixed at initialisation from the contract config
-	// (all valid endorser candidates are already known), so dynamic updates are skipped.
-	if c.domainAPI.ContractConfig().GetCoordinatorSelection() == prototk.ContractConfig_COORDINATOR_ENDORSER {
-		return
-	}
-	if !slices.Contains(c.originatorNodePool, originatorNode) {
-		c.originatorNodePool = append(c.originatorNodePool, originatorNode)
+func (c *coordinator) updateOriginatorNodePool(nodes ...string) {
+	for _, node := range nodes {
+		if !slices.Contains(c.originatorNodePool, node) {
+			c.originatorNodePool = append(c.originatorNodePool, node)
+		}
 	}
 	if !slices.Contains(c.originatorNodePool, c.nodeName) {
 		// As coordinator we should always be in the pool as it's used to select the next coordinator when necessary
 		c.originatorNodePool = append(c.originatorNodePool, c.nodeName)
 	}
 	slices.Sort(c.originatorNodePool)
+	if c.notifyOriginator != nil && len(nodes) > 0 {
+		c.notifyOriginator(c.ctx, nodes)
+	}
 }
 
 func (c *coordinator) coordinatorTransactionHandleEvent(ctx context.Context, txID uuid.UUID, event common.Event) error {
@@ -111,6 +110,7 @@ func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator 
 		c.queueEventInternal,
 		c.coordinatorTransactionHandleEvent,
 		c.getCoordinatorTransactionState,
+		c.updateOriginatorNodePool,
 		c.engineIntegration,
 		c.syncPoints,
 		c.components,

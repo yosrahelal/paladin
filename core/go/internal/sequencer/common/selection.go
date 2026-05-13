@@ -43,16 +43,16 @@ func DedupeSortedCoordinatorEndorserNodes(nodes []string) []string {
 // construction/Start time and this function is never invoked.
 func SelectCoordinatorNode(
 	ctx context.Context,
-	coordinatorEndorserPool []string,
+	nodePool []string,
 	currentBlockHeight uint64,
 	blockRange uint64,
 ) string {
-	n := len(coordinatorEndorserPool)
+	n := len(nodePool)
 	if n == 0 {
 		return ""
 	}
 	if n == 1 {
-		return coordinatorEndorserPool[0]
+		return nodePool[0]
 	}
 	effectiveBlockNumber := currentBlockHeight - (currentBlockHeight % blockRange)
 
@@ -60,8 +60,8 @@ func SelectCoordinatorNode(
 	h := fnv.New32a()
 	h.Write([]byte(strconv.FormatUint(effectiveBlockNumber, 10)))
 	p := int(h.Sum32()) % n
-	selected := coordinatorEndorserPool[p]
-	log.L(ctx).Debugf("endorser coordinator selected %q (selectedIndex=%d pool %+v)", selected, p, coordinatorEndorserPool)
+	selected := nodePool[p]
+	log.L(ctx).Debugf("coordinator selected %q (selectedIndex=%d pool %+v)", selected, p, nodePool)
 	return selected
 }
 

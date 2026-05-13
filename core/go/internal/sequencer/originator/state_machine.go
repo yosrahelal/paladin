@@ -107,6 +107,9 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
+			common.Event_EndorserNodesDiscovered: {
+				Actions: []ActionRule{{Action: action_UpdateOriginatorNodePool}},
+			},
 		},
 	},
 	State_Observing: {
@@ -151,6 +154,9 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_FinalizeTransaction,
 					},
 				},
+			},
+			common.Event_EndorserNodesDiscovered: {
+				Actions: []ActionRule{{Action: action_UpdateOriginatorNodePool}},
 			},
 		},
 	},
@@ -222,6 +228,9 @@ var stateDefinitionsMap = StateDefinitions{
 				Transitions: []Transition{
 					{To: State_Observing, If: statemachine.GuardNot(guard_HasUnconfirmedTransactions)},
 				},
+			},
+			common.Event_EndorserNodesDiscovered: {
+				Actions: []ActionRule{{Action: action_UpdateOriginatorNodePool}},
 			},
 		},
 	},

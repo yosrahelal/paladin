@@ -32,6 +32,7 @@ const (
 	Event_TransactionStateTransition                  // transaction state machine transition; originator/coordinator handle cleanup and side effects
 	Event_NewBlock                                    // a new block has been confirmed on the base ledger
 	Event_HeartbeatReceived                           // a heartbeat notification was received from the active coordinator
+	Event_EndorserNodesDiscovered                     // endorser node names discovered by the coordinator; used to grow the originator node pool
 )
 
 type BaseEvent struct {
@@ -103,4 +104,19 @@ func (*HeartbeatReceivedEvent) Type() EventType {
 
 func (*HeartbeatReceivedEvent) TypeString() string {
 	return "Event_HeartbeatReceived"
+}
+
+// EndorserNodesDiscoveredEvent is queued by the coordinator to notify the originator of endorser
+// node names discovered from the attestation plan, so the originator can grow its node pool.
+type EndorserNodesDiscoveredEvent struct {
+	BaseEvent
+	Nodes []string
+}
+
+func (*EndorserNodesDiscoveredEvent) Type() EventType {
+	return Event_EndorserNodesDiscovered
+}
+
+func (*EndorserNodesDiscoveredEvent) TypeString() string {
+	return "Event_EndorserNodesDiscovered"
 }

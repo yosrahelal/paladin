@@ -70,7 +70,7 @@ type originator struct {
 	transactionsOrdered                []transaction.OriginatorTransaction
 	currentBlockHeight                 uint64
 	newBlockRangeEpoch                 bool     // sticky for the current NewBlock event: guards on Select
-	coordinatorEndorserPool            []string // Sorted deduped endorser node names for COORDINATOR_ENDORSER mode
+	originatorNodePool                 []string // Unified pool of nodes for coordinator selection; seeded from endorser candidates and grown dynamically
 	watchingPreviousCoordinatorFlush   bool     // Watching-phase tracking: set when coordinator changes; cleared on first closing heartbeat or if inactive thresholds are exceeded
 	// One-shot flag: set when a condition is detected; cleared when the handler that performs the action runs.
 	needsRedelegate bool // Set by applyHeartbeatReceived when the heartbeat reveals a need to redelegate; cleared by sendDelegationRequest
@@ -159,9 +159,6 @@ func (o *originator) initializeFromContractConfig(ctx context.Context) error {
 		log.L(ctx).Debugf("coordinator selection is SENDER mode; active coordinator set to self: %s", o.nodeName)
 	case prototk.ContractConfig_COORDINATOR_ENDORSER:
 		candidates := o.domainAPI.ContractConfig().GetCoordinatorEndorserCandidates()
-		if len(candidates) == 0 {
-			return i18n.NewError(ctx, msgs.MsgSequencerEndorserNoCandidates, o.contractAddress.String())
-		}
 		nodes := make([]string, 0, len(candidates))
 		for _, locator := range candidates {
 			_, node, err := pldtypes.PrivateIdentityLocator(locator).Validate(ctx, "", false)
@@ -170,8 +167,10 @@ func (o *originator) initializeFromContractConfig(ctx context.Context) error {
 			}
 			nodes = append(nodes, node)
 		}
-		o.coordinatorEndorserPool = common.DedupeSortedCoordinatorEndorserNodes(nodes)
-		log.L(ctx).Debugf("initialized coordinator endorser pool for originator: %+v", o.coordinatorEndorserPool)
+		// Always include the local node so the pool is never empty.
+		nodes = append(nodes, o.nodeName)
+		o.originatorNodePool = common.DedupeSortedCoordinatorEndorserNodes(nodes)
+		log.L(ctx).Debugf("initialized originator node pool (COORDINATOR_ENDORSER): %+v", o.originatorNodePool)
 	}
 	return nil
 }

@@ -476,14 +476,21 @@ func TestCoordinator_GetTransactionsNotInStates_EmptyStatesFilter_ReturnsAll(t *
 	require.Len(t, result, 1)
 }
 
-func TestCoordinator_NewCoordinator_EndorserMode_NoConfiguredCandidates_Fails(t *testing.T) {
-	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+func TestCoordinator_NewCoordinator_EndorserMode_NoConfiguredCandidates_SeedsPoolWithLocalNode(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle).NodeName("localNode")
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	})
-	c, _ := builder.Build()
-	assert.Error(t, c.Start(ctx))
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
+	require.NoError(t, c.Start(ctx))
+	defer func() {
+		cancel()
+		c.WaitForDone(t.Context())
+	}()
+	// Pool must never be empty; always contains at least the local node.
+	assert.Equal(t, []string{"localNode"}, c.originatorNodePool)
 }
 
 func TestCoordinator_NewCoordinator_StaticMode_EmptyStaticCoordinator_Fails(t *testing.T) {
@@ -552,8 +559,8 @@ func TestCoordinator_NewCoordinator_EndorserMode_InitializesPoolFromConfiguredCa
 		c.WaitForDone(t.Context())
 	}()
 	defer cancel()
-	assert.Equal(t, []string{"nodeA", "nodeB"}, c.originatorNodePool)
-	assert.Equal(t, []string{"nodeA", "nodeB"}, c.coordinatorEndorserPool)
+	// Pool contains deduped/sorted candidate nodes plus the local node ("node1" is the builder default).
+	assert.Equal(t, []string{"node1", "nodeA", "nodeB"}, c.originatorNodePool)
 }
 
 func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {

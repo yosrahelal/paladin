@@ -49,7 +49,6 @@ type CoordinatorBuilderForTesting struct {
 	currentBlockHeight                       *uint64
 	transactions                             []transaction.CoordinatorTransaction
 	pooledTransactions                       []transaction.CoordinatorTransaction
-	coordinatorEndorserPool                  []string
 	heartbeatsUntilClosingGracePeriodExpires *int
 	metrics                                  metrics.DistributedSequencerMetrics
 	sequencerConfig                          *pldconf.SequencerConfig
@@ -188,11 +187,6 @@ func (b *CoordinatorBuilderForTesting) Transactions(transactions ...transaction.
 
 func (b *CoordinatorBuilderForTesting) PooledTransactions(transactions ...transaction.CoordinatorTransaction) *CoordinatorBuilderForTesting {
 	b.pooledTransactions = transactions
-	return b
-}
-
-func (b *CoordinatorBuilderForTesting) CoordinatorEndorserPool(nodes ...string) *CoordinatorBuilderForTesting {
-	b.coordinatorEndorserPool = nodes
 	return b
 }
 
@@ -355,6 +349,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		b.sequencerConfig,
 		localNode,
 		b.metrics,
+		nil, // notifyOriginator — not needed in unit tests
 	)
 
 	// Loops are not started yet — set state and seed transactions directly.
@@ -367,10 +362,6 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 			coordinator.pooledTransactions = append(coordinator.pooledTransactions, tx)
 		}
 	}
-	if len(b.coordinatorEndorserPool) > 0 {
-		coordinator.coordinatorEndorserPool = b.coordinatorEndorserPool
-	}
-
 	coordinator.stateMachineEventLoop.StateMachine().SetCurrentState(b.state)
 
 	if b.currentBlockHeight != nil {

@@ -20,6 +20,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 )
@@ -115,6 +116,9 @@ func (t *coordinatorTransaction) sendEndorsementRequests(ctx context.Context) er
 		//this is done by emitting events rather so that this behavior is obvious from the state machine definition
 		t.scheduleRequestTimeout(ctx)
 		t.pendingEndorsementRequests = make(map[string]map[string]*common.IdempotentRequest)
+		// Notify the coordinator about endorser nodes discovered from the attestation plan so it can
+		// grow the originator node pool even when no candidates were pre-configured.
+		t.notifyEndorserNodes(t.extractEndorserNodes(ctx)...)
 	}
 
 	for _, endorsementRequirement := range t.unfulfilledEndorsementRequirements(ctx) {
@@ -140,6 +144,32 @@ func (t *coordinatorTransaction) sendEndorsementRequests(ctx context.Context) er
 	}
 
 	return nil
+}
+
+// extractEndorserNodes returns deduplicated node names from all ENDORSE-type attestation parties.
+func (t *coordinatorTransaction) extractEndorserNodes(ctx context.Context) []string {
+	seen := make(map[string]struct{})
+	nodes := make([]string, 0)
+	if t.pt.PostAssembly == nil {
+		return nodes
+	}
+	for _, attRequest := range t.pt.PostAssembly.AttestationPlan {
+		if attRequest.AttestationType != prototk.AttestationType_ENDORSE {
+			continue
+		}
+		for _, party := range attRequest.Parties {
+			node, err := pldtypes.PrivateIdentityLocator(party).Node(ctx, false)
+			if err != nil {
+				log.L(ctx).Warnf("could not extract node from endorser party %q: %v", party, err)
+				continue
+			}
+			if _, exists := seen[node]; !exists {
+				seen[node] = struct{}{}
+				nodes = append(nodes, node)
+			}
+		}
+	}
+	return nodes
 }
 
 func (t *coordinatorTransaction) resetEndorsementRequests(ctx context.Context) {

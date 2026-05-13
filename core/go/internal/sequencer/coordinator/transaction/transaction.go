@@ -97,6 +97,7 @@ type coordinatorTransaction struct {
 	queueEventForCoordinator          func(context.Context, common.Event)
 	coordinatorTransactionHandleEvent func(context.Context, uuid.UUID, common.Event) error
 	getCoordinatorTransactionState    func(context.Context, uuid.UUID) (State, bool)
+	notifyEndorserNodes               func(...string) // called once when endorsement requests are first sent; passes endorser node names to the coordinator for pool updates
 	metrics                           metrics.DistributedSequencerMetrics
 }
 
@@ -111,6 +112,7 @@ func NewTransaction(ctx context.Context,
 	queueEventForCoordinator func(context.Context, common.Event),
 	coordinatorTransactionHandleEvent func(context.Context, uuid.UUID, common.Event) error,
 	getCoordinatorTransactionState func(context.Context, uuid.UUID) (State, bool),
+	notifyEndorserNodes func(...string),
 	engineIntegration common.EngineIntegration,
 	syncPoints syncpoints.SyncPoints,
 	allComponents components.AllComponents,
@@ -137,6 +139,7 @@ func NewTransaction(ctx context.Context,
 		queueEventForCoordinator,
 		coordinatorTransactionHandleEvent,
 		getCoordinatorTransactionState,
+		notifyEndorserNodes,
 		engineIntegration,
 		syncPoints,
 		allComponents,
@@ -165,6 +168,7 @@ func newTransaction(
 	queueEventForCoordinator func(context.Context, common.Event),
 	coordinatorTransactionHandleEvent func(context.Context, uuid.UUID, common.Event) error,
 	getCoordinatorTransactionState func(context.Context, uuid.UUID) (State, bool),
+	notifyEndorserNodes func(...string),
 	engineIntegration common.EngineIntegration,
 	syncPoints syncpoints.SyncPoints,
 	allComponents components.AllComponents,
@@ -191,6 +195,7 @@ func newTransaction(
 		queueEventForCoordinator:          queueEventForCoordinator,
 		coordinatorTransactionHandleEvent: coordinatorTransactionHandleEvent,
 		getCoordinatorTransactionState:    getCoordinatorTransactionState,
+		notifyEndorserNodes:               notifyEndorserNodes,
 		engineIntegration:                 engineIntegration,
 		syncPoints:                        syncPoints,
 		components:                        allComponents,

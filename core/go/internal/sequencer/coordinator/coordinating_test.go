@@ -1153,19 +1153,38 @@ func Test_updateOriginatorNodePool_HandlesEmptyStringNode(t *testing.T) {
 	assert.Contains(t, c.originatorNodePool, "node1", "pool should contain coordinator's own node")
 }
 
-func Test_updateOriginatorNodePool_CoordinatorEndorserMode_PoolNotModified(t *testing.T) {
-	// In COORDINATOR_ENDORSER mode the pool is fixed at Start time; dynamic updates are skipped.
+func Test_updateOriginatorNodePool_CoordinatorEndorserMode_PoolGrowsDynamically(t *testing.T) {
+	// updateOriginatorNodePool no longer has a mode-specific guard; the pool grows in all modes.
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"id@node1"},
-	})
-	c, _ := builder.OriginatorNodePool("node1").Build()
-
-	before := make([]string, len(c.originatorNodePool))
-	copy(before, c.originatorNodePool)
+	c, _ := builder.NodeName("node1").OriginatorNodePool("node1").Build()
 
 	c.updateOriginatorNodePool("node2")
 
-	assert.Equal(t, before, c.originatorNodePool, "ENDORSER mode should not modify originatorNodePool on dynamic update")
+	assert.Equal(t, []string{"node1", "node2"}, c.originatorNodePool)
+}
+
+func Test_updateOriginatorNodePool_InvokesNotifyOriginatorCallback(t *testing.T) {
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	c, _ := builder.OriginatorNodePool().Build()
+
+	var notified []string
+	c.notifyOriginator = func(_ context.Context, nodes []string) {
+		notified = append(notified, nodes...)
+	}
+
+	c.updateOriginatorNodePool("node2", "node3")
+
+	assert.Equal(t, []string{"node2", "node3"}, notified)
+}
+
+func Test_updateOriginatorNodePool_DoesNotInvokeNotifyOriginatorWhenNodesEmpty(t *testing.T) {
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
+	c, _ := builder.OriginatorNodePool().Build()
+
+	called := false
+	c.notifyOriginator = func(_ context.Context, nodes []string) { called = true }
+
+	c.updateOriginatorNodePool() // no nodes passed
+
+	assert.False(t, called, "callback should not fire when no new nodes are provided")
 }

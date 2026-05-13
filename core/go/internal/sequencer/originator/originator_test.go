@@ -372,16 +372,22 @@ func TestOriginator_Start_StaticCoordinator_InvalidLocator_ReturnsError(t *testi
 	require.Error(t, err)
 }
 
-func TestOriginator_Start_EndorserMode_NoCandidates_ReturnsError(t *testing.T) {
-	ctx := t.Context()
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{},
-	})
+func TestOriginator_Start_EndorserMode_NoCandidates_SeedsPoolWithLocalNode(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).
+		NodeName("localNode").
+		DomainContractConfig(&prototk.ContractConfig{
+			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+			CoordinatorEndorserCandidates: []string{},
+		})
 	o, _ := builder.Build()
-	err := o.Start(ctx)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no configured candidates")
+	require.NoError(t, o.Start(ctx))
+	defer func() {
+		cancel()
+		o.WaitForDone(t.Context())
+	}()
+	// Pool must never be empty; always contains at least the local node.
+	assert.Equal(t, []string{"localNode"}, o.originatorNodePool)
 }
 
 func TestOriginator_Start_EndorserMode_InvalidCandidate_ReturnsError(t *testing.T) {
@@ -397,10 +403,12 @@ func TestOriginator_Start_EndorserMode_InvalidCandidate_ReturnsError(t *testing.
 
 func TestOriginator_Start_EndorserMode_ValidCandidates_Success(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
-	})
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).
+		NodeName("node1").
+		DomainContractConfig(&prototk.ContractConfig{
+			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
+		})
 	o, _ := builder.Build()
 	require.NoError(t, o.Start(ctx))
 	defer func() {
@@ -408,7 +416,8 @@ func TestOriginator_Start_EndorserMode_ValidCandidates_Success(t *testing.T) {
 		o.WaitForDone(t.Context())
 	}()
 	assert.True(t, o.started)
-	assert.Len(t, o.coordinatorEndorserPool, 2)
+	// Candidates node1 and node2 deduped/sorted; local node (node1) is already in the pool.
+	assert.Equal(t, []string{"node1", "node2"}, o.originatorNodePool)
 }
 
 func TestOriginator_Start_SenderMode_Success(t *testing.T) {

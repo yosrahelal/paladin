@@ -524,8 +524,7 @@ var (
 	MsgSequencerTransactionNotFound                = pde("PD012645", "TX %s missing from coordinator")
 	MsgSequencerInvalidEndorserCandidate           = pde("PD012646", "Invalid coordinator endorser candidate identity '%s'")
 	MsgSequencerGrapherAddMinterAlreadyExistsError = pde("PD012647", "Error adding TX %s as minter for state %s, already minted by %s")
-	MsgSequencerEndorserNoCandidates               = pde("PD012648", "Endorser coordinator mode for contract %s has no configured candidates")
-	MsgSequencerStaticCoordinatorNotSet            = pde("PD012649", "Static coordinator mode for contract %s has no configured coordinator node")
+	MsgSequencerStaticCoordinatorNotSet            = pde("PD012648", "Static coordinator mode for contract %s has no configured coordinator node")
 
 	// Entrypoint PD0127XX
 	MsgResolveVerifierRemoteFailed = pde("PD012701", "Failed to resolve verifier on remote node with lookup %s algorithm %s: Error %s")

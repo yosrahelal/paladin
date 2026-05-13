@@ -88,7 +88,7 @@ func Test_TryQueueEvent_QueuesToEventLoop(t *testing.T) {
 func TestCoordinator_WhenCreated_TransitionsToIdle(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Initial).
-		CoordinatorEndorserPool("node1", "node2").
+		OriginatorNodePool("node1", "node2").
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
 			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
@@ -176,7 +176,7 @@ func TestCoordinator_WhenObserving_TransitionsToElect_OnNewBlock_WhenCurrentCoor
 		CurrentActiveCoordinator("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		CoordinatorEndorserPool("node1", "node2", "node3").
+		OriginatorNodePool("node1", "node2", "node3").
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
@@ -344,7 +344,7 @@ func TestCoordinator_WhenActiveAndEpochChangesWithNotYetDispatchedTxsAndStillCur
 		CurrentActiveCoordinator("node2").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		CoordinatorEndorserPool("node1", "node2", "node3").
+		OriginatorNodePool("node1", "node2", "node3").
 		PooledTransactions(pooledTx). // adds to both transactionsByID and pooledTransactions
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
@@ -378,7 +378,7 @@ func TestCoordinator_WhenActiveAndEpochChangesWithNotYetDispatchedTxsAndNotCurre
 		CurrentActiveCoordinator("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		CoordinatorEndorserPool("node1", "node2", "node3").
+		OriginatorNodePool("node1", "node2", "node3").
 		Transactions(pooledTx).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
@@ -470,7 +470,7 @@ func TestCoordinator_WhenFlushingAndNewEpochArrives_UpdatesHeightAndSelectionBut
 		CurrentActiveCoordinator("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		CoordinatorEndorserPool("node1", "node2", "node3").
+		OriginatorNodePool("node1", "node2", "node3").
 		Transactions(txDispatched).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
@@ -542,7 +542,7 @@ func TestCoordinator_WhenClosing_NewBlockReBecomesCurrentCoordinator_Transitions
 		CoordinatorSelectionBlockRange(50).
 		HeartbeatIntervalsSinceStateChange(0).
 		InactiveGracePeriod(5).
-		CoordinatorEndorserPool("node1", "node2", "node3").
+		OriginatorNodePool("node1", "node2", "node3").
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
@@ -563,7 +563,7 @@ func TestCoordinator_WhenClosing_NewBlockReBecomesCurrentWithInflight_Transition
 		CoordinatorSelectionBlockRange(50).
 		HeartbeatIntervalsSinceStateChange(4).
 		InactiveGracePeriod(3).
-		CoordinatorEndorserPool("node1", "node2", "node3").
+		OriginatorNodePool("node1", "node2", "node3").
 		Transactions(txDispatched).
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
@@ -586,7 +586,7 @@ func TestCoordinator_WhenClosing_NewBlockReBecomesCurrentNoInflight_TransitionsT
 		CoordinatorSelectionBlockRange(50).
 		HeartbeatIntervalsSinceStateChange(4).
 		InactiveGracePeriod(3).
-		CoordinatorEndorserPool("node1", "node2", "node3").
+		OriginatorNodePool("node1", "node2", "node3").
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).

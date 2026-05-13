@@ -30,7 +30,7 @@ func action_SelectActiveCoordinator(ctx context.Context, c *coordinator, _ commo
 	c.previousActiveCoordinatorNode = c.currentActiveCoordinator
 	c.currentActiveCoordinator = common.SelectCoordinatorNode(
 		ctx,
-		c.coordinatorEndorserPool,
+		c.originatorNodePool,
 		c.currentBlockHeight,
 		c.coordinatorSelectionBlockRange,
 	)

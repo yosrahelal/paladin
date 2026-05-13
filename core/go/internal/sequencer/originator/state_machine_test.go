@@ -45,7 +45,7 @@ func TestStateMachine_WhenCreated_TransitionsToIdle(t *testing.T) {
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
-		CoordinatorEndorserPool("node1", "node2").
+		OriginatorNodePool("node1", "node2").
 		Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &OriginatorCreatedEvent{}))
 	assert.Equal(t, State_Idle, o.GetCurrentState())
@@ -114,7 +114,7 @@ func TestStateMachine_WhenIdle_NewEpoch_RefreshesCoordinatorSelectionStaysIdle(t
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
-		CoordinatorEndorserPool("node1", "node2", "node3").
+		OriginatorNodePool("node1", "node2", "node3").
 		BlockRangeSize(blockRange).
 		CurrentBlockHeight(100).
 		CurrentActiveCoordinator("node1").
@@ -261,7 +261,7 @@ func TestOriginator_WhenNewEpochRuns_PreservesPreviousActiveAndRecomputesActiveW
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
-		CoordinatorEndorserPool("node1", "node2", "node3").
+		OriginatorNodePool("node1", "node2", "node3").
 		BlockRangeSize(blockRange).
 		CurrentBlockHeight(100).
 		CurrentActiveCoordinator("node1").
@@ -276,7 +276,7 @@ func TestOriginator_WhenNewEpochRuns_PreservesPreviousActiveAndRecomputesActiveW
 		DomainContractConfig(&prototk.ContractConfig{
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
-		CoordinatorEndorserPool("node1").
+		OriginatorNodePool("node1").
 		BlockRangeSize(blockRange).
 		CurrentBlockHeight(100).
 		CurrentActiveCoordinator("node1").

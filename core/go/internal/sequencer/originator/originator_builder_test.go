@@ -53,7 +53,7 @@ type OriginatorBuilderForTesting struct {
 	blockRangeSize                     *uint64
 	currentBlockHeight                 *uint64
 	newBlockRangeEpoch                 *bool
-	coordinatorEndorserPool            []string
+	originatorNodePool []string
 	currentActiveCoordinator           *string
 	previousActiveCoordinatorNode      *string
 	watchingPreviousCoordinatorFlush   *bool
@@ -126,8 +126,8 @@ func (b *OriginatorBuilderForTesting) NewBlockRangeEpoch(v bool) *OriginatorBuil
 	return b
 }
 
-func (b *OriginatorBuilderForTesting) CoordinatorEndorserPool(nodes ...string) *OriginatorBuilderForTesting {
-	b.coordinatorEndorserPool = common.DedupeSortedCoordinatorEndorserNodes(append([]string(nil), nodes...))
+func (b *OriginatorBuilderForTesting) OriginatorNodePool(nodes ...string) *OriginatorBuilderForTesting {
+	b.originatorNodePool = common.DedupeSortedCoordinatorEndorserNodes(append([]string(nil), nodes...))
 	return b
 }
 
@@ -266,8 +266,8 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	if b.newBlockRangeEpoch != nil {
 		originator.newBlockRangeEpoch = *b.newBlockRangeEpoch
 	}
-	if b.coordinatorEndorserPool != nil {
-		originator.coordinatorEndorserPool = b.coordinatorEndorserPool
+	if b.originatorNodePool != nil {
+		originator.originatorNodePool = b.originatorNodePool
 	}
 	if b.previousActiveCoordinatorNode != nil {
 		originator.previousActiveCoordinatorNode = *b.previousActiveCoordinatorNode

@@ -18,7 +18,6 @@ package coordinator
 import (
 	"context"
 	"fmt"
-	"slices"
 	"sync"
 	"time"
 
@@ -85,8 +84,7 @@ type coordinator struct {
 	currentBlockHeight                 uint64
 	dependencyTracker                  dependencytracker.DependencyTracker
 	grapher                            grapher.Grapher
-	coordinatorEndorserPool            []string // Fixed set of endorser candidates used for coordinator selection (COORDINATOR_ENDORSER mode only)
-	originatorNodePool                 []string // Dynamic set of originator nodes used for heartbeat fan-out
+	originatorNodePool                 []string // Unified pool of nodes for coordinator selection and heartbeat fan-out; seeded from endorser candidates and grown dynamically
 	newBlockRangeEpoch                 bool
 
 	/* Config */
@@ -114,6 +112,7 @@ type coordinator struct {
 	newPrivateTransaction func(context.Context, []*components.ValidatedTransaction) error
 	syncPoints            syncpoints.SyncPoints
 	metrics               metrics.DistributedSequencerMetrics
+	notifyOriginator      func(ctx context.Context, nodes []string) // optional callback to mirror pool updates to the co-located originator
 
 	/* Dispatch loop */
 	dispatchQueue       chan transaction.CoordinatorTransaction
@@ -136,6 +135,7 @@ func NewCoordinator(
 	configuration *pldconf.SequencerConfig,
 	nodeName string,
 	metrics metrics.DistributedSequencerMetrics,
+	notifyOriginator func(ctx context.Context, nodes []string),
 ) *coordinator {
 	dependencyTracker := dependencytracker.NewDependencyTracker()
 	c := &coordinator{
@@ -156,6 +156,7 @@ func NewCoordinator(
 		nodeName:                           nodeName,
 		metrics:                            metrics,
 		dispatchLoopStopped:                make(chan struct{}),
+		notifyOriginator:                   notifyOriginator,
 	}
 
 	// Configuration
@@ -265,10 +266,7 @@ func (c *coordinator) initializeFromContractConfig(ctx context.Context) error {
 		log.L(ctx).Debugf("coordinator selection is SENDER mode; active coordinator set to self: %s", c.nodeName)
 	case prototk.ContractConfig_COORDINATOR_ENDORSER:
 		candidates := c.domainAPI.ContractConfig().GetCoordinatorEndorserCandidates()
-		if len(candidates) == 0 {
-			return i18n.NewError(ctx, msgs.MsgSequencerEndorserNoCandidates, c.contractAddress.String())
-		}
-		nodes := make([]string, 0, len(candidates))
+		nodes := make([]string, 0, len(candidates)+1)
 		for _, locator := range candidates {
 			_, node, err := pldtypes.PrivateIdentityLocator(locator).Validate(ctx, "", false)
 			if err != nil {
@@ -276,15 +274,10 @@ func (c *coordinator) initializeFromContractConfig(ctx context.Context) error {
 			}
 			nodes = append(nodes, node)
 		}
-		// coordinatorEndorserPool is sorted, deduped by node name, and never mutated after init.
-		c.coordinatorEndorserPool = common.DedupeSortedCoordinatorEndorserNodes(nodes)
-
-		// originatorNodePool is the heartbeat fan-out set; starts from the same endorser candidates.
-		// In COORDINATOR_ENDORSER mode all valid candidates are already known, so updateOriginatorNodePool
-		// becomes a no-op (see selection.go).
-		c.originatorNodePool = slices.Clone(c.coordinatorEndorserPool)
-
-		log.L(ctx).Debugf("initialized coordinator endorser pool: %+v", c.coordinatorEndorserPool)
+		// Always include the local node so the pool is never empty.
+		nodes = append(nodes, c.nodeName)
+		c.originatorNodePool = common.DedupeSortedCoordinatorEndorserNodes(nodes)
+		log.L(ctx).Debugf("initialized originator node pool (COORDINATOR_ENDORSER): %+v", c.originatorNodePool)
 	}
 	return nil
 }

@@ -193,28 +193,6 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				domainContext:   dCtx,
 			}
 
-			seqCoordinator := coordinator.NewCoordinator(
-				&contractAddr,
-				domainAPI,
-				dCtx,
-				sMgr.components,
-				nil,
-				nil,
-				transportWriter,
-				common.RealClock(),
-				engineIntegration,
-				sMgr.syncPoints,
-				sMgr.config,
-				sMgr.nodeName,
-				sMgr.metrics,
-			)
-			if err := seqCoordinator.Start(seqCtx); err != nil {
-				cancelCtx()
-				log.L(ctx).Errorf("failed to start sequencer coordinator for contract %s: %s", contractAddr.String(), err)
-				return nil, err
-			}
-			sequencer.coordinator = seqCoordinator
-
 			seqOriginator := originator.NewOriginator(
 				sMgr.nodeName,
 				transportWriter,
@@ -229,8 +207,33 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				log.L(ctx).Errorf("failed to start sequencer originator for contract %s: %s", contractAddr.String(), err)
 				return nil, err
 			}
-
 			sequencer.originator = seqOriginator
+
+			seqCoordinator := coordinator.NewCoordinator(
+				&contractAddr,
+				domainAPI,
+				dCtx,
+				sMgr.components,
+				nil,
+				nil,
+				transportWriter,
+				common.RealClock(),
+				engineIntegration,
+				sMgr.syncPoints,
+				sMgr.config,
+				sMgr.nodeName,
+				sMgr.metrics,
+				func(ctx context.Context, nodes []string) {
+					seqOriginator.QueueEvent(ctx, &common.EndorserNodesDiscoveredEvent{Nodes: nodes})
+				},
+			)
+			if err := seqCoordinator.Start(seqCtx); err != nil {
+				cancelCtx()
+				log.L(ctx).Errorf("failed to start sequencer coordinator for contract %s: %s", contractAddr.String(), err)
+				return nil, err
+			}
+			sequencer.coordinator = seqCoordinator
+
 			sMgr.sequencers[contractAddr.String()] = sequencer
 
 			go sequencer.heartbeatLoop(seqCtx, sMgr.heartbeatInterval)
