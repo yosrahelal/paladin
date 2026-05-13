@@ -317,10 +317,6 @@ const simpleTokenPrivacyGroupEndorsementConstructorABI = `{
       {
         "name": "amountVisible",
         "type": "bool"
-      },
-      {
-        "name": "requiredEndorsements",
-        "type": "uint32"
       }
 	],
 	"outputs": null
@@ -343,15 +339,14 @@ func SimpleTokenConstructorABI(endorsementMode string) *abi.ABI {
 // Go struct used in test (test + domain) to work with JSON structure passed into the paladin transaction for the constructor
 // This is a union of the 3 ABI above
 type ConstructorParameters struct {
-	Notary               string          `json:"notary"`               // empty string if endorsementMode is PrivacyGroupEndorsement
-	EndorsementSet       []string        `json:"endorsementSet"`       // empty array if endorsementMode is not PrivacyGroupEndorsement
-	From                 string          `json:"from"`                 // empty string if endorsementMode is not SelfEndorsement
-	Name                 string          `json:"name"`
-	Symbol               string          `json:"symbol"`
-	EndorsementMode      string          `json:"endorsementMode"`
-	HookAddress          string          `json:"hookAddress"`
-	AmountVisible        bool            `json:"amountVisible"`
-	RequiredEndorsements int32FromABIJSON `json:"requiredEndorsements"` // minimum endorsements needed for PrivacyGroupEndorsement (0 = all)
+	Notary          string   `json:"notary"`         // empty string if  endorsementMode is PrivacyGroupEndorsement
+	EndorsementSet  []string `json:"endorsementSet"` // empty array if endorsementMode is not PrivacyGroupEndorsement
+	From            string   `json:"from"`           // empty string if endorsementMode is not SelfEndorsement
+	Name            string   `json:"name"`
+	Symbol          string   `json:"symbol"`
+	EndorsementMode string   `json:"endorsementMode"`
+	HookAddress     string   `json:"hookAddress"`
+	AmountVisible   bool     `json:"amountVisible"`
 }
 
 // Go struct used in test (test + domain) to work with JSON structure for `params` on the base ledger factory function
@@ -363,7 +358,6 @@ type FactoryParameters struct {
 	EndorsementSetLocators []string `json:"endorsementSetLocators"`
 	HookAddress            string   `json:"hookAddress"`
 	AmountVisible          bool     `json:"amountVisible"`
-	RequiredEndorsements   int32    `json:"requiredEndorsements"`
 }
 
 // JSON structure passed into the paladin transaction for the transfer
@@ -396,38 +390,17 @@ var contractDataABI = &abi.ParameterArray{
 	{Name: "endorsementSetLocators", Type: "string[]"},
 	{Name: "hookAddress", Type: "string"},
 	{Name: "amountVisible", Type: "bool"},
-	{Name: "requiredEndorsements", Type: "uint256"},
 }
 
 // golang struct to parse and serialize the data received from the block indexer when the base ledger factor contract
 // emits a PaladinRegisterSmartContract_V0 event
 // this must match the ABI above
-// int32FromABIJSON is an int32 that can unmarshal from either a JSON number or a JSON
-// decimal string. pldtypes.StandardABISerializer encodes uint256 values as quoted decimal
-// strings (e.g. "1"), so plain int32 would fail to unmarshal. This type handles both forms.
-type int32FromABIJSON int32
-
-func (v *int32FromABIJSON) UnmarshalJSON(b []byte) error {
-	// Strip surrounding quotes if present (decimal string form from ABI serializer for uint256).
-	raw := string(b)
-	if len(raw) >= 2 && raw[0] == '"' {
-		raw = raw[1 : len(raw)-1]
-	}
-	n, err := strconv.ParseInt(raw, 10, 32)
-	if err != nil {
-		return err
-	}
-	*v = int32FromABIJSON(n)
-	return nil
-}
-
 type simpleTokenConfigParser struct {
-	EndorsementMode      string          `json:"endorsementMode"`
-	NotaryLocator        string          `json:"notaryLocator"`
-	EndorsementSet       []string        `json:"endorsementSetLocators"`
-	HookAddress          string          `json:"hookAddress"`
-	AmountVisible        bool            `json:"amountVisible"`
-	RequiredEndorsements int32FromABIJSON `json:"requiredEndorsements"` // uint256 from ABI serialized as a decimal string
+	EndorsementMode string   `json:"endorsementMode"`
+	NotaryLocator   string   `json:"notaryLocator"`
+	EndorsementSet  []string `json:"endorsementSetLocators"`
+	HookAddress     string   `json:"hookAddress"`
+	AmountVisible   bool     `json:"amountVisible"`
 }
 
 func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
@@ -544,6 +517,7 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 			var config simpleTokenConfigParser
 			err = json.Unmarshal([]byte(tx.ContractInfo.ContractConfigJson), &config)
 			require.NoError(t, err)
+			//assert.NotEmpty(t, config.NotaryLocator)
 
 			return contractAddr, config, &inputs
 		}
@@ -735,15 +709,14 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				if constructorParameters.EndorsementSet == nil {
 					constructorParameters.EndorsementSet = []string{}
 				}
-			params := FactoryParameters{
-				TxId:                   req.Transaction.TransactionId,
-				EndorsementSetLocators: constructorParameters.EndorsementSet,
-				EndorsementMode:        constructorParameters.EndorsementMode,
-				NotaryLocator:          constructorParameters.Notary,
-				HookAddress:            constructorParameters.HookAddress,
-				AmountVisible:          constructorParameters.AmountVisible,
-				RequiredEndorsements:   int32(constructorParameters.RequiredEndorsements),
-			}
+				params := FactoryParameters{
+					TxId:                   req.Transaction.TransactionId,
+					EndorsementSetLocators: constructorParameters.EndorsementSet,
+					EndorsementMode:        constructorParameters.EndorsementMode,
+					NotaryLocator:          constructorParameters.Notary,
+					HookAddress:            constructorParameters.HookAddress,
+					AmountVisible:          constructorParameters.AmountVisible,
+				}
 				return &prototk.PrepareDeployResponse{
 					Signer: confutil.P(fmt.Sprintf("domain1.transactions.%s", req.Transaction.TransactionId)),
 					Transaction: &prototk.PreparedTransaction{
@@ -1003,37 +976,37 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 							},
 						},
 					}, nil
-			case PrivacyGroupEndorsement:
-				return &prototk.AssembleTransactionResponse{
-					AssembledTransaction: &prototk.AssembledTransaction{
-						InputStates:  stateRefsToSpend,
-						OutputStates: newStates,
-					},
-					AssemblyResult: prototk.AssembleTransactionResponse_OK,
-					AttestationPlan: []*prototk.AttestationRequest{
-						{
-							Name:            "sender",
-							AttestationType: prototk.AttestationType_SIGN,
-							Algorithm:       algorithms.ECDSA_SECP256K1,
-							VerifierType:    verifiers.ETH_ADDRESS,
-							PayloadType:     signpayloads.OPAQUE_TO_RSV,
-							Payload:         eip712Payload,
-							Parties: []string{
-								req.Transaction.From,
+				case PrivacyGroupEndorsement:
+
+					return &prototk.AssembleTransactionResponse{
+						AssembledTransaction: &prototk.AssembledTransaction{
+							InputStates:  stateRefsToSpend,
+							OutputStates: newStates,
+						},
+						AssemblyResult: prototk.AssembleTransactionResponse_OK,
+						AttestationPlan: []*prototk.AttestationRequest{
+							{
+								Name:            "sender",
+								AttestationType: prototk.AttestationType_SIGN,
+								Algorithm:       algorithms.ECDSA_SECP256K1,
+								VerifierType:    verifiers.ETH_ADDRESS,
+								PayloadType:     signpayloads.OPAQUE_TO_RSV,
+								Payload:         eip712Payload,
+								Parties: []string{
+									req.Transaction.From,
+								},
+							},
+							{
+								Name:            "privacyGroup",
+								AttestationType: prototk.AttestationType_ENDORSE,
+								// we expect an endorsement is of the form ENDORSER_SUBMIT - so we need an eth signing key to exist
+								Algorithm:    algorithms.ECDSA_SECP256K1,
+								VerifierType: verifiers.ETH_ADDRESS,
+								PayloadType:  signpayloads.OPAQUE_TO_RSV,
+								Parties:      config.EndorsementSet,
 							},
 						},
-					{
-						Name:            "privacyGroup",
-						AttestationType: prototk.AttestationType_ENDORSE,
-						// we expect an endorsement is of the form ENDORSER_SUBMIT - so we need an eth signing key to exist
-						Algorithm:    algorithms.ECDSA_SECP256K1,
-						VerifierType: verifiers.ETH_ADDRESS,
-						PayloadType:  signpayloads.OPAQUE_TO_RSV,
-						Parties:      config.EndorsementSet,
-						Threshold:    confutil.P(int32(config.RequiredEndorsements)),
-					},
-					},
-				}, nil
+					}, nil
 				default:
 					return nil, fmt.Errorf("unsupported endorsement mode: %s", config.EndorsementMode)
 				}

@@ -24,7 +24,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/verifiers"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -223,56 +222,6 @@ func Test_applyEndorsement_NoPendingRequestForParty_IgnoresAndReturnsNil(t *test
 	err := txn.applyEndorsement(ctx, endorsement, requestID)
 	require.NoError(t, err)
 	assert.Empty(t, txn.pt.PostAssembly.Endorsements)
-}
-
-func Test_unfulfilledEndorsementRequirements_ExplicitThresholdMet(t *testing.T) {
-	ctx := t.Context()
-	threshold := int32(2)
-	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
-		PostAssembly(&components.TransactionPostAssembly{
-			AttestationPlan: []*prototk.AttestationRequest{{
-				Name:            "privacyGroup",
-				AttestationType: prototk.AttestationType_ENDORSE,
-				VerifierType:    verifiers.ETH_ADDRESS,
-				Parties:         []string{"party1", "party2", "party3"},
-				Threshold:       &threshold,
-			}},
-			Endorsements: []*prototk.AttestationResult{
-				{Name: "privacyGroup", Verifier: &prototk.ResolvedVerifier{Lookup: "party1", VerifierType: verifiers.ETH_ADDRESS}},
-				{Name: "privacyGroup", Verifier: &prototk.ResolvedVerifier{Lookup: "party2", VerifierType: verifiers.ETH_ADDRESS}},
-			},
-		}).
-		Build()
-
-	assert.False(t, txn.hasUnfulfilledEndorsementRequirements(ctx))
-}
-
-func Test_unfulfilledEndorsementRequirements_ExplicitThresholdNotMet(t *testing.T) {
-	ctx := t.Context()
-	threshold := int32(2)
-	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
-		PostAssembly(&components.TransactionPostAssembly{
-			AttestationPlan: []*prototk.AttestationRequest{{
-				Name:            "privacyGroup",
-				AttestationType: prototk.AttestationType_ENDORSE,
-				VerifierType:    verifiers.ETH_ADDRESS,
-				Parties:         []string{"party1", "party2", "party3"},
-				Threshold:       &threshold,
-			}},
-			// Only party2 has endorsed — threshold of 2 is not yet met.
-			Endorsements: []*prototk.AttestationResult{
-				{Name: "privacyGroup", Verifier: &prototk.ResolvedVerifier{Lookup: "party2", VerifierType: verifiers.ETH_ADDRESS}},
-			},
-		}).
-		Build()
-
-	unfulfilled := txn.unfulfilledEndorsementRequirements(ctx)
-	// party2 is already endorsed and must be skipped; party1 and party3 are still needed.
-	require.Len(t, unfulfilled, 2)
-	parties := []string{unfulfilled[0].party, unfulfilled[1].party}
-	assert.Contains(t, parties, "party1")
-	assert.Contains(t, parties, "party3")
-	assert.NotContains(t, parties, "party2")
 }
 
 func Test_resetEndorsementRequests_WhenPendingNotNull_CancelsAndClears(t *testing.T) {

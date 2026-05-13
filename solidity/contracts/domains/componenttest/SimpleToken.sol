@@ -17,26 +17,15 @@ contract SimpleToken {
     error BadNotary(address sender);
     error SimpleTokenRetryableError(bytes32 id);
     error SimpleTokenNonRetryableError(bytes32 id);
-    error SimpleTokenDuplicateTransaction(bytes32 txId);
     bytes32 public constant SINGLE_FUNCTION_SELECTOR = keccak256("SimpleToken()");
-
-    mapping(bytes32 => bool) private _txIds;
-
+    
     constructor() {
-    }
-
-    function _useTxId(bytes32 txId) internal {
-        if (_txIds[txId]) {
-            revert SimpleTokenDuplicateTransaction(txId);
-        }
-        _txIds[txId] = true;
     }
 
     function paladinExecute_V0(bytes32 txId, bytes32 fnSelector, bytes calldata payload) public  {
         assert(fnSelector == SINGLE_FUNCTION_SELECTOR);
         (bytes32 signature, bytes32[] memory inputs, bytes32[] memory outputs) =
             abi.decode(payload, (bytes32, bytes32[], bytes32[]));
-        _useTxId(txId);
         emit UTXOTransfer(txId, inputs, outputs, abi.encodePacked(signature));
     }
 
@@ -48,7 +37,6 @@ contract SimpleToken {
         if (errorMode == 2) {
             revert SimpleTokenNonRetryableError(outputs.length > 0 ? outputs[0] : bytes32(0));
         }
-        _useTxId(txId);
         emit UTXOTransfer(txId, inputs, outputs, abi.encodePacked(signature));
     }
 
@@ -59,7 +47,6 @@ contract SimpleToken {
             revert("tx arrived out of order, amount not expected");
         }
         storedAmount = amount;
-        _useTxId(txId);
         emit UTXOTransfer(txId, inputs, outputs, abi.encodePacked(signature));
     }
 
@@ -70,8 +57,6 @@ contract SimpleToken {
         if (errorMode == 2) {
             revert SimpleTokenNonRetryableError(outputs.length > 0 ? outputs[0] : bytes32(0));
         }
-        _useTxId(txId);
-        _useTxId(originTxId);
         // Emit 2 events, one for the hook TX ID, one for the original TX ID. Note that the simple domain
         // doesn't check the inputs and outputs so we just pass them through to both. In reality the origin
         // domain wouldn't validate the inputs and outputs but we're just testing TX chaining here, not domain functionality.
