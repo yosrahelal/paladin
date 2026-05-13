@@ -54,11 +54,9 @@ type OriginatorBuilderForTesting struct {
 	currentBlockHeight                 *uint64
 	newBlockRangeEpoch                 *bool
 	coordinatorEndorserPool            []string
-	preferredActiveCoordinator         *string
 	currentActiveCoordinator           *string
 	previousActiveCoordinatorNode      *string
 	watchingPreviousCoordinatorFlush   *bool
-	failoverOffset                     *int
 	needsRedelegate                    *bool
 	heartbeatIntervalsSinceLastReceive *int
 	inactiveGracePeriod                *int
@@ -138,18 +136,8 @@ func (b *OriginatorBuilderForTesting) DomainContractConfig(cfg *prototk.Contract
 	return b
 }
 
-func (b *OriginatorBuilderForTesting) PreferredActiveCoordinator(node string) *OriginatorBuilderForTesting {
-	b.preferredActiveCoordinator = &node
-	return b
-}
-
 func (b *OriginatorBuilderForTesting) CurrentActiveCoordinator(node string) *OriginatorBuilderForTesting {
 	b.currentActiveCoordinator = &node
-	return b
-}
-
-func (b *OriginatorBuilderForTesting) FailoverOffset(offset int) *OriginatorBuilderForTesting {
-	b.failoverOffset = &offset
 	return b
 }
 
@@ -248,7 +236,6 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		seqConfig,
 		b.metrics,
 		domainAPI,
-		func(context.Context, string) {},
 	)
 
 	for _, tx := range b.transactions {
@@ -262,22 +249,10 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	// Any state specific setup can be done here
 	}
 
-	switch {
-	case b.currentActiveCoordinator != nil && b.preferredActiveCoordinator != nil:
+	if b.currentActiveCoordinator != nil {
 		originator.currentActiveCoordinator = *b.currentActiveCoordinator
-		originator.preferredActiveCoordinator = *b.preferredActiveCoordinator
-	case b.currentActiveCoordinator != nil:
-		originator.currentActiveCoordinator = *b.currentActiveCoordinator
-		originator.preferredActiveCoordinator = *b.currentActiveCoordinator
-	case b.preferredActiveCoordinator != nil:
-		originator.preferredActiveCoordinator = *b.preferredActiveCoordinator
-		originator.currentActiveCoordinator = *b.preferredActiveCoordinator
-	default:
+	} else {
 		originator.currentActiveCoordinator = "coordinator"
-		originator.preferredActiveCoordinator = "coordinator"
-	}
-	if b.failoverOffset != nil {
-		originator.failoverOffset = *b.failoverOffset
 	}
 	if b.needsRedelegate != nil {
 		originator.needsRedelegate = *b.needsRedelegate
@@ -290,7 +265,6 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	}
 	if b.newBlockRangeEpoch != nil {
 		originator.newBlockRangeEpoch = *b.newBlockRangeEpoch
-		originator.needsFailoverOffsetReset = *b.newBlockRangeEpoch
 	}
 	if b.coordinatorEndorserPool != nil {
 		originator.coordinatorEndorserPool = b.coordinatorEndorserPool

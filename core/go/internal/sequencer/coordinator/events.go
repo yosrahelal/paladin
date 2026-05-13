@@ -52,17 +52,3 @@ func (*TransactionsDelegatedEvent) Type() EventType {
 func (*TransactionsDelegatedEvent) TypeString() string {
 	return "Event_TransactionsDelegated"
 }
-
-// ActiveCoordinatorUnavailableEvent is queued when the originator detects the currentActiveCoordinator as unavailable.
-type ActiveCoordinatorUnavailableEvent struct {
-	common.BaseEvent
-	NewActiveCoordinator string
-}
-
-func (*ActiveCoordinatorUnavailableEvent) Type() EventType {
-	return Event_ActiveCoordinatorUnavailable
-}
-
-func (*ActiveCoordinatorUnavailableEvent) TypeString() string {
-	return "Event_ActiveCoordinatorUnavailable"
-}

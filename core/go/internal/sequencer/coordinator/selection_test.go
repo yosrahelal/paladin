@@ -37,7 +37,7 @@ func Test_initializeActiveCoordinatorFromContractConfig_StaticMode_SetsActiveCoo
 	c, _ := builder.Build()
 	require.NoError(t, c.initializeFromContractConfig(ctx))
 
-	assert.Equal(t, "node1", c.preferredActiveCoordinator)
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
 func Test_action_SelectActiveCoordinator_SingleNodeInPool_ReturnsNode(t *testing.T) {
@@ -54,7 +54,7 @@ func Test_action_SelectActiveCoordinator_SingleNodeInPool_ReturnsNode(t *testing
 	require.NoError(t, c.initializeFromContractConfig(ctx))
 
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	assert.Equal(t, "node1", c.preferredActiveCoordinator)
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
 func Test_action_SelectActiveCoordinator_MultipleNodesInPool_ReturnsOneOfPool(t *testing.T) {
@@ -71,7 +71,7 @@ func Test_action_SelectActiveCoordinator_MultipleNodesInPool_ReturnsOneOfPool(t 
 	require.NoError(t, c.initializeFromContractConfig(ctx))
 
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	assert.Contains(t, []string{"node1", "node2", "node3"}, c.preferredActiveCoordinator)
+	assert.Contains(t, []string{"node1", "node2", "node3"}, c.currentActiveCoordinator)
 }
 
 func Test_action_SelectActiveCoordinator_BlockHeightRounding_SameRangeSameCoordinator(t *testing.T) {
@@ -89,58 +89,22 @@ func Test_action_SelectActiveCoordinator_BlockHeightRounding_SameRangeSameCoordi
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1000}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	coordinatorNode1 := c.preferredActiveCoordinator
+	coordinatorNode1 := c.currentActiveCoordinator
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1001}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	coordinatorNode2 := c.preferredActiveCoordinator
+	coordinatorNode2 := c.currentActiveCoordinator
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1099}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	coordinatorNode3 := c.preferredActiveCoordinator
+	coordinatorNode3 := c.currentActiveCoordinator
 
 	assert.Equal(t, coordinatorNode1, coordinatorNode2)
 	assert.Equal(t, coordinatorNode2, coordinatorNode3)
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1100}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	assert.Contains(t, []string{"node1", "node2", "node3"}, c.preferredActiveCoordinator)
-}
-
-func Test_action_ActiveCoordinatorUnavailable_SetsCurrentFromEvent(t *testing.T) {
-	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2", "id@node3"},
-	})
-	config := builder.GetSequencerConfig()
-	config.BlockRange = confutil.P(uint64(100))
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.CurrentBlockHeight(1000).Build()
-	require.NoError(t, c.initializeFromContractConfig(ctx))
-
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	preferred := c.preferredActiveCoordinator
-	require.Contains(t, []string{"node1", "node2", "node3"}, preferred)
-
-	var other string
-	for _, n := range []string{"node1", "node2", "node3"} {
-		if n != preferred {
-			other = n
-			break
-		}
-	}
-	require.NotEmpty(t, other)
-
-	ev := &ActiveCoordinatorUnavailableEvent{
-		BaseEvent:            common.BaseEvent{},
-		NewActiveCoordinator: other,
-	}
-	require.NoError(t, action_CurrentActiveCoordinatorUnavailable(ctx, c, ev))
-
-	assert.Equal(t, preferred, c.preferredActiveCoordinator, "preferred unchanged")
-	assert.Equal(t, other, c.currentActiveCoordinator, "current matches originator currentActiveCoordinator after failover")
+	assert.Contains(t, []string{"node1", "node2", "node3"}, c.currentActiveCoordinator)
 }
 
 func Test_action_SelectActiveCoordinator_DifferentBlockRanges_CanSelectDifferentCoordinators(t *testing.T) {
@@ -158,11 +122,11 @@ func Test_action_SelectActiveCoordinator_DifferentBlockRanges_CanSelectDifferent
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 100}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	coordinatorNode1 := c.preferredActiveCoordinator
+	coordinatorNode1 := c.currentActiveCoordinator
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 150}))
 	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
-	coordinatorNode2 := c.preferredActiveCoordinator
+	coordinatorNode2 := c.currentActiveCoordinator
 
 	assert.Contains(t, []string{"node1", "node2"}, coordinatorNode1)
 	assert.Contains(t, []string{"node1", "node2"}, coordinatorNode2)
@@ -177,7 +141,7 @@ func Test_initializeActiveCoordinatorFromContractConfig_SenderMode_SetsActiveCoo
 	c, _ := builder.Build()
 
 	require.NoError(t, c.initializeFromContractConfig(ctx))
-	assert.Equal(t, "node1", c.preferredActiveCoordinator)
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
 func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
@@ -224,26 +188,4 @@ func Test_guard_IsNewBlockRangeEpoch_WhenSameEpoch_ReturnsFalse(t *testing.T) {
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 	c.newBlockRangeEpoch = false
 	assert.False(t, guard_IsNewBlockRangeEpoch(ctx, c))
-}
-
-func Test_action_CurrentActiveCoordinatorUnavailable_SelfIsActiveCoordinator_LogsWarnAndDoesNotUpdate(t *testing.T) {
-	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Active)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
-	})
-	c, _ := builder.NodeName("node1").Build()
-	// Set currentActiveCoordinator to be this node's own name — simulates the
-	// coordinator thinking it IS the active coordinator.
-	c.currentActiveCoordinator = "node1"
-	originalCurrent := c.currentActiveCoordinator
-
-	ev := &ActiveCoordinatorUnavailableEvent{
-		NewActiveCoordinator: "node2",
-	}
-	err := action_CurrentActiveCoordinatorUnavailable(ctx, c, ev)
-	require.NoError(t, err)
-	// The coordinator should NOT have updated currentActiveCoordinator.
-	assert.Equal(t, originalCurrent, c.currentActiveCoordinator)
 }

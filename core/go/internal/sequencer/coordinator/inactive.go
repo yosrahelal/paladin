@@ -28,12 +28,6 @@ func action_RejectDelegatedTransactions(ctx context.Context, c *coordinator, eve
 
 // When we validate who heartbeats are from, we must always exclude heartbeats from ourselves
 
-func validator_IsHeartbeatFromPreferredActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
-	e := event.(*common.HeartbeatReceivedEvent)
-	return c.nodeName != e.From && c.preferredActiveCoordinator == e.From &&
-		e.CoordinatorSnapshot.CoordinatorState == common.CoordinatorState_Active, nil
-}
-
 func validator_IsHeartbeatFromCurrentActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*common.HeartbeatReceivedEvent)
 	return c.nodeName != e.From && c.currentActiveCoordinator == e.From, nil
@@ -44,26 +38,9 @@ func validator_IsHeartbeatFromPreviousActiveCoordinator(_ context.Context, c *co
 	return c.nodeName != e.From && c.previousActiveCoordinatorNode == e.From, nil
 }
 
-// validator_IsHeartbeatFromActiveWhenWeArePreferred returns true when we (the preferred coordinator)
-// are in Idle state and receive a heartbeat from an Active fallback coordinator. This is the
-// "awakening" trigger: the preferred coordinator should assert its role by entering Elect state.
-func validator_IsHeartbeatFromActiveWhenWeArePreferred(_ context.Context, c *coordinator, event common.Event) (bool, error) {
-	e := event.(*common.HeartbeatReceivedEvent)
-	return c.nodeName != e.From &&
-		c.nodeName == c.preferredActiveCoordinator &&
-		e.CoordinatorSnapshot.CoordinatorState == common.CoordinatorState_Active, nil
-}
-
 func action_HeartbeatReceived(_ context.Context, c *coordinator, event common.Event) error {
 	e := event.(*common.HeartbeatReceivedEvent)
 	c.activeCoordinatorState = e.CoordinatorSnapshot.CoordinatorState
-	// is this a
-	if c.currentActiveCoordinator != c.preferredActiveCoordinator &&
-		c.activeCoordinatorState == common.CoordinatorState_Active &&
-		e.From == c.preferredActiveCoordinator {
-		c.previousActiveCoordinatorNode = c.currentActiveCoordinator
-		c.currentActiveCoordinator = c.preferredActiveCoordinator
-	}
 	return nil
 }
 

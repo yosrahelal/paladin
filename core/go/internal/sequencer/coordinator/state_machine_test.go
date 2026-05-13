@@ -125,7 +125,6 @@ func TestCoordinator_WhenIdle_StaysIdle_OnHeartbeatFromUnrelatedNode(t *testing.
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2").
-		PreferredActiveCoordinator("node2").
 		Build()
 	event := &common.HeartbeatReceivedEvent{
 		From:                "node3",
@@ -135,26 +134,6 @@ func TestCoordinator_WhenIdle_StaysIdle_OnHeartbeatFromUnrelatedNode(t *testing.
 	assert.Equal(t, State_Idle, c.GetCurrentState())
 	// validator failed → action_HeartbeatReceived never ran → activeCoordinatorState stays unset
 	assert.Equal(t, common.CoordinatorState(0), c.activeCoordinatorState, "rejected heartbeat must not update activeCoordinatorState")
-}
-
-// When this node is the preferred coordinator and it is Idle, a heartbeat from an Active fallback
-// coordinator awakens it: Idle → Active (no handover needed, preferred asserts itself immediately).
-func TestCoordinator_WhenIdleAndWeArePreferred_TransitionsToActive_OnHeartbeatFromActiveFallback(t *testing.T) {
-	ctx := t.Context()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
-		NodeName("node1").
-		PreferredActiveCoordinator("node1"). // this node is the preferred coordinator
-		CurrentActiveCoordinator("node2").  // node2 is currently acting as fallback coordinator
-		Build()
-	event := &common.HeartbeatReceivedEvent{
-		From:                "node2",
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: State_Active},
-	}
-	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
-	// validator_IsHeartbeatFromActiveWhenWeArePreferred matches → guard_IsPreferredActiveCoordinator → Active
-	assert.Equal(t, State_Active, c.GetCurrentState())
-	// action_HeartbeatReceived ran and captured the observed coordinator state
-	assert.Equal(t, State_Active, c.activeCoordinatorState)
 }
 
 // When delegations arrive in Idle and this node IS the current coordinator, process and transition to Active.
@@ -176,7 +155,7 @@ func TestCoordinator_WhenIdleAndTransactionsDelegatedToSelf_TransitionsToActive(
 
 // ── Observing state transitions ───────────────────────────────────────────────
 
-// When heartbeat intervals exceed the inactive grace period in Observing, transition to Idle.
+// When heartbeat intervals exceed the inactive grace period in Observing, the coordinator transitions to Idle.
 func TestCoordinator_WhenObserving_TransitionsToIdle_OnHeartbeatIntervalInactiveGrace(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
@@ -189,12 +168,11 @@ func TestCoordinator_WhenObserving_TransitionsToIdle_OnHeartbeatIntervalInactive
 	assert.Equal(t, 3, c.heartbeatIntervalsSinceLastReceive, "counter must be at grace-period threshold after increment")
 }
 
-// When a new block-range epoch arrives and this node is the preferred coordinator, transition to Elect.
-func TestCoordinator_WhenObserving_TransitionsToElect_OnNewBlock_WhenPreferredActive(t *testing.T) {
+// When a new block-range epoch arrives and this node is the current coordinator, transition to Elect.
+func TestCoordinator_WhenObserving_TransitionsToElect_OnNewBlock_WhenCurrentCoordinator(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
 		NodeName("node2").
-		PreferredActiveCoordinator("node1").
 		CurrentActiveCoordinator("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
@@ -203,23 +181,9 @@ func TestCoordinator_WhenObserving_TransitionsToElect_OnNewBlock_WhenPreferredAc
 			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 		}).
 		Build()
-	// NewBlock at 150: epoch 100/50=2 → 150/50=3 — crosses boundary and selects node2 as preferred
+	// NewBlock at 150: epoch 100/50=2 → 150/50=3 — crosses boundary and selects node2 as current coordinator
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
 	assert.Equal(t, State_Elect, c.GetCurrentState())
-}
-
-// An ActiveCoordinatorUnavailable event in Observing always transitions to Idle, regardless of mode.
-// In SENDER mode action_CurrentActiveCoordinatorUnavailable is a no-op; currentActiveCoordinator is unchanged.
-func TestCoordinator_WhenObserving_TransitionsToIdle_OnActiveCoordinatorUnavailable(t *testing.T) {
-	ctx := t.Context()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
-		NodeName("node1").
-		CurrentActiveCoordinator("node2").
-		Build()
-	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &ActiveCoordinatorUnavailableEvent{NewActiveCoordinator: "node3"}))
-	assert.Equal(t, State_Idle, c.GetCurrentState())
-	// SENDER mode: action_CurrentActiveCoordinatorUnavailable is a no-op; currentActiveCoordinator must not change
-	assert.Equal(t, "node2", c.currentActiveCoordinator, "SENDER mode: current must be unchanged by unavailability event")
 }
 
 // ── Elect state transitions ───────────────────────────────────────────────────
@@ -231,7 +195,6 @@ func TestCoordinator_WhenElectCompletesViaPreviousClosingHeartbeat_ImportsStateO
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).
 		NodeName("node1").
-		PreferredActiveCoordinator("node1").
 		CurrentActiveCoordinator("node1").
 		PreviousActiveCoordinatorNode("node2").
 		Build()
@@ -274,7 +237,6 @@ func TestCoordinator_WhenElectCompletesViaInactiveGrace_DoesNotImportStateLikeCl
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).
 		NodeName("node1").
-		PreferredActiveCoordinator("node1").
 		CurrentActiveCoordinator("node1").
 		HeartbeatIntervalsSinceStateChange(2).
 		InactiveGracePeriod(3).
@@ -296,7 +258,6 @@ func TestCoordinator_WhenElect_StaysElect_OnHeartbeatFromPreviousCoordinatorNotY
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).
 		NodeName("node1").
-		PreferredActiveCoordinator("node1").
 		CurrentActiveCoordinator("node1").
 		PreviousActiveCoordinatorNode("prev").
 		Build()
@@ -318,7 +279,6 @@ func TestCoordinator_WhenElect_TransitionsToObserving_OnNewBlock_WhenNoLongerCur
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).
 		NodeName("node1").
-		PreferredActiveCoordinator("node1").
 		CurrentActiveCoordinator("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
@@ -432,44 +392,6 @@ func TestCoordinator_WhenActiveAndEpochChangesWithNotYetDispatchedTxsAndNotCurre
 	assert.Equal(t, 0, len(c.transactionsByID), "pooled tx must be cleaned up on epoch change")
 }
 
-// A fallback Active coordinator receives an Active heartbeat from the preferred node with inflight txns → Flush.
-func TestCoordinator_WhenFallbackActiveAndPreferredSendsActiveHeartbeat_TransitionsToFlush_WhenInflight(t *testing.T) {
-	ctx := t.Context()
-	txDispatched, _ := newDispatchedTxMock(t)
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
-		NodeName("node1").
-		PreferredActiveCoordinator("node2").
-		CurrentActiveCoordinator("node1"). // "node1" is acting as fallback
-		Transactions(txDispatched).
-		Build()
-	event := &common.HeartbeatReceivedEvent{
-		From: "node2",
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			CoordinatorState: common.CoordinatorState_Active,
-		},
-	}
-	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
-	assert.Equal(t, State_Flush, c.GetCurrentState())
-}
-
-// A fallback Active coordinator receives an Active heartbeat from the preferred node with no inflight txns → Closing.
-func TestCoordinator_WhenFallbackActiveAndPreferredSendsActiveHeartbeat_TransitionsToClosing_WhenNoInflight(t *testing.T) {
-	ctx := t.Context()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
-		NodeName("node1").
-		PreferredActiveCoordinator("node2").
-		CurrentActiveCoordinator("node1").
-		Build()
-	event := &common.HeartbeatReceivedEvent{
-		From: "node2",
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			CoordinatorState: common.CoordinatorState_Active,
-		},
-	}
-	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
-	assert.Equal(t, State_Closing, c.GetCurrentState())
-}
-
 // Entering Active via any path fires action_NewSigningIdentity and action_SelectTransaction.
 // With a pooled transaction present, action_SelectTransaction pops it and calls HandleEvent(SelectedEvent).
 // The Elect→Active path via a closing heartbeat does not run action_CleanUpTransactionsNotYetDispatched,
@@ -484,7 +406,6 @@ func TestCoordinator_WhenEnteringActive_RefreshesSigningIdentityAndSelectsTransa
 
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).
 		NodeName("node1").
-		PreferredActiveCoordinator("node1").
 		CurrentActiveCoordinator("node1").
 		PreviousActiveCoordinatorNode("node2").
 		PooledTransactions(pooledTx).
@@ -540,7 +461,7 @@ func TestCoordinator_WhenFlushCompletesAndNotCurrentCoordinator_TransitionsToClo
 }
 
 // A NewBlock epoch crossing in Flush updates block height and re-runs coordinator selection, but stays in Flush.
-// action_SelectActiveCoordinator fires and re-computes preferred/current from the pool.
+// action_SelectActiveCoordinator fires and re-computes the active coordinator from the pool.
 func TestCoordinator_WhenFlushingAndNewEpochArrives_UpdatesHeightAndSelectionButStaysFlush(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
@@ -558,31 +479,7 @@ func TestCoordinator_WhenFlushingAndNewEpochArrives_UpdatesHeightAndSelectionBut
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
 	assert.Equal(t, State_Flush, c.GetCurrentState())
 	assert.Equal(t, uint64(150), c.currentBlockHeight)
-	assert.Equal(t, "node2", c.preferredActiveCoordinator, "action_SelectActiveCoordinator must update preferredActiveCoordinator")
-}
-
-// ActiveCoordinatorUnavailable in Flush updates current coordinator but does not change state.
-func TestCoordinator_WhenFlushing_ActiveCoordinatorUnavailable_UpdatesCurrentStaysFlush(t *testing.T) {
-	ctx := t.Context()
-	txDispatched, _ := newDispatchedTxMock(t)
-	// node1 is flushing; the epoch already rolled and node2 became the new current coordinator.
-	// action_CurrentActiveCoordinatorUnavailable only updates when nodeName != currentActiveCoordinator,
-	// so currentActiveCoordinator must be node2 (not node1) for the update to fire.
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Flush).
-		NodeName("node1").
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2", "id@node3"},
-		}).
-		CurrentActiveCoordinator("node2").
-		PreferredActiveCoordinator("node2").
-		Transactions(txDispatched).
-		Build()
-	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &ActiveCoordinatorUnavailableEvent{
-		NewActiveCoordinator: "node3",
-	}))
-	assert.Equal(t, State_Flush, c.GetCurrentState())
-	assert.Equal(t, "node3", c.currentActiveCoordinator)
+	assert.Equal(t, "node2", c.currentActiveCoordinator, "action_SelectActiveCoordinator must update currentActiveCoordinator")
 }
 
 // ── Closing state transitions ─────────────────────────────────────────────────
@@ -590,7 +487,7 @@ func TestCoordinator_WhenFlushing_ActiveCoordinatorUnavailable_UpdatesCurrentSta
 // On entering Closing via an epoch NewBlock (no inflight, not current), action_SendHeartbeat fires immediately.
 func TestCoordinator_WhenClosingStarts_EmitsImmediateHeartbeat(t *testing.T) {
 	ctx := t.Context()
-	// node1 is the fallback active, node2 is current after epoch change
+	// node1 is the outgoing active, node2 is current after epoch change
 	// OriginatorNodePool ensures sendHeartbeat has someone to notify
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node1").
@@ -635,7 +532,7 @@ func TestCoordinator_WhenClosingGraceExpires_WithoutNewActiveHeartbeat_Transitio
 }
 
 // In Closing, a NewBlock epoch that re-selects this node as current with heartbeats recently seen → Elect.
-func TestCoordinator_WhenClosing_NewBlockReBecomesPreferred_TransitionsToElect(t *testing.T) {
+func TestCoordinator_WhenClosing_NewBlockReBecomesCurrentCoordinator_TransitionsToElect(t *testing.T) {
 	ctx := t.Context()
 	// HeartbeatIntervalsSinceStateChange < InactiveGracePeriod: inactive grace NOT expired → Elect
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
@@ -685,7 +582,6 @@ func TestCoordinator_WhenClosing_NewBlockReBecomesCurrentNoInflight_TransitionsT
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
 		NodeName("node2").
 		CurrentActiveCoordinator("node2").
-		PreferredActiveCoordinator("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
 		HeartbeatIntervalsSinceStateChange(4).
@@ -699,44 +595,4 @@ func TestCoordinator_WhenClosing_NewBlockReBecomesCurrentNoInflight_TransitionsT
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
 	assert.Equal(t, State_Idle, c.GetCurrentState())
 	assert.Equal(t, uint64(150), c.currentBlockHeight, "action_UpdateBlockHeight must have run")
-}
-
-// In Closing, ActiveCoordinatorUnavailable that makes this node current + inflight txns → Active.
-func TestCoordinator_WhenClosing_ActiveCoordinatorUnavailable_ReBecomesCurrentWithInflight_TransitionsToActive(t *testing.T) {
-	ctx := t.Context()
-	txDispatched, _ := newDispatchedTxMock(t)
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
-		NodeName("node1").
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-		}).
-		CurrentActiveCoordinator("node2").
-		PreferredActiveCoordinator("node2").
-		Transactions(txDispatched).
-		Build()
-	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &ActiveCoordinatorUnavailableEvent{
-		NewActiveCoordinator: "node1",
-	}))
-	// action_CurrentActiveCoordinatorUnavailable sets current to "node1"
-	// guard_IsCurrentActiveCoordinator = true; guard_HasTransactionsInflight = true → Active
-	assert.Equal(t, State_Active, c.GetCurrentState())
-	assert.NotEmpty(t, c.signingIdentity)
-}
-
-// In Closing, ActiveCoordinatorUnavailable that makes this node current + no inflight txns → Idle.
-func TestCoordinator_WhenClosing_ActiveCoordinatorUnavailable_BecomesCurrentNoInflight_TransitionsToIdle(t *testing.T) {
-	ctx := t.Context()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
-		NodeName("node1").
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-		}).
-		CurrentActiveCoordinator("node2").
-		PreferredActiveCoordinator("node2").
-		Build()
-	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &ActiveCoordinatorUnavailableEvent{
-		NewActiveCoordinator: "node1",
-	}))
-	assert.Equal(t, State_Idle, c.GetCurrentState())
-	assert.Equal(t, "node1", c.currentActiveCoordinator, "action_CurrentActiveCoordinatorUnavailable must update current to this node")
 }

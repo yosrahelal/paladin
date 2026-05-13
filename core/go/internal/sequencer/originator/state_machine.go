@@ -77,21 +77,9 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			},
 			common.Event_HeartbeatReceived: {
-				Validator: statemachine.ValidatorOr(
-					validator_IsHeartbeatFromPreferredActiveCoordinator,
-					validator_IsHeartbeatFromCurrentActiveCoordinator,
-				),
+				Validator: validator_IsHeartbeatFromCurrentActiveCoordinator,
 				Actions: []ActionRule{
-					// If preferred has become active again and current is still a failover candidate,
-					// realign current back to preferred so we track the correct coordinator.
-					{
-						Validator: validator_IsHeartbeatFromPreferredActiveCoordinator,
-						If:        guard_PreferredAndCurrentDiffer,
-						Action:    action_ResetCurrentToPreferred,
-					}, {
-						Validator: validator_IsHeartbeatFromCurrentActiveCoordinator,
-						Action:    action_ResetHeartbeatIntervalsSinceLastReceive,
-					},
+					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
 				},
 				Transitions: []Transition{{
 					To: State_Observing,
@@ -144,17 +132,9 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			common.Event_HeartbeatReceived: {
+				Validator: validator_IsHeartbeatFromCurrentActiveCoordinator,
 				Actions: []ActionRule{
-					// If preferred has become active again and current is still a failover candidate,
-					// realign current back to preferred so we track the correct coordinator.
-					{
-						Validator: validator_IsHeartbeatFromPreferredActiveCoordinator,
-						If:        guard_PreferredAndCurrentDiffer,
-						Action:    action_ResetCurrentToPreferred,
-					}, {
-						Validator: validator_IsHeartbeatFromCurrentActiveCoordinator,
-						Action:    action_ResetHeartbeatIntervalsSinceLastReceive,
-					},
+					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
 				},
 			},
 			common.Event_TransactionStateTransition: {
@@ -207,17 +187,9 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			},
 			common.Event_HeartbeatReceived: {
+				// No validator: applyHeartbeatReceived internally handles routing between the active
+				// coordinator and the previous coordinator (when watchingPreviousCoordinatorFlush is true).
 				Actions: []ActionRule{
-					// If preferred has become active again and current is a failover candidate, realign
-					// current back to preferred before processing the heartbeat. applyHeartbeatReceived
-					// will then see the heartbeat as being from current, find no delegated transactions
-					// in preferred's snapshot, and set needsRedelegate so we delegate to the new current.
-					{
-						// TODO AM: think about checking block height tolerance and handover of locks here https://github.com/LFDT-Paladin/paladin/issues/1141
-						Validator: validator_IsHeartbeatFromPreferredActiveCoordinator,
-						If:        guard_PreferredAndCurrentDiffer,
-						Action:    action_ResetCurrentToPreferred,
-					},
 					{Action: action_HeartbeatReceived},
 					{Action: action_SendDelegationRequest, If: guard_NeedsRedelegate},
 				},
@@ -225,16 +197,8 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
 					{Action: action_IncrementHeartbeatIntervalCounts},
-					{
-						If:     guard_InactiveGracePeriodExceeded,
-						Action: action_IncrementFailoverOffset,
-					},
-					{
-						If:     guard_InactiveGracePeriodExceeded,
-						Action: action_SelectActiveCoordinator,
-					},
-					// If we've failed over to a new coordinator in the actions above, the count of intervals since last received heartbeat
-					// will have been reset, but there should be a needsRedelegate flag set instead.
+					// If the active coordinator has been silent past the inactive grace period, redelegate to it
+					// to nudge it into action. Failover to a different coordinator is not yet implemented.
 					{
 						If:     statemachine.GuardOr(guard_InactiveGracePeriodExceeded, guard_NeedsRedelegate),
 						Action: action_SendDelegationRequest,

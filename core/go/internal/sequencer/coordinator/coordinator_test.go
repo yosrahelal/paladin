@@ -522,7 +522,6 @@ func TestCoordinator_NewCoordinator_StaticMode_ValidStaticCoordinator_StoresNode
 		cancel()
 		c.WaitForDone(t.Context())
 	}()
-	assert.Equal(t, "nodeA", c.preferredActiveCoordinator)
 	assert.Equal(t, "nodeA", c.currentActiveCoordinator)
 }
 

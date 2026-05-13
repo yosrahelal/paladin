@@ -215,13 +215,6 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 			}
 			sequencer.coordinator = seqCoordinator
 
-			queueActiveCoordinatorUnavailable := func(qCtx context.Context, newActiveCoordinator string) {
-				seqCoordinator.QueueEvent(qCtx, &coordinator.ActiveCoordinatorUnavailableEvent{
-					BaseEvent:            common.BaseEvent{EventTime: time.Now()},
-					NewActiveCoordinator: newActiveCoordinator,
-				})
-			}
-
 			seqOriginator := originator.NewOriginator(
 				sMgr.nodeName,
 				transportWriter,
@@ -230,7 +223,6 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				sMgr.config,
 				sMgr.metrics,
 				domainAPI,
-				queueActiveCoordinatorUnavailable,
 			)
 			if err := seqOriginator.Start(seqCtx); err != nil {
 				cancelCtx()

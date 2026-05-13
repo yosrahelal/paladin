@@ -282,24 +282,20 @@ func TestGuard_HasTransactionAssembling_MixOfAssemblingAndOtherStates(t *testing
 	assert.True(t, result, "mix with Assembling should return true")
 }
 
-func Test_guard_IsPreferredActiveCoordinator_MatchesPreferredField(t *testing.T) {
-	ctx := context.Background()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
-		NodeName("self").
-		PreferredActiveCoordinator("self").
-		CurrentActiveCoordinator("other").
-		Build()
-	assert.True(t, guard_IsPreferredActiveCoordinator(ctx, c))
-	assert.False(t, guard_IsCurrentActiveCoordinator(ctx, c))
-}
-
 func Test_guard_IsCurrentActiveCoordinator_MatchesCurrentField(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
 		NodeName("self").
-		PreferredActiveCoordinator("other").
 		CurrentActiveCoordinator("self").
 		Build()
-	assert.False(t, guard_IsPreferredActiveCoordinator(ctx, c))
 	assert.True(t, guard_IsCurrentActiveCoordinator(ctx, c))
+}
+
+func Test_guard_IsCurrentActiveCoordinator_WhenNotCurrent_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodeName("self").
+		CurrentActiveCoordinator("other").
+		Build()
+	assert.False(t, guard_IsCurrentActiveCoordinator(ctx, c))
 }

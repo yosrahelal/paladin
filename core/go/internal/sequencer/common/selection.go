@@ -25,8 +25,8 @@ import (
 )
 
 // DedupeSortedCoordinatorEndorserNodes sorts node names in place and removes duplicate entries
-// (adjacent after sort). Use this when building the endorser pool so hash-modulus selection and
-// failover offsets see one slot per coordinator node.
+// (adjacent after sort). Use this when building the endorser pool so hash-modulus selection
+// sees one slot per coordinator node.
 func DedupeSortedCoordinatorEndorserNodes(nodes []string) []string {
 	if len(nodes) == 0 {
 		return nodes
@@ -35,30 +35,24 @@ func DedupeSortedCoordinatorEndorserNodes(nodes []string) []string {
 	return slices.Compact(nodes)
 }
 
-// SelectCoordinatorNode returns the preferred and current active coordinator for this height/range
-// and failoverOffset. The offset is applied on the sorted deduped pool
-// ring: current slot is (preferredIndex + failoverOffset) mod len(pool). Callers reset the offset
-// to 0 on a new epoch and increment it (e.g. on unavailability); they do not need to normalize.
-// The originator tracks failoverOffset for delegation stepping. The coordinator does not store
-// failoverOffset: it uses SelectCoordinatorNode(..., 0) so preferred and current match, and sets
-// currentActiveCoordinator from ActiveCoordinatorUnavailableEvent.NewActiveCoordinator when the
-// originator fails over.
+// SelectCoordinatorNode returns the active coordinator for this height/range from the sorted
+// deduped endorser pool. The selection is deterministic: all nodes that call this function with
+// the same pool and block height will independently reach the same result.
 //
-// For COORDINATOR_STATIC and COORDINATOR_SENDER modes, preferred/current coordinator fields are
-// set once at construction/Start time and this function is never invoked.
+// For COORDINATOR_STATIC and COORDINATOR_SENDER modes, the coordinator field is set once at
+// construction/Start time and this function is never invoked.
 func SelectCoordinatorNode(
 	ctx context.Context,
 	coordinatorEndorserPool []string,
 	currentBlockHeight uint64,
 	blockRange uint64,
-	failoverOffset int,
-) (preferred, current string) {
+) string {
 	n := len(coordinatorEndorserPool)
 	if n == 0 {
-		return "", ""
+		return ""
 	}
 	if n == 1 {
-		return coordinatorEndorserPool[0], coordinatorEndorserPool[0]
+		return coordinatorEndorserPool[0]
 	}
 	effectiveBlockNumber := currentBlockHeight - (currentBlockHeight % blockRange)
 
@@ -66,14 +60,9 @@ func SelectCoordinatorNode(
 	h := fnv.New32a()
 	h.Write([]byte(strconv.FormatUint(effectiveBlockNumber, 10)))
 	p := int(h.Sum32()) % n
-	preferred = coordinatorEndorserPool[p]
-	s := (p + failoverOffset) % n
-	if s < 0 {
-		s += n
-	}
-	current = coordinatorEndorserPool[s]
-	log.L(ctx).Debugf("endorser coordinator preferred %q current %q (failoverOffset=%d preferredIndex=%d pool %+v)", preferred, current, failoverOffset, p, coordinatorEndorserPool)
-	return preferred, current
+	selected := coordinatorEndorserPool[p]
+	log.L(ctx).Debugf("endorser coordinator selected %q (selectedIndex=%d pool %+v)", selected, p, coordinatorEndorserPool)
+	return selected
 }
 
 // DecodeNewBlockHeight extracts the new block height from a NewBlockEvent and determines

@@ -75,7 +75,6 @@ type coordinator struct {
 
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop              *statemachine.StateMachineEventLoop[State, *coordinator]
-	preferredActiveCoordinator         string
 	currentActiveCoordinator           string
 	previousActiveCoordinatorNode      string
 	activeCoordinatorState             State // only used when we are not the active coordinator
@@ -259,11 +258,9 @@ func (c *coordinator) initializeFromContractConfig(ctx context.Context) error {
 		if err != nil {
 			return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidStaticCoordinator, c.contractAddress.String(), staticCoordinator)
 		}
-		c.preferredActiveCoordinator = node
 		c.currentActiveCoordinator = node
 		log.L(ctx).Debugf("static coordinator node for contract %s validated and set: %s", c.contractAddress.String(), node)
 	case prototk.ContractConfig_COORDINATOR_SENDER:
-		c.preferredActiveCoordinator = c.nodeName
 		c.currentActiveCoordinator = c.nodeName
 		log.L(ctx).Debugf("coordinator selection is SENDER mode; active coordinator set to self: %s", c.nodeName)
 	case prototk.ContractConfig_COORDINATOR_ENDORSER:

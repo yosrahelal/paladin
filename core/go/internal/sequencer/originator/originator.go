@@ -63,9 +63,7 @@ type originator struct {
 
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop              *statemachine.StateMachineEventLoop[State, *originator]
-	preferredActiveCoordinator         string
 	currentActiveCoordinator           string
-	failoverOffset                     int // starts at 0; increment on unavailability; reset on epoch
 	previousActiveCoordinatorNode      string
 	heartbeatIntervalsSinceLastReceive int
 	transactionsByID                   map[uuid.UUID]transaction.OriginatorTransaction
@@ -74,9 +72,8 @@ type originator struct {
 	newBlockRangeEpoch                 bool     // sticky for the current NewBlock event: guards on Select
 	coordinatorEndorserPool            []string // Sorted deduped endorser node names for COORDINATOR_ENDORSER mode
 	watchingPreviousCoordinatorFlush   bool     // Watching-phase tracking: set when coordinator changes; cleared on first closing heartbeat or if inactive thresholds are exceeded
-	// One-shot flags: set when a condition is detected; cleared when the handler that performs the action runs.
-	needsRedelegate          bool // Set by applyHeartbeatReceived when the heartbeat reveals a need to redelegate; cleared by sendDelegationRequest
-	needsFailoverOffsetReset bool // Set on new block range epoch in UpdateBlockHeight; cleared after endorser Select resets failover offset.
+	// One-shot flag: set when a condition is detected; cleared when the handler that performs the action runs.
+	needsRedelegate bool // Set by applyHeartbeatReceived when the heartbeat reveals a need to redelegate; cleared by sendDelegationRequest
 
 	/* Config */
 	nodeName            string
@@ -85,11 +82,10 @@ type originator struct {
 	inactiveGracePeriod int // expressed as a multiple of heartbeat intervals
 
 	/* Dependencies */
-	domainAPI                         components.DomainSmartContract
-	transportWriter                   transport.TransportWriter
-	engineIntegration                 common.EngineIntegration
-	metrics                           metrics.DistributedSequencerMetrics
-	queueActiveCoordinatorUnavailable func(ctx context.Context, newActiveCoordinator string)
+	domainAPI         components.DomainSmartContract
+	transportWriter   transport.TransportWriter
+	engineIntegration common.EngineIntegration
+	metrics           metrics.DistributedSequencerMetrics
 }
 
 func NewOriginator(
@@ -100,19 +96,17 @@ func NewOriginator(
 	configuration *pldconf.SequencerConfig,
 	metrics metrics.DistributedSequencerMetrics,
 	domainAPI components.DomainSmartContract,
-	queueActiveCoordinatorUnavailable func(ctx context.Context, newActiveCoordinator string),
 ) *originator {
 	o := &originator{
-		nodeName:                          nodeName,
-		transactionsByID:                  make(map[uuid.UUID]transaction.OriginatorTransaction),
-		transportWriter:                   transportWriter,
-		blockRangeSize:                    confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
-		contractAddress:                   contractAddress,
-		engineIntegration:                 engineIntegration,
-		metrics:                           metrics,
-		inactiveGracePeriod:               confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod),
-		domainAPI:                         domainAPI,
-		queueActiveCoordinatorUnavailable: queueActiveCoordinatorUnavailable,
+		nodeName:            nodeName,
+		transactionsByID:    make(map[uuid.UUID]transaction.OriginatorTransaction),
+		transportWriter:     transportWriter,
+		blockRangeSize:      confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
+		contractAddress:     contractAddress,
+		engineIntegration:   engineIntegration,
+		metrics:             metrics,
+		inactiveGracePeriod: confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod),
+		domainAPI:           domainAPI,
 	}
 
 	originatorEventQueueSize := confutil.IntMin(configuration.OriginatorEventQueueSize, pldconf.SequencerMinimum.OriginatorEventQueueSize, *pldconf.SequencerDefaults.OriginatorEventQueueSize)
@@ -158,11 +152,9 @@ func (o *originator) initializeFromContractConfig(ctx context.Context) error {
 		if err != nil {
 			return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidStaticCoordinator, o.contractAddress.String(), staticCoordinator)
 		}
-		o.preferredActiveCoordinator = node
 		o.currentActiveCoordinator = node
 		log.L(ctx).Debugf("static coordinator node for contract %s validated and set: %s", o.contractAddress.String(), node)
 	case prototk.ContractConfig_COORDINATOR_SENDER:
-		o.preferredActiveCoordinator = o.nodeName
 		o.currentActiveCoordinator = o.nodeName
 		log.L(ctx).Debugf("coordinator selection is SENDER mode; active coordinator set to self: %s", o.nodeName)
 	case prototk.ContractConfig_COORDINATOR_ENDORSER:

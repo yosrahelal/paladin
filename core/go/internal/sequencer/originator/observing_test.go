@@ -80,70 +80,6 @@ func Test_validator_IsHeartbeatFromCurrentActiveCoordinator_FalseWhenFromOtherNo
 	assert.False(t, ok)
 }
 
-func Test_validator_IsHeartbeatFromPreferredActiveCoordinator_TrueWhenActiveFromPreferred(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		PreferredActiveCoordinator("nodeA").
-		NodeName("self").
-		Build()
-	event := &common.HeartbeatReceivedEvent{}
-	event.From = "nodeA"
-	event.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
-	ok, err := validator_IsHeartbeatFromPreferredActiveCoordinator(ctx, o, event)
-	require.NoError(t, err)
-	assert.True(t, ok)
-}
-
-func Test_validator_IsHeartbeatFromPreferredActiveCoordinator_FalseWhenFlushFromPreferred(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		PreferredActiveCoordinator("nodeA").
-		NodeName("self").
-		Build()
-	event := &common.HeartbeatReceivedEvent{}
-	event.From = "nodeA"
-	event.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Flush}
-	ok, err := validator_IsHeartbeatFromPreferredActiveCoordinator(ctx, o, event)
-	require.NoError(t, err)
-	assert.False(t, ok)
-}
-
-func Test_guard_PreferredAndCurrentDiffer_TrueWhenDifferent(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		PreferredActiveCoordinator("nodeA").
-		CurrentActiveCoordinator("nodeB").
-		Build()
-	assert.True(t, guard_PreferredAndCurrentDiffer(ctx, o))
-}
-
-func Test_guard_PreferredAndCurrentDiffer_FalseWhenSame(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		PreferredActiveCoordinator("nodeA").
-		CurrentActiveCoordinator("nodeA").
-		Build()
-	assert.False(t, guard_PreferredAndCurrentDiffer(ctx, o))
-}
-
-func Test_action_ResetCurrentToPreferred_SetsCurrentAndResetsCounters(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		PreferredActiveCoordinator("nodeA").
-		CurrentActiveCoordinator("nodeB").
-		FailoverOffset(1).
-		HeartbeatIntervalsSinceLastReceive(3).
-		Build()
-	require.Equal(t, "nodeB", o.currentActiveCoordinator)
-
-	err := action_ResetCurrentToPreferred(ctx, o, nil)
-	require.NoError(t, err)
-
-	assert.Equal(t, "nodeA", o.currentActiveCoordinator)
-	assert.Equal(t, 0, o.failoverOffset)
-	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
-}
-
 func Test_guard_InactiveGracePeriodExceeded_WhileObserving_TrueWhenCounterExceedsThreshold(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
@@ -188,31 +124,9 @@ func Test_ProcessEvent_HeartbeatReceivedWhileObserving_FromCurrentActiveCoordina
 	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
 }
 
-func Test_ProcessEvent_HeartbeatReceivedWhileObserving_FromPreferredActiveCoordinator_RealignsCurrent(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		PreferredActiveCoordinator("nodeA").
-		CurrentActiveCoordinator("nodeB").
-		FailoverOffset(1).
-		NodeName("self@selfNode").
-		HeartbeatIntervalsSinceLastReceive(5).
-		InactiveGracePeriod(100).
-		Build()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = "nodeA"
-	heartbeatEvent.ContractAddress = o.contractAddress
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
-	assert.Equal(t, State_Observing, o.GetCurrentState())
-	assert.Equal(t, "nodeA", o.currentActiveCoordinator)
-	assert.Equal(t, 0, o.failoverOffset)
-	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
-}
-
 func Test_ProcessEvent_HeartbeatReceivedWhileObserving_FromUnrelatedNode_NoChange(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		PreferredActiveCoordinator("nodeA").
 		CurrentActiveCoordinator("nodeB").
 		NodeName("self@selfNode").
 		HeartbeatIntervalsSinceLastReceive(5).

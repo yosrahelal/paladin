@@ -44,7 +44,6 @@ const (
 const (
 	Event_CoordinatorCreated EventType = iota + common.Event_HeartbeatReceived + 1
 	Event_TransactionsDelegated
-	Event_ActiveCoordinatorUnavailable
 )
 
 // Type aliases for the generic statemachine types, specialized for coordinator
@@ -58,11 +57,6 @@ type (
 	StateDefinition  = statemachine.StateDefinition[State, *coordinator]
 	StateDefinitions = statemachine.StateDefinitions[State, *coordinator]
 )
-
-// TODO AM: something to think about
-// does a node who is endorsing in a privacy group but not submitting need a way to understand that the preferred active
-// coordinator has become unavailable?
-// I think the simplest way is to endorse everything that comes in? Are there knock on implications for this?
 
 var stateDefinitionsMap = StateDefinitions{
 	State_Initial: {
@@ -88,37 +82,29 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Active,
 				}},
 			},
-		common.Event_HeartbeatReceived: {
-			Validator: statemachine.ValidatorOr(
-				validator_IsHeartbeatFromCurrentActiveCoordinator,
-				validator_IsHeartbeatFromPreferredActiveCoordinator,
-				validator_IsHeartbeatFromActiveWhenWeArePreferred,
-			),
-			Actions: []ActionRule{{Action: action_HeartbeatReceived}},
-			Transitions: []Transition{{
-				// Preferred coordinator awakens directly to Active — no handover needed.
-				To: State_Active,
-				If: guard_IsPreferredActiveCoordinator,
-			}, {
-				To: State_Observing,
-			}},
-		},
-		common.Event_NewBlock: {
-			Actions: []ActionRule{
-				{
-					Action: action_UpdateBlockHeight,
-				},
-				{
-					Action: action_ExpireGrapherLocks,
-				},
-				{
-					// If we have entered a new block range, action_SelectActiveCoordinator refreshes preferred/current.
-					// We stay in Idle until delegated work arrives; then we accept if guard_IsCurrentActiveCoordinator.
-					If:     guard_IsNewBlockRangeEpoch,
-					Action: action_SelectActiveCoordinator,
+			common.Event_HeartbeatReceived: {
+				Validator: validator_IsHeartbeatFromCurrentActiveCoordinator,
+				Actions:   []ActionRule{{Action: action_HeartbeatReceived}},
+				Transitions: []Transition{{
+					To: State_Observing,
+				}},
+			},
+			common.Event_NewBlock: {
+				Actions: []ActionRule{
+					{
+						Action: action_UpdateBlockHeight,
+					},
+					{
+						Action: action_ExpireGrapherLocks,
+					},
+					{
+						// If we have entered a new block range, action_SelectActiveCoordinator refreshes the active coordinator.
+						// We stay in Idle until delegated work arrives; then we accept if guard_IsCurrentActiveCoordinator.
+						If:     guard_IsNewBlockRangeEpoch,
+						Action: action_SelectActiveCoordinator,
+					},
 				},
 			},
-		},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
 					{
@@ -130,13 +116,6 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
-			Event_ActiveCoordinatorUnavailable: {
-				Actions: []ActionRule{
-					// Our originator must be trying to do something to detect this unavailability and select a new active coordinator.
-					// We don't transition in response to this event but we will likely see a heartbeat or delegation request very soon.
-					{Action: action_CurrentActiveCoordinatorUnavailable},
-				},
-			},
 		},
 	},
 	State_Observing: {
@@ -145,10 +124,11 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
 			},
 			common.Event_HeartbeatReceived: {
+				// TODO: this could be more nuanced by tracking the coorrect ordering of flush -> close -> active across
+				// the previous and current coordinators
 				Validator: statemachine.ValidatorOr(
 					validator_IsHeartbeatFromCurrentActiveCoordinator,
-					validator_IsHeartbeatFromPreferredActiveCoordinator,
-				),
+					validator_IsHeartbeatFromPreviousActiveCoordinator),
 				Actions: []ActionRule{
 					{Action: action_HeartbeatReceived},
 					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
@@ -178,21 +158,7 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 				Transitions: []Transition{{
 					To: State_Elect,
-					If: guard_IsPreferredActiveCoordinator,
-				}},
-			},
-			Event_ActiveCoordinatorUnavailable: {
-				Actions: []ActionRule{
-					{Action: action_CurrentActiveCoordinatorUnavailable},
-				},
-				// It should be impossible to receive this event in observing as our own inactive transition to
-				// idle should happen in response to lack of heartbeats before the originator can queue this event
-				// for us, but we include the path for completeness.
-				// From idle we can
-				// - accept delegations and move to active if we are the new active coordinator
-				// - accept heartbeats and move to observing if we are not the new active coordinator
-				Transitions: []Transition{{
-					To: State_Idle,
+					If: guard_IsCurrentActiveCoordinator,
 				}},
 			},
 		},
@@ -287,30 +253,6 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardNot(guard_HasTransactionsInflight),
 				}},
 			},
-			// If we've recevied a heartbeat from the preferred active coordinator we must stop coordinating immediately.
-			// We flush the transactions we have past the point of no return and track them through to completion; however,
-			// the protocol doesn't currently attempt any handover of locks, instead tolerating what will be retryable on chain
-			// failures.
-			// TODO AM: think about checking block height tolerance and handover of locks here https://github.com/LFDT-Paladin/paladin/issues/1141
-			common.Event_HeartbeatReceived: {
-				Validator: validator_IsHeartbeatFromPreferredActiveCoordinator,
-				Actions: []ActionRule{
-					{Action: action_HeartbeatReceived},
-					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-				},
-				Transitions: []Transition{{
-					To: State_Flush,
-					If: statemachine.GuardAnd(
-						statemachine.GuardNot(guard_FlushComplete),
-					),
-				}, {
-					To: State_Closing,
-					If: statemachine.GuardAnd(
-						guard_FlushComplete,
-					),
-				}},
-			},
 			Event_TransactionsDelegated: {
 				// don't select a transaction here since events must to move into pooled state before
 				// they can be selected and there is a separate event for that
@@ -355,7 +297,7 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
-			// TODO: We are periodically flushing in all coordinator selection modes, not just coordinator endorser, where the preferred
+			// TODO: We are periodically flushing in all coordinator selection modes, not just coordinator endorser, where the
 			// active coordinator can change. This allows us to rotate the signing identity on a regular basis, but we might want to consider
 			// making this behaviour configurable via the domain (e.g. when the domain will provide the signing identity, or is configured to
 			// use a fixed signing identity)
@@ -384,8 +326,7 @@ var stateDefinitionsMap = StateDefinitions{
 						Action: action_CleanUpTransactionsNotYetDispatched,
 					},
 				},
-				// All of these transitions only apply if we are entering a new block range. After action_SelectActiveCoordinator on epoch,
-				// preferredActiveCoordinator and currentActiveCoordinator always match.
+				// All of these transitions only apply if we are entering a new block range.
 				// If we reach these transitions without having any inflight transactions, we must have just cleaned up the transactions
 				// that hadn't yet reached the point of no return, otherwise we would have been in State_Idle, not State_Active. This is why
 				// we preemptively transition to State_Active/State_Observing, since we know the transactions we cleaned up should be immediately
@@ -475,11 +416,6 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardAnd(guard_FlushComplete, guard_IsCurrentActiveCoordinator),
 				}},
 			},
-			Event_ActiveCoordinatorUnavailable: {
-				Actions: []ActionRule{
-					{Action: action_CurrentActiveCoordinatorUnavailable},
-				},
-			},
 		},
 	},
 	State_Closing: {
@@ -492,10 +428,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{{Action: action_RejectDelegatedTransactions}},
 			},
 			common.Event_HeartbeatReceived: {
-				Validator: statemachine.ValidatorOr(
-					validator_IsHeartbeatFromCurrentActiveCoordinator,
-					validator_IsHeartbeatFromPreferredActiveCoordinator,
-				),
+				Validator: validator_IsHeartbeatFromCurrentActiveCoordinator,
 				Actions: []ActionRule{
 					{Action: action_HeartbeatReceived},
 					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
@@ -570,24 +503,6 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardAnd(
 						guard_IsCurrentActiveCoordinator,
 						guard_InactiveGracePeriodExpiredSinceStateChange,
-						statemachine.GuardNot(guard_HasTransactionsInflight),
-					),
-				}},
-			},
-			Event_ActiveCoordinatorUnavailable: {
-				Actions: []ActionRule{
-					{Action: action_CurrentActiveCoordinatorUnavailable},
-				},
-				Transitions: []Transition{{
-					To: State_Active,
-					If: statemachine.GuardAnd(
-						guard_IsCurrentActiveCoordinator,
-						guard_HasTransactionsInflight,
-					),
-				}, {
-					To: State_Idle,
-					If: statemachine.GuardAnd(
-						guard_IsCurrentActiveCoordinator,
 						statemachine.GuardNot(guard_HasTransactionsInflight),
 					),
 				}},

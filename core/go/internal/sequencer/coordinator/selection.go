@@ -18,44 +18,22 @@ package coordinator
 import (
 	"context"
 
-	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
 
-// action_CurrentActiveCoordinatorUnavailable sets current from the originator's newly selected active coordinator
-// preferred coordinator does not change
-func action_CurrentActiveCoordinatorUnavailable(ctx context.Context, c *coordinator, event common.Event) error {
-	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
-		return nil
-	}
-	if c.currentActiveCoordinator == c.nodeName {
-		log.L(ctx).Warnf("Received an active coordinator unavailable event while in State_Active.")
-		return nil
-	}
-	ev := event.(*ActiveCoordinatorUnavailableEvent)
-
-	c.previousActiveCoordinatorNode = c.currentActiveCoordinator
-	c.currentActiveCoordinator = ev.NewActiveCoordinator
-	return nil
-}
-
 func action_SelectActiveCoordinator(ctx context.Context, c *coordinator, _ common.Event) error {
 	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
-		// For STATIC and SENDER modes, preferred/current coordinator are set once at Start time and never change.
+		// For STATIC and SENDER modes, the coordinator is set once at Start time and never changes.
 		return nil
 	}
-	selectedPreferred, selectedCurrent := common.SelectCoordinatorNode(
+	c.previousActiveCoordinatorNode = c.currentActiveCoordinator
+	c.currentActiveCoordinator = common.SelectCoordinatorNode(
 		ctx,
 		c.coordinatorEndorserPool,
 		c.currentBlockHeight,
 		c.coordinatorSelectionBlockRange,
-		0,
 	)
-	c.previousActiveCoordinatorNode = c.currentActiveCoordinator
-	c.preferredActiveCoordinator = selectedPreferred
-	c.currentActiveCoordinator = selectedCurrent
-
 	return nil
 }
 

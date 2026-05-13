@@ -114,40 +114,13 @@ func guard_InactiveGracePeriodExceeded(_ context.Context, o *originator) bool {
 	return o.heartbeatIntervalsSinceLastReceive >= o.inactiveGracePeriod
 }
 
-func guard_PreferredAndCurrentDiffer(_ context.Context, o *originator) bool {
-	return o.preferredActiveCoordinator != o.currentActiveCoordinator
-}
-
 func validator_IsHeartbeatFromCurrentActiveCoordinator(_ context.Context, o *originator, event common.Event) (bool, error) {
 	e := event.(*common.HeartbeatReceivedEvent)
 	return o.currentActiveCoordinator == e.From, nil
 }
 
-func validator_IsHeartbeatFromPreferredActiveCoordinator(_ context.Context, o *originator, event common.Event) (bool, error) {
-	e := event.(*common.HeartbeatReceivedEvent)
-	return o.preferredActiveCoordinator == e.From && e.CoordinatorSnapshot.CoordinatorState == common.CoordinatorState_Active, nil
-}
-
 func action_ResetHeartbeatIntervalsSinceLastReceive(_ context.Context, o *originator, _ common.Event) error {
 	o.heartbeatIntervalsSinceLastReceive = 0
-	return nil
-}
-
-func action_ResetCurrentToPreferred(ctx context.Context, o *originator, _ common.Event) error {
-	log.L(ctx).Debugf("preferred coordinator %s is active again; realigning current from %s", o.preferredActiveCoordinator, o.currentActiveCoordinator)
-	o.currentActiveCoordinator = o.preferredActiveCoordinator
-	o.failoverOffset = 0
-	o.heartbeatIntervalsSinceLastReceive = 0
-	return nil
-}
-
-// action_IncrementFailoverOffset advances the endorser ring step. No-op in STATIC/SENDER modes.
-func action_IncrementFailoverOffset(ctx context.Context, o *originator, _ common.Event) error {
-	if o.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
-		return nil
-	}
-	log.L(ctx).Debugf("Current active coordinator %s is unavailable: incrementing failover offset from %d to %d", o.currentActiveCoordinator, o.failoverOffset, o.failoverOffset+1)
-	o.failoverOffset++
 	return nil
 }
 
@@ -218,7 +191,6 @@ func (o *originator) removeTransaction(ctx context.Context, txnID uuid.UUID) {
 
 func action_UpdateBlockHeight(_ context.Context, o *originator, event common.Event) error {
 	o.currentBlockHeight, o.newBlockRangeEpoch = common.DecodeNewBlockHeight(o.currentBlockHeight, o.blockRangeSize, event)
-	o.needsFailoverOffsetReset = o.newBlockRangeEpoch
 	return nil
 }
 
@@ -228,33 +200,20 @@ func guard_IsNewBlockRangeEpoch(_ context.Context, o *originator) bool {
 
 func action_SelectActiveCoordinator(ctx context.Context, o *originator, _ common.Event) error {
 	if o.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
-		// For STATIC and SENDER modes, preferred/current coordinator are set once at construction time and never change.
+		// For STATIC and SENDER modes, the coordinator is set once at construction time and never changes.
 		return nil
 	}
-	if o.needsFailoverOffsetReset || o.preferredActiveCoordinator == "" {
-		o.failoverOffset = 0
-	}
 	o.previousActiveCoordinatorNode = o.currentActiveCoordinator
-	o.preferredActiveCoordinator, o.currentActiveCoordinator = common.SelectCoordinatorNode(
+	o.currentActiveCoordinator = common.SelectCoordinatorNode(
 		ctx,
 		o.coordinatorEndorserPool,
 		o.currentBlockHeight,
 		o.blockRangeSize,
-		o.failoverOffset,
 	)
-	if o.currentActiveCoordinator != o.previousActiveCoordinatorNode {
-		o.heartbeatIntervalsSinceLastReceive = 0
-		// When the coordinator changed due to inactivity failover (failoverOffset > 0, not an epoch reset),
-		// notify the coordinator so it can update its own currentActiveCoordinator and set a flag to redelegate
-		if o.failoverOffset > 0 {
-			o.needsRedelegate = true
-			o.queueActiveCoordinatorUnavailable(ctx, o.currentActiveCoordinator)
-		}
-	}
-	o.needsFailoverOffsetReset = false
-	// If the coordinator has changed because of new block-range epoch, start watching for the previous coordinator's closing heartbeat.
-	// If we've selected a new coordinator because of inactivity, there will be no closing heartbeat to look for.
 	if o.newBlockRangeEpoch && o.currentActiveCoordinator != o.previousActiveCoordinatorNode && o.previousActiveCoordinatorNode != "" {
+		o.heartbeatIntervalsSinceLastReceive = 0
+		// If the coordinator has changed because of a new block-range epoch, start watching for the previous
+		// coordinator's closing heartbeat before sending a delegation request to the new one.
 		o.watchingPreviousCoordinatorFlush = true
 	}
 	return nil

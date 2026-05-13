@@ -54,7 +54,6 @@ type CoordinatorBuilderForTesting struct {
 	metrics                                  metrics.DistributedSequencerMetrics
 	sequencerConfig                          *pldconf.SequencerConfig
 	originatorNodePool                       *[]string
-	preferredActiveCoordinator               *string
 	currentActiveCoordinator                 *string
 	previousActiveCoordinatorNode            *string
 	newBlockRangeEpoch                       *bool
@@ -233,11 +232,6 @@ func (b *CoordinatorBuilderForTesting) NodeName(name string) *CoordinatorBuilder
 	return b
 }
 
-func (b *CoordinatorBuilderForTesting) PreferredActiveCoordinator(node string) *CoordinatorBuilderForTesting {
-	b.preferredActiveCoordinator = &node
-	return b
-}
-
 func (b *CoordinatorBuilderForTesting) CurrentActiveCoordinator(node string) *CoordinatorBuilderForTesting {
 	b.currentActiveCoordinator = &node
 	return b
@@ -385,16 +379,8 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	if b.originatorNodePool != nil {
 		coordinator.originatorNodePool = *b.originatorNodePool
 	}
-	switch {
-	case b.currentActiveCoordinator != nil && b.preferredActiveCoordinator != nil:
+	if b.currentActiveCoordinator != nil {
 		coordinator.currentActiveCoordinator = *b.currentActiveCoordinator
-		coordinator.preferredActiveCoordinator = *b.preferredActiveCoordinator
-	case b.currentActiveCoordinator != nil:
-		coordinator.currentActiveCoordinator = *b.currentActiveCoordinator
-		coordinator.preferredActiveCoordinator = *b.currentActiveCoordinator
-	case b.preferredActiveCoordinator != nil:
-		coordinator.preferredActiveCoordinator = *b.preferredActiveCoordinator
-		coordinator.currentActiveCoordinator = *b.preferredActiveCoordinator
 	}
 	if b.previousActiveCoordinatorNode != nil {
 		coordinator.previousActiveCoordinatorNode = *b.previousActiveCoordinatorNode

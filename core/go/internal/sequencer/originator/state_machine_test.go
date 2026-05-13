@@ -38,7 +38,7 @@ func TestStateMachine_InitializeOK(t *testing.T) {
 }
 
 // Firing OriginatorCreatedEvent from State_Initial transitions to State_Idle;
-// action_SelectActiveCoordinator runs and seeds preferredActiveCoordinator from the pool.
+// action_SelectActiveCoordinator runs and seeds currentActiveCoordinator from the pool.
 func TestStateMachine_WhenCreated_TransitionsToIdle(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Initial).
@@ -49,9 +49,7 @@ func TestStateMachine_WhenCreated_TransitionsToIdle(t *testing.T) {
 		Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &OriginatorCreatedEvent{}))
 	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.NotEmpty(t, o.preferredActiveCoordinator, "action_SelectActiveCoordinator must seed preferredActiveCoordinator from pool")
 	assert.NotEmpty(t, o.currentActiveCoordinator, "action_SelectActiveCoordinator must seed currentActiveCoordinator from pool")
-	assert.Equal(t, o.currentActiveCoordinator, o.preferredActiveCoordinator, "action_SelectActiveCoordinator must set currentActiveCoordinator to preferredActiveCoordinator")
 }
 
 func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromCurrentActiveCoordinator(t *testing.T) {
@@ -75,30 +73,9 @@ func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromCurrentActiveCoord
 	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
 }
 
-func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromPreferredActiveCoordinator_RealignsCurrentAndTransitions(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).
-		PreferredActiveCoordinator("node1").
-		CurrentActiveCoordinator("node2").
-		FailoverOffset(1).
-		NodeName("node2")
-	o, _ := builder.Build()
-	ca := builder.GetContractAddress()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{
-		From:                "node1",
-		ContractAddress:     &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
-	}
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
-	assert.Equal(t, State_Observing, o.GetCurrentState())
-	assert.Equal(t, "node1", o.currentActiveCoordinator)
-	assert.Equal(t, 0, o.failoverOffset)
-}
-
 func TestStateMachine_Idle_StaysIdle_OnHeartbeatReceivedFromUnrelatedNode(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(t, State_Idle).
-		PreferredActiveCoordinator("node2").
 		CurrentActiveCoordinator("node2").
 		NodeName("node1")
 	o, _ := builder.Build()
@@ -110,7 +87,7 @@ func TestStateMachine_Idle_StaysIdle_OnHeartbeatReceivedFromUnrelatedNode(t *tes
 	}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
 	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.Equal(t, "node2", o.currentActiveCoordinator)
+	assert.Equal(t, "node2", o.currentActiveCoordinator, "unrelated heartbeat must not change currentActiveCoordinator")
 }
 
 func TestStateMachine_Idle_ToSending_OnTransactionCreated(t *testing.T) {
@@ -144,7 +121,7 @@ func TestStateMachine_WhenIdle_NewEpoch_RefreshesCoordinatorSelectionStaysIdle(t
 		Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
 	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.Equal(t, "node2", o.preferredActiveCoordinator, "coordinator selection should refresh on epoch boundary")
+	assert.Equal(t, "node2", o.currentActiveCoordinator, "coordinator selection should refresh on epoch boundary")
 }
 
 // ── Observing state transitions ───────────────────────────────────────────────
@@ -232,40 +209,6 @@ func TestStateMachine_Sending_DoDelegateTransactions_OnHeartbeatReceived_IfHasDr
 	}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
 	assert.Equal(t, State_Sending, o.GetCurrentState())
-}
-
-func TestStateMachine_Sending_OnHeartbeatReceivedFromPreferredActiveCoordinator_RealignsAndRedelegates(t *testing.T) {
-	ctx := context.Background()
-	txID := uuid.New()
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
-	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
-	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		PreferredActiveCoordinator("node1").
-		CurrentActiveCoordinator("node2").
-		FailoverOffset(1).
-		NodeName("node3").
-		WithMockTransportWriter(t).
-		Transactions(mockTxn)
-	o, mocks := builder.Build()
-	ca := builder.GetContractAddress()
-	// action_ResetCurrentToPreferred realigns current → preferred ("node1") before delegation fires.
-	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, "node1", mock.Anything, mock.Anything).
-		Return(nil).Once()
-	// Preferred coordinator sends an Active heartbeat with an empty snapshot (our transactions are absent).
-	heartbeatEvent := &common.HeartbeatReceivedEvent{
-		From:            "node1",
-		ContractAddress: &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			CoordinatorState: common.CoordinatorState_Active,
-		},
-	}
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
-	assert.Equal(t, "node1", o.currentActiveCoordinator)
-	assert.Equal(t, 0, o.failoverOffset)
 }
 
 // A new transaction created in Sending while not watching a flush immediately delegates.
@@ -372,7 +315,6 @@ func TestOriginator_WhenWatchingPreviousFlush_ExitsOnPreviousClosingHeartbeat(t 
 		WatchingPreviousCoordinatorFlush(true).
 		PreviousActiveCoordinatorNode("node2").
 		CurrentActiveCoordinator("node1").
-		PreferredActiveCoordinator("node1").
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
 	ca := builder.GetContractAddress()
@@ -397,7 +339,6 @@ func TestOriginator_WhenWatchingPreviousFlush_ExitsOnHeartbeatFromNewActiveWhile
 		WatchingPreviousCoordinatorFlush(true).
 		PreviousActiveCoordinatorNode("node2").
 		CurrentActiveCoordinator("node1").
-		PreferredActiveCoordinator("node1").
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
 	ca := builder.GetContractAddress()
@@ -421,7 +362,6 @@ func TestOriginator_WhenWatchingPreviousFlush_ExitsOnHeartbeatIntervalInactivePa
 		HeartbeatIntervalsSinceLastReceive(0).
 		InactiveGracePeriod(1).
 		CurrentActiveCoordinator("node1").
-		PreferredActiveCoordinator("node1").
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
 	// Delegation fires to the current active coordinator ("node1"), bypassing the watching guard.
@@ -462,278 +402,3 @@ func TestOriginator_WhenSnapshotShowsMissingNonFinalTransaction_SetsNeedsRedeleg
 	}))
 }
 
-// ── Failover-offset / coordinator-walk behaviour ──────────────────────────────
-
-// In COORDINATOR_SENDER mode, action_IncrementFailoverOffset is a no-op — failoverOffset stays 0.
-func TestOriginator_WhenCoordinatorSenderMode_DoesNotMutateFailoverOffset(t *testing.T) {
-	ctx := context.Background()
-	txID := uuid.New()
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
-	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		// Default config is COORDINATOR_SENDER — no DomainContractConfig needed.
-		HeartbeatIntervalsSinceLastReceive(0).
-		InactiveGracePeriod(1).
-		Transactions(mockTxn).
-		Build()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
-	assert.Equal(t, 0, o.failoverOffset, "SENDER mode must not mutate failoverOffset")
-}
-
-// In COORDINATOR_ENDORSER mode, action_IncrementFailoverOffset advances the offset by one.
-func TestOriginator_WhenCoordinatorEndorserMode_UsesCyclicWalkOnlyWhenConfigured(t *testing.T) {
-	ctx := context.Background()
-	txID := uuid.New()
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
-	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-		}).
-		CoordinatorEndorserPool("node1", "node2").
-		BlockRangeSize(50).
-		CurrentBlockHeight(100).
-		HeartbeatIntervalsSinceLastReceive(0).
-		InactiveGracePeriod(1).
-		Transactions(mockTxn).
-		Build()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
-	assert.Equal(t, 1, o.failoverOffset, "ENDORSER mode must increment failoverOffset when grace exceeded")
-}
-
-// Exceeding the inactive grace period in ENDORSER mode advances the offset, re-selects coordinator,
-// and sends a delegation request to the new coordinator.
-func TestOriginator_WhenHeartbeatFromCurrentStalePastInactive_AdvancedFailoverOffsetAndRedelegates(t *testing.T) {
-	ctx := context.Background()
-	blockRange := uint64(50)
-	txID := uuid.New()
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
-	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	o, mocks := NewOriginatorBuilderForTesting(t, State_Sending).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-		}).
-		CoordinatorEndorserPool("node1", "node2", "node3").
-		BlockRangeSize(blockRange).
-		CurrentBlockHeight(150).
-		CurrentActiveCoordinator("node").
-		HeartbeatIntervalsSinceLastReceive(0).
-		InactiveGracePeriod(1).
-		WithMockTransportWriter(t).
-		Transactions(mockTxn).
-		Build()
-	// After failover offset increments, action_SelectActiveCoordinator re-picks from the pool.
-	// The test already asserts o.currentActiveCoordinator == "node3"; delegation goes to that same node.
-	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, "node3", mock.Anything, mock.Anything).
-		Return(nil).Once()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
-	assert.Equal(t, 1, o.failoverOffset, "failoverOffset must advance by one on inactive grace exceeded")
-	assert.Equal(t, "node3", o.currentActiveCoordinator, "coordinator must change when stepping to failover")
-}
-
-// Each HeartbeatInterval exceeding the grace period always advances the failover offset by one, stepping around the pool
-func TestOriginator_WhenRepeatedCurrentCoordinatorFailures_AdvanceFailoverOffsetAroundPool(t *testing.T) {
-	ctx := context.Background()
-	blockRange := uint64(50)
-	txID := uuid.New()
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
-	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-		}).
-		CoordinatorEndorserPool("node1", "node2", "node3").
-		BlockRangeSize(blockRange).
-		CurrentBlockHeight(150).
-		CurrentActiveCoordinator("node2").
-		PreferredActiveCoordinator("node2").
-		HeartbeatIntervalsSinceLastReceive(0).
-		InactiveGracePeriod(1).
-		Transactions(mockTxn).
-		Build()
-
-	// First HeartbeatInterval: offset 0→1, counter resets to 0 (new coordinator selected).
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
-	assert.Equal(t, 1, o.failoverOffset)
-	assert.Equal(t, "node3", o.currentActiveCoordinator, "coordinator must change when stepping to failover")
-	assert.Equal(t, "node2", o.preferredActiveCoordinator, "preferred coordinator must not change")
-	// Reset counter to 0 so next interval also exceeds grace.
-	o.heartbeatIntervalsSinceLastReceive = 0
-
-	// Second HeartbeatInterval: offset 1→2.
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
-	assert.Equal(t, 2, o.failoverOffset, "two consecutive inactive-grace intervals must advance offset to 2")
-	assert.Equal(t, "node1", o.currentActiveCoordinator, "coordinator must change when stepping to failover")
-	assert.Equal(t, "node2", o.preferredActiveCoordinator, "preferred coordinator must not change")
-}
-
-// A new block-range epoch resets failoverOffset to 0 even when currently on a fallback coordinator.
-func TestOriginator_WhenNewEpochWhileOnFallback_ResetsFailoverOffsetToZero(t *testing.T) {
-	ctx := context.Background()
-	blockRange := uint64(50)
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-		}).
-		CoordinatorEndorserPool("node1", "node2", "node3").
-		BlockRangeSize(blockRange).
-		CurrentBlockHeight(100).
-		CurrentActiveCoordinator("node3").
-		FailoverOffset(2).
-		Build()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
-	assert.Equal(t, 0, o.failoverOffset, "epoch boundary must reset failoverOffset to 0")
-}
-
-// ── Preferred-coordinator recovery (fallback → preferred) ─────────────────────
-
-// When on a fallback coordinator and the preferred sends an Active heartbeat,
-// the originator realigns current to preferred and redelegates all inflight transactions.
-func TestOriginator_WhenFallbackObservesPreferredActive_RedelegatesPerSpec(t *testing.T) {
-	ctx := context.Background()
-	txID := uuid.New()
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
-	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
-	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		PreferredActiveCoordinator("node1").
-		CurrentActiveCoordinator("node2").
-		FailoverOffset(1).
-		NodeName("node3").
-		WithMockTransportWriter(t).
-		Transactions(mockTxn)
-	o, mocks := builder.Build()
-	ca := builder.GetContractAddress()
-	// After realignment current = "node1"; delegation must go to the preferred coordinator.
-	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, "node1", mock.Anything, mock.Anything).
-		Return(nil).Once()
-	// Preferred sends Active heartbeat with an empty snapshot (our delegated tx is absent → dropped detection fires).
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "node1",
-		ContractAddress: &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			CoordinatorState: common.CoordinatorState_Active,
-		},
-	}))
-	assert.Equal(t, "node1", o.currentActiveCoordinator, "current must realign to preferred")
-	assert.Equal(t, 0, o.failoverOffset, "failoverOffset must reset when preferred is restored")
-}
-
-// Receiving only heartbeats from the fallback coordinator (with the transaction in the snapshot)
-// produces no failover signal — originator remains on fallback.
-func TestOriginator_WhenFallbackNeverReceivesPreferredHeartbeat_RemainsOnFallback(t *testing.T) {
-	ctx := context.Background()
-	preferred := "node1"
-	fallback := "node2"
-	txID := uuid.New()
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		PreferredActiveCoordinator(preferred).
-		CurrentActiveCoordinator(fallback).
-		FailoverOffset(1).
-		NodeName("node3").
-		Transactions(mockTxn)
-	o, mocks := builder.Build()
-	ca := builder.GetContractAddress()
-	// Fallback sends heartbeat with the transaction in its snapshot — no drop detected, no redelegate.
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            fallback,
-		ContractAddress: &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			PooledTransactions: []*common.SnapshotPooledTransaction{
-				{ID: txID, Originator: "node3"},
-			},
-		},
-	}))
-	assert.Equal(t, fallback, o.currentActiveCoordinator, "current must remain on fallback coordinator")
-	assert.Equal(t, 1, o.failoverOffset, "failoverOffset must not change when fallback heartbeat is healthy")
-	assert.False(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "no redelegate when fallback snapshot is healthy")
-}
-
-// When on a fallback coordinator and the preferred sends an Active heartbeat,
-// the originator redelegates all work to the preferred.
-func TestOriginator_WhenOnFallbackAndPreferredBecomesVisible_RedelegatesNewWorkToPreferred(t *testing.T) {
-	ctx := context.Background()
-	preferred := "node1"
-	fallback := "node2"
-	txID := uuid.New()
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
-	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
-	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		PreferredActiveCoordinator(preferred).
-		CurrentActiveCoordinator(fallback).
-		FailoverOffset(1).
-		NodeName("node3").
-		WithMockTransportWriter(t).
-		Transactions(mockTxn)
-	o, mocks := builder.Build()
-	ca := builder.GetContractAddress()
-	// After realignment current = preferred; all work is redelegated to the preferred coordinator.
-	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, preferred, mock.Anything, mock.Anything).
-		Return(nil).Once()
-	// Preferred sends Active heartbeat with empty snapshot (transaction not listed → dropped detected).
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            preferred,
-		ContractAddress: &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			CoordinatorState: common.CoordinatorState_Active,
-		},
-	}))
-	assert.Equal(t, preferred, o.currentActiveCoordinator, "originator must realign current to preferred")
-	assert.Equal(t, 0, o.failoverOffset, "failoverOffset resets when returning to preferred")
-}
-
-// When watching the previous flush AND on a fallback (failoverOffset > 0) AND inactive grace
-// is exceeded, the inactive-grace HeartbeatInterval path clears watching AND sends delegation
-// (the inactive-grace path bypasses the guard_WatchingPreviousCoordinatorFlush guard).
-func TestOriginator_WhenWatchingPreviousFlushWhileRepointingToFallback_ReconcilesPerSpec(t *testing.T) {
-	ctx := context.Background()
-	pool := []string{"node1", "node2", "node3"}
-	txID := uuid.New()
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
-	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	o, mocks := NewOriginatorBuilderForTesting(t, State_Sending).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-		}).
-		CoordinatorEndorserPool(pool...).
-		BlockRangeSize(50).
-		CurrentBlockHeight(100).
-		WatchingPreviousCoordinatorFlush(true).
-		FailoverOffset(1).
-		HeartbeatIntervalsSinceLastReceive(0).
-		InactiveGracePeriod(1).
-		WithMockTransportWriter(t).
-		Transactions(mockTxn).
-		Build()
-	// After action_IncrementFailoverOffset (offset 1→2) and action_SelectActiveCoordinator, the
-	// new current coordinator is determined by SelectCoordinatorNode(pool, 100, 50, 2).
-	// The inactive-grace path then delegates to that coordinator regardless of the watching flag.
-	_, expectedCoordinator := common.SelectCoordinatorNode(ctx, pool, 100, 50, 2)
-	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, expectedCoordinator, mock.Anything, mock.Anything).
-		Return(nil).Once()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
-	assert.False(t, o.watchingPreviousCoordinatorFlush, "inactive-grace path must clear watching even when on fallback")
-	assert.Equal(t, expectedCoordinator, o.currentActiveCoordinator, "current coordinator must match selection after failover step")
-}
