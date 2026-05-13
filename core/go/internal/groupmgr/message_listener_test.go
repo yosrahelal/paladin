@@ -559,8 +559,10 @@ func TestClosedRetryingWritingCheckpoint(t *testing.T) {
 	mdb := mc.db.Mock
 	mdb.ExpectExec("INSERT.*message_listeners").WillReturnResult(driver.ResultNoRows)
 	mdb.ExpectQuery("SELECT.*message_listener_checkpoints").WillReturnRows(sqlmock.NewRows([]string{}))
-	mdb.ExpectExec("INSERT.*message_listener_checkpoints").WillReturnError(fmt.Errorf("pop"))
 	mockMessages(1, mc)
+	mdb.ExpectBegin()
+	mdb.ExpectExec("INSERT.*message_listener_checkpoints").WillReturnError(fmt.Errorf("pop"))
+	mdb.ExpectRollback()
 
 	err := gm.CreateMessageListener(ctx, &pldapi.PrivacyGroupMessageListener{
 		Name:    "listener1",
