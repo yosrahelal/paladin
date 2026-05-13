@@ -654,6 +654,22 @@ func TestDeliverBatchCancelledCtxNotifyReceiver(t *testing.T) {
 
 }
 
+func TestSetActiveAlreadyActive(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	l := &messageListener{
+		ctx:          ctx,
+		newReceivers: make(chan bool, 1),
+	}
+
+	receiver := l.addReceiver(newTestMessageReceiver(nil))
+	receiver.SetActive()
+	receiver.SetActive() // hits the "already active" early return
+
+	require.Len(t, l.receivers, 1)
+}
+
 func TestNextMessageReceiverSkipsInactive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
