@@ -18,23 +18,18 @@ package coordinator
 import (
 	"context"
 
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 )
 
 // Guard type is defined as a type alias in state_machine.go using statemachine.Guard[*coordinator]
 
-func guard_ActiveCoordinatorFlushComplete(_ context.Context, c *coordinator) bool {
-	return c.activeCoordinatorState == State_Closing
-}
-
-// Function flushComplete returns true if there are no transactions past the point of no return that haven't been confirmed yet
-func guard_FlushComplete(ctx context.Context, c *coordinator) bool {
+func guard_HasUnconfirmedDispatchedTransactions(ctx context.Context, c *coordinator) bool {
 	return len(
 		c.getTransactionsInStates(ctx, []transaction.State{
-			transaction.State_Ready_For_Dispatch,
 			transaction.State_Dispatched,
 		}),
-	) == 0
+	) > 0
 }
 
 // Function noTransactionsInflight returns true if all transactions that have been delegated to this coordinator have been confirmed/reverted
@@ -47,10 +42,6 @@ func guard_ClosingGracePeriodExpired(_ context.Context, c *coordinator) bool {
 	return c.heartbeatIntervalsSinceStateChange >= c.closingGracePeriod
 }
 
-func guard_InactiveGracePeriodExpiredSinceStateChange(_ context.Context, c *coordinator) bool {
-	return c.heartbeatIntervalsSinceStateChange >= c.inactiveGracePeriod
-}
-
 func guard_HasTransactionAssembling(ctx context.Context, c *coordinator) bool {
 	//TODO this could be optimized by keeping track of a boolean that is switched from the onStateChange handler
 	return len(
@@ -60,6 +51,28 @@ func guard_HasTransactionAssembling(ctx context.Context, c *coordinator) bool {
 	) > 0
 }
 
-func guard_IsCurrentActiveCoordinator(ctx context.Context, c *coordinator) bool {
+// guard_IsCurrentActiveCoordinator returns true when this node believes it is the current active
+// coordinator (i.e. index 0 in the priority list, or set by static/sender mode).
+func guard_IsCurrentActiveCoordinator(_ context.Context, c *coordinator) bool {
 	return c.nodeName == c.currentActiveCoordinator
+}
+
+// guard_SigningIdentityUsed returns true if any transaction has retrieved the signing identity
+// via the callback since the last key rotation. This determines whether a key rotation is needed
+// on an epoch boundary.
+func guard_SigningIdentityUsed(_ context.Context, c *coordinator) bool {
+	return c.signingIdentityUsed
+}
+
+// guard_InactiveGracePeriodExceeded returns true when no heartbeat has been received for at least
+// inactiveGracePeriod heartbeat intervals.
+func guard_InactiveGracePeriodExceeded(_ context.Context, c *coordinator) bool {
+	return c.heartbeatIntervalsSinceLastReceive >= c.inactiveGracePeriod
+}
+
+// guard_IsHigherPriorityThanCurrentActive returns true when this node has a strictly higher
+// priority (lower index) than the current active coordinator in the coordinator priority list.
+// Used in Observing and Closing when deciding whether to initiate a handover.
+func guard_IsHigherPriorityThanCurrentActive(_ context.Context, c *coordinator) bool {
+	return common.IsHigherPriority(c.coordinatorPriorityList, c.nodeName, c.currentActiveCoordinator)
 }

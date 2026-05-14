@@ -733,7 +733,6 @@ func Test_addToDelegatedTransactions_MockTransactionHandleEventReturnsError(t *t
 		_ context.Context,
 		_ string, _ string, _ string,
 		_ *components.PrivateTransaction,
-		_ string,
 	) transaction.CoordinatorTransaction {
 		return mockTxn
 	}
@@ -769,7 +768,6 @@ func Test_addToDelegatedTransactions_SubsequentTransactionGetsPreviousTransactio
 		_ context.Context,
 		_ string, _ string, _ string,
 		_ *components.PrivateTransaction,
-		_ string,
 	) transaction.CoordinatorTransaction {
 		return mockTxn
 	}
@@ -823,7 +821,6 @@ func Test_addToDelegatedTransactions_ErrorStopsSubsequentTransactionsBeingAccept
 		_ context.Context,
 		_ string, _ string, _ string,
 		pt *components.PrivateTransaction,
-		_ string,
 	) transaction.CoordinatorTransaction {
 		idx := -1
 		for i, priv := range txns {
@@ -945,7 +942,6 @@ func Test_addToDelegatedTransactions_FifthFailsThenFullRetry_PreservesFirstFourA
 		_ context.Context,
 		_ string, _ string, _ string,
 		pt *components.PrivateTransaction,
-		_ string,
 	) transaction.CoordinatorTransaction {
 		idx := idxOf(pt)
 		require.GreaterOrEqual(t, idx, 0)
@@ -1062,129 +1058,151 @@ func Test_action_CleanUpTransactionsNotYetDispatched_RemovesNonDispatchedTransac
 	assert.Contains(t, c.transactionsByID, idConfirmed, "Confirmed transaction should remain")
 }
 
-func Test_updateOriginatorNodePool_AddsNodeToEmptyPool(t *testing.T) {
+func Test_updateNodePool_AddsNodeToEmptyPool(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.OriginatorNodePool().Build()
 
-	c.updateOriginatorNodePool("node2")
+	c.updateNodePool("node2")
 
-	assert.Equal(t, 2, len(c.originatorNodePool), "pool should contain 2 nodes")
-	assert.Contains(t, c.originatorNodePool, "node2", "pool should contain node2")
-	assert.Contains(t, c.originatorNodePool, "node1", "pool should contain coordinator's own node")
+	assert.Equal(t, 2, len(c.nodePool), "pool should contain 2 nodes")
+	assert.Contains(t, c.nodePool, "node2", "pool should contain node2")
+	assert.Contains(t, c.nodePool, "node1", "pool should contain coordinator's own node")
 }
 
-func Test_updateOriginatorNodePool_AddsNodeToNonEmptyPool(t *testing.T) {
+func Test_updateNodePool_AddsNodeToNonEmptyPool(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.OriginatorNodePool("node1", "node3").Build()
 
-	c.updateOriginatorNodePool("node2")
+	c.updateNodePool("node2")
 
-	assert.Equal(t, 3, len(c.originatorNodePool), "pool should contain 3 nodes")
-	assert.Contains(t, c.originatorNodePool, "node1", "pool should contain node1")
-	assert.Contains(t, c.originatorNodePool, "node2", "pool should contain node2")
-	assert.Contains(t, c.originatorNodePool, "node3", "pool should contain node3")
+	assert.Equal(t, 3, len(c.nodePool), "pool should contain 3 nodes")
+	assert.Contains(t, c.nodePool, "node1", "pool should contain node1")
+	assert.Contains(t, c.nodePool, "node2", "pool should contain node2")
+	assert.Contains(t, c.nodePool, "node3", "pool should contain node3")
 }
 
-func Test_updateOriginatorNodePool_DoesNotAddDuplicateNode(t *testing.T) {
+func Test_updateNodePool_DoesNotAddDuplicateNode(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.OriginatorNodePool("node1", "node2").Build()
 
-	c.updateOriginatorNodePool("node2")
+	c.updateNodePool("node2")
 
-	assert.Equal(t, 2, len(c.originatorNodePool), "pool should still contain 2 nodes")
-	assert.Contains(t, c.originatorNodePool, "node1", "pool should contain node1")
-	assert.Contains(t, c.originatorNodePool, "node2", "pool should contain node2")
+	assert.Equal(t, 2, len(c.nodePool), "pool should still contain 2 nodes")
+	assert.Contains(t, c.nodePool, "node1", "pool should contain node1")
+	assert.Contains(t, c.nodePool, "node2", "pool should contain node2")
 }
 
-func Test_updateOriginatorNodePool_EnsuresCoordinatorsOwnNodeIsAlwaysInPool(t *testing.T) {
+func Test_updateNodePool_EnsuresCoordinatorsOwnNodeIsAlwaysInPool(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.OriginatorNodePool().Build()
 
-	c.updateOriginatorNodePool("node2")
+	c.updateNodePool("node2")
 
-	assert.Contains(t, c.originatorNodePool, "node1", "pool should contain coordinator's own node")
-	assert.Equal(t, 2, len(c.originatorNodePool), "pool should contain 2 nodes")
+	assert.Contains(t, c.nodePool, "node1", "pool should contain coordinator's own node")
+	assert.Equal(t, 2, len(c.nodePool), "pool should contain 2 nodes")
 }
 
-func Test_updateOriginatorNodePool_EnsuresCoordinatorsOwnNodeIsAddedEvenWhenPoolAlreadyHasOtherNodes(t *testing.T) {
+func Test_updateNodePool_EnsuresCoordinatorsOwnNodeIsAddedEvenWhenPoolAlreadyHasOtherNodes(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.OriginatorNodePool("node2", "node3").Build()
 
-	c.updateOriginatorNodePool("node4")
+	c.updateNodePool("node4")
 
-	assert.Contains(t, c.originatorNodePool, "node1", "pool should contain coordinator's own node")
-	assert.Equal(t, 4, len(c.originatorNodePool), "pool should contain 4 nodes")
+	assert.Contains(t, c.nodePool, "node1", "pool should contain coordinator's own node")
+	assert.Equal(t, 4, len(c.nodePool), "pool should contain 4 nodes")
 }
 
-func Test_updateOriginatorNodePool_DoesNotDuplicateCoordinatorsOwnNode(t *testing.T) {
+func Test_updateNodePool_DoesNotDuplicateCoordinatorsOwnNode(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.OriginatorNodePool("node1", "node2").Build()
 
-	c.updateOriginatorNodePool("node1")
+	c.updateNodePool("node1")
 
-	assert.Equal(t, 2, len(c.originatorNodePool), "pool should still contain 2 nodes")
-	assert.Contains(t, c.originatorNodePool, "node1", "pool should contain node1")
-	assert.Contains(t, c.originatorNodePool, "node2", "pool should contain node2")
+	assert.Equal(t, 2, len(c.nodePool), "pool should still contain 2 nodes")
+	assert.Contains(t, c.nodePool, "node1", "pool should contain node1")
+	assert.Contains(t, c.nodePool, "node2", "pool should contain node2")
 }
 
-func Test_updateOriginatorNodePool_HandlesMultipleSequentialUpdates(t *testing.T) {
+func Test_updateNodePool_HandlesMultipleSequentialUpdates(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.OriginatorNodePool().Build()
 
-	c.updateOriginatorNodePool("node2")
-	c.updateOriginatorNodePool("node3")
-	c.updateOriginatorNodePool("node4")
+	c.updateNodePool("node2")
+	c.updateNodePool("node3")
+	c.updateNodePool("node4")
 
-	assert.Equal(t, 4, len(c.originatorNodePool), "pool should contain 4 nodes")
-	assert.Contains(t, c.originatorNodePool, "node1", "pool should contain node1")
-	assert.Contains(t, c.originatorNodePool, "node2", "pool should contain node2")
-	assert.Contains(t, c.originatorNodePool, "node3", "pool should contain node3")
-	assert.Contains(t, c.originatorNodePool, "node4", "pool should contain node4")
+	assert.Equal(t, 4, len(c.nodePool), "pool should contain 4 nodes")
+	assert.Contains(t, c.nodePool, "node1", "pool should contain node1")
+	assert.Contains(t, c.nodePool, "node2", "pool should contain node2")
+	assert.Contains(t, c.nodePool, "node3", "pool should contain node3")
+	assert.Contains(t, c.nodePool, "node4", "pool should contain node4")
 }
 
-func Test_updateOriginatorNodePool_HandlesEmptyStringNode(t *testing.T) {
+func Test_updateNodePool_HandlesEmptyStringNode(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.OriginatorNodePool().Build()
 
-	c.updateOriginatorNodePool("")
+	c.updateNodePool("")
 
-	assert.Equal(t, 2, len(c.originatorNodePool), "pool should contain 2 nodes")
-	assert.Contains(t, c.originatorNodePool, "", "pool should contain empty string")
-	assert.Contains(t, c.originatorNodePool, "node1", "pool should contain coordinator's own node")
+	assert.Equal(t, 2, len(c.nodePool), "pool should contain 2 nodes")
+	assert.Contains(t, c.nodePool, "", "pool should contain empty string")
+	assert.Contains(t, c.nodePool, "node1", "pool should contain coordinator's own node")
 }
 
-func Test_updateOriginatorNodePool_CoordinatorEndorserMode_PoolGrowsDynamically(t *testing.T) {
-	// updateOriginatorNodePool no longer has a mode-specific guard; the pool grows in all modes.
+func Test_updateNodePool_CoordinatorEndorserMode_PoolGrowsDynamically(t *testing.T) {
+	// updateNodePool no longer has a mode-specific guard; the pool grows in all modes.
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, _ := builder.NodeName("node1").OriginatorNodePool("node1").Build()
 
-	c.updateOriginatorNodePool("node2")
+	c.updateNodePool("node2")
 
-	assert.Equal(t, []string{"node1", "node2"}, c.originatorNodePool)
+	assert.Equal(t, []string{"node1", "node2"}, c.nodePool)
 }
 
-func Test_updateOriginatorNodePool_InvokesNotifyOriginatorCallback(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.OriginatorNodePool().Build()
+func Test_action_CalculateCoordinatorPriorities_InvokesNotifyOriginator(t *testing.T) {
+	ctx := context.Background()
+	builder := NewCoordinatorBuilderForTesting(t, State_Active)
+	c, _ := builder.NodePool("node1", "node2").DomainContractConfig(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+	}).Build()
 
-	var notified []string
-	c.notifyOriginator = func(_ context.Context, nodes []string) {
-		notified = append(notified, nodes...)
+	var received common.Event
+	c.notifyOriginator = func(_ context.Context, event common.Event) {
+		received = event
 	}
 
-	c.updateOriginatorNodePool("node2", "node3")
-
-	assert.Equal(t, []string{"node2", "node3"}, notified)
+	err := action_CalculateCoordinatorPriorities(ctx, c, nil)
+	require.NoError(t, err)
+	assert.NotNil(t, received, "notifyOriginator must be invoked")
+	listEvent, ok := received.(*common.CoordinatorPriorityListUpdatedEvent)
+	require.True(t, ok, "event must be a CoordinatorPriorityListUpdatedEvent")
+	assert.Equal(t, c.coordinatorPriorityList, listEvent.Nodes)
 }
 
-func Test_updateOriginatorNodePool_DoesNotInvokeNotifyOriginatorWhenNodesEmpty(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.OriginatorNodePool().Build()
+func Test_nudgeHandoverRequest_NoPendingRequest_ReturnsError(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).Build()
 
-	called := false
-	c.notifyOriginator = func(_ context.Context, nodes []string) { called = true }
+	err := c.nudgeHandoverRequest(ctx)
 
-	c.updateOriginatorNodePool() // no nodes passed
+	require.Error(t, err, "nudgeHandoverRequest must error when no pending request exists")
+	assert.ErrorContains(t, err, "nudgeHandoverRequest called with no pending request")
+}
 
-	assert.False(t, called, "callback should not fire when no new nodes are provided")
+func Test_nudgeHandoverRequest_WithPendingRequest_CallsNudge(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node1").
+		CurrentActiveCoordinator("node2").
+		WithMockTransportWriter().
+		Build()
+	mocks.TransportWriter.EXPECT().SendHandoverRequest(mock.Anything, "node2", mock.Anything).Return(nil).Once()
+	// A freshly created IdempotentRequest (requestTime == nil) always sends on first Nudge.
+	c.pendingHandoverRequest = common.NewIdempotentRequest(ctx, c.clock, c.requestTimeout, func(ctx context.Context, _ uuid.UUID) error {
+		return c.transportWriter.SendHandoverRequest(ctx, c.currentActiveCoordinator, c.contractAddress)
+	})
+
+	err := c.nudgeHandoverRequest(ctx)
+
+	require.NoError(t, err)
 }

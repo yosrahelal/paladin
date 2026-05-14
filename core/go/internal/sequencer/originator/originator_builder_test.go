@@ -52,12 +52,8 @@ type OriginatorBuilderForTesting struct {
 	contractConfig                     *prototk.ContractConfig
 	blockRangeSize                     *uint64
 	currentBlockHeight                 *uint64
-	newBlockRangeEpoch                 *bool
-	originatorNodePool []string
+	coordinatorPriorityList            []string
 	currentActiveCoordinator           *string
-	previousActiveCoordinatorNode      *string
-	watchingPreviousCoordinatorFlush   *bool
-	needsRedelegate                    *bool
 	heartbeatIntervalsSinceLastReceive *int
 	inactiveGracePeriod                *int
 	transactions                       []transaction.OriginatorTransaction
@@ -121,13 +117,8 @@ func (b *OriginatorBuilderForTesting) CurrentBlockHeight(n uint64) *OriginatorBu
 	return b
 }
 
-func (b *OriginatorBuilderForTesting) NewBlockRangeEpoch(v bool) *OriginatorBuilderForTesting {
-	b.newBlockRangeEpoch = &v
-	return b
-}
-
-func (b *OriginatorBuilderForTesting) OriginatorNodePool(nodes ...string) *OriginatorBuilderForTesting {
-	b.originatorNodePool = common.DedupeSortedCoordinatorEndorserNodes(append([]string(nil), nodes...))
+func (b *OriginatorBuilderForTesting) CoordinatorPriorityList(nodes ...string) *OriginatorBuilderForTesting {
+	b.coordinatorPriorityList = common.DedupeSortedCoordinatorEndorserNodes(append([]string(nil), nodes...))
 	return b
 }
 
@@ -138,21 +129,6 @@ func (b *OriginatorBuilderForTesting) DomainContractConfig(cfg *prototk.Contract
 
 func (b *OriginatorBuilderForTesting) CurrentActiveCoordinator(node string) *OriginatorBuilderForTesting {
 	b.currentActiveCoordinator = &node
-	return b
-}
-
-func (b *OriginatorBuilderForTesting) NeedsRedelegate(v bool) *OriginatorBuilderForTesting {
-	b.needsRedelegate = &v
-	return b
-}
-
-func (b *OriginatorBuilderForTesting) PreviousActiveCoordinatorNode(node string) *OriginatorBuilderForTesting {
-	b.previousActiveCoordinatorNode = &node
-	return b
-}
-
-func (b *OriginatorBuilderForTesting) WatchingPreviousCoordinatorFlush(watching bool) *OriginatorBuilderForTesting {
-	b.watchingPreviousCoordinatorFlush = &watching
 	return b
 }
 
@@ -254,26 +230,14 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	} else {
 		originator.currentActiveCoordinator = "coordinator"
 	}
-	if b.needsRedelegate != nil {
-		originator.needsRedelegate = *b.needsRedelegate
-	}
 	if b.blockRangeSize != nil {
 		originator.blockRangeSize = *b.blockRangeSize
 	}
 	if b.currentBlockHeight != nil {
 		originator.currentBlockHeight = *b.currentBlockHeight
 	}
-	if b.newBlockRangeEpoch != nil {
-		originator.newBlockRangeEpoch = *b.newBlockRangeEpoch
-	}
-	if b.originatorNodePool != nil {
-		originator.originatorNodePool = b.originatorNodePool
-	}
-	if b.previousActiveCoordinatorNode != nil {
-		originator.previousActiveCoordinatorNode = *b.previousActiveCoordinatorNode
-	}
-	if b.watchingPreviousCoordinatorFlush != nil {
-		originator.watchingPreviousCoordinatorFlush = *b.watchingPreviousCoordinatorFlush
+	if b.coordinatorPriorityList != nil {
+		originator.coordinatorPriorityList = b.coordinatorPriorityList
 	}
 	if b.heartbeatIntervalsSinceLastReceive != nil {
 		originator.heartbeatIntervalsSinceLastReceive = *b.heartbeatIntervalsSinceLastReceive

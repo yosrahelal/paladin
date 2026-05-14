@@ -41,10 +41,98 @@ const (
 	DelegationAcknowledgementError_PreviousTransactionError
 )
 
+// action_SendHandoverRequest sends a CoordinatorHandoverRequest to the current active coordinator,
+// asking it to step down so this node can take over. Creates an IdempotentRequest on first call
+// and arms the request-timeout timer. Mirrors the pattern of sendAssembleRequest.
+func action_SendHandoverRequest(ctx context.Context, c *coordinator, _ common.Event) error {
+	return c.sendHandoverRequest(ctx)
+}
+
+// action_NudgeHandoverRequest is called when the request-timeout fires and re-prompts the
+// IdempotentRequest to send if enough time has elapsed since the last attempt.
+func action_NudgeHandoverRequest(ctx context.Context, c *coordinator, _ common.Event) error {
+	return c.nudgeHandoverRequest(ctx)
+}
+
+func (c *coordinator) sendHandoverRequest(ctx context.Context) error {
+	if c.pendingHandoverRequest == nil {
+		c.pendingHandoverRequest = common.NewIdempotentRequest(ctx, c.clock, c.requestTimeout, func(ctx context.Context, _ uuid.UUID) error {
+			return c.transportWriter.SendHandoverRequest(ctx, c.currentActiveCoordinator, c.contractAddress)
+		})
+		c.scheduleRequestTimeout(ctx)
+	}
+	return c.pendingHandoverRequest.Nudge(ctx)
+}
+
+func (c *coordinator) nudgeHandoverRequest(ctx context.Context) error {
+	if c.pendingHandoverRequest == nil {
+		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "nudgeHandoverRequest called with no pending request")
+	}
+	return c.pendingHandoverRequest.Nudge(ctx)
+}
+
+// action_ScheduleStateTimeout arms the state give-up timer. Called from OnTransitionTo of states
+// that use the send-nudge-give-up pattern (currently State_Elect).
+func action_ScheduleStateTimeout(ctx context.Context, c *coordinator, _ common.Event) error {
+	c.scheduleStateTimeout(ctx)
+	return nil
+}
+
+// action_ClearTimeoutSchedules cancels any pending request and state timers. Included as a
+// transition action on every exit from a timed state so timers never fire after the state is left.
+func action_ClearTimeoutSchedules(_ context.Context, c *coordinator, _ common.Event) error {
+	c.clearTimeoutSchedules()
+	return nil
+}
+
+func (c *coordinator) scheduleRequestTimeout(ctx context.Context) {
+	if c.cancelRequestTimeout != nil {
+		c.cancelRequestTimeout()
+	}
+	c.cancelRequestTimeout = c.clock.ScheduleTimer(ctx, c.requestTimeout, func() {
+		c.QueueEvent(ctx, &RequestTimeoutIntervalEvent{})
+	})
+}
+
+func (c *coordinator) scheduleStateTimeout(ctx context.Context) {
+	if c.cancelStateTimeout != nil {
+		c.cancelStateTimeout()
+	}
+	c.cancelStateTimeout = c.clock.ScheduleTimer(ctx, c.stateTimeout, func() {
+		c.QueueEvent(ctx, &StateTimeoutIntervalEvent{})
+	})
+}
+
+func (c *coordinator) clearTimeoutSchedules() {
+	if c.cancelRequestTimeout != nil {
+		c.cancelRequestTimeout()
+		c.cancelRequestTimeout = nil
+	}
+	if c.cancelStateTimeout != nil {
+		c.cancelStateTimeout()
+		c.cancelStateTimeout = nil
+	}
+	c.pendingHandoverRequest = nil
+}
+
+// action_ProcessConfirmedTransactionsFromSnapshot cleans up any delegated transactions that the
+// flushing/closing coordinator has already confirmed. Called in State_Prepared so that transactions
+// confirmed by the outgoing coordinator are not redundantly re-submitted after becoming Active.
+func action_ProcessConfirmedTransactionsFromSnapshot(ctx context.Context, c *coordinator, event common.Event) error {
+	e := event.(*common.HeartbeatReceivedEvent)
+	if e.CoordinatorSnapshot == nil {
+		return nil
+	}
+	for _, confirmed := range e.CoordinatorSnapshot.ConfirmedTransactions {
+		c.cleanUpTransaction(ctx, confirmed.ID)
+	}
+	return nil
+}
+
 // action_ImportStatesAndLocks imports confirmed locks and private state data from the previous
 // coordinator's closing heartbeat into the grapher. This covers states confirmed within the block
 // height tolerance window.
-// Triggered as a transition action on State_Elect → State_Active when the closing heartbeat arrives.
+// Triggered as a transition action on State_Prepared → State_Active when the closing heartbeat arrives.
 func action_ImportStatesAndLocks(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*common.HeartbeatReceivedEvent)
 	snapshot := e.CoordinatorSnapshot
@@ -61,24 +149,20 @@ func action_ImportStatesAndLocks(ctx context.Context, c *coordinator, event comm
 // in the request.
 func action_ProcessDelegatedTransactions(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*TransactionsDelegatedEvent)
-	c.updateOriginatorNodePool(e.FromNode)
+	c.updateNodePool(e.FromNode)
 	return c.addToDelegatedTransactions(ctx, e.Originator, e.Transactions, e.DelegationID, c.newCoordinatorTransaction)
 }
 
-func (c *coordinator) updateOriginatorNodePool(nodes ...string) {
+func (c *coordinator) updateNodePool(nodes ...string) {
 	for _, node := range nodes {
-		if !slices.Contains(c.originatorNodePool, node) {
-			c.originatorNodePool = append(c.originatorNodePool, node)
+		if !slices.Contains(c.nodePool, node) {
+			c.nodePool = append(c.nodePool, node)
 		}
 	}
-	if !slices.Contains(c.originatorNodePool, c.nodeName) {
-		// As coordinator we should always be in the pool as it's used to select the next coordinator when necessary
-		c.originatorNodePool = append(c.originatorNodePool, c.nodeName)
+	if !slices.Contains(c.nodePool, c.nodeName) {
+		c.nodePool = append(c.nodePool, c.nodeName)
 	}
-	slices.Sort(c.originatorNodePool)
-	if c.notifyOriginator != nil && len(nodes) > 0 {
-		c.notifyOriginator(c.ctx, nodes)
-	}
+	slices.Sort(c.nodePool)
 }
 
 func (c *coordinator) coordinatorTransactionHandleEvent(ctx context.Context, txID uuid.UUID, event common.Event) error {
@@ -97,20 +181,25 @@ func (c *coordinator) getCoordinatorTransactionState(ctx context.Context, id uui
 	return txn.GetCurrentState(), true
 }
 
-func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator string, originatorNode string, nodeName string, pt *components.PrivateTransaction, coordinatorSigningIdentity string) transaction.CoordinatorTransaction {
+func (c *coordinator) getCoordinatorSigningIdentity() string {
+	c.signingIdentityUsed = true
+	return c.signingIdentity
+}
+
+func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator string, originatorNode string, nodeName string, pt *components.PrivateTransaction) transaction.CoordinatorTransaction {
 	return transaction.NewTransaction(
 		ctx,
 		originator,
 		originatorNode,
 		nodeName,
 		pt,
-		coordinatorSigningIdentity,
+		c.getCoordinatorSigningIdentity,
 		c.transportWriter,
 		c.clock,
 		c.queueEventInternal,
 		c.coordinatorTransactionHandleEvent,
 		c.getCoordinatorTransactionState,
-		c.updateOriginatorNodePool,
+		c.updateNodePool,
 		c.engineIntegration,
 		c.syncPoints,
 		c.components,
@@ -138,8 +227,7 @@ func (c *coordinator) addToDelegatedTransactions(
 		originator string,
 		originatorNode string,
 		nodeName string,
-		pt *components.PrivateTransaction,
-		coordinatorSigningIdentity string) transaction.CoordinatorTransaction) error {
+		pt *components.PrivateTransaction) transaction.CoordinatorTransaction) error {
 
 	var previousTransaction transaction.CoordinatorTransaction
 
@@ -218,7 +306,7 @@ func (c *coordinator) addToDelegatedTransactions(
 			}
 		}
 
-		newTransaction := createTransaction(ctx, originator, originatorNode, c.nodeName, txn, c.signingIdentity)
+		newTransaction := createTransaction(ctx, originator, originatorNode, c.nodeName, txn)
 
 		c.transactionsByID[txn.ID] = newTransaction
 		c.metrics.IncCoordinatingTransactions()
@@ -260,6 +348,7 @@ func (c *coordinator) addToDelegatedTransactions(
 
 func action_NewSigningIdentity(ctx context.Context, c *coordinator, _ common.Event) error {
 	c.signingIdentity = fmt.Sprintf("domains.%s.submit.%s", c.contractAddress.String(), uuid.New())
+	c.signingIdentityUsed = false
 	log.L(ctx).Debugf("new signing identity: %s", c.signingIdentity)
 	return nil
 }
@@ -366,7 +455,6 @@ func action_QueueTransactionForDispatch(ctx context.Context, c *coordinator, eve
 
 func action_CleanUpTransactionsNotYetDispatched(ctx context.Context, c *coordinator, _ common.Event) error {
 	txns := c.getTransactionsNotInStates(ctx, []transaction.State{
-		transaction.State_Ready_For_Dispatch,
 		transaction.State_Dispatched,
 		transaction.State_Confirmed,
 		transaction.State_Reverted,
@@ -411,4 +499,16 @@ func action_cancelCurrentlyAssemblingTransaction(ctx context.Context, c *coordin
 		return err
 	}
 	return nil
+}
+
+func validator_HeartBeatState(state ...common.CoordinatorState) statemachine.Validator[*coordinator] {
+	return func(_ context.Context, c *coordinator, event common.Event) (bool, error) {
+		e := event.(*common.HeartbeatReceivedEvent)
+		for _, s := range state {
+			if e.CoordinatorSnapshot.CoordinatorState == s {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
 }

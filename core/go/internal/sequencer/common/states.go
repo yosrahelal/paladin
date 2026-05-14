@@ -21,7 +21,7 @@ import "fmt"
 type OriginatorState int
 
 const (
-	OriginatorState_Initial   OriginatorState = iota
+	OriginatorState_Initial OriginatorState = iota
 	OriginatorState_Idle
 	OriginatorState_Observing
 	OriginatorState_Sending
@@ -45,12 +45,14 @@ func (s OriginatorState) String() string {
 type CoordinatorState int
 
 const (
-	CoordinatorState_Initial   CoordinatorState = iota
+	CoordinatorState_Initial CoordinatorState = iota
 	CoordinatorState_Idle
 	CoordinatorState_Observing
 	CoordinatorState_Elect
+	CoordinatorState_Prepared
 	CoordinatorState_Active
-	CoordinatorState_Flush
+	CoordinatorState_Active_Flush
+	CoordinatorState_Closing_Flush
 	CoordinatorState_Closing
 )
 
@@ -64,10 +66,14 @@ func (s CoordinatorState) String() string {
 		return "Observing"
 	case CoordinatorState_Elect:
 		return "Elect"
+	case CoordinatorState_Prepared:
+		return "Prepared"
 	case CoordinatorState_Active:
 		return "Active"
-	case CoordinatorState_Flush:
-		return "Flush"
+	case CoordinatorState_Active_Flush:
+		return "Active_Flush"
+	case CoordinatorState_Closing_Flush:
+		return "Closing_Flush"
 	case CoordinatorState_Closing:
 		return "Closing"
 	}
@@ -78,7 +84,7 @@ func (s CoordinatorState) String() string {
 type OriginatorTransactionState int
 
 const (
-	OriginatorTransactionState_Initial               OriginatorTransactionState = iota
+	OriginatorTransactionState_Initial OriginatorTransactionState = iota
 	OriginatorTransactionState_Pending
 	OriginatorTransactionState_Delegated
 	OriginatorTransactionState_Assembling
@@ -129,7 +135,7 @@ func (s OriginatorTransactionState) String() string {
 type CoordinatorTransactionState int
 
 const (
-	CoordinatorTransactionState_Initial                 CoordinatorTransactionState = iota
+	CoordinatorTransactionState_Initial CoordinatorTransactionState = iota
 	CoordinatorTransactionState_Pooled
 	CoordinatorTransactionState_PreAssembly_Blocked
 	CoordinatorTransactionState_Assembling

@@ -30,55 +30,112 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_applyHeartbeatReceived_BasicUpdate(t *testing.T) {
-	ctx := context.Background()
-	coordinatorLocator := "coordinator@coordinatorNode"
-	// Seed the current coordinator to match the heartbeat sender so the active-coordinator path is exercised.
-	builder := NewOriginatorBuilderForTesting(t, State_Observing).
-		CurrentActiveCoordinator(coordinatorLocator)
-	o, _ := builder.Build()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
-		BlockHeight: 1000,
-	}
-	err := o.applyHeartbeatReceived(ctx, heartbeatEvent)
-	assert.NoError(t, err)
-	// Verify counter was reset
-	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
-	// Verify active coordinator node remains unchanged (heartbeat does NOT update it)
-	assert.Equal(t, coordinatorLocator, o.currentActiveCoordinator)
-}
+// ── validator_IsFromCurrentCoordinator ───────────────────────────────────────
 
-func Test_validator_IsHeartbeatFromCurrentActiveCoordinator_TrueWhenFromCurrent(t *testing.T) {
+func Test_validator_IsFromCurrentCoordinator_TrueWhenSenderIsCurrentCoordinator(t *testing.T) {
 	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		CurrentActiveCoordinator("nodeB").
-		NodeName("self").
 		Build()
-	event := &common.HeartbeatReceivedEvent{}
-	event.From = "nodeB"
-	event.CoordinatorSnapshot = &common.CoordinatorSnapshot{}
-	ok, err := validator_IsHeartbeatFromCurrentActiveCoordinator(ctx, o, event)
+	event := &common.HeartbeatReceivedEvent{
+		From:                "nodeB",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
+	}
+	ok, err := validator_IsFromCurrentCoordinator(ctx, o, event)
 	require.NoError(t, err)
 	assert.True(t, ok)
 }
 
-func Test_validator_IsHeartbeatFromCurrentActiveCoordinator_FalseWhenFromOtherNode(t *testing.T) {
+func Test_validator_IsFromCurrentCoordinator_TrueRegardlessOfLiveness(t *testing.T) {
 	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		CurrentActiveCoordinator("nodeB").
-		NodeName("self").
 		Build()
-	event := &common.HeartbeatReceivedEvent{}
-	event.From = "nodeC"
-	event.CoordinatorSnapshot = &common.CoordinatorSnapshot{}
-	ok, err := validator_IsHeartbeatFromCurrentActiveCoordinator(ctx, o, event)
+	event := &common.HeartbeatReceivedEvent{
+		From:                "nodeB",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Closing},
+	}
+	ok, err := validator_IsFromCurrentCoordinator(ctx, o, event)
+	require.NoError(t, err)
+	assert.True(t, ok, "identity check does not require liveness")
+}
+
+func Test_validator_IsFromCurrentCoordinator_FalseWhenSenderIsOtherNode(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("nodeB").
+		Build()
+	event := &common.HeartbeatReceivedEvent{
+		From:                "nodeC",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
+	}
+	ok, err := validator_IsFromCurrentCoordinator(ctx, o, event)
 	require.NoError(t, err)
 	assert.False(t, ok)
 }
+
+// ── validator_HasDroppedTransactions ─────────────────────────────────────────
+
+func Test_validator_HasDroppedTransactions_TrueWhenInFlightTransactionAbsentFromSnapshot(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		NodeName("member1@node1").
+		CurrentActiveCoordinator("coordinator@node1").
+		Transactions(mockTxn).
+		Build()
+	event := &common.HeartbeatReceivedEvent{
+		From:                "coordinator@node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
+	}
+	ok, err := validator_HasDroppedTransactions(ctx, o, event)
+	require.NoError(t, err)
+	assert.True(t, ok, "transaction absent from snapshot must register as dropped")
+}
+
+func Test_validator_HasDroppedTransactions_FalseWhenAllTransactionsPresentInSnapshot(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		NodeName("member1@node1").
+		CurrentActiveCoordinator("coordinator@node1").
+		Transactions(mockTxn).
+		Build()
+	event := &common.HeartbeatReceivedEvent{
+		From: "coordinator@node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+				{SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txID}},
+			},
+		},
+	}
+	ok, err := validator_HasDroppedTransactions(ctx, o, event)
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func Test_validator_HasDroppedTransactions_FalseWhenNoInFlightTransactions(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		NodeName("member1@node1").
+		CurrentActiveCoordinator("coordinator@node1").
+		Build()
+	event := &common.HeartbeatReceivedEvent{
+		From:                "coordinator@node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
+	}
+	ok, err := validator_HasDroppedTransactions(ctx, o, event)
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+// ── guard_InactiveGracePeriodExceeded ─────────────────────────────────────────
 
 func Test_guard_InactiveGracePeriodExceeded_WhileObserving_TrueWhenCounterExceedsThreshold(t *testing.T) {
 	ctx := context.Background()
@@ -96,6 +153,9 @@ func Test_guard_InactiveGracePeriodExceeded_WhileObserving_FalseWhenCounterBelow
 		Build()
 	assert.False(t, guard_InactiveGracePeriodExceeded(ctx, o))
 }
+
+// ── State_Observing integration tests ─────────────────────────────────────────
+
 func Test_ProcessEvent_HeartbeatIntervalWhileObserving_IncrementsHeartbeatIntervalsSinceLastReceive(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
@@ -107,7 +167,7 @@ func Test_ProcessEvent_HeartbeatIntervalWhileObserving_IncrementsHeartbeatInterv
 	assert.Equal(t, State_Observing, o.GetCurrentState())
 }
 
-func Test_ProcessEvent_HeartbeatReceivedWhileObserving_FromCurrentActiveCoordinator_ResetsLivenessCounter(t *testing.T) {
+func Test_ProcessEvent_HeartbeatReceivedWhileObserving_FromCurrentActiveCoordinator_ActiveState_ResetsLivenessCounter(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
 		CurrentActiveCoordinator("nodeB").
@@ -118,13 +178,13 @@ func Test_ProcessEvent_HeartbeatReceivedWhileObserving_FromCurrentActiveCoordina
 	heartbeatEvent := &common.HeartbeatReceivedEvent{}
 	heartbeatEvent.From = "nodeB"
 	heartbeatEvent.ContractAddress = o.contractAddress
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{}
+	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
 	assert.Equal(t, State_Observing, o.GetCurrentState())
-	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive, "liveness counter must be reset on Active heartbeat from current coordinator")
 }
 
-func Test_ProcessEvent_HeartbeatReceivedWhileObserving_FromUnrelatedNode_NoChange(t *testing.T) {
+func Test_ProcessEvent_HeartbeatReceivedWhileObserving_FromAnotherActiveNode_UpdatesCoordinatorAndResetsTimer(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
 		CurrentActiveCoordinator("nodeB").
@@ -138,306 +198,24 @@ func Test_ProcessEvent_HeartbeatReceivedWhileObserving_FromUnrelatedNode_NoChang
 	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
 	assert.Equal(t, State_Observing, o.GetCurrentState())
-	assert.Equal(t, "nodeB", o.currentActiveCoordinator)
-	assert.Equal(t, 5, o.heartbeatIntervalsSinceLastReceive)
+	assert.Equal(t, "nodeC", o.currentActiveCoordinator, "Active heartbeat from a new node must update currentActiveCoordinator")
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive, "liveness counter must be reset on Active heartbeat")
 }
 
-func Test_applyHeartbeatReceived_DispatchedTransactionNotFoundLogsAndContinues(t *testing.T) {
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	// nodeName must match DispatchedTransactions[].Originator or the heartbeat entry is skipped entirely.
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		NodeName(originatorLocator).
-		CurrentActiveCoordinator(coordinatorLocator)
-	o, _ := builder.Build()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent.ContractAddress = &contractAddress
-	// Create a dispatched transaction that doesn't exist in memory
-	unknownTxID := uuid.New()
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
-		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
-			{
-				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-					ID:         unknownTxID,
-					Originator: originatorLocator,
-				},
-			},
-		},
-	}
-	err := o.applyHeartbeatReceived(ctx, heartbeatEvent)
-	// Should not error, just log a warning
-	assert.NoError(t, err)
-}
-func Test_applyHeartbeatReceived_DispatchedTransactionWithHashUpdatesSubmitted(t *testing.T) {
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		CurrentActiveCoordinator(coordinatorLocator)
-	o, _ := builder.Build()
-	// Create a real transaction
-	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
-		Address(builder.GetContractAddress()).
-		Originator(originatorLocator).
-		NumberOfRequiredEndorsers(1)
-	txn := transactionBuilder.BuildSparse()
-	// Create the transaction in the originator
-	err := o.addToTransactions(ctx, txn, o.newOriginatorTransaction)
-	require.NoError(t, err)
-	// Create heartbeat with dispatched transaction that has a hash
-	signerAddress := pldtypes.RandAddress()
-	submissionHash := pldtypes.RandBytes32()
-	nonce := uint64(42)
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
-		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
-			{
-				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-					ID:         txn.ID,
-					Originator: originatorLocator,
-				},
-				Signer:               *signerAddress,
-				LatestSubmissionHash: &submissionHash,
-				Nonce:                &nonce,
-			},
-		},
-	}
-	err = o.applyHeartbeatReceived(ctx, heartbeatEvent)
-	assert.NoError(t, err)
-}
-func Test_applyHeartbeatReceived_DispatchedTransactionWithNonceOnlySendsNonceAssigned(t *testing.T) {
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		CurrentActiveCoordinator(coordinatorLocator)
-	o, _ := builder.Build()
-	// Create a real transaction
-	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
-		Address(builder.GetContractAddress()).
-		Originator(originatorLocator).
-		NumberOfRequiredEndorsers(1)
-	txn := transactionBuilder.BuildSparse()
-	// Create the transaction in the originator
-	err := o.addToTransactions(ctx, txn, o.newOriginatorTransaction)
-	require.NoError(t, err)
-	// Create heartbeat with dispatched transaction that has a nonce but no hash
-	nonce := uint64(42)
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
-		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
-			{
-				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-					ID:         txn.ID,
-					Originator: originatorLocator,
-				},
-				Nonce: &nonce,
-				// No LatestSubmissionHash
-			},
-		},
-	}
-	err = o.applyHeartbeatReceived(ctx, heartbeatEvent)
-	assert.NoError(t, err)
-}
-func Test_applyHeartbeatReceived_DispatchedTransactionFromDifferentOriginatorIgnored(t *testing.T) {
-	ctx := context.Background()
-	otherOriginatorLocator := "otherSender@otherNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		CurrentActiveCoordinator(coordinatorLocator)
-	o, _ := builder.Build()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
-		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
-			{
-				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-					ID:         uuid.New(),
-					Originator: otherOriginatorLocator, // Different originator
-				},
-			},
-		},
-	}
-	err := o.applyHeartbeatReceived(ctx, heartbeatEvent)
-	assert.NoError(t, err)
-}
-func Test_applyHeartbeatReceived_DispatchedTransactionWithHashAndNonceSucceeds(t *testing.T) {
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		CurrentActiveCoordinator(coordinatorLocator)
-	o, _ := builder.Build()
-	// Create a real transaction
-	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
-		Address(builder.GetContractAddress()).
-		Originator(originatorLocator).
-		NumberOfRequiredEndorsers(1)
-	txn := transactionBuilder.BuildSparse()
-	// Create the transaction in the originator
-	err := o.addToTransactions(ctx, txn, o.newOriginatorTransaction)
-	require.NoError(t, err)
-	submissionHash := pldtypes.RandBytes32()
-	nonce := uint64(42)
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
-		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
-			{
-				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-					ID:         txn.ID,
-					Originator: originatorLocator,
-				},
-				LatestSubmissionHash: &submissionHash,
-				Nonce:                &nonce,
-			},
-		},
-	}
-	// This should succeed with a real transaction
-	err = o.applyHeartbeatReceived(ctx, heartbeatEvent)
-	assert.NoError(t, err)
-}
-func Test_applyHeartbeatReceived_DispatchedTransactionNonceOnlySucceeds(t *testing.T) {
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		CurrentActiveCoordinator(coordinatorLocator)
-	o, _ := builder.Build()
-	// Create a real transaction
-	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
-		Address(builder.GetContractAddress()).
-		Originator(originatorLocator).
-		NumberOfRequiredEndorsers(1)
-	txn := transactionBuilder.BuildSparse()
-	// Create the transaction in the originator
-	err := o.addToTransactions(ctx, txn, o.newOriginatorTransaction)
-	require.NoError(t, err)
-	// Create heartbeat with dispatched transaction that has a nonce but no hash
-	nonce := uint64(42)
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
-		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
-			{
-				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-					ID:         txn.ID,
-					Originator: originatorLocator,
-				},
-				Nonce: &nonce,
-				// No LatestSubmissionHash
-			},
-		},
-	}
-	// This should succeed with a real transaction
-	err = o.applyHeartbeatReceived(ctx, heartbeatEvent)
-	assert.NoError(t, err)
-}
-func Test_applyHeartbeatReceived_SubmittedHandleEventError_ReturnsWrappedError(t *testing.T) {
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	txnID := uuid.New()
-	innerErr := fmt.Errorf("simulated submitted handling failure")
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.EXPECT().GetID().Return(txnID)
-	mockTxn.EXPECT().GetCurrentState().Return(transaction.State_Delegated)
-	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.SubmittedEvent")).Return(innerErr)
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		NodeName(originatorLocator).
-		CurrentActiveCoordinator(coordinatorLocator).
-		Transactions(mockTxn)
-	o, _ := builder.Build()
-	signerAddress := pldtypes.RandAddress()
-	submissionHash := pldtypes.RandBytes32()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
-		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
-			{
-				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-					ID:         txnID,
-					Originator: originatorLocator,
-				},
-				Signer:               *signerAddress,
-				LatestSubmissionHash: &submissionHash,
-			},
-		},
-	}
-	err := o.applyHeartbeatReceived(ctx, heartbeatEvent)
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "error handling transaction submitted event")
-	assert.Contains(t, err.Error(), txnID.String())
-	assert.Contains(t, err.Error(), innerErr.Error())
-}
-func Test_applyHeartbeatReceived_NonceAssignedHandleEventError_ReturnsWrappedError(t *testing.T) {
-	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
-	coordinatorLocator := "coordinator@coordinatorNode"
-	txnID := uuid.New()
-	innerErr := fmt.Errorf("simulated nonce handling failure")
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.EXPECT().GetID().Return(txnID)
-	mockTxn.EXPECT().GetCurrentState().Return(transaction.State_Delegated)
-	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.NonceAssignedEvent")).Return(innerErr)
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		NodeName(originatorLocator).
-		CurrentActiveCoordinator(coordinatorLocator).
-		Transactions(mockTxn)
-	o, _ := builder.Build()
-	nonce := uint64(99)
-	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = coordinatorLocator
-	contractAddress := builder.GetContractAddress()
-	heartbeatEvent.ContractAddress = &contractAddress
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{
-		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
-			{
-				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-					ID:         txnID,
-					Originator: originatorLocator,
-				},
-				Nonce: &nonce,
-			},
-		},
-	}
-	err := o.applyHeartbeatReceived(ctx, heartbeatEvent)
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "error handling nonce assigned event")
-	assert.Contains(t, err.Error(), txnID.String())
-	assert.Contains(t, err.Error(), innerErr.Error())
-}
+// ── action_ProcessConfirmedTransactions ───────────────────────────────────────
 
-func Test_applyHeartbeatReceived_ConfirmedTransaction_Success(t *testing.T) {
+func Test_action_ProcessConfirmedTransactions_ConfirmedSuccess(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
 
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetCurrentState").Return(transaction.State_Submitted)
 	mockTxn.On("HandleEvent", mock.Anything, mock.MatchedBy(func(e transaction.Event) bool {
 		_, ok := e.(*transaction.ConfirmedSuccessEvent)
 		return ok
 	})).Return(nil)
 
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		NodeName("member1@node1").
 		CurrentActiveCoordinator("coordinator@node1").
 		Transactions(mockTxn).
@@ -445,7 +223,7 @@ func Test_applyHeartbeatReceived_ConfirmedTransaction_Success(t *testing.T) {
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "coordinator@node1",
+		From:            "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -461,24 +239,23 @@ func Test_applyHeartbeatReceived_ConfirmedTransaction_Success(t *testing.T) {
 		},
 	}
 
-	err := o.applyHeartbeatReceived(ctx, event)
+	err := action_ProcessConfirmedTransactions(ctx, o, event)
 	require.NoError(t, err)
 	mockTxn.AssertExpectations(t)
 }
 
-func Test_applyHeartbeatReceived_ConfirmedTransaction_Reverted(t *testing.T) {
+func Test_action_ProcessConfirmedTransactions_ConfirmedReverted(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
 
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetCurrentState").Return(transaction.State_Submitted)
 	mockTxn.On("HandleEvent", mock.Anything, mock.MatchedBy(func(e transaction.Event) bool {
 		rev, ok := e.(*transaction.ConfirmedRevertedEvent)
 		return ok && len(rev.RevertReason) > 0
 	})).Return(nil)
 
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		NodeName("member1@node1").
 		CurrentActiveCoordinator("coordinator@node1").
 		Transactions(mockTxn).
@@ -486,7 +263,7 @@ func Test_applyHeartbeatReceived_ConfirmedTransaction_Reverted(t *testing.T) {
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "coordinator@node1",
+		From:            "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -503,22 +280,22 @@ func Test_applyHeartbeatReceived_ConfirmedTransaction_Reverted(t *testing.T) {
 		},
 	}
 
-	err := o.applyHeartbeatReceived(ctx, event)
+	err := action_ProcessConfirmedTransactions(ctx, o, event)
 	require.NoError(t, err)
 	mockTxn.AssertExpectations(t)
 }
 
-func Test_applyHeartbeatReceived_ConfirmedTransaction_NotOurNode_Skipped(t *testing.T) {
+func Test_action_ProcessConfirmedTransactions_NotOurNode_Skipped(t *testing.T) {
 	ctx := context.Background()
 
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		NodeName("member1@node1").
 		CurrentActiveCoordinator("coordinator@node1").
 		Build()
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "coordinator@node1",
+		From:            "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -534,21 +311,21 @@ func Test_applyHeartbeatReceived_ConfirmedTransaction_NotOurNode_Skipped(t *test
 		},
 	}
 
-	err := o.applyHeartbeatReceived(ctx, event)
+	err := action_ProcessConfirmedTransactions(ctx, o, event)
 	require.NoError(t, err)
 }
 
-func Test_applyHeartbeatReceived_ConfirmedTransaction_NotInMemory_Skipped(t *testing.T) {
+func Test_action_ProcessConfirmedTransactions_NotInMemory_Skipped(t *testing.T) {
 	ctx := context.Background()
 
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		NodeName("member1@node1").
 		CurrentActiveCoordinator("coordinator@node1").
 		Build()
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "coordinator@node1",
+		From:            "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -564,20 +341,19 @@ func Test_applyHeartbeatReceived_ConfirmedTransaction_NotInMemory_Skipped(t *tes
 		},
 	}
 
-	err := o.applyHeartbeatReceived(ctx, event)
+	err := action_ProcessConfirmedTransactions(ctx, o, event)
 	require.NoError(t, err)
 }
 
-func Test_applyHeartbeatReceived_ConfirmedTransaction_SuccessHandleEventError(t *testing.T) {
+func Test_action_ProcessConfirmedTransactions_HandleEventError(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
 
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetCurrentState").Return(transaction.State_Submitted).Maybe()
 	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(fmt.Errorf("handle event error"))
 
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		NodeName("member1@node1").
 		CurrentActiveCoordinator("coordinator@node1").
 		Transactions(mockTxn).
@@ -585,7 +361,7 @@ func Test_applyHeartbeatReceived_ConfirmedTransaction_SuccessHandleEventError(t 
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "coordinator@node1",
+		From:            "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -601,23 +377,22 @@ func Test_applyHeartbeatReceived_ConfirmedTransaction_SuccessHandleEventError(t 
 		},
 	}
 
-	err := o.applyHeartbeatReceived(ctx, event)
+	err := action_ProcessConfirmedTransactions(ctx, o, event)
 	require.Error(t, err)
 }
 
-func Test_applyHeartbeatReceived_ConfirmedRevertedHandleEventError(t *testing.T) {
+func Test_action_ProcessConfirmedTransactions_RevertedHandleEventError(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
 
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetCurrentState").Return(transaction.State_Submitted).Maybe()
 	mockTxn.On("HandleEvent", mock.Anything, mock.MatchedBy(func(e transaction.Event) bool {
 		_, ok := e.(*transaction.ConfirmedRevertedEvent)
 		return ok
 	})).Return(fmt.Errorf("revert handle error"))
 
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		NodeName("member1@node1").
 		CurrentActiveCoordinator("coordinator@node1").
 		Transactions(mockTxn).
@@ -625,7 +400,7 @@ func Test_applyHeartbeatReceived_ConfirmedRevertedHandleEventError(t *testing.T)
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "coordinator@node1",
+		From:            "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -642,137 +417,377 @@ func Test_applyHeartbeatReceived_ConfirmedRevertedHandleEventError(t *testing.T)
 		},
 	}
 
-	err := o.applyHeartbeatReceived(ctx, event)
+	err := action_ProcessConfirmedTransactions(ctx, o, event)
 	require.Error(t, err)
 }
 
-func Test_applyHeartbeatReceived_NonActiveCoordinator_Ignored(t *testing.T) {
-	// Heartbeat from a node that is neither the active coordinator nor the previous coordinator
-	// should be silently ignored (lines 92-95 in observing.go).
+// ── action_ProcessCurrentCoordinatorHeartbeat ─────────────────────────────────
+
+func Test_action_ProcessCurrentCoordinatorHeartbeat_ResetsLivenessTimer(t *testing.T) {
 	ctx := context.Background()
-
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		NodeName("member1@node1").
-		CurrentActiveCoordinator("coordinator@node1").
+	coordinatorLocator := "coordinator@coordinatorNode"
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator(coordinatorLocator).
 		Build()
-
-	contractAddress := *pldtypes.RandAddress()
-	event := &common.HeartbeatReceivedEvent{
-		From:                "some-other@node3",
-		ContractAddress:     &contractAddress,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
-	}
-
-	err := o.applyHeartbeatReceived(ctx, event)
-	require.NoError(t, err)
-	assert.False(t, o.needsRedelegate)
-}
-
-func Test_applyHeartbeatReceived_WatchingPrevious_PreClosing_ResetsCounter(t *testing.T) {
-	// watchingPreviousCoordinatorFlush=true, heartbeat from previous coordinator, NOT closing:
-	// reset heartbeatIntervalsSinceLastReceive but do NOT set needsRedelegate.
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		NodeName("member1@node1").
-		CurrentActiveCoordinator("new-coordinator@node2").
-		PreviousActiveCoordinatorNode("old-coordinator@node1").
-		WatchingPreviousCoordinatorFlush(true).
-		Build()
-
 	o.heartbeatIntervalsSinceLastReceive = 5
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "old-coordinator@node1",
+		From:            coordinatorLocator,
+		ContractAddress: &contractAddress,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			BlockHeight: 1000,
+		},
+	}
+	err := action_ProcessCurrentCoordinatorHeartbeat(ctx, o, event)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive, "liveness counter must be reset")
+	assert.Equal(t, coordinatorLocator, o.currentActiveCoordinator, "coordinator must be unchanged")
+}
+
+func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionNotFoundLogsAndContinues(t *testing.T) {
+	ctx := context.Background()
+	originatorLocator := "sender@senderNode"
+	coordinatorLocator := "coordinator@coordinatorNode"
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		NodeName(originatorLocator).
+		CurrentActiveCoordinator(coordinatorLocator).
+		Build()
+
+	unknownTxID := uuid.New()
+	contractAddress := *pldtypes.RandAddress()
+	event := &common.HeartbeatReceivedEvent{
+		From:            coordinatorLocator,
+		ContractAddress: &contractAddress,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+				{
+					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+						ID:         unknownTxID,
+						Originator: originatorLocator,
+					},
+				},
+			},
+		},
+	}
+	err := action_ProcessCurrentCoordinatorHeartbeat(ctx, o, event)
+	assert.NoError(t, err)
+}
+
+func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionWithHashUpdatesSubmitted(t *testing.T) {
+	ctx := context.Background()
+	originatorLocator := "sender@senderNode"
+	coordinatorLocator := "coordinator@coordinatorNode"
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+		NodeName(originatorLocator).
+		CurrentActiveCoordinator(coordinatorLocator)
+	o, _ := builder.Build()
+
+	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
+		Address(builder.GetContractAddress()).
+		Originator(originatorLocator).
+		NumberOfRequiredEndorsers(1)
+	txn := transactionBuilder.BuildSparse()
+	require.NoError(t, o.addToTransactions(ctx, txn, o.newOriginatorTransaction))
+
+	signerAddress := pldtypes.RandAddress()
+	submissionHash := pldtypes.RandBytes32()
+	nonce := uint64(42)
+	contractAddress := builder.GetContractAddress()
+	event := &common.HeartbeatReceivedEvent{
+		From:            coordinatorLocator,
+		ContractAddress: &contractAddress,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+				{
+					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+						ID:         txn.ID,
+						Originator: originatorLocator,
+					},
+					Signer:               *signerAddress,
+					LatestSubmissionHash: &submissionHash,
+					Nonce:                &nonce,
+				},
+			},
+		},
+	}
+	err := action_ProcessCurrentCoordinatorHeartbeat(ctx, o, event)
+	assert.NoError(t, err)
+}
+
+func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionWithNonceOnly(t *testing.T) {
+	ctx := context.Background()
+	originatorLocator := "sender@senderNode"
+	coordinatorLocator := "coordinator@coordinatorNode"
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+		NodeName(originatorLocator).
+		CurrentActiveCoordinator(coordinatorLocator)
+	o, _ := builder.Build()
+
+	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().
+		Address(builder.GetContractAddress()).
+		Originator(originatorLocator).
+		NumberOfRequiredEndorsers(1)
+	txn := transactionBuilder.BuildSparse()
+	require.NoError(t, o.addToTransactions(ctx, txn, o.newOriginatorTransaction))
+
+	nonce := uint64(42)
+	contractAddress := builder.GetContractAddress()
+	event := &common.HeartbeatReceivedEvent{
+		From:            coordinatorLocator,
+		ContractAddress: &contractAddress,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+				{
+					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+						ID:         txn.ID,
+						Originator: originatorLocator,
+					},
+					Nonce: &nonce,
+				},
+			},
+		},
+	}
+	err := action_ProcessCurrentCoordinatorHeartbeat(ctx, o, event)
+	assert.NoError(t, err)
+}
+
+func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionFromDifferentOriginatorIgnored(t *testing.T) {
+	ctx := context.Background()
+	coordinatorLocator := "coordinator@coordinatorNode"
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator(coordinatorLocator).
+		Build()
+
+	contractAddress := *pldtypes.RandAddress()
+	event := &common.HeartbeatReceivedEvent{
+		From:            coordinatorLocator,
+		ContractAddress: &contractAddress,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+				{
+					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+						ID:         uuid.New(),
+						Originator: "otherSender@otherNode",
+					},
+				},
+			},
+		},
+	}
+	err := action_ProcessCurrentCoordinatorHeartbeat(ctx, o, event)
+	assert.NoError(t, err)
+}
+
+func Test_action_ProcessCurrentCoordinatorHeartbeat_SubmittedHandleEventError(t *testing.T) {
+	ctx := context.Background()
+	originatorLocator := "sender@senderNode"
+	coordinatorLocator := "coordinator@coordinatorNode"
+	txnID := uuid.New()
+	innerErr := fmt.Errorf("simulated submitted handling failure")
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.EXPECT().GetID().Return(txnID)
+	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.SubmittedEvent")).Return(innerErr)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		NodeName(originatorLocator).
+		CurrentActiveCoordinator(coordinatorLocator).
+		Transactions(mockTxn).
+		Build()
+
+	signerAddress := pldtypes.RandAddress()
+	submissionHash := pldtypes.RandBytes32()
+	contractAddress := *pldtypes.RandAddress()
+	event := &common.HeartbeatReceivedEvent{
+		From:            coordinatorLocator,
+		ContractAddress: &contractAddress,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+				{
+					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+						ID:         txnID,
+						Originator: originatorLocator,
+					},
+					Signer:               *signerAddress,
+					LatestSubmissionHash: &submissionHash,
+				},
+			},
+		},
+	}
+	err := action_ProcessCurrentCoordinatorHeartbeat(ctx, o, event)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "error handling transaction submitted event")
+	assert.Contains(t, err.Error(), txnID.String())
+	assert.Contains(t, err.Error(), innerErr.Error())
+}
+
+func Test_action_ProcessCurrentCoordinatorHeartbeat_NonceAssignedHandleEventError(t *testing.T) {
+	ctx := context.Background()
+	originatorLocator := "sender@senderNode"
+	coordinatorLocator := "coordinator@coordinatorNode"
+	txnID := uuid.New()
+	innerErr := fmt.Errorf("simulated nonce handling failure")
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.EXPECT().GetID().Return(txnID)
+	mockTxn.EXPECT().HandleEvent(ctx, mock.AnythingOfType("*transaction.NonceAssignedEvent")).Return(innerErr)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		NodeName(originatorLocator).
+		CurrentActiveCoordinator(coordinatorLocator).
+		Transactions(mockTxn).
+		Build()
+
+	nonce := uint64(99)
+	contractAddress := *pldtypes.RandAddress()
+	event := &common.HeartbeatReceivedEvent{
+		From:            coordinatorLocator,
+		ContractAddress: &contractAddress,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
+				{
+					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
+						ID:         txnID,
+						Originator: originatorLocator,
+					},
+					Nonce: &nonce,
+				},
+			},
+		},
+	}
+	err := action_ProcessCurrentCoordinatorHeartbeat(ctx, o, event)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "error handling nonce assigned event")
+	assert.Contains(t, err.Error(), txnID.String())
+	assert.Contains(t, err.Error(), innerErr.Error())
+}
+
+// ── validator_IsSenderHigherPriorityThanCurrentCoordinator ───────────────────
+
+func Test_validator_IsSenderHigherPriorityThanCurrentCoordinator_TrueWhenHigherPriority(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+	event := &common.HeartbeatReceivedEvent{
+		From:                "node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
+	}
+	ok, err := validator_IsSenderHigherPriorityThanCurrentCoordinator(ctx, o, event)
+	require.NoError(t, err)
+	assert.True(t, ok, "node1 (idx 0) is higher priority than node2 (idx 1)")
+}
+
+func Test_validator_IsSenderHigherPriorityThanCurrentCoordinator_FalseWhenLowerPriority(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+	event := &common.HeartbeatReceivedEvent{
+		From:                "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
+	}
+	ok, err := validator_IsSenderHigherPriorityThanCurrentCoordinator(ctx, o, event)
+	require.NoError(t, err)
+	assert.False(t, ok, "node2 (idx 1) is not higher priority than node1 (idx 0)")
+}
+
+// ── action_SwitchActiveCoordinator ────────────────────────────────────────────
+
+func Test_action_SwitchActiveCoordinator_UpdatesCoordinatorAndResetsLivenessTimer(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node2").
+		HeartbeatIntervalsSinceLastReceive(7).
+		Build()
+
+	event := &common.HeartbeatReceivedEvent{
+		From:                "node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
+	}
+
+	err := action_SwitchActiveCoordinator(ctx, o, event)
+	require.NoError(t, err)
+
+	assert.Equal(t, "node1", o.currentActiveCoordinator)
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive, "liveness timer must be reset when switching coordinator")
+}
+
+// ── State_Sending integration: coordinator switching ─────────────────────────
+
+// A live heartbeat from a higher-priority node redirects the active coordinator (step 2) and then
+// immediately processes that same heartbeat as the new coordinator's heartbeat (step 4), because
+// step 2 updates currentActiveCoordinator before step 4's validator runs.
+func Test_ProcessEvent_HeartbeatReceived_HigherPriorityNode_RedirectsAndProcessesHeartbeat(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		HeartbeatIntervalsSinceLastReceive(5).
+		Build()
+
+	contractAddress := *pldtypes.RandAddress()
+	event := &common.HeartbeatReceivedEvent{
+		From:            "node1",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
 	}
 
-	err := o.applyHeartbeatReceived(ctx, event)
-	require.NoError(t, err)
-
-	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
-	assert.False(t, o.needsRedelegate)
-	assert.True(t, o.watchingPreviousCoordinatorFlush)
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, event))
+	assert.Equal(t, "node1", o.currentActiveCoordinator, "must redirect to higher-priority node")
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive, "liveness timer must be reset")
+	assert.Equal(t, State_Sending, o.GetCurrentState())
 }
 
-func Test_applyHeartbeatReceived_WatchingPrevious_ClosingHeartbeat_Redelegates(t *testing.T) {
-	// watchingPreviousCoordinatorFlush=true, heartbeat from previous coordinator, IS closing:
-	// stop watching and set needsRedelegate.
+// A live heartbeat from any node redirects when the current coordinator has been silent for at
+// least the inactive grace period (step 3), and then fires step 4 for the same reason as above.
+func Test_ProcessEvent_HeartbeatReceived_InactiveFallback_RedirectsAndProcessesHeartbeat(t *testing.T) {
 	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		NodeName("member1@node1").
-		CurrentActiveCoordinator("new-coordinator@node2").
-		PreviousActiveCoordinatorNode("old-coordinator@node1").
-		WatchingPreviousCoordinatorFlush(true).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		HeartbeatIntervalsSinceLastReceive(10).
+		InactiveGracePeriod(10).
 		Build()
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "old-coordinator@node1",
+		From:            "node2",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			CoordinatorState: common.CoordinatorState_Closing,
+			CoordinatorState: common.CoordinatorState_Active,
 		},
 	}
 
-	err := o.applyHeartbeatReceived(ctx, event)
-	require.NoError(t, err)
-
-	assert.False(t, o.watchingPreviousCoordinatorFlush)
-	assert.True(t, o.needsRedelegate)
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, event))
+	assert.Equal(t, "node2", o.currentActiveCoordinator, "must switch to live node when current is inactive")
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive, "liveness timer must be reset")
+	assert.Equal(t, State_Sending, o.GetCurrentState())
 }
 
-func Test_applyHeartbeatReceived_WatchingPrevious_ActiveCoordinatorHeartbeat_Redelegates(t *testing.T) {
-	// watchingPreviousCoordinatorFlush=true but heartbeat is from the NEW active coordinator:
-	// exit watching state and set needsRedelegate.
+// A live heartbeat from a lower-priority node when the current coordinator is still within the
+// grace period must be a no-op for coordinator selection but still process confirmed transactions.
+func Test_ProcessEvent_HeartbeatReceived_LowerPriorityWithinGracePeriod_NoRedirect(t *testing.T) {
 	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		NodeName("member1@node1").
-		CurrentActiveCoordinator("new-coordinator@node2").
-		PreviousActiveCoordinatorNode("old-coordinator@node1").
-		WatchingPreviousCoordinatorFlush(true).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		HeartbeatIntervalsSinceLastReceive(3).
+		InactiveGracePeriod(10).
 		Build()
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:                "new-coordinator@node2",
-		ContractAddress:     &contractAddress,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
+		From:            "node2",
+		ContractAddress: &contractAddress,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
 	}
 
-	err := o.applyHeartbeatReceived(ctx, event)
-	require.NoError(t, err)
-
-	assert.False(t, o.watchingPreviousCoordinatorFlush)
-	assert.True(t, o.needsRedelegate)
-}
-
-func Test_applyHeartbeatReceived_DroppedTransaction_SetsNeedsRedelegate(t *testing.T) {
-	// A transaction present in memory but absent from the coordinator snapshot triggers redelegate.
-	ctx := context.Background()
-	txID := uuid.New()
-
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.On("GetID").Return(txID)
-	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
-
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		NodeName("member1@node1").
-		CurrentActiveCoordinator("coordinator@node1").
-		Transactions(mockTxn).
-		Build()
-
-	contractAddress := *pldtypes.RandAddress()
-	event := &common.HeartbeatReceivedEvent{
-		From:                "coordinator@node1",
-		ContractAddress:     &contractAddress,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
-	}
-
-	err := o.applyHeartbeatReceived(ctx, event)
-	require.NoError(t, err)
-	assert.True(t, o.needsRedelegate)
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, event))
+	assert.Equal(t, "node1", o.currentActiveCoordinator, "must not redirect while current is within grace period")
+	assert.Equal(t, 3, o.heartbeatIntervalsSinceLastReceive, "liveness timer must not be reset for other node")
+	assert.Equal(t, State_Sending, o.GetCurrentState())
 }

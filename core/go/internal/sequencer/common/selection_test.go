@@ -29,73 +29,129 @@ func TestDedupeSortedCoordinatorEndorserNodes_RemovesDuplicatesAndSorts(t *testi
 	assert.Equal(t, []string{"a", "b", "c"}, got)
 }
 
-func Test_SelectCoordinatorNode_EndorserMode_SingleNode_ReturnsThatNode(t *testing.T) {
+func Test_ComputeCoordinatorPriorityList_SingleNode_ReturnsThatNode(t *testing.T) {
 	ctx := context.Background()
-	selected := SelectCoordinatorNode(ctx, []string{"node1"}, 1000, 100)
-	assert.Equal(t, "node1", selected)
+	list := ComputeCoordinatorPriorityList(ctx, []string{"node1"}, 1000, 100)
+	require.Len(t, list, 1)
+	assert.Equal(t, "node1", list[0])
 }
 
-func Test_SelectCoordinatorNode_EndorserMode_MultipleNodes_ReturnsNodeFromPool(t *testing.T) {
+func Test_ComputeCoordinatorPriorityList_MultipleNodes_TopIsInPool(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2", "node3"}
-	selected := SelectCoordinatorNode(ctx, pool, 1000, 100)
-	assert.Contains(t, pool, selected)
+	list := ComputeCoordinatorPriorityList(ctx, pool, 1000, 100)
+	require.Len(t, list, len(pool))
+	assert.Contains(t, pool, list[0], "highest-priority node must be a member of the pool")
 }
 
-func Test_SelectCoordinatorNode_EndorserMode_SameBlockRange_ReturnsSameNode(t *testing.T) {
+func Test_ComputeCoordinatorPriorityList_SameBlockRange_ReturnsSameTop(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2", "node3"}
 	blockRange := uint64(100)
 
-	c1 := SelectCoordinatorNode(ctx, pool, 1000, blockRange)
-	c2 := SelectCoordinatorNode(ctx, pool, 1050, blockRange)
-	c3 := SelectCoordinatorNode(ctx, pool, 1099, blockRange)
+	l1 := ComputeCoordinatorPriorityList(ctx, pool, 1000, blockRange)
+	l2 := ComputeCoordinatorPriorityList(ctx, pool, 1050, blockRange)
+	l3 := ComputeCoordinatorPriorityList(ctx, pool, 1099, blockRange)
 
-	assert.Equal(t, c1, c2, "same block range epoch should select same coordinator")
-	assert.Equal(t, c2, c3, "same block range epoch should select same coordinator")
+	assert.Equal(t, l1[0], l2[0], "same block range epoch should produce the same top node")
+	assert.Equal(t, l2[0], l3[0], "same block range epoch should produce the same top node")
 }
 
-func Test_SelectCoordinatorNode_EndorserMode_DifferentBlockRanges_CanSelectDifferentNodes(t *testing.T) {
+func Test_ComputeCoordinatorPriorityList_DifferentBlockRanges_CanSelectDifferentTopNode(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2"}
 	blockRange := uint64(50)
 
-	n1 := SelectCoordinatorNode(ctx, pool, 100, blockRange)
-	n2 := SelectCoordinatorNode(ctx, pool, 150, blockRange)
+	l1 := ComputeCoordinatorPriorityList(ctx, pool, 100, blockRange)
+	l2 := ComputeCoordinatorPriorityList(ctx, pool, 150, blockRange)
 
-	assert.Contains(t, pool, n1)
-	assert.Contains(t, pool, n2)
+	assert.Contains(t, pool, l1[0])
+	assert.Contains(t, pool, l2[0])
 }
 
-func Test_SelectCoordinatorNode_EndorserMode_CoordinatorAndOriginatorAgree(t *testing.T) {
+func Test_ComputeCoordinatorPriorityList_TwoCallsAgree(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2", "node3"}
 	blockRange := uint64(100)
 	blockHeight := uint64(1000)
 
-	fromCoordinator := SelectCoordinatorNode(ctx, pool, blockHeight, blockRange)
-	fromOriginator := SelectCoordinatorNode(ctx, pool, blockHeight, blockRange)
+	first := ComputeCoordinatorPriorityList(ctx, pool, blockHeight, blockRange)
+	second := ComputeCoordinatorPriorityList(ctx, pool, blockHeight, blockRange)
 
-	assert.Equal(t, fromCoordinator, fromOriginator, "coordinator and originator must agree on the same pool, height, and range")
+	assert.Equal(t, first, second, "two independent calls with the same inputs must return the same list")
 }
 
-func TestSelectCoordinatorNode_WhenBlockHeightIsExactEpochBoundary_UsesThatBoundaryForSelection(t *testing.T) {
+func Test_ComputeCoordinatorPriorityList_EpochBoundary_SameBoundaryProducesSameTop(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"a-node", "b-node", "m-node", "z-node"}
 	blockRange := uint64(100)
-	atBoundary := SelectCoordinatorNode(ctx, pool, 1000, blockRange)
-	atEnd := SelectCoordinatorNode(ctx, pool, 1099, blockRange)
-	assert.Equal(t, atBoundary, atEnd)
+	atBoundary := ComputeCoordinatorPriorityList(ctx, pool, 1000, blockRange)
+	atEnd := ComputeCoordinatorPriorityList(ctx, pool, 1099, blockRange)
+	assert.Equal(t, atBoundary[0], atEnd[0])
 }
 
-func TestSelectCoordinatorNode_WhenPoolOrderIsLexicographic_HashIndexIsStableForFixedInputs(t *testing.T) {
+func Test_ComputeCoordinatorPriorityList_IsStableForFixedInputs(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"a", "b", "c", "d", "e"}
 	blockRange := uint64(50)
-	first := SelectCoordinatorNode(ctx, pool, 75, blockRange)
-	second := SelectCoordinatorNode(ctx, pool, 75, blockRange)
+	first := ComputeCoordinatorPriorityList(ctx, pool, 75, blockRange)
+	second := ComputeCoordinatorPriorityList(ctx, pool, 75, blockRange)
 	assert.Equal(t, first, second)
-	assert.Contains(t, pool, first)
+	assert.Contains(t, pool, first[0])
+}
+
+func Test_ComputeCoordinatorPriorityList_WrapAroundOrder(t *testing.T) {
+	// Fix a pool and block height so the hash deterministically picks index 2 ("node3").
+	// With wrap-around the expected order is [node3, node4, node1, node2].
+	ctx := context.Background()
+	pool := []string{"node1", "node2", "node3", "node4"}
+
+	list := ComputeCoordinatorPriorityList(ctx, pool, 1000, 100)
+	require.Len(t, list, len(pool))
+
+	// Locate where the top node sits in the original pool.
+	top := list[0]
+	var topIdx int
+	for i, n := range pool {
+		if n == top {
+			topIdx = i
+			break
+		}
+	}
+	// Every subsequent entry must be the next pool node with wrap-around.
+	for i := range len(pool) {
+		expected := pool[(topIdx+i)%len(pool)]
+		assert.Equal(t, expected, list[i], "position %d must follow wrap-around order", i)
+	}
+}
+
+
+func Test_ComputeCoordinatorPriorityList_EmptyPool_ReturnsNil(t *testing.T) {
+	ctx := context.Background()
+	list := ComputeCoordinatorPriorityList(ctx, nil, 1000, 100)
+	assert.Nil(t, list)
+}
+
+func Test_ComputeCoordinatorPriorityList_ListContainsAllPoolNodes(t *testing.T) {
+	ctx := context.Background()
+	pool := []string{"node1", "node2", "node3"}
+	list := ComputeCoordinatorPriorityList(ctx, pool, 1000, 100)
+	require.Len(t, list, len(pool))
+	for _, node := range pool {
+		assert.Contains(t, list, node, "all pool nodes must appear in the priority list")
+	}
+}
+
+func Test_PriorityIndexOf_ReturnsIndexForKnownNode(t *testing.T) {
+	list := []string{"a", "b", "c"}
+	assert.Equal(t, 0, PriorityIndexOf(list, "a"))
+	assert.Equal(t, 1, PriorityIndexOf(list, "b"))
+	assert.Equal(t, 2, PriorityIndexOf(list, "c"))
+}
+
+func Test_PriorityIndexOf_ReturnsLenForUnknownNode(t *testing.T) {
+	list := []string{"a", "b", "c"}
+	assert.Equal(t, len(list), PriorityIndexOf(list, "unknown"))
 }
 
 func Test_DecodeNewBlockHeight_NewEpoch(t *testing.T) {

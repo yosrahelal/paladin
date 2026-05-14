@@ -22,27 +22,32 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
 
-func action_SelectActiveCoordinator(ctx context.Context, c *coordinator, _ common.Event) error {
+// action_CalculateCoordinatorPriorities recomputes the coordinator priority list for the current
+// block height and epoch. It stores the result on the coordinator and pushes it to the co-located
+// originator via the notifyOriginator callback.
+func action_CalculateCoordinatorPriorities(ctx context.Context, c *coordinator, _ common.Event) error {
 	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
 		// For STATIC and SENDER modes, the coordinator is set once at Start time and never changes.
 		return nil
 	}
-	c.previousActiveCoordinatorNode = c.currentActiveCoordinator
-	c.currentActiveCoordinator = common.SelectCoordinatorNode(
+	c.coordinatorPriorityList = common.ComputeCoordinatorPriorityList(
 		ctx,
-		c.originatorNodePool,
+		c.nodePool,
 		c.currentBlockHeight,
 		c.coordinatorSelectionBlockRange,
 	)
+	if len(c.coordinatorPriorityList) > 0 {
+		c.currentActiveCoordinator = c.coordinatorPriorityList[0]
+	}
+
+	c.notifyOriginator(ctx, &common.CoordinatorPriorityListUpdatedEvent{
+		Nodes: c.coordinatorPriorityList,
+	})
 	return nil
 }
 
-func action_UpdateBlockHeight(_ context.Context, c *coordinator, event common.Event) error {
+func action_UpdateBlockHeight(ctx context.Context, c *coordinator, event common.Event) error {
 	c.currentBlockHeight, c.newBlockRangeEpoch = common.DecodeNewBlockHeight(c.currentBlockHeight, c.coordinatorSelectionBlockRange, event)
-	return nil
-}
-
-func action_ExpireGrapherLocks(ctx context.Context, c *coordinator, _ common.Event) error {
 	c.grapher.CleanUpLocks(ctx, c.currentBlockHeight)
 	return nil
 }

@@ -52,6 +52,8 @@ func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
 	require.NoError(t, c.Start(ctx))
 	defer cancel()
 
+	c.startDispatchLoop()
+
 	// Pre-populate inFlightTxns so the dispatch loop will enter the first Wait() when it pulls the tx
 	c.inFlightMutex.L.Lock()
 	c.inFlightTxns[uuid.New()] = coordinatortransactionmocks.NewCoordinatorTransaction(t)
@@ -80,6 +82,7 @@ func TestDispatchLoop_StopAtSelect(t *testing.T) {
 	c, mocks := builder.Build()
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
 	require.NoError(t, c.Start(ctx))
+	c.startDispatchLoop()
 	cancel()
 	// Stop without ever queueing a tx; loop is blocked on the select waiting for dispatchQueue or ctx.Done()
 }
@@ -126,14 +129,19 @@ func TestDispatchLoop_HandleEventError_ContinuesLoop(t *testing.T) {
 	c.dispatchQueue <- tx1
 	c.dispatchQueue <- tx2
 
-	go c.dispatchLoop(ctx)
+	done := make(chan struct{})
+	c.dispatchLoopDone = done
+	go func() {
+		defer close(done)
+		c.dispatchLoop(ctx)
+	}()
 
 	// Give the loop time to process both transactions
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 
 	select {
-	case <-c.dispatchLoopStopped:
+	case <-c.dispatchLoopDone:
 	case <-time.After(time.Second):
 		t.Fatal("dispatch loop did not stop within timeout")
 	}
@@ -164,13 +172,19 @@ func TestDispatchLoop_TxnWithoutPublicDispatch_DoesNotCountAhead(t *testing.T) {
 	tx.EXPECT().HasDispatchedPublicTransaction().Return(false)
 
 	c.dispatchQueue <- tx
-	go c.dispatchLoop(ctx)
+
+	done := make(chan struct{})
+	c.dispatchLoopDone = done
+	go func() {
+		defer close(done)
+		c.dispatchLoop(ctx)
+	}()
 
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 
 	select {
-	case <-c.dispatchLoopStopped:
+	case <-c.dispatchLoopDone:
 	case <-time.After(time.Second):
 		t.Fatal("dispatch loop did not stop within timeout")
 	}
@@ -208,14 +222,20 @@ func TestDispatchLoop_CtxCancelledDuringSecondWait_Exits(t *testing.T) {
 	tx.EXPECT().HasDispatchedPublicTransaction().Return(true)
 
 	c.dispatchQueue <- tx
-	go c.dispatchLoop(ctx)
+
+	done := make(chan struct{})
+	c.dispatchLoopDone = done
+	go func() {
+		defer close(done)
+		c.dispatchLoop(ctx)
+	}()
 
 	// Give the loop time to enter the second wait
 	time.Sleep(50 * time.Millisecond)
 	cancel() // cancelling context triggers AfterFunc → Broadcast → loop exits second wait via ctx.Done()
 
 	select {
-	case <-c.dispatchLoopStopped:
+	case <-c.dispatchLoopDone:
 	case <-time.After(time.Second):
 		t.Fatal("dispatch loop did not stop within timeout")
 	}
@@ -290,7 +310,13 @@ func TestDispatchLoop_SecondWait_NormalExit(t *testing.T) {
 	tx.EXPECT().HasDispatchedPublicTransaction().Return(true)
 
 	c.dispatchQueue <- tx
-	go c.dispatchLoop(ctx)
+
+	done := make(chan struct{})
+	c.dispatchLoopDone = done
+	go func() {
+		defer close(done)
+		c.dispatchLoop(ctx)
+	}()
 
 	// Wait for the loop to dispatch the tx and enter the second wait
 	time.Sleep(50 * time.Millisecond)
@@ -306,7 +332,7 @@ func TestDispatchLoop_SecondWait_NormalExit(t *testing.T) {
 
 	cancel()
 	select {
-	case <-c.dispatchLoopStopped:
+	case <-c.dispatchLoopDone:
 	case <-time.After(time.Second):
 		t.Fatal("dispatch loop did not stop within timeout")
 	}

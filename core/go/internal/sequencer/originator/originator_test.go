@@ -55,9 +55,11 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	// Ensure the originator is in observing mode by queuing a heartbeat from an active coordinator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent := &common.HeartbeatReceivedEvent{
-		From:                coordinatorNode,
-		ContractAddress:     &contractAddress,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
+		From:            coordinatorNode,
+		ContractAddress: &contractAddress,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
 	}
 	o.QueueEvent(ctx, heartbeatEvent)
 	sync := statemachine.NewSyncEvent()
@@ -387,7 +389,7 @@ func TestOriginator_Start_EndorserMode_NoCandidates_SeedsPoolWithLocalNode(t *te
 		o.WaitForDone(t.Context())
 	}()
 	// Pool must never be empty; always contains at least the local node.
-	assert.Equal(t, []string{"localNode"}, o.originatorNodePool)
+	assert.Equal(t, []string{"localNode"}, o.coordinatorPriorityList)
 }
 
 func TestOriginator_Start_EndorserMode_InvalidCandidate_ReturnsError(t *testing.T) {
@@ -417,7 +419,7 @@ func TestOriginator_Start_EndorserMode_ValidCandidates_Success(t *testing.T) {
 	}()
 	assert.True(t, o.started)
 	// Candidates node1 and node2 deduped/sorted; local node (node1) is already in the pool.
-	assert.Equal(t, []string{"node1", "node2"}, o.originatorNodePool)
+	assert.Equal(t, []string{"node1", "node2"}, o.coordinatorPriorityList)
 }
 
 func TestOriginator_Start_SenderMode_Success(t *testing.T) {

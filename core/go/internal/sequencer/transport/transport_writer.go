@@ -39,7 +39,8 @@ type TransportWriter interface {
 	WaitForDone(ctx context.Context)
 	SendDelegationRequest(ctx context.Context, coordinatorNode string, transactions []*components.PrivateTransaction, blockHeight uint64) error
 	SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64, blockHeight uint64) error
-	SendDelegationRequestRejection(ctx context.Context, delegatingNodeName string, delegationId string, blockHeight uint64) error
+	SendDelegationRequestRejection(ctx context.Context, delegatingNodeName string, delegationId string, blockHeight uint64, activeCoordinator string) error
+	SendHandoverRequest(ctx context.Context, targetNode string, contractAddress *pldtypes.EthAddress) error
 	SendEndorsementRequest(ctx context.Context, txID uuid.UUID, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState) error
 	SendEndorsementResponse(ctx context.Context, transactionId, idempotencyKey, contractAddress string, attResult *prototk.AttestationResult, endorsementResult *components.EndorsementResult, revertReason, endorsementName, party, node string) error
 	SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, blockHeight int64) error
@@ -161,13 +162,15 @@ func (tw *transportWriter) SendDelegationRequestRejection(
 	delegatingNodeName string,
 	delegationId string,
 	blockHeight uint64,
+	activeCoordinator string,
 ) error {
 	rejection := &engineProto.DelegationRequestAcknowledgment{
-		DelegationId:    delegationId,
-		DelegateNodeId:  delegatingNodeName,
-		ContractAddress: tw.contractAddress.String(),
-		Accepted:        false,
-		BlockHeight:     int64(blockHeight),
+		DelegationId:      delegationId,
+		DelegateNodeId:    delegatingNodeName,
+		ContractAddress:   tw.contractAddress.String(),
+		Accepted:          false,
+		BlockHeight:       int64(blockHeight),
+		ActiveCoordinator: activeCoordinator,
 	}
 	rejectionBytes, err := proto.Marshal(rejection)
 	if err != nil {
@@ -180,6 +183,27 @@ func (tw *transportWriter) SendDelegationRequestRejection(
 		Payload:     rejectionBytes,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        delegatingNodeName,
+	})
+}
+
+func (tw *transportWriter) SendHandoverRequest(ctx context.Context, targetNode string, contractAddress *pldtypes.EthAddress) error {
+	log.L(ctx).Debugf("transport writer sending handover request to %s for contract %s", targetNode, contractAddress.String())
+
+	handoverRequest := &engineProto.CoordinatorHandoverRequest{
+		FromNode:        tw.nodeID,
+		ContractAddress: contractAddress.String(),
+	}
+	handoverRequestBytes, err := proto.Marshal(handoverRequest)
+	if err != nil {
+		log.L(ctx).Errorf("error marshalling handover request: %s", err)
+		return err
+	}
+
+	return tw.send(ctx, &components.FireAndForgetMessageSend{
+		MessageType: MessageType_HandoverRequest,
+		Payload:     handoverRequestBytes,
+		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
+		Node:        targetNode,
 	})
 }
 

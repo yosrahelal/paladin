@@ -34,8 +34,10 @@ func TestCoordinatorState_String(t *testing.T) {
 	assert.Equal(t, "Idle", CoordinatorState_Idle.String())
 	assert.Equal(t, "Observing", CoordinatorState_Observing.String())
 	assert.Equal(t, "Elect", CoordinatorState_Elect.String())
+	assert.Equal(t, "Prepared", CoordinatorState_Prepared.String())
 	assert.Equal(t, "Active", CoordinatorState_Active.String())
-	assert.Equal(t, "Flush", CoordinatorState_Flush.String())
+	assert.Equal(t, "Active_Flush", CoordinatorState_Active_Flush.String())
+	assert.Equal(t, "Closing_Flush", CoordinatorState_Closing_Flush.String())
 	assert.Equal(t, "Closing", CoordinatorState_Closing.String())
 	assert.Equal(t, "Unknown(99)", CoordinatorState(99).String())
 }

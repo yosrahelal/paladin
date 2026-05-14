@@ -77,6 +77,8 @@ func (sMgr *sequencerManager) HandlePaladinMsg(ctx context.Context, message *com
 		go sMgr.handleTransactionUnknown(sMgr.ctx, message)
 	case transport.MessageType_NotActiveCoordinator:
 		go sMgr.handleNotActiveCoordinator(sMgr.ctx, message)
+	case transport.MessageType_HandoverRequest:
+		go sMgr.handleHandoverRequest(sMgr.ctx, message)
 	default:
 		log.L(ctx).Errorf("Unknown message type: %s", message.MessageType)
 	}
@@ -410,6 +412,24 @@ func (sMgr *sequencerManager) handleDelegationRequestAcknowledgment(ctx context.
 		return
 	}
 
+	contractAddress := sMgr.parseContractAddressString(ctx, delegationRequestAcknowledgment.ContractAddress, message)
+	if contractAddress == nil {
+		return
+	}
+
+	if !delegationRequestAcknowledgment.Accepted {
+		seq, err := sMgr.GetSequencer(ctx, *contractAddress)
+		if seq == nil || err != nil {
+			log.L(ctx).Debugf("ignoring delegation rejection for contract %s as sequencer is not loaded: %v", contractAddress, err)
+			return
+		}
+		rejectedEvent := &common.DelegationRejectedEvent{}
+		rejectedEvent.ActiveCoordinator = delegationRequestAcknowledgment.ActiveCoordinator
+		rejectedEvent.EventTime = time.Now()
+		seq.GetOriginator().QueueEvent(ctx, rejectedEvent)
+		return
+	}
+
 	rejectedDelegationIDs := make([]string, 0, len(delegationRequestAcknowledgment.TransactionIds))
 	rejectedDelegationMaxInFlight := 0
 	rejectedDelegationCoordinatorError := 0
@@ -433,6 +453,30 @@ func (sMgr *sequencerManager) handleDelegationRequestAcknowledgment(ctx context.
 	if rejectedDelegationCoordinatorError > 0 {
 		log.L(ctx).Warnf("coordinator error processing %d delegations", rejectedDelegationCoordinatorError)
 	}
+}
+
+func (sMgr *sequencerManager) handleHandoverRequest(ctx context.Context, message *components.ReceivedMessage) {
+	handoverRequest := &engineProto.CoordinatorHandoverRequest{}
+	if err := proto.Unmarshal(message.Payload, handoverRequest); err != nil {
+		sMgr.logPaladinMessageUnmarshalError(ctx, message, err)
+		return
+	}
+
+	contractAddress := sMgr.parseContractAddressString(ctx, handoverRequest.ContractAddress, message)
+	if contractAddress == nil {
+		return
+	}
+
+	seq, err := sMgr.GetSequencer(ctx, *contractAddress)
+	if seq == nil || err != nil {
+		log.L(ctx).Debugf("ignoring handover request for contract %s as sequencer is not loaded: %v", contractAddress, err)
+		return
+	}
+
+	handoverEvent := &common.HandoverRequestEvent{}
+	handoverEvent.FromNode = handoverRequest.FromNode
+	handoverEvent.EventTime = time.Now()
+	seq.GetCoordinator().QueueEvent(ctx, handoverEvent)
 }
 
 // TODO AM: this is being handled outside the sequencer, although a sequencer is loaded at the end purely to send the response.

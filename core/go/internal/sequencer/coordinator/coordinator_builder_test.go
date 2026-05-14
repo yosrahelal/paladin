@@ -52,17 +52,15 @@ type CoordinatorBuilderForTesting struct {
 	heartbeatsUntilClosingGracePeriodExpires *int
 	metrics                                  metrics.DistributedSequencerMetrics
 	sequencerConfig                          *pldconf.SequencerConfig
-	originatorNodePool                       *[]string
+	nodePool                                 *[]string
 	currentActiveCoordinator                 *string
-	previousActiveCoordinatorNode            *string
-	newBlockRangeEpoch                       *bool
 	localNodeName                            string
 	heartbeatIntervalsSinceLastReceive       *int
 	inactiveGracePeriod                      *int
 	heartbeatIntervalsSinceStateChange       *int
-	activeCoordinatorState                   *State
 	useMockTransportWriter                   bool
 	grapher                                  grapher.Grapher
+	signingIdentityUsed                      *bool
 }
 
 type CoordinatorDependencyMocks struct {
@@ -211,9 +209,14 @@ func (b *CoordinatorBuilderForTesting) OverrideSequencerConfig(config *pldconf.S
 	return b
 }
 
-func (b *CoordinatorBuilderForTesting) OriginatorNodePool(nodes ...string) *CoordinatorBuilderForTesting {
-	b.originatorNodePool = &nodes
+func (b *CoordinatorBuilderForTesting) NodePool(nodes ...string) *CoordinatorBuilderForTesting {
+	b.nodePool = &nodes
 	return b
+}
+
+// OriginatorNodePool is an alias for NodePool, kept for call-site compatibility in tests.
+func (b *CoordinatorBuilderForTesting) OriginatorNodePool(nodes ...string) *CoordinatorBuilderForTesting {
+	return b.NodePool(nodes...)
 }
 
 func (b *CoordinatorBuilderForTesting) DomainContractConfig(cfg *prototk.ContractConfig) *CoordinatorBuilderForTesting {
@@ -231,18 +234,8 @@ func (b *CoordinatorBuilderForTesting) CurrentActiveCoordinator(node string) *Co
 	return b
 }
 
-func (b *CoordinatorBuilderForTesting) PreviousActiveCoordinatorNode(node string) *CoordinatorBuilderForTesting {
-	b.previousActiveCoordinatorNode = &node
-	return b
-}
-
 func (b *CoordinatorBuilderForTesting) CoordinatorSelectionBlockRange(n uint64) *CoordinatorBuilderForTesting {
 	b.sequencerConfig.BlockRange = confutil.P(n)
-	return b
-}
-
-func (b *CoordinatorBuilderForTesting) NewBlockRangeEpoch(v bool) *CoordinatorBuilderForTesting {
-	b.newBlockRangeEpoch = &v
 	return b
 }
 
@@ -258,11 +251,6 @@ func (b *CoordinatorBuilderForTesting) InactiveGracePeriod(n int) *CoordinatorBu
 
 func (b *CoordinatorBuilderForTesting) HeartbeatIntervalsSinceStateChange(n int) *CoordinatorBuilderForTesting {
 	b.heartbeatIntervalsSinceStateChange = &n
-	return b
-}
-
-func (b *CoordinatorBuilderForTesting) ActiveCoordinatorState(state State) *CoordinatorBuilderForTesting {
-	b.activeCoordinatorState = &state
 	return b
 }
 
@@ -283,6 +271,11 @@ func (b *CoordinatorBuilderForTesting) ClosingGracePeriod(n int) *CoordinatorBui
 
 func (b *CoordinatorBuilderForTesting) Grapher(grapher grapher.Grapher) *CoordinatorBuilderForTesting {
 	b.grapher = grapher
+	return b
+}
+
+func (b *CoordinatorBuilderForTesting) SigningIdentityUsed(used bool) *CoordinatorBuilderForTesting {
+	b.signingIdentityUsed = &used
 	return b
 }
 
@@ -349,7 +342,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		b.sequencerConfig,
 		localNode,
 		b.metrics,
-		nil, // notifyOriginator — not needed in unit tests
+		func(_ context.Context, _ common.Event) {}, // no-op notifyOriginator; tests that need it wire c.notifyOriginator directly
 	)
 
 	// Loops are not started yet — set state and seed transactions directly.
@@ -367,17 +360,11 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	if b.currentBlockHeight != nil {
 		coordinator.currentBlockHeight = *b.currentBlockHeight
 	}
-	if b.originatorNodePool != nil {
-		coordinator.originatorNodePool = *b.originatorNodePool
+	if b.nodePool != nil {
+		coordinator.nodePool = *b.nodePool
 	}
 	if b.currentActiveCoordinator != nil {
 		coordinator.currentActiveCoordinator = *b.currentActiveCoordinator
-	}
-	if b.previousActiveCoordinatorNode != nil {
-		coordinator.previousActiveCoordinatorNode = *b.previousActiveCoordinatorNode
-	}
-	if b.newBlockRangeEpoch != nil {
-		coordinator.newBlockRangeEpoch = *b.newBlockRangeEpoch
 	}
 	if b.heartbeatIntervalsSinceLastReceive != nil {
 		coordinator.heartbeatIntervalsSinceLastReceive = *b.heartbeatIntervalsSinceLastReceive
@@ -388,11 +375,11 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	if b.heartbeatIntervalsSinceStateChange != nil {
 		coordinator.heartbeatIntervalsSinceStateChange = *b.heartbeatIntervalsSinceStateChange
 	}
-	if b.activeCoordinatorState != nil {
-		coordinator.activeCoordinatorState = *b.activeCoordinatorState
-	}
 	if b.grapher != nil {
 		coordinator.grapher = b.grapher
+	}
+	if b.signingIdentityUsed != nil {
+		coordinator.signingIdentityUsed = *b.signingIdentityUsed
 	}
 	return coordinator, mocks
 }

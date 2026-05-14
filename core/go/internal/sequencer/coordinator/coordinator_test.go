@@ -490,7 +490,7 @@ func TestCoordinator_NewCoordinator_EndorserMode_NoConfiguredCandidates_SeedsPoo
 		c.WaitForDone(t.Context())
 	}()
 	// Pool must never be empty; always contains at least the local node.
-	assert.Equal(t, []string{"localNode"}, c.originatorNodePool)
+	assert.Equal(t, []string{"localNode"}, c.nodePool)
 }
 
 func TestCoordinator_NewCoordinator_StaticMode_EmptyStaticCoordinator_Fails(t *testing.T) {
@@ -560,7 +560,7 @@ func TestCoordinator_NewCoordinator_EndorserMode_InitializesPoolFromConfiguredCa
 	}()
 	defer cancel()
 	// Pool contains deduped/sorted candidate nodes plus the local node ("node1" is the builder default).
-	assert.Equal(t, []string{"node1", "nodeA", "nodeB"}, c.originatorNodePool)
+	assert.Equal(t, []string{"node1", "nodeA", "nodeB"}, c.nodePool)
 }
 
 func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {
@@ -572,12 +572,7 @@ func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {
 
 	// Verify event loop is running
 	require.False(t, c.stateMachineEventLoop.IsStopped(), "event loop should not be stopped initially")
-
-	select {
-	case <-c.dispatchLoopStopped:
-		t.Fatal("dispatch loop should not be stopped initially")
-	default:
-	}
+	require.False(t, c.isDispatchLoopRunning(), "dispatch loop should not be running initially (not yet Active)")
 
 	// Cancel the context then wait for shutdown to complete
 	cancel()
@@ -585,13 +580,7 @@ func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {
 
 	// Verify both loops have stopped
 	require.True(t, c.stateMachineEventLoop.IsStopped(), "event loop should be stopped")
-
-	select {
-	case _, ok := <-c.dispatchLoopStopped:
-		require.False(t, ok, "dispatch loop stopped channel should be closed")
-	case <-time.After(10 * time.Millisecond):
-		t.Fatal("dispatch loop did not stop within timeout")
-	}
+	require.False(t, c.isDispatchLoopRunning(), "dispatch loop should not be running after shutdown")
 
 	// Verify context was cancelled
 	select {
@@ -627,12 +616,7 @@ func TestCoordinator_CancelContext_CompletesSuccessfullyWhenCalledOnce(t *testin
 
 	// Verify both loops have stopped
 	require.True(t, c.stateMachineEventLoop.IsStopped(), "event loop should be stopped")
-	select {
-	case _, ok := <-c.dispatchLoopStopped:
-		require.False(t, ok, "dispatch loop stopped channel should be closed")
-	default:
-		t.Fatal("dispatch loop should be stopped")
-	}
+	require.False(t, c.isDispatchLoopRunning(), "dispatch loop should not be running after shutdown")
 }
 
 func TestCoordinator_CancelContext_StopsLoopsEvenWhenProcessingEvents(t *testing.T) {
@@ -652,13 +636,7 @@ func TestCoordinator_CancelContext_StopsLoopsEvenWhenProcessingEvents(t *testing
 
 	// Verify both loops have stopped
 	require.True(t, c.stateMachineEventLoop.IsStopped(), "event loop should be stopped")
-
-	select {
-	case _, ok := <-c.dispatchLoopStopped:
-		require.False(t, ok, "dispatch loop stopped channel should be closed")
-	default:
-		t.Fatal("dispatch loop should be stopped")
-	}
+	require.False(t, c.isDispatchLoopRunning(), "dispatch loop should not be running after shutdown")
 }
 
 func TestCoordinator_CancelContext_WhenAlreadyCancelled_ReturnsImmediately(t *testing.T) {
@@ -865,12 +843,8 @@ func TestStart_Idempotent_SecondCallReturnsNil(t *testing.T) {
 	c.started = true
 	err := c.Start(ctx)
 	require.NoError(t, err)
-	// Confirm no goroutines were started by verifying dispatchLoopStopped is not closed
-	select {
-	case <-c.dispatchLoopStopped:
-		t.Fatal("dispatchLoopStopped should not be closed")
-	default:
-	}
+	// Confirm no goroutines were started by verifying the dispatch loop is not running
+	require.False(t, c.isDispatchLoopRunning(), "dispatch loop should not be running after idempotent Start()")
 }
 
 func TestWaitForDone_NotStarted_ReturnsImmediately(t *testing.T) {

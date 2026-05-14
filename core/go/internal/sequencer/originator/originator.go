@@ -64,16 +64,11 @@ type originator struct {
 	/* State machine - using generic statemachine.StateMachineEventLoop */
 	stateMachineEventLoop              *statemachine.StateMachineEventLoop[State, *originator]
 	currentActiveCoordinator           string
-	previousActiveCoordinatorNode      string
 	heartbeatIntervalsSinceLastReceive int
 	transactionsByID                   map[uuid.UUID]transaction.OriginatorTransaction
 	transactionsOrdered                []transaction.OriginatorTransaction
 	currentBlockHeight                 uint64
-	newBlockRangeEpoch                 bool     // sticky for the current NewBlock event: guards on Select
-	originatorNodePool                 []string // Unified pool of nodes for coordinator selection; seeded from endorser candidates and grown dynamically
-	watchingPreviousCoordinatorFlush   bool     // Watching-phase tracking: set when coordinator changes; cleared on first closing heartbeat or if inactive thresholds are exceeded
-	// One-shot flag: set when a condition is detected; cleared when the handler that performs the action runs.
-	needsRedelegate bool // Set by applyHeartbeatReceived when the heartbeat reveals a need to redelegate; cleared by sendDelegationRequest
+	coordinatorPriorityList            []string // priority-ordered list pushed by the co-located coordinator; index 0 is the current active coordinator
 
 	/* Config */
 	nodeName            string
@@ -159,7 +154,13 @@ func (o *originator) initializeFromContractConfig(ctx context.Context) error {
 		log.L(ctx).Debugf("coordinator selection is SENDER mode; active coordinator set to self: %s", o.nodeName)
 	case prototk.ContractConfig_COORDINATOR_ENDORSER:
 		candidates := o.domainAPI.ContractConfig().GetCoordinatorEndorserCandidates()
-		nodes := make([]string, 0, len(candidates))
+		if len(candidates) == 0 {
+			log.L(ctx).Warnf("no coordinator endorser candidates configured; using local node as active coordinator: %s", o.nodeName)
+			o.coordinatorPriorityList = []string{o.nodeName}
+			o.currentActiveCoordinator = o.nodeName
+			return nil
+		}
+		nodes := make([]string, 0, len(candidates)+1)
 		for _, locator := range candidates {
 			_, node, err := pldtypes.PrivateIdentityLocator(locator).Validate(ctx, "", false)
 			if err != nil {
@@ -167,10 +168,13 @@ func (o *originator) initializeFromContractConfig(ctx context.Context) error {
 			}
 			nodes = append(nodes, node)
 		}
-		// Always include the local node so the pool is never empty.
+		// Always include the local node so the list is never empty.
 		nodes = append(nodes, o.nodeName)
-		o.originatorNodePool = common.DedupeSortedCoordinatorEndorserNodes(nodes)
-		log.L(ctx).Debugf("initialized originator node pool (COORDINATOR_ENDORSER): %+v", o.originatorNodePool)
+		o.coordinatorPriorityList = common.DedupeSortedCoordinatorEndorserNodes(nodes)
+		if len(o.coordinatorPriorityList) > 0 {
+			o.currentActiveCoordinator = o.coordinatorPriorityList[0]
+		}
+		log.L(ctx).Debugf("initialized coordinator priority list (COORDINATOR_ENDORSER): %+v", o.coordinatorPriorityList)
 	}
 	return nil
 }

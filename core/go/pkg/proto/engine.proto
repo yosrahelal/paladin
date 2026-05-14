@@ -128,6 +128,12 @@ message DelegationRequestAcknowledgment {
     string contract_address = 5;
     bool accepted = 6; // A delegation request is accepted if a node believes it is the active coordinator. A request being accepted does not indicate an absence of errors 
     int64 block_height = 7;
+    string active_coordinator = 8; // On rejection, the rejecting coordinator's belief of who is currently active, so the originator can fast-redirect
+}
+
+message CoordinatorHandoverRequest {
+    string from_node = 1;
+    string contract_address = 2;
 }
 
 message StateAcknowledgedEvent {

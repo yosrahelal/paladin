@@ -335,8 +335,17 @@ func (r *SentMessageRecorder) SendDelegationRequestAcknowledgment(ctx context.Co
 	return nil
 }
 
-func (r *SentMessageRecorder) SendDelegationRequestRejection(ctx context.Context, delegatingNodeName string, delegationId string, blockHeight uint64) error {
+func (r *SentMessageRecorder) SendDelegationRequestRejection(ctx context.Context, delegatingNodeName string, delegationId string, blockHeight uint64, activeCoordinator string) error {
 	return nil
+}
+
+func (r *SentMessageRecorder) SendHandoverRequest(ctx context.Context, targetNode string, contractAddress *pldtypes.EthAddress) error {
+	r.hasSentHandoverRequest = true
+	return nil
+}
+
+func (r *SentMessageRecorder) HasSentHandoverRequest() bool {
+	return r.hasSentHandoverRequest
 }
 
 func (r *SentMessageRecorder) SendDispatched(ctx context.Context, transactionOriginator string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification) error {

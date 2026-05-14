@@ -26,6 +26,7 @@ const (
 	MessageType_Dispatched                       = "Dispatched"
 	MessageType_EndorsementRequest               = "EndorsementRequest"
 	MessageType_EndorsementResponse              = "EndorsementResponse"
+	MessageType_HandoverRequest                  = "HandoverRequest"
 	MessageType_NonceAssigned                    = "NonceAssigned"
 	MessageType_NotActiveCoordinator             = "NotActiveCoordinator"
 	MessageType_PreDispatchRequest               = "PreDispatchRequest"

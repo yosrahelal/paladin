@@ -461,7 +461,7 @@ func TestSendDelegationRequestRejection_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendDelegationRequestRejection(ctx, delegatingNodeName, delegationId, blockHeight)
+	err := tw.SendDelegationRequestRejection(ctx, delegatingNodeName, delegationId, blockHeight, "active-coordinator")
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 }
@@ -486,7 +486,7 @@ func TestSendDelegationRequestRejection_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendDelegationRequestRejection(ctx, delegatingNodeName, delegationId, uint64(100))
+	err := tw.SendDelegationRequestRejection(ctx, delegatingNodeName, delegationId, uint64(100), "node1")
 	require.Error(t, err)
 	assert.Equal(t, sendError, err)
 	mockTransportManager.AssertExpectations(t)

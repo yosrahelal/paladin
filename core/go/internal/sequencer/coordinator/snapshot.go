@@ -28,16 +28,18 @@ func action_SendHeartbeat(ctx context.Context, c *coordinator, _ common.Event) e
 }
 
 // sendHeartbeat builds the base snapshot once, then sends a per-node copy to each node in the
-// originator pool. In Flush/Closing states, the grapher is queried per-node: each node receives
-// all locks (unfiltered) plus only the OutputStates it is permitted to hold (filtered by AllowedNodes).
+// originator pool. In Active_Flush/Closing_Flush/Closing states, the grapher is queried per-node:
+// each node receives all locks (unfiltered) plus only the OutputStates it is permitted to hold
+// (filtered by AllowedNodes).
 func (c *coordinator) sendHeartbeat(ctx context.Context, contractAddress *pldtypes.EthAddress) error {
-	base := c.getSnapshot(ctx)
-	includeLocks := base.CoordinatorState == common.CoordinatorState_Flush || base.CoordinatorState == common.CoordinatorState_Closing
+	baseSnapshot := c.getSnapshot(ctx)
+	coordinatorState := baseSnapshot.CoordinatorState
+	includeLocks := coordinatorState == common.CoordinatorState_Closing_Flush || coordinatorState == common.CoordinatorState_Closing
 	log.L(ctx).Debugf("sending heartbeats for sequencer %s (includeLocks=%v)", contractAddress.String(), includeLocks)
 	var err error
-	for _, node := range c.originatorNodePool {
+	for _, node := range c.nodePool {
 		log.L(ctx).Debugf("sending heartbeat to %s", node)
-		snapshot := base
+		snapshot := baseSnapshot
 		if includeLocks {
 			statesAndLocks, exportErr := c.grapher.ExportStatesAndLocks(ctx, node)
 			if exportErr != nil {
@@ -46,11 +48,11 @@ func (c *coordinator) sendHeartbeat(ctx context.Context, contractAddress *pldtyp
 				continue
 			}
 			snapshot = &common.CoordinatorSnapshot{
-				DispatchedTransactions: base.DispatchedTransactions,
-				PooledTransactions:     base.PooledTransactions,
-				ConfirmedTransactions:  base.ConfirmedTransactions,
-				CoordinatorState:       base.CoordinatorState,
-				BlockHeight:            base.BlockHeight,
+				DispatchedTransactions: baseSnapshot.DispatchedTransactions,
+				PooledTransactions:     baseSnapshot.PooledTransactions,
+				ConfirmedTransactions:  baseSnapshot.ConfirmedTransactions,
+				CoordinatorState:       baseSnapshot.CoordinatorState,
+				BlockHeight:            baseSnapshot.BlockHeight,
 				Locks:                  statesAndLocks.LockedState,
 				OutputStates:           statesAndLocks.OutputState,
 			}
@@ -64,7 +66,7 @@ func (c *coordinator) sendHeartbeat(ctx context.Context, contractAddress *pldtyp
 }
 
 // getSnapshot builds the coordinator snapshot (without per-node lock data).
-// Locks are attached per-node in sendHeartbeat for Flush/Closing heartbeats.
+// Locks are attached per-node in sendHeartbeat for Closing_Flush/Closing heartbeats.
 func (c *coordinator) getSnapshot(ctx context.Context) *common.CoordinatorSnapshot {
 	log.L(ctx).Debugf("creating snapshot for sequencer %s", c.contractAddress.String())
 	pooledTransactions := make([]*common.SnapshotPooledTransaction, 0, len(c.transactionsByID))

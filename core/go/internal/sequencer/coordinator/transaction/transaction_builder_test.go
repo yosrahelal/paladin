@@ -93,19 +93,19 @@ type TransactionBuilderForTesting struct {
 // use the builder methods to set specific values for fields before calling Build to create a new Transaction
 func NewTransactionBuilderForTesting(t *testing.T, state State) *TransactionBuilderForTesting {
 	builder := &TransactionBuilderForTesting{
-		t:                                 t,
-		originator:                        "sender@node1",
-		originatorNode:                    "node1",
-		queueEventForCoordinator:          func(context.Context, common.Event) {},
-		signerAddress:                     nil,
-		latestSubmissionHash:              nil,
-		state:                             state,
+		t:                         t,
+		originator:                "sender@node1",
+		originatorNode:            "node1",
+		queueEventForCoordinator:  func(context.Context, common.Event) {},
+		signerAddress:             nil,
+		latestSubmissionHash:      nil,
+		state:                     state,
 		stateTimeout:              5000,
 		requestTimeout:            1000,
 		finalizingGracePeriod:     5,
 		privateTransactionBuilder: testutil.NewPrivateTransactionBuilderForTesting(),
-		submitterSelection:                prototk.ContractConfig_SUBMITTER_COORDINATOR,
-		nodeName:                          "node1",
+		submitterSelection:        prototk.ContractConfig_SUBMITTER_COORDINATOR,
+		nodeName:                  "node1",
 	}
 
 	switch state {
@@ -508,7 +508,7 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		b.originatorNode,
 		b.nodeName,
 		privateTransaction,
-		b.coordinatorSigningIdentity,
+		func() string { return b.coordinatorSigningIdentity },
 		transportWriter,
 		clock,
 		b.queueEventForCoordinator,

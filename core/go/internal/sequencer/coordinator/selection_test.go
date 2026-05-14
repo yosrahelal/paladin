@@ -40,7 +40,7 @@ func Test_initializeActiveCoordinatorFromContractConfig_StaticMode_SetsActiveCoo
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
-func Test_action_SelectActiveCoordinator_SingleNodeInPool_ReturnsNode(t *testing.T) {
+func Test_action_CalculateCoordinatorPriorities_SingleNodeInPool_ReturnsNode(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -53,11 +53,11 @@ func Test_action_SelectActiveCoordinator_SingleNodeInPool_ReturnsNode(t *testing
 	c, _ := builder.CurrentBlockHeight(1000).Build()
 	require.NoError(t, c.initializeFromContractConfig(ctx))
 
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
-func Test_action_SelectActiveCoordinator_MultipleNodesInPool_ReturnsOneOfPool(t *testing.T) {
+func Test_action_CalculateCoordinatorPriorities_MultipleNodesInPool_ReturnsOneOfPool(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -70,11 +70,11 @@ func Test_action_SelectActiveCoordinator_MultipleNodesInPool_ReturnsOneOfPool(t 
 	c, _ := builder.CurrentBlockHeight(1000).Build()
 	require.NoError(t, c.initializeFromContractConfig(ctx))
 
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
 	assert.Contains(t, []string{"node1", "node2", "node3"}, c.currentActiveCoordinator)
 }
 
-func Test_action_SelectActiveCoordinator_BlockHeightRounding_SameRangeSameCoordinator(t *testing.T) {
+func Test_action_CalculateCoordinatorPriorities_BlockHeightRounding_SameRangeSameCoordinator(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -88,26 +88,26 @@ func Test_action_SelectActiveCoordinator_BlockHeightRounding_SameRangeSameCoordi
 	require.NoError(t, c.initializeFromContractConfig(ctx))
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1000}))
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
 	coordinatorNode1 := c.currentActiveCoordinator
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1001}))
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
 	coordinatorNode2 := c.currentActiveCoordinator
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1099}))
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
 	coordinatorNode3 := c.currentActiveCoordinator
 
 	assert.Equal(t, coordinatorNode1, coordinatorNode2)
 	assert.Equal(t, coordinatorNode2, coordinatorNode3)
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1100}))
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
 	assert.Contains(t, []string{"node1", "node2", "node3"}, c.currentActiveCoordinator)
 }
 
-func Test_action_SelectActiveCoordinator_DifferentBlockRanges_CanSelectDifferentCoordinators(t *testing.T) {
+func Test_action_CalculateCoordinatorPriorities_DifferentBlockRanges_CanSelectDifferentCoordinators(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
@@ -121,11 +121,11 @@ func Test_action_SelectActiveCoordinator_DifferentBlockRanges_CanSelectDifferent
 	require.NoError(t, c.initializeFromContractConfig(ctx))
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 100}))
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
 	coordinatorNode1 := c.currentActiveCoordinator
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 150}))
-	require.NoError(t, action_SelectActiveCoordinator(ctx, c, nil))
+	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
 	coordinatorNode2 := c.currentActiveCoordinator
 
 	assert.Contains(t, []string{"node1", "node2"}, coordinatorNode1)

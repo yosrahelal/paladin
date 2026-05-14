@@ -25,14 +25,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGuard_FlushComplete_NoTransactions(t *testing.T) {
+func TestGuard_HasUnconfirmedDispatchedTransactions_NoTransactions(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
-	result := guard_FlushComplete(ctx, c)
-	assert.True(t, result, "no transactions should return true")
+	result := guard_HasUnconfirmedDispatchedTransactions(ctx, c)
+	assert.False(t, result, "no transactions should return false")
 }
 
-func TestGuard_FlushComplete_TransactionsInOtherStates(t *testing.T) {
+func TestGuard_HasUnconfirmedDispatchedTransactions_TransactionsInOtherStates(t *testing.T) {
 	ctx := context.Background()
 	tx1 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	tx1.EXPECT().GetID().Return(uuid.New())
@@ -46,31 +46,24 @@ func TestGuard_FlushComplete_TransactionsInOtherStates(t *testing.T) {
 	tx3.EXPECT().GetID().Return(uuid.New())
 	tx3.EXPECT().GetCurrentState().Return(transaction.State_Confirmed)
 
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx1, tx2, tx3).Build()
-	result := guard_FlushComplete(ctx, c)
-	assert.True(t, result, "transactions in other states should return true")
+	tx4 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	tx4.EXPECT().GetID().Return(uuid.New())
+	tx4.EXPECT().GetCurrentState().Return(transaction.State_Ready_For_Dispatch)
+
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx1, tx2, tx3, tx4).Build()
+	result := guard_HasUnconfirmedDispatchedTransactions(ctx, c)
+	assert.False(t, result, "transactions in other states should return false")
 }
 
-func TestGuard_FlushComplete_TransactionInReadyForDispatchState(t *testing.T) {
-	ctx := context.Background()
-	tx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
-	tx.EXPECT().GetID().Return(uuid.New())
-	tx.EXPECT().GetCurrentState().Return(transaction.State_Ready_For_Dispatch)
-
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx).Build()
-	result := guard_FlushComplete(ctx, c)
-	assert.False(t, result, "transaction in Ready_For_Dispatch should return false")
-}
-
-func TestGuard_FlushComplete_TransactionInDispatchedState(t *testing.T) {
+func TestGuard_HasUnconfirmedDispatchedTransactions_TransactionInDispatchedState(t *testing.T) {
 	ctx := context.Background()
 	tx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	tx.EXPECT().GetID().Return(uuid.New())
 	tx.EXPECT().GetCurrentState().Return(transaction.State_Dispatched)
 
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx).Build()
-	result := guard_FlushComplete(ctx, c)
-	assert.False(t, result, "transaction in Dispatched should return false")
+	result := guard_HasUnconfirmedDispatchedTransactions(ctx, c)
+	assert.True(t, result, "transaction in Dispatched should return true")
 }
 
 func TestGuard_FlushComplete_TransactionInSubmittedState(t *testing.T) {
@@ -80,27 +73,23 @@ func TestGuard_FlushComplete_TransactionInSubmittedState(t *testing.T) {
 	tx.EXPECT().GetCurrentState().Return(transaction.State_Dispatched)
 
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx).Build()
-	result := guard_FlushComplete(ctx, c)
-	assert.False(t, result, "transaction in Submitted should return false")
+	result := guard_HasUnconfirmedDispatchedTransactions(ctx, c)
+	assert.True(t, result, "transaction in Submitted should return true")
 }
 
-func TestGuard_FlushComplete_MultipleTransactionsInFlushStates(t *testing.T) {
+func TestGuard_HasUnconfirmedDispatchedTransactions_MultipleTransactionsInFlushStates(t *testing.T) {
 	ctx := context.Background()
 	tx1 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	tx1.EXPECT().GetID().Return(uuid.New())
-	tx1.EXPECT().GetCurrentState().Return(transaction.State_Ready_For_Dispatch)
+	tx1.EXPECT().GetCurrentState().Return(transaction.State_Dispatched)
 
 	tx2 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	tx2.EXPECT().GetID().Return(uuid.New())
 	tx2.EXPECT().GetCurrentState().Return(transaction.State_Dispatched)
 
-	tx3 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
-	tx3.EXPECT().GetID().Return(uuid.New())
-	tx3.EXPECT().GetCurrentState().Return(transaction.State_Dispatched)
-
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx1, tx2, tx3).Build()
-	result := guard_FlushComplete(ctx, c)
-	assert.False(t, result, "transactions in flush states should return false")
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx1, tx2).Build()
+	result := guard_HasUnconfirmedDispatchedTransactions(ctx, c)
+	assert.True(t, result, "transactions in flush states should return true")
 }
 
 func TestGuard_FlushComplete_MixOfFlushAndNonFlushStates(t *testing.T) {
@@ -111,11 +100,11 @@ func TestGuard_FlushComplete_MixOfFlushAndNonFlushStates(t *testing.T) {
 
 	tx2 := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	tx2.EXPECT().GetID().Return(uuid.New())
-	tx2.EXPECT().GetCurrentState().Return(transaction.State_Confirmed)
+	tx2.EXPECT().GetCurrentState().Return(transaction.State_Dispatched)
 
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx1, tx2).Build()
-	result := guard_FlushComplete(ctx, c)
-	assert.False(t, result, "mix with flush state should return false")
+	result := guard_HasUnconfirmedDispatchedTransactions(ctx, c)
+	assert.True(t, result, "mix with flush state should return true")
 }
 
 func TestGuard_HasTransactionsInflight_NoTransactions(t *testing.T) {
@@ -251,20 +240,6 @@ func TestGuard_HasTransactionAssembling_TransactionInOtherStates(t *testing.T) {
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(tx1, tx2, tx3).Build()
 	result := guard_HasTransactionAssembling(ctx, c)
 	assert.False(t, result, "transactions in other states should return false")
-}
-
-func TestGuard_ActiveCoordinatorFlushComplete_WhenFlush_ReturnsFalse(t *testing.T) {
-	ctx := context.Background()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).ActiveCoordinatorState(State_Flush).Build()
-	result := guard_ActiveCoordinatorFlushComplete(ctx, c)
-	assert.False(t, result, "active coordinator in Flush state should return false")
-}
-
-func TestGuard_ActiveCoordinatorFlushComplete_WhenNotFlush_ReturnsTrue(t *testing.T) {
-	ctx := context.Background()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).ActiveCoordinatorState(State_Closing).Build()
-	result := guard_ActiveCoordinatorFlushComplete(ctx, c)
-	assert.True(t, result, "active coordinator not in Flush state should return true")
 }
 
 func TestGuard_HasTransactionAssembling_MixOfAssemblingAndOtherStates(t *testing.T) {

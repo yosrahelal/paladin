@@ -52,3 +52,25 @@ func (*TransactionsDelegatedEvent) Type() EventType {
 func (*TransactionsDelegatedEvent) TypeString() string {
 	return "Event_TransactionsDelegated"
 }
+
+// RequestTimeoutIntervalEvent is fired by the request-timeout timer to trigger a re-send of the
+// pending outbound request for the current state (e.g. HandoverRequest while in State_Elect).
+type RequestTimeoutIntervalEvent struct {
+	common.BaseEvent
+}
+
+func (*RequestTimeoutIntervalEvent) Type() EventType { return Event_RequestTimeoutInterval }
+func (*RequestTimeoutIntervalEvent) TypeString() string {
+	return "Event_RequestTimeoutInterval"
+}
+
+// StateTimeoutIntervalEvent is fired by the state-timeout timer to signal that the current state
+// has exceeded its maximum wait duration (e.g. Elect → Active when no handover acknowledgement arrives).
+type StateTimeoutIntervalEvent struct {
+	common.BaseEvent
+}
+
+func (*StateTimeoutIntervalEvent) Type() EventType { return Event_StateTimeoutInterval }
+func (*StateTimeoutIntervalEvent) TypeString() string {
+	return "Event_StateTimeoutInterval"
+}

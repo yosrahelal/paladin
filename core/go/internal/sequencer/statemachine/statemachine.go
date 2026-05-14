@@ -115,12 +115,16 @@ type ActionRule[E any] struct {
 
 // Transition defines a possible state transition.
 // To: The target state to transition to
+// Validator: Optional event-aware condition checked before the guard; if it returns false the transition is skipped
 // If: Optional guard condition - if nil, transition is always taken (when matched)
 // Actions: Optional transition-specific action rules to execute before state-entry actions
+//
+// Evaluation order: Validator (event-aware) → If (entity-only guard) → transition fires.
 type Transition[S State, E any] struct {
-	To      S               // Target state
-	If      Guard[E]        // Guard condition (optional)
-	Actions []ActionRule[E] // Transition-specific action rules (optional)
+	To        S               // Target state
+	Validator Validator[E]    // Event-aware condition (optional)
+	If        Guard[E]        // Guard condition (optional)
+	Actions   []ActionRule[E] // Transition-specific action rules (optional)
 }
 
 // Validator is a function that validates whether an event is valid for the current
@@ -140,10 +144,12 @@ type EventHandler[S State, E any] struct {
 
 // StateDefinition defines the behavior of a particular state.
 // OnTransitionTo: Action rules executed when entering this state (after transition-specific actions)
+// OnTransitionFrom: Action rules executed when leaving this state (after transition-specific actions, before entry actions)
 // Events: Map of event types to their handlers in this state
 type StateDefinition[S State, E any] struct {
-	OnTransitionTo []ActionRule[E]
-	Events         map[common.EventType]EventHandler[S, E]
+	OnTransitionTo   []ActionRule[E]
+	OnTransitionFrom []ActionRule[E]
+	Events           map[common.EventType]EventHandler[S, E]
 }
 
 // StateDefinitions is a map from states to their definitions.
@@ -303,6 +309,17 @@ func (sm *StateMachine[S, E]) evaluateTransitions(
 	eventHandler EventHandler[S, E],
 ) error {
 	for _, rule := range eventHandler.Transitions {
+		// Check event-aware validator first (if set)
+		if rule.Validator != nil {
+			valid, err := rule.Validator(ctx, entity, event)
+			if err != nil {
+				log.L(ctx).Errorf("%s | %s | %s | error in transition validator for target state %s: %v", sm.name, sm.GetCurrentState().String(), event.TypeString(), rule.To.String(), err)
+				return err
+			}
+			if !valid {
+				continue
+			}
+		}
 		// Check if transition guard passes (or is nil)
 		if rule.If == nil || rule.If(ctx, entity) {
 			previousState := sm.GetCurrentState()
@@ -315,6 +332,16 @@ func (sm *StateMachine[S, E]) evaluateTransitions(
 			if err != nil {
 				log.L(ctx).Errorf("%s | %s | %s | error executing transition to state %s : %v", sm.name, previousState.String(), event.TypeString(), sm.GetCurrentState().String(), err)
 				return err
+			}
+
+			// Execute exit actions for the previous state
+			previousStateDefinition, exists := sm.definitions[previousState]
+			if exists && len(previousStateDefinition.OnTransitionFrom) > 0 {
+				err := sm.executeActionRules(ctx, entity, event, previousStateDefinition.OnTransitionFrom)
+				if err != nil {
+					log.L(ctx).Errorf("%s | %s | %s | error executing state exit action for transition from state %s : %v", sm.name, previousState.String(), event.TypeString(), previousState.String(), err)
+					return err
+				}
 			}
 
 			// Execute state entry actions

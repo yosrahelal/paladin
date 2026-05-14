@@ -223,8 +223,8 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				sMgr.config,
 				sMgr.nodeName,
 				sMgr.metrics,
-				func(ctx context.Context, nodes []string) {
-					seqOriginator.QueueEvent(ctx, &common.EndorserNodesDiscoveredEvent{Nodes: nodes})
+				func(ctx context.Context, event common.Event) {
+					seqOriginator.QueueEvent(ctx, event)
 				},
 			)
 			if err := seqCoordinator.Start(seqCtx); err != nil {
@@ -269,7 +269,7 @@ func (sMgr *sequencerManager) stopLowestPrioritySequencer(ctx context.Context) {
 		for _, sequencer := range sMgr.sequencers {
 			coordinatorState := sequencer.coordinator.GetCurrentState()
 			switch coordinatorState {
-			case coordinator.State_Flush, coordinator.State_Closing:
+			case coordinator.State_Closing_Flush, coordinator.State_Closing:
 				// To avoid blocking the start of new sequencer that has caused us to purge the lowest priority one,
 				// we don't wait for the closing ones to complete. The aim is to allow the node to remain stable while
 				// still being responsive to new contract activity so a closing sequencer is allowed to page out in its

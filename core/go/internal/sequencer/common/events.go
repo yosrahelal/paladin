@@ -32,7 +32,9 @@ const (
 	Event_TransactionStateTransition                  // transaction state machine transition; originator/coordinator handle cleanup and side effects
 	Event_NewBlock                                    // a new block has been confirmed on the base ledger
 	Event_HeartbeatReceived                           // a heartbeat notification was received from the active coordinator
-	Event_EndorserNodesDiscovered                     // endorser node names discovered by the coordinator; used to grow the originator node pool
+	Event_CoordinatorPriorityListUpdated              // pushed by the coordinator to its co-located originator after recalculating the priority list
+	Event_DelegationRejected                          // pushed by transport_client to the originator when a delegation acknowledgement indicates rejection
+	Event_HandoverRequest                             // pushed by transport_client to the coordinator when a CoordinatorHandoverRequest message is received
 )
 
 type BaseEvent struct {
@@ -106,17 +108,51 @@ func (*HeartbeatReceivedEvent) TypeString() string {
 	return "Event_HeartbeatReceived"
 }
 
-// EndorserNodesDiscoveredEvent is queued by the coordinator to notify the originator of endorser
-// node names discovered from the attestation plan, so the originator can grow its node pool.
-type EndorserNodesDiscoveredEvent struct {
+// CoordinatorPriorityListUpdatedEvent is queued by the coordinator to its co-located originator
+// after action_CalculateCoordinatorPriorities runs. It carries the new priority-ordered list so
+// the originator always has a consistent view of coordinator priority without computing it independently.
+type CoordinatorPriorityListUpdatedEvent struct {
 	BaseEvent
 	Nodes []string
 }
 
-func (*EndorserNodesDiscoveredEvent) Type() EventType {
-	return Event_EndorserNodesDiscovered
+func (*CoordinatorPriorityListUpdatedEvent) Type() EventType {
+	return Event_CoordinatorPriorityListUpdated
 }
 
-func (*EndorserNodesDiscoveredEvent) TypeString() string {
-	return "Event_EndorserNodesDiscovered"
+func (*CoordinatorPriorityListUpdatedEvent) TypeString() string {
+	return "Event_CoordinatorPriorityListUpdated"
+}
+
+// DelegationRejectedEvent is queued by the transport client to the originator when a
+// DelegationRequestAcknowledgment arrives with Accepted == false. It carries the name of the
+// coordinator that the rejecting node believes is currently active so the originator can
+// fast-redirect to a higher-priority coordinator.
+type DelegationRejectedEvent struct {
+	BaseEvent
+	ActiveCoordinator string
+}
+
+func (*DelegationRejectedEvent) Type() EventType {
+	return Event_DelegationRejected
+}
+
+func (*DelegationRejectedEvent) TypeString() string {
+	return "Event_DelegationRejected"
+}
+
+// HandoverRequestEvent is queued by the transport client to the coordinator when a
+// CoordinatorHandoverRequest message is received from a higher-priority node. The coordinator
+// in Active state handles it identically to a preemption heartbeat.
+type HandoverRequestEvent struct {
+	BaseEvent
+	FromNode string
+}
+
+func (*HandoverRequestEvent) Type() EventType {
+	return Event_HandoverRequest
+}
+
+func (*HandoverRequestEvent) TypeString() string {
+	return "Event_HandoverRequest"
 }

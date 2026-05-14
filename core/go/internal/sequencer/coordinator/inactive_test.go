@@ -35,9 +35,9 @@ func Test_action_HeartbeatReceived_SetsActiveCoordinatorState(t *testing.T) {
 		CoordinatorState: State_Active,
 	}
 
-	err := action_HeartbeatReceived(ctx, c, event)
+	err := action_UpdateActiveCoordinator(ctx, c, event)
 	require.NoError(t, err)
-	assert.Equal(t, State_Active, c.activeCoordinatorState)
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
 func Test_action_ResetHeartbeatIntervalsSinceLastReceive(t *testing.T) {
@@ -92,7 +92,7 @@ func Test_action_RejectDelegatedTransactions_Success(t *testing.T) {
 
 	delegationID := "del-123"
 	fromNode := "remoteNode"
-	mocks.TransportWriter.EXPECT().SendDelegationRequestRejection(ctx, fromNode, delegationID, c.currentBlockHeight).Return(nil)
+	mocks.TransportWriter.EXPECT().SendDelegationRequestRejection(ctx, fromNode, delegationID, c.currentBlockHeight, c.currentActiveCoordinator).Return(nil)
 
 	event := &TransactionsDelegatedEvent{
 		FromNode:     fromNode,
@@ -109,7 +109,7 @@ func Test_action_RejectDelegatedTransactions_PropagatesError(t *testing.T) {
 	delegationID := "del-456"
 	fromNode := "remoteNode"
 	expectedErr := fmt.Errorf("transport error")
-	mocks.TransportWriter.EXPECT().SendDelegationRequestRejection(ctx, fromNode, delegationID, c.currentBlockHeight).Return(expectedErr)
+	mocks.TransportWriter.EXPECT().SendDelegationRequestRejection(ctx, fromNode, delegationID, c.currentBlockHeight, c.currentActiveCoordinator).Return(expectedErr)
 
 	event := &TransactionsDelegatedEvent{
 		FromNode:     fromNode,

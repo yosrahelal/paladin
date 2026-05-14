@@ -51,12 +51,12 @@ type coordinatorTransaction struct {
 	stateMachine *StateMachine
 
 	// immutable properties of the transaction
-	originator                 string // The fully qualified identity of the originator e.g. "member1@node1"
-	originatorNode             string // The node the originator is running on e.g. "node1"
-	nodeName                   string // The local node coordinating this transaction
-	domainSigningIdentity      string // Used if an endorsement constraint doesn't stipulate a specific endorser must submit
-	coordinatorSigningIdentity string
-	submitterSelection         prototk.ContractConfig_SubmitterSelection // The selection of submitter for the transaction
+	originator                    string // The fully qualified identity of the originator e.g. "member1@node1"
+	originatorNode                string // The node the originator is running on e.g. "node1"
+	nodeName                      string // The local node coordinating this transaction
+	domainSigningIdentity         string // Used if an endorsement constraint doesn't stipulate a specific endorser must submit
+	getCoordinatorSigningIdentity func() string
+	submitterSelection            prototk.ContractConfig_SubmitterSelection // The selection of submitter for the transaction
 
 	// mutable fields that state machine actions will change
 	signerAddress                      *pldtypes.EthAddress
@@ -106,7 +106,7 @@ func NewTransaction(ctx context.Context,
 	originatorNode string,
 	nodeName string,
 	pt *components.PrivateTransaction,
-	coordinatorSigningIdentity string,
+	getCoordinatorSigningIdentity func() string,
 	transportWriter transport.TransportWriter,
 	clock common.Clock,
 	queueEventForCoordinator func(context.Context, common.Event),
@@ -133,7 +133,7 @@ func NewTransaction(ctx context.Context,
 		originatorNode,
 		nodeName,
 		pt,
-		coordinatorSigningIdentity,
+		getCoordinatorSigningIdentity,
 		transportWriter,
 		clock,
 		queueEventForCoordinator,
@@ -162,7 +162,7 @@ func newTransaction(
 	originatorNode string,
 	nodeName string,
 	pt *components.PrivateTransaction,
-	coordinatorSigningIdentity string,
+	getCoordinatorSigningIdentity func() string,
 	transportWriter transport.TransportWriter,
 	clock common.Clock,
 	queueEventForCoordinator func(context.Context, common.Event),
@@ -202,7 +202,7 @@ func newTransaction(
 		domainAPI:                         domainAPI,
 		dCtx:                              dCtx,
 		domainSigningIdentity:             domainAPI.Domain().FixedSigningIdentity(),
-		coordinatorSigningIdentity:        coordinatorSigningIdentity,
+		getCoordinatorSigningIdentity:     getCoordinatorSigningIdentity,
 		submitterSelection:                domainAPI.ContractConfig().GetSubmitterSelection(),
 		requestTimeout:                    requestTimeout,
 		stateTimeout:                      stateTimeout,

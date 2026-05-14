@@ -35,24 +35,25 @@ func DedupeSortedCoordinatorEndorserNodes(nodes []string) []string {
 	return slices.Compact(nodes)
 }
 
-// SelectCoordinatorNode returns the active coordinator for this height/range from the sorted
-// deduped endorser pool. The selection is deterministic: all nodes that call this function with
-// the same pool and block height will independently reach the same result.
+// ComputeCoordinatorPriorityList returns a priority-ordered list of coordinator nodes for the
+// given block height and range. The node at index 0 is the highest-priority (currently selected)
+// coordinator; remaining nodes follow in sorted order. All nodes that call this function with the
+// same pool and block height will independently reach the same result.
 //
 // For COORDINATOR_STATIC and COORDINATOR_SENDER modes, the coordinator field is set once at
 // construction/Start time and this function is never invoked.
-func SelectCoordinatorNode(
+func ComputeCoordinatorPriorityList(
 	ctx context.Context,
 	nodePool []string,
 	currentBlockHeight uint64,
 	blockRange uint64,
-) string {
+) []string {
 	n := len(nodePool)
 	if n == 0 {
-		return ""
+		return nil
 	}
 	if n == 1 {
-		return nodePool[0]
+		return []string{nodePool[0]}
 	}
 	effectiveBlockNumber := currentBlockHeight - (currentBlockHeight % blockRange)
 
@@ -61,8 +62,32 @@ func SelectCoordinatorNode(
 	h.Write([]byte(strconv.FormatUint(effectiveBlockNumber, 10)))
 	p := int(h.Sum32()) % n
 	selected := nodePool[p]
-	log.L(ctx).Debugf("coordinator selected %q (selectedIndex=%d pool %+v)", selected, p, nodePool)
-	return selected
+	log.L(ctx).Debugf("coordinator priority list: selected index %d (%q) from pool %+v", p, selected, nodePool)
+
+	// Build priority list: walk the sorted pool starting at the selected index,
+	// wrapping around so the ordering is e.g. [3,4,1,2] when p=2 and n=4.
+	list := make([]string, n)
+	for i := range n {
+		list[i] = nodePool[(p+i)%n]
+	}
+	return list
+}
+
+// PriorityIndexOf returns the index of node in the priority list, or len(list) if absent.
+// A lower index means higher priority (index 0 is the current active coordinator).
+func PriorityIndexOf(list []string, node string) int {
+	for i, n := range list {
+		if n == node {
+			return i
+		}
+	}
+	return len(list)
+}
+
+func IsHigherPriority(list []string, node1 string, node2 string) bool {
+	idx1 := PriorityIndexOf(list, node1)
+	idx2 := PriorityIndexOf(list, node2)
+	return idx1 < idx2
 }
 
 // DecodeNewBlockHeight extracts the new block height from a NewBlockEvent and determines

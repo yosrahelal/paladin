@@ -691,7 +691,7 @@ func TestSequencerManager_stopLowestPrioritySequencer_SequencerAlreadyClosing(t 
 
 	// Create a sequencer that's already closing
 	seq := newSequencerForTesting(contractAddr, mocks)
-	mocks.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Flush)
+	mocks.coordinator.EXPECT().GetCurrentState().Return(coordinator.State_Closing_Flush)
 
 	sm.sequencersLock.Lock()
 	sm.sequencers[contractAddr.String()] = seq

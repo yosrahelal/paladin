@@ -23,212 +23,314 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-// ── Initial / Idle state transitions ─────────────────────────────────────────
+// ── State_Initial ─────────────────────────────────────────────────────────────
 
-func TestStateMachine_InitializeOK(t *testing.T) {
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
-	assert.Equal(t, State_Idle, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
-}
-
-// Firing OriginatorCreatedEvent from State_Initial transitions to State_Idle;
-// action_SelectActiveCoordinator runs and seeds currentActiveCoordinator from the pool.
-func TestStateMachine_WhenCreated_TransitionsToIdle(t *testing.T) {
+// OriginatorCreatedEvent from Initial transitions unconditionally to Idle.
+func TestStateMachine_Initial_OriginatorCreated_TransitionsToIdle(t *testing.T) {
 	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Initial).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-		}).
-		OriginatorNodePool("node1", "node2").
-		Build()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Initial).Build()
+
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &OriginatorCreatedEvent{}))
+
 	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.NotEmpty(t, o.currentActiveCoordinator, "action_SelectActiveCoordinator must seed currentActiveCoordinator from pool")
+	// currentActiveCoordinator is set during Start() → initializeFromContractConfig, not here.
+	// So the field value is whatever was set on the builder (default "coordinator").
+	assert.NotEmpty(t, o.currentActiveCoordinator)
 }
 
-func TestStateMachine_Idle_ToObserving_OnHeartbeatReceivedFromCurrentActiveCoordinator(t *testing.T) {
+// ── State_Idle ────────────────────────────────────────────────────────────────
+
+// HeartbeatReceived in Idle from a node in Active state → Observing; coordinator updated; timer reset.
+func TestStateMachine_Idle_HeartbeatReceived_ActiveState_TransitionsToObserving(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(t, State_Idle).
-		CurrentActiveCoordinator("node2").
+		CurrentActiveCoordinator("old-coordinator").
 		NodeName("node1")
 	o, _ := builder.Build()
-	assert.Equal(t, State_Idle, o.GetCurrentState())
+	o.heartbeatIntervalsSinceLastReceive = 5
 	ca := builder.GetContractAddress()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
 		From:            "node2",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
-	}
-	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{}
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
+	}))
+
 	assert.Equal(t, State_Observing, o.GetCurrentState())
-	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive)
+	assert.Equal(t, "node2", o.currentActiveCoordinator, "coordinator must be updated to the Active heartbeat sender")
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive, "liveness timer must be reset")
 }
 
-func TestStateMachine_Idle_StaysIdle_OnHeartbeatReceivedFromUnrelatedNode(t *testing.T) {
+// HeartbeatReceived in Idle from a node in Elect state → Observing; Elect is a liveness-proving state.
+func TestStateMachine_Idle_HeartbeatReceived_ElectState_TransitionsToObserving(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(t, State_Idle).
-		CurrentActiveCoordinator("node2").
+		CurrentActiveCoordinator("existing-coordinator").
 		NodeName("node1")
 	o, _ := builder.Build()
 	ca := builder.GetContractAddress()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{
-		From:                "node3",
-		ContractAddress:     &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
-	}
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
-	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.Equal(t, "node2", o.currentActiveCoordinator, "unrelated heartbeat must not change currentActiveCoordinator")
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		From:            "node2",
+		ContractAddress: &ca,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Elect,
+		},
+	}))
+
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Equal(t, "node2", o.currentActiveCoordinator, "coordinator must be updated to the Elect heartbeat sender")
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive, "liveness timer must be reset")
 }
 
-func TestStateMachine_Idle_ToSending_OnTransactionCreated(t *testing.T) {
+// HeartbeatReceived in Idle from a node in Closing_Flush/Closing/Idle state → no state change.
+func TestStateMachine_Idle_HeartbeatReceived_NonLiveState_StaysIdle(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(t, State_Idle).
+		CurrentActiveCoordinator("existing-coordinator").
+		NodeName("node1")
+	o, _ := builder.Build()
+	ca := builder.GetContractAddress()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		From:            "node2",
+		ContractAddress: &ca,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Closing_Flush,
+		},
+	}))
+
+	assert.Equal(t, State_Idle, o.GetCurrentState())
+	assert.Equal(t, "existing-coordinator", o.currentActiveCoordinator, "coordinator must not change on non-live heartbeat in Idle")
+}
+
+// TransactionCreated in Idle → Sending; delegation request sent.
+func TestStateMachine_Idle_TransactionCreated_TransitionsToSending_SendsDelegationRequest(t *testing.T) {
+	ctx := context.Background()
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).
+		CurrentActiveCoordinator("coordinator@node1").
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
-	assert.Equal(t, State_Idle, o.GetCurrentState())
+
 	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, "coordinator", mock.Anything, mock.Anything).
+		SendDelegationRequest(mock.Anything, "coordinator@node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
+
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator("sender@node1").Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{Transaction: txn}))
-	assert.Equal(t, State_Sending, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Len(t, o.transactionsByID, 1, "transaction must be tracked")
 }
 
-// A new block that crosses a block-range epoch boundary in Idle refreshes coordinator selection
-// but keeps the originator in Idle (no transactions to send).
-func TestStateMachine_WhenIdle_NewEpoch_RefreshesCoordinatorSelectionStaysIdle(t *testing.T) {
+// Duplicate TransactionCreated (same ID) in Idle → no state change; no double tracking.
+func TestStateMachine_Idle_TransactionCreated_DuplicateID_StaysIdle(t *testing.T) {
 	ctx := context.Background()
-	blockRange := uint64(50)
-
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
 	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-		}).
-		OriginatorNodePool("node1", "node2", "node3").
-		BlockRangeSize(blockRange).
-		CurrentBlockHeight(100).
-		CurrentActiveCoordinator("node1").
+		Transactions(mockTxn).
 		Build()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{
+		Transaction: &components.PrivateTransaction{ID: txID},
+	}))
+
 	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.Equal(t, "node2", o.currentActiveCoordinator, "coordinator selection should refresh on epoch boundary")
+	assert.Len(t, o.transactionsByID, 1, "duplicate transaction must not be double-tracked")
 }
 
-// ── Observing state transitions ───────────────────────────────────────────────
+// NewBlock event in Idle updates currentBlockHeight; stays Idle.
+func TestStateMachine_Idle_NewBlock_UpdatesBlockHeight_StaysIdle(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).CurrentBlockHeight(100).Build()
 
-func TestStateMachine_Observing_ToSending_OnTransactionCreated(t *testing.T) {
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 200}))
+
+	assert.Equal(t, State_Idle, o.GetCurrentState())
+	assert.Equal(t, uint64(200), o.currentBlockHeight)
+}
+
+// CoordinatorPriorityListUpdated in Idle updates the list and currentActiveCoordinator.
+func TestStateMachine_Idle_CoordinatorPriorityListUpdated_UpdatesListAndCoordinator(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		CurrentActiveCoordinator("old").
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.CoordinatorPriorityListUpdatedEvent{
+		Nodes: []string{"node1", "node2"},
+	}))
+
+	assert.Equal(t, State_Idle, o.GetCurrentState())
+	assert.Equal(t, "node1", o.currentActiveCoordinator, "first node in list becomes active coordinator")
+	assert.Equal(t, []string{"node1", "node2"}, o.coordinatorPriorityList)
+}
+
+// ── State_Observing ───────────────────────────────────────────────────────────
+
+// TransactionCreated in Observing → Sending; delegation request sent.
+func TestStateMachine_Observing_TransactionCreated_TransitionsToSending_SendsDelegation(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(t, State_Observing).
+		CurrentActiveCoordinator("coordinator@node1").
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
+
 	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, "coordinator", mock.Anything, mock.Anything).
+		SendDelegationRequest(mock.Anything, "coordinator@node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
+
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator("sender@node1").Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{Transaction: txn}))
-	assert.Equal(t, State_Sending, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Len(t, o.transactionsByID, 1)
 }
 
-// HeartbeatInterval exceeding the inactive grace period transitions Observing → Idle.
-func TestStateMachine_Observing_TransitionsToIdle_OnHeartbeatIntervalInactiveGrace(t *testing.T) {
+// HeartbeatReceived in Observing from Active node → coordinator updated; timer reset.
+func TestStateMachine_Observing_HeartbeatReceived_ActiveState_UpdatesCoordinatorAndTimer(t *testing.T) {
+	ctx := context.Background()
+	builder := NewOriginatorBuilderForTesting(t, State_Observing).
+		CurrentActiveCoordinator("old-coordinator")
+	o, _ := builder.Build()
+	o.heartbeatIntervalsSinceLastReceive = 3
+	ca := builder.GetContractAddress()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		From:            "new-coordinator",
+		ContractAddress: &ca,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	}))
+
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Equal(t, "new-coordinator", o.currentActiveCoordinator)
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive, "timer must be reset for Active heartbeat")
+}
+
+// HeartbeatReceived in Observing from Flush node → timer reset; coordinator NOT updated.
+// HeartbeatReceived in Observing from Active_Flush node → timer reset; currentActiveCoordinator updated.
+func TestStateMachine_Observing_HeartbeatReceived_ActiveFlushState_ResetsTimerAndUpdatesCoordinator(t *testing.T) {
+	ctx := context.Background()
+	builder := NewOriginatorBuilderForTesting(t, State_Observing).
+		CurrentActiveCoordinator("existing-coordinator")
+	o, _ := builder.Build()
+	o.heartbeatIntervalsSinceLastReceive = 3
+	ca := builder.GetContractAddress()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		From:            "other-node",
+		ContractAddress: &ca,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active_Flush,
+		},
+	}))
+
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Equal(t, "other-node", o.currentActiveCoordinator, "Active_Flush heartbeat must update coordinator")
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive, "timer must be reset for Active_Flush heartbeat")
+}
+
+// HeartbeatReceived in Observing from Closing node → no timer reset; coordinator NOT updated.
+func TestStateMachine_Observing_HeartbeatReceived_ClosingState_NoTimerResetAndNoCoordinatorUpdate(t *testing.T) {
+	ctx := context.Background()
+	builder := NewOriginatorBuilderForTesting(t, State_Observing).
+		CurrentActiveCoordinator("existing-coordinator")
+	o, _ := builder.Build()
+	o.heartbeatIntervalsSinceLastReceive = 3
+	ca := builder.GetContractAddress()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		From:            "other-node",
+		ContractAddress: &ca,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Closing,
+		},
+	}))
+
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Equal(t, "existing-coordinator", o.currentActiveCoordinator, "Closing heartbeat must not update coordinator")
+	assert.Equal(t, 3, o.heartbeatIntervalsSinceLastReceive, "timer must not be reset for Closing heartbeat")
+}
+
+// HeartbeatInterval in Observing within grace period → increments counter; stays Observing.
+func TestStateMachine_Observing_HeartbeatInterval_WithinGrace_StaysObserving(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
 		HeartbeatIntervalsSinceLastReceive(0).
-		InactiveGracePeriod(1).
+		InactiveGracePeriod(2).
 		Build()
+
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
-	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.Equal(t, 1, o.heartbeatIntervalsSinceLastReceive, "counter incremented before transition check")
+
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Equal(t, 1, o.heartbeatIntervalsSinceLastReceive, "counter must be incremented")
 }
 
-// ── Sending state transitions ─────────────────────────────────────────────────
-
-func TestStateMachine_Sending_NoTransition_OnTransactionConfirmed_IfHasTransactionsInflight(t *testing.T) {
+// HeartbeatInterval in Observing exceeding grace period → transitions to Idle.
+func TestStateMachine_Observing_HeartbeatInterval_GraceExceeded_TransitionsToIdle(t *testing.T) {
 	ctx := context.Background()
-	txn1ID := uuid.New()
-	txn2ID := uuid.New()
-	mockTxn1 := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn1.On("GetID").Return(txn1ID)
-	mockTxn1.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	mockTxn2 := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn2.On("GetID").Return(txn2ID)
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		Transactions(mockTxn1, mockTxn2).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+		HeartbeatIntervalsSinceLastReceive(1).
+		InactiveGracePeriod(2).
 		Build()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &transaction.ConfirmedSuccessEvent{
-		BaseEvent: transaction.BaseEvent{TransactionID: txn1ID},
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
+
+	assert.Equal(t, State_Idle, o.GetCurrentState())
+	assert.Equal(t, 2, o.heartbeatIntervalsSinceLastReceive, "counter must be incremented before transition check")
+}
+
+// CoordinatorPriorityListUpdated in Observing updates the list.
+func TestStateMachine_Observing_CoordinatorPriorityListUpdated_UpdatesList(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+		CurrentActiveCoordinator("old").
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.CoordinatorPriorityListUpdatedEvent{
+		Nodes: []string{"nodeA", "nodeB"},
 	}))
-	assert.Equal(t, State_Sending, o.GetCurrentState(), "current state is %s", o.GetCurrentState().String())
-	// txn2 is still unconfirmed; both transactions must remain in the map
-	assert.Len(t, o.transactionsByID, 2, "both transactions must remain tracked while one is still unconfirmed")
+
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Equal(t, "nodeA", o.currentActiveCoordinator)
+	assert.Equal(t, []string{"nodeA", "nodeB"}, o.coordinatorPriorityList)
 }
 
-func TestStateMachine_Sending_DoDelegateTransactions_OnHeartbeatReceived_IfHasDroppedTransaction(t *testing.T) {
-	ctx := context.Background()
-	coordinatorLocator := "node1"
-	txn1ID := uuid.New()
-	txn2ID := uuid.New()
-	mockTxn1 := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn1.On("GetID").Return(txn1ID)
-	mockTxn1.On("GetCurrentState").Return(transaction.State_Delegated)
-	mockTxn1.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txn1ID})
-	mockTxn1.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	mockTxn2 := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn2.On("GetID").Return(txn2ID)
-	mockTxn2.On("GetCurrentState").Return(transaction.State_Delegated)
-	mockTxn2.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txn2ID})
-	mockTxn2.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		CurrentActiveCoordinator(coordinatorLocator).
-		WithMockTransportWriter(t).
-		Transactions(mockTxn1, mockTxn2)
-	o, mocks := builder.Build()
-	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, coordinatorLocator, mock.Anything, mock.Anything).
-		Return(nil).Once()
-	// Send heartbeat with only txn1 in the snapshot — txn2 is "dropped"
-	ca := builder.GetContractAddress()
-	heartbeatEvent := &common.HeartbeatReceivedEvent{
-		From:            coordinatorLocator,
-		ContractAddress: &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			PooledTransactions: []*common.SnapshotPooledTransaction{
-				{ID: txn1ID, Originator: "node1"},
-			},
-		},
-	}
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
-	assert.Equal(t, State_Sending, o.GetCurrentState())
-}
+// ── State_Sending ─────────────────────────────────────────────────────────────
 
-// A new transaction created in Sending while not watching a flush immediately delegates.
-func TestStateMachine_Sending_TransactionCreated_DelegatesImmediately_WhenNotWatching(t *testing.T) {
+// TransactionCreated in Sending → creates txn and sends delegation; stays Sending.
+func TestStateMachine_Sending_TransactionCreated_CreatesTxnAndDelegates(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		WatchingPreviousCoordinatorFlush(false).
+		CurrentActiveCoordinator("coordinator@node1").
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
-	// Default currentActiveCoordinator is "coordinator" when none is explicitly set.
+
 	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, "coordinator", mock.Anything, mock.Anything).
+		SendDelegationRequest(mock.Anything, "coordinator@node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
+
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator("sender@node1").Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{Transaction: txn}))
+
 	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Len(t, o.transactionsByID, 1, "new transaction must be tracked")
 }
 
-// When the last transaction reaches State_Final in Sending, the originator transitions to Observing.
-func TestStateMachine_Sending_TransitionsToObserving_WhenLastTransactionFinal(t *testing.T) {
+// Duplicate TransactionCreated in Sending → validator blocks; no double delegation.
+func TestStateMachine_Sending_TransactionCreated_DuplicateID_NoDelegation(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
@@ -236,147 +338,17 @@ func TestStateMachine_Sending_TransitionsToObserving_WhenLastTransactionFinal(t 
 	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		Transactions(mockTxn).
 		Build()
-	// Fire a Final state-transition event directly — action_CleanUpTransaction removes the tx,
-	// and with no remaining transactions GuardNot(guard_HasUnconfirmedTransactions) fires.
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
-		TransactionID: txID,
-		From:          transaction.State_Delegated,
-		To:            transaction.State_Final,
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{
+		Transaction: &components.PrivateTransaction{ID: txID},
 	}))
-	assert.Equal(t, State_Observing, o.GetCurrentState())
-	assert.Empty(t, o.transactionsByID, "transaction must be cleaned up")
-}
 
-// ── Epoch / coordinator selection ─────────────────────────────────────────────
-
-// Crossing a block-range epoch in ENDORSER mode with a 3-node pool sets previousActiveCoordinatorNode
-// and watchingPreviousCoordinatorFlush when the identity changes.  With a 1-node pool the identity
-// cannot change, so watchingPreviousCoordinatorFlush stays false.
-func TestOriginator_WhenNewEpochRuns_PreservesPreviousActiveAndRecomputesActiveWithWatchingFlushOnlyOnIdentityChange(t *testing.T) {
-	ctx := context.Background()
-	blockRange := uint64(50)
-
-	// 3-node pool: coordinator changes → watchingPreviousCoordinatorFlush = true
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-		}).
-		OriginatorNodePool("node1", "node2", "node3").
-		BlockRangeSize(blockRange).
-		CurrentBlockHeight(100).
-		CurrentActiveCoordinator("node1").
-		PreviousActiveCoordinatorNode("node3").
-		Build()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
-	assert.Equal(t, "node1", o.previousActiveCoordinatorNode)
-	assert.True(t, o.watchingPreviousCoordinatorFlush, "must watch when coordinator identity changes at epoch boundary")
-
-	// 1-node pool: coordinator stays the same → watchingPreviousCoordinatorFlush stays false
-	o2, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-		}).
-		OriginatorNodePool("node1").
-		BlockRangeSize(blockRange).
-		CurrentBlockHeight(100).
-		CurrentActiveCoordinator("node1").
-		PreviousActiveCoordinatorNode("node1").
-		Build()
-	require.NoError(t, o2.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
-	assert.False(t, o2.watchingPreviousCoordinatorFlush, "single-node pool: no identity change, no watching")
-}
-
-// ── watchingPreviousCoordinatorFlush suppression ──────────────────────────────
-
-// Transitioning into Sending while watching and creating a new transaction both suppress delegation.
-func TestOriginator_WhenWatchingPreviousFlush_DelegationSuppressedOnTransitionInAndOnNewTransaction(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(t, State_Observing).
-		WatchingPreviousCoordinatorFlush(true)
-	o, mocks := builder.Build()
-
-	// First TransactionCreated: triggers Observing → Sending transition.
-	// OnTransitionTo has action_SendDelegationRequest guarded by GuardNot(guard_WatchingPreviousCoordinatorFlush).
-	txn1 := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator("sender@node1").Build()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{Transaction: txn1}))
 	assert.Equal(t, State_Sending, o.GetCurrentState())
-	assert.False(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "watching: delegation must be suppressed on entry to Sending")
-
-	// Second TransactionCreated in Sending: also guarded by GuardNot(guard_WatchingPreviousCoordinatorFlush).
-	txn2 := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator("sender@node1").Build()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{Transaction: txn2}))
-	assert.False(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "watching: delegation must be suppressed for new transaction in Sending")
+	assert.Len(t, o.transactionsByID, 1, "duplicate must not be tracked twice")
 }
 
-// A closing heartbeat from the previous coordinator exits watching and triggers a full redelegate.
-func TestOriginator_WhenWatchingPreviousFlush_ExitsOnPreviousClosingHeartbeat(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		WatchingPreviousCoordinatorFlush(true).
-		PreviousActiveCoordinatorNode("node2").
-		CurrentActiveCoordinator("node1").
-		WithMockTransportWriter(t)
-	o, mocks := builder.Build()
-	ca := builder.GetContractAddress()
-	// Delegation fires to the current active coordinator ("node1") once watching is cleared.
-	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, "node1", mock.Anything, mock.Anything).
-		Return(nil).Once()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "node2",
-		ContractAddress: &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			CoordinatorState: common.CoordinatorState_Closing,
-		},
-	}))
-	assert.False(t, o.watchingPreviousCoordinatorFlush, "watching must be cleared on previous coordinator closing heartbeat")
-}
-
-// If the new active coordinator starts heartbeating before the previous has closed, watching exits.
-func TestOriginator_WhenWatchingPreviousFlush_ExitsOnHeartbeatFromNewActiveWhileWatching(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		WatchingPreviousCoordinatorFlush(true).
-		PreviousActiveCoordinatorNode("node2").
-		CurrentActiveCoordinator("node1").
-		WithMockTransportWriter(t)
-	o, mocks := builder.Build()
-	ca := builder.GetContractAddress()
-	// Delegation fires to the new active coordinator ("node1") once watching is cleared.
-	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, "node1", mock.Anything, mock.Anything).
-		Return(nil).Once()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:                "node1",
-		ContractAddress:     &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
-	}))
-	assert.False(t, o.watchingPreviousCoordinatorFlush, "new coordinator heartbeat while watching must clear the flag")
-}
-
-// The HeartbeatInterval inactive-grace path bypasses the watching guard and always delegates.
-func TestOriginator_WhenWatchingPreviousFlush_ExitsOnHeartbeatIntervalInactivePathThatNudgesNewCoordinator(t *testing.T) {
-	ctx := context.Background()
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		WatchingPreviousCoordinatorFlush(true).
-		HeartbeatIntervalsSinceLastReceive(0).
-		InactiveGracePeriod(1).
-		CurrentActiveCoordinator("node1").
-		WithMockTransportWriter(t)
-	o, mocks := builder.Build()
-	// Delegation fires to the current active coordinator ("node1"), bypassing the watching guard.
-	mocks.TransportWriter.EXPECT().
-		SendDelegationRequest(mock.Anything, "node1", mock.Anything, mock.Anything).
-		Return(nil).Once()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
-	assert.False(t, o.watchingPreviousCoordinatorFlush, "inactive-grace path must clear watching flag as a side effect of sendDelegationRequest")
-}
-
-// ── Dropped-transaction detection ─────────────────────────────────────────────
-
-// A non-final transaction absent from the coordinator's snapshot triggers needsRedelegate
-// and a delegation request.
-func TestOriginator_WhenSnapshotShowsMissingNonFinalTransaction_SetsNeedsRedelegate(t *testing.T) {
+// HeartbeatReceived in Sending with dropped transaction → redelegate.
+func TestStateMachine_Sending_HeartbeatReceived_DroppedTransaction_Redelegates(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
@@ -385,20 +357,248 @@ func TestOriginator_WhenSnapshotShowsMissingNonFinalTransaction_SetsNeedsRedeleg
 	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
 	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
 	builder := NewOriginatorBuilderForTesting(t, State_Sending).
-		CurrentActiveCoordinator("node1").
+		CurrentActiveCoordinator("coordinator@node1").
 		WithMockTransportWriter(t).
 		Transactions(mockTxn)
 	o, mocks := builder.Build()
 	ca := builder.GetContractAddress()
-	// Dropped transaction must trigger redelegate to the current active coordinator ("node1").
+
+	mocks.TransportWriter.EXPECT().
+		SendDelegationRequest(mock.Anything, "coordinator@node1", mock.Anything, mock.Anything).
+		Return(nil).Once()
+
+	// Heartbeat with empty snapshot — txID is absent ⇒ dropped.
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		From:            "coordinator@node1",
+		ContractAddress: &ca,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+}
+
+// HeartbeatReceived in Sending from all-present snapshot → no redelegate.
+func TestStateMachine_Sending_HeartbeatReceived_NoDroppedTransactions_NoRedelegate(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("coordinator@node1").
+		Transactions(mockTxn)
+	o, _ := builder.Build()
+	ca := builder.GetContractAddress()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		From:            "coordinator@node1",
+		ContractAddress: &ca,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+			PooledTransactions: []*common.SnapshotPooledTransaction{
+				{ID: txID, Originator: "sender@node1"},
+			},
+		},
+	}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+}
+
+// HeartbeatReceived in Sending from a higher-priority node in Active state → redirects (step 2),
+// then step 5 fires because the empty snapshot indicates the new coordinator has no record of our
+// transaction, triggering a redelegate to it.
+func TestStateMachine_Sending_HeartbeatReceived_HigherPriorityActiveNode_RedirectsAndRedelegates(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated) // called by validator_HasDroppedTransactions (step 5)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node2"). // node1 is higher priority (index 0)
+		CoordinatorPriorityList("node1", "node2", "node3").
+		WithMockTransportWriter(t).
+		Transactions(mockTxn)
+	o, mocks := builder.Build()
+	ca := builder.GetContractAddress()
+
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
-	// Send heartbeat with an empty snapshot — the delegated transaction is absent.
+
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:                "node1",
-		ContractAddress:     &ca,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
+		From:            "node1",
+		ContractAddress: &ca,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
 	}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Equal(t, "node1", o.currentActiveCoordinator, "coordinator must be redirected to higher-priority node")
 }
 
+// HeartbeatInterval in Sending within grace period → counter incremented; no redelegate.
+func TestStateMachine_Sending_HeartbeatInterval_WithinGrace_NoRedelegate(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		HeartbeatIntervalsSinceLastReceive(0).
+		InactiveGracePeriod(2).
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Equal(t, 1, o.heartbeatIntervalsSinceLastReceive)
+}
+
+// HeartbeatInterval in Sending exceeding grace → redelegates.
+func TestStateMachine_Sending_HeartbeatInterval_GraceExceeded_Redelegates(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("coordinator@node1").
+		HeartbeatIntervalsSinceLastReceive(1).
+		InactiveGracePeriod(2).
+		WithMockTransportWriter(t).
+		Transactions(mockTxn)
+	o, mocks := builder.Build()
+
+	mocks.TransportWriter.EXPECT().
+		SendDelegationRequest(mock.Anything, "coordinator@node1", mock.Anything, mock.Anything).
+		Return(nil).Once()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Equal(t, 2, o.heartbeatIntervalsSinceLastReceive)
+}
+
+// DelegationRejected in Sending with higher-priority named coordinator → redirects and redelegates.
+func TestStateMachine_Sending_DelegationRejected_HigherPriority_RedirectsAndRedelegates(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		WithMockTransportWriter(t).
+		Transactions(mockTxn)
+	o, mocks := builder.Build()
+
+	mocks.TransportWriter.EXPECT().
+		SendDelegationRequest(mock.Anything, "node1", mock.Anything, mock.Anything).
+		Return(nil).Once()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.DelegationRejectedEvent{
+		ActiveCoordinator: "node1",
+	}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Equal(t, "node1", o.currentActiveCoordinator)
+}
+
+// DelegationRejected in Sending with lower-priority named coordinator → no redirect; no redelegate.
+func TestStateMachine_Sending_DelegationRejected_LowerPriority_NoChange(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.DelegationRejectedEvent{
+		ActiveCoordinator: "node3",
+	}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Equal(t, "node1", o.currentActiveCoordinator, "lower-priority coordinator must be ignored")
+}
+
+// TransactionStateTransition to Final in Sending removes transaction; transitions to Observing
+// when it was the last unconfirmed transaction.
+func TestStateMachine_Sending_TransactionFinal_LastTxn_TransitionsToObserving(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		Transactions(mockTxn).
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
+		From:          transaction.State_Delegated,
+		To:            transaction.State_Final,
+	}))
+
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Empty(t, o.transactionsByID, "final transaction must be removed")
+}
+
+// TransactionStateTransition to Final in Sending when other transactions remain → stays Sending.
+func TestStateMachine_Sending_TransactionFinal_OtherTxnsRemain_StaysSending(t *testing.T) {
+	ctx := context.Background()
+	txID1 := uuid.New()
+	txID2 := uuid.New()
+	mockTxn1 := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn1.On("GetID").Return(txID1)
+	mockTxn2 := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn2.On("GetID").Return(txID2)
+	// guard_HasUnconfirmedTransactions calls GetCurrentState on remaining transactions.
+	mockTxn2.On("GetCurrentState").Return(transaction.State_Delegated)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		Transactions(mockTxn1, mockTxn2).
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID1,
+		From:          transaction.State_Delegated,
+		To:            transaction.State_Final,
+	}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Len(t, o.transactionsByID, 1, "only the finalized transaction is removed")
+}
+
+// CoordinatorPriorityListUpdated in Sending updates the stored list and currentActiveCoordinator.
+func TestStateMachine_Sending_CoordinatorPriorityListUpdated_UpdatesListAndCoordinator(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("old-coordinator").
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.CoordinatorPriorityListUpdatedEvent{
+		Nodes: []string{"new-node1", "new-node2"},
+	}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Equal(t, "new-node1", o.currentActiveCoordinator)
+	assert.Equal(t, []string{"new-node1", "new-node2"}, o.coordinatorPriorityList)
+}
+
+// NewBlock event in Sending updates currentBlockHeight; stays Sending.
+func TestStateMachine_Sending_NewBlock_UpdatesBlockHeight_StaysSending(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentBlockHeight(50).
+		Transactions(mockTxn).
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 100}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Equal(t, uint64(100), o.currentBlockHeight)
+}

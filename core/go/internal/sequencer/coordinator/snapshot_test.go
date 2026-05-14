@@ -172,8 +172,8 @@ func TestSendHeartbeat_ExportStatesAndLocksError_ReturnsError(t *testing.T) {
 	mockGrapher.EXPECT().ExportStatesAndLocks(mock.Anything, "node1").
 		Return(grapher.ExportableStates{}, fmt.Errorf("export error"))
 
-	// Flush state means includeLocks=true, which causes ExportStatesAndLocks to be called.
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Flush).
+	// Closing_Flush state means includeLocks=true, which causes ExportStatesAndLocks to be called.
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
 		OriginatorNodePool("node1").
 		Grapher(mockGrapher).
 		Build()

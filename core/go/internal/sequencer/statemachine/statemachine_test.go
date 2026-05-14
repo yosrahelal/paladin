@@ -219,6 +219,86 @@ func TestGuardedTransitions(t *testing.T) {
 	assert.Equal(t, State_Error, entity2.sm.GetCurrentState())
 }
 
+func TestTransitionValidator(t *testing.T) {
+	// validator passes → transition fires
+	t.Run("validator passes, transition fires", func(t *testing.T) {
+		definitions := StateDefinitions[TestState, *TestEntity]{
+			State_Idle: {
+				Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+					Event_Start: {
+						Transitions: []Transition[TestState, *TestEntity]{{
+							To: State_Active,
+							Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
+								ev := event.(*testEvent)
+								return ev.data == "go", nil
+							},
+						}},
+					},
+				},
+			},
+		}
+		entity := newTestEntity(definitions, "test-entity")
+		ev := newTestEvent(Event_Start)
+		ev.data = "go"
+		err := entity.sm.ProcessEvent(context.Background(), entity, ev)
+		require.NoError(t, err)
+		assert.Equal(t, State_Active, entity.sm.GetCurrentState())
+	})
+
+	// validator fails → transition skipped, falls through to next
+	t.Run("validator fails, skips to next transition", func(t *testing.T) {
+		definitions := StateDefinitions[TestState, *TestEntity]{
+			State_Idle: {
+				Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+					Event_Start: {
+						Transitions: []Transition[TestState, *TestEntity]{
+							{
+								To: State_Error,
+								Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
+									ev := event.(*testEvent)
+									return ev.data == "fail", nil
+								},
+							},
+							{
+								To: State_Active,
+							},
+						},
+					},
+				},
+			},
+		}
+		entity := newTestEntity(definitions, "test-entity")
+		ev := newTestEvent(Event_Start)
+		ev.data = "go" // does not match "fail", so first transition is skipped
+		err := entity.sm.ProcessEvent(context.Background(), entity, ev)
+		require.NoError(t, err)
+		assert.Equal(t, State_Active, entity.sm.GetCurrentState())
+	})
+
+	// validator returns an error → error is propagated
+	t.Run("validator error propagated", func(t *testing.T) {
+		validatorErr := errors.New("validator boom")
+		definitions := StateDefinitions[TestState, *TestEntity]{
+			State_Idle: {
+				Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+					Event_Start: {
+						Transitions: []Transition[TestState, *TestEntity]{{
+							To: State_Active,
+							Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
+								return false, validatorErr
+							},
+						}},
+					},
+				},
+			},
+		}
+		entity := newTestEntity(definitions, "test-entity")
+		err := entity.sm.ProcessEvent(context.Background(), entity, newTestEvent(Event_Start))
+		assert.ErrorIs(t, err, validatorErr)
+		assert.Equal(t, State_Idle, entity.sm.GetCurrentState())
+	})
+}
+
 func TestActionsOnTransition(t *testing.T) {
 	actionCalled := false
 	entryActionCalled := false
@@ -329,6 +409,101 @@ func TestTransitionAndEntryActionRules_OrderAndGuards(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, State_Active, entity.sm.GetCurrentState())
 	assert.Equal(t, []string{"transition-1", "transition-2", "entry-1", "entry-2"}, steps)
+}
+
+func TestOnTransitionFrom_ExecutedWhenLeavingState(t *testing.T) {
+	steps := make([]string, 0, 4)
+
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			OnTransitionFrom: []ActionRule[*TestEntity]{
+				{
+					Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
+						steps = append(steps, "exit-idle")
+						return nil
+					},
+				},
+			},
+			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+				Event_Start: {
+					Transitions: []Transition[TestState, *TestEntity]{{
+						To: State_Active,
+						Actions: []ActionRule[*TestEntity]{{
+							Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
+								steps = append(steps, "transition")
+								return nil
+							},
+						}},
+					}},
+				},
+			},
+		},
+		State_Active: {
+			OnTransitionTo: []ActionRule[*TestEntity]{{
+				Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
+					steps = append(steps, "entry-active")
+					return nil
+				},
+			}},
+			OnTransitionFrom: []ActionRule[*TestEntity]{{
+				Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
+					steps = append(steps, "exit-active")
+					return nil
+				},
+			}},
+			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+				Event_Complete: {
+					Transitions: []Transition[TestState, *TestEntity]{{
+						To: State_Complete,
+					}},
+				},
+			},
+		},
+		State_Complete: {
+			OnTransitionTo: []ActionRule[*TestEntity]{{
+				Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
+					steps = append(steps, "entry-complete")
+					return nil
+				},
+			}},
+		},
+	}
+
+	entity := newTestEntity(definitions, "test-entity")
+	ctx := context.Background()
+
+	// Idle → Active: transition action, then exit-idle, then entry-active
+	err := entity.sm.ProcessEvent(ctx, entity, newTestEvent(Event_Start))
+	require.NoError(t, err)
+	assert.Equal(t, State_Active, entity.sm.GetCurrentState())
+	assert.Equal(t, []string{"transition", "exit-idle", "entry-active"}, steps)
+
+	// Active → Complete: exit-active fires before entry-complete; no transition action
+	err = entity.sm.ProcessEvent(ctx, entity, newTestEvent(Event_Complete))
+	require.NoError(t, err)
+	assert.Equal(t, State_Complete, entity.sm.GetCurrentState())
+	assert.Equal(t, []string{"transition", "exit-idle", "entry-active", "exit-active", "entry-complete"}, steps)
+}
+
+func TestOnTransitionFrom_NilSafe_WhenNotDefined(t *testing.T) {
+	// States without OnTransitionFrom should not panic or error when a transition fires from them.
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+				Event_Start: {
+					Transitions: []Transition[TestState, *TestEntity]{{
+						To: State_Active,
+					}},
+				},
+			},
+		},
+		State_Active: {},
+	}
+
+	entity := newTestEntity(definitions, "test-entity")
+	err := entity.sm.ProcessEvent(context.Background(), entity, newTestEvent(Event_Start))
+	require.NoError(t, err)
+	assert.Equal(t, State_Active, entity.sm.GetCurrentState())
 }
 
 func TestTransitionActionRules_ErrorStopsRemainingRules(t *testing.T) {

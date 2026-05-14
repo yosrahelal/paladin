@@ -38,77 +38,159 @@ func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1000), o.currentBlockHeight)
 }
-func Test_action_UpdateBlockHeight_NewEpoch_SetsNewBlockRangeEpochTrue(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).BlockRangeSize(10).CurrentBlockHeight(9).Build()
-	err := action_UpdateBlockHeight(ctx, o, &common.NewBlockEvent{BlockHeight: 10})
-	require.NoError(t, err)
-	assert.True(t, o.newBlockRangeEpoch)
-}
-func Test_action_UpdateBlockHeight_SameEpoch_SetsNewBlockRangeEpochFalse(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).BlockRangeSize(10).CurrentBlockHeight(0).Build()
-	err := action_UpdateBlockHeight(ctx, o, &common.NewBlockEvent{BlockHeight: 1})
-	require.NoError(t, err)
-	assert.False(t, o.newBlockRangeEpoch)
-}
-func Test_guard_IsNewBlockRangeEpoch_WhenNewEpoch_ReturnsTrue(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).NewBlockRangeEpoch(true).Build()
-	assert.True(t, guard_IsNewBlockRangeEpoch(ctx, o))
-}
-func Test_guard_IsNewBlockRangeEpoch_WhenSameEpoch_ReturnsFalse(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).NewBlockRangeEpoch(false).Build()
-	assert.False(t, guard_IsNewBlockRangeEpoch(ctx, o))
-}
-func Test_action_SelectActiveCoordinator_SenderMode_NoOp_ActiveCoordinatorUnchanged(t *testing.T) {
+
+func Test_action_UpdateCoordinatorPriorityList_UpdatesListAndActiveCoordinator(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
-	// In SENDER mode, action_SelectActiveCoordinator is a no-op; the current coordinator identity is unchanged.
-	before := o.currentActiveCoordinator
-	err := action_SelectActiveCoordinator(ctx, o, nil)
+
+	err := action_UpdateCoordinatorPriorityList(ctx, o, &common.CoordinatorPriorityListUpdatedEvent{
+		Nodes: []string{"node1", "node2", "node3"},
+	})
 	require.NoError(t, err)
-	assert.Equal(t, before, o.currentActiveCoordinator)
-}
-func Test_action_SelectActiveCoordinator_WhenCoordinatorChanges_SetsChangedFlag(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
-		}).
-		OriginatorNodePool("node1", "node2").
-		CurrentActiveCoordinator("some-other-node").
-		CurrentBlockHeight(1000).
-		Build()
-	err := action_SelectActiveCoordinator(ctx, o, nil)
-	require.NoError(t, err)
+
+	assert.Equal(t, []string{"node1", "node2", "node3"}, o.coordinatorPriorityList)
+	assert.Equal(t, "node1", o.currentActiveCoordinator, "index-0 node becomes the active coordinator")
 }
 
-func Test_action_SelectActiveCoordinator_NewEpochWithIdentityChange_SetsWatchingPreviousCoordinatorFlush(t *testing.T) {
+func Test_action_UpdateCoordinatorPriorityList_EmptyNodeList_NoChange(t *testing.T) {
 	ctx := context.Background()
-	pool := []string{"node1", "node2"}
-	blockRange := uint64(50)
-	at100 := common.SelectCoordinatorNode(ctx, pool, 100, blockRange)
-	at150 := common.SelectCoordinatorNode(ctx, pool, 150, blockRange)
-	require.NotEqual(t, at100, at150)
-
 	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
-		}).
-		OriginatorNodePool("node1", "node2").
-		BlockRangeSize(blockRange).
-		CurrentBlockHeight(150).
-		CurrentActiveCoordinator(at100).
-		NewBlockRangeEpoch(true).
+		CurrentActiveCoordinator("existing-coordinator").
+		CoordinatorPriorityList("existing-coordinator").
 		Build()
-	require.NoError(t, action_SelectActiveCoordinator(ctx, o, nil))
-	require.Equal(t, at100, o.previousActiveCoordinatorNode)
-	require.Equal(t, at150, o.currentActiveCoordinator)
-	assert.True(t, o.watchingPreviousCoordinatorFlush)
+
+	err := action_UpdateCoordinatorPriorityList(ctx, o, &common.CoordinatorPriorityListUpdatedEvent{
+		Nodes: []string{},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "existing-coordinator", o.currentActiveCoordinator, "empty list must not overwrite current coordinator")
+}
+
+func Test_action_UpdateActiveCoordinatorFromHeartbeat_SetsCoordinator(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
+
+	err := action_UpdateActiveCoordinatorFromHeartbeat(ctx, o, &common.HeartbeatReceivedEvent{
+		From: "new-coordinator@node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "new-coordinator@node2", o.currentActiveCoordinator)
+}
+
+func Test_action_HandleDelegationRejected_HigherPriorityCoordinator_Redirects(t *testing.T) {
+	// The rejection names a coordinator that has higher priority (lower index) than the current one.
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+
+	err := action_HandleDelegationRejected(ctx, o, &common.DelegationRejectedEvent{
+		ActiveCoordinator: "node1",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "node1", o.currentActiveCoordinator, "coordinator must be redirected to the higher-priority node")
+}
+
+func Test_action_HandleDelegationRejected_LowerPriorityCoordinator_NoChange(t *testing.T) {
+	// The rejection names a coordinator with lower priority than the current one; we ignore it.
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+
+	err := action_HandleDelegationRejected(ctx, o, &common.DelegationRejectedEvent{
+		ActiveCoordinator: "node3",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "node1", o.currentActiveCoordinator, "coordinator must not change when named node has lower priority")
+}
+
+func Test_action_HandleDelegationRejected_NoActiveCoordinator_NoChange(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node1").
+		Build()
+
+	err := action_HandleDelegationRejected(ctx, o, &common.DelegationRejectedEvent{
+		ActiveCoordinator: "",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "node1", o.currentActiveCoordinator)
+}
+
+func Test_validator_IsHeartbeatSenderLive_ActiveState_ReturnsTrue(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).Build()
+	valid, err := validator_IsHeartbeatSenderLive(ctx, o, &common.HeartbeatReceivedEvent{
+		From: "coordinator@node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, valid)
+}
+
+func Test_validator_IsHeartbeatSenderLive_PreparedState_ReturnsTrue(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).Build()
+	valid, err := validator_IsHeartbeatSenderLive(ctx, o, &common.HeartbeatReceivedEvent{
+		From: "coordinator@node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Prepared,
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, valid)
+}
+
+func Test_validator_IsHeartbeatSenderLive_ActiveFlushState_ReturnsTrue(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).Build()
+	valid, err := validator_IsHeartbeatSenderLive(ctx, o, &common.HeartbeatReceivedEvent{
+		From: "coordinator@node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active_Flush,
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, valid)
+}
+
+func Test_validator_IsHeartbeatSenderLive_ClosingFlushState_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).Build()
+	valid, err := validator_IsHeartbeatSenderLive(ctx, o, &common.HeartbeatReceivedEvent{
+		From: "coordinator@node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Closing_Flush,
+		},
+	})
+	require.NoError(t, err)
+	assert.False(t, valid)
+}
+
+func Test_validator_IsHeartbeatSenderLive_ClosingState_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).Build()
+	valid, err := validator_IsHeartbeatSenderLive(ctx, o, &common.HeartbeatReceivedEvent{
+		From: "coordinator@node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Closing,
+		},
+	})
+	require.NoError(t, err)
+	assert.False(t, valid)
 }
 
 func Test_hasDroppedTransactions_TrueWhenDelegatedTxnNotInSnapshot(t *testing.T) {
@@ -319,18 +401,6 @@ func Test_guard_InactiveGracePeriodExceeded_WhileSending_FalseWhenCounterBelowTh
 	assert.False(t, guard_InactiveGracePeriodExceeded(ctx, o))
 }
 
-func Test_guard_InactiveGracePeriodExceeded_WhileSending_TrueEvenWhenWatchingPreviousCoordinatorFlush(t *testing.T) {
-	ctx := context.Background()
-	// Watching a previous coordinator flush does not suppress the redelegate on inactive grace;
-	// if the current coordinator is also inactive, we redelegate regardless.
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		HeartbeatIntervalsSinceLastReceive(2).
-		InactiveGracePeriod(2).
-		WatchingPreviousCoordinatorFlush(true).
-		Build()
-	assert.True(t, guard_InactiveGracePeriodExceeded(ctx, o))
-}
-
 func Test_sendDelegationRequest_TransportError_ReturnsError(t *testing.T) {
 	ctx := t.Context()
 	builder := NewOriginatorBuilderForTesting(t, State_Sending).WithMockTransportWriter(t)
@@ -350,38 +420,23 @@ func Test_sendDelegationRequest_TransportError_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "transport error")
 }
 
-func Test_updateOriginatorNodePool_AddsNewNode(t *testing.T) {
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).NodeName("node1").Build()
-
-	o.updateOriginatorNodePool("node2")
-
-	assert.Equal(t, []string{"node1", "node2"}, o.originatorNodePool)
-}
-
-func Test_updateOriginatorNodePool_DoesNotAddDuplicate(t *testing.T) {
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).NodeName("node1").OriginatorNodePool("node1", "node2").Build()
-
-	o.updateOriginatorNodePool("node2")
-
-	assert.Equal(t, []string{"node1", "node2"}, o.originatorNodePool)
-}
-
-func Test_updateOriginatorNodePool_EnsuresLocalNodeAlwaysPresent(t *testing.T) {
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).NodeName("node1").OriginatorNodePool().Build()
-
-	o.updateOriginatorNodePool("node2")
-
-	assert.Contains(t, o.originatorNodePool, "node1")
-}
-
-func Test_action_UpdateOriginatorNodePool_GrowsPool(t *testing.T) {
+func Test_action_SelectActiveCoordinator_EndorserMode_SetsCoordinatorFromPriorityList(t *testing.T) {
+	// In COORDINATOR_ENDORSER mode the coordinator selection uses the priority list
+	// that was previously pushed by the co-located coordinator.
 	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).NodeName("node1").Build()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		DomainContractConfig(&prototk.ContractConfig{
+			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
+			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
+		}).
+		CoordinatorPriorityList("node1", "node2").
+		CurrentActiveCoordinator("node2").
+		Build()
 
-	err := action_UpdateOriginatorNodePool(ctx, o, &common.EndorserNodesDiscoveredEvent{
-		Nodes: []string{"node2", "node3"},
+	// The coordinator sends a priority-list update event to the originator.
+	err := action_UpdateCoordinatorPriorityList(ctx, o, &common.CoordinatorPriorityListUpdatedEvent{
+		Nodes: []string{"node1", "node2"},
 	})
-
 	require.NoError(t, err)
-	assert.Equal(t, []string{"node1", "node2", "node3"}, o.originatorNodePool)
+	assert.Equal(t, "node1", o.currentActiveCoordinator)
 }
