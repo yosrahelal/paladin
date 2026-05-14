@@ -212,7 +212,7 @@ var stateDefinitionsMap = StateDefinitions{
 							validator_IsHeartbeatFromHigherPriorityCoordinator,
 							validator_IsHeartbeatSenderLive,
 						),
-						If: guard_HasTransactionsInflight,
+						If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
 						Actions: []ActionRule{
 							{Action: action_UpdateActiveCoordinator},
 							{Action: action_ClearTimeoutSchedules},
@@ -231,20 +231,23 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
-			common.Event_HandoverRequest: {
-				Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
-				Actions:   []ActionRule{{Action: action_CleanUpTransactionsNotYetDispatched}},
-				Transitions: []Transition{{
-					To: State_Closing_Flush,
-					If: guard_HasUnconfirmedDispatchedTransactions,
-				}, {
-					To: State_Closing,
-					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
-				}},
+		common.Event_HandoverRequest: {
+			Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
+			Actions: []ActionRule{
+				{Action: action_UpdateActiveCoordinator},
+				{Action: action_CleanUpTransactionsNotYetDispatched},
 			},
-			Event_TransactionsDelegated: {
-				// Accept delegations while in Elect so originators are not bounced while we wait.
-				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+			Transitions: []Transition{{
+				To: State_Closing_Flush,
+				If: guard_HasUnconfirmedDispatchedTransactions,
+			}, {
+				To: State_Closing,
+				If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+			}},
+		},
+		Event_TransactionsDelegated: {
+			// Accept delegations while in Elect so originators are not bounced while we wait.
+			Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 			},
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
@@ -353,40 +356,43 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
-			common.Event_HandoverRequest: {
-				Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
-				Actions:   []ActionRule{{Action: action_CleanUpTransactionsNotYetDispatched}},
-				Transitions: []Transition{{
-					To: State_Closing_Flush,
-					If: guard_HasUnconfirmedDispatchedTransactions,
-				}, {
-					To: State_Closing,
-					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
-				}},
+		common.Event_HandoverRequest: {
+			Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
+			Actions: []ActionRule{
+				{Action: action_UpdateActiveCoordinator},
+				{Action: action_CleanUpTransactionsNotYetDispatched},
 			},
-			Event_TransactionsDelegated: {
-				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+			Transitions: []Transition{{
+				To: State_Closing_Flush,
+				If: guard_HasUnconfirmedDispatchedTransactions,
+			}, {
+				To: State_Closing,
+				If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+			}},
+		},
+		Event_TransactionsDelegated: {
+			Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+		},
+		common.Event_NewBlock: {
+			Actions: []ActionRule{
+				{Action: action_UpdateBlockHeight},
+				{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
 			},
-			common.Event_NewBlock: {
-				Actions: []ActionRule{
-					{Action: action_UpdateBlockHeight},
-					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
-				},
-			},
-			common.Event_TransactionStateTransition: {
-				Actions: []ActionRule{
-					{
-						// There is a small chance we have come here from State_Closing (via State_Elect) and still have transactions in terminal
-						// states from a previous time of actively coordinating that we haven't cleaned up from memory yet,
-						// so we handle that here.
-						Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
-						Action:    action_CleanUpTransaction,
-					},
+		},
+		common.Event_TransactionStateTransition: {
+			Actions: []ActionRule{
+				{
+					// There is a small chance we have come here from State_Closing (via State_Elect) and still have transactions in terminal
+					// states from a previous time of actively coordinating that we haven't cleaned up from memory yet,
+					// so we handle that here.
+					Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
+					Action:    action_CleanUpTransaction,
 				},
 			},
 		},
 	},
-	State_Active: {
+},
+State_Active: {
 		OnTransitionTo: []ActionRule{
 			{Action: action_NewSigningIdentity},
 			{Action: action_StartDispatchLoop},
@@ -571,20 +577,42 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_TransactionsDelegated: {
-				// Still the active coordinator — accept delegations normally, we just won't be progressing them in this state
-				// TODO: could we keep safely assembling and endorsement gathering in this state?
+				// Still the active coordinator — accept delegations normally- we can process transactions, just not dispatch them
 				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 			},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
 					{
+						// This TX is leaving dispatched after being reverted on chain, cancel any transaction being assembled
+						// This could be more nuanced if we could capture the set of potential states that are being removed
+						// as part of unwinding the dependency chain, and only repool the transaction once assembly is complete if
+						// it is using one of these potential outputs as an input.
+						Validator: statemachine.ValidatorAnd(
+							validator_TransactionStateTransitionFrom(transaction.State_Dispatched),
+							validator_TransactionStateTransitionTo(transaction.State_Pooled, transaction.State_Reverted),
+						),
+						If:     guard_HasTransactionAssembling,
+						Action: action_cancelCurrentlyAssemblingTransaction,
+					},
+					{
+						Validator: validator_TransactionStateTransitionTo(transaction.State_Pooled),
+						Action:    action_PoolTransaction,
+					},
+					{
+						Validator: validator_TransactionStateTransitionTo(transaction.State_Ready_For_Dispatch),
+						Action:    action_QueueTransactionForDispatch,
+					},
+					{
 						Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
 						Action:    action_CleanUpTransaction,
 					},
 					{
-						// A transaction has moved back to pooled state- add it back to the pool.
-						Validator: validator_TransactionStateTransitionTo(transaction.State_Pooled),
-						Action:    action_PoolTransaction,
+						Validator: validator_TransactionStateTransitionTo(transaction.State_Evicted),
+						Action:    action_CleanUpTransaction,
+					},
+					{
+						Action: action_SelectTransaction,
+						If:     statemachine.GuardNot(guard_HasTransactionAssembling),
 					},
 				},
 				Transitions: []Transition{{

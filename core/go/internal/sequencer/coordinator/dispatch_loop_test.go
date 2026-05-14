@@ -31,6 +31,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test_stopDispatchLoop_StopsRunningLoop verifies the full body of stopDispatchLoop: it cancels the
+// loop's context, signals the inFlightMutex to unblock any Wait(), waits for the goroutine to exit,
+// and then nils both dispatchLoopCancel and dispatchLoopDone.
+func Test_stopDispatchLoop_StopsRunningLoop(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).Build()
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil)
+	require.NoError(t, c.Start(ctx))
+
+	c.startDispatchLoop()
+	require.True(t, c.isDispatchLoopRunning(), "dispatch loop must be running after startDispatchLoop")
+
+	c.stopDispatchLoop()
+
+	require.False(t, c.isDispatchLoopRunning(), "dispatch loop must have stopped after stopDispatchLoop")
+	assert.Nil(t, c.dispatchLoopCancel, "dispatchLoopCancel must be nilled by stopDispatchLoop")
+	assert.Nil(t, c.dispatchLoopDone, "dispatchLoopDone must be nilled by stopDispatchLoop")
+}
+
 // TestDispatchLoop_StopWhileWaitingForInFlightSlot covers the path where the dispatch loop
 // is blocked in the first Wait() (too many in flight) and exits when Stop() sends to
 // stopDispatchLoop and Signals. We pre-populate inFlightTxns so that when the loop

@@ -39,9 +39,11 @@ func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
 	assert.Equal(t, uint64(1000), o.currentBlockHeight)
 }
 
-func Test_action_UpdateCoordinatorPriorityList_UpdatesListAndActiveCoordinator(t *testing.T) {
+func Test_action_UpdateCoordinatorPriorityList_UpdatesListOnly_CoordinatorUnchanged(t *testing.T) {
 	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		CurrentActiveCoordinator("coordinator").
+		Build()
 
 	err := action_UpdateCoordinatorPriorityList(ctx, o, &common.CoordinatorPriorityListUpdatedEvent{
 		Nodes: []string{"node1", "node2", "node3"},
@@ -49,7 +51,7 @@ func Test_action_UpdateCoordinatorPriorityList_UpdatesListAndActiveCoordinator(t
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"node1", "node2", "node3"}, o.coordinatorPriorityList)
-	assert.Equal(t, "node1", o.currentActiveCoordinator, "index-0 node becomes the active coordinator")
+	assert.Equal(t, "coordinator", o.currentActiveCoordinator, "action_UpdateCoordinatorPriorityList must not change currentActiveCoordinator")
 }
 
 func Test_action_UpdateCoordinatorPriorityList_EmptyNodeList_NoChange(t *testing.T) {
@@ -420,9 +422,10 @@ func Test_sendDelegationRequest_TransportError_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "transport error")
 }
 
-func Test_action_SelectActiveCoordinator_EndorserMode_SetsCoordinatorFromPriorityList(t *testing.T) {
-	// In COORDINATOR_ENDORSER mode the coordinator selection uses the priority list
-	// that was previously pushed by the co-located coordinator.
+func Test_action_UpdateCoordinatorPriorityList_EndorserMode_UpdatesListOnly_CoordinatorUnchanged(t *testing.T) {
+	// In COORDINATOR_ENDORSER mode the originator receives priority-list updates from the
+	// co-located coordinator. The list is updated but currentActiveCoordinator is left alone;
+	// only a live heartbeat or a delegation rejection can redirect the originator.
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
 		DomainContractConfig(&prototk.ContractConfig{
@@ -433,10 +436,10 @@ func Test_action_SelectActiveCoordinator_EndorserMode_SetsCoordinatorFromPriorit
 		CurrentActiveCoordinator("node2").
 		Build()
 
-	// The coordinator sends a priority-list update event to the originator.
 	err := action_UpdateCoordinatorPriorityList(ctx, o, &common.CoordinatorPriorityListUpdatedEvent{
 		Nodes: []string{"node1", "node2"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "node1", o.currentActiveCoordinator)
+	assert.Equal(t, []string{"node1", "node2"}, o.coordinatorPriorityList)
+	assert.Equal(t, "node2", o.currentActiveCoordinator, "action_UpdateCoordinatorPriorityList must not change currentActiveCoordinator")
 }

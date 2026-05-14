@@ -58,7 +58,9 @@ type CoordinatorBuilderForTesting struct {
 	heartbeatIntervalsSinceLastReceive       *int
 	inactiveGracePeriod                      *int
 	heartbeatIntervalsSinceStateChange       *int
+	coordinatorPriorityList                  []string
 	useMockTransportWriter                   bool
+	useMockClock                             bool
 	grapher                                  grapher.Grapher
 	signingIdentityUsed                      *bool
 }
@@ -68,6 +70,7 @@ type CoordinatorDependencyMocks struct {
 	EngineIntegration   *sequencercommonmocks.EngineIntegration
 	SyncPoints          *syncpointsmocks.SyncPoints
 	TransportWriter     *sequencertransportmocks.TransportWriter
+	Clock               *sequencercommonmocks.Clock
 }
 
 // copySequencerDefaultsForTest returns a deep copy of SequencerDefaults so tests that mutate
@@ -239,6 +242,11 @@ func (b *CoordinatorBuilderForTesting) CoordinatorSelectionBlockRange(n uint64) 
 	return b
 }
 
+func (b *CoordinatorBuilderForTesting) CoordinatorPriorityList(nodes ...string) *CoordinatorBuilderForTesting {
+	b.coordinatorPriorityList = nodes
+	return b
+}
+
 func (b *CoordinatorBuilderForTesting) HeartbeatIntervalsSinceLastReceive(n int) *CoordinatorBuilderForTesting {
 	b.heartbeatIntervalsSinceLastReceive = &n
 	return b
@@ -279,6 +287,11 @@ func (b *CoordinatorBuilderForTesting) SigningIdentityUsed(used bool) *Coordinat
 	return b
 }
 
+func (b *CoordinatorBuilderForTesting) UseMockClock() *CoordinatorBuilderForTesting {
+	b.useMockClock = true
+	return b
+}
+
 func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDependencyMocks) {
 	if b.contractAddress == nil {
 		b.contractAddress = pldtypes.RandAddress()
@@ -287,6 +300,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		SentMessageRecorder: testutil.NewSentMessageRecorder(),
 		EngineIntegration:   sequencercommonmocks.NewEngineIntegration(b.t),
 		SyncPoints:          syncpointsmocks.NewSyncPoints(b.t),
+		Clock:               sequencercommonmocks.NewClock(b.t),
 	}
 
 	if b.useMockTransportWriter {
@@ -328,6 +342,13 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		transportWriter = mocks.TransportWriter
 	}
 
+	var clock common.Clock
+	if b.useMockClock {
+		clock = mocks.Clock
+	} else {
+		clock = common.RealClock()
+	}
+
 	coordinator := NewCoordinator(
 		b.contractAddress, // Contract address,
 		b.domainAPI,
@@ -336,7 +357,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		nil,
 		nil,
 		transportWriter,
-		common.RealClock(),
+		clock,
 		mocks.EngineIntegration,
 		mocks.SyncPoints,
 		b.sequencerConfig,
@@ -380,6 +401,9 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	}
 	if b.signingIdentityUsed != nil {
 		coordinator.signingIdentityUsed = *b.signingIdentityUsed
+	}
+	if b.coordinatorPriorityList != nil {
+		coordinator.coordinatorPriorityList = b.coordinatorPriorityList
 	}
 	return coordinator, mocks
 }

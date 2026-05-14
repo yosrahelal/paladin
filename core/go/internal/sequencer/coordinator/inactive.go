@@ -51,10 +51,15 @@ func action_RejectDelegatedTransactions(ctx context.Context, c *coordinator, eve
 	return c.transportWriter.SendDelegationRequestRejection(ctx, e.FromNode, e.DelegationID, c.currentBlockHeight, c.currentActiveCoordinator)
 }
 
-// action_UpdateActiveCoordinator updates the current active coordinator from a received heartbeat.s
+// action_UpdateActiveCoordinator updates the current active coordinator from either a received
+// heartbeat or a handover request. Both events carry the sender identity in different fields.
 func action_UpdateActiveCoordinator(_ context.Context, c *coordinator, event common.Event) error {
-	e := event.(*common.HeartbeatReceivedEvent)
-	c.currentActiveCoordinator = e.From
+	switch e := event.(type) {
+	case *common.HeartbeatReceivedEvent:
+		c.currentActiveCoordinator = e.From
+	case *common.HandoverRequestEvent:
+		c.currentActiveCoordinator = e.FromNode
+	}
 	return nil
 }
 

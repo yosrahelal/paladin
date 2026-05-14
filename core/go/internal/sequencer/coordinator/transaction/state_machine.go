@@ -591,9 +591,8 @@ var stateDefinitionsMap = StateDefinitions{
 		Events: map[EventType]EventHandler{
 			Event_Dispatched: {
 				Actions: []ActionRule{
-					{
-						Action: action_Dispatch,
-					},
+					{Action: action_AllocateSigningIdentity},
+					{Action: action_Dispatch},
 				},
 				Transitions: []Transition{
 					{
@@ -645,7 +644,6 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Dispatched: {
 		OnTransitionTo: []ActionRule{
-			{Action: action_AllocateSigningIdentity},
 			{Action: action_NotifyDispatched},
 			{Action: action_CleanUpAssemblyPayload},
 		},

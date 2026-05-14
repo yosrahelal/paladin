@@ -884,6 +884,32 @@ func TestCoordinator_WaitForDone_ReturnsEarlyWhenContextCancelled(t *testing.T) 
 	c.WaitForDone(ctx2)
 }
 
+// WaitForDone returns via ctx.Done() when the context is cancelled while the dispatch loop is
+// still running (dispatchLoopDone channel is non-nil and will never close).
+func TestCoordinator_WaitForDone_CtxCancelledWhileDispatchLoopRunning_ReturnsEarly(t *testing.T) {
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	c.started = true
+
+	// Simulate a running dispatch loop: a channel that is open but will never close.
+	neverClosing := make(chan struct{})
+	c.dispatchLoopDone = neverClosing
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // already cancelled
+
+	done := make(chan struct{})
+	go func() {
+		c.WaitForDone(ctx)
+		close(done)
+	}()
+	select {
+	case <-done:
+		// WaitForDone returned early via ctx.Done() — expected
+	case <-time.After(time.Second):
+		t.Fatal("WaitForDone should have returned early when context is cancelled and dispatch loop is running")
+	}
+}
+
 func TestCoordinator_Start_GetBlockHeightError_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)

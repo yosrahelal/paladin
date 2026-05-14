@@ -1179,6 +1179,106 @@ func Test_action_CalculateCoordinatorPriorities_InvokesNotifyOriginator(t *testi
 	assert.Equal(t, c.coordinatorPriorityList, listEvent.Nodes)
 }
 
+// scheduleRequestTimeout cancels an existing timer before arming a new one, and its timer callback
+// queues a RequestTimeoutIntervalEvent onto the coordinator event loop.
+func Test_scheduleRequestTimeout_ReplacesExistingTimer(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).Build()
+
+	oldCancelCalled := false
+	c.cancelRequestTimeout = func() { oldCancelCalled = true }
+
+	c.scheduleRequestTimeout(ctx)
+
+	assert.True(t, oldCancelCalled, "scheduleRequestTimeout must cancel the existing timer before arming a new one")
+	assert.NotNil(t, c.cancelRequestTimeout, "scheduleRequestTimeout must arm a new timer")
+	c.cancelRequestTimeout() // clean up the newly-armed timer
+}
+
+// scheduleRequestTimeout_TimerCallback verifies that when the timer fires it queues a
+// RequestTimeoutIntervalEvent onto the coordinator's event loop.
+func Test_scheduleRequestTimeout_TimerCallback_QueuesRequestTimeoutEvent(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).UseMockClock().Build()
+
+	// When ScheduleTimer is called, invoke the callback synchronously so the closure body is covered.
+	// The callback calls QueueEvent which sends to the buffered event channel.
+	mocks.Clock.On("ScheduleTimer", mock.Anything, mock.Anything, mock.Anything).
+		Return(func() {}).
+		Run(func(args mock.Arguments) {
+			args.Get(2).(func())()
+		})
+
+	c.scheduleRequestTimeout(ctx)
+
+	assert.NotNil(t, c.cancelRequestTimeout, "scheduleRequestTimeout must set a cancel func")
+}
+
+// scheduleStateTimeout cancels an existing timer before arming a new one.
+func Test_scheduleStateTimeout_ReplacesExistingTimer(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).Build()
+
+	oldCancelCalled := false
+	c.cancelStateTimeout = func() { oldCancelCalled = true }
+
+	c.scheduleStateTimeout(ctx)
+
+	assert.True(t, oldCancelCalled, "scheduleStateTimeout must cancel the existing timer before arming a new one")
+	assert.NotNil(t, c.cancelStateTimeout, "scheduleStateTimeout must arm a new timer")
+	c.cancelStateTimeout() // clean up the newly-armed timer
+}
+
+// scheduleStateTimeout_TimerCallback verifies that when the timer fires it queues a
+// StateTimeoutIntervalEvent onto the coordinator's event loop.
+func Test_scheduleStateTimeout_TimerCallback_QueuesStateTimeoutEvent(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).UseMockClock().Build()
+
+	mocks.Clock.On("ScheduleTimer", mock.Anything, mock.Anything, mock.Anything).
+		Return(func() {}).
+		Run(func(args mock.Arguments) {
+			args.Get(2).(func())()
+		})
+
+	c.scheduleStateTimeout(ctx)
+
+	assert.NotNil(t, c.cancelStateTimeout, "scheduleStateTimeout must set a cancel func")
+}
+
+// action_ProcessConfirmedTransactionsFromSnapshot returns immediately when there is no snapshot
+// (e.g. a plain Observing heartbeat carries no coordinator state).
+func Test_action_ProcessConfirmedTransactionsFromSnapshot_NilSnapshot_ReturnsNil(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Prepared).Build()
+
+	err := action_ProcessConfirmedTransactionsFromSnapshot(ctx, c, &common.HeartbeatReceivedEvent{
+		From:                "node2",
+		CoordinatorSnapshot: nil, // no snapshot — guard must return nil immediately
+	})
+	require.NoError(t, err)
+}
+
+// clearTimeoutSchedules calls and nils both cancel functions when they are set, and also
+// clears pendingHandoverRequest.
+func Test_clearTimeoutSchedules_WithBothSet_CancelsBothAndNilsOut(t *testing.T) {
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).Build()
+
+	requestCancelled := false
+	stateCancelled := false
+	c.cancelRequestTimeout = func() { requestCancelled = true }
+	c.cancelStateTimeout = func() { stateCancelled = true }
+	c.pendingHandoverRequest = nil // value doesn't matter; just ensure it is cleared
+
+	c.clearTimeoutSchedules()
+
+	assert.True(t, requestCancelled, "cancelRequestTimeout must be called")
+	assert.True(t, stateCancelled, "cancelStateTimeout must be called")
+	assert.Nil(t, c.cancelRequestTimeout, "cancelRequestTimeout must be nilled")
+	assert.Nil(t, c.cancelStateTimeout, "cancelStateTimeout must be nilled")
+	assert.Nil(t, c.pendingHandoverRequest, "pendingHandoverRequest must be cleared")
+}
+
 func Test_nudgeHandoverRequest_NoPendingRequest_ReturnsError(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).Build()

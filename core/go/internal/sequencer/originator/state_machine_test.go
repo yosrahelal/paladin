@@ -160,8 +160,10 @@ func TestStateMachine_Idle_NewBlock_UpdatesBlockHeight_StaysIdle(t *testing.T) {
 	assert.Equal(t, uint64(200), o.currentBlockHeight)
 }
 
-// CoordinatorPriorityListUpdated in Idle updates the list and currentActiveCoordinator.
-func TestStateMachine_Idle_CoordinatorPriorityListUpdated_UpdatesListAndCoordinator(t *testing.T) {
+// CoordinatorPriorityListUpdated in Idle updates the stored priority list only.
+// action_UpdateCoordinatorPriorityList does not change currentActiveCoordinator; that field is
+// only updated by the heartbeat and delegation-rejection handlers.
+func TestStateMachine_Idle_CoordinatorPriorityListUpdated_UpdatesListOnly_CoordinatorUnchanged(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
 		CurrentActiveCoordinator("old").
@@ -172,8 +174,58 @@ func TestStateMachine_Idle_CoordinatorPriorityListUpdated_UpdatesListAndCoordina
 	}))
 
 	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.Equal(t, "node1", o.currentActiveCoordinator, "first node in list becomes active coordinator")
+	assert.Equal(t, "old", o.currentActiveCoordinator, "action_UpdateCoordinatorPriorityList must not change currentActiveCoordinator")
 	assert.Equal(t, []string{"node1", "node2"}, o.coordinatorPriorityList)
+}
+
+// TransactionStateTransition to Final in Idle removes the transaction from memory.
+func TestStateMachine_Idle_TransactionStateTransition_ToFinal_CleansUpTransaction(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		Transactions(mockTxn).
+		Build()
+	require.Len(t, o.transactionsByID, 1)
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
+		To:            transaction.State_Final,
+	}))
+	assert.Equal(t, State_Idle, o.GetCurrentState())
+	assert.Empty(t, o.transactionsByID, "action_CleanUpTransaction must remove the transaction")
+}
+
+// TransactionStateTransition to Confirmed in Idle queues a FinalizeEvent; state stays Idle.
+func TestStateMachine_Idle_TransactionStateTransition_ToConfirmed_FinalizesAndStaysIdle(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		Transactions(mockTxn).
+		Build()
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
+		To:            transaction.State_Confirmed,
+	}))
+	assert.Equal(t, State_Idle, o.GetCurrentState())
+}
+
+// TransactionStateTransition to Reverted in Idle queues a FinalizeEvent; state stays Idle.
+func TestStateMachine_Idle_TransactionStateTransition_ToReverted_FinalizesAndStaysIdle(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		Transactions(mockTxn).
+		Build()
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
+		To:            transaction.State_Reverted,
+	}))
+	assert.Equal(t, State_Idle, o.GetCurrentState())
 }
 
 // ── State_Observing ───────────────────────────────────────────────────────────
@@ -292,8 +344,9 @@ func TestStateMachine_Observing_HeartbeatInterval_GraceExceeded_TransitionsToIdl
 	assert.Equal(t, 2, o.heartbeatIntervalsSinceLastReceive, "counter must be incremented before transition check")
 }
 
-// CoordinatorPriorityListUpdated in Observing updates the list.
-func TestStateMachine_Observing_CoordinatorPriorityListUpdated_UpdatesList(t *testing.T) {
+// CoordinatorPriorityListUpdated in Observing updates the stored priority list only;
+// currentActiveCoordinator is not changed by action_UpdateCoordinatorPriorityList.
+func TestStateMachine_Observing_CoordinatorPriorityListUpdated_UpdatesListOnly_CoordinatorUnchanged(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
 		CurrentActiveCoordinator("old").
@@ -304,8 +357,83 @@ func TestStateMachine_Observing_CoordinatorPriorityListUpdated_UpdatesList(t *te
 	}))
 
 	assert.Equal(t, State_Observing, o.GetCurrentState())
-	assert.Equal(t, "nodeA", o.currentActiveCoordinator)
+	assert.Equal(t, "old", o.currentActiveCoordinator, "action_UpdateCoordinatorPriorityList must not change currentActiveCoordinator")
 	assert.Equal(t, []string{"nodeA", "nodeB"}, o.coordinatorPriorityList)
+}
+
+// Duplicate TransactionCreated (same ID) in Observing → no state change; no double tracking.
+func TestStateMachine_Observing_TransactionCreated_DuplicateID_StaysObserving(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+		Transactions(mockTxn).
+		Build()
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{
+		Transaction: &components.PrivateTransaction{ID: txID},
+	}))
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Len(t, o.transactionsByID, 1, "duplicate must not be tracked twice")
+}
+
+// NewBlock event in Observing updates currentBlockHeight; stays Observing.
+func TestStateMachine_Observing_NewBlock_UpdatesBlockHeight_StaysObserving(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).CurrentBlockHeight(10).Build()
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 20}))
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Equal(t, uint64(20), o.currentBlockHeight)
+}
+
+// TransactionStateTransition to Final in Observing removes the transaction from memory.
+func TestStateMachine_Observing_TransactionStateTransition_ToFinal_CleansUpTransaction(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+		Transactions(mockTxn).
+		Build()
+	require.Len(t, o.transactionsByID, 1)
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
+		To:            transaction.State_Final,
+	}))
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Empty(t, o.transactionsByID, "action_CleanUpTransaction must remove the transaction")
+}
+
+// TransactionStateTransition to Confirmed in Observing queues a FinalizeEvent; state stays Observing.
+func TestStateMachine_Observing_TransactionStateTransition_ToConfirmed_FinalizesAndStaysObserving(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+		Transactions(mockTxn).
+		Build()
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
+		To:            transaction.State_Confirmed,
+	}))
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+}
+
+// TransactionStateTransition to Reverted in Observing queues a FinalizeEvent; state stays Observing.
+func TestStateMachine_Observing_TransactionStateTransition_ToReverted_FinalizesAndStaysObserving(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+		Transactions(mockTxn).
+		Build()
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
+		To:            transaction.State_Reverted,
+	}))
+	assert.Equal(t, State_Observing, o.GetCurrentState())
 }
 
 // ── State_Sending ─────────────────────────────────────────────────────────────
@@ -570,8 +698,9 @@ func TestStateMachine_Sending_TransactionFinal_OtherTxnsRemain_StaysSending(t *t
 	assert.Len(t, o.transactionsByID, 1, "only the finalized transaction is removed")
 }
 
-// CoordinatorPriorityListUpdated in Sending updates the stored list and currentActiveCoordinator.
-func TestStateMachine_Sending_CoordinatorPriorityListUpdated_UpdatesListAndCoordinator(t *testing.T) {
+// CoordinatorPriorityListUpdated in Sending updates the stored priority list only;
+// currentActiveCoordinator is not changed by action_UpdateCoordinatorPriorityList.
+func TestStateMachine_Sending_CoordinatorPriorityListUpdated_UpdatesListOnly_CoordinatorUnchanged(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		CurrentActiveCoordinator("old-coordinator").
@@ -582,7 +711,7 @@ func TestStateMachine_Sending_CoordinatorPriorityListUpdated_UpdatesListAndCoord
 	}))
 
 	assert.Equal(t, State_Sending, o.GetCurrentState())
-	assert.Equal(t, "new-node1", o.currentActiveCoordinator)
+	assert.Equal(t, "old-coordinator", o.currentActiveCoordinator, "action_UpdateCoordinatorPriorityList must not change currentActiveCoordinator")
 	assert.Equal(t, []string{"new-node1", "new-node2"}, o.coordinatorPriorityList)
 }
 
@@ -601,4 +730,117 @@ func TestStateMachine_Sending_NewBlock_UpdatesBlockHeight_StaysSending(t *testin
 
 	assert.Equal(t, State_Sending, o.GetCurrentState())
 	assert.Equal(t, uint64(100), o.currentBlockHeight)
+}
+
+// HeartbeatReceived in Sending from a live non-current node when the inactive grace period has NOT
+// been exceeded (step-3 guard false) — the coordinator is not switched; state stays Sending.
+func TestStateMachine_Sending_HeartbeatReceived_Step3_WithinGrace_NoCoordinatorSwitch(t *testing.T) {
+	ctx := context.Background()
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		HeartbeatIntervalsSinceLastReceive(0).
+		InactiveGracePeriod(2)
+	o, _ := builder.Build()
+	ca := builder.GetContractAddress()
+
+	// "node3" is live (Active) but NOT higher priority than "node1" and grace is not exceeded.
+	// Step 2 does not fire (not higher priority); step 3 guard is false (grace not exceeded);
+	// steps 4 and 5 don't fire (not from current coordinator).
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		From:            "node3",
+		ContractAddress: &ca,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Equal(t, "node1", o.currentActiveCoordinator, "coordinator must not switch when grace has not expired")
+}
+
+// HeartbeatReceived in Sending from a live non-current node when grace IS exceeded (step 3) —
+// the coordinator switches to that node and all transactions are redelegated.
+func TestStateMachine_Sending_HeartbeatReceived_Step3_GraceExceeded_SwitchesCoordinatorAndRedelegates(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetCurrentState").Return(transaction.State_Delegated)
+	mockTxn.On("GetPrivateTransaction").Return(&components.PrivateTransaction{ID: txID})
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		HeartbeatIntervalsSinceLastReceive(2).
+		InactiveGracePeriod(2). // 2 >= 2 → exceeded
+		WithMockTransportWriter(t).
+		Transactions(mockTxn)
+	o, mocks := builder.Build()
+	ca := builder.GetContractAddress()
+
+	// Step 3 fires: switches to "node3" (live, not current, grace exceeded).
+	// Step 4 then fires because currentActiveCoordinator is now "node3".
+	// Step 5 fires because empty snapshot means txID is dropped → redelegate.
+	mocks.TransportWriter.EXPECT().
+		SendDelegationRequest(mock.Anything, "node3", mock.Anything, mock.Anything).
+		Return(nil).Once()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		From:            "node3",
+		ContractAddress: &ca,
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Equal(t, "node3", o.currentActiveCoordinator, "coordinator must switch to the now-active node when grace expires")
+}
+
+// TransactionStateTransition to Confirmed for the last transaction in Sending transitions to Observing.
+func TestStateMachine_Sending_TransactionConfirmed_LastTxn_TransitionsToObserving(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	// guard_HasUnconfirmedTransactions calls GetCurrentState; returning Confirmed means the tx
+	// is not counted as unconfirmed, so the guard returns false → transition to Observing fires.
+	mockTxn.On("GetCurrentState").Return(transaction.State_Confirmed)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		Transactions(mockTxn).
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
+		To:            transaction.State_Confirmed,
+	}))
+
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+}
+
+// TransactionStateTransition to Reverted in Sending when other transactions remain → stays Sending.
+// action_FinalizeTransaction queues a FinalizeEvent; the transaction stays in memory until Final.
+func TestStateMachine_Sending_TransactionReverted_OtherTxnsRemain_StaysSending(t *testing.T) {
+	ctx := context.Background()
+	txID1 := uuid.New()
+	txID2 := uuid.New()
+	mockTxn1 := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn1.On("GetID").Return(txID1)
+	mockTxn1.On("GetCurrentState").Return(transaction.State_Reverted)
+	mockTxn2 := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn2.On("GetID").Return(txID2)
+	// guard_HasUnconfirmedTransactions: txID2 is Delegated (≠ Confirmed) → unconfirmed → stays Sending.
+	mockTxn2.On("GetCurrentState").Return(transaction.State_Delegated)
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		Transactions(mockTxn1, mockTxn2).
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID1,
+		To:            transaction.State_Reverted,
+	}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Len(t, o.transactionsByID, 2, "action_FinalizeTransaction does not remove; transaction stays until Final")
 }

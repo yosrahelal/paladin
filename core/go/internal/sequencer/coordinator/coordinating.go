@@ -462,7 +462,19 @@ func action_CleanUpTransactionsNotYetDispatched(ctx context.Context, c *coordina
 	for _, txn := range txns {
 		c.cleanUpTransaction(ctx, txn.GetID())
 	}
-	return nil
+	// Drain any Ready_For_Dispatch items still sitting in the dispatch channel.
+	// The dispatch loop is guaranteed to be stopped before this action runs (either by an
+	// explicit action_StopDispatchLoop earlier in the same sequence, or by State_Active's
+	// OnTransitionFrom no-op stop). Consuming these references here prevents a future
+	// dispatch loop — started when this node is re-elected — from processing stale
+	// CoordinatorTransaction objects whose IDs are no longer in transactionsByID.
+	for {
+		select {
+		case <-c.dispatchQueue:
+		default:
+			return nil
+		}
+	}
 }
 
 func action_CleanUpTransaction(ctx context.Context, c *coordinator, event common.Event) error {
