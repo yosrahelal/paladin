@@ -199,7 +199,6 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				log.L(ctx).Errorf("failed to resolve coordinator selection config for contract %s: %s", contractAddr.String(), err)
 				return nil, err
 			}
-
 			seqOriginator := originator.NewOriginator(
 				sMgr.nodeName,
 				transportWriter,

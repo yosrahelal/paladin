@@ -77,7 +77,8 @@ type coordinator struct {
 	currentBlockHeight                 uint64
 	dependencyTracker                  dependencytracker.DependencyTracker
 	grapher                            grapher.Grapher
-	nodePool                           []string // pool of nodes for coordinator priority list and heartbeat fan-out
+	endorserCandidates                 []string         // ENDORSER mode only: candidate nodes for coordinator priority list and heartbeat fan-out
+	originatorActivity                 map[string]int   // STATIC/SENDER only: heartbeat-intervals since last delegation activity per originator node
 	coordinatorPriorityList            []string // priority-ordered list; index 0 is current active coordinator
 	newBlockRangeEpoch                 bool
 
@@ -188,12 +189,13 @@ func NewCoordinator(
 	case prototk.ContractConfig_COORDINATOR_SENDER:
 		c.currentActiveCoordinator = nodeName
 	case prototk.ContractConfig_COORDINATOR_ENDORSER:
-		c.nodePool = selectionConfig.Endorsers
+		c.endorserCandidates = selectionConfig.Endorsers
 	}
 
 	// Initialize the state machine event loop (state machine + event loop combined)
 	c.initializeStateMachineEventLoop(State_Initial, coordinatorEventQueueSize, coordinatorPriorityEventQueueSize)
 
+	c.originatorActivity = make(map[string]int)
 	c.inFlightMutex = sync.NewCond(&sync.Mutex{})
 	c.inFlightTxns = make(map[uuid.UUID]transaction.CoordinatorTransaction, c.maxDispatchAhead)
 	c.pooledTransactions = make([]transaction.CoordinatorTransaction, 0, c.maxInflightTransactions)

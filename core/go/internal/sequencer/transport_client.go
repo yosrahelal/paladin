@@ -265,7 +265,7 @@ func (sMgr *sequencerManager) handleCoordinatorHeartbeatNotification(ctx context
 	}
 
 	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = from
+	heartbeatEvent.FromNode = from
 	heartbeatEvent.ContractAddress = contractAddress
 	heartbeatEvent.CoordinatorSnapshot = coordinatorSnapshot
 	heartbeatEvent.EventTime = time.Now()
@@ -475,7 +475,7 @@ func (sMgr *sequencerManager) handleHandoverRequest(ctx context.Context, message
 	}
 
 	handoverEvent := &coordinator.HandoverRequestEvent{}
-	handoverEvent.From = handoverRequest.FromNode
+	handoverEvent.FromNode = handoverRequest.FromNode
 	handoverEvent.EventTime = time.Now()
 	seq.GetCoordinator().QueueEvent(ctx, handoverEvent)
 }

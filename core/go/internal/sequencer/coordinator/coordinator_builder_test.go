@@ -52,7 +52,8 @@ type CoordinatorBuilderForTesting struct {
 	heartbeatsUntilClosingGracePeriodExpires *int
 	metrics                                  metrics.DistributedSequencerMetrics
 	sequencerConfig                          *pldconf.SequencerConfig
-	nodePool                                 *[]string
+	endorserCandidates                       *[]string
+	originatorActivity                       map[string]int
 	currentActiveCoordinator                 *string
 	localNodeName                            string
 	heartbeatIntervalsSinceLastReceive       *int
@@ -212,8 +213,16 @@ func (b *CoordinatorBuilderForTesting) OverrideSequencerConfig(config *pldconf.S
 	return b
 }
 
-func (b *CoordinatorBuilderForTesting) NodePool(nodes ...string) *CoordinatorBuilderForTesting {
-	b.nodePool = &nodes
+// EndorserCandidates sets the endorser candidate pool for ENDORSER-mode coordinator tests.
+func (b *CoordinatorBuilderForTesting) EndorserCandidates(nodes ...string) *CoordinatorBuilderForTesting {
+	b.endorserCandidates = &nodes
+	return b
+}
+
+// OriginatorActivity seeds the originator activity map for STATIC/SENDER-mode coordinator tests.
+// The map keys are originator node names and the values are heartbeat intervals since last activity.
+func (b *CoordinatorBuilderForTesting) OriginatorActivity(activity map[string]int) *CoordinatorBuilderForTesting {
+	b.originatorActivity = activity
 	return b
 }
 
@@ -374,8 +383,11 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	if b.currentBlockHeight != nil {
 		coordinator.currentBlockHeight = *b.currentBlockHeight
 	}
-	if b.nodePool != nil {
-		coordinator.nodePool = *b.nodePool
+	if b.endorserCandidates != nil {
+		coordinator.endorserCandidates = *b.endorserCandidates
+	}
+	if b.originatorActivity != nil {
+		coordinator.originatorActivity = b.originatorActivity
 	}
 	if b.currentActiveCoordinator != nil {
 		coordinator.currentActiveCoordinator = *b.currentActiveCoordinator

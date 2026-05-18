@@ -23,26 +23,17 @@ import (
 )
 
 // action_CalculateCoordinatorPriorities recomputes the coordinator priority list for the current
-// block height and epoch. It stores the result on the coordinator and pushes it to the co-located
-// originator via the notifyOriginator callback.
+// block height and epoch. No-op in STATIC and SENDER modes.
 func action_CalculateCoordinatorPriorities(ctx context.Context, c *coordinator, _ common.Event) error {
 	if c.coordinatorSelection != prototk.ContractConfig_COORDINATOR_ENDORSER {
-		// For STATIC and SENDER modes, the coordinator is set once at Start time and never changes.
 		return nil
 	}
 	c.coordinatorPriorityList = common.ComputeCoordinatorPriorityList(
 		ctx,
-		c.nodePool,
+		c.endorserCandidates,
 		c.currentBlockHeight,
 		c.coordinatorSelectionBlockRange,
 	)
-	if len(c.coordinatorPriorityList) > 0 {
-		c.currentActiveCoordinator = c.coordinatorPriorityList[0]
-	}
-
-	c.notifyOriginator(ctx, &common.CoordinatorPriorityListUpdatedEvent{
-		Nodes: c.coordinatorPriorityList,
-	})
 	return nil
 }
 

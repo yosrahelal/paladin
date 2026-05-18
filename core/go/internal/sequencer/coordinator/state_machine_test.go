@@ -48,6 +48,8 @@ func newDispatchedTxMock(t *testing.T) (*coordinatortransactionmocks.Coordinator
 	tx.EXPECT().HandleEvent(mock.Anything, mock.AnythingOfType("*common.HeartbeatIntervalEvent")).Return(nil).Maybe()
 	// HasDispatchedPublicTransaction is called by action_NudgeDispatchLoop to track in-flight counts.
 	tx.EXPECT().HasDispatchedPublicTransaction().Return(true).Maybe()
+	// GetOriginatorNode is called by updateOriginatorActivity in STATIC/SENDER modes.
+	tx.EXPECT().GetOriginatorNode().Return("originator-node").Maybe()
 	return tx, txID
 }
 
@@ -92,16 +94,16 @@ func Test_TryQueueEvent_QueuesToEventLoop(t *testing.T) {
 // ── Initial state ─────────────────────────────────────────────────────────────
 
 // State_Initial receives CoordinatorCreated and transitions to Idle;
-// action_CalculateCoordinatorPriorities runs and sets currentActiveCoordinator from the pool.
+// action_CalculateCoordinatorPriorities runs and computes the initial priority list.
 func TestCoordinator_WhenCreated_TransitionsToIdle(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Initial).
-		NodePool("node1", "node2").
+		EndorserCandidates("node1", "node2").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &CoordinatorCreatedEvent{}))
 	assert.Equal(t, State_Idle, c.GetCurrentState())
-	assert.NotEmpty(t, c.currentActiveCoordinator, "action_CalculateCoordinatorPriorities must set currentActiveCoordinator from pool")
+	assert.NotEmpty(t, c.coordinatorPriorityList, "action_CalculateCoordinatorPriorities must populate the priority list")
 }
 
 // ── Idle state transitions ────────────────────────────────────────────────────
@@ -115,7 +117,7 @@ func TestCoordinator_WhenIdle_TransitionsToObserving_OnHeartbeatFromCurrentActiv
 		Build()
 	// Pass a recognisable coordinator state so we can confirm action_HeartbeatReceived ran.
 	event := &common.HeartbeatReceivedEvent{
-		From:                "node2",
+		FromNode:            "node2",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: State_Active},
 	}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
@@ -133,7 +135,7 @@ func TestCoordinator_WhenIdle_StaysIdle_OnHeartbeatFromNodeInNonActiveState(t *t
 		CurrentActiveCoordinator("node1").
 		Build()
 	event := &common.HeartbeatReceivedEvent{
-		From:                "node3",
+		FromNode:            "node3",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Closing},
 	}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
@@ -158,9 +160,8 @@ func TestCoordinator_WhenIdleAndTransactionsDelegatedToSelf_TransitionsToActive(
 	assert.NotEmpty(t, c.signingIdentity, "OnTransitionTo Active must set signing identity")
 }
 
-// A new-epoch NewBlock in Idle fires action_CalculateCoordinatorPriorities (updates priority list and
-// currentActiveCoordinator) and action_UpdateBlockHeight. No state transition — Idle does not have an
-// epoch-change exit condition.
+// A new-epoch NewBlock in Idle fires action_CalculateCoordinatorPriorities (recomputes priority list)
+// and action_UpdateBlockHeight. No state transition — Idle does not have an epoch-change exit condition.
 func TestCoordinator_WhenIdle_NewBlock_NewEpoch_UpdatesPriorityListAndStaysIdle(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
@@ -168,14 +169,13 @@ func TestCoordinator_WhenIdle_NewBlock_NewEpoch_UpdatesPriorityListAndStaysIdle(
 		CurrentActiveCoordinator("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
 	assert.Equal(t, State_Idle, c.GetCurrentState())
 	assert.Equal(t, uint64(150), c.currentBlockHeight, "action_UpdateBlockHeight must have run")
 	assert.NotEmpty(t, c.coordinatorPriorityList, "priority list must be populated by action_CalculateCoordinatorPriorities")
-	assert.Equal(t, c.coordinatorPriorityList[0], c.currentActiveCoordinator)
 }
 
 // A same-epoch NewBlock in Idle fires only action_UpdateBlockHeight; action_CalculateCoordinatorPriorities
@@ -186,7 +186,7 @@ func TestCoordinator_WhenIdle_NewBlock_NotNewEpoch_UpdatesBlockHeightAndStaysIdl
 		NodeName("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	// Block 120 is in the same epoch as 100 (both in epoch 100/50 = 2), so guard_IsNewBlockRangeEpoch = false.
@@ -211,9 +211,9 @@ func TestCoordinator_WhenObserving_TransitionsToIdle_OnHeartbeatIntervalInactive
 	assert.Equal(t, 3, c.heartbeatIntervalsSinceLastReceive, "counter must be at grace-period threshold after increment")
 }
 
-// When a new block-range epoch arrives in Observing, action_CalculateCoordinatorPriorities updates the priority
-// list and currentActiveCoordinator. The state stays Observing — epoch changes do not trigger a transition to
-// Elect; only a delegation request can move Observing → Elect.
+// When a new block-range epoch arrives in Observing, action_CalculateCoordinatorPriorities recomputes
+// the priority list. The state stays Observing — epoch changes do not trigger a transition to Elect;
+// only a delegation request can move Observing → Elect.
 func TestCoordinator_WhenObserving_NewBlock_UpdatesPriorityListAndStaysObserving(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
@@ -221,7 +221,7 @@ func TestCoordinator_WhenObserving_NewBlock_UpdatesPriorityListAndStaysObserving
 		CurrentActiveCoordinator("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	// NewBlock at 150: epoch 100/50=2 → 150/50=3 — crosses boundary; action_CalculateCoordinatorPriorities fires
@@ -229,9 +229,7 @@ func TestCoordinator_WhenObserving_NewBlock_UpdatesPriorityListAndStaysObserving
 	// No transition to Elect — epoch change alone does not initiate a handover.
 	assert.Equal(t, State_Observing, c.GetCurrentState())
 	assert.Equal(t, uint64(150), c.currentBlockHeight, "action_UpdateBlockHeight must have run")
-	// action_CalculateCoordinatorPriorities updated currentActiveCoordinator from the new priority list
 	assert.NotEmpty(t, c.coordinatorPriorityList, "priority list must be populated by action_CalculateCoordinatorPriorities")
-	assert.Equal(t, c.coordinatorPriorityList[0], c.currentActiveCoordinator)
 }
 
 // A HeartbeatInterval in Observing within the inactive grace period increments the counter but does
@@ -322,7 +320,7 @@ func TestCoordinator_WhenElect_ActiveCoordinatorStartsFlushing_TransitionsToPrep
 		Build()
 
 	event := &common.HeartbeatReceivedEvent{
-		From: "node2",
+		FromNode: "node2",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing_Flush,
 		},
@@ -359,7 +357,7 @@ func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_TransitionsToActiveAnd
 	outputState.ID = stateID
 
 	event := &common.HeartbeatReceivedEvent{
-		From: "node2",
+		FromNode: "node2",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing,
 			Locks:            []*grapher.StateLock{lock},
@@ -396,7 +394,7 @@ func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_ConfirmedTransactionsI
 		Build()
 
 	event := &common.HeartbeatReceivedEvent{
-		From: "node2",
+		FromNode: "node2",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing,
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -468,7 +466,7 @@ func TestCoordinator_WhenElect_StaysElect_OnHeartbeatFromCurrentCoordinator_When
 		CurrentActiveCoordinator("prev"). // the outgoing coordinator
 		Build()
 	event := &common.HeartbeatReceivedEvent{
-		From: "prev",
+		FromNode: "prev",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active, // still Active — not flushing yet
 		},
@@ -490,7 +488,7 @@ func TestCoordinator_WhenElect_HigherPriorityHeartbeat_TransitionsToObserving(t 
 
 	// Heartbeat from node1 (higher priority, Active) — sets receivedHigherPriorityActiveHeartbeat.
 	event := &common.HeartbeatReceivedEvent{
-		From: "node1",
+		FromNode: "node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -512,7 +510,7 @@ func TestCoordinator_WhenElect_NewBlock_UpdatesPriorityListAndStaysElect(t *test
 		CurrentActiveCoordinator("prev").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
@@ -530,7 +528,8 @@ func TestCoordinator_WhenElect_HeartbeatInterval_PropagatesAndSendsHeartbeatAndS
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2").
-		NodePool("node2"). // gives action_SendHeartbeat a recipient
+		EndorserCandidates("node2"). // gives action_SendHeartbeat a recipient
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
 	assert.Equal(t, State_Elect, c.GetCurrentState())
@@ -562,11 +561,12 @@ func TestCoordinator_WhenElect_HandoverRequest_HigherPriority_HasDispatched_Tran
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node3"). // for OnTransitionTo Closing_Flush heartbeat
+		EndorserCandidates("node3"). // for OnTransitionTo Closing_Flush heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &HandoverRequestEvent{
-		From: "node1",
+		FromNode: "node1",
 	}))
 	// validator_IsHandoverRequestFromHigherPriorityCoordinator: IsHigherPriority(list, "node1", "node2") = true
 	// guard_HasUnconfirmedDispatchedTransactions = true → Closing_Flush
@@ -582,10 +582,11 @@ func TestCoordinator_WhenElect_HandoverRequest_HigherPriority_NoDispatched_Trans
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node3"). // for OnTransitionTo Closing heartbeat
+		EndorserCandidates("node3"). // for OnTransitionTo Closing heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &HandoverRequestEvent{
-		From: "node1",
+		FromNode: "node1",
 	}))
 	// guard_HasUnconfirmedDispatchedTransactions = false → Closing
 	assert.Equal(t, State_Closing, c.GetCurrentState())
@@ -608,7 +609,7 @@ func TestCoordinator_WhenElect_TransactionStateTransition_ToFinal_CleansUpAndSta
 	require.Equal(t, 1, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Final,
+		ToState:       transaction.State_Final,
 	}))
 	assert.Equal(t, State_Elect, c.GetCurrentState())
 	assert.Empty(t, c.transactionsByID, "action_CleanUpTransaction must remove the finalised transaction")
@@ -628,11 +629,12 @@ func TestCoordinator_WhenElect_HigherPriorityHeartbeat_HasInflightNoDispatched_T
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node3"). // for OnTransitionTo Closing heartbeat
+		EndorserCandidates("node3"). // for OnTransitionTo Closing heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txConfirmed).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node1",
+		FromNode: "node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -651,11 +653,12 @@ func TestCoordinator_WhenElect_HigherPriorityHeartbeat_HasInflightAndDispatched_
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node3"). // for OnTransitionTo Closing_Flush heartbeat
+		EndorserCandidates("node3"). // for OnTransitionTo Closing_Flush heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node1",
+		FromNode: "node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -674,8 +677,9 @@ func TestCoordinator_WhenPrepared_HeartbeatInterval_WithinGrace_SendsHeartbeatAn
 		NodeName("node1").
 		CurrentActiveCoordinator("node2").
 		HeartbeatIntervalsSinceLastReceive(0).
-		InactiveGracePeriod(3).      // after increment: 1 < 3 → no transition
-		NodePool("node2"). // for action_SendHeartbeat
+		InactiveGracePeriod(3). // after increment: 1 < 3 → no transition
+		EndorserCandidates("node2").      // for action_SendHeartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
 	assert.Equal(t, State_Prepared, c.GetCurrentState())
@@ -709,7 +713,7 @@ func TestCoordinator_WhenPrepared_HeartbeatReceived_ClosingFlushFromCurrentActiv
 		InactiveGracePeriod(3).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node2",
+		FromNode: "node2",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing_Flush,
 		},
@@ -730,7 +734,7 @@ func TestCoordinator_WhenPrepared_HeartbeatReceived_HigherPriority_NoInflight_Tr
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node1",
+		FromNode: "node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -756,11 +760,12 @@ func TestCoordinator_WhenPrepared_HeartbeatReceived_HigherPriority_HasInflightNo
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node3"). // for OnTransitionTo Closing heartbeat
+		EndorserCandidates("node3"). // for OnTransitionTo Closing heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txConfirmed).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node1",
+		FromNode: "node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -779,11 +784,12 @@ func TestCoordinator_WhenPrepared_HeartbeatReceived_HigherPriority_HasInflightAn
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node3"). // for OnTransitionTo Closing_Flush heartbeat
+		EndorserCandidates("node3"). // for OnTransitionTo Closing_Flush heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node1",
+		FromNode: "node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -801,11 +807,12 @@ func TestCoordinator_WhenPrepared_HandoverRequest_HigherPriority_HasDispatched_T
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node3"). // for OnTransitionTo Closing_Flush heartbeat
+		EndorserCandidates("node3"). // for OnTransitionTo Closing_Flush heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &HandoverRequestEvent{
-		From: "node1",
+		FromNode: "node1",
 	}))
 	// guard_HasUnconfirmedDispatchedTransactions = true → Closing_Flush
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
@@ -820,10 +827,11 @@ func TestCoordinator_WhenPrepared_HandoverRequest_HigherPriority_NoDispatched_Tr
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node3"). // for OnTransitionTo Closing heartbeat
+		EndorserCandidates("node3"). // for OnTransitionTo Closing heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &HandoverRequestEvent{
-		From: "node1",
+		FromNode: "node1",
 	}))
 	// guard_HasUnconfirmedDispatchedTransactions = false → Closing
 	assert.Equal(t, State_Closing, c.GetCurrentState())
@@ -855,7 +863,7 @@ func TestCoordinator_WhenPrepared_NewBlock_NewEpoch_UpdatesPriorityListAndStaysP
 		CurrentActiveCoordinator("node2").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
@@ -879,7 +887,7 @@ func TestCoordinator_WhenPrepared_TransactionStateTransition_ToFinal_CleansUpAnd
 	require.Equal(t, 1, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Final,
+		ToState:       transaction.State_Final,
 	}))
 	assert.Equal(t, State_Prepared, c.GetCurrentState())
 	assert.Empty(t, c.transactionsByID, "action_CleanUpTransaction must remove the finalised transaction")
@@ -894,7 +902,8 @@ func TestCoordinator_WhenActive_TransitionsToIdle_OnHeartbeatInterval_WhenNoInfl
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node1").
 		CurrentActiveCoordinator("node1").
-		NodePool("node2"). // gives action_SendHeartbeat a recipient
+		EndorserCandidates("node2"). // gives action_SendHeartbeat a recipient
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
 	// guard_HasTransactionsInflight = false (no txns); GuardNot(HasTransactionsInflight) = true
@@ -966,7 +975,7 @@ func TestCoordinator_WhenActiveAndEpochChanges_SigningNotUsed_StaysActiveWithSam
 		CurrentActiveCoordinator("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	prevIdentity := c.signingIdentity
@@ -974,7 +983,7 @@ func TestCoordinator_WhenActiveAndEpochChanges_SigningNotUsed_StaysActiveWithSam
 	// guard_SigningIdentityUsed = false → no key rotation, no Flush transition
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.Equal(t, prevIdentity, c.signingIdentity, "signing identity must not change when it was not used")
-	// action_CalculateCoordinatorPriorities updated the priority list and currentActiveCoordinator
+	// action_CalculateCoordinatorPriorities updated the priority list
 	assert.NotEmpty(t, c.coordinatorPriorityList, "priority list must be populated")
 	assert.Equal(t, uint64(150), c.currentBlockHeight, "block height must be updated")
 }
@@ -992,15 +1001,15 @@ func TestCoordinator_WhenActive_HigherPriorityHeartbeat_CleansUpPooledAndTransit
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node3"). // node3 is lower priority than node1
 		CurrentActiveCoordinator("node3").
-		NodePool("node1", "node2", "node3").
-		PooledTransactions(pooledTx).
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		PooledTransactions(pooledTx).
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 	require.Equal(t, 1, len(c.transactionsByID), "pooled tx must be registered before event")
 	// node1 sends an Active heartbeat while node3 is coordinating → preemption
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node1",
+		FromNode: "node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -1029,7 +1038,7 @@ func TestCoordinator_WhenPreparedTransitionsToActive_RefreshesSigningIdentityAnd
 		PooledTransactions(pooledTx).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node2",
+		FromNode: "node2",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing,
 		},
@@ -1047,7 +1056,8 @@ func TestCoordinator_WhenActive_HeartbeatInterval_WithInflight_SendsHeartbeatAnd
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node1").
 		CurrentActiveCoordinator("node1").
-		NodePool("node2"). // for action_SendHeartbeat
+		EndorserCandidates("node2"). // for action_SendHeartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
@@ -1067,7 +1077,7 @@ func TestCoordinator_WhenActive_HeartbeatReceived_NotHigherPriority_IgnoresAndSt
 		Build()
 	// node2 has lower priority than node1 (higher index); validator fails → event ignored
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node2",
+		FromNode: "node2",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -1084,11 +1094,12 @@ func TestCoordinator_WhenActive_HandoverRequest_HigherPriority_HasDispatched_Tra
 		NodeName("node2").
 		CurrentActiveCoordinator("node2").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node1"). // for OnTransitionTo Closing_Flush heartbeat
+		EndorserCandidates("node1"). // for OnTransitionTo Closing_Flush heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &HandoverRequestEvent{
-		From: "node1",
+		FromNode: "node1",
 	}))
 	// guard_HasUnconfirmedDispatchedTransactions = true → Closing_Flush
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
@@ -1103,10 +1114,11 @@ func TestCoordinator_WhenActive_HandoverRequest_HigherPriority_NoDispatched_Tran
 		NodeName("node2").
 		CurrentActiveCoordinator("node2").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node1"). // for OnTransitionTo Closing heartbeat
+		EndorserCandidates("node1"). // for OnTransitionTo Closing heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &HandoverRequestEvent{
-		From: "node1",
+		FromNode: "node1",
 	}))
 	// guard_HasUnconfirmedDispatchedTransactions = false → Closing
 	assert.Equal(t, State_Closing, c.GetCurrentState())
@@ -1165,8 +1177,8 @@ func TestCoordinator_WhenActive_TransactionStateTransition_DispatchedToPooled_Wi
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txDispatchedID,
-		From:          transaction.State_Dispatched,
-		To:            transaction.State_Pooled,
+		FromState:     transaction.State_Dispatched,
+		ToState:       transaction.State_Pooled,
 	}))
 	// action_cancelCurrentlyAssemblingTransaction fired — testify verifies the .Once() expectation.
 	// action_SelectTransaction is suppressed because guard_HasTransactionAssembling was still true.
@@ -1196,7 +1208,7 @@ func TestCoordinator_WhenActive_TransactionStateTransition_ToPooled_PoolsAndSele
 	require.Equal(t, 0, len(c.pooledTransactions))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Pooled,
+		ToState:       transaction.State_Pooled,
 	}))
 	// action_PoolTransaction added it to pool; action_SelectTransaction immediately selected it.
 	assert.Equal(t, State_Active, c.GetCurrentState())
@@ -1218,7 +1230,7 @@ func TestCoordinator_WhenActive_TransactionStateTransition_ToReadyForDispatch_Qu
 	require.Equal(t, 0, len(c.dispatchQueue))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Ready_For_Dispatch,
+		ToState:       transaction.State_Ready_For_Dispatch,
 	}))
 	// action_QueueTransactionForDispatch placed the tx on the dispatch channel.
 	assert.Equal(t, State_Active, c.GetCurrentState())
@@ -1240,7 +1252,7 @@ func TestCoordinator_WhenActive_TransactionStateTransition_ToFinal_CleansUpAndSt
 	require.Equal(t, 1, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Final,
+		ToState:       transaction.State_Final,
 	}))
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.Empty(t, c.transactionsByID, "action_CleanUpTransaction must remove the finalised transaction")
@@ -1261,7 +1273,7 @@ func TestCoordinator_WhenActive_TransactionStateTransition_ToEvicted_CleansUpAnd
 	require.Equal(t, 1, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Evicted,
+		ToState:       transaction.State_Evicted,
 	}))
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.Empty(t, c.transactionsByID, "action_CleanUpTransaction must remove the evicted transaction")
@@ -1281,8 +1293,8 @@ func TestCoordinator_WhenActiveFLushCompletesAndStillCurrentCoordinator_Transiti
 		Build()
 	event := &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		From:          transaction.State_Dispatched,
-		To:            transaction.State_Final,
+		FromState:     transaction.State_Dispatched,
+		ToState:       transaction.State_Final,
 	}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 	assert.Equal(t, State_Active, c.GetCurrentState())
@@ -1300,16 +1312,16 @@ func TestCoordinator_WhenClosingFlushCompletesAndNotCurrentCoordinator_Transitio
 		Build()
 	event := &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		From:          transaction.State_Dispatched,
-		To:            transaction.State_Final,
+		FromState:     transaction.State_Dispatched,
+		ToState:       transaction.State_Final,
 	}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 	assert.Equal(t, State_Closing, c.GetCurrentState())
 }
 
-// A NewBlock epoch crossing in Active_Flush updates block height and re-runs coordinator selection,
+// A NewBlock epoch crossing in Active_Flush updates block height and recomputes the priority list,
 // but stays in Active_Flush.
-func TestCoordinator_WhenActiveFlushing_AndNewEpochArrives_UpdatesHeightAndSelectionButStaysActiveFLush(t *testing.T) {
+func TestCoordinator_WhenActiveFlushing_AndNewEpochArrives_UpdatesHeightAndPriorityListButStaysActiveFLush(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
@@ -1317,14 +1329,14 @@ func TestCoordinator_WhenActiveFlushing_AndNewEpochArrives_UpdatesHeightAndSelec
 		CurrentActiveCoordinator("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		NodePool("node1", "node2", "node3").
-		Transactions(txDispatched).
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
 	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
 	assert.Equal(t, uint64(150), c.currentBlockHeight)
-	assert.Equal(t, "node2", c.currentActiveCoordinator, "action_SelectActiveCoordinator must update currentActiveCoordinator")
+	assert.NotEmpty(t, c.coordinatorPriorityList, "action_CalculateCoordinatorPriorities must recompute the priority list")
 }
 
 // HeartbeatInterval in Active_Flush propagates to transactions and sends a heartbeat;
@@ -1335,7 +1347,8 @@ func TestCoordinator_WhenActiveFLush_HeartbeatInterval_SendsHeartbeatAndStaysAct
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
 		NodeName("node1").
 		CurrentActiveCoordinator("node1").
-		NodePool("node2"). // for action_SendHeartbeat
+		EndorserCandidates("node2"). // for action_SendHeartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
@@ -1352,11 +1365,12 @@ func TestCoordinator_WhenActiveFLush_HigherPriorityHeartbeat_TransitionsToClosin
 		NodeName("node2").
 		CurrentActiveCoordinator("node2").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node1"). // for OnTransitionTo Closing_Flush heartbeat
+		EndorserCandidates("node1"). // for OnTransitionTo Closing_Flush heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node1",
+		FromNode: "node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -1374,11 +1388,12 @@ func TestCoordinator_WhenActiveFLush_HandoverRequest_HigherPriority_HasDispatche
 		NodeName("node2").
 		CurrentActiveCoordinator("node2").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node1"). // for OnTransitionTo Closing_Flush heartbeat
+		EndorserCandidates("node1"). // for OnTransitionTo Closing_Flush heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &HandoverRequestEvent{
-		From: "node1",
+		FromNode: "node1",
 	}))
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
 	assert.Equal(t, "node1", c.currentActiveCoordinator, "action_UpdateActiveCoordinator must record the requesting node")
@@ -1392,10 +1407,11 @@ func TestCoordinator_WhenActiveFLush_HandoverRequest_HigherPriority_NoDispatched
 		NodeName("node2").
 		CurrentActiveCoordinator("node2").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node1"). // for OnTransitionTo Closing heartbeat
+		EndorserCandidates("node1"). // for OnTransitionTo Closing heartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &HandoverRequestEvent{
-		From: "node1",
+		FromNode: "node1",
 	}))
 	assert.Equal(t, State_Closing, c.GetCurrentState())
 	assert.Equal(t, "node1", c.currentActiveCoordinator, "action_UpdateActiveCoordinator must record the requesting node")
@@ -1436,8 +1452,8 @@ func TestCoordinator_WhenActiveFLush_TransactionStateTransition_DispatchedToPool
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txDispatched1ID,
-		From:          transaction.State_Dispatched,
-		To:            transaction.State_Pooled,
+		FromState:     transaction.State_Dispatched,
+		ToState:       transaction.State_Pooled,
 	}))
 	// txDispatched2 still in memory → guard_HasUnconfirmedDispatchedTransactions = true → stays Active_Flush.
 	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
@@ -1460,7 +1476,7 @@ func TestCoordinator_WhenActiveFLush_TransactionStateTransition_ToReadyForDispat
 	require.Equal(t, 0, len(c.dispatchQueue))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txReadyID,
-		To:            transaction.State_Ready_For_Dispatch,
+		ToState:       transaction.State_Ready_For_Dispatch,
 	}))
 	// txDispatched still in memory → stays Active_Flush; txReady was queued for dispatch.
 	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
@@ -1481,7 +1497,7 @@ func TestCoordinator_WhenActiveFLush_TransactionStateTransition_ToEvicted_Cleans
 	require.Equal(t, 2, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txDispatched1ID,
-		To:            transaction.State_Evicted,
+		ToState:       transaction.State_Evicted,
 	}))
 	// txDispatched2 still in memory → guard_HasUnconfirmedDispatchedTransactions = true → stays Active_Flush.
 	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
@@ -1502,7 +1518,7 @@ func TestCoordinator_WhenActiveFLush_TransactionStateTransition_ToFinal_WithMore
 	require.Equal(t, 2, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txDispatched1ID,
-		To:            transaction.State_Final,
+		ToState:       transaction.State_Final,
 	}))
 	// txDispatched2 still dispatched → stays Active_Flush.
 	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
@@ -1539,12 +1555,13 @@ func TestCoordinator_WhenEnteringClosingFlush_OnTransitionTo_SendsImmediateHeart
 		NodeName("node2").
 		CurrentActiveCoordinator("node2").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node1").
+		EndorserCandidates("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	// Trigger transition Active → Closing_Flush via a higher-priority heartbeat.
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node1",
+		FromNode: "node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -1562,7 +1579,8 @@ func TestCoordinator_WhenClosingFlush_HeartbeatInterval_IncrementsCounterAndSend
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2").
-		NodePool("node2"). // for action_SendHeartbeat
+		EndorserCandidates("node2"). // for action_SendHeartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		HeartbeatIntervalsSinceStateChange(0).
 		Transactions(txDispatched).
 		Build()
@@ -1583,7 +1601,7 @@ func TestCoordinator_WhenClosingFlush_HeartbeatReceived_FromLiveSender_ResetsCou
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node2",
+		FromNode: "node2",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -1601,7 +1619,8 @@ func TestCoordinator_WhenClosingFlush_DelegatedTransactions_HigherPriority_Trans
 		NodeName("node1").
 		CurrentActiveCoordinator("node2"). // node1 re-selected as higher priority
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		WithMockTransportWriter().
 		Transactions(txDispatched).
 		Build()
@@ -1650,8 +1669,8 @@ func TestCoordinator_WhenClosingFlush_TransactionStateTransition_DispatchedToRet
 	// From=Dispatched, To=Pooled is retryable (not Confirmed/Reverted) → action_CleanUpTransaction fires.
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txDispatched1ID,
-		From:          transaction.State_Dispatched,
-		To:            transaction.State_Pooled,
+		FromState:     transaction.State_Dispatched,
+		ToState:       transaction.State_Pooled,
 	}))
 	// txDispatched2 still dispatched → guard_HasUnconfirmedDispatchedTransactions = true → stays Closing_Flush.
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
@@ -1672,7 +1691,7 @@ func TestCoordinator_WhenClosingFlush_TransactionStateTransition_ToFinal_WithMor
 	require.Equal(t, 2, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txDispatched1ID,
-		To:            transaction.State_Final,
+		ToState:       transaction.State_Final,
 	}))
 	// txDispatched2 still dispatched → stays Closing_Flush.
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
@@ -1688,7 +1707,7 @@ func TestCoordinator_WhenClosingFlush_NewBlock_UpdatesBlockHeightAndStaysClosing
 		CurrentActiveCoordinator("node2").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
@@ -1709,15 +1728,16 @@ func TestCoordinator_WhenClosingFlushCompletesAndNotCurrentCoordinator_EnteringC
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2"). // another node is now active; node1 is stepping down
-		NodePool("node2").       // gives action_SendHeartbeat a recipient
+		EndorserCandidates("node2").                 // gives action_SendHeartbeat a recipient
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	// Finalising the last dispatched transaction triggers guard_FlushComplete = true and
 	// !guard_IsCurrentActiveCoordinator → transition to Closing, where OnTransitionTo fires action_SendHeartbeat.
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		From:          transaction.State_Dispatched,
-		To:            transaction.State_Final,
+		FromState:     transaction.State_Dispatched,
+		ToState:       transaction.State_Final,
 	}))
 	assert.Equal(t, State_Closing, c.GetCurrentState())
 	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "OnTransitionTo Closing must emit an immediate heartbeat")
@@ -1763,7 +1783,7 @@ func TestCoordinator_WhenClosing_NewBlock_UpdatesPriorityListAndStaysClosing(t *
 		CurrentActiveCoordinator("node1").
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
@@ -1782,7 +1802,7 @@ func TestCoordinator_WhenClosing_DelegationRequest_HigherPriorityThanCurrentActi
 		NodeName("node1").
 		CurrentActiveCoordinator("node2"). // node1 is now higher priority
 		CoordinatorPriorityList("node1", "node2", "node3").
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		WithMockTransportWriter().
 		Build()
@@ -1810,7 +1830,7 @@ func TestCoordinator_WhenClosing_HeartbeatReceived_FromLiveSender_ResetsCounterA
 		HeartbeatIntervalsSinceLastReceive(5).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From: "node2",
+		FromNode: "node2",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -1829,7 +1849,8 @@ func TestCoordinator_WhenClosing_HeartbeatInterval_GraceNotExpired_SendsHeartbea
 		HeartbeatIntervalsSinceStateChange(0). // after increment: 1 < 5 → grace not expired
 		HeartbeatIntervalsSinceLastReceive(0).
 		InactiveGracePeriod(3).
-		NodePool("node2"). // for action_SendHeartbeat
+		EndorserCandidates("node2"). // for action_SendHeartbeat
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
 	assert.Equal(t, State_Closing, c.GetCurrentState())
@@ -1894,7 +1915,7 @@ func TestCoordinator_WhenClosing_TransactionStateTransition_ToFinal_CleansUpAndS
 	require.Equal(t, 1, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Final,
+		ToState:       transaction.State_Final,
 	}))
 	assert.Equal(t, State_Closing, c.GetCurrentState())
 	assert.Empty(t, c.transactionsByID, "action_CleanUpTransaction must remove the finalised transaction")
@@ -1913,7 +1934,7 @@ func TestCoordinator_PreProcessEvent_OwnHeartbeat_IsFilteredOut(t *testing.T) {
 		Build()
 
 	selfHeartbeat := &common.HeartbeatReceivedEvent{
-		From: "node1", // own node name — must be filtered
+		FromNode: "node1", // own node name — must be filtered
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},

@@ -795,8 +795,8 @@ func (t *coordinatorTransaction) initializeStateMachine(initialState State) {
 				t.queueEventForCoordinator(ctx, &common.TransactionStateTransitionEvent[State]{
 					BaseEvent:     common.BaseEvent{EventTime: time.Now()},
 					TransactionID: t.pt.ID,
-					From:          from,
-					To:            to,
+					FromState:     from,
+					ToState:       to,
 				})
 			}
 		}),

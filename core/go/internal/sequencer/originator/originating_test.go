@@ -38,34 +38,19 @@ func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
 	assert.Equal(t, uint64(1000), o.currentBlockHeight)
 }
 
-func Test_action_UpdateCoordinatorPriorityList_UpdatesListOnly_CoordinatorUnchanged(t *testing.T) {
+func Test_action_UpdateEndorserCandidates_ReplacesCandidates(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
 		CurrentActiveCoordinator("coordinator").
 		Build()
 
-	err := action_UpdateCoordinatorPriorityList(ctx, o, &common.CoordinatorPriorityListUpdatedEvent{
-		Nodes: []string{"node1", "node2", "node3"},
-	})
+	eventNodes := []string{"node1", "node2", "node3"}
+	err := action_UpdateEndorserCandidates(ctx, o, &common.EndorserNodesDiscoveredEvent{Nodes: eventNodes})
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"node1", "node2", "node3"}, o.coordinatorPriorityList)
-	assert.Equal(t, "coordinator", o.currentActiveCoordinator, "action_UpdateCoordinatorPriorityList must not change currentActiveCoordinator")
-}
-
-func Test_action_UpdateCoordinatorPriorityList_EmptyNodeList_NoChange(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
-		CurrentActiveCoordinator("existing-coordinator").
-		CoordinatorPriorityList("existing-coordinator").
-		Build()
-
-	err := action_UpdateCoordinatorPriorityList(ctx, o, &common.CoordinatorPriorityListUpdatedEvent{
-		Nodes: []string{},
-	})
-	require.NoError(t, err)
-
-	assert.Equal(t, "existing-coordinator", o.currentActiveCoordinator, "empty list must not overwrite current coordinator")
+	assert.Equal(t, eventNodes, o.endorserCandidates)
+	assert.Empty(t, o.coordinatorPriorityList, "priority list is computed by action_CalculateCoordinatorPriorities, not this action")
+	assert.Equal(t, "coordinator", o.currentActiveCoordinator, "action_UpdateEndorserCandidates must not change currentActiveCoordinator")
 }
 
 func Test_action_UpdateActiveCoordinatorFromHeartbeat_SetsCoordinator(t *testing.T) {
@@ -73,7 +58,7 @@ func Test_action_UpdateActiveCoordinatorFromHeartbeat_SetsCoordinator(t *testing
 	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
 
 	err := action_UpdateActiveCoordinatorFromHeartbeat(ctx, o, &common.HeartbeatReceivedEvent{
-		From: "new-coordinator@node2",
+		FromNode: "new-coordinator@node2",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -133,7 +118,7 @@ func Test_validator_IsHeartbeatSenderLive_ActiveState_ReturnsTrue(t *testing.T) 
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).Build()
 	valid, err := validator_IsHeartbeatSenderLive(ctx, o, &common.HeartbeatReceivedEvent{
-		From: "coordinator@node1",
+		FromNode: "coordinator@node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 		},
@@ -146,7 +131,7 @@ func Test_validator_IsHeartbeatSenderLive_PreparedState_ReturnsTrue(t *testing.T
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).Build()
 	valid, err := validator_IsHeartbeatSenderLive(ctx, o, &common.HeartbeatReceivedEvent{
-		From: "coordinator@node1",
+		FromNode: "coordinator@node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Prepared,
 		},
@@ -159,7 +144,7 @@ func Test_validator_IsHeartbeatSenderLive_ActiveFlushState_ReturnsTrue(t *testin
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).Build()
 	valid, err := validator_IsHeartbeatSenderLive(ctx, o, &common.HeartbeatReceivedEvent{
-		From: "coordinator@node1",
+		FromNode: "coordinator@node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active_Flush,
 		},
@@ -172,7 +157,7 @@ func Test_validator_IsHeartbeatSenderLive_ClosingFlushState_ReturnsFalse(t *test
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).Build()
 	valid, err := validator_IsHeartbeatSenderLive(ctx, o, &common.HeartbeatReceivedEvent{
-		From: "coordinator@node1",
+		FromNode: "coordinator@node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing_Flush,
 		},
@@ -185,7 +170,7 @@ func Test_validator_IsHeartbeatSenderLive_ClosingState_ReturnsFalse(t *testing.T
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).Build()
 	valid, err := validator_IsHeartbeatSenderLive(ctx, o, &common.HeartbeatReceivedEvent{
-		From: "coordinator@node1",
+		FromNode: "coordinator@node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing,
 		},
@@ -360,28 +345,28 @@ func Test_validator_TransactionDoesNotExist_NewTransactionReturnsTrue(t *testing
 }
 func Test_validator_OriginatorTransactionStateTransitionToFinal(t *testing.T) {
 	ctx := context.Background()
-	valid, err := validator_OriginatorTransactionStateTransitionToFinal(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Final})
+	valid, err := validator_OriginatorTransactionStateTransitionToFinal(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{ToState: transaction.State_Final})
 	require.NoError(t, err)
 	assert.True(t, valid)
-	valid, err = validator_OriginatorTransactionStateTransitionToFinal(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Confirmed})
+	valid, err = validator_OriginatorTransactionStateTransitionToFinal(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{ToState: transaction.State_Confirmed})
 	require.NoError(t, err)
 	assert.False(t, valid)
 }
 func Test_validator_OriginatorTransactionStateTransitionToConfirmed(t *testing.T) {
 	ctx := context.Background()
-	valid, err := validator_OriginatorTransactionStateTransitionToConfirmed(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Confirmed})
+	valid, err := validator_OriginatorTransactionStateTransitionToConfirmed(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{ToState: transaction.State_Confirmed})
 	require.NoError(t, err)
 	assert.True(t, valid)
-	valid, err = validator_OriginatorTransactionStateTransitionToConfirmed(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Reverted})
+	valid, err = validator_OriginatorTransactionStateTransitionToConfirmed(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{ToState: transaction.State_Reverted})
 	require.NoError(t, err)
 	assert.False(t, valid)
 }
 func Test_validator_OriginatorTransactionStateTransitionToReverted(t *testing.T) {
 	ctx := context.Background()
-	valid, err := validator_OriginatorTransactionStateTransitionToReverted(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Reverted})
+	valid, err := validator_OriginatorTransactionStateTransitionToReverted(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{ToState: transaction.State_Reverted})
 	require.NoError(t, err)
 	assert.True(t, valid)
-	valid, err = validator_OriginatorTransactionStateTransitionToReverted(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{To: transaction.State_Final})
+	valid, err = validator_OriginatorTransactionStateTransitionToReverted(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{ToState: transaction.State_Final})
 	require.NoError(t, err)
 	assert.False(t, valid)
 }
@@ -421,20 +406,17 @@ func Test_sendDelegationRequest_TransportError_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "transport error")
 }
 
-func Test_action_UpdateCoordinatorPriorityList_EndorserMode_UpdatesListOnly_CoordinatorUnchanged(t *testing.T) {
-	// In COORDINATOR_ENDORSER mode the originator receives priority-list updates from the
-	// co-located coordinator. The list is updated but currentActiveCoordinator is left alone;
-	// only a live heartbeat or a delegation rejection can redirect the originator.
+func Test_action_UpdateEndorserCandidates_DoesNotChangeCurrentActiveCoordinator(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
 		CoordinatorPriorityList("node1", "node2").
 		CurrentActiveCoordinator("node2").
 		Build()
 
-	err := action_UpdateCoordinatorPriorityList(ctx, o, &common.CoordinatorPriorityListUpdatedEvent{
+	err := action_UpdateEndorserCandidates(ctx, o, &common.EndorserNodesDiscoveredEvent{
 		Nodes: []string{"node1", "node2"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"node1", "node2"}, o.coordinatorPriorityList)
-	assert.Equal(t, "node2", o.currentActiveCoordinator, "action_UpdateCoordinatorPriorityList must not change currentActiveCoordinator")
+	assert.NotEmpty(t, o.coordinatorPriorityList)
+	assert.Equal(t, "node2", o.currentActiveCoordinator, "action_UpdateEndorserCandidates must not change currentActiveCoordinator")
 }

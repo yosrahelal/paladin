@@ -108,6 +108,7 @@ var stateDefinitionsMap = StateDefinitions{
 			},
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
+					{Action: action_UpdateOriginatorActivity},
 					{Action: action_IncrementHeartbeatIntervalCounts},
 				},
 				Transitions: []Transition{{
@@ -164,6 +165,7 @@ var stateDefinitionsMap = StateDefinitions{
 			},
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
+					{Action: action_UpdateOriginatorActivity},
 					{Action: action_PropagateHeartbeatIntervalToTransactions},
 					{Action: action_SendHeartbeat},
 				},
@@ -232,23 +234,23 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
-		Event_HandoverRequest: {
-			Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
-			Actions: []ActionRule{
-				{Action: action_UpdateActiveCoordinator},
-				{Action: action_CleanUpTransactionsNotYetDispatched},
+			Event_HandoverRequest: {
+				Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
+				Actions: []ActionRule{
+					{Action: action_UpdateActiveCoordinator},
+					{Action: action_CleanUpTransactionsNotYetDispatched},
+				},
+				Transitions: []Transition{{
+					To: State_Closing_Flush,
+					If: guard_HasUnconfirmedDispatchedTransactions,
+				}, {
+					To: State_Closing,
+					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+				}},
 			},
-			Transitions: []Transition{{
-				To: State_Closing_Flush,
-				If: guard_HasUnconfirmedDispatchedTransactions,
-			}, {
-				To: State_Closing,
-				If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
-			}},
-		},
-		Event_TransactionsDelegated: {
-			// Accept delegations while in Elect so originators are not bounced while we wait.
-			Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+			Event_TransactionsDelegated: {
+				// Accept delegations while in Elect so originators are not bounced while we wait.
+				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 			},
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
@@ -273,6 +275,7 @@ var stateDefinitionsMap = StateDefinitions{
 		Events: map[EventType]EventHandler{
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
+					{Action: action_UpdateOriginatorActivity},
 					{Action: action_IncrementHeartbeatIntervalCounts},
 					{Action: action_PropagateHeartbeatIntervalToTransactions},
 					{Action: action_SendHeartbeat},
@@ -357,43 +360,43 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
-		Event_HandoverRequest: {
-			Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
-			Actions: []ActionRule{
-				{Action: action_UpdateActiveCoordinator},
-				{Action: action_CleanUpTransactionsNotYetDispatched},
+			Event_HandoverRequest: {
+				Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
+				Actions: []ActionRule{
+					{Action: action_UpdateActiveCoordinator},
+					{Action: action_CleanUpTransactionsNotYetDispatched},
+				},
+				Transitions: []Transition{{
+					To: State_Closing_Flush,
+					If: guard_HasUnconfirmedDispatchedTransactions,
+				}, {
+					To: State_Closing,
+					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+				}},
 			},
-			Transitions: []Transition{{
-				To: State_Closing_Flush,
-				If: guard_HasUnconfirmedDispatchedTransactions,
-			}, {
-				To: State_Closing,
-				If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
-			}},
-		},
-		Event_TransactionsDelegated: {
-			Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
-		},
-		common.Event_NewBlock: {
-			Actions: []ActionRule{
-				{Action: action_UpdateBlockHeight},
-				{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+			Event_TransactionsDelegated: {
+				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 			},
-		},
-		common.Event_TransactionStateTransition: {
-			Actions: []ActionRule{
-				{
-					// There is a small chance we have come here from State_Closing (via State_Elect) and still have transactions in terminal
-					// states from a previous time of actively coordinating that we haven't cleaned up from memory yet,
-					// so we handle that here.
-					Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
-					Action:    action_CleanUpTransaction,
+			common.Event_NewBlock: {
+				Actions: []ActionRule{
+					{Action: action_UpdateBlockHeight},
+					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+				},
+			},
+			common.Event_TransactionStateTransition: {
+				Actions: []ActionRule{
+					{
+						// There is a small chance we have come here from State_Closing (via State_Elect) and still have transactions in terminal
+						// states from a previous time of actively coordinating that we haven't cleaned up from memory yet,
+						// so we handle that here.
+						Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
+						Action:    action_CleanUpTransaction,
+					},
 				},
 			},
 		},
 	},
-},
-State_Active: {
+	State_Active: {
 		OnTransitionTo: []ActionRule{
 			{Action: action_NewSigningIdentity},
 			{Action: action_StartDispatchLoop},
@@ -409,6 +412,7 @@ State_Active: {
 		Events: map[EventType]EventHandler{
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
+					{Action: action_UpdateOriginatorActivity},
 					{Action: action_PropagateHeartbeatIntervalToTransactions},
 					{Action: action_SendHeartbeat},
 				},
@@ -541,6 +545,7 @@ State_Active: {
 		Events: map[EventType]EventHandler{
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
+					{Action: action_UpdateOriginatorActivity},
 					{Action: action_PropagateHeartbeatIntervalToTransactions},
 					{Action: action_SendHeartbeat},
 				},
@@ -640,6 +645,7 @@ State_Active: {
 		Events: map[EventType]EventHandler{
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
+					{Action: action_UpdateOriginatorActivity},
 					{Action: action_IncrementHeartbeatIntervalsSinceStateChange},
 					{Action: action_SendHeartbeat},
 					{Action: action_PropagateHeartbeatIntervalToTransactions},
@@ -714,6 +720,7 @@ State_Active: {
 			},
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
+					{Action: action_UpdateOriginatorActivity},
 					{Action: action_IncrementHeartbeatIntervalsSinceStateChange},
 					{Action: action_SendHeartbeat},
 					{Action: action_PropagateHeartbeatIntervalToTransactions},
@@ -806,7 +813,7 @@ func (c *coordinator) preProcessEvent(ctx context.Context, entity *coordinator, 
 	}
 	// heartbeat events from ourself are filtered out
 	if heartbeatEvent, ok := event.(*common.HeartbeatReceivedEvent); ok {
-		if heartbeatEvent.From == c.nodeName {
+		if heartbeatEvent.FromNode == c.nodeName {
 			return true, nil
 		}
 	}

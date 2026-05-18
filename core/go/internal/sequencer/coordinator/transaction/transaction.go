@@ -38,7 +38,8 @@ type CoordinatorTransaction interface {
 	GetCurrentState() State
 	HasDispatchedPublicTransaction() bool
 	GetSnapshot(ctx context.Context) (*common.SnapshotPooledTransaction, *common.SnapshotDispatchedTransaction, *common.SnapshotConfirmedTransaction)
-	GetPrivateTransaction() *components.PrivateTransaction
+	GetPrivateTransaction() *components.PrivateTransaction // TODO AM REMOVE FROM interface
+	GetOriginatorNode() string
 }
 
 // coordinatorTransaction represents a transaction that is being coordinated by a contract sequencer agent in Coordinator state.
@@ -97,7 +98,7 @@ type coordinatorTransaction struct {
 	queueEventForCoordinator          func(context.Context, common.Event)
 	coordinatorTransactionHandleEvent func(context.Context, uuid.UUID, common.Event) error
 	getCoordinatorTransactionState    func(context.Context, uuid.UUID) (State, bool)
-	notifyEndorserNodes               func(...string) // called once when endorsement requests are first sent; passes endorser node names to the coordinator for pool updates
+	notifyEndorserCandidates          func(context.Context, ...string) // called once when endorsement requests are first sent; passes endorser node names to the coordinator for pool updates
 	metrics                           metrics.DistributedSequencerMetrics
 }
 
@@ -112,7 +113,7 @@ func NewTransaction(ctx context.Context,
 	queueEventForCoordinator func(context.Context, common.Event),
 	coordinatorTransactionHandleEvent func(context.Context, uuid.UUID, common.Event) error,
 	getCoordinatorTransactionState func(context.Context, uuid.UUID) (State, bool),
-	notifyEndorserNodes func(...string),
+	notifyEndorserCandidates func(context.Context, ...string),
 	engineIntegration common.EngineIntegration,
 	syncPoints syncpoints.SyncPoints,
 	allComponents components.AllComponents,
@@ -139,7 +140,7 @@ func NewTransaction(ctx context.Context,
 		queueEventForCoordinator,
 		coordinatorTransactionHandleEvent,
 		getCoordinatorTransactionState,
-		notifyEndorserNodes,
+		notifyEndorserCandidates,
 		engineIntegration,
 		syncPoints,
 		allComponents,
@@ -168,7 +169,7 @@ func newTransaction(
 	queueEventForCoordinator func(context.Context, common.Event),
 	coordinatorTransactionHandleEvent func(context.Context, uuid.UUID, common.Event) error,
 	getCoordinatorTransactionState func(context.Context, uuid.UUID) (State, bool),
-	notifyEndorserNodes func(...string),
+	notifyEndorserCandidates func(context.Context, ...string),
 	engineIntegration common.EngineIntegration,
 	syncPoints syncpoints.SyncPoints,
 	allComponents components.AllComponents,
@@ -195,7 +196,7 @@ func newTransaction(
 		queueEventForCoordinator:          queueEventForCoordinator,
 		coordinatorTransactionHandleEvent: coordinatorTransactionHandleEvent,
 		getCoordinatorTransactionState:    getCoordinatorTransactionState,
-		notifyEndorserNodes:               notifyEndorserNodes,
+		notifyEndorserCandidates:          notifyEndorserCandidates,
 		engineIntegration:                 engineIntegration,
 		syncPoints:                        syncPoints,
 		components:                        allComponents,
@@ -271,4 +272,10 @@ func (t *coordinatorTransaction) GetPrivateTransaction() *components.PrivateTran
 	t.RLock()
 	defer t.RUnlock()
 	return t.pt
+}
+
+func (t *coordinatorTransaction) GetOriginatorNode() string {
+	t.RLock()
+	defer t.RUnlock()
+	return t.originatorNode
 }

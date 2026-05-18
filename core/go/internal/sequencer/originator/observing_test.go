@@ -38,7 +38,7 @@ func Test_validator_IsFromCurrentCoordinator_TrueWhenSenderIsCurrentCoordinator(
 		CurrentActiveCoordinator("nodeB").
 		Build()
 	event := &common.HeartbeatReceivedEvent{
-		From:                "nodeB",
+		FromNode:            "nodeB",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
 	}
 	ok, err := validator_IsFromCurrentCoordinator(ctx, o, event)
@@ -52,7 +52,7 @@ func Test_validator_IsFromCurrentCoordinator_TrueRegardlessOfLiveness(t *testing
 		CurrentActiveCoordinator("nodeB").
 		Build()
 	event := &common.HeartbeatReceivedEvent{
-		From:                "nodeB",
+		FromNode:            "nodeB",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Closing},
 	}
 	ok, err := validator_IsFromCurrentCoordinator(ctx, o, event)
@@ -66,7 +66,7 @@ func Test_validator_IsFromCurrentCoordinator_FalseWhenSenderIsOtherNode(t *testi
 		CurrentActiveCoordinator("nodeB").
 		Build()
 	event := &common.HeartbeatReceivedEvent{
-		From:                "nodeC",
+		FromNode:            "nodeC",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
 	}
 	ok, err := validator_IsFromCurrentCoordinator(ctx, o, event)
@@ -88,7 +88,7 @@ func Test_validator_HasDroppedTransactions_TrueWhenInFlightTransactionAbsentFrom
 		Transactions(mockTxn).
 		Build()
 	event := &common.HeartbeatReceivedEvent{
-		From:                "coordinator@node1",
+		FromNode:            "coordinator@node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
 	}
 	ok, err := validator_HasDroppedTransactions(ctx, o, event)
@@ -108,7 +108,7 @@ func Test_validator_HasDroppedTransactions_FalseWhenAllTransactionsPresentInSnap
 		Transactions(mockTxn).
 		Build()
 	event := &common.HeartbeatReceivedEvent{
-		From: "coordinator@node1",
+		FromNode: "coordinator@node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
 				{SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txID}},
@@ -127,7 +127,7 @@ func Test_validator_HasDroppedTransactions_FalseWhenNoInFlightTransactions(t *te
 		CurrentActiveCoordinator("coordinator@node1").
 		Build()
 	event := &common.HeartbeatReceivedEvent{
-		From:                "coordinator@node1",
+		FromNode:            "coordinator@node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
 	}
 	ok, err := validator_HasDroppedTransactions(ctx, o, event)
@@ -176,7 +176,7 @@ func Test_ProcessEvent_HeartbeatReceivedWhileObserving_FromCurrentActiveCoordina
 		InactiveGracePeriod(100).
 		Build()
 	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = "nodeB"
+	heartbeatEvent.FromNode = "nodeB"
 	heartbeatEvent.ContractAddress = o.contractAddress
 	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
@@ -193,7 +193,7 @@ func Test_ProcessEvent_HeartbeatReceivedWhileObserving_FromAnotherActiveNode_Upd
 		InactiveGracePeriod(100).
 		Build()
 	heartbeatEvent := &common.HeartbeatReceivedEvent{}
-	heartbeatEvent.From = "nodeC"
+	heartbeatEvent.FromNode = "nodeC"
 	heartbeatEvent.ContractAddress = o.contractAddress
 	heartbeatEvent.CoordinatorSnapshot = &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, heartbeatEvent))
@@ -223,7 +223,7 @@ func Test_action_ProcessConfirmedTransactions_ConfirmedSuccess(t *testing.T) {
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "any@node",
+		FromNode:        "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -263,7 +263,7 @@ func Test_action_ProcessConfirmedTransactions_ConfirmedReverted(t *testing.T) {
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "any@node",
+		FromNode:        "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -295,7 +295,7 @@ func Test_action_ProcessConfirmedTransactions_NotOurNode_Skipped(t *testing.T) {
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "any@node",
+		FromNode:        "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -325,7 +325,7 @@ func Test_action_ProcessConfirmedTransactions_NotInMemory_Skipped(t *testing.T) 
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "any@node",
+		FromNode:        "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -361,7 +361,7 @@ func Test_action_ProcessConfirmedTransactions_HandleEventError(t *testing.T) {
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "any@node",
+		FromNode:        "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -400,7 +400,7 @@ func Test_action_ProcessConfirmedTransactions_RevertedHandleEventError(t *testin
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "any@node",
+		FromNode:        "any@node",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
@@ -433,7 +433,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_ResetsLivenessTimer(t *testi
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            coordinatorLocator,
+		FromNode:        coordinatorLocator,
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			BlockHeight: 1000,
@@ -458,7 +458,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionNotFoun
 	unknownTxID := uuid.New()
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            coordinatorLocator,
+		FromNode:        coordinatorLocator,
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
@@ -496,7 +496,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionWithHas
 	nonce := uint64(42)
 	contractAddress := builder.GetContractAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            coordinatorLocator,
+		FromNode:        coordinatorLocator,
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
@@ -535,7 +535,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionWithNon
 	nonce := uint64(42)
 	contractAddress := builder.GetContractAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            coordinatorLocator,
+		FromNode:        coordinatorLocator,
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
@@ -562,7 +562,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionFromDif
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            coordinatorLocator,
+		FromNode:        coordinatorLocator,
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
@@ -598,7 +598,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_SubmittedHandleEventError(t 
 	submissionHash := pldtypes.RandBytes32()
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            coordinatorLocator,
+		FromNode:        coordinatorLocator,
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
@@ -638,7 +638,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_NonceAssignedHandleEventErro
 	nonce := uint64(99)
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            coordinatorLocator,
+		FromNode:        coordinatorLocator,
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
@@ -668,7 +668,7 @@ func Test_validator_IsSenderHigherPriorityThanCurrentCoordinator_TrueWhenHigherP
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 	event := &common.HeartbeatReceivedEvent{
-		From:                "node1",
+		FromNode:            "node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
 	}
 	ok, err := validator_IsSenderHigherPriorityThanCurrentCoordinator(ctx, o, event)
@@ -683,7 +683,7 @@ func Test_validator_IsSenderHigherPriorityThanCurrentCoordinator_FalseWhenLowerP
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 	event := &common.HeartbeatReceivedEvent{
-		From:                "node2",
+		FromNode:            "node2",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
 	}
 	ok, err := validator_IsSenderHigherPriorityThanCurrentCoordinator(ctx, o, event)
@@ -701,7 +701,7 @@ func Test_action_SwitchActiveCoordinator_UpdatesCoordinatorAndResetsLivenessTime
 		Build()
 
 	event := &common.HeartbeatReceivedEvent{
-		From:                "node1",
+		FromNode:            "node1",
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{},
 	}
 
@@ -727,7 +727,7 @@ func Test_ProcessEvent_HeartbeatReceived_HigherPriorityNode_RedirectsAndProcesse
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "node1",
+		FromNode:        "node1",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
@@ -753,7 +753,7 @@ func Test_ProcessEvent_HeartbeatReceived_InactiveFallback_RedirectsAndProcessesH
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "node2",
+		FromNode:        "node2",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
@@ -779,7 +779,7 @@ func Test_ProcessEvent_HeartbeatReceived_LowerPriorityWithinGracePeriod_NoRedire
 
 	contractAddress := *pldtypes.RandAddress()
 	event := &common.HeartbeatReceivedEvent{
-		From:            "node2",
+		FromNode:        "node2",
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,

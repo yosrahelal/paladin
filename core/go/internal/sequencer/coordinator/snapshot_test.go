@@ -24,6 +24,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -89,7 +90,8 @@ func TestGetSnapshot_IncludesCoordinatorStateAndBlockHeight(t *testing.T) {
 func TestSendHeartbeat_Success(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
 	err := c.sendHeartbeat(ctx, c.contractAddress)
@@ -100,19 +102,20 @@ func TestSendHeartbeat_Success(t *testing.T) {
 func TestSendHeartbeat_IncludesCurrentNode(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
-		NodePool("node1").
+		EndorserCandidates("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
 	err := c.sendHeartbeat(ctx, c.contractAddress)
 	assert.NoError(t, err)
-	// Should send heartbeat to the current node so its originator can use inactive detection
 	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat())
 }
 
 func TestSendHeartbeat_HandlesError(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
-		NodePool("node1", "node2").
+		EndorserCandidates("node1", "node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		WithMockTransportWriter().
 		Build()
 	mocks.TransportWriter.EXPECT().SendHeartbeat(mock.Anything, "node1", mock.Anything, mock.Anything).
@@ -129,7 +132,8 @@ func TestSendHeartbeat_HandlesError(t *testing.T) {
 func TestAction_SendHeartbeat(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
-		NodePool("node1", "node2").
+		EndorserCandidates("node1", "node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
 	err := action_SendHeartbeat(ctx, c, nil)
@@ -174,7 +178,8 @@ func TestSendHeartbeat_ExportStatesAndLocksError_ReturnsError(t *testing.T) {
 
 	// Closing_Flush state means includeLocks=true, which causes ExportStatesAndLocks to be called.
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
-		NodePool("node1").
+		EndorserCandidates("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Grapher(mockGrapher).
 		Build()
 

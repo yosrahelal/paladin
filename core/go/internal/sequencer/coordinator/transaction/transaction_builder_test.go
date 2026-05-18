@@ -514,7 +514,7 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		b.queueEventForCoordinator,
 		coordinatorTransactionHandleEvent(b.coordinatorTransactions),
 		coordinatorTransactionStateLookup(b.coordinatorTransactions),
-		func(...string) {}, // notifyEndorserNodes
+		func(context.Context, ...string) {}, // notifyEndorserCandidates
 		mocks.EngineIntegration,
 		mocks.SyncPoints,
 		mocks.AllComponents,

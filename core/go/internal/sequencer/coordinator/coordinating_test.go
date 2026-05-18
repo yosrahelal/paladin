@@ -34,6 +34,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// newMockCoordinatorTransactionWithOriginatorNode creates a mock CoordinatorTransaction that
+// returns the given originatorNode from GetOriginatorNode(). GetID() returns a random UUID.
+// Other interface methods are not stubbed; add expectations as needed in specific tests.
+func newMockCoordinatorTransactionWithOriginatorNode(t *testing.T, originatorNode string) *coordinatortransactionmocks.CoordinatorTransaction {
+	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txn.On("GetID").Return(uuid.New()).Maybe()
+	txn.On("GetOriginatorNode").Return(originatorNode).Maybe()
+	txn.On("GetCurrentState").Return(transaction.State_Pooled).Maybe()
+	return txn
+}
+
 func Test_addToDelegatedTransactions_NewTransactionError_ReturnsError(t *testing.T) {
 	ctx := t.Context()
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
@@ -225,7 +236,7 @@ func Test_action_PoolTransaction(t *testing.T) {
 
 	err := action_PoolTransaction(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Pooled,
+		ToState:       transaction.State_Pooled,
 	})
 	require.NoError(t, err)
 	require.Len(t, c.pooledTransactions, 1, "transaction should be added to pool")
@@ -239,7 +250,7 @@ func Test_action_QueueTransactionForDispatch(t *testing.T) {
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 	err := action_QueueTransactionForDispatch(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Ready_For_Dispatch,
+		ToState:       transaction.State_Ready_For_Dispatch,
 	})
 	require.NoError(t, err)
 }
@@ -251,7 +262,7 @@ func Test_action_CleanUpTransaction_RemovesFromMap(t *testing.T) {
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 	err := action_CleanUpTransaction(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Final,
+		ToState:       transaction.State_Final,
 	})
 	require.NoError(t, err)
 	_, ok := c.transactionsByID[txID]
@@ -267,7 +278,7 @@ func Test_action_CleanUpTransaction_RemovesFromPool(t *testing.T) {
 	require.Len(t, c.pooledTransactions, 1)
 	err := action_CleanUpTransaction(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Evicted,
+		ToState:       transaction.State_Evicted,
 	})
 	require.NoError(t, err)
 	assert.Empty(t, c.pooledTransactions, "transaction should be removed from pool on cleanup")
@@ -314,7 +325,7 @@ func Test_action_CleanUpTransaction_GrapherForgetError_LogsButReturnsNil(t *test
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
 	err := action_CleanUpTransaction(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Final,
+		ToState:       transaction.State_Final,
 	})
 	require.NoError(t, err)
 	_, ok := c.transactionsByID[txID]
@@ -364,8 +375,8 @@ func Test_validator_TransactionStateTransitionFrom(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			validator := validator_TransactionStateTransitionFrom(tc.states...)
 			valid, err := validator(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{
-				From: tc.eventFrom,
-				To:   tc.eventTo,
+				FromState: tc.eventFrom,
+				ToState:   tc.eventTo,
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantResult, valid)
@@ -416,8 +427,8 @@ func Test_validator_TransactionStateTransitionTo(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			validator := validator_TransactionStateTransitionTo(tc.states...)
 			valid, err := validator(ctx, nil, &common.TransactionStateTransitionEvent[transaction.State]{
-				From: tc.eventFrom,
-				To:   tc.eventTo,
+				FromState: tc.eventFrom,
+				ToState:   tc.eventTo,
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantResult, valid)
@@ -618,7 +629,7 @@ func Test_action_PoolTransaction_WhenTxnNotInMap_NoOp(t *testing.T) {
 	c, _ := builder.Build()
 	err := action_PoolTransaction(ctx, c, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: uuid.New(),
-		To:            transaction.State_Pooled,
+		ToState:       transaction.State_Pooled,
 	})
 	require.NoError(t, err)
 	assert.Empty(t, c.pooledTransactions)
@@ -635,7 +646,7 @@ func Test_action_QueueTransactionForDispatch_WhenContextDone_DoesNotBlock(t *tes
 
 	err := action_QueueTransactionForDispatch(ctxCancelled, c, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Ready_For_Dispatch,
+		ToState:       transaction.State_Ready_For_Dispatch,
 	})
 	require.NoError(t, err)
 }
@@ -1058,123 +1069,224 @@ func Test_action_CleanUpTransactionsNotYetDispatched_RemovesNonDispatchedTransac
 	assert.Contains(t, c.transactionsByID, idConfirmed, "Confirmed transaction should remain")
 }
 
-func Test_updateNodePool_AddsNodeToEmptyPool(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.NodePool().Build()
-
-	c.updateNodePool("node2")
-
-	assert.Equal(t, 2, len(c.nodePool), "pool should contain 2 nodes")
-	assert.Contains(t, c.nodePool, "node2", "pool should contain node2")
-	assert.Contains(t, c.nodePool, "node1", "pool should contain coordinator's own node")
-}
-
-func Test_updateNodePool_AddsNodeToNonEmptyPool(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.NodePool("node1", "node3").Build()
-
-	c.updateNodePool("node2")
-
-	assert.Equal(t, 3, len(c.nodePool), "pool should contain 3 nodes")
-	assert.Contains(t, c.nodePool, "node1", "pool should contain node1")
-	assert.Contains(t, c.nodePool, "node2", "pool should contain node2")
-	assert.Contains(t, c.nodePool, "node3", "pool should contain node3")
-}
-
-func Test_updateNodePool_DoesNotAddDuplicateNode(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.NodePool("node1", "node2").Build()
-
-	c.updateNodePool("node2")
-
-	assert.Equal(t, 2, len(c.nodePool), "pool should still contain 2 nodes")
-	assert.Contains(t, c.nodePool, "node1", "pool should contain node1")
-	assert.Contains(t, c.nodePool, "node2", "pool should contain node2")
-}
-
-func Test_updateNodePool_EnsuresCoordinatorsOwnNodeIsAlwaysInPool(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.NodePool().Build()
-
-	c.updateNodePool("node2")
-
-	assert.Contains(t, c.nodePool, "node1", "pool should contain coordinator's own node")
-	assert.Equal(t, 2, len(c.nodePool), "pool should contain 2 nodes")
-}
-
-func Test_updateNodePool_EnsuresCoordinatorsOwnNodeIsAddedEvenWhenPoolAlreadyHasOtherNodes(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.NodePool("node2", "node3").Build()
-
-	c.updateNodePool("node4")
-
-	assert.Contains(t, c.nodePool, "node1", "pool should contain coordinator's own node")
-	assert.Equal(t, 4, len(c.nodePool), "pool should contain 4 nodes")
-}
-
-func Test_updateNodePool_DoesNotDuplicateCoordinatorsOwnNode(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.NodePool("node1", "node2").Build()
-
-	c.updateNodePool("node1")
-
-	assert.Equal(t, 2, len(c.nodePool), "pool should still contain 2 nodes")
-	assert.Contains(t, c.nodePool, "node1", "pool should contain node1")
-	assert.Contains(t, c.nodePool, "node2", "pool should contain node2")
-}
-
-func Test_updateNodePool_HandlesMultipleSequentialUpdates(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.NodePool().Build()
-
-	c.updateNodePool("node2")
-	c.updateNodePool("node3")
-	c.updateNodePool("node4")
-
-	assert.Equal(t, 4, len(c.nodePool), "pool should contain 4 nodes")
-	assert.Contains(t, c.nodePool, "node1", "pool should contain node1")
-	assert.Contains(t, c.nodePool, "node2", "pool should contain node2")
-	assert.Contains(t, c.nodePool, "node3", "pool should contain node3")
-	assert.Contains(t, c.nodePool, "node4", "pool should contain node4")
-}
-
-func Test_updateNodePool_HandlesEmptyStringNode(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.NodePool().Build()
-
-	c.updateNodePool("")
-
-	assert.Equal(t, 2, len(c.nodePool), "pool should contain 2 nodes")
-	assert.Contains(t, c.nodePool, "", "pool should contain empty string")
-	assert.Contains(t, c.nodePool, "node1", "pool should contain coordinator's own node")
-}
-
-func Test_updateNodePool_CoordinatorEndorserMode_PoolGrowsDynamically(t *testing.T) {
-	// updateNodePool no longer has a mode-specific guard; the pool grows in all modes.
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.NodeName("node1").NodePool("node1").Build()
-
-	c.updateNodePool("node2")
-
-	assert.Equal(t, []string{"node1", "node2"}, c.nodePool)
-}
-
-func Test_action_CalculateCoordinatorPriorities_InvokesNotifyOriginator(t *testing.T) {
+func Test_updateEndorserCandidates_AddsNodeToEmptyPool(t *testing.T) {
 	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Active)
-	c, _ := builder.NodePool("node1", "node2").CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	c.updateEndorserCandidates(ctx, "node2")
+
+	assert.Equal(t, 2, len(c.endorserCandidates), "pool should contain 2 nodes")
+	assert.Contains(t, c.endorserCandidates, "node2", "pool should contain node2")
+	assert.Contains(t, c.endorserCandidates, "node1", "pool should contain coordinator's own node")
+}
+
+func Test_updateEndorserCandidates_AddsNodeToNonEmptyPool(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		EndorserCandidates("node1", "node3").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	c.updateEndorserCandidates(ctx, "node2")
+
+	assert.Equal(t, 3, len(c.endorserCandidates))
+	assert.Contains(t, c.endorserCandidates, "node1")
+	assert.Contains(t, c.endorserCandidates, "node2")
+	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
+func Test_updateEndorserCandidates_DoesNotAddDuplicateNode(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		EndorserCandidates("node1", "node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	c.updateEndorserCandidates(ctx, "node2")
+
+	assert.Equal(t, 2, len(c.endorserCandidates), "duplicate should not be added")
+}
+
+func Test_updateEndorserCandidates_EnsuresCoordinatorsOwnNodeIsAlwaysInPool(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	c.updateEndorserCandidates(ctx, "node2")
+
+	assert.Contains(t, c.endorserCandidates, "node1", "pool should contain coordinator's own node")
+	assert.Equal(t, 2, len(c.endorserCandidates))
+}
+
+func Test_updateEndorserCandidates_DoesNotDuplicateCoordinatorsOwnNode(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		EndorserCandidates("node1", "node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	c.updateEndorserCandidates(ctx, "node1")
+
+	assert.Equal(t, 2, len(c.endorserCandidates), "pool should still contain 2 nodes")
+}
+
+func Test_updateEndorserCandidates_HandlesMultipleSequentialUpdates(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	c.updateEndorserCandidates(ctx, "node2")
+	c.updateEndorserCandidates(ctx, "node3")
+	c.updateEndorserCandidates(ctx, "node4")
+
+	assert.Equal(t, 4, len(c.endorserCandidates))
+	assert.Contains(t, c.endorserCandidates, "node1")
+	assert.Contains(t, c.endorserCandidates, "node2")
+	assert.Contains(t, c.endorserCandidates, "node3")
+	assert.Contains(t, c.endorserCandidates, "node4")
+}
+
+func Test_updateEndorserCandidates_NewNodeTriggersRecalculationAndNotifiesOriginator(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		EndorserCandidates("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
 
 	var received common.Event
 	c.notifyOriginator = func(_ context.Context, event common.Event) {
 		received = event
 	}
 
+	c.updateEndorserCandidates(ctx, "node2")
+
+	require.NotNil(t, received, "originator must be notified when pool grows")
+	discoveredEvent, ok := received.(*common.EndorserNodesDiscoveredEvent)
+	require.True(t, ok)
+	assert.Contains(t, discoveredEvent.Nodes, "node1")
+	assert.Contains(t, discoveredEvent.Nodes, "node2")
+}
+
+func Test_updateEndorserCandidates_NoNewNodeDoesNotNotifyOriginator(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		EndorserCandidates("node1", "node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	notified := false
+	c.notifyOriginator = func(_ context.Context, _ common.Event) { notified = true }
+
+	c.updateEndorserCandidates(ctx, "node2")
+
+	assert.False(t, notified, "originator must not be notified when pool does not grow")
+}
+
+func Test_updateEndorserCandidates_NoOpInSenderMode(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build() // default = SENDER mode
+
+	c.updateEndorserCandidates(ctx, "node2")
+
+	assert.Empty(t, c.endorserCandidates, "endorserCandidates must not grow in SENDER mode")
+}
+
+func Test_recordOriginatorActivity_SetsCountToZero(t *testing.T) {
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+
+	c.recordOriginatorActivity("node2")
+
+	assert.Equal(t, 0, c.originatorActivity["node2"])
+}
+
+func Test_recordOriginatorActivity_ResetsExistingCount(t *testing.T) {
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		OriginatorActivity(map[string]int{"node2": 3}).
+		Build()
+
+	c.recordOriginatorActivity("node2")
+
+	assert.Equal(t, 0, c.originatorActivity["node2"])
+}
+
+func Test_recordOriginatorActivity_NoOpInEndorserMode(t *testing.T) {
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	c.recordOriginatorActivity("node2")
+
+	assert.Empty(t, c.originatorActivity, "originatorActivity must not be populated in ENDORSER mode")
+}
+
+func Test_updateOriginatorActivity_ResetsCountForActiveNode(t *testing.T) {
+	ctx := context.Background()
+	txn := newMockCoordinatorTransactionWithOriginatorNode(t, "node2")
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		Transactions(txn).
+		OriginatorActivity(map[string]int{"node2": 3}).
+		InactiveGracePeriod(10).
+		Build()
+
+	c.updateOriginatorActivity(ctx)
+
+	assert.Equal(t, 0, c.originatorActivity["node2"], "active node counter must be reset to 0")
+}
+
+func Test_updateOriginatorActivity_IncrementsCountForInactiveNode(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		OriginatorActivity(map[string]int{"node2": 2}).
+		InactiveGracePeriod(10).
+		Build()
+
+	c.updateOriginatorActivity(ctx)
+
+	assert.Equal(t, 3, c.originatorActivity["node2"])
+}
+
+func Test_updateOriginatorActivity_PrunesNodeAtGracePeriod(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		OriginatorActivity(map[string]int{"node2": 5}).
+		InactiveGracePeriod(5).
+		Build()
+
+	c.updateOriginatorActivity(ctx)
+
+	assert.NotContains(t, c.originatorActivity, "node2", "node must be pruned when count reaches inactiveGracePeriod")
+}
+
+func Test_updateOriginatorActivity_DoesNotPruneActiveNode(t *testing.T) {
+	ctx := context.Background()
+	txn := newMockCoordinatorTransactionWithOriginatorNode(t, "node2")
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		Transactions(txn).
+		OriginatorActivity(map[string]int{"node2": 5}).
+		InactiveGracePeriod(5).
+		Build()
+
+	c.updateOriginatorActivity(ctx)
+
+	assert.Contains(t, c.originatorActivity, "node2", "active node must not be pruned")
+	assert.Equal(t, 0, c.originatorActivity["node2"])
+}
+
+func Test_action_CalculateCoordinatorPriorities_UpdatesPriorityList(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
+		EndorserCandidates("node1", "node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
 	err := action_CalculateCoordinatorPriorities(ctx, c, nil)
 	require.NoError(t, err)
-	assert.NotNil(t, received, "notifyOriginator must be invoked")
-	listEvent, ok := received.(*common.CoordinatorPriorityListUpdatedEvent)
-	require.True(t, ok, "event must be a CoordinatorPriorityListUpdatedEvent")
-	assert.Equal(t, c.coordinatorPriorityList, listEvent.Nodes)
+	assert.NotEmpty(t, c.coordinatorPriorityList)
+	assert.Contains(t, []string{"node1", "node2"}, c.coordinatorPriorityList[0])
 }
 
 // scheduleRequestTimeout cancels an existing timer before arming a new one, and its timer callback
@@ -1251,7 +1363,7 @@ func Test_action_ProcessConfirmedTransactionsFromSnapshot_NilSnapshot_ReturnsNil
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Prepared).Build()
 
 	err := action_ProcessConfirmedTransactionsFromSnapshot(ctx, c, &common.HeartbeatReceivedEvent{
-		From:                "node2",
+		FromNode:            "node2",
 		CoordinatorSnapshot: nil, // no snapshot — guard must return nil immediately
 	})
 	require.NoError(t, err)

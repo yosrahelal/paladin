@@ -59,6 +59,7 @@ var stateDefinitionsMap = StateDefinitions{
 	State_Initial: {
 		Events: map[EventType]EventHandler{
 			Event_OriginatorCreated: {
+				Actions:     []ActionRule{{Action: action_CalculateCoordinatorPriorities}},
 				Transitions: []Transition{{To: State_Idle}},
 			},
 		},
@@ -81,10 +82,16 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			common.Event_NewBlock: {
-				Actions: []ActionRule{{Action: action_UpdateBlockHeight}},
+				Actions: []ActionRule{
+					{Action: action_UpdateBlockHeight},
+					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+				},
 			},
-			common.Event_CoordinatorPriorityListUpdated: {
-				Actions: []ActionRule{{Action: action_UpdateCoordinatorPriorityList}},
+			common.Event_EndorserNodesDiscovered: {
+				Actions: []ActionRule{
+					{Action: action_UpdateEndorserCandidates},
+					{Action: action_CalculateCoordinatorPriorities},
+				},
 			},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
@@ -124,10 +131,16 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			common.Event_NewBlock: {
-				Actions: []ActionRule{{Action: action_UpdateBlockHeight}},
+				Actions: []ActionRule{
+					{Action: action_UpdateBlockHeight},
+					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+				},
 			},
-			common.Event_CoordinatorPriorityListUpdated: {
-				Actions: []ActionRule{{Action: action_UpdateCoordinatorPriorityList}},
+			common.Event_EndorserNodesDiscovered: {
+				Actions: []ActionRule{
+					{Action: action_UpdateEndorserCandidates},
+					{Action: action_CalculateCoordinatorPriorities},
+				},
 			},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
@@ -208,7 +221,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{Action: action_IncrementHeartbeatIntervalCounts},
 					// Nudge with a redelegate when the active coordinator has been silent too long
-					// TODO: this is the point where we could consider failing over to a new coordinator
+					// TODO AM: this is the point where we could consider failing over to a new coordinator
 					// the current design results in noone coordinating if every sending originator agrees
 					// that an unavailable node is the preferred active coordinator
 					{
@@ -243,10 +256,16 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			},
 			common.Event_NewBlock: {
-				Actions: []ActionRule{{Action: action_UpdateBlockHeight}},
+				Actions: []ActionRule{
+					{Action: action_UpdateBlockHeight},
+					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+				},
 			},
-			common.Event_CoordinatorPriorityListUpdated: {
-				Actions: []ActionRule{{Action: action_UpdateCoordinatorPriorityList}},
+			common.Event_EndorserNodesDiscovered: {
+				Actions: []ActionRule{
+					{Action: action_UpdateEndorserCandidates},
+					{Action: action_CalculateCoordinatorPriorities},
+				},
 			},
 		},
 	},

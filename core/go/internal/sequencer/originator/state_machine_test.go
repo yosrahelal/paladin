@@ -57,7 +57,7 @@ func TestStateMachine_Idle_HeartbeatReceived_ActiveState_TransitionsToObserving(
 	ca := builder.GetContractAddress()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "node2",
+		FromNode:        "node2",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
@@ -79,7 +79,7 @@ func TestStateMachine_Idle_HeartbeatReceived_ElectState_TransitionsToObserving(t
 	ca := builder.GetContractAddress()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "node2",
+		FromNode:        "node2",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Elect,
@@ -101,7 +101,7 @@ func TestStateMachine_Idle_HeartbeatReceived_NonLiveState_StaysIdle(t *testing.T
 	ca := builder.GetContractAddress()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "node2",
+		FromNode:        "node2",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing_Flush,
@@ -160,22 +160,22 @@ func TestStateMachine_Idle_NewBlock_UpdatesBlockHeight_StaysIdle(t *testing.T) {
 	assert.Equal(t, uint64(200), o.currentBlockHeight)
 }
 
-// CoordinatorPriorityListUpdated in Idle updates the stored priority list only.
-// action_UpdateCoordinatorPriorityList does not change currentActiveCoordinator; that field is
-// only updated by the heartbeat and delegation-rejection handlers.
-func TestStateMachine_Idle_CoordinatorPriorityListUpdated_UpdatesListOnly_CoordinatorUnchanged(t *testing.T) {
+// EndorserNodesDiscovered in Idle updates endorserCandidates and recomputes the priority list.
+// currentActiveCoordinator is not changed; only heartbeat and delegation-rejection handlers update it.
+func TestStateMachine_Idle_EndorserNodesDiscovered_UpdatesCandidatesAndRecomputesList(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
 		CurrentActiveCoordinator("old").
 		Build()
 
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.CoordinatorPriorityListUpdatedEvent{
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.EndorserNodesDiscoveredEvent{
 		Nodes: []string{"node1", "node2"},
 	}))
 
 	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.Equal(t, "old", o.currentActiveCoordinator, "action_UpdateCoordinatorPriorityList must not change currentActiveCoordinator")
-	assert.Equal(t, []string{"node1", "node2"}, o.coordinatorPriorityList)
+	assert.Equal(t, "old", o.currentActiveCoordinator, "action_UpdateEndorserCandidates must not change currentActiveCoordinator")
+	assert.Equal(t, []string{"node1", "node2"}, o.endorserCandidates)
+	assert.ElementsMatch(t, []string{"node1", "node2"}, o.coordinatorPriorityList)
 }
 
 // TransactionStateTransition to Final in Idle removes the transaction from memory.
@@ -190,7 +190,7 @@ func TestStateMachine_Idle_TransactionStateTransition_ToFinal_CleansUpTransactio
 	require.Len(t, o.transactionsByID, 1)
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Final,
+		ToState:       transaction.State_Final,
 	}))
 	assert.Equal(t, State_Idle, o.GetCurrentState())
 	assert.Empty(t, o.transactionsByID, "action_CleanUpTransaction must remove the transaction")
@@ -207,7 +207,7 @@ func TestStateMachine_Idle_TransactionStateTransition_ToConfirmed_FinalizesAndSt
 		Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Confirmed,
+		ToState:       transaction.State_Confirmed,
 	}))
 	assert.Equal(t, State_Idle, o.GetCurrentState())
 }
@@ -223,7 +223,7 @@ func TestStateMachine_Idle_TransactionStateTransition_ToReverted_FinalizesAndSta
 		Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Reverted,
+		ToState:       transaction.State_Reverted,
 	}))
 	assert.Equal(t, State_Idle, o.GetCurrentState())
 }
@@ -259,7 +259,7 @@ func TestStateMachine_Observing_HeartbeatReceived_ActiveState_UpdatesCoordinator
 	ca := builder.GetContractAddress()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "new-coordinator",
+		FromNode:        "new-coordinator",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
@@ -282,7 +282,7 @@ func TestStateMachine_Observing_HeartbeatReceived_ActiveFlushState_ResetsTimerAn
 	ca := builder.GetContractAddress()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "other-node",
+		FromNode:        "other-node",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active_Flush,
@@ -304,7 +304,7 @@ func TestStateMachine_Observing_HeartbeatReceived_ClosingState_NoTimerResetAndNo
 	ca := builder.GetContractAddress()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "other-node",
+		FromNode:        "other-node",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing,
@@ -344,21 +344,22 @@ func TestStateMachine_Observing_HeartbeatInterval_GraceExceeded_TransitionsToIdl
 	assert.Equal(t, 2, o.heartbeatIntervalsSinceLastReceive, "counter must be incremented before transition check")
 }
 
-// CoordinatorPriorityListUpdated in Observing updates the stored priority list only;
-// currentActiveCoordinator is not changed by action_UpdateCoordinatorPriorityList.
-func TestStateMachine_Observing_CoordinatorPriorityListUpdated_UpdatesListOnly_CoordinatorUnchanged(t *testing.T) {
+// EndorserNodesDiscovered in Observing updates endorserCandidates and recomputes the priority list.
+// currentActiveCoordinator is not changed.
+func TestStateMachine_Observing_EndorserNodesDiscovered_UpdatesCandidatesAndRecomputesList(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
 		CurrentActiveCoordinator("old").
 		Build()
 
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.CoordinatorPriorityListUpdatedEvent{
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.EndorserNodesDiscoveredEvent{
 		Nodes: []string{"nodeA", "nodeB"},
 	}))
 
 	assert.Equal(t, State_Observing, o.GetCurrentState())
-	assert.Equal(t, "old", o.currentActiveCoordinator, "action_UpdateCoordinatorPriorityList must not change currentActiveCoordinator")
-	assert.Equal(t, []string{"nodeA", "nodeB"}, o.coordinatorPriorityList)
+	assert.Equal(t, "old", o.currentActiveCoordinator, "action_UpdateEndorserCandidates must not change currentActiveCoordinator")
+	assert.Equal(t, []string{"nodeA", "nodeB"}, o.endorserCandidates)
+	assert.ElementsMatch(t, []string{"nodeA", "nodeB"}, o.coordinatorPriorityList)
 }
 
 // Duplicate TransactionCreated (same ID) in Observing → no state change; no double tracking.
@@ -398,7 +399,7 @@ func TestStateMachine_Observing_TransactionStateTransition_ToFinal_CleansUpTrans
 	require.Len(t, o.transactionsByID, 1)
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Final,
+		ToState:       transaction.State_Final,
 	}))
 	assert.Equal(t, State_Observing, o.GetCurrentState())
 	assert.Empty(t, o.transactionsByID, "action_CleanUpTransaction must remove the transaction")
@@ -415,7 +416,7 @@ func TestStateMachine_Observing_TransactionStateTransition_ToConfirmed_Finalizes
 		Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Confirmed,
+		ToState:       transaction.State_Confirmed,
 	}))
 	assert.Equal(t, State_Observing, o.GetCurrentState())
 }
@@ -431,7 +432,7 @@ func TestStateMachine_Observing_TransactionStateTransition_ToReverted_FinalizesA
 		Build()
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Reverted,
+		ToState:       transaction.State_Reverted,
 	}))
 	assert.Equal(t, State_Observing, o.GetCurrentState())
 }
@@ -497,7 +498,7 @@ func TestStateMachine_Sending_HeartbeatReceived_DroppedTransaction_Redelegates(t
 
 	// Heartbeat with empty snapshot — txID is absent ⇒ dropped.
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "coordinator@node1",
+		FromNode:        "coordinator@node1",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
@@ -521,7 +522,7 @@ func TestStateMachine_Sending_HeartbeatReceived_NoDroppedTransactions_NoRedelega
 	ca := builder.GetContractAddress()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "coordinator@node1",
+		FromNode:        "coordinator@node1",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
@@ -558,7 +559,7 @@ func TestStateMachine_Sending_HeartbeatReceived_HigherPriorityActiveNode_Redirec
 		Return(nil).Once()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "node1",
+		FromNode:        "node1",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
@@ -665,8 +666,8 @@ func TestStateMachine_Sending_TransactionFinal_LastTxn_TransitionsToObserving(t 
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		From:          transaction.State_Delegated,
-		To:            transaction.State_Final,
+		FromState:     transaction.State_Delegated,
+		ToState:       transaction.State_Final,
 	}))
 
 	assert.Equal(t, State_Observing, o.GetCurrentState())
@@ -690,29 +691,30 @@ func TestStateMachine_Sending_TransactionFinal_OtherTxnsRemain_StaysSending(t *t
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID1,
-		From:          transaction.State_Delegated,
-		To:            transaction.State_Final,
+		FromState:     transaction.State_Delegated,
+		ToState:       transaction.State_Final,
 	}))
 
 	assert.Equal(t, State_Sending, o.GetCurrentState())
 	assert.Len(t, o.transactionsByID, 1, "only the finalized transaction is removed")
 }
 
-// CoordinatorPriorityListUpdated in Sending updates the stored priority list only;
-// currentActiveCoordinator is not changed by action_UpdateCoordinatorPriorityList.
-func TestStateMachine_Sending_CoordinatorPriorityListUpdated_UpdatesListOnly_CoordinatorUnchanged(t *testing.T) {
+// EndorserNodesDiscovered in Sending updates endorserCandidates and recomputes the priority list.
+// currentActiveCoordinator is not changed.
+func TestStateMachine_Sending_EndorserNodesDiscovered_UpdatesCandidatesAndRecomputesList(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		CurrentActiveCoordinator("old-coordinator").
 		Build()
 
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.CoordinatorPriorityListUpdatedEvent{
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.EndorserNodesDiscoveredEvent{
 		Nodes: []string{"new-node1", "new-node2"},
 	}))
 
 	assert.Equal(t, State_Sending, o.GetCurrentState())
-	assert.Equal(t, "old-coordinator", o.currentActiveCoordinator, "action_UpdateCoordinatorPriorityList must not change currentActiveCoordinator")
-	assert.Equal(t, []string{"new-node1", "new-node2"}, o.coordinatorPriorityList)
+	assert.Equal(t, "old-coordinator", o.currentActiveCoordinator, "action_UpdateEndorserCandidates must not change currentActiveCoordinator")
+	assert.Equal(t, []string{"new-node1", "new-node2"}, o.endorserCandidates)
+	assert.ElementsMatch(t, []string{"new-node1", "new-node2"}, o.coordinatorPriorityList)
 }
 
 // NewBlock event in Sending updates currentBlockHeight; stays Sending.
@@ -748,7 +750,7 @@ func TestStateMachine_Sending_HeartbeatReceived_Step3_WithinGrace_NoCoordinatorS
 	// Step 2 does not fire (not higher priority); step 3 guard is false (grace not exceeded);
 	// steps 4 and 5 don't fire (not from current coordinator).
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "node3",
+		FromNode:        "node3",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
@@ -787,7 +789,7 @@ func TestStateMachine_Sending_HeartbeatReceived_Step3_GraceExceeded_SwitchesCoor
 		Return(nil).Once()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		From:            "node3",
+		FromNode:        "node3",
 		ContractAddress: &ca,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
@@ -813,7 +815,7 @@ func TestStateMachine_Sending_TransactionConfirmed_LastTxn_TransitionsToObservin
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
-		To:            transaction.State_Confirmed,
+		ToState:       transaction.State_Confirmed,
 	}))
 
 	assert.Equal(t, State_Observing, o.GetCurrentState())
@@ -838,7 +840,7 @@ func TestStateMachine_Sending_TransactionReverted_OtherTxnsRemain_StaysSending(t
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID1,
-		To:            transaction.State_Reverted,
+		ToState:       transaction.State_Reverted,
 	}))
 
 	assert.Equal(t, State_Sending, o.GetCurrentState())

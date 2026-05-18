@@ -35,7 +35,7 @@ func validator_IsHeartbeatSenderLive(_ context.Context, _ *coordinator, event co
 // validator_IsHeartbeatFromHigherPriorityCoordinator returns true when a heartbeat is froma node that is higher-priority than this node
 func validator_IsHeartbeatFromHigherPriorityCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*common.HeartbeatReceivedEvent)
-	return common.IsHigherPriority(c.coordinatorPriorityList, e.From, c.currentActiveCoordinator), nil
+	return common.IsHigherPriority(c.coordinatorPriorityList, e.FromNode, c.currentActiveCoordinator), nil
 
 }
 
@@ -43,11 +43,12 @@ func validator_IsHeartbeatFromHigherPriorityCoordinator(_ context.Context, c *co
 // a node that has strictly higher priority (lower index) than this node.
 func validator_IsHandoverRequestFromHigherPriorityCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*HandoverRequestEvent)
-	return common.IsHigherPriority(c.coordinatorPriorityList, e.From, c.nodeName), nil
+	return common.IsHigherPriority(c.coordinatorPriorityList, e.FromNode, c.nodeName), nil
 }
 
 func action_RejectDelegatedTransactions(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*TransactionsDelegatedEvent)
+	c.recordOriginatorActivity(e.FromNode)
 	return c.transportWriter.SendDelegationRequestRejection(ctx, e.FromNode, e.DelegationID, c.currentBlockHeight, c.currentActiveCoordinator)
 }
 
@@ -56,9 +57,9 @@ func action_RejectDelegatedTransactions(ctx context.Context, c *coordinator, eve
 func action_UpdateActiveCoordinator(_ context.Context, c *coordinator, event common.Event) error {
 	switch e := event.(type) {
 	case *common.HeartbeatReceivedEvent:
-		c.currentActiveCoordinator = e.From
+		c.currentActiveCoordinator = e.FromNode
 	case *HandoverRequestEvent:
-		c.currentActiveCoordinator = e.From
+		c.currentActiveCoordinator = e.FromNode
 	}
 	return nil
 }
@@ -78,5 +79,5 @@ func action_IncrementHeartbeatIntervalCounts(_ context.Context, c *coordinator, 
 // we believe is the current active coordinator
 func validator_IsHeartbeatFromCurrentActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*common.HeartbeatReceivedEvent)
-	return c.currentActiveCoordinator == e.From, nil
+	return c.currentActiveCoordinator == e.FromNode, nil
 }

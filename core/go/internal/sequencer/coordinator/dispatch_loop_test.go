@@ -83,7 +83,7 @@ func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
 	// Queue one tx: transition to Ready_For_Dispatch so it gets sent to dispatchQueue
 	err := action_QueueTransactionForDispatch(ctx, c, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txnID,
-		To:            transaction.State_Ready_For_Dispatch,
+		ToState:       transaction.State_Ready_For_Dispatch,
 	})
 	require.NoError(t, err)
 

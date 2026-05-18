@@ -117,8 +117,8 @@ func (t *coordinatorTransaction) sendEndorsementRequests(ctx context.Context) er
 		t.scheduleRequestTimeout(ctx)
 		t.pendingEndorsementRequests = make(map[string]map[string]*common.IdempotentRequest)
 		// Notify the coordinator about endorser nodes discovered from the attestation plan so it can
-		// grow the originator node pool even when no candidates were pre-configured.
-		t.notifyEndorserNodes(t.extractEndorserNodes(ctx)...)
+		// grow the endorser candidate pool even when no candidates were pre-configured.
+		t.notifyEndorserCandidates(ctx, t.extractEndorserNodes(ctx)...)
 	}
 
 	for _, endorsementRequirement := range t.unfulfilledEndorsementRequirements(ctx) {

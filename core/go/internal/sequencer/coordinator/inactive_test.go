@@ -30,7 +30,7 @@ func Test_action_HeartbeatReceived_SetsActiveCoordinatorState(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Observing)
 	c, _ := builder.Build()
 	event := &common.HeartbeatReceivedEvent{}
-	event.From = "node1"
+	event.FromNode = "node1"
 	event.CoordinatorSnapshot = &common.CoordinatorSnapshot{
 		CoordinatorState: State_Active,
 	}
@@ -126,7 +126,7 @@ func Test_validator_IsHeartbeatFromCurrentActiveCoordinator_FromCurrentNode_Retu
 		Build()
 
 	event := &common.HeartbeatReceivedEvent{}
-	event.From = "nodeC"
+	event.FromNode = "nodeC"
 
 	result, err := validator_IsHeartbeatFromCurrentActiveCoordinator(ctx, c, event)
 	require.NoError(t, err)
@@ -140,7 +140,7 @@ func Test_validator_IsHeartbeatFromCurrentActiveCoordinator_FromNonCurrentNode_R
 		Build()
 
 	event := &common.HeartbeatReceivedEvent{}
-	event.From = "nodeOther"
+	event.FromNode = "nodeOther"
 
 	result, err := validator_IsHeartbeatFromCurrentActiveCoordinator(ctx, c, event)
 	require.NoError(t, err)

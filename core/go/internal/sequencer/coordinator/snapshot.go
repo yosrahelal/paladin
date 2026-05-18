@@ -21,23 +21,37 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
 
 func action_SendHeartbeat(ctx context.Context, c *coordinator, _ common.Event) error {
 	return c.sendHeartbeat(ctx, c.contractAddress)
 }
 
-// sendHeartbeat builds the base snapshot once, then sends a per-node copy to each node in the
-// originator pool. In Active_Flush/Closing_Flush/Closing states, the grapher is queried per-node:
+// sendHeartbeat builds the base snapshot once, then sends a per-node copy to each heartbeat
+// recipient. In ENDORSER mode the recipients are the endorser candidates; in STATIC/SENDER modes
+// the originator activity map is updated first and its surviving keys are used.
+// In Active_Flush/Closing_Flush/Closing states, the grapher is queried per-node:
 // each node receives all locks (unfiltered) plus only the OutputStates it is permitted to hold
 // (filtered by AllowedNodes).
 func (c *coordinator) sendHeartbeat(ctx context.Context, contractAddress *pldtypes.EthAddress) error {
 	baseSnapshot := c.getSnapshot(ctx)
 	coordinatorState := baseSnapshot.CoordinatorState
 	includeLocks := coordinatorState == common.CoordinatorState_Closing_Flush || coordinatorState == common.CoordinatorState_Closing
-	log.L(ctx).Debugf("sending heartbeats for sequencer %s (includeLocks=%v)", contractAddress.String(), includeLocks)
+
+	var nodes []string
+	if c.coordinatorSelection == prototk.ContractConfig_COORDINATOR_ENDORSER {
+		nodes = c.endorserCandidates
+	} else {
+		nodes = make([]string, 0, len(c.originatorActivity))
+		for node := range c.originatorActivity {
+			nodes = append(nodes, node)
+		}
+	}
+
+	log.L(ctx).Debugf("sending heartbeats for sequencer %s to %d nodes (includeLocks=%v)", contractAddress.String(), len(nodes), includeLocks)
 	var err error
-	for _, node := range c.nodePool {
+	for _, node := range nodes {
 		log.L(ctx).Debugf("sending heartbeat to %s", node)
 		snapshot := baseSnapshot
 		if includeLocks {
@@ -63,6 +77,32 @@ func (c *coordinator) sendHeartbeat(ctx context.Context, contractAddress *pldtyp
 		}
 	}
 	return err
+}
+
+// updateOriginatorActivity refreshes the originator activity map for STATIC/SENDER modes.
+// For each tracked node: if there is a transaction currently in memory for that node the
+// counter is reset to 0; otherwise it is incremented. Nodes whose counter reaches the
+// inactive grace period are pruned and will no longer receive heartbeats.
+func (c *coordinator) updateOriginatorActivity(ctx context.Context) {
+	activeNodes := make(map[string]bool, len(c.transactionsByID))
+	for _, txn := range c.transactionsByID {
+		activeNodes[txn.GetOriginatorNode()] = true
+	}
+
+	for node := range c.originatorActivity {
+		if activeNodes[node] {
+			c.originatorActivity[node] = 0
+		} else {
+			c.originatorActivity[node]++
+		}
+	}
+
+	for node, count := range c.originatorActivity {
+		if count >= c.inactiveGracePeriod {
+			log.L(ctx).Debugf("pruning originator %s from activity map after %d heartbeat intervals of inactivity", node, count)
+			delete(c.originatorActivity, node)
+		}
+	}
 }
 
 // getSnapshot builds the coordinator snapshot (without per-node lock data).
@@ -98,6 +138,15 @@ func (c *coordinator) getSnapshot(ctx context.Context) *common.CoordinatorSnapsh
 		CoordinatorState:       coordinatorState,
 		BlockHeight:            c.currentBlockHeight,
 	}
+}
+
+// action_UpdateOriginatorActivity advances the originator activity map for STATIC/SENDER modes.
+func action_UpdateOriginatorActivity(ctx context.Context, c *coordinator, _ common.Event) error {
+	if c.coordinatorSelection == prototk.ContractConfig_COORDINATOR_ENDORSER {
+		return nil
+	}
+	c.updateOriginatorActivity(ctx)
+	return nil
 }
 
 func action_IncrementHeartbeatIntervalsSinceStateChange(ctx context.Context, c *coordinator, event common.Event) error {

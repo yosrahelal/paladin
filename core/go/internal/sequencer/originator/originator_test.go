@@ -34,9 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Note: tests of coordinator selection config resolution (static coordinator validation,
-// endorser candidate validation, etc.) live in common/coordinator_config_test.go.
-
 func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	originatorLocator := "sender@senderNode"
@@ -51,7 +48,7 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	// Ensure the originator is in observing mode by queuing a heartbeat from an active coordinator
 	contractAddress := builder.GetContractAddress()
 	heartbeatEvent := &common.HeartbeatReceivedEvent{
-		From:            coordinatorNode,
+		FromNode:        coordinatorNode,
 		ContractAddress: &contractAddress,
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
@@ -120,7 +117,6 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 					Originator: "member1@node1",
 				},
 				Signer:               *signerAddress,
-				SignerLocator:        "signer@node2",
 				Nonce:                &nonce,
 				LatestSubmissionHash: &submissionHash,
 			},
@@ -334,4 +330,3 @@ func TestOriginator_WaitForDone_NotStarted_ReturnsImmediately(t *testing.T) {
 		t.Fatal("WaitForDone should have returned immediately when not started")
 	}
 }
-

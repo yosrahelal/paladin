@@ -15,24 +15,10 @@
 package common
 
 import (
-	"fmt"
-
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
 )
-
-type SnapshotFlushPoint struct {
-	From          pldtypes.EthAddress
-	Nonce         uint64
-	TransactionID uuid.UUID
-	Hash          pldtypes.Bytes32
-	Confirmed     bool
-}
-
-func (f *SnapshotFlushPoint) GetSignerNonce() string {
-	return fmt.Sprintf("%s:%d", f.From.String(), f.Nonce)
-}
 
 type CoordinatorSnapshot struct {
 	DispatchedTransactions []*SnapshotDispatchedTransaction `json:"dispatchedTransactions"`
@@ -61,7 +47,6 @@ func (t *SnapshotPooledTransaction) GetID() string {
 
 type SnapshotDispatchedTransaction struct {
 	SnapshotPooledTransaction
-	SignerLocator        string
 	Signer               pldtypes.EthAddress
 	LatestSubmissionHash *pldtypes.Bytes32
 	Nonce                *uint64

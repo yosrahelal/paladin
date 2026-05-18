@@ -28,10 +28,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
 
-// CoordinatorSelectionConfig holds validated coordinator selection configuration resolved
-// from the domain's ContractConfig before the originator and coordinator are constructed.
-// Each component derives its own currentActiveCoordinator from Mode plus these values and
-// its own nodeName — this struct is a validated data bag, not a pre-resolved answer.
 type CoordinatorSelectionConfig struct {
 	Mode              prototk.ContractConfig_CoordinatorSelection
 	StaticCoordinator string   // STATIC: validated node name extracted from the locator

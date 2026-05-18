@@ -94,14 +94,14 @@ func guard_InactiveGracePeriodExceeded(_ context.Context, o *originator) bool {
 // tracked active coordinator. Does not check liveness; used where identity alone is sufficient.
 func validator_IsFromCurrentCoordinator(_ context.Context, o *originator, event common.Event) (bool, error) {
 	e := event.(*common.HeartbeatReceivedEvent)
-	return e.From == o.currentActiveCoordinator, nil
+	return e.FromNode == o.currentActiveCoordinator, nil
 }
 
 // validator_IsSenderHigherPriorityThanCurrentCoordinator returns true when the heartbeat sender
 // has a lower priority index (higher priority) than the currently tracked active coordinator.
 func validator_IsSenderHigherPriorityThanCurrentCoordinator(_ context.Context, o *originator, event common.Event) (bool, error) {
 	e := event.(*common.HeartbeatReceivedEvent)
-	return common.IsHigherPriority(o.coordinatorPriorityList, e.From, o.currentActiveCoordinator), nil
+	return common.IsHigherPriority(o.coordinatorPriorityList, e.FromNode, o.currentActiveCoordinator), nil
 }
 
 // validator_HasDroppedTransactions returns true when the heartbeat snapshot is missing at least one
@@ -138,7 +138,7 @@ func validator_TransactionDoesNotExist(ctx context.Context, o *originator, event
 
 func validator_OriginatorTransactionStateTransitionToFinal(ctx context.Context, _ *originator, event common.Event) (bool, error) {
 	e := event.(*common.TransactionStateTransitionEvent[transaction.State])
-	return e.To == transaction.State_Final, nil
+	return e.ToState == transaction.State_Final, nil
 }
 
 func action_CleanUpTransaction(ctx context.Context, o *originator, event common.Event) error {
@@ -149,12 +149,12 @@ func action_CleanUpTransaction(ctx context.Context, o *originator, event common.
 
 func validator_OriginatorTransactionStateTransitionToConfirmed(ctx context.Context, _ *originator, event common.Event) (bool, error) {
 	e := event.(*common.TransactionStateTransitionEvent[transaction.State])
-	return e.To == transaction.State_Confirmed, nil
+	return e.ToState == transaction.State_Confirmed, nil
 }
 
 func validator_OriginatorTransactionStateTransitionToReverted(ctx context.Context, _ *originator, event common.Event) (bool, error) {
 	e := event.(*common.TransactionStateTransitionEvent[transaction.State])
-	return e.To == transaction.State_Reverted, nil
+	return e.ToState == transaction.State_Reverted, nil
 }
 
 func action_FinalizeTransaction(ctx context.Context, o *originator, event common.Event) error {
@@ -182,19 +182,35 @@ func (o *originator) removeTransaction(ctx context.Context, txnID uuid.UUID) {
 }
 
 func action_UpdateBlockHeight(_ context.Context, o *originator, event common.Event) error {
-	e := event.(*common.NewBlockEvent)
-	o.currentBlockHeight = e.BlockHeight
+	o.currentBlockHeight, o.newBlockRangeEpoch = common.DecodeNewBlockHeight(o.currentBlockHeight, o.blockRangeSize, event)
 	return nil
 }
 
-// action_UpdateCoordinatorPriorityList replaces the stored priority list with the one pushed by
-// the co-located coordinator. The current active coordinator doesn't change. The list is only used to
-// resolve disgreement if we start seeing multiple active coordinators
-func action_UpdateCoordinatorPriorityList(_ context.Context, o *originator, event common.Event) error {
-	e := event.(*common.CoordinatorPriorityListUpdatedEvent)
-	if len(e.Nodes) > 0 {
-		o.coordinatorPriorityList = e.Nodes
+func guard_IsNewBlockRangeEpoch(_ context.Context, o *originator) bool {
+	return o.newBlockRangeEpoch
+}
+
+// action_CalculateCoordinatorPriorities recomputes coordinatorPriorityList from the current
+// endorserCandidates and block height. No-op when endorserCandidates is empty (STATIC/SENDER modes).
+func action_CalculateCoordinatorPriorities(ctx context.Context, o *originator, _ common.Event) error {
+	if len(o.endorserCandidates) == 0 {
+		return nil
 	}
+	o.coordinatorPriorityList = common.ComputeCoordinatorPriorityList(
+		ctx,
+		o.endorserCandidates,
+		o.currentBlockHeight,
+		o.blockRangeSize,
+	)
+	return nil
+}
+
+// action_UpdateEndorserCandidates replaces the endorser candidates with the full sorted+deduped
+// list sent by the coordinator. The coordinator copies the slice before sending so the originator
+// can assign it directly without aliasing the coordinator's internal state.
+func action_UpdateEndorserCandidates(_ context.Context, o *originator, event common.Event) error {
+	e := event.(*common.EndorserNodesDiscoveredEvent)
+	o.endorserCandidates = e.Nodes
 	return nil
 }
 
@@ -202,7 +218,7 @@ func action_UpdateCoordinatorPriorityList(_ context.Context, o *originator, even
 // coordinator. Called only when the sender is in Active or Elect state.
 func action_UpdateActiveCoordinatorFromHeartbeat(_ context.Context, o *originator, event common.Event) error {
 	e := event.(*common.HeartbeatReceivedEvent)
-	o.currentActiveCoordinator = e.From
+	o.currentActiveCoordinator = e.FromNode
 	return nil
 }
 

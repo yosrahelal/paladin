@@ -28,6 +28,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 )
 
@@ -149,20 +150,49 @@ func action_ImportStatesAndLocks(ctx context.Context, c *coordinator, event comm
 // in the request.
 func action_ProcessDelegatedTransactions(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*TransactionsDelegatedEvent)
-	c.updateNodePool(e.FromNode)
+	c.recordOriginatorActivity(e.FromNode)
 	return c.addToDelegatedTransactions(ctx, e.Originator, e.Transactions, e.DelegationID, c.newCoordinatorTransaction)
 }
 
-func (c *coordinator) updateNodePool(nodes ...string) {
+// recordOriginatorActivity records that an originator node has sent a delegation request,
+// resetting its inactivity counter to 0. No-op in ENDORSER mode.
+func (c *coordinator) recordOriginatorActivity(node string) {
+	if c.coordinatorSelection == prototk.ContractConfig_COORDINATOR_ENDORSER {
+		return
+	}
+	c.originatorActivity[node] = 0
+}
+
+// updateEndorserCandidates adds newly-discovered endorser nodes to the candidate pool.
+// Only operates in ENDORSER mode; no-op in STATIC/SENDER. When new nodes are actually added
+// both the coordinator's own priority list is recomputed and the co-located originator is
+// notified with the updated candidates so it can recompute its own list independently.
+func (c *coordinator) updateEndorserCandidates(ctx context.Context, nodes ...string) {
+	if c.coordinatorSelection != prototk.ContractConfig_COORDINATOR_ENDORSER {
+		return
+	}
+	before := len(c.endorserCandidates)
 	for _, node := range nodes {
-		if !slices.Contains(c.nodePool, node) {
-			c.nodePool = append(c.nodePool, node)
+		if !slices.Contains(c.endorserCandidates, node) {
+			c.endorserCandidates = append(c.endorserCandidates, node)
 		}
 	}
-	if !slices.Contains(c.nodePool, c.nodeName) {
-		c.nodePool = append(c.nodePool, c.nodeName)
+	if !slices.Contains(c.endorserCandidates, c.nodeName) {
+		c.endorserCandidates = append(c.endorserCandidates, c.nodeName)
 	}
-	slices.Sort(c.nodePool)
+	if len(c.endorserCandidates) > before {
+		slices.Sort(c.endorserCandidates)
+		c.coordinatorPriorityList = common.ComputeCoordinatorPriorityList(
+			ctx,
+			c.endorserCandidates,
+			c.currentBlockHeight,
+			c.coordinatorSelectionBlockRange,
+		)
+		c.notifyOriginator(ctx, &common.EndorserNodesDiscoveredEvent{
+			// Put a copy of the candidates in the event so the originator can't modify the coordinator's internal state.
+			Nodes: slices.Clone(c.endorserCandidates),
+		})
+	}
 }
 
 func (c *coordinator) coordinatorTransactionHandleEvent(ctx context.Context, txID uuid.UUID, event common.Event) error {
@@ -199,7 +229,7 @@ func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator 
 		c.queueEventInternal,
 		c.coordinatorTransactionHandleEvent,
 		c.getCoordinatorTransactionState,
-		c.updateNodePool,
+		c.updateEndorserCandidates,
 		c.engineIntegration,
 		c.syncPoints,
 		c.components,
@@ -408,7 +438,7 @@ func validator_TransactionStateTransitionFrom(states ...transaction.State) state
 	return func(ctx context.Context, _ *coordinator, event common.Event) (bool, error) {
 		e := event.(*common.TransactionStateTransitionEvent[transaction.State])
 		for _, s := range states {
-			if e.From == s {
+			if e.FromState == s {
 				return true, nil
 			}
 		}
@@ -420,7 +450,7 @@ func validator_TransactionStateTransitionTo(states ...transaction.State) statema
 	return func(ctx context.Context, _ *coordinator, event common.Event) (bool, error) {
 		e := event.(*common.TransactionStateTransitionEvent[transaction.State])
 		for _, s := range states {
-			if e.To == s {
+			if e.ToState == s {
 				return true, nil
 			}
 		}

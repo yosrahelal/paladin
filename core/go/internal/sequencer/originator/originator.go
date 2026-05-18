@@ -34,7 +34,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 )
 
-
 // Originator is the interface that consumers use to interact with the originator.
 type Originator interface {
 	// Start begins the event loop. It must be called once after construction before any events are queued.
@@ -67,7 +66,9 @@ type originator struct {
 	transactionsByID                   map[uuid.UUID]transaction.OriginatorTransaction
 	transactionsOrdered                []transaction.OriginatorTransaction
 	currentBlockHeight                 uint64
-	coordinatorPriorityList            []string // priority-ordered list pushed by the co-located coordinator; index 0 is the current active coordinator
+	newBlockRangeEpoch                 bool
+	endorserCandidates                 []string // COORDINATOR_ENDORSER mode: deduped+sorted candidate pool; updated when EndorserNodesDiscoveredEvent arrives
+	coordinatorPriorityList            []string // COORDINATOR_ENDORSER mode: priority-ordered list computed independently from endorserCandidates + currentBlockHeight + blockRangeSize
 
 	/* Config */
 	nodeName            string
@@ -107,10 +108,7 @@ func NewOriginator(
 	case prototk.ContractConfig_COORDINATOR_SENDER:
 		o.currentActiveCoordinator = nodeName
 	case prototk.ContractConfig_COORDINATOR_ENDORSER:
-		o.coordinatorPriorityList = selectionConfig.Endorsers
-		if len(o.coordinatorPriorityList) > 0 {
-			o.currentActiveCoordinator = o.coordinatorPriorityList[0]
-		}
+		o.endorserCandidates = selectionConfig.Endorsers
 	}
 
 	originatorEventQueueSize := confutil.IntMin(configuration.OriginatorEventQueueSize, pldconf.SequencerMinimum.OriginatorEventQueueSize, *pldconf.SequencerDefaults.OriginatorEventQueueSize)

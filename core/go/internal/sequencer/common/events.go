@@ -25,11 +25,11 @@ import (
 type EventType int
 
 const (
-	Event_HeartbeatInterval              EventType = iota // emitted on a regular basis, interval defined by the sequencer config
-	Event_TransactionStateTransition                      // transaction state machine transition; originator/coordinator handle cleanup and side effects
-	Event_NewBlock                                        // a new block has been confirmed on the base ledger
-	Event_HeartbeatReceived                               // a heartbeat notification was received from the active coordinator
-	Event_CoordinatorPriorityListUpdated                  // pushed by the coordinator to its co-located originator after recalculating the priority list
+	Event_HeartbeatInterval         EventType = iota // emitted on a regular basis, interval defined by the sequencer config
+	Event_TransactionStateTransition                 // transaction state machine transition; originator/coordinator handle cleanup and side effects
+	Event_NewBlock                                   // a new block has been confirmed on the base ledger
+	Event_HeartbeatReceived                          // a heartbeat notification was received from the active coordinator
+	Event_EndorserNodesDiscovered                    // pushed by the coordinator to its co-located originator when new endorser nodes are discovered
 )
 
 type BaseEvent struct {
@@ -63,8 +63,8 @@ func (*HeartbeatIntervalEvent) TypeString() string {
 type TransactionStateTransitionEvent[S comparable] struct {
 	BaseEvent
 	TransactionID uuid.UUID
-	From          S
-	To            S
+	FromState     S
+	ToState       S
 }
 
 func (*TransactionStateTransitionEvent[S]) Type() EventType {
@@ -90,7 +90,7 @@ func (*NewBlockEvent) TypeString() string {
 
 type HeartbeatReceivedEvent struct {
 	BaseEvent
-	From                string               `json:"from"`
+	FromNode            string               `json:"from"`
 	ContractAddress     *pldtypes.EthAddress `json:"contractAddress"`
 	CoordinatorSnapshot *CoordinatorSnapshot `json:"coordinatorSnapshot"`
 }
@@ -103,18 +103,18 @@ func (*HeartbeatReceivedEvent) TypeString() string {
 	return "Event_HeartbeatReceived"
 }
 
-// CoordinatorPriorityListUpdatedEvent is queued by the coordinator to its co-located originator
-// after action_CalculateCoordinatorPriorities runs. It carries the new priority-ordered list so
-// the originator always has a consistent view of coordinator priority without computing it independently.
-type CoordinatorPriorityListUpdatedEvent struct {
+// EndorserNodesDiscoveredEvent is queued by the coordinator to its co-located originator
+// when updateEndorserCandidates adds new nodes to the pool. Nodes carries the full updated
+// endorser candidates so the originator can recompute its own priority list.
+type EndorserNodesDiscoveredEvent struct {
 	BaseEvent
 	Nodes []string
 }
 
-func (*CoordinatorPriorityListUpdatedEvent) Type() EventType {
-	return Event_CoordinatorPriorityListUpdated
+func (*EndorserNodesDiscoveredEvent) Type() EventType {
+	return Event_EndorserNodesDiscovered
 }
 
-func (*CoordinatorPriorityListUpdatedEvent) TypeString() string {
-	return "Event_CoordinatorPriorityListUpdated"
+func (*EndorserNodesDiscoveredEvent) TypeString() string {
+	return "Event_EndorserNodesDiscovered"
 }

@@ -46,8 +46,8 @@ func action_ProcessCurrentCoordinatorHeartbeat(ctx context.Context, o *originato
 
 func action_SwitchActiveCoordinator(ctx context.Context, o *originator, event common.Event) error {
 	e := event.(*common.HeartbeatReceivedEvent)
-	log.L(ctx).Debugf("switching active coordinator from %s to %s", o.currentActiveCoordinator, e.From)
-	o.currentActiveCoordinator = e.From
+	log.L(ctx).Debugf("switching active coordinator from %s to %s", o.currentActiveCoordinator, e.FromNode)
+	o.currentActiveCoordinator = e.FromNode
 	o.heartbeatIntervalsSinceLastReceive = 0
 	return nil
 }
@@ -70,7 +70,7 @@ func (o *originator) processDispatchedTransactions(ctx context.Context, event *c
 			txnSubmittedEvent.TransactionID = dispatchedTransaction.ID
 			txnSubmittedEvent.SignerAddress = dispatchedTransaction.Signer
 			txnSubmittedEvent.LatestSubmissionHash = *dispatchedTransaction.LatestSubmissionHash
-			txnSubmittedEvent.Coordinator = event.From
+			txnSubmittedEvent.Coordinator = event.FromNode
 			if dispatchedTransaction.Nonce != nil {
 				txnSubmittedEvent.Nonce = *dispatchedTransaction.Nonce
 			}
@@ -82,7 +82,7 @@ func (o *originator) processDispatchedTransactions(ctx context.Context, event *c
 			err := txn.HandleEvent(ctx, &transaction.NonceAssignedEvent{
 				BaseEvent:   transaction.BaseEvent{TransactionID: dispatchedTransaction.ID},
 				Nonce:       *dispatchedTransaction.Nonce,
-				Coordinator: event.From,
+				Coordinator: event.FromNode,
 			})
 			if err != nil {
 				msg := fmt.Errorf("error handling nonce assigned event for transaction %s: %v", txn.GetID(), err)
@@ -103,7 +103,7 @@ func (o *originator) processConfirmedTransactions(ctx context.Context, event *co
 		txn := o.transactionsByID[confirmedTransaction.ID]
 		if txn == nil {
 			log.L(ctx).Debugf("received confirmed transaction %s in heartbeat from %s but no transaction found in memory",
-				confirmedTransaction.ID, event.From)
+				confirmedTransaction.ID, event.FromNode)
 			continue
 		}
 		if len(confirmedTransaction.RevertReason) > 0 {

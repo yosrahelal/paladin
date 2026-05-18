@@ -25,92 +25,89 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_action_CalculateCoordinatorPriorities_SingleNodeInPool_ReturnsNode(t *testing.T) {
+func Test_action_CalculateCoordinatorPriorities_SingleNodeInPool_SetsPriorityList(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
-		NodePool("node1").
+		EndorserCandidates("node1").
 		CoordinatorSelectionBlockRange(100).
 		CurrentBlockHeight(1000).
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
-	assert.Equal(t, "node1", c.currentActiveCoordinator)
+	assert.Equal(t, []string{"node1"}, c.coordinatorPriorityList)
 }
 
-func Test_action_CalculateCoordinatorPriorities_MultipleNodesInPool_ReturnsOneOfPool(t *testing.T) {
+func Test_action_CalculateCoordinatorPriorities_MultipleNodesInPool_SetsNonEmptyPriorityList(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionBlockRange(100).
 		CurrentBlockHeight(1000).
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
-	assert.Contains(t, []string{"node1", "node2", "node3"}, c.currentActiveCoordinator)
+	assert.NotEmpty(t, c.coordinatorPriorityList)
+	assert.Contains(t, []string{"node1", "node2", "node3"}, c.coordinatorPriorityList[0])
 }
 
-func Test_action_CalculateCoordinatorPriorities_BlockHeightRounding_SameRangeSameCoordinator(t *testing.T) {
+func Test_action_CalculateCoordinatorPriorities_BlockHeightRounding_SameRangeSamePriorityList(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
-		NodePool("node1", "node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionBlockRange(100).
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1000}))
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
-	coordinatorNode1 := c.currentActiveCoordinator
+	list1 := c.coordinatorPriorityList[0]
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1001}))
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
-	coordinatorNode2 := c.currentActiveCoordinator
+	list2 := c.coordinatorPriorityList[0]
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1099}))
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
-	coordinatorNode3 := c.currentActiveCoordinator
+	list3 := c.coordinatorPriorityList[0]
 
-	assert.Equal(t, coordinatorNode1, coordinatorNode2)
-	assert.Equal(t, coordinatorNode2, coordinatorNode3)
+	assert.Equal(t, list1, list2)
+	assert.Equal(t, list2, list3)
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1100}))
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
-	assert.Contains(t, []string{"node1", "node2", "node3"}, c.currentActiveCoordinator)
+	assert.Contains(t, []string{"node1", "node2", "node3"}, c.coordinatorPriorityList[0])
 }
 
-func Test_action_CalculateCoordinatorPriorities_DifferentBlockRanges_CanSelectDifferentCoordinators(t *testing.T) {
+func Test_action_CalculateCoordinatorPriorities_DifferentBlockRanges_CanSelectDifferentPriorityHeads(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
-		NodePool("node1", "node2").
+		EndorserCandidates("node1", "node2").
 		CoordinatorSelectionBlockRange(50).
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 100}))
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
-	coordinatorNode1 := c.currentActiveCoordinator
+	head1 := c.coordinatorPriorityList[0]
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 150}))
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
-	coordinatorNode2 := c.currentActiveCoordinator
+	head2 := c.coordinatorPriorityList[0]
 
-	assert.Contains(t, []string{"node1", "node2"}, coordinatorNode1)
-	assert.Contains(t, []string{"node1", "node2"}, coordinatorNode2)
+	assert.Contains(t, []string{"node1", "node2"}, head1)
+	assert.Contains(t, []string{"node1", "node2"}, head2)
 }
 
 func Test_action_CalculateCoordinatorPriorities_SenderMode_NoOp(t *testing.T) {
 	ctx := context.Background()
-	// In SENDER mode the coordinatorSelection field is COORDINATOR_SENDER, so
-	// action_CalculateCoordinatorPriorities should be a no-op and leave currentActiveCoordinator
-	// unchanged.
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
 		CurrentActiveCoordinator("node1").
 		Build()
-	// Default builder uses SENDER mode; currentActiveCoordinator is pre-set above.
 
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
-	assert.Equal(t, "node1", c.currentActiveCoordinator)
+	assert.Empty(t, c.coordinatorPriorityList, "SENDER mode must not compute a priority list")
 }
 
 func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {

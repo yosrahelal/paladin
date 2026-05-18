@@ -570,8 +570,8 @@ func (t *originatorTransaction) initializeStateMachine(initialState State) {
 				t.queueEventForOriginator(ctx, &common.TransactionStateTransitionEvent[State]{
 					BaseEvent:     common.BaseEvent{EventTime: time.Now()},
 					TransactionID: t.pt.ID,
-					From:          from,
-					To:            to,
+					FromState:     from,
+					ToState:       to,
 				})
 			}
 		}),
@@ -584,4 +584,3 @@ func (t *originatorTransaction) HandleEvent(ctx context.Context, event common.Ev
 	txCtx := log.WithLogField(ctx, "txID", t.pt.ID.String())
 	return t.stateMachine.ProcessEvent(txCtx, t, event)
 }
-

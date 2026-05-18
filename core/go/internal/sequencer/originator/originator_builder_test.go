@@ -49,6 +49,7 @@ type OriginatorBuilderForTesting struct {
 	sequencerConfig                    *pldconf.SequencerConfig
 	blockRangeSize                     *uint64
 	currentBlockHeight                 *uint64
+	endorserCandidates                 []string
 	coordinatorPriorityList            []string
 	currentActiveCoordinator           *string
 	heartbeatIntervalsSinceLastReceive *int
@@ -113,8 +114,13 @@ func (b *OriginatorBuilderForTesting) CurrentBlockHeight(n uint64) *OriginatorBu
 	return b
 }
 
+func (b *OriginatorBuilderForTesting) WithEndorserCandidates(nodes ...string) *OriginatorBuilderForTesting {
+	b.endorserCandidates = append([]string(nil), nodes...)
+	return b
+}
+
 func (b *OriginatorBuilderForTesting) CoordinatorPriorityList(nodes ...string) *OriginatorBuilderForTesting {
-	b.coordinatorPriorityList = common.DedupeSortedCoordinatorEndorserNodes(append([]string(nil), nodes...))
+	b.coordinatorPriorityList = append([]string(nil), nodes...)
 	return b
 }
 
@@ -217,6 +223,9 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	}
 	if b.currentBlockHeight != nil {
 		originator.currentBlockHeight = *b.currentBlockHeight
+	}
+	if b.endorserCandidates != nil {
+		originator.endorserCandidates = b.endorserCandidates
 	}
 	if b.coordinatorPriorityList != nil {
 		originator.coordinatorPriorityList = b.coordinatorPriorityList

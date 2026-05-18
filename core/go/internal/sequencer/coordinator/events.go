@@ -80,7 +80,7 @@ func (*StateTimeoutIntervalEvent) TypeString() string {
 // in Active state handles it identically to a preemption heartbeat.
 type HandoverRequestEvent struct {
 	common.BaseEvent
-	From string
+	FromNode string
 }
 
 func (*HandoverRequestEvent) Type() EventType { return Event_HandoverRequest }
