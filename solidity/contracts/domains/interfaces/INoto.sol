@@ -117,8 +117,8 @@ interface INoto is IConfidentialToken, ILockableCapability {
     event NotoLockDelegated(
         bytes32 indexed txId,
         bytes32 indexed lockId,
-        address indexed from,
-        address to,
+        address indexed previousSpender,
+        address newSpender,
         bytes32 oldLockState,
         bytes32 newLockState,
         bytes proof,

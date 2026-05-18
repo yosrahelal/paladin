@@ -105,8 +105,8 @@ interface ILockableCapability {
      */
     event LockDelegated(
         bytes32 indexed lockId,
-        address indexed from,
-        address indexed to,
+        address indexed previousSpender,
+        address indexed newSpender,
         bytes data
     );
 

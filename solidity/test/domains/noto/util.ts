@@ -401,8 +401,8 @@ export async function doDelegateLock(
   expect(event0).to.exist;
   expect(event0?.name).to.equal("LockDelegated");
   expect(event0?.args.lockId).to.equal(lockId);
-  expect(event0?.args.from).to.equal(await notary.getAddress());
-  expect(event0?.args.to).to.equal(delegate);
+  expect(event0?.args.previousSpender).to.equal(await notary.getAddress());
+  expect(event0?.args.newSpender).to.equal(delegate);
   expect(event0?.args.data).to.equal(data);
 
   // Second log is the INoto.NotoLockDelegated event that gives the inputs and outputs
@@ -411,8 +411,8 @@ export async function doDelegateLock(
   expect(event1?.name).to.equal("NotoLockDelegated");
   expect(event1?.args.txId).to.equal(txId);
   expect(event1?.args.lockId).to.equal(lockId);
-  expect(event1?.args.from).to.equal(await notary.getAddress());
-  expect(event1?.args.to).to.equal(delegate);
+  expect(event1?.args.previousSpender).to.equal(await notary.getAddress());
+  expect(event1?.args.newSpender).to.equal(delegate);
   expect(event1?.args.proof).to.deep.equal("0x");
   expect(event1?.args.data).to.equal(data);
 
