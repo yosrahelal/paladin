@@ -18,6 +18,7 @@ package rpcserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,6 +31,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/rpcclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -276,7 +278,47 @@ func TestHTTPHandler(t *testing.T) {
 	req := httptest.NewRequest("POST", "/", nil)
 	res := httptest.NewRecorder()
 	rpcServer.HTTPHandler(res, req)
+	// Empty body is a parse error → valid JSON/RPC error response → HTTP 200
+	assert.Equal(t, http.StatusOK, res.Code)
+	var jsonResponse rpcclient.RPCResponse
+	err = json.NewDecoder(res.Body).Decode(&jsonResponse)
+	require.NoError(t, err)
+	assert.NotNil(t, jsonResponse.Error)
+	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), jsonResponse.Error.Code)
+}
+
+func TestHTTPHandler_PanicRecovery(t *testing.T) {
+	rpcServer, err := NewRPCServer(context.Background(), &pldconf.RPCServerConfig{
+		HTTP: pldconf.RPCServerConfigHTTP{
+			Disabled: false,
+			HTTPServerConfig: pldconf.HTTPServerConfig{
+				Address: confutil.P("127.0.0.1"),
+				Port:    confutil.P(0),
+			},
+		},
+		WS: pldconf.RPCServerConfigWS{Disabled: true},
+	})
+	require.NoError(t, err)
+	defer rpcServer.Stop()
+
+	regTestRPC(rpcServer, "test_panic", RPCMethod0(func(ctx context.Context) (string, error) {
+		panic("something went very wrong")
+	}))
+
+	body := strings.NewReader(`{"jsonrpc":"2.0","method":"test_panic","id":1,"params":[]}`)
+	req := httptest.NewRequest("POST", "/", body)
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+
+	rpcServer.HTTPHandler(res, req)
+
 	assert.Equal(t, http.StatusInternalServerError, res.Code)
+	var jsonResponse rpcclient.RPCResponse
+	err = json.NewDecoder(res.Body).Decode(&jsonResponse)
+	require.NoError(t, err)
+	assert.NotNil(t, jsonResponse.Error)
+	assert.Equal(t, int64(rpcclient.RPCCodeInternalError), jsonResponse.Error.Code)
+	assert.Contains(t, jsonResponse.Error.Message, "something went very wrong")
 }
 
 func TestHTTPHandler_AuthenticationFailure(t *testing.T) {

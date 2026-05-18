@@ -19,6 +19,7 @@ package rpcserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"sync"
@@ -26,6 +27,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/rpcclient"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/httpserver"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/router"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/staticserver"
@@ -147,6 +149,7 @@ func (s *rpcServer) HTTPHandler(w http.ResponseWriter, r *http.Request) {
 func (s *rpcServer) httpHandler(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
 	}
 
 	ctx := req.Context()
@@ -162,12 +165,22 @@ func (s *rpcServer) httpHandler(res http.ResponseWriter, req *http.Request) {
 		ctx = context.WithValue(ctx, authResultKey, authenticationResults)
 	}
 
-	r := s.rpcHandler(ctx, req.Body, nil /* not websockets */)
+	var r handlerResult
+	func() {
+		defer func() {
+			if rc := recover(); rc != nil {
+				log.L(ctx).Errorf("Panic in RPC handler: %v", rc)
+				r = handlerResult{httpStatus: http.StatusInternalServerError, sendRes: true,
+					res: rpcclient.NewRPCErrorResponse(fmt.Errorf("%v", rc), nil, rpcclient.RPCCodeInternalError)}
+			}
+		}()
+		r = s.rpcHandler(ctx, req.Body, nil /* not websockets */)
+	}()
 
 	res.Header().Set("Content-Type", "application/json; charset=utf-8")
-	status := http.StatusOK
-	if !r.isOK {
-		status = http.StatusInternalServerError
+	status := r.httpStatus
+	if status == 0 {
+		status = http.StatusOK
 	}
 	res.WriteHeader(status)
 	_ = json.NewEncoder(res).Encode(r.res)

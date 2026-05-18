@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"testing/iotest"
 	"time"
@@ -215,7 +216,7 @@ func TestRPCMessageBatchAllFail(t *testing.T) {
 		SetError(&jsonResponse).
 		Post(url)
 	require.NoError(t, err)
-	assert.False(t, res.IsSuccess())
+	assert.True(t, res.IsSuccess())
 	assert.JSONEq(t, `[
 		{
 			"jsonrpc": "2.0",
@@ -245,6 +246,48 @@ func TestRPCMessageBatchAllFail(t *testing.T) {
 
 }
 
+func TestRPCIdempotencyConflict_Returns200WithError(t *testing.T) {
+
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
+	defer done()
+
+	var mu sync.Mutex
+	seenKeys := make(map[string]bool)
+	regTestRPC(s, "ut_idempotent", RPCMethod1(func(ctx context.Context, idempotencyKey string) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if seenKeys[idempotencyKey] {
+			return "", fmt.Errorf("PD012220 duplicate request with idempotency key: %s", idempotencyKey)
+		}
+		seenKeys[idempotencyKey] = true
+		return "ok", nil
+	}))
+
+	// First call with the key succeeds
+	var firstResponse pldtypes.RawJSON
+	res, err := resty.New().R().
+		SetBody(`{"jsonrpc":"2.0","id":"1","method":"ut_idempotent","params":["my-key"]}`).
+		SetResult(&firstResponse).
+		Post(url)
+	require.NoError(t, err)
+	assert.True(t, res.IsSuccess())
+	assert.JSONEq(t, `{"jsonrpc":"2.0","id":"1","result":"ok"}`, string(firstResponse))
+
+	// Second call with the same idempotency key: HTTP 200 with a JSON/RPC error, not HTTP 500
+	var conflictResponse rpcclient.RPCResponse
+	res, err = resty.New().R().
+		SetBody(`{"jsonrpc":"2.0","id":"2","method":"ut_idempotent","params":["my-key"]}`).
+		SetResult(&conflictResponse).
+		SetError(&conflictResponse).
+		Post(url)
+	require.NoError(t, err)
+	assert.True(t, res.IsSuccess()) // HTTP 200, not 500 or 409
+	assert.NotNil(t, conflictResponse.Error)
+	assert.Equal(t, int64(rpcclient.RPCCodeInternalError), conflictResponse.Error.Code)
+	assert.Contains(t, conflictResponse.Error.Message, "PD012220")
+
+}
+
 func TestRPCHandleBadDataEmptySpace(t *testing.T) {
 
 	url, _, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
@@ -257,7 +300,7 @@ func TestRPCHandleBadDataEmptySpace(t *testing.T) {
 		SetError(&jsonResponse).
 		Post(url)
 	require.NoError(t, err)
-	assert.False(t, res.IsSuccess())
+	assert.True(t, res.IsSuccess()) // parse error → valid JSON/RPC error body → HTTP 200
 	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), jsonResponse.Error.Code)
 	assert.Regexp(t, "PD020700", jsonResponse.Error.Message)
 
@@ -269,7 +312,7 @@ func TestRPCHandleIOError(t *testing.T) {
 	defer done()
 
 	r := s.rpcHandler(context.Background(), iotest.ErrReader(fmt.Errorf("pop")), nil)
-	assert.False(t, r.isOK)
+	assert.Zero(t, r.httpStatus)
 	jsonResponse := r.res.(*rpcclient.RPCResponse)
 	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), jsonResponse.Error.Code)
 	assert.Regexp(t, "PD020700", jsonResponse.Error.Message)
@@ -282,7 +325,7 @@ func TestRPCBadArrayError(t *testing.T) {
 	defer done()
 
 	r := s.rpcHandler(context.Background(), strings.NewReader("[... this is not an array"), nil)
-	assert.False(t, r.isOK)
+	assert.Zero(t, r.httpStatus)
 	jsonResponse := r.res.(*rpcclient.RPCResponse)
 	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), jsonResponse.Error.Code)
 	assert.Regexp(t, "PD020700", jsonResponse.Error.Message)
