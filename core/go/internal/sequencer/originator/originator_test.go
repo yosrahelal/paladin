@@ -28,24 +28,20 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
+// Note: tests of coordinator selection config resolution (static coordinator validation,
+// endorser candidate validation, etc.) live in common/coordinator_config_test.go.
+
 func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	originatorLocator := "sender@senderNode"
-	// coordinatorNode is the node name that initializeFromContractConfig will extract from the static coordinator locator
 	coordinatorNode := "coordinatorNode"
-	staticCoordinatorLocator := "coordinator@coordinatorNode"
-	// Use COORDINATOR_STATIC mode so Start() runs initializeFromContractConfig for coordinator selection.
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
-		StaticCoordinator:    &staticCoordinatorLocator,
-	})
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).CurrentActiveCoordinator(coordinatorNode)
 	o, mocks := builder.Build()
 	require.NoError(t, o.Start(ctx))
 	defer func() {
@@ -298,12 +294,7 @@ func Test_GetTxStatus_UnknownTransactionReturnsUnknown(t *testing.T) {
 
 func TestOriginator_Start_Idempotent(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	staticLocator := "coord@node1"
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
-		StaticCoordinator:    &staticLocator,
-	})
-	o, _ := builder.Build()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
 	require.NoError(t, o.Start(ctx))
 	defer func() {
 		cancel()
@@ -315,12 +306,7 @@ func TestOriginator_Start_Idempotent(t *testing.T) {
 
 func TestOriginator_Start_GetBlockHeightError(t *testing.T) {
 	ctx := t.Context()
-	staticLocator := "coord@node1"
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
-		StaticCoordinator:    &staticLocator,
-	})
-	o, _ := builder.Build()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
 
 	mockEI := sequencercommonmocks.NewEngineIntegration(t)
 	mockEI.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0), fmt.Errorf("block height error"))
@@ -349,93 +335,3 @@ func TestOriginator_WaitForDone_NotStarted_ReturnsImmediately(t *testing.T) {
 	}
 }
 
-func TestOriginator_Start_StaticCoordinator_EmptyLocator_ReturnsError(t *testing.T) {
-	ctx := t.Context()
-	emptyLocator := ""
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
-		StaticCoordinator:    &emptyLocator,
-	})
-	o, _ := builder.Build()
-	err := o.Start(ctx)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no configured coordinator node")
-}
-
-func TestOriginator_Start_StaticCoordinator_InvalidLocator_ReturnsError(t *testing.T) {
-	ctx := t.Context()
-	invalidLocator := "not-a-valid-locator"
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
-		StaticCoordinator:    &invalidLocator,
-	})
-	o, _ := builder.Build()
-	err := o.Start(ctx)
-	require.Error(t, err)
-}
-
-func TestOriginator_Start_EndorserMode_NoCandidates_SeedsPoolWithLocalNode(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).
-		NodeName("localNode").
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-			CoordinatorEndorserCandidates: []string{},
-		})
-	o, _ := builder.Build()
-	require.NoError(t, o.Start(ctx))
-	defer func() {
-		cancel()
-		o.WaitForDone(t.Context())
-	}()
-	// Pool must never be empty; always contains at least the local node.
-	assert.Equal(t, []string{"localNode"}, o.coordinatorPriorityList)
-}
-
-func TestOriginator_Start_EndorserMode_InvalidCandidate_ReturnsError(t *testing.T) {
-	ctx := t.Context()
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).DomainContractConfig(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"not-a-valid-locator"},
-	})
-	o, _ := builder.Build()
-	err := o.Start(ctx)
-	require.Error(t, err)
-}
-
-func TestOriginator_Start_EndorserMode_ValidCandidates_Success(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).
-		NodeName("node1").
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
-		})
-	o, _ := builder.Build()
-	require.NoError(t, o.Start(ctx))
-	defer func() {
-		cancel()
-		o.WaitForDone(t.Context())
-	}()
-	assert.True(t, o.started)
-	// Candidates node1 and node2 deduped/sorted; local node (node1) is already in the pool.
-	assert.Equal(t, []string{"node1", "node2"}, o.coordinatorPriorityList)
-}
-
-func TestOriginator_Start_SenderMode_Success(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	builder := NewOriginatorBuilderForTesting(t, State_Idle).
-		NodeName("senderNode").
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-		})
-	o, _ := builder.Build()
-	require.NoError(t, o.Start(ctx))
-	defer func() {
-		cancel()
-		o.WaitForDone(t.Context())
-	}()
-	assert.True(t, o.started)
-	// SENDER mode sets currentActiveCoordinator to nodeName.
-	assert.Equal(t, "senderNode", o.currentActiveCoordinator)
-}

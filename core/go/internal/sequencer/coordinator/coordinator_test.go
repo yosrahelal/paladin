@@ -35,7 +35,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 )
 
 func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
@@ -474,93 +473,6 @@ func TestCoordinator_GetTransactionsNotInStates_EmptyStatesFilter_ReturnsAll(t *
 	require.Len(t, result, 1)
 	result = c.getTransactionsNotInStates(t.Context(), []transaction.State{})
 	require.Len(t, result, 1)
-}
-
-func TestCoordinator_NewCoordinator_EndorserMode_NoConfiguredCandidates_SeedsPoolWithLocalNode(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle).NodeName("localNode")
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-	})
-	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
-	require.NoError(t, c.Start(ctx))
-	defer func() {
-		cancel()
-		c.WaitForDone(t.Context())
-	}()
-	// Pool must never be empty; always contains at least the local node.
-	assert.Equal(t, []string{"localNode"}, c.nodePool)
-}
-
-func TestCoordinator_NewCoordinator_StaticMode_EmptyStaticCoordinator_Fails(t *testing.T) {
-	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
-		StaticCoordinator:    proto.String(""),
-	})
-	c, _ := builder.Build()
-	assert.Error(t, c.Start(ctx))
-}
-
-func TestCoordinator_NewCoordinator_StaticMode_InvalidIdentity_Fails(t *testing.T) {
-	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
-		StaticCoordinator:    proto.String("identity"), // no @node
-	})
-	c, _ := builder.Build()
-	assert.Error(t, c.Start(ctx))
-}
-
-func TestCoordinator_NewCoordinator_StaticMode_ValidStaticCoordinator_StoresNodeName(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
-		StaticCoordinator:    proto.String("identity@nodeA"),
-	})
-	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
-	ctx, cancel := context.WithCancel(t.Context())
-	require.NoError(t, c.Start(ctx))
-	defer func() {
-		cancel()
-		c.WaitForDone(t.Context())
-	}()
-	assert.Equal(t, "nodeA", c.currentActiveCoordinator)
-}
-
-func TestCoordinator_NewCoordinator_EndorserMode_FailsOnInvalidConfiguredCandidate(t *testing.T) {
-	ctx := t.Context()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"endorser1"},
-	})
-	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
-	assert.Error(t, c.Start(ctx))
-}
-
-func TestCoordinator_NewCoordinator_EndorserMode_InitializesPoolFromConfiguredCandidates(t *testing.T) {
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"endorser1@nodeB", "endorser2@nodeA", "endorser3@nodeB"},
-	})
-	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
-	ctx, cancel := context.WithCancel(t.Context())
-	require.NoError(t, c.Start(ctx))
-	defer func() {
-		cancel()
-		c.WaitForDone(t.Context())
-	}()
-	defer cancel()
-	// Pool contains deduped/sorted candidate nodes plus the local node ("node1" is the builder default).
-	assert.Equal(t, []string{"node1", "nodeA", "nodeB"}, c.nodePool)
 }
 
 func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {

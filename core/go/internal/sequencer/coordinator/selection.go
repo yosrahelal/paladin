@@ -26,7 +26,7 @@ import (
 // block height and epoch. It stores the result on the coordinator and pushes it to the co-located
 // originator via the notifyOriginator callback.
 func action_CalculateCoordinatorPriorities(ctx context.Context, c *coordinator, _ common.Event) error {
-	if c.domainAPI.ContractConfig().GetCoordinatorSelection() != prototk.ContractConfig_COORDINATOR_ENDORSER {
+	if c.coordinatorSelection != prototk.ContractConfig_COORDINATOR_ENDORSER {
 		// For STATIC and SENDER modes, the coordinator is set once at Start time and never changes.
 		return nil
 	}

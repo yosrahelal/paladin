@@ -89,7 +89,7 @@ func TestGetSnapshot_IncludesCoordinatorStateAndBlockHeight(t *testing.T) {
 func TestSendHeartbeat_Success(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
-		OriginatorNodePool("node1", "node2", "node3").
+		NodePool("node1", "node2", "node3").
 		Build()
 
 	err := c.sendHeartbeat(ctx, c.contractAddress)
@@ -100,7 +100,7 @@ func TestSendHeartbeat_Success(t *testing.T) {
 func TestSendHeartbeat_IncludesCurrentNode(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
-		OriginatorNodePool("node1").
+		NodePool("node1").
 		Build()
 
 	err := c.sendHeartbeat(ctx, c.contractAddress)
@@ -112,7 +112,7 @@ func TestSendHeartbeat_IncludesCurrentNode(t *testing.T) {
 func TestSendHeartbeat_HandlesError(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
-		OriginatorNodePool("node1", "node2").
+		NodePool("node1", "node2").
 		WithMockTransportWriter().
 		Build()
 	mocks.TransportWriter.EXPECT().SendHeartbeat(mock.Anything, "node1", mock.Anything, mock.Anything).
@@ -129,7 +129,7 @@ func TestSendHeartbeat_HandlesError(t *testing.T) {
 func TestAction_SendHeartbeat(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
-		OriginatorNodePool("node1", "node2").
+		NodePool("node1", "node2").
 		Build()
 
 	err := action_SendHeartbeat(ctx, c, nil)
@@ -174,7 +174,7 @@ func TestSendHeartbeat_ExportStatesAndLocksError_ReturnsError(t *testing.T) {
 
 	// Closing_Flush state means includeLocks=true, which causes ExportStatesAndLocks to be called.
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
-		OriginatorNodePool("node1").
+		NodePool("node1").
 		Grapher(mockGrapher).
 		Build()
 

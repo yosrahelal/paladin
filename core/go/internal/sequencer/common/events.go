@@ -24,17 +24,12 @@ import (
 
 type EventType int
 
-// function that can be used to emit events from the internals of the sequencer to feed back into the state machine
-type EmitEvent func(event Event)
-
 const (
-	Event_HeartbeatInterval          EventType = iota // emitted on a regular basis, interval defined by the sequencer config
-	Event_TransactionStateTransition                  // transaction state machine transition; originator/coordinator handle cleanup and side effects
-	Event_NewBlock                                    // a new block has been confirmed on the base ledger
-	Event_HeartbeatReceived                           // a heartbeat notification was received from the active coordinator
-	Event_CoordinatorPriorityListUpdated              // pushed by the coordinator to its co-located originator after recalculating the priority list
-	Event_DelegationRejected                          // pushed by transport_client to the originator when a delegation acknowledgement indicates rejection
-	Event_HandoverRequest                             // pushed by transport_client to the coordinator when a CoordinatorHandoverRequest message is received
+	Event_HeartbeatInterval              EventType = iota // emitted on a regular basis, interval defined by the sequencer config
+	Event_TransactionStateTransition                      // transaction state machine transition; originator/coordinator handle cleanup and side effects
+	Event_NewBlock                                        // a new block has been confirmed on the base ledger
+	Event_HeartbeatReceived                               // a heartbeat notification was received from the active coordinator
+	Event_CoordinatorPriorityListUpdated                  // pushed by the coordinator to its co-located originator after recalculating the priority list
 )
 
 type BaseEvent struct {
@@ -122,37 +117,4 @@ func (*CoordinatorPriorityListUpdatedEvent) Type() EventType {
 
 func (*CoordinatorPriorityListUpdatedEvent) TypeString() string {
 	return "Event_CoordinatorPriorityListUpdated"
-}
-
-// DelegationRejectedEvent is queued by the transport client to the originator when a
-// DelegationRequestAcknowledgment arrives with Accepted == false. It carries the name of the
-// coordinator that the rejecting node believes is currently active so the originator can
-// fast-redirect to a higher-priority coordinator.
-type DelegationRejectedEvent struct {
-	BaseEvent
-	ActiveCoordinator string
-}
-
-func (*DelegationRejectedEvent) Type() EventType {
-	return Event_DelegationRejected
-}
-
-func (*DelegationRejectedEvent) TypeString() string {
-	return "Event_DelegationRejected"
-}
-
-// HandoverRequestEvent is queued by the transport client to the coordinator when a
-// CoordinatorHandoverRequest message is received from a higher-priority node. The coordinator
-// in Active state handles it identically to a preemption heartbeat.
-type HandoverRequestEvent struct {
-	BaseEvent
-	FromNode string
-}
-
-func (*HandoverRequestEvent) Type() EventType {
-	return Event_HandoverRequest
-}
-
-func (*HandoverRequestEvent) TypeString() string {
-	return "Event_HandoverRequest"
 }

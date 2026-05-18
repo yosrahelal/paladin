@@ -209,7 +209,7 @@ func action_UpdateActiveCoordinatorFromHeartbeat(_ context.Context, o *originato
 // action_HandleDelegationRejected processes a rejection from a coordinator. If the rejection names
 // a coordinator that has higher priority than our current one, we redirect to it
 func action_HandleDelegationRejected(_ context.Context, o *originator, event common.Event) error {
-	e := event.(*common.DelegationRejectedEvent)
+	e := event.(*DelegationRejectedEvent)
 	if e.ActiveCoordinator == "" {
 		return nil
 	}

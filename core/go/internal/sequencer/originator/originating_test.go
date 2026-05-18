@@ -24,7 +24,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
@@ -92,7 +91,7 @@ func Test_action_HandleDelegationRejected_HigherPriorityCoordinator_Redirects(t 
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 
-	err := action_HandleDelegationRejected(ctx, o, &common.DelegationRejectedEvent{
+	err := action_HandleDelegationRejected(ctx, o, &DelegationRejectedEvent{
 		ActiveCoordinator: "node1",
 	})
 	require.NoError(t, err)
@@ -108,7 +107,7 @@ func Test_action_HandleDelegationRejected_LowerPriorityCoordinator_NoChange(t *t
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 
-	err := action_HandleDelegationRejected(ctx, o, &common.DelegationRejectedEvent{
+	err := action_HandleDelegationRejected(ctx, o, &DelegationRejectedEvent{
 		ActiveCoordinator: "node3",
 	})
 	require.NoError(t, err)
@@ -122,7 +121,7 @@ func Test_action_HandleDelegationRejected_NoActiveCoordinator_NoChange(t *testin
 		CurrentActiveCoordinator("node1").
 		Build()
 
-	err := action_HandleDelegationRejected(ctx, o, &common.DelegationRejectedEvent{
+	err := action_HandleDelegationRejected(ctx, o, &DelegationRejectedEvent{
 		ActiveCoordinator: "",
 	})
 	require.NoError(t, err)
@@ -428,10 +427,6 @@ func Test_action_UpdateCoordinatorPriorityList_EndorserMode_UpdatesListOnly_Coor
 	// only a live heartbeat or a delegation rejection can redirect the originator.
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
-		DomainContractConfig(&prototk.ContractConfig{
-			CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-			CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
-		}).
 		CoordinatorPriorityList("node1", "node2").
 		CurrentActiveCoordinator("node2").
 		Build()

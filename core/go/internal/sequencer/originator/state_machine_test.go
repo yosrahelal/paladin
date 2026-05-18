@@ -628,7 +628,7 @@ func TestStateMachine_Sending_DelegationRejected_HigherPriority_RedirectsAndRede
 		SendDelegationRequest(mock.Anything, "node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
 
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.DelegationRejectedEvent{
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &DelegationRejectedEvent{
 		ActiveCoordinator: "node1",
 	}))
 
@@ -644,7 +644,7 @@ func TestStateMachine_Sending_DelegationRejected_LowerPriority_NoChange(t *testi
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.DelegationRejectedEvent{
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &DelegationRejectedEvent{
 		ActiveCoordinator: "node3",
 	}))
 

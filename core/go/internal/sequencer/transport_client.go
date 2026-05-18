@@ -26,6 +26,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator"
 	coordTransaction "github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator"
 	originatorTransaction "github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
 	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
@@ -423,7 +424,7 @@ func (sMgr *sequencerManager) handleDelegationRequestAcknowledgment(ctx context.
 			log.L(ctx).Debugf("ignoring delegation rejection for contract %s as sequencer is not loaded: %v", contractAddress, err)
 			return
 		}
-		rejectedEvent := &common.DelegationRejectedEvent{}
+		rejectedEvent := &originator.DelegationRejectedEvent{}
 		rejectedEvent.ActiveCoordinator = delegationRequestAcknowledgment.ActiveCoordinator
 		rejectedEvent.EventTime = time.Now()
 		seq.GetOriginator().QueueEvent(ctx, rejectedEvent)
@@ -473,8 +474,8 @@ func (sMgr *sequencerManager) handleHandoverRequest(ctx context.Context, message
 		return
 	}
 
-	handoverEvent := &common.HandoverRequestEvent{}
-	handoverEvent.FromNode = handoverRequest.FromNode
+	handoverEvent := &coordinator.HandoverRequestEvent{}
+	handoverEvent.From = handoverRequest.FromNode
 	handoverEvent.EventTime = time.Now()
 	seq.GetCoordinator().QueueEvent(ctx, handoverEvent)
 }

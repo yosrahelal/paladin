@@ -21,8 +21,75 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
+	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
+
+// CoordinatorSelectionConfig holds validated coordinator selection configuration resolved
+// from the domain's ContractConfig before the originator and coordinator are constructed.
+// Each component derives its own currentActiveCoordinator from Mode plus these values and
+// its own nodeName — this struct is a validated data bag, not a pre-resolved answer.
+type CoordinatorSelectionConfig struct {
+	Mode              prototk.ContractConfig_CoordinatorSelection
+	StaticCoordinator string   // STATIC: validated node name extracted from the locator
+	Endorsers         []string // ENDORSER: deduped+sorted candidate nodes + local node; always non-empty
+}
+
+// ResolveCoordinatorSelectionConfig validates the coordinator selection configuration from
+// the domain ContractConfig and returns a CoordinatorSelectionConfig ready to be passed to
+// NewOriginator and NewCoordinator. It must be called before creating either component.
+func ResolveCoordinatorSelectionConfig(
+	ctx context.Context,
+	nodeName string,
+	contractAddress *pldtypes.EthAddress,
+	contractConfig *prototk.ContractConfig,
+) (*CoordinatorSelectionConfig, error) {
+	cfg := &CoordinatorSelectionConfig{
+		Mode: contractConfig.GetCoordinatorSelection(),
+	}
+
+	switch cfg.Mode {
+	case prototk.ContractConfig_COORDINATOR_STATIC:
+		staticCoordinator := contractConfig.GetStaticCoordinator()
+		if staticCoordinator == "" {
+			return nil, i18n.NewError(ctx, msgs.MsgSequencerStaticCoordinatorNotSet, contractAddress.String())
+		}
+		node, err := pldtypes.PrivateIdentityLocator(staticCoordinator).Node(ctx, false)
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidStaticCoordinator, contractAddress.String(), staticCoordinator)
+		}
+		cfg.StaticCoordinator = node
+		log.L(ctx).Debugf("static coordinator node for contract %s validated and set: %s", contractAddress.String(), node)
+
+	case prototk.ContractConfig_COORDINATOR_SENDER:
+		log.L(ctx).Debugf("coordinator selection is SENDER mode for contract %s", contractAddress.String())
+
+	case prototk.ContractConfig_COORDINATOR_ENDORSER:
+		candidates := contractConfig.GetCoordinatorEndorserCandidates()
+		if len(candidates) == 0 {
+			log.L(ctx).Warnf("no coordinator endorser candidates configured for contract %s; defaulting to local node: %s", contractAddress.String(), nodeName)
+			cfg.Endorsers = []string{nodeName}
+			return cfg, nil
+		}
+		nodes := make([]string, 0, len(candidates)+1)
+		for _, locator := range candidates {
+			_, node, err := pldtypes.PrivateIdentityLocator(locator).Validate(ctx, "", false)
+			if err != nil {
+				return nil, i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidEndorserCandidate, locator)
+			}
+			nodes = append(nodes, node)
+		}
+		// Always include the local node so the list is never empty.
+		nodes = append(nodes, nodeName)
+		cfg.Endorsers = DedupeSortedCoordinatorEndorserNodes(nodes)
+		log.L(ctx).Debugf("resolved coordinator endorsers for contract %s: %+v", contractAddress.String(), cfg.Endorsers)
+	}
+
+	return cfg, nil
+}
 
 // DedupeSortedCoordinatorEndorserNodes sorts node names in place and removes duplicate entries
 // (adjacent after sort). Use this when building the endorser pool so hash-modulus selection

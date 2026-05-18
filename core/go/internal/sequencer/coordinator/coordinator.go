@@ -23,7 +23,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
@@ -35,7 +34,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 
-	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 )
@@ -106,6 +104,7 @@ type coordinator struct {
 	coordinatorSelectionBlockRange uint64
 	maxInflightTransactions        int
 	maxDispatchAhead               int
+	coordinatorSelection           prototk.ContractConfig_CoordinatorSelection
 
 	/* Dependencies */
 	domainAPI             components.DomainSmartContract
@@ -143,6 +142,7 @@ func NewCoordinator(
 	nodeName string,
 	metrics metrics.DistributedSequencerMetrics,
 	notifyOriginator func(ctx context.Context, event common.Event),
+	selectionConfig *common.CoordinatorSelectionConfig,
 ) *coordinator {
 	dependencyTracker := dependencytracker.NewDependencyTracker()
 	c := &coordinator{
@@ -180,6 +180,17 @@ func NewCoordinator(
 	c.maxInflightTransactions = confutil.IntMin(configuration.MaxInflightTransactions, pldconf.SequencerMinimum.MaxInflightTransactions, *pldconf.SequencerDefaults.MaxInflightTransactions)
 	c.coordinatorSelectionBlockRange = confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange)
 
+	// Initialize coordinator selection state from pre-resolved config.
+	c.coordinatorSelection = selectionConfig.Mode
+	switch selectionConfig.Mode {
+	case prototk.ContractConfig_COORDINATOR_STATIC:
+		c.currentActiveCoordinator = selectionConfig.StaticCoordinator
+	case prototk.ContractConfig_COORDINATOR_SENDER:
+		c.currentActiveCoordinator = nodeName
+	case prototk.ContractConfig_COORDINATOR_ENDORSER:
+		c.nodePool = selectionConfig.Endorsers
+	}
+
 	// Initialize the state machine event loop (state machine + event loop combined)
 	c.initializeStateMachineEventLoop(State_Initial, coordinatorEventQueueSize, coordinatorPriorityEventQueueSize)
 
@@ -197,10 +208,6 @@ func (c *coordinator) Start(ctx context.Context) error {
 	}
 	coordCtx := log.WithLogField(ctx, "role", "coordinator")
 	c.ctx = coordCtx
-
-	if err := c.initializeFromContractConfig(coordCtx); err != nil {
-		return err
-	}
 
 	blockHeight, err := c.engineIntegration.GetBlockHeight(ctx)
 	if err != nil {
@@ -253,40 +260,6 @@ func (c *coordinator) WaitForDone(ctx context.Context) {
 	}
 	c.stateMachineEventLoop.WaitForDone(ctx)
 	c.transportWriter.WaitForDone(ctx)
-}
-
-func (c *coordinator) initializeFromContractConfig(ctx context.Context) error {
-	switch c.domainAPI.ContractConfig().GetCoordinatorSelection() {
-	case prototk.ContractConfig_COORDINATOR_STATIC:
-		staticCoordinator := c.domainAPI.ContractConfig().GetStaticCoordinator()
-		if staticCoordinator == "" {
-			return i18n.NewError(ctx, msgs.MsgSequencerStaticCoordinatorNotSet, c.contractAddress.String())
-		}
-		node, err := pldtypes.PrivateIdentityLocator(staticCoordinator).Node(ctx, false)
-		if err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidStaticCoordinator, c.contractAddress.String(), staticCoordinator)
-		}
-		c.currentActiveCoordinator = node
-		log.L(ctx).Debugf("static coordinator node for contract %s validated and set: %s", c.contractAddress.String(), node)
-	case prototk.ContractConfig_COORDINATOR_SENDER:
-		c.currentActiveCoordinator = c.nodeName
-		log.L(ctx).Debugf("coordinator selection is SENDER mode; active coordinator set to self: %s", c.nodeName)
-	case prototk.ContractConfig_COORDINATOR_ENDORSER:
-		candidates := c.domainAPI.ContractConfig().GetCoordinatorEndorserCandidates()
-		nodes := make([]string, 0, len(candidates)+1)
-		for _, locator := range candidates {
-			_, node, err := pldtypes.PrivateIdentityLocator(locator).Validate(ctx, "", false)
-			if err != nil {
-				return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidEndorserCandidate, locator)
-			}
-			nodes = append(nodes, node)
-		}
-		// Always include the local node so the pool is never empty.
-		nodes = append(nodes, c.nodeName)
-		c.nodePool = common.DedupeSortedCoordinatorEndorserNodes(nodes)
-		log.L(ctx).Debugf("initialized node pool (COORDINATOR_ENDORSER): %+v", c.nodePool)
-	}
-	return nil
 }
 
 func (c *coordinator) propagateEventToTransaction(ctx context.Context, event transaction.Event) error {

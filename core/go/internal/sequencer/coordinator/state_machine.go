@@ -48,6 +48,7 @@ const (
 	Event_TransactionsDelegated
 	Event_RequestTimeoutInterval
 	Event_StateTimeoutInterval
+	Event_HandoverRequest // pushed by transport_client when a CoordinatorHandoverRequest message is received from a higher-priority node
 )
 
 // Type aliases for the generic statemachine types, specialized for coordinator
@@ -231,7 +232,7 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
-		common.Event_HandoverRequest: {
+		Event_HandoverRequest: {
 			Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
 			Actions: []ActionRule{
 				{Action: action_UpdateActiveCoordinator},
@@ -356,7 +357,7 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
-		common.Event_HandoverRequest: {
+		Event_HandoverRequest: {
 			Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
 			Actions: []ActionRule{
 				{Action: action_UpdateActiveCoordinator},
@@ -434,7 +435,7 @@ State_Active: {
 					},
 				}},
 			},
-			common.Event_HandoverRequest: {
+			Event_HandoverRequest: {
 				// A higher-priority node has explicitly requested we step down; treat identically to a preemption heartbeat.
 				// The difference is that the other node will watch our flush and take over gracefully
 				Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
@@ -560,7 +561,7 @@ State_Active: {
 					},
 				}},
 			},
-			common.Event_HandoverRequest: {
+			Event_HandoverRequest: {
 				// A higher-priority node has explicitly requested we step down; treat identically to a preemption heartbeat.
 				// The difference is that the other node will watch our flush and take over gracefully
 				Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,

@@ -74,3 +74,16 @@ func (*StateTimeoutIntervalEvent) Type() EventType { return Event_StateTimeoutIn
 func (*StateTimeoutIntervalEvent) TypeString() string {
 	return "Event_StateTimeoutInterval"
 }
+
+// HandoverRequestEvent is queued by the transport client to the coordinator when a
+// CoordinatorHandoverRequest message is received from a higher-priority node. The coordinator
+// in Active state handles it identically to a preemption heartbeat.
+type HandoverRequestEvent struct {
+	common.BaseEvent
+	From string
+}
+
+func (*HandoverRequestEvent) Type() EventType { return Event_HandoverRequest }
+func (*HandoverRequestEvent) TypeString() string {
+	return "Event_HandoverRequest"
+}

@@ -193,6 +193,13 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				domainContext:   dCtx,
 			}
 
+			selectionConfig, err := common.ResolveCoordinatorSelectionConfig(seqCtx, sMgr.nodeName, &contractAddr, domainAPI.ContractConfig())
+			if err != nil {
+				cancelCtx()
+				log.L(ctx).Errorf("failed to resolve coordinator selection config for contract %s: %s", contractAddr.String(), err)
+				return nil, err
+			}
+
 			seqOriginator := originator.NewOriginator(
 				sMgr.nodeName,
 				transportWriter,
@@ -200,7 +207,7 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				&contractAddr,
 				sMgr.config,
 				sMgr.metrics,
-				domainAPI,
+				selectionConfig,
 			)
 			if err := seqOriginator.Start(seqCtx); err != nil {
 				cancelCtx()
@@ -226,6 +233,7 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 				func(ctx context.Context, event common.Event) {
 					seqOriginator.QueueEvent(ctx, event)
 				},
+				selectionConfig,
 			)
 			if err := seqCoordinator.Start(seqCtx); err != nil {
 				cancelCtx()

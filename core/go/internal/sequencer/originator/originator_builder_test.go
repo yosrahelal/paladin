@@ -27,11 +27,9 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
-	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/mock"
 )
@@ -49,7 +47,6 @@ type OriginatorBuilderForTesting struct {
 	contractAddress                    *pldtypes.EthAddress
 	metrics                            metrics.DistributedSequencerMetrics
 	sequencerConfig                    *pldconf.SequencerConfig
-	contractConfig                     *prototk.ContractConfig
 	blockRangeSize                     *uint64
 	currentBlockHeight                 *uint64
 	coordinatorPriorityList            []string
@@ -63,7 +60,6 @@ type OriginatorBuilderForTesting struct {
 type OriginatorDependencyMocks struct {
 	SentMessageRecorder *testutil.SentMessageRecorder
 	EngineIntegration   *sequencercommonmocks.EngineIntegration
-	DomainAPI           *componentsmocks.DomainSmartContract
 	TransportWriter     *sequencertransportmocks.TransportWriter
 }
 
@@ -119,11 +115,6 @@ func (b *OriginatorBuilderForTesting) CurrentBlockHeight(n uint64) *OriginatorBu
 
 func (b *OriginatorBuilderForTesting) CoordinatorPriorityList(nodes ...string) *OriginatorBuilderForTesting {
 	b.coordinatorPriorityList = common.DedupeSortedCoordinatorEndorserNodes(append([]string(nil), nodes...))
-	return b
-}
-
-func (b *OriginatorBuilderForTesting) DomainContractConfig(cfg *prototk.ContractConfig) *OriginatorBuilderForTesting {
-	b.contractConfig = cfg
 	return b
 }
 
@@ -185,15 +176,6 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		mocks.TransportWriter = sequencertransportmocks.NewTransportWriter(b.t)
 	}
 
-	domainAPI := &componentsmocks.DomainSmartContract{}
-	if b.contractConfig != nil {
-		domainAPI.On("ContractConfig").Return(b.contractConfig).Maybe()
-	} else {
-		domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-		}).Maybe()
-	}
-
 	seqConfig := b.sequencerConfig
 	if seqConfig == nil {
 		seqConfig = &pldconf.SequencerDefaults
@@ -211,7 +193,7 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		b.contractAddress,
 		seqConfig,
 		b.metrics,
-		domainAPI,
+		&common.CoordinatorSelectionConfig{},
 	)
 
 	for _, tx := range b.transactions {
@@ -227,7 +209,7 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 
 	if b.currentActiveCoordinator != nil {
 		originator.currentActiveCoordinator = *b.currentActiveCoordinator
-	} else {
+	} else if originator.currentActiveCoordinator == "" {
 		originator.currentActiveCoordinator = "coordinator"
 	}
 	if b.blockRangeSize != nil {
@@ -246,6 +228,5 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		originator.inactiveGracePeriod = *b.inactiveGracePeriod
 	}
 
-	mocks.DomainAPI = domainAPI
 	return originator, mocks
 }

@@ -45,7 +45,7 @@ type CoordinatorBuilderForTesting struct {
 	txManager                                *componentsmocks.TXManager
 	sequencerManager                         *componentsmocks.SequencerManager
 	contractAddress                          *pldtypes.EthAddress
-	contractConfig                           *prototk.ContractConfig
+	coordinatorSelectionMode                 *prototk.ContractConfig_CoordinatorSelection
 	currentBlockHeight                       *uint64
 	transactions                             []transaction.CoordinatorTransaction
 	pooledTransactions                       []transaction.CoordinatorTransaction
@@ -217,13 +217,9 @@ func (b *CoordinatorBuilderForTesting) NodePool(nodes ...string) *CoordinatorBui
 	return b
 }
 
-// OriginatorNodePool is an alias for NodePool, kept for call-site compatibility in tests.
-func (b *CoordinatorBuilderForTesting) OriginatorNodePool(nodes ...string) *CoordinatorBuilderForTesting {
-	return b.NodePool(nodes...)
-}
 
-func (b *CoordinatorBuilderForTesting) DomainContractConfig(cfg *prototk.ContractConfig) *CoordinatorBuilderForTesting {
-	b.contractConfig = cfg
+func (b *CoordinatorBuilderForTesting) CoordinatorSelectionMode(mode prototk.ContractConfig_CoordinatorSelection) *CoordinatorBuilderForTesting {
+	b.coordinatorSelectionMode = &mode
 	return b
 }
 
@@ -311,14 +307,6 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		mocks.TransportWriter = mockTransportWriter
 	}
 
-	if b.contractConfig != nil {
-		b.domainAPI.On("ContractConfig").Return(b.contractConfig).Maybe()
-	} else {
-		b.domainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
-			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-		}).Maybe()
-	}
-
 	allComponents := componentsmocks.NewAllComponents(b.t)
 	mp, err := mockpersistence.NewSQLMockProvider()
 	if err != nil {
@@ -350,7 +338,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	}
 
 	coordinator := NewCoordinator(
-		b.contractAddress, // Contract address,
+		b.contractAddress,
 		b.domainAPI,
 		nil,
 		allComponents,
@@ -364,7 +352,12 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		localNode,
 		b.metrics,
 		func(_ context.Context, _ common.Event) {}, // no-op notifyOriginator; tests that need it wire c.notifyOriginator directly
+		&common.CoordinatorSelectionConfig{},
 	)
+
+	if b.coordinatorSelectionMode != nil {
+		coordinator.coordinatorSelection = *b.coordinatorSelectionMode
+	}
 
 	// Loops are not started yet — set state and seed transactions directly.
 	for _, tx := range b.transactions {

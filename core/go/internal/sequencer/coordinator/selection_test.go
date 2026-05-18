@@ -19,39 +19,20 @@ import (
 	"context"
 	"testing"
 
-	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 )
-
-func Test_initializeActiveCoordinatorFromContractConfig_StaticMode_SetsActiveCoordinatorNode(t *testing.T) {
-	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
-		StaticCoordinator:    proto.String("identity@node1"),
-	})
-	c, _ := builder.Build()
-	require.NoError(t, c.initializeFromContractConfig(ctx))
-
-	assert.Equal(t, "node1", c.currentActiveCoordinator)
-}
 
 func Test_action_CalculateCoordinatorPriorities_SingleNodeInPool_ReturnsNode(t *testing.T) {
 	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"id@node1"},
-	})
-	config := builder.GetSequencerConfig()
-	config.BlockRange = confutil.P(uint64(100))
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.CurrentBlockHeight(1000).Build()
-	require.NoError(t, c.initializeFromContractConfig(ctx))
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodePool("node1").
+		CoordinatorSelectionBlockRange(100).
+		CurrentBlockHeight(1000).
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
 
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
@@ -59,16 +40,12 @@ func Test_action_CalculateCoordinatorPriorities_SingleNodeInPool_ReturnsNode(t *
 
 func Test_action_CalculateCoordinatorPriorities_MultipleNodesInPool_ReturnsOneOfPool(t *testing.T) {
 	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2", "id@node3"},
-	})
-	config := builder.GetSequencerConfig()
-	config.BlockRange = confutil.P(uint64(100))
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.CurrentBlockHeight(1000).Build()
-	require.NoError(t, c.initializeFromContractConfig(ctx))
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodePool("node1", "node2", "node3").
+		CoordinatorSelectionBlockRange(100).
+		CurrentBlockHeight(1000).
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
 
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
 	assert.Contains(t, []string{"node1", "node2", "node3"}, c.currentActiveCoordinator)
@@ -76,16 +53,11 @@ func Test_action_CalculateCoordinatorPriorities_MultipleNodesInPool_ReturnsOneOf
 
 func Test_action_CalculateCoordinatorPriorities_BlockHeightRounding_SameRangeSameCoordinator(t *testing.T) {
 	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2", "id@node3"},
-	})
-	config := builder.GetSequencerConfig()
-	config.BlockRange = confutil.P(uint64(100))
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
-	require.NoError(t, c.initializeFromContractConfig(ctx))
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodePool("node1", "node2", "node3").
+		CoordinatorSelectionBlockRange(100).
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1000}))
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
@@ -109,16 +81,11 @@ func Test_action_CalculateCoordinatorPriorities_BlockHeightRounding_SameRangeSam
 
 func Test_action_CalculateCoordinatorPriorities_DifferentBlockRanges_CanSelectDifferentCoordinators(t *testing.T) {
 	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection:          prototk.ContractConfig_COORDINATOR_ENDORSER,
-		CoordinatorEndorserCandidates: []string{"id@node1", "id@node2"},
-	})
-	config := builder.GetSequencerConfig()
-	config.BlockRange = confutil.P(uint64(50))
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
-	require.NoError(t, c.initializeFromContractConfig(ctx))
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodePool("node1", "node2").
+		CoordinatorSelectionBlockRange(50).
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
 
 	require.NoError(t, action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 100}))
 	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
@@ -132,22 +99,23 @@ func Test_action_CalculateCoordinatorPriorities_DifferentBlockRanges_CanSelectDi
 	assert.Contains(t, []string{"node1", "node2"}, coordinatorNode2)
 }
 
-func Test_initializeActiveCoordinatorFromContractConfig_SenderMode_SetsActiveCoordinatorToSelf(t *testing.T) {
+func Test_action_CalculateCoordinatorPriorities_SenderMode_NoOp(t *testing.T) {
 	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-	})
-	c, _ := builder.Build()
+	// In SENDER mode the coordinatorSelection field is COORDINATOR_SENDER, so
+	// action_CalculateCoordinatorPriorities should be a no-op and leave currentActiveCoordinator
+	// unchanged.
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		CurrentActiveCoordinator("node1").
+		Build()
+	// Default builder uses SENDER mode; currentActiveCoordinator is pre-set above.
 
-	require.NoError(t, c.initializeFromContractConfig(ctx))
+	require.NoError(t, action_CalculateCoordinatorPriorities(ctx, c, nil))
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
 func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
 	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.Build()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 
 	err := action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1000})
 	require.NoError(t, err)

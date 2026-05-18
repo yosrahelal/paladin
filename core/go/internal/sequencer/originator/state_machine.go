@@ -40,6 +40,7 @@ const (
 const (
 	Event_OriginatorCreated  EventType = iota + 300 // fired once by Start to drive the initial coordinator selection
 	Event_TransactionCreated                        // a new transaction has been created and is ready to be sent to the coordinator TODO maybe name something like Intent created?
+	Event_DelegationRejected                        // pushed by transport_client when a DelegationRequestAcknowledgment arrives with Accepted == false
 )
 
 // Type aliases for the generic statemachine types, specialized for originator
@@ -216,7 +217,7 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			},
-			common.Event_DelegationRejected: {
+			Event_DelegationRejected: {
 				Actions: []ActionRule{
 					{Action: action_HandleDelegationRejected},
 					// We always redelegate after a rejection, regardless of whether the current active coordinator has changed

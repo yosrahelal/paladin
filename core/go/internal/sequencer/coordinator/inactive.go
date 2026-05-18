@@ -42,8 +42,8 @@ func validator_IsHeartbeatFromHigherPriorityCoordinator(_ context.Context, c *co
 // validator_IsHandoverRequestFromHigherPriorityCoordinator returns true when a HandoverRequest is from
 // a node that has strictly higher priority (lower index) than this node.
 func validator_IsHandoverRequestFromHigherPriorityCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
-	e := event.(*common.HandoverRequestEvent)
-	return common.IsHigherPriority(c.coordinatorPriorityList, e.FromNode, c.nodeName), nil
+	e := event.(*HandoverRequestEvent)
+	return common.IsHigherPriority(c.coordinatorPriorityList, e.From, c.nodeName), nil
 }
 
 func action_RejectDelegatedTransactions(ctx context.Context, c *coordinator, event common.Event) error {
@@ -57,8 +57,8 @@ func action_UpdateActiveCoordinator(_ context.Context, c *coordinator, event com
 	switch e := event.(type) {
 	case *common.HeartbeatReceivedEvent:
 		c.currentActiveCoordinator = e.From
-	case *common.HandoverRequestEvent:
-		c.currentActiveCoordinator = e.FromNode
+	case *HandoverRequestEvent:
+		c.currentActiveCoordinator = e.From
 	}
 	return nil
 }

@@ -22,7 +22,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
@@ -31,10 +30,10 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 
-	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 )
+
 
 // Originator is the interface that consumers use to interact with the originator.
 type Originator interface {
@@ -77,7 +76,6 @@ type originator struct {
 	inactiveGracePeriod int // expressed as a multiple of heartbeat intervals
 
 	/* Dependencies */
-	domainAPI         components.DomainSmartContract
 	transportWriter   transport.TransportWriter
 	engineIntegration common.EngineIntegration
 	metrics           metrics.DistributedSequencerMetrics
@@ -90,7 +88,7 @@ func NewOriginator(
 	contractAddress *pldtypes.EthAddress,
 	configuration *pldconf.SequencerConfig,
 	metrics metrics.DistributedSequencerMetrics,
-	domainAPI components.DomainSmartContract,
+	selectionConfig *common.CoordinatorSelectionConfig,
 ) *originator {
 	o := &originator{
 		nodeName:            nodeName,
@@ -101,7 +99,18 @@ func NewOriginator(
 		engineIntegration:   engineIntegration,
 		metrics:             metrics,
 		inactiveGracePeriod: confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod),
-		domainAPI:           domainAPI,
+	}
+
+	switch selectionConfig.Mode {
+	case prototk.ContractConfig_COORDINATOR_STATIC:
+		o.currentActiveCoordinator = selectionConfig.StaticCoordinator
+	case prototk.ContractConfig_COORDINATOR_SENDER:
+		o.currentActiveCoordinator = nodeName
+	case prototk.ContractConfig_COORDINATOR_ENDORSER:
+		o.coordinatorPriorityList = selectionConfig.Endorsers
+		if len(o.coordinatorPriorityList) > 0 {
+			o.currentActiveCoordinator = o.coordinatorPriorityList[0]
+		}
 	}
 
 	originatorEventQueueSize := confutil.IntMin(configuration.OriginatorEventQueueSize, pldconf.SequencerMinimum.OriginatorEventQueueSize, *pldconf.SequencerDefaults.OriginatorEventQueueSize)
@@ -117,10 +126,6 @@ func (o *originator) Start(ctx context.Context) error {
 	}
 	o.ctx = log.WithLogField(ctx, "role", "originator")
 
-	if err := o.initializeFromContractConfig(o.ctx); err != nil {
-		return err
-	}
-
 	blockHeight, err := o.engineIntegration.GetBlockHeight(ctx)
 	if err != nil {
 		return err
@@ -133,49 +138,6 @@ func (o *originator) Start(ctx context.Context) error {
 
 	o.QueueEvent(o.ctx, &OriginatorCreatedEvent{})
 
-	return nil
-}
-
-func (o *originator) initializeFromContractConfig(ctx context.Context) error {
-	switch o.domainAPI.ContractConfig().GetCoordinatorSelection() {
-	case prototk.ContractConfig_COORDINATOR_STATIC:
-		staticCoordinator := o.domainAPI.ContractConfig().GetStaticCoordinator()
-		if staticCoordinator == "" {
-			return i18n.NewError(ctx, msgs.MsgSequencerStaticCoordinatorNotSet, o.contractAddress.String())
-		}
-		node, err := pldtypes.PrivateIdentityLocator(staticCoordinator).Node(ctx, false)
-		if err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidStaticCoordinator, o.contractAddress.String(), staticCoordinator)
-		}
-		o.currentActiveCoordinator = node
-		log.L(ctx).Debugf("static coordinator node for contract %s validated and set: %s", o.contractAddress.String(), node)
-	case prototk.ContractConfig_COORDINATOR_SENDER:
-		o.currentActiveCoordinator = o.nodeName
-		log.L(ctx).Debugf("coordinator selection is SENDER mode; active coordinator set to self: %s", o.nodeName)
-	case prototk.ContractConfig_COORDINATOR_ENDORSER:
-		candidates := o.domainAPI.ContractConfig().GetCoordinatorEndorserCandidates()
-		if len(candidates) == 0 {
-			log.L(ctx).Warnf("no coordinator endorser candidates configured; using local node as active coordinator: %s", o.nodeName)
-			o.coordinatorPriorityList = []string{o.nodeName}
-			o.currentActiveCoordinator = o.nodeName
-			return nil
-		}
-		nodes := make([]string, 0, len(candidates)+1)
-		for _, locator := range candidates {
-			_, node, err := pldtypes.PrivateIdentityLocator(locator).Validate(ctx, "", false)
-			if err != nil {
-				return i18n.WrapError(ctx, err, msgs.MsgSequencerInvalidEndorserCandidate, locator)
-			}
-			nodes = append(nodes, node)
-		}
-		// Always include the local node so the list is never empty.
-		nodes = append(nodes, o.nodeName)
-		o.coordinatorPriorityList = common.DedupeSortedCoordinatorEndorserNodes(nodes)
-		if len(o.coordinatorPriorityList) > 0 {
-			o.currentActiveCoordinator = o.coordinatorPriorityList[0]
-		}
-		log.L(ctx).Debugf("initialized coordinator priority list (COORDINATOR_ENDORSER): %+v", o.coordinatorPriorityList)
-	}
 	return nil
 }
 

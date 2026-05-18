@@ -1060,7 +1060,7 @@ func Test_action_CleanUpTransactionsNotYetDispatched_RemovesNonDispatchedTransac
 
 func Test_updateNodePool_AddsNodeToEmptyPool(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.OriginatorNodePool().Build()
+	c, _ := builder.NodePool().Build()
 
 	c.updateNodePool("node2")
 
@@ -1071,7 +1071,7 @@ func Test_updateNodePool_AddsNodeToEmptyPool(t *testing.T) {
 
 func Test_updateNodePool_AddsNodeToNonEmptyPool(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.OriginatorNodePool("node1", "node3").Build()
+	c, _ := builder.NodePool("node1", "node3").Build()
 
 	c.updateNodePool("node2")
 
@@ -1083,7 +1083,7 @@ func Test_updateNodePool_AddsNodeToNonEmptyPool(t *testing.T) {
 
 func Test_updateNodePool_DoesNotAddDuplicateNode(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.OriginatorNodePool("node1", "node2").Build()
+	c, _ := builder.NodePool("node1", "node2").Build()
 
 	c.updateNodePool("node2")
 
@@ -1094,7 +1094,7 @@ func Test_updateNodePool_DoesNotAddDuplicateNode(t *testing.T) {
 
 func Test_updateNodePool_EnsuresCoordinatorsOwnNodeIsAlwaysInPool(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.OriginatorNodePool().Build()
+	c, _ := builder.NodePool().Build()
 
 	c.updateNodePool("node2")
 
@@ -1104,7 +1104,7 @@ func Test_updateNodePool_EnsuresCoordinatorsOwnNodeIsAlwaysInPool(t *testing.T) 
 
 func Test_updateNodePool_EnsuresCoordinatorsOwnNodeIsAddedEvenWhenPoolAlreadyHasOtherNodes(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.OriginatorNodePool("node2", "node3").Build()
+	c, _ := builder.NodePool("node2", "node3").Build()
 
 	c.updateNodePool("node4")
 
@@ -1114,7 +1114,7 @@ func Test_updateNodePool_EnsuresCoordinatorsOwnNodeIsAddedEvenWhenPoolAlreadyHas
 
 func Test_updateNodePool_DoesNotDuplicateCoordinatorsOwnNode(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.OriginatorNodePool("node1", "node2").Build()
+	c, _ := builder.NodePool("node1", "node2").Build()
 
 	c.updateNodePool("node1")
 
@@ -1125,7 +1125,7 @@ func Test_updateNodePool_DoesNotDuplicateCoordinatorsOwnNode(t *testing.T) {
 
 func Test_updateNodePool_HandlesMultipleSequentialUpdates(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.OriginatorNodePool().Build()
+	c, _ := builder.NodePool().Build()
 
 	c.updateNodePool("node2")
 	c.updateNodePool("node3")
@@ -1140,7 +1140,7 @@ func Test_updateNodePool_HandlesMultipleSequentialUpdates(t *testing.T) {
 
 func Test_updateNodePool_HandlesEmptyStringNode(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.OriginatorNodePool().Build()
+	c, _ := builder.NodePool().Build()
 
 	c.updateNodePool("")
 
@@ -1152,7 +1152,7 @@ func Test_updateNodePool_HandlesEmptyStringNode(t *testing.T) {
 func Test_updateNodePool_CoordinatorEndorserMode_PoolGrowsDynamically(t *testing.T) {
 	// updateNodePool no longer has a mode-specific guard; the pool grows in all modes.
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, _ := builder.NodeName("node1").OriginatorNodePool("node1").Build()
+	c, _ := builder.NodeName("node1").NodePool("node1").Build()
 
 	c.updateNodePool("node2")
 
@@ -1162,9 +1162,7 @@ func Test_updateNodePool_CoordinatorEndorserMode_PoolGrowsDynamically(t *testing
 func Test_action_CalculateCoordinatorPriorities_InvokesNotifyOriginator(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Active)
-	c, _ := builder.NodePool("node1", "node2").DomainContractConfig(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
-	}).Build()
+	c, _ := builder.NodePool("node1", "node2").CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).Build()
 
 	var received common.Event
 	c.notifyOriginator = func(_ context.Context, event common.Event) {
