@@ -44,6 +44,12 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     // Config follows the convention of a 4 byte type selector, followed by ABI encoded bytes
     bytes4 public constant NotoConfigID_V1 = 0x00020000;
 
+    // ERC-8074 type selector for the bytes returned by getLockContent.
+    // bytes4(keccak256("NotoLockContent(bytes32[] states)"))
+    string public constant NotoLockContentType = "NotoLockContent(bytes32[] states)";
+    bytes4 public constant NotoLockContentSelector =
+        bytes4(keccak256(bytes(NotoLockContentType)));
+
     uint64 public constant NotoVariant = 0x0002;
 
     bytes32 private constant UNLOCK_TYPEHASH =
@@ -257,7 +263,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     function getLockContent(
         bytes32 lockId
     ) external view override lockActive(lockId) returns (bytes memory content) {
-        return _locks[lockId].content;
+        return bytes.concat(NotoLockContentSelector, _locks[lockId].content);
     }
 
     /**
