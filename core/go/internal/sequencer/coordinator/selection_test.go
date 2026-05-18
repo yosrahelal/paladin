@@ -127,7 +127,7 @@ func Test_action_UpdateBlockHeight_NewEpoch_SetsNewBlockRangeEpochTrue(t *testin
 
 	err := action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 10})
 	require.NoError(t, err)
-	assert.True(t, c.newBlockRangeEpoch, "crossing a block range boundary should set newBlockRangeEpoch=true")
+	assert.True(t, c.onEpochBoundary, "crossing a block range boundary should set onEpochBoundary=true")
 }
 
 func Test_action_UpdateBlockHeight_SameEpoch_SetsNewBlockRangeEpochFalse(t *testing.T) {
@@ -138,19 +138,19 @@ func Test_action_UpdateBlockHeight_SameEpoch_SetsNewBlockRangeEpochFalse(t *test
 
 	err := action_UpdateBlockHeight(ctx, c, &common.NewBlockEvent{BlockHeight: 1})
 	require.NoError(t, err)
-	assert.False(t, c.newBlockRangeEpoch, "staying within the same block range should set newBlockRangeEpoch=false")
+	assert.False(t, c.onEpochBoundary, "staying within the same block range should set onEpochBoundary=false")
 }
 
-func Test_guard_IsNewBlockRangeEpoch_WhenNewEpoch_ReturnsTrue(t *testing.T) {
+func Test_guard_IsOnEpochBoundary_WhenNewEpoch_ReturnsTrue(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
-	c.newBlockRangeEpoch = true
-	assert.True(t, guard_IsNewBlockRangeEpoch(ctx, c))
+	c.onEpochBoundary = true
+	assert.True(t, guard_IsOnEpochBoundary(ctx, c))
 }
 
-func Test_guard_IsNewBlockRangeEpoch_WhenSameEpoch_ReturnsFalse(t *testing.T) {
+func Test_guard_IsOnEpochBoundary_WhenSameEpoch_ReturnsFalse(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
-	c.newBlockRangeEpoch = false
-	assert.False(t, guard_IsNewBlockRangeEpoch(ctx, c))
+	c.onEpochBoundary = false
+	assert.False(t, guard_IsOnEpochBoundary(ctx, c))
 }

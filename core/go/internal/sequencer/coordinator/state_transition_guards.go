@@ -57,13 +57,6 @@ func guard_IsCurrentActiveCoordinator(_ context.Context, c *coordinator) bool {
 	return c.nodeName == c.currentActiveCoordinator
 }
 
-// guard_SigningIdentityUsed returns true if any transaction has retrieved the signing identity
-// via the callback since the last key rotation. This determines whether a key rotation is needed
-// on an epoch boundary.
-func guard_SigningIdentityUsed(_ context.Context, c *coordinator) bool {
-	return c.signingIdentityUsed
-}
-
 // guard_InactiveGracePeriodExceeded returns true when no heartbeat has been received for at least
 // inactiveGracePeriod heartbeat intervals.
 func guard_InactiveGracePeriodExceeded(_ context.Context, c *coordinator) bool {
@@ -75,4 +68,11 @@ func guard_InactiveGracePeriodExceeded(_ context.Context, c *coordinator) bool {
 // Used in Observing and Closing when deciding whether to initiate a handover.
 func guard_IsHigherPriorityThanCurrentActive(_ context.Context, c *coordinator) bool {
 	return common.IsHigherPriority(c.coordinatorPriorityList, c.nodeName, c.currentActiveCoordinator)
+}
+
+// Guards are typically combined using the statemachine combination functions so that the state machine definition
+// can read like a spec; however, this particular check self describes better by being combined
+// into a new single guard function.
+func guard_MustFlushToRotateSigningIdentity(ctx context.Context, c *coordinator) bool {
+	return c.signingIdentity.used && guard_HasUnconfirmedDispatchedTransactions(ctx, c)
 }

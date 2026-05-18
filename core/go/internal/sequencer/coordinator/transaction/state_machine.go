@@ -659,16 +659,15 @@ var stateDefinitionsMap = StateDefinitions{
 			},
 			Event_ConfirmedSuccess: {
 				Actions: []ActionRule{
-					{Action: action_RecordConfirmation},
+					{Action: action_RecordConfirmationSuccess},
 					{Action: action_NotifyOriginatorOfConfirmation},
-					{Action: action_ConfirmTransactionInGrapher},
 				},
 				Transitions: []Transition{{To: State_Confirmed}},
 			},
 			Event_ConfirmedReverted: {
 				Actions: []ActionRule{
 					{
-						Action: action_RecordConfirmation,
+						Action: action_RecordConfirmationRevert,
 					},
 				},
 				Transitions: []Transition{

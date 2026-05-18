@@ -45,10 +45,10 @@ import (
 //   - A base-ledger confirmation has occurred so consumed states should be removed once the block height tolerance window passes
 
 // Lock lifecycle:
-//   - Transaction-owned (Transaction != nil): managed by the transaction state machine via Forget and ConfirmTransaction.
-//   - No-transaction locks (Transaction == nil, ConfirmedAtBlock set): created when ConfirmTransaction clears the
+//   - Transaction-owned (Transaction != nil): managed by the transaction state machine via ForgetTransactionAndLocks and ForgetTransaction.
+//   - No-transaction locks (Transaction == nil, ConfirmedAtBlock set): created when ForgetTransaction clears the
 //     transaction reference, or imported directly via ImportStatesAndLocks on coordinator handover.
-//     Cleaned up by CleanUpLocks when currentBlockHeight >= ConfirmedAtBlock + blockHeightTolerance.
+//     Cleaned up by ForgetLocks when currentBlockHeight >= ConfirmedAtBlock + blockHeightTolerance.
 type Grapher interface {
 	// AddMinter records that a set of states has been minted by the specified transaction.
 	// allowedNodesByState maps stateID (hex string) → nodes expected to hold that state's private data,
@@ -63,16 +63,16 @@ type Grapher interface {
 	// All locks are returned unfiltered — lock data (state IDs, types, block numbers) is on-chain metadata and
 	// does not need privacy protection.
 	ExportStatesAndLocks(ctx context.Context, node string) (ExportableStates, error)
-	// Forget fully removes a transaction and all its locks. Used for failure/reset paths (revert, repool, eviction).
+	// ForgetTransactionAndLocks fully removes a transaction and all its locks. Used for failure/reset paths (revert, repool, eviction).
 	// No-op if the transaction is not known (e.g. already confirmed).
-	Forget(ctx context.Context, transactionID uuid.UUID)
-	// ConfirmTransaction removes the transaction from the grapher's dependency tracking and minter index,
+	ForgetTransactionAndLocks(ctx context.Context, transactionID uuid.UUID)
+	// ForgetTransaction removes the transaction from the grapher's dependency tracking and minter index,
 	// and stamps confirmedAtBlock on its locks, clearing the transaction reference.
-	ConfirmTransaction(ctx context.Context, transactionID uuid.UUID, confirmedAtBlock uint64)
-	// CleanUpLocks removes locks with no transaction whose block height tolerance window has passed,
+	ForgetTransaction(ctx context.Context, transactionID uuid.UUID, confirmedAtBlock uint64)
+	// ForgetLocks removes locks with no transaction whose block height tolerance window has passed,
 	// meaning the persisted state records should have caught up and the lock is no longer needed.
 	// Should be called on every NewBlock event.
-	CleanUpLocks(ctx context.Context, currentBlockHeight uint64)
+	ForgetLocks(ctx context.Context, currentBlockHeight uint64)
 	// ImportStatesAndLocks imports states and locks from a previous coordinator on handover.
 	// OutputStates carry private state data filtered for this node; locks are imported to maintain
 	// the ahead-of-chain view. Existing entries are never overwritten — the current coordinator's
@@ -180,10 +180,10 @@ func (g *grapher) AddMinter(ctx context.Context, states []*components.FullState,
 	return nil
 }
 
-// Forget fully removes a transaction and all its locks from the grapher.
+// ForgetTransactionAndLocks fully removes a transaction and all its locks from the grapher.
 // Used for failure/reset paths: revert, repool, eviction.
 // No-op if the transaction is not known (e.g. already confirmed).
-func (g *grapher) Forget(ctx context.Context, transactionID uuid.UUID) {
+func (g *grapher) ForgetTransactionAndLocks(ctx context.Context, transactionID uuid.UUID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -197,13 +197,13 @@ func (g *grapher) Forget(ctx context.Context, transactionID uuid.UUID) {
 	delete(g.transactionByID, transactionID)
 }
 
-// ConfirmTransaction removes the transaction from all in-flight tracking (dependency chain,
+// ForgetTransaction removes the transaction from all in-flight tracking (dependency chain,
 // transactionByOutputState, outputStatesByMinter, transactionByID), stamps confirmedAtBlock on
 // its locks, and clears the transaction reference on those locks.
 // outputStatesByStateID is NOT cleared — private state data persists until the lock expires in
-// CleanUpLocks, so coordinator handover heartbeats include it within the block tolerance window.
+// ForgetLocks, so coordinator handover heartbeats include it within the block tolerance window.
 // No-op if the transaction is not known.
-func (g *grapher) ConfirmTransaction(ctx context.Context, transactionID uuid.UUID, confirmedAtBlock uint64) {
+func (g *grapher) ForgetTransaction(ctx context.Context, transactionID uuid.UUID, confirmedAtBlock uint64) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -223,23 +223,23 @@ func (g *grapher) ConfirmTransaction(ctx context.Context, transactionID uuid.UUI
 	delete(g.locksByTransaction, transactionID)
 	delete(g.transactionByID, transactionID)
 
-	log.L(ctx).Debugf("ConfirmTransaction: confirmed %d locks for tx %s at block %d", len(txLocks), transactionID, confirmedAtBlock)
+	log.L(ctx).Debugf("ForgetTransaction: confirmed %d locks for tx %s at block %d", len(txLocks), transactionID, confirmedAtBlock)
 }
 
-// CleanUpLocks removes locks with no transaction whose block height tolerance window has passed,
+// ForgetLocks removes locks with no transaction whose block height tolerance window has passed,
 // meaning the persisted state should have caught up and the lock is no longer needed.
 // Removing a create lock cascades to delete the corresponding private state data from
 // outputStatesByStateID — the create lock is the source of truth for how long private
 // state data is held.
 // Should be called on every NewBlock event.
-func (g *grapher) CleanUpLocks(ctx context.Context, currentBlockHeight uint64) {
+func (g *grapher) ForgetLocks(ctx context.Context, currentBlockHeight uint64) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	for stateID, lock := range g.locksByStateID {
 		if lock.Transaction == nil && lock.ConfirmedAtBlock != nil {
 			if currentBlockHeight >= *lock.ConfirmedAtBlock+g.blockHeightTolerance {
-				log.L(ctx).Debugf("CleanUpLocks: removing lock on state %s (confirmedAtBlock=%d, tolerance=%d, currentBlock=%d)",
+				log.L(ctx).Debugf("ForgetLocks: removing lock on state %s (confirmedAtBlock=%d, tolerance=%d, currentBlock=%d)",
 					stateID, *lock.ConfirmedAtBlock, g.blockHeightTolerance, currentBlockHeight)
 				delete(g.locksByStateID, stateID)
 				if lock.Type.V() == pldapi.StateLockTypeCreate {
@@ -305,7 +305,7 @@ func (g *grapher) ImportStatesAndLocks(ctx context.Context, outputStates []*Outp
 
 // forgetTxMints removes a transaction's in-flight tracking entries (transactionByOutputState
 // and outputStatesByMinter) without touching outputStatesByStateID.
-// Called from both the success path (ConfirmTransaction) and the failure path (Forget) so
+// Called from both the success path (ForgetTransaction) and the failure path (ForgetTransactionAndLocks) so
 // that the transaction-indexed maps stay in sync with transactionByID.
 // Caller must hold g.mu write lock.
 func (g *grapher) forgetTxMints(transactionID uuid.UUID) {

@@ -128,6 +128,15 @@ func action_StartDispatchLoop(_ context.Context, c *coordinator, _ common.Event)
 	return nil
 }
 
+// action_QueueRestartDispatchLoop defers the dispatch loop restart by queuing a RestartDispatchLoopEvent
+// rather than calling startDispatchLoop directly. This ensures any TransactionStateTransitionEvents
+// that were queued by the loop before it stopped are processed first, so c.inFlightTxns is fully
+// up to date before the loop resumes with dispatchedAhead reset to zero.
+func action_QueueRestartDispatchLoop(ctx context.Context, c *coordinator, _ common.Event) error {
+	c.queueEventInternal(ctx, &RestartDispatchLoopEvent{})
+	return nil
+}
+
 func action_StopDispatchLoop(_ context.Context, c *coordinator, _ common.Event) error {
 	c.stopDispatchLoop()
 	return nil

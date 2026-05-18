@@ -157,7 +157,7 @@ func TestCoordinator_WhenIdleAndTransactionsDelegatedToSelf_TransitionsToActive(
 	}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 	assert.Equal(t, State_Active, c.GetCurrentState())
-	assert.NotEmpty(t, c.signingIdentity, "OnTransitionTo Active must set signing identity")
+	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must set signing identity")
 }
 
 // A new-epoch NewBlock in Idle fires action_CalculateCoordinatorPriorities (recomputes priority list)
@@ -179,7 +179,7 @@ func TestCoordinator_WhenIdle_NewBlock_NewEpoch_UpdatesPriorityListAndStaysIdle(
 }
 
 // A same-epoch NewBlock in Idle fires only action_UpdateBlockHeight; action_CalculateCoordinatorPriorities
-// is guarded by guard_IsNewBlockRangeEpoch and must NOT run, so the priority list stays empty.
+// is guarded by guard_IsOnEpochBoundary and must NOT run, so the priority list stays empty.
 func TestCoordinator_WhenIdle_NewBlock_NotNewEpoch_UpdatesBlockHeightAndStaysIdle(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
@@ -189,7 +189,7 @@ func TestCoordinator_WhenIdle_NewBlock_NotNewEpoch_UpdatesBlockHeightAndStaysIdl
 		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
-	// Block 120 is in the same epoch as 100 (both in epoch 100/50 = 2), so guard_IsNewBlockRangeEpoch = false.
+	// Block 120 is in the same epoch as 100 (both in epoch 100/50 = 2), so guard_IsOnEpochBoundary = false.
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 120}))
 	assert.Equal(t, State_Idle, c.GetCurrentState())
 	assert.Equal(t, uint64(120), c.currentBlockHeight, "action_UpdateBlockHeight must have run")
@@ -281,7 +281,7 @@ func TestCoordinator_WhenObserving_DelegatedTransactions_LowerPriority_RejectsAn
 		CoordinatorPriorityList("node1", "node2", "node3").
 		WithMockTransportWriter().
 		Build()
-	// action_RejectDelegatedTransactions sends a rejection naming the current active coordinator.
+	// action_RejectDelegationRequest sends a rejection naming the current active coordinator.
 	mocks.TransportWriter.EXPECT().SendDelegationRequestRejection(mock.Anything, "originator-node", "del-1", mock.Anything, "node1").Return(nil)
 
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &TransactionsDelegatedEvent{
@@ -294,14 +294,14 @@ func TestCoordinator_WhenObserving_DelegatedTransactions_LowerPriority_RejectsAn
 }
 
 // A same-epoch NewBlock in Observing fires only action_UpdateBlockHeight; action_CalculateCoordinatorPriorities
-// is guarded by guard_IsNewBlockRangeEpoch and must NOT run.
+// is guarded by guard_IsOnEpochBoundary and must NOT run.
 func TestCoordinator_WhenObserving_NewBlock_NotNewEpoch_UpdatesBlockHeightAndStaysObserving(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
 		CurrentBlockHeight(100).
 		CoordinatorSelectionBlockRange(50).
 		Build()
-	// Block 120 is in the same epoch as 100 → guard_IsNewBlockRangeEpoch = false.
+	// Block 120 is in the same epoch as 100 → guard_IsOnEpochBoundary = false.
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 120}))
 	assert.Equal(t, State_Observing, c.GetCurrentState())
 	assert.Equal(t, uint64(120), c.currentBlockHeight)
@@ -366,7 +366,7 @@ func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_TransitionsToActiveAnd
 	}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 	assert.Equal(t, State_Active, c.GetCurrentState())
-	assert.NotEmpty(t, c.signingIdentity, "OnTransitionTo Active must set signing identity")
+	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must set signing identity")
 	// action_ImportStatesAndLocks ran: the grapher must now hold the imported state and lock.
 	exported, err := c.grapher.ExportStatesAndLocks(ctx, "node1")
 	require.NoError(t, err)
@@ -422,7 +422,7 @@ func TestCoordinator_WhenElectStateTimeoutFires_TransitionsToActive(t *testing.T
 	// Firing the state-timeout event simulates the wall-clock timer expiring.
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &StateTimeoutIntervalEvent{}))
 	assert.Equal(t, State_Active, c.GetCurrentState())
-	assert.NotEmpty(t, c.signingIdentity, "OnTransitionTo Active must set signing identity")
+	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must set signing identity")
 	// action_ClearTimeoutSchedules ran on exit; both cancel funcs must be nil.
 	assert.Nil(t, c.cancelRequestTimeout, "request timeout must be cleared on Elect exit")
 	assert.Nil(t, c.cancelStateTimeout, "state timeout must be cleared on Elect exit")
@@ -677,8 +677,8 @@ func TestCoordinator_WhenPrepared_HeartbeatInterval_WithinGrace_SendsHeartbeatAn
 		NodeName("node1").
 		CurrentActiveCoordinator("node2").
 		HeartbeatIntervalsSinceLastReceive(0).
-		InactiveGracePeriod(3). // after increment: 1 < 3 → no transition
-		EndorserCandidates("node2").      // for action_SendHeartbeat
+		InactiveGracePeriod(3).      // after increment: 1 < 3 → no transition
+		EndorserCandidates("node2"). // for action_SendHeartbeat
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
@@ -934,15 +934,13 @@ func TestCoordinator_WhenActiveAndEpochChangesWithSigningUsedAndInflightDispatch
 // A new-epoch NewBlock where the signing identity was used and there are no dispatched transactions (only
 // pooled ones) → key is rotated in place without a state transition. guard_FlushComplete returns true because
 // pooled transactions (State_Pooled) are not past the point of no return. The pooled transaction remains in
-// memory (its getCoordinatorSigningIdentity callback will return the new identity at dispatch time).
+// the pool; it will pick up the new signing identity when it is eventually dispatched.
 func TestCoordinator_WhenActiveAndEpochChangesWithSigningUsedAndOnlyPooledTxs_RotatesKeyInPlace(t *testing.T) {
 	ctx := t.Context()
 	pooledTx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	pooledTxID := uuid.New()
 	pooledTx.EXPECT().GetID().Return(pooledTxID).Maybe()
 	pooledTx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
-	// action_SelectTransaction pops the pooled transaction and sends it a SelectedEvent.
-	pooledTx.EXPECT().HandleEvent(mock.Anything, mock.AnythingOfType("*transaction.SelectedEvent")).Return(nil)
 
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node2").
@@ -953,22 +951,22 @@ func TestCoordinator_WhenActiveAndEpochChangesWithSigningUsedAndOnlyPooledTxs_Ro
 		PooledTransactions(pooledTx).
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
-	prevIdentity := c.signingIdentity
+	prevIdentity := c.signingIdentity.value
 	require.Equal(t, 1, len(c.transactionsByID), "pooled tx must be registered before event")
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
 	// guard_SigningIdentityUsed = true, guard_FlushComplete = true → action_NewSigningIdentity (in-place rotation)
 	assert.Equal(t, State_Active, c.GetCurrentState(), "key-rotation does not change state when flush is already complete")
 	// action_NewSigningIdentity rotated the key in place
-	assert.NotEqual(t, prevIdentity, c.signingIdentity, "signing identity must be refreshed on epoch boundary when used")
-	// The transaction was promoted to assembling by action_SelectTransaction (part of Active OnTransitionTo).
-	// It remains registered in transactionsByID but is no longer in the pool.
+	assert.NotEqual(t, prevIdentity, c.signingIdentity.value, "signing identity must be refreshed on epoch boundary when used")
+	// The pooled transaction stays in the pool: transaction selection is independent of key rotation.
+	// When it is eventually dispatched it will call getCoordinatorSigningIdentity and receive the new key.
 	assert.Equal(t, 1, len(c.transactionsByID), "transaction must remain registered after in-place key rotation")
-	assert.Equal(t, 0, len(c.pooledTransactions), "transaction leaves the pool when action_SelectTransaction picks it up for assembly")
+	assert.Equal(t, 1, len(c.pooledTransactions), "pooled transaction stays in pool; selection is not triggered by key rotation")
 }
 
-// A new-epoch NewBlock where the signing identity was NOT used → priority list is updated but no key rotation
-// and no state transition occurs. The coordinator stays Active with the same signing identity.
-func TestCoordinator_WhenActiveAndEpochChanges_SigningNotUsed_StaysActiveWithSameIdentity(t *testing.T) {
+// A new-epoch NewBlock where the signing identity was NOT used → the key is still rotated in place
+// (rotation happens on every epoch boundary regardless of use) and no state transition occurs.
+func TestCoordinator_WhenActiveAndEpochChanges_SigningNotUsed_StaysActiveAndRotatesKey(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node1").
@@ -978,11 +976,11 @@ func TestCoordinator_WhenActiveAndEpochChanges_SigningNotUsed_StaysActiveWithSam
 		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
-	prevIdentity := c.signingIdentity
+	prevIdentity := c.signingIdentity.value
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 150}))
-	// guard_SigningIdentityUsed = false → no key rotation, no Flush transition
 	assert.Equal(t, State_Active, c.GetCurrentState())
-	assert.Equal(t, prevIdentity, c.signingIdentity, "signing identity must not change when it was not used")
+	// Key is rotated on every epoch boundary, even when it was not used
+	assert.NotEqual(t, prevIdentity, c.signingIdentity.value, "signing identity must be rotated on every epoch boundary")
 	// action_CalculateCoordinatorPriorities updated the priority list
 	assert.NotEmpty(t, c.coordinatorPriorityList, "priority list must be populated")
 	assert.Equal(t, uint64(150), c.currentBlockHeight, "block height must be updated")
@@ -1044,7 +1042,7 @@ func TestCoordinator_WhenPreparedTransitionsToActive_RefreshesSigningIdentityAnd
 		},
 	}))
 	assert.Equal(t, State_Active, c.GetCurrentState())
-	assert.NotEmpty(t, c.signingIdentity)
+	assert.NotEmpty(t, c.signingIdentity.value)
 	// mock expectation on pooledTx.HandleEvent(SelectedEvent) verified by testify
 }
 
@@ -1298,7 +1296,7 @@ func TestCoordinator_WhenActiveFLushCompletesAndStillCurrentCoordinator_Transiti
 	}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 	assert.Equal(t, State_Active, c.GetCurrentState())
-	assert.NotEmpty(t, c.signingIdentity, "OnTransitionTo Active must set signing identity")
+	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must set signing identity")
 }
 
 // When the last inflight transaction finalises in Closing_Flush, the coordinator transitions to Closing.
@@ -1728,7 +1726,7 @@ func TestCoordinator_WhenClosingFlushCompletesAndNotCurrentCoordinator_EnteringC
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2"). // another node is now active; node1 is stepping down
-		EndorserCandidates("node2").                 // gives action_SendHeartbeat a recipient
+		EndorserCandidates("node2").       // gives action_SendHeartbeat a recipient
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
@@ -1876,7 +1874,7 @@ func TestCoordinator_WhenClosing_DelegatedTransactions_LowerPriority_ActiveCoord
 		Originator:   "sender@originator-node",
 		DelegationID: "del-3",
 	}))
-	// GuardNot(IsHigherPriority) AND GuardNot(InactiveGraceExceeded) → action_RejectDelegatedTransactions fires.
+	// GuardNot(IsHigherPriority) AND GuardNot(InactiveGraceExceeded) → action_RejectDelegationRequest fires.
 	assert.Equal(t, State_Closing, c.GetCurrentState())
 }
 

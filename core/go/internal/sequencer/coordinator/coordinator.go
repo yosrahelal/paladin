@@ -38,6 +38,13 @@ import (
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 )
 
+// signingIdentityState groups the coordinator's current signing key with a flag that tracks
+// whether any transaction has consumed it since the last key rotation.
+type signingIdentityState struct {
+	value string
+	used  bool // set when a transaction first retrieves the signing identity; cleared on key rotation
+}
+
 // Coordinator is the interface that consumers should use to interact with the coordinator.
 type Coordinator interface {
 	// Start initializes the coordinator from the contract config and begins the event loop and
@@ -77,13 +84,11 @@ type coordinator struct {
 	currentBlockHeight                 uint64
 	dependencyTracker                  dependencytracker.DependencyTracker
 	grapher                            grapher.Grapher
-	endorserCandidates                 []string         // ENDORSER mode only: candidate nodes for coordinator priority list and heartbeat fan-out
-	originatorActivity                 map[string]int   // STATIC/SENDER only: heartbeat-intervals since last delegation activity per originator node
-	coordinatorPriorityList            []string // priority-ordered list; index 0 is current active coordinator
-	newBlockRangeEpoch                 bool
-
-	signingIdentity     string
-	signingIdentityUsed bool // set when a transaction first retrieves the signing identity; cleared on key rotation
+	endorserCandidates                 []string       // ENDORSER mode only: candidate nodes for coordinator priority list and heartbeat fan-out
+	originatorActivity                 map[string]int // STATIC/SENDER only: heartbeat-intervals since last delegation activity per originator node
+	coordinatorPriorityList            []string       // priority-ordered list; index 0 is current active coordinator
+	onEpochBoundary                    bool
+	signingIdentity                    signingIdentityState
 
 	// Handover request tracking
 	pendingHandoverRequest *common.IdempotentRequest // idempotent request in flight while in State_Elect

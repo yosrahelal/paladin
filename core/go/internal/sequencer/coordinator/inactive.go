@@ -46,7 +46,7 @@ func validator_IsHandoverRequestFromHigherPriorityCoordinator(_ context.Context,
 	return common.IsHigherPriority(c.coordinatorPriorityList, e.FromNode, c.nodeName), nil
 }
 
-func action_RejectDelegatedTransactions(ctx context.Context, c *coordinator, event common.Event) error {
+func action_RejectDelegationRequest(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*TransactionsDelegatedEvent)
 	c.recordOriginatorActivity(e.FromNode)
 	return c.transportWriter.SendDelegationRequestRejection(ctx, e.FromNode, e.DelegationID, c.currentBlockHeight, c.currentActiveCoordinator)

@@ -226,7 +226,6 @@ func (b *CoordinatorBuilderForTesting) OriginatorActivity(activity map[string]in
 	return b
 }
 
-
 func (b *CoordinatorBuilderForTesting) CoordinatorSelectionMode(mode prototk.ContractConfig_CoordinatorSelection) *CoordinatorBuilderForTesting {
 	b.coordinatorSelectionMode = &mode
 	return b
@@ -405,7 +404,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		coordinator.grapher = b.grapher
 	}
 	if b.signingIdentityUsed != nil {
-		coordinator.signingIdentityUsed = *b.signingIdentityUsed
+		coordinator.signingIdentity.used = *b.signingIdentityUsed
 	}
 	if b.coordinatorPriorityList != nil {
 		coordinator.coordinatorPriorityList = b.coordinatorPriorityList

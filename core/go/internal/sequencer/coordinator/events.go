@@ -87,3 +87,15 @@ func (*HandoverRequestEvent) Type() EventType { return Event_HandoverRequest }
 func (*HandoverRequestEvent) TypeString() string {
 	return "Event_HandoverRequest"
 }
+
+// RestartDispatchLoopEvent is queued internally during an in-place key rotation so that the
+// dispatch loop is restarted in a subsequent event-processing step, after any pending
+// TransactionStateTransitionEvents have been processed and c.inFlightTxns is up to date.
+type RestartDispatchLoopEvent struct {
+	common.BaseEvent
+}
+
+func (*RestartDispatchLoopEvent) Type() EventType { return Event_RestartDispatchLoop }
+func (*RestartDispatchLoopEvent) TypeString() string {
+	return "Event_RestartDispatchLoop"
+}

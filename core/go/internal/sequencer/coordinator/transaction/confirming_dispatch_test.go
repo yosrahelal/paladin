@@ -136,7 +136,7 @@ func Test_ConfirmingDispatch_Timeout_TransitionsToPooled_AndClearsPendingRequest
 		AddPendingPreDispatchRequest().Grapher(mockGrapher)
 	txn, _ := builder.Build()
 	require.NotNil(t, txn.pendingPreDispatchRequest)
-	mockGrapher.EXPECT().Forget(mock.Anything, txn.pt.ID)
+	mockGrapher.EXPECT().ForgetTransactionAndLocks(mock.Anything, txn.pt.ID)
 
 	err := txn.HandleEvent(ctx, &StateTimeoutIntervalEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{

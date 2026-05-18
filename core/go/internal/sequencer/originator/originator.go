@@ -66,13 +66,13 @@ type originator struct {
 	transactionsByID                   map[uuid.UUID]transaction.OriginatorTransaction
 	transactionsOrdered                []transaction.OriginatorTransaction
 	currentBlockHeight                 uint64
-	newBlockRangeEpoch                 bool
+	onEpochBoundary                    bool
 	endorserCandidates                 []string // COORDINATOR_ENDORSER mode: deduped+sorted candidate pool; updated when EndorserNodesDiscoveredEvent arrives
 	coordinatorPriorityList            []string // COORDINATOR_ENDORSER mode: priority-ordered list computed independently from endorserCandidates + currentBlockHeight + blockRangeSize
 
 	/* Config */
 	nodeName            string
-	blockRangeSize      uint64
+	blockRange          uint64
 	contractAddress     *pldtypes.EthAddress
 	inactiveGracePeriod int // expressed as a multiple of heartbeat intervals
 
@@ -95,7 +95,7 @@ func NewOriginator(
 		nodeName:            nodeName,
 		transactionsByID:    make(map[uuid.UUID]transaction.OriginatorTransaction),
 		transportWriter:     transportWriter,
-		blockRangeSize:      confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
+		blockRange:          confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
 		contractAddress:     contractAddress,
 		engineIntegration:   engineIntegration,
 		metrics:             metrics,

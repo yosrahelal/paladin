@@ -47,7 +47,7 @@ type OriginatorBuilderForTesting struct {
 	contractAddress                    *pldtypes.EthAddress
 	metrics                            metrics.DistributedSequencerMetrics
 	sequencerConfig                    *pldconf.SequencerConfig
-	blockRangeSize                     *uint64
+	blockRange                         *uint64
 	currentBlockHeight                 *uint64
 	endorserCandidates                 []string
 	coordinatorPriorityList            []string
@@ -104,8 +104,8 @@ func (b *OriginatorBuilderForTesting) OverrideSequencerConfig(config *pldconf.Se
 	b.sequencerConfig = config
 }
 
-func (b *OriginatorBuilderForTesting) BlockRangeSize(n uint64) *OriginatorBuilderForTesting {
-	b.blockRangeSize = &n
+func (b *OriginatorBuilderForTesting) BlockRange(n uint64) *OriginatorBuilderForTesting {
+	b.blockRange = &n
 	return b
 }
 
@@ -218,8 +218,8 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	} else if originator.currentActiveCoordinator == "" {
 		originator.currentActiveCoordinator = "coordinator"
 	}
-	if b.blockRangeSize != nil {
-		originator.blockRangeSize = *b.blockRangeSize
+	if b.blockRange != nil {
+		originator.blockRange = *b.blockRange
 	}
 	if b.currentBlockHeight != nil {
 		originator.currentBlockHeight = *b.currentBlockHeight

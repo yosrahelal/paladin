@@ -327,15 +327,15 @@ func TestExportStatesAndLocks_EmptyGrapher(t *testing.T) {
 	assert.Empty(t, data.LockedState)
 }
 
-func TestForget_UnknownTransaction_NoOp(t *testing.T) {
+func TestForgetTransactionAndLocks_UnknownTransaction_NoOp(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapher(t)
 	unknown := uuid.New()
-	g.Forget(ctx, unknown)
+	g.ForgetTransactionAndLocks(ctx, unknown)
 	assert.Nil(t, g.GetDependencies(ctx, unknown))
 }
 
-func TestForget_RemoveAllDependencyLinks_SkipsMissingDependent(t *testing.T) {
+func TestForgetTransactionAndLocks_RemoveAllDependencyLinks_SkipsMissingDependent(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapherUnlocked(t)
 	ghostDependent := uuid.New()
@@ -352,12 +352,12 @@ func TestForget_RemoveAllDependencyLinks_SkipsMissingDependent(t *testing.T) {
 	g.dependencyChain.AddPrerequisites(ctx, ghostDependent, minterID)
 	g.mu.Unlock()
 
-	g.Forget(ctx, minterID)
+	g.ForgetTransactionAndLocks(ctx, minterID)
 
 	assert.Empty(t, g.GetDependencies(ctx, realDependent))
 }
 
-func TestForget_RemoveAllDependencyLinks_SkipsMissingPrerequisite(t *testing.T) {
+func TestForgetTransactionAndLocks_RemoveAllDependencyLinks_SkipsMissingPrerequisite(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapherUnlocked(t)
 	txID := uuid.New()
@@ -374,12 +374,12 @@ func TestForget_RemoveAllDependencyLinks_SkipsMissingPrerequisite(t *testing.T) 
 	g.dependencyChain.AddPrerequisites(ctx, txID, minterID, ghostPrereq)
 	g.mu.Unlock()
 
-	g.Forget(ctx, txID)
+	g.ForgetTransactionAndLocks(ctx, txID)
 
 	assert.NotContains(t, g.GetDependents(ctx, minterID), txID)
 }
 
-func TestForget_ClearsPrereqOnMinterWhenConsumerForgotten(t *testing.T) {
+func TestForgetTransactionAndLocks_ClearsPrereqOnMinterWhenConsumerForgotten(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapherUnlocked(t)
 	minterID := uuid.New()
@@ -392,12 +392,12 @@ func TestForget_ClearsPrereqOnMinterWhenConsumerForgotten(t *testing.T) {
 
 	require.Contains(t, g.GetDependents(ctx, minterID), consumerID)
 
-	g.Forget(ctx, consumerID)
+	g.ForgetTransactionAndLocks(ctx, consumerID)
 
 	assert.NotContains(t, g.GetDependents(ctx, minterID), consumerID)
 }
 
-func TestForget_ClearsMinterConsumerAndLocks(t *testing.T) {
+func TestForgetTransactionAndLocks_ClearsMinterConsumerAndLocks(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapherUnlocked(t)
 	minterID := uuid.New()
@@ -409,7 +409,7 @@ func TestForget_ClearsMinterConsumerAndLocks(t *testing.T) {
 	require.NoError(t, g.AddMinter(ctx, []*components.FullState{state}, minterID, nil))
 	g.LockMintsOnCreate(ctx, []*components.StateUpsert{{ID: stateID, CreatedBy: &createdBy}}, []*components.FullState{{ID: stateID}}, minterID)
 	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{}, []*components.FullState{state}, consumerID)
-	g.Forget(ctx, minterID)
+	g.ForgetTransactionAndLocks(ctx, minterID)
 
 	// Transaction-indexed maps cleared
 	_, ok := g.transactionByOutputState[stateID.String()]
@@ -421,7 +421,7 @@ func TestForget_ClearsMinterConsumerAndLocks(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestForget_ClearsLocksForTransaction(t *testing.T) {
+func TestForgetTransactionAndLocks_ClearsLocksForTransaction(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapherUnlocked(t)
 	txID := uuid.New()
@@ -429,29 +429,29 @@ func TestForget_ClearsLocksForTransaction(t *testing.T) {
 	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{{ID: s}}, []*components.FullState{}, txID)
 	require.Contains(t, g.locksByTransaction, txID)
 	require.Contains(t, g.locksByStateID, s.String())
-	g.Forget(ctx, txID)
+	g.ForgetTransactionAndLocks(ctx, txID)
 	_, ok := g.locksByTransaction[txID]
 	assert.False(t, ok)
 	_, ok = g.locksByStateID[s.String()]
 	assert.False(t, ok)
 }
 
-func TestForget_AlreadyConfirmedTransaction_NoOp(t *testing.T) {
+func TestForgetTransactionAndLocks_AlreadyConfirmedTransaction_NoOp(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapher(t)
 	txID := uuid.New()
 	s := pldtypes.MustParseHexBytes("0x" + strings.Repeat("cd", 32))
 	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{{ID: s}}, []*components.FullState{}, txID)
-	g.ConfirmTransaction(ctx, txID, 100)
+	g.ForgetTransaction(ctx, txID, 100)
 	// Second call (from cleanUpTransaction) must be a no-op
-	g.Forget(ctx, txID)
-	// The confirmed lock (no transaction) should still be present — Forget is a no-op once confirmed
+	g.ForgetTransactionAndLocks(ctx, txID)
+	// The confirmed lock (no transaction) should still be present — ForgetTransactionAndLocks is a no-op once confirmed
 	data, err := g.ExportStatesAndLocks(ctx, "test-node")
 	require.NoError(t, err)
 	assert.Len(t, data.LockedState, 1)
 }
 
-func TestConfirmTransaction_OutputStateRemainsForHeartbeatsUntilLockExpires(t *testing.T) {
+func TestForgetTransaction_OutputStateRemainsForHeartbeatsUntilLockExpires(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapher(t)
 	txID := uuid.New()
@@ -461,7 +461,7 @@ func TestConfirmTransaction_OutputStateRemainsForHeartbeatsUntilLockExpires(t *t
 
 	require.NoError(t, g.AddMinter(ctx, []*components.FullState{state}, txID, map[string][]string{s.String(): {"test-node"}}))
 	g.LockMintsOnCreate(ctx, []*components.StateUpsert{{ID: s, CreatedBy: &createdBy}}, []*components.FullState{{ID: s}}, txID)
-	g.ConfirmTransaction(ctx, txID, 100)
+	g.ForgetTransaction(ctx, txID, 100)
 
 	// OutputState should still be exported for heartbeats after confirmation
 	data, err := g.ExportStatesAndLocks(ctx, "test-node")
@@ -470,14 +470,14 @@ func TestConfirmTransaction_OutputStateRemainsForHeartbeatsUntilLockExpires(t *t
 	assert.True(t, data.OutputState[0].ID.Equals(s))
 
 	// Once the lock expires, both the lock and the OutputState are removed
-	g.CleanUpLocks(ctx, 100+testBlockHeightTolerance)
+	g.ForgetLocks(ctx, 100+testBlockHeightTolerance)
 	data, err = g.ExportStatesAndLocks(ctx, "test-node")
 	require.NoError(t, err)
 	assert.Empty(t, data.LockedState)
 	assert.Empty(t, data.OutputState, "OutputState must be removed when the lock expires")
 }
 
-func TestConfirmTransaction_StampsConfirmedAtBlockAndClearsTransaction(t *testing.T) {
+func TestForgetTransaction_StampsConfirmedAtBlockAndClearsTransaction(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapherUnlocked(t)
 	txID := uuid.New()
@@ -487,7 +487,7 @@ func TestConfirmTransaction_StampsConfirmedAtBlockAndClearsTransaction(t *testin
 	states := []*components.FullState{{ID: s}}
 
 	g.LockMintsOnCreate(ctx, upserts, states, txID)
-	g.ConfirmTransaction(ctx, txID, 100)
+	g.ForgetTransaction(ctx, txID, 100)
 
 	// Transaction removed from grapher indexes
 	assert.NotContains(t, g.transactionByID, txID)
@@ -502,7 +502,7 @@ func TestConfirmTransaction_StampsConfirmedAtBlockAndClearsTransaction(t *testin
 	assert.True(t, lock.State.Equals(s))
 }
 
-func TestConfirmTransaction_ClearsInFlightIndexesButKeepsStateData(t *testing.T) {
+func TestForgetTransaction_ClearsInFlightIndexesButKeepsStateData(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapherUnlocked(t)
 	txID := uuid.New()
@@ -512,7 +512,7 @@ func TestConfirmTransaction_ClearsInFlightIndexesButKeepsStateData(t *testing.T)
 	require.NoError(t, g.AddMinter(ctx, []*components.FullState{state}, txID, map[string][]string{stateID.String(): {"node1"}}))
 	createdBy := uuid.New()
 	g.LockMintsOnCreate(ctx, []*components.StateUpsert{{ID: stateID, CreatedBy: &createdBy}}, []*components.FullState{{ID: stateID}}, txID)
-	g.ConfirmTransaction(ctx, txID, 50)
+	g.ForgetTransaction(ctx, txID, 50)
 
 	// All transaction tracking removed — txID is no longer known to the grapher
 	assert.NotContains(t, g.transactionByID, txID)
@@ -524,41 +524,41 @@ func TestConfirmTransaction_ClearsInFlightIndexesButKeepsStateData(t *testing.T)
 	assert.Contains(t, g.outputStatesByStateID, stateID.String())
 
 	// Once the lock expires, OutputState is also cleaned up
-	g.CleanUpLocks(ctx, 50+testBlockHeightTolerance)
+	g.ForgetLocks(ctx, 50+testBlockHeightTolerance)
 	assert.NotContains(t, g.outputStatesByStateID, stateID.String())
 }
 
-func TestConfirmTransaction_UnknownTransaction_NoOp(t *testing.T) {
+func TestForgetTransaction_UnknownTransaction_NoOp(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapher(t)
 	// Should be a no-op with no panic
-	g.ConfirmTransaction(ctx, uuid.New(), 100)
+	g.ForgetTransaction(ctx, uuid.New(), 100)
 	data, err := g.ExportStatesAndLocks(ctx, "test-node")
 	require.NoError(t, err)
 	assert.Empty(t, data.LockedState)
 }
 
-func TestCleanUpLocks_RemovesExpiredLocks(t *testing.T) {
+func TestForgetLocks_RemovesExpiredLocks(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapher(t)
 	txID := uuid.New()
 	s := pldtypes.MustParseHexBytes("0x" + strings.Repeat("56", 32))
 	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{{ID: s}}, []*components.FullState{}, txID)
-	g.ConfirmTransaction(ctx, txID, 100)
+	g.ForgetTransaction(ctx, txID, 100)
 
 	// tolerance = 5, confirmedAt = 100, expires at >= 105
-	g.CleanUpLocks(ctx, 104) // not yet expired
+	g.ForgetLocks(ctx, 104) // not yet expired
 	data, err := g.ExportStatesAndLocks(ctx, "test-node")
 	require.NoError(t, err)
 	assert.Len(t, data.LockedState, 1)
 
-	g.CleanUpLocks(ctx, 105) // exactly at expiry
+	g.ForgetLocks(ctx, 105) // exactly at expiry
 	data, err = g.ExportStatesAndLocks(ctx, "test-node")
 	require.NoError(t, err)
 	assert.Empty(t, data.LockedState)
 }
 
-func TestCleanUpLocks_DoesNotRemoveTransactionOwnedLocks(t *testing.T) {
+func TestForgetLocks_DoesNotRemoveTransactionOwnedLocks(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapher(t)
 	txID := uuid.New()
@@ -566,7 +566,7 @@ func TestCleanUpLocks_DoesNotRemoveTransactionOwnedLocks(t *testing.T) {
 	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{{ID: s}}, []*components.FullState{}, txID)
 
 	// Should not touch transaction-owned locks
-	g.CleanUpLocks(ctx, 99999)
+	g.ForgetLocks(ctx, 99999)
 	data, err := g.ExportStatesAndLocks(ctx, "test-node")
 	require.NoError(t, err)
 	assert.Len(t, data.LockedState, 1)
@@ -631,7 +631,7 @@ func TestImportStatesAndLocks_ExpiredAfterImport(t *testing.T) {
 	confirmedAt := uint64(10)
 	g.ImportStatesAndLocks(ctx, nil, []*StateLock{{State: s, Type: pldapi.StateLockTypeRead.Enum(), ConfirmedAtBlock: &confirmedAt}})
 
-	g.CleanUpLocks(ctx, 15) // 10 + 5 = 15, should expire
+	g.ForgetLocks(ctx, 15) // 10 + 5 = 15, should expire
 	data, err := g.ExportStatesAndLocks(ctx, "test-node")
 	require.NoError(t, err)
 	assert.Empty(t, data.LockedState)

@@ -48,7 +48,8 @@ const (
 	Event_TransactionsDelegated
 	Event_RequestTimeoutInterval
 	Event_StateTimeoutInterval
-	Event_HandoverRequest // pushed by transport_client when a CoordinatorHandoverRequest message is received from a higher-priority node
+	Event_HandoverRequest     // pushed by transport_client when a CoordinatorHandoverRequest message is received from a higher-priority node
+	Event_RestartDispatchLoop // queued internally after an in-place key rotation so the loop restarts after TransactionStateTransitionEvents are processed
 )
 
 // Type aliases for the generic statemachine types, specialized for coordinator
@@ -92,7 +93,7 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
-					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
 				},
 			},
 		},
@@ -126,7 +127,7 @@ var stateDefinitionsMap = StateDefinitions{
 					{
 						// This node is lower-priority — reject and include the current active coordinator's identity.
 						If:     statemachine.GuardNot(guard_IsHigherPriorityThanCurrentActive),
-						Action: action_RejectDelegatedTransactions,
+						Action: action_RejectDelegationRequest,
 					},
 				},
 				Transitions: []Transition{{
@@ -138,7 +139,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
 					{
-						If:     guard_IsNewBlockRangeEpoch,
+						If:     guard_IsOnEpochBoundary,
 						Action: action_CalculateCoordinatorPriorities,
 					},
 				},
@@ -255,7 +256,7 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
-					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
 				},
 			},
 			common.Event_TransactionStateTransition: {
@@ -380,7 +381,7 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
-					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
 				},
 			},
 			common.Event_TransactionStateTransition: {
@@ -400,7 +401,10 @@ var stateDefinitionsMap = StateDefinitions{
 		OnTransitionTo: []ActionRule{
 			{Action: action_NewSigningIdentity},
 			{Action: action_StartDispatchLoop},
-			{Action: action_SelectTransaction},
+			{
+				Action: action_SelectTransaction,
+				If:     statemachine.GuardNot(guard_HasTransactionAssembling),
+			},
 			// Now we're active we can remove any record of inactivity from a previous coordinator
 			// We don't increment the counters in this state as we're the active coordinator who is heartbeating.
 			{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
@@ -503,19 +507,28 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
-					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
-					// If we're in a new block range epoch and the signing key has been used
-					// we need to rotate it. Stop the dispatch loop ahead of making a decision on whether
-					// we have any unconfirmed dispatched transactions
-
-					// The transition from Active -> Active may seem a bit odd here but it is a clean way
-					// to trigger a signing key rotation and only then restart the dispatch loop if we do not
-					// have any transactions to flush.
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
+					// If we're at an epoch boundary we need to rotate the coordinator signing key
+					// If the key has been used AND we have unconfirmed dispatched transactions we need to
+					// take the more expensive route of flushing the dispatched transactions before we can
+					// start signing with the new key. The dispatch loop must be stopped in order to reliably
+					// make this decision. Otherwise we can rotate the key in place and restart the dispatch loop.
 					{
+						If:     guard_IsOnEpochBoundary,
 						Action: action_StopDispatchLoop,
+					}, {
+						Action: action_NewSigningIdentity,
 						If: statemachine.GuardAnd(
-							guard_IsNewBlockRangeEpoch,
-							guard_SigningIdentityUsed,
+							guard_IsOnEpochBoundary,
+							statemachine.GuardNot(guard_MustFlushToRotateSigningIdentity),
+						),
+					}, {
+						// Queueing this event gives the coordinator a chance to process any state transition events before
+						// the loop restarts, meaning inflightTxns is guaranteed to be up to date.
+						Action: action_QueueRestartDispatchLoop,
+						If: statemachine.GuardAnd(
+							guard_IsOnEpochBoundary,
+							statemachine.GuardNot(guard_MustFlushToRotateSigningIdentity),
 						),
 					},
 				},
@@ -524,18 +537,13 @@ var stateDefinitionsMap = StateDefinitions{
 				Transitions: []Transition{{
 					To: State_Active_Flush,
 					If: statemachine.GuardAnd(
-						guard_IsNewBlockRangeEpoch,
-						guard_SigningIdentityUsed,
-						guard_HasUnconfirmedDispatchedTransactions,
-					),
-				}, {
-					To: State_Active,
-					If: statemachine.GuardAnd(
-						guard_IsNewBlockRangeEpoch,
-						guard_SigningIdentityUsed,
-						statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+						guard_IsOnEpochBoundary,
+						guard_MustFlushToRotateSigningIdentity,
 					),
 				}},
+			},
+			Event_RestartDispatchLoop: {
+				Actions: []ActionRule{{Action: action_StartDispatchLoop}},
 			},
 		},
 	},
@@ -629,7 +637,7 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
-					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
 				},
 			},
 		},
@@ -667,7 +675,7 @@ var stateDefinitionsMap = StateDefinitions{
 					{
 						// This node is lower-priority — reject and include the current active coordinator's identity.
 						If:     statemachine.GuardNot(guard_IsHigherPriorityThanCurrentActive),
-						Action: action_RejectDelegatedTransactions,
+						Action: action_RejectDelegationRequest,
 					},
 				},
 				Transitions: []Transition{{
@@ -701,7 +709,7 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
-					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
 				},
 			},
 		},
@@ -751,7 +759,7 @@ var stateDefinitionsMap = StateDefinitions{
 						statemachine.GuardNot(guard_IsHigherPriorityThanCurrentActive),
 						statemachine.GuardNot(guard_InactiveGracePeriodExceeded),
 					),
-					Action: action_RejectDelegatedTransactions,
+					Action: action_RejectDelegationRequest,
 				}},
 				Transitions: []Transition{
 					{
@@ -783,7 +791,7 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
-					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
 				},
 			},
 		},

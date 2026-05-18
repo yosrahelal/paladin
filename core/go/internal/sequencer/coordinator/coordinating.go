@@ -212,8 +212,8 @@ func (c *coordinator) getCoordinatorTransactionState(ctx context.Context, id uui
 }
 
 func (c *coordinator) getCoordinatorSigningIdentity() string {
-	c.signingIdentityUsed = true
-	return c.signingIdentity
+	c.signingIdentity.used = true
+	return c.signingIdentity.value
 }
 
 func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator string, originatorNode string, nodeName string, pt *components.PrivateTransaction) transaction.CoordinatorTransaction {
@@ -377,9 +377,9 @@ func (c *coordinator) addToDelegatedTransactions(
 }
 
 func action_NewSigningIdentity(ctx context.Context, c *coordinator, _ common.Event) error {
-	c.signingIdentity = fmt.Sprintf("domains.%s.submit.%s", c.contractAddress.String(), uuid.New())
-	c.signingIdentityUsed = false
-	log.L(ctx).Debugf("new signing identity: %s", c.signingIdentity)
+	c.signingIdentity.value = fmt.Sprintf("domains.%s.submit.%s", c.contractAddress.String(), uuid.New())
+	c.signingIdentity.used = false
+	log.L(ctx).Debugf("new signing identity: %s", c.signingIdentity.value)
 	return nil
 }
 
@@ -520,7 +520,7 @@ func (c *coordinator) cleanUpTransaction(ctx context.Context, txID uuid.UUID) {
 		// this is a no-op if the transaction is not in the pool
 		c.removeTransactionFromPool(txID)
 		c.metrics.DecCoordinatingTransactions()
-		c.grapher.Forget(ctx, txID)
+		c.grapher.ForgetTransactionAndLocks(ctx, txID)
 		c.dependencyTracker.Delete(ctx, txID)
 		log.L(ctx).Debugf("transaction %s cleaned up", txID.String())
 	}

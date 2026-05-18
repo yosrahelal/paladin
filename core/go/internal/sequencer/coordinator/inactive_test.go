@@ -86,7 +86,7 @@ func Test_guard_InactiveGracePeriodExceeded_Exceeded(t *testing.T) {
 	assert.True(t, guard_InactiveGracePeriodExceeded(ctx, c))
 }
 
-func Test_action_RejectDelegatedTransactions_Success(t *testing.T) {
+func Test_action_RejectDelegationRequest_Success(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).WithMockTransportWriter().Build()
 
@@ -98,11 +98,11 @@ func Test_action_RejectDelegatedTransactions_Success(t *testing.T) {
 		FromNode:     fromNode,
 		DelegationID: delegationID,
 	}
-	err := action_RejectDelegatedTransactions(ctx, c, event)
+	err := action_RejectDelegationRequest(ctx, c, event)
 	require.NoError(t, err)
 }
 
-func Test_action_RejectDelegatedTransactions_PropagatesError(t *testing.T) {
+func Test_action_RejectDelegationRequest_PropagatesError(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).WithMockTransportWriter().Build()
 
@@ -115,7 +115,7 @@ func Test_action_RejectDelegatedTransactions_PropagatesError(t *testing.T) {
 		FromNode:     fromNode,
 		DelegationID: delegationID,
 	}
-	err := action_RejectDelegatedTransactions(ctx, c, event)
+	err := action_RejectDelegationRequest(ctx, c, event)
 	require.ErrorIs(t, err, expectedErr)
 }
 

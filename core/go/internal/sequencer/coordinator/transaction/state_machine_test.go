@@ -369,7 +369,7 @@ func TestCoordinatorTransaction_Assembling_ToPooled_OnStateTimeout_IfStateTimeou
 		Grapher(mockGrapher).
 		StateTimeout(1).
 		Build()
-	mockGrapher.EXPECT().Forget(mock.Anything, txn.GetID())
+	mockGrapher.EXPECT().ForgetTransactionAndLocks(mock.Anything, txn.GetID())
 
 	err := txn.HandleEvent(ctx, &StateTimeoutIntervalEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{
@@ -393,7 +393,7 @@ func TestCoordinatorTransaction_Assembling_ToReverted_OnAssembleRevertResponse(t
 	txn, mocks := txnBuilder.Build()
 
 	mocks.SyncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
-	mockGrapher.EXPECT().Forget(mock.Anything, txn.GetID())
+	mockGrapher.EXPECT().ForgetTransactionAndLocks(mock.Anything, txn.GetID())
 
 	err := txn.HandleEvent(ctx, txnBuilder.BuildAssembleRevertEvent())
 	require.NoError(t, err)
@@ -524,7 +524,7 @@ func TestCoordinatorTransaction_Endorsement_Gathering_ToBlocked_OnEndorsed_IfAtt
 	builder2 := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
 		Grapher(mockGrapher).
 		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{
-			txn1.GetPrivateTransaction().ID: txn1,
+			txn1.pt.ID: txn1,
 		}).
 		NumberOfRequiredEndorsers(3).
 		NumberOfEndorsements(2).
@@ -548,7 +548,7 @@ func TestCoordinatorTransaction_Endorsement_Gathering_ToPooled_OnEndorseRejected
 		AddPendingEndorsementRequest(2)
 
 	txn, _ := builder.Build()
-	mockGrapher.EXPECT().Forget(mock.Anything, txn.GetID())
+	mockGrapher.EXPECT().ForgetTransactionAndLocks(mock.Anything, txn.GetID())
 
 	err := txn.HandleEvent(ctx, builder.BuildEndorseRejectedEvent(2))
 	require.NoError(t, err)
@@ -622,7 +622,7 @@ func TestCoordinatorTransaction_Blocked_ToConfirmingDispatch_OnDependencyReady_I
 		CoordinatorTransactions(sharedTransactions).
 		TransactionID(txBID).
 		Build()
-	sharedTransactions[txnB.GetPrivateTransaction().ID] = txnB
+	sharedTransactions[txnB.pt.ID] = txnB
 
 	builderC := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).
 		Grapher(mockGrapher).
@@ -630,14 +630,14 @@ func TestCoordinatorTransaction_Blocked_ToConfirmingDispatch_OnDependencyReady_I
 		TransactionID(txCID).
 		AddPendingPreDispatchRequest()
 	txnC, _ := builderC.Build()
-	sharedTransactions[txnC.GetPrivateTransaction().ID] = txnC
+	sharedTransactions[txnC.pt.ID] = txnC
 
 	builderA := NewTransactionBuilderForTesting(t, State_Blocked).
 		Grapher(mockGrapher).
 		CoordinatorTransactions(sharedTransactions).
 		TransactionID(txAID)
 	txnA, _ := builderA.Build()
-	sharedTransactions[txnA.GetPrivateTransaction().ID] = txnA
+	sharedTransactions[txnA.pt.ID] = txnA
 
 	mockGrapher.EXPECT().GetDependencies(mock.Anything, txAID).Return([]uuid.UUID{txBID, txCID}).Maybe()
 	mockGrapher.EXPECT().GetDependents(mock.Anything, txCID).Return([]uuid.UUID{txAID}).Once()
@@ -752,7 +752,7 @@ func TestCoordinatorTransaction_Dispatched_ToPooled_OnConfirmedRevert_IfRetryabl
 		BaseLedgerRevertRetryThreshold(3).
 		Build()
 	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(true, "", nil)
-	mockGrapher.EXPECT().Forget(mock.Anything, txn.GetID())
+	mockGrapher.EXPECT().ForgetTransactionAndLocks(mock.Anything, txn.GetID())
 
 	err := txn.HandleEvent(ctx, &ConfirmedRevertedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{
@@ -772,7 +772,7 @@ func TestCoordinatorTransaction_Dispatched_ToReverted_OnConfirmedRevert_IfNonRet
 		Grapher(mockGrapher).
 		Build()
 	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(false, "decoded error", nil)
-	mockGrapher.EXPECT().Forget(mock.Anything, txn.GetID())
+	mockGrapher.EXPECT().ForgetTransactionAndLocks(mock.Anything, txn.GetID())
 	mocks.SyncPoints.EXPECT().QueueTransactionFinalize(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 	).Return()
@@ -797,7 +797,7 @@ func TestCoordinatorTransaction_Dispatched_ToReverted_OnConfirmedRevert_IfThresh
 		RevertCount(1).
 		Build()
 	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, []byte(revertReason)).Return(true, "", nil)
-	mockGrapher.EXPECT().Forget(mock.Anything, txn.GetID())
+	mockGrapher.EXPECT().ForgetTransactionAndLocks(mock.Anything, txn.GetID())
 	mocks.SyncPoints.EXPECT().QueueTransactionFinalize(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 	).Return()

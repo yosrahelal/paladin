@@ -182,12 +182,12 @@ func (o *originator) removeTransaction(ctx context.Context, txnID uuid.UUID) {
 }
 
 func action_UpdateBlockHeight(_ context.Context, o *originator, event common.Event) error {
-	o.currentBlockHeight, o.newBlockRangeEpoch = common.DecodeNewBlockHeight(o.currentBlockHeight, o.blockRangeSize, event)
+	o.currentBlockHeight, o.onEpochBoundary = common.DecodeNewBlockHeight(o.currentBlockHeight, o.blockRange, event)
 	return nil
 }
 
-func guard_IsNewBlockRangeEpoch(_ context.Context, o *originator) bool {
-	return o.newBlockRangeEpoch
+func guard_IsOnEpochBoundary(_ context.Context, o *originator) bool {
+	return o.onEpochBoundary
 }
 
 // action_CalculateCoordinatorPriorities recomputes coordinatorPriorityList from the current
@@ -200,7 +200,7 @@ func action_CalculateCoordinatorPriorities(ctx context.Context, o *originator, _
 		ctx,
 		o.endorserCandidates,
 		o.currentBlockHeight,
-		o.blockRangeSize,
+		o.blockRange,
 	)
 	return nil
 }

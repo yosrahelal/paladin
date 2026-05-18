@@ -66,25 +66,27 @@ func action_SendPreDispatchResponse(ctx context.Context, txn *originatorTransact
 	return txn.transportWriter.SendPreDispatchResponse(ctx, txn.currentDelegate, txn.latestPreDispatchRequestID, txn.pt.PreAssembly.TransactionSpecification)
 }
 
-// validator_AssembleRequestMatches validates that the assemble request comes from the current delegate.
-// If the coordinator does not match, it proactively sends a NotActiveCoordinator rejection so the
-// coordinator can evict the transaction rather than waiting indefinitely.
 func validator_AssembleRequestMatches(ctx context.Context, txn *originatorTransaction, event common.Event) (bool, error) {
 	assembleRequestEvent, ok := event.(*AssembleRequestReceivedEvent)
 	if !ok {
 		log.L(ctx).Errorf("expected event type *AssembleRequestReceivedEvent, got %T", event)
 		return false, nil
 	}
-
 	if assembleRequestEvent.Coordinator != txn.currentDelegate {
-		// TODO: Should a validator be able to have a side effect like this?
 		log.L(ctx).Debugf("originator transaction rejecting assemble request - event coordinator %s, TX current delegate = %s", assembleRequestEvent.Coordinator, txn.currentDelegate)
-		if err := txn.transportWriter.SendNotActiveCoordinator(ctx, assembleRequestEvent.Coordinator, txn.pt.ID); err != nil {
-			log.L(ctx).Warnf("failed to send not-active-coordinator rejection to %s: %s", assembleRequestEvent.Coordinator, err)
-		}
 		return false, nil
 	}
 	return true, nil
+}
+
+// action_SendNotActiveCoordinatorForAssembleRequest proactively notifies a non-active coordinator
+// that it should evict this transaction rather than waiting indefinitely for a response.
+func action_SendNotActiveCoordinatorForAssembleRequest(ctx context.Context, txn *originatorTransaction, event common.Event) error {
+	assembleRequestEvent := event.(*AssembleRequestReceivedEvent)
+	if err := txn.transportWriter.SendNotActiveCoordinator(ctx, assembleRequestEvent.Coordinator, txn.pt.ID); err != nil {
+		log.L(ctx).Warnf("failed to send not-active-coordinator rejection to %s: %s", assembleRequestEvent.Coordinator, err)
+	}
+	return nil
 }
 
 func validator_PreDispatchRequestMatchesAssembledDelegation(ctx context.Context, txn *originatorTransaction, event common.Event) (bool, error) {

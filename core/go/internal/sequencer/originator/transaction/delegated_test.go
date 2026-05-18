@@ -432,14 +432,32 @@ func Test_validator_CoordinatorIsCurrentDelegate_WrongCoordinator_ReturnsFalse(t
 	assert.False(t, ok, "should return false when coordinator does not match currentDelegate")
 }
 
-func TestValidator_AssembleRequestMatches_SendNotActiveCoordinatorError_LogsWarnAndReturnsFalse(t *testing.T) {
+func TestAction_SendNotActiveCoordinatorForAssembleRequest_Success(t *testing.T) {
 	ctx := context.Background()
 	builder := NewTransactionBuilderForTesting(t, State_Delegated).WithMockTransportWriter()
 	txn, mocks := builder.BuildWithMocks()
 
 	txn.currentDelegate = "coordinator@node1"
+	event := &AssembleRequestReceivedEvent{
+		BaseEvent:   BaseEvent{TransactionID: txn.GetID()},
+		Coordinator: "other@node2",
+		RequestID:   uuid.New(),
+	}
 
-	// Event comes from a DIFFERENT coordinator — triggers the SendNotActiveCoordinator call.
+	mocks.TransportWriter.EXPECT().
+		SendNotActiveCoordinator(mock.Anything, "other@node2", txn.pt.ID).
+		Return(nil)
+
+	err := action_SendNotActiveCoordinatorForAssembleRequest(ctx, txn, event)
+	require.NoError(t, err)
+}
+
+func TestAction_SendNotActiveCoordinatorForAssembleRequest_TransportError_LogsWarnAndReturnsNil(t *testing.T) {
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Delegated).WithMockTransportWriter()
+	txn, mocks := builder.BuildWithMocks()
+
+	txn.currentDelegate = "coordinator@node1"
 	event := &AssembleRequestReceivedEvent{
 		BaseEvent:   BaseEvent{TransactionID: txn.GetID()},
 		Coordinator: "other@node2",
@@ -450,10 +468,8 @@ func TestValidator_AssembleRequestMatches_SendNotActiveCoordinatorError_LogsWarn
 		SendNotActiveCoordinator(mock.Anything, "other@node2", txn.pt.ID).
 		Return(errors.New("transport error"))
 
-	matches, err := validator_AssembleRequestMatches(ctx, txn, event)
-
-	require.NoError(t, err, "transport error must be logged and swallowed, not returned")
-	assert.False(t, matches)
+	err := action_SendNotActiveCoordinatorForAssembleRequest(ctx, txn, event)
+	require.NoError(t, err, "transport error must be logged and swallowed, not returned as action error")
 }
 
 func TestValidator_PreDispatchRequestMatchesAssembledDelegation_SendNotActiveCoordinatorError_LogsWarnAndReturnsFalse(t *testing.T) {

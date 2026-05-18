@@ -698,7 +698,7 @@ func Test_notifyDependentsOfSelection_PreAssembleDependent(t *testing.T) {
 	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
 		Grapher(g).DependencyTracker(dt).
 		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{
-			dependentTxn.GetPrivateTransaction().ID: dependentTxn,
+			dependentTxn.pt.ID: dependentTxn,
 		}).
 		Build()
 
@@ -719,7 +719,7 @@ func Test_notifyDependentsOfSelection_ChainedDependent(t *testing.T) {
 	txn, _ := NewTransactionBuilderForTesting(t, State_Pooled).
 		Grapher(g).DependencyTracker(dt).
 		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{
-			depTx.GetPrivateTransaction().ID: depTx,
+			depTx.pt.ID: depTx,
 		}).
 		Build()
 
@@ -865,7 +865,7 @@ func Test_action_NotifyPreAssembleDependentOfSelection_Success(t *testing.T) {
 	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
 		Grapher(g).DependencyTracker(dt).
 		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{
-			dependentTxn.GetPrivateTransaction().ID: dependentTxn,
+			dependentTxn.pt.ID: dependentTxn,
 		}).
 		Build()
 

@@ -38,7 +38,6 @@ type CoordinatorTransaction interface {
 	GetCurrentState() State
 	HasDispatchedPublicTransaction() bool
 	GetSnapshot(ctx context.Context) (*common.SnapshotPooledTransaction, *common.SnapshotDispatchedTransaction, *common.SnapshotConfirmedTransaction)
-	GetPrivateTransaction() *components.PrivateTransaction // TODO AM REMOVE FROM interface
 	GetOriginatorNode() string
 }
 
@@ -266,12 +265,6 @@ func (t *coordinatorTransaction) HasDispatchedPublicTransaction() bool {
 	defer t.RUnlock()
 	return t.pt.PreparedPublicTransaction != nil &&
 		t.pt.PreAssembly.TransactionSpecification.Intent == prototk.TransactionSpecification_SEND_TRANSACTION
-}
-
-func (t *coordinatorTransaction) GetPrivateTransaction() *components.PrivateTransaction {
-	t.RLock()
-	defer t.RUnlock()
-	return t.pt
 }
 
 func (t *coordinatorTransaction) GetOriginatorNode() string {

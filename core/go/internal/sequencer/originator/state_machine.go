@@ -84,7 +84,7 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
-					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
 				},
 			},
 			common.Event_EndorserNodesDiscovered: {
@@ -133,7 +133,7 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
-					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
 				},
 			},
 			common.Event_EndorserNodesDiscovered: {
@@ -258,7 +258,7 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_NewBlock: {
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
-					{If: guard_IsNewBlockRangeEpoch, Action: action_CalculateCoordinatorPriorities},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
 				},
 			},
 			common.Event_EndorserNodesDiscovered: {

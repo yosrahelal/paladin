@@ -159,6 +159,6 @@ func IsHigherPriority(list []string, node1 string, node2 string) bool {
 func DecodeNewBlockHeight(currentBlockHeight uint64, blockRange uint64, event Event) (uint64, bool) {
 	e := event.(*NewBlockEvent)
 	newHeight := e.BlockHeight
-	newBlockRangeEpoch := newHeight/blockRange != currentBlockHeight/blockRange
-	return newHeight, newBlockRangeEpoch
+	onEpochBoundary := newHeight/blockRange != currentBlockHeight/blockRange
+	return newHeight, onEpochBoundary
 }

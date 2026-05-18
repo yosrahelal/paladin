@@ -344,12 +344,6 @@ func TestTransaction_GetCurrentState_ReturnsState(t *testing.T) {
 	assert.Equal(t, State_Initial, txn.GetCurrentState())
 }
 
-func TestTransaction_GetPrivateTransaction_ReturnsPt(t *testing.T) {
-	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).Build()
-	pt := txn.pt
-	assert.Same(t, pt, txn.GetPrivateTransaction())
-}
-
 func TestTransaction_HasDispatchedPublicTransaction_TrueWhenSetAndIntentIsSend(t *testing.T) {
 	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
 		PreparedPublicTransaction(&pldapi.TransactionInput{}).
@@ -400,7 +394,7 @@ func TestDependsOn_InitializedFromPrivateTransaction(t *testing.T) {
 		ChainedDependencies(depID).
 		Grapher(grapher).
 		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{
-			depTx.GetPrivateTransaction().ID: depTx,
+			depTx.pt.ID: depTx,
 		}).
 		Build()
 
@@ -433,7 +427,7 @@ func TestNewTransaction_ChainedDependsOn_AddsPrereqAndUnassembledWhenDependencyN
 		Grapher(grapher).
 		ChainedDependencies(depID).
 		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{
-			depTx.GetPrivateTransaction().ID: depTx,
+			depTx.pt.ID: depTx,
 		}).
 		Build()
 
@@ -458,7 +452,7 @@ func TestNewTransaction_ChainedDependsOn_AddsPrereqOnlyWhenDependencyPastUnassem
 		Grapher(grapher).
 		ChainedDependencies(depID).
 		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{
-			depTx.GetPrivateTransaction().ID: depTx,
+			depTx.pt.ID: depTx,
 		}).
 		Build()
 
