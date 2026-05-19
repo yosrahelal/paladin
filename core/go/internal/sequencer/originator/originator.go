@@ -69,6 +69,7 @@ type originator struct {
 	onEpochBoundary                    bool
 	endorserCandidates                 []string // COORDINATOR_ENDORSER mode: deduped+sorted candidate pool; updated when EndorserNodesDiscoveredEvent arrives
 	coordinatorPriorityList            []string // COORDINATOR_ENDORSER mode: priority-ordered list computed independently from endorserCandidates + currentBlockHeight + blockRangeSize
+	failoverIndex                      int      // COORDINATOR_ENDORSER mode:t he next position in coordinatorPriorityList to try when the current active coordinator exceeds the inactive grace period
 
 	/* Config */
 	nodeName            string

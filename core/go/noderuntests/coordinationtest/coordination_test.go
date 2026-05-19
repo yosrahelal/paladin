@@ -21,11 +21,13 @@ package coordinationtest
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
+	seqcommon "github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	testutils "github.com/LFDT-Paladin/paladin/core/noderuntests/pkg"
 	"github.com/LFDT-Paladin/paladin/core/noderuntests/pkg/domains"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/algorithms"
@@ -1845,3 +1847,121 @@ func TestTransactionFailsIfExplicitPrereqTransactionFails(t *testing.T) {
 	)
 }
 
+func TestCoordinatorFailover(t *testing.T) {
+	// Test that when the preferred (highest-priority) coordinator goes offline, the non-preferred
+	// node takes over coordination, and that when the preferred node restarts it does not disrupt
+	// the non-preferred coordinator that is already active.
+
+	ctx := t.Context()
+	domainRegistryAddress := deployDomainRegistry(t, "alice")
+
+	alice := testutils.NewPartyForTesting(t, "alice", domainRegistryAddress)
+	bob := testutils.NewPartyForTesting(t, "bob", domainRegistryAddress)
+
+	// Compute the priority list before starting nodes. With BlockRange=MaxUint64, the effective
+	// block number is always 0 (h - h%MaxUint64 = 0), so the priority list is fixed for the test.
+	endorserPool := seqcommon.DedupeSortedCoordinatorEndorserNodes(
+		[]string{alice.GetName(), bob.GetName()},
+	)
+	priorityList := seqcommon.ComputeCoordinatorPriorityList(ctx, endorserPool, 0, math.MaxUint64)
+	// Bob should always be the preferred coordinator for this block range - it's permissable for this to change if we
+	// move to a different priority selection algorithm, but in that case the test needs to be updated.
+	require.Equal(t, bob.GetName(), priorityList[0])
+	require.Equal(t, alice.GetName(), priorityList[1])
+
+	// Use a large ClosingGracePeriod so the non-preferred coordinator remains in State_Active long enough for
+	// the preferred node to restart and observe it as the active coordinator.
+	// Use a large block range so the test stays within a single block range epoch
+	seqConfig := &pldconf.SequencerConfig{
+		BlockRange:         confutil.P(uint64(math.MaxUint64)),
+		ClosingGracePeriod: confutil.P(20),
+	}
+	alice.OverrideSequencerConfig(seqConfig)
+	bob.OverrideSequencerConfig(seqConfig)
+
+	alice.AddPeer(bob.GetNodeConfig())
+	bob.AddPeer(alice.GetNodeConfig())
+
+	domainConfig := &domains.SimpleDomainConfig{}
+	startNode(t, alice, domainConfig)
+	startNode(t, bob, domainConfig)
+	t.Cleanup(func() {
+		stopNode(t, alice)
+		stopNode(t, bob)
+	})
+
+	constructorParameters := &domains.ConstructorParameters{
+		From:                 alice.GetIdentity(),
+		Name:                 "FailoverToken",
+		Symbol:               "FT",
+		EndorsementMode:      domains.PrivacyGroupEndorsement,
+		EndorsementSet:       []string{alice.GetIdentityLocator(), bob.GetIdentityLocator()},
+		EndorsementThreshold: 1, // only one endorsement needed - allows transactions to succeed when one node is down
+	}
+	contractAddress := alice.DeploySimpleDomainInstanceContract(t, constructorParameters, transactionLatencyThreshold)
+
+	submitTx := func(party testutils.Party) pldclient.SentTransaction {
+		return party.GetClient().ForABI(ctx, *domains.SimpleTokenTransferABI()).
+			Private().
+			Domain("domain1").
+			From(party.GetIdentity()).
+			To(contractAddress).
+			Function("transfer").
+			Inputs(pldtypes.RawJSON(`{
+				"from": "",
+				"to": "` + alice.GetIdentityLocator() + `",
+				"amount": "100"
+			}`)).
+			Send()
+	}
+
+	// Helper: assert that a successfully completed transaction was sequenced by expectedNode.
+	assertDispatchedBy := func(t *testing.T, txID uuid.UUID, submitter testutils.Party, expectedNode testutils.Party) {
+		t.Helper()
+		txFull, err := submitter.GetClient().PTX().GetTransactionFull(ctx, txID)
+		require.NoError(t, err)
+		require.Len(t, txFull.SequencerActivity, 1, "Expected at least one sequencer activity record")
+		assert.Equal(t, string(pldapi.SequencerActivityType_Dispatch), txFull.SequencerActivity[0].ActivityType)
+		assert.Equal(t, expectedNode.GetNodeName(), txFull.SequencerActivity[0].SequencingNode,
+			"Expected transaction %s to be sequenced by %s", txID, expectedNode.GetNodeName())
+	}
+
+	// Step 1 — baseline: both nodes up, transactions from both nodes dispatched by bob.
+	aliceTx1 := submitTx(alice)
+	require.NoError(t, aliceTx1.Error())
+
+	bobTx1 := submitTx(bob)
+	require.NoError(t, bobTx1.Error())
+
+	require.NoError(t, aliceTx1.Wait(transactionLatencyThreshold(t)).Error())
+	assertDispatchedBy(t, *aliceTx1.ID(), alice, bob)
+	require.NoError(t, bobTx1.Wait(transactionLatencyThreshold(t)).Error())
+	assertDispatchedBy(t, *bobTx1.ID(), bob, bob)
+
+	// Step 2 — bob stopped: alice's originator redelegates to alice's coordinator.
+	stopNode(t, bob)
+	step2Tx := submitTx(alice)
+	require.NoError(t, step2Tx.Error())
+	customThreshold := 10 * time.Second // Allow longer for a transaction to complete when we're expecting a failover
+	require.NoError(t, step2Tx.Wait(transactionLatencyThresholdCustom(t, &customThreshold)).Error())
+	assertDispatchedBy(t, *step2Tx.ID(), alice, alice)
+
+	// Step 3 — bob restarted: alice remains the active coordinator.
+	// The ClosingGracePeriod is 20s, so alice should remain active for the duration of this step.
+	startNode(t, bob, domainConfig)
+
+	aliceTx2 := submitTx(alice)
+	require.NoError(t, aliceTx2.Error())
+	require.NoError(t, aliceTx2.Wait(transactionLatencyThreshold(t)).Error())
+	assertDispatchedBy(t, *aliceTx2.ID(), alice, alice)
+
+	// sleep for long enough to ensure that bob has seen alice's active heartbeat
+	// handling an endorsement request ensures that Bob will have a sequencer loaded for the contract
+	time.Sleep(2 * time.Second)
+
+	// Bob has already seens Alice's active heartbeats so lets her continue coordinating.
+	bobTx2 := submitTx(bob)
+	require.NoError(t, bobTx2.Error())
+	require.NoError(t, bobTx2.Wait(transactionLatencyThreshold(t)).Error())
+	assertDispatchedBy(t, *bobTx2.ID(), bob, alice)
+}

@@ -662,9 +662,12 @@ func (p *partyForTesting) Stop(t *testing.T) {
 	if p.instance == nil {
 		return
 	}
-	p.instance.GetComponentManager().Stop()
-	p.instance.GetPluginManager().Stop()
-	p.instance.CancelInstanceCtx()
+	instance := p.instance
+	p.instance = nil
+
+	instance.GetComponentManager().Stop()
+	instance.GetPluginManager().Stop()
+	instance.CancelInstanceCtx()
 
 	// Avoid restart races by waiting for the transport listener to release its bind port.
 	listenerAddr := net.JoinHostPort(p.nodeConfig.address, strconv.Itoa(p.nodeConfig.port))

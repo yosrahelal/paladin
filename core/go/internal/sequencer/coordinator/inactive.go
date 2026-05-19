@@ -52,6 +52,11 @@ func action_RejectDelegationRequest(ctx context.Context, c *coordinator, event c
 	return c.transportWriter.SendDelegationRequestRejection(ctx, e.FromNode, e.DelegationID, c.currentBlockHeight, c.currentActiveCoordinator)
 }
 
+func action_SetSelfAsActiveCoordinator(_ context.Context, c *coordinator, _ common.Event) error {
+	c.currentActiveCoordinator = c.nodeName
+	return nil
+}
+
 // action_UpdateActiveCoordinator updates the current active coordinator from either a received
 // heartbeat or a handover request. Both events carry the sender identity in different fields.
 func action_UpdateActiveCoordinator(_ context.Context, c *coordinator, event common.Event) error {

@@ -54,6 +54,7 @@ type OriginatorBuilderForTesting struct {
 	currentActiveCoordinator           *string
 	heartbeatIntervalsSinceLastReceive *int
 	inactiveGracePeriod                *int
+	failoverIndex                      *int
 	transactions                       []transaction.OriginatorTransaction
 	useMockTransportWriter             bool
 }
@@ -139,6 +140,10 @@ func (b *OriginatorBuilderForTesting) InactiveGracePeriod(n int) *OriginatorBuil
 	return b
 }
 
+func (b *OriginatorBuilderForTesting) FailoverIndex(n int) *OriginatorBuilderForTesting {
+	b.failoverIndex = &n
+	return b
+}
 func (b *OriginatorBuilderForTesting) Transactions(txns ...transaction.OriginatorTransaction) *OriginatorBuilderForTesting {
 	b.transactions = txns
 	return b
@@ -235,6 +240,9 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	}
 	if b.inactiveGracePeriod != nil {
 		originator.inactiveGracePeriod = *b.inactiveGracePeriod
+	}
+	if b.failoverIndex != nil {
+		originator.failoverIndex = *b.failoverIndex
 	}
 
 	return originator, mocks

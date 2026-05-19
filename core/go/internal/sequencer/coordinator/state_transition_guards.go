@@ -51,12 +51,6 @@ func guard_HasTransactionAssembling(ctx context.Context, c *coordinator) bool {
 	) > 0
 }
 
-// guard_IsCurrentActiveCoordinator returns true when this node believes it is the current active
-// coordinator (i.e. index 0 in the priority list, or set by static/sender mode).
-func guard_IsCurrentActiveCoordinator(_ context.Context, c *coordinator) bool {
-	return c.nodeName == c.currentActiveCoordinator
-}
-
 // guard_InactiveGracePeriodExceeded returns true when no heartbeat has been received for at least
 // inactiveGracePeriod heartbeat intervals.
 func guard_InactiveGracePeriodExceeded(_ context.Context, c *coordinator) bool {

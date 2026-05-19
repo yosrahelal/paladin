@@ -86,6 +86,60 @@ func action_SendDelegationRequest(ctx context.Context, o *originator, _ common.E
 	return sendDelegationRequest(ctx, o)
 }
 
+// resetFailoverIndex sets failoverIndex so the next failover walk step targets the
+// highest-priority candidate that is not the current active coordinator. Called whenever
+// currentActiveCoordinator changes via an external signal (heartbeat switch, rejection redirect,
+// priority recalculation). Must NOT be called from action_FailoverToNextCoordinator.
+//
+// No-op unless the priority list has more than one entry (STATIC/SENDER modes and single-node
+// ENDORSER pools cannot failover to a different coordinator).
+func (o *originator) resetFailoverIndex() {
+	if len(o.coordinatorPriorityList) <= 1 {
+		return
+	}
+	if o.currentActiveCoordinator == o.coordinatorPriorityList[0] {
+		o.failoverIndex = 1
+	} else {
+		o.failoverIndex = 0
+	}
+}
+
+// action_FailoverToNextCoordinator advances currentActiveCoordinator to the next candidate in
+// the priority list, increments failoverIndex (wrapping), resets the liveness counter, then
+// delegates. If there is no alternative coordinator to failover to (single endorser or STATE/SENDER mode)
+// this becomes the equivalent of a redelegate.
+func action_FailoverToNextCoordinator(ctx context.Context, o *originator, _ common.Event) error {
+	if len(o.coordinatorPriorityList) > 1 {
+		prev := o.currentActiveCoordinator
+		o.currentActiveCoordinator = o.coordinatorPriorityList[o.failoverIndex]
+		o.failoverIndex = (o.failoverIndex + 1) % len(o.coordinatorPriorityList)
+		o.heartbeatIntervalsSinceLastReceive = 0
+		log.L(ctx).Debugf("originator failing over from %s to %s (failoverIndex now %d)",
+			prev, o.currentActiveCoordinator, o.failoverIndex)
+	}
+	return sendDelegationRequest(ctx, o)
+}
+
+// action_ResetToTopPriorityCoordinator sets currentActiveCoordinator to the highest-priority
+// candidate and recalibrates failoverIndex. Used when entering Idle and on epoch boundaries
+// while Idle to ensure the next Sending entry starts from a fresh, highest-priority delegation
+// target rather than a potentially stale one.
+//
+// No-op unless the priority list has more than one entry.
+func action_ResetToTopPriorityCoordinator(ctx context.Context, o *originator, _ common.Event) error {
+	if len(o.coordinatorPriorityList) <= 1 {
+		return nil
+	}
+	prev := o.currentActiveCoordinator
+	o.currentActiveCoordinator = o.coordinatorPriorityList[0]
+	o.failoverIndex = 1
+	if prev != o.currentActiveCoordinator {
+		log.L(ctx).Debugf("originator reset active coordinator from %s to top priority %s",
+			prev, o.currentActiveCoordinator)
+	}
+	return nil
+}
+
 func guard_InactiveGracePeriodExceeded(_ context.Context, o *originator) bool {
 	return o.heartbeatIntervalsSinceLastReceive >= o.inactiveGracePeriod
 }
@@ -206,7 +260,9 @@ func action_CalculateCoordinatorPriorities(ctx context.Context, o *originator, _
 		// this should really only run on start up - after that we never unset the current active coordinator
 		o.currentActiveCoordinator = o.coordinatorPriorityList[0]
 	}
-
+	// whenever we have a new coordinator priority list we want to make sure that a failover walk through the
+	// list, if required, starts from the beginning
+	o.resetFailoverIndex()
 	return nil
 }
 
@@ -224,6 +280,7 @@ func action_UpdateEndorserCandidates(_ context.Context, o *originator, event com
 func action_UpdateActiveCoordinatorFromHeartbeat(_ context.Context, o *originator, event common.Event) error {
 	e := event.(*common.HeartbeatReceivedEvent)
 	o.currentActiveCoordinator = e.FromNode
+	o.resetFailoverIndex()
 	return nil
 }
 
@@ -236,6 +293,7 @@ func action_HandleDelegationRejected(_ context.Context, o *originator, event com
 	}
 	if common.IsHigherPriority(o.coordinatorPriorityList, e.ActiveCoordinator, o.currentActiveCoordinator) {
 		o.currentActiveCoordinator = e.ActiveCoordinator
+		o.resetFailoverIndex()
 	}
 	return nil
 }

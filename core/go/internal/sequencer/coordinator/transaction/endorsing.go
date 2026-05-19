@@ -72,10 +72,31 @@ func (t *coordinatorTransaction) unfulfilledEndorsementRequirements(ctx context.
 	}
 	for _, attRequest := range t.pt.PostAssembly.AttestationPlan {
 		if attRequest.AttestationType == prototk.AttestationType_ENDORSE {
+			// When threshold is unset (0) every party must endorse, which is equivalent to a
+			// threshold equal to the total party count.
+			effectiveThreshold := int(attRequest.GetThreshold())
+			if effectiveThreshold == 0 {
+				effectiveThreshold = len(attRequest.Parties)
+			}
+
+			receivedCount := 0
+			for _, endorsement := range t.pt.PostAssembly.Endorsements {
+				if endorsement.Name == attRequest.Name &&
+					attRequest.VerifierType == endorsement.Verifier.VerifierType {
+					receivedCount++
+				}
+			}
+			shortfall := effectiveThreshold - receivedCount
+			if shortfall <= 0 {
+				log.L(ctx).Debugf("endorsement request %s: threshold %d met (received %d)", attRequest.Name, effectiveThreshold, receivedCount)
+				continue
+			}
+
 			for _, party := range attRequest.Parties {
-				log.L(ctx).Debugf("party %s must endorse this request. Checking for endorsement", party)
+				log.L(ctx).Debugf("party %s may endorse this request. Checking for endorsement", party)
 				found := false
 				for _, endorsement := range t.pt.PostAssembly.Endorsements {
+					log.L(ctx).Debugf("existing endorsement from party %s", endorsement.Verifier.Lookup)
 					log.L(ctx).Debugf("existing endorsement from party %s", endorsement.Verifier.Lookup)
 					found = endorsement.Name == attRequest.Name &&
 						party == endorsement.Verifier.Lookup &&
@@ -91,7 +112,8 @@ func (t *coordinatorTransaction) unfulfilledEndorsementRequirements(ctx context.
 					}
 				}
 				if !found {
-					log.L(ctx).Debugf("no endorsement exists from party %s for transaction %s", party, t.pt.ID)
+					log.L(ctx).Debugf("no endorsement exists from party %s for transaction %s (need %d of %d)",
+						party, t.pt.ID, effectiveThreshold, len(attRequest.Parties))
 					unfulfilledEndorsementRequirements = append(unfulfilledEndorsementRequirements, &endorsementRequirement{party: party, attRequest: attRequest})
 				}
 			}

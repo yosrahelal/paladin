@@ -49,6 +49,7 @@ func action_SwitchActiveCoordinator(ctx context.Context, o *originator, event co
 	log.L(ctx).Debugf("switching active coordinator from %s to %s", o.currentActiveCoordinator, e.FromNode)
 	o.currentActiveCoordinator = e.FromNode
 	o.heartbeatIntervalsSinceLastReceive = 0
+	o.resetFailoverIndex()
 	return nil
 }
 

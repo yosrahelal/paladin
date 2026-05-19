@@ -36,6 +36,7 @@ func TestPrivateTransactionsSequencerLimitSequentialContracts(t *testing.T) {
 			Domain("domain1").
 			IdempotencyKey(fmt.Sprintf("deploy-seq-limit-%d", flowNum)).
 			From(alice.GetIdentity()).
+			// endorsementThreshold is 0 means all parties must endorse (default)
 			Inputs(pldtypes.RawJSON(fmt.Sprintf(`{
                     "from": "wallets.org1.node1",
                     "endorsementSet": ["%s"],
@@ -43,7 +44,8 @@ func TestPrivateTransactionsSequencerLimitSequentialContracts(t *testing.T) {
                     "symbol": "SLT%d",
 					"endorsementMode": "%s",
 					"hookAddress": "",
-					"amountVisible": false
+					"amountVisible": false,
+					"endorsementThreshold": 0
                 }`, endorsementSet[0], flowNum, flowNum, domains.PrivacyGroupEndorsement))).
 			Send()
 		require.NoError(t, deploy.Error(), "deploy flow %d should submit", flowNum)

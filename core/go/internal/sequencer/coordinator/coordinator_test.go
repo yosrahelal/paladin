@@ -488,7 +488,6 @@ func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {
 
 	// Verify event loop is running
 	require.False(t, c.stateMachineEventLoop.IsStopped(), "event loop should not be stopped initially")
-	require.False(t, c.isDispatchLoopRunning(), "dispatch loop should not be running initially (not yet Active)")
 
 	// Cancel the context then wait for shutdown to complete
 	cancel()
@@ -496,7 +495,7 @@ func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {
 
 	// Verify both loops have stopped
 	require.True(t, c.stateMachineEventLoop.IsStopped(), "event loop should be stopped")
-	require.False(t, c.isDispatchLoopRunning(), "dispatch loop should not be running after shutdown")
+	require.Nil(t, c.dispatchLoopDone, "dispatch loop should not be running after shutdown")
 
 	// Verify context was cancelled
 	select {
@@ -532,7 +531,7 @@ func TestCoordinator_CancelContext_CompletesSuccessfullyWhenCalledOnce(t *testin
 
 	// Verify both loops have stopped
 	require.True(t, c.stateMachineEventLoop.IsStopped(), "event loop should be stopped")
-	require.False(t, c.isDispatchLoopRunning(), "dispatch loop should not be running after shutdown")
+	require.Nil(t, c.dispatchLoopDone, "dispatch loop should not be running after shutdown")
 }
 
 func TestCoordinator_CancelContext_StopsLoopsEvenWhenProcessingEvents(t *testing.T) {
@@ -552,7 +551,7 @@ func TestCoordinator_CancelContext_StopsLoopsEvenWhenProcessingEvents(t *testing
 
 	// Verify both loops have stopped
 	require.True(t, c.stateMachineEventLoop.IsStopped(), "event loop should be stopped")
-	require.False(t, c.isDispatchLoopRunning(), "dispatch loop should not be running after shutdown")
+	require.Nil(t, c.dispatchLoopDone, "dispatch loop should not be running after shutdown")
 }
 
 func TestCoordinator_CancelContext_WhenAlreadyCancelled_ReturnsImmediately(t *testing.T) {
@@ -760,7 +759,7 @@ func TestStart_Idempotent_SecondCallReturnsNil(t *testing.T) {
 	err := c.Start(ctx)
 	require.NoError(t, err)
 	// Confirm no goroutines were started by verifying the dispatch loop is not running
-	require.False(t, c.isDispatchLoopRunning(), "dispatch loop should not be running after idempotent Start()")
+	require.Nil(t, c.dispatchLoopDone, "dispatch loop should not be running after idempotent Start()")
 }
 
 func TestWaitForDone_NotStarted_ReturnsImmediately(t *testing.T) {

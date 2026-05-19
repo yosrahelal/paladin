@@ -65,6 +65,11 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Idle: {
+		OnTransitionTo: []ActionRule{
+			// When entering Idle the last known active coordinator has gone silent.
+			// Reset to the highest-priority candidate so the next Sending entry starts fresh.
+			{Action: action_ResetToTopPriorityCoordinator},
+		},
 		Events: map[EventType]EventHandler{
 			common.Event_HeartbeatReceived: {
 				Validator: validator_IsHeartbeatSenderLive,
@@ -85,12 +90,15 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{Action: action_UpdateBlockHeight},
 					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
+					// Re-align to the new epoch's top-priority coordinator while still idle.
+					{If: guard_IsOnEpochBoundary, Action: action_ResetToTopPriorityCoordinator},
 				},
 			},
 			common.Event_EndorserNodesDiscovered: {
 				Actions: []ActionRule{
 					{Action: action_UpdateEndorserCandidates},
 					{Action: action_CalculateCoordinatorPriorities},
+					{Action: action_ResetToTopPriorityCoordinator},
 				},
 			},
 			common.Event_TransactionStateTransition: {
@@ -220,13 +228,11 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
 					{Action: action_IncrementHeartbeatIntervalCounts},
-					// Nudge with a redelegate when the active coordinator has been silent too long
-					// TODO AM: this is the point where we could consider failing over to a new coordinator
-					// the current design results in noone coordinating if every sending originator agrees
-					// that an unavailable node is the preferred active coordinator
+					// When the active coordinator has been silent too long, failover to the next
+					// highest-priority candidate if one is available. Otherwise redelegate to the same node.
 					{
 						If:     guard_InactiveGracePeriodExceeded,
-						Action: action_SendDelegationRequest,
+						Action: action_FailoverToNextCoordinator,
 					},
 				},
 			},

@@ -119,10 +119,6 @@ func (c *coordinator) stopDispatchLoop() {
 	c.dispatchLoopDone = nil
 }
 
-func (c *coordinator) isDispatchLoopRunning() bool {
-	return c.dispatchLoopDone != nil
-}
-
 func action_StartDispatchLoop(_ context.Context, c *coordinator, _ common.Event) error {
 	c.startDispatchLoop()
 	return nil

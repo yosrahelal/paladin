@@ -25,6 +25,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func Test_action_SetSelfAsActiveCoordinator_SetsNodeNameAsActiveCoordinator(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodeName("myNode").
+		CurrentActiveCoordinator("someOtherNode").
+		Build()
+
+	err := action_SetSelfAsActiveCoordinator(ctx, c, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "myNode", c.currentActiveCoordinator)
+}
+
 func Test_action_HeartbeatReceived_SetsActiveCoordinatorState(t *testing.T) {
 	ctx := context.Background()
 	builder := NewCoordinatorBuilderForTesting(t, State_Observing)

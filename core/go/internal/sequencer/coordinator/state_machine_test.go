@@ -148,6 +148,7 @@ func TestCoordinator_WhenIdleAndTransactionsDelegatedToSelf_TransitionsToActive(
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must set signing identity")
+	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
 }
 
 func TestCoordinator_WhenIdle_NewBlock_NewEpoch_UpdatesPriorityListAndStaysIdle(t *testing.T) {
@@ -309,6 +310,7 @@ func TestCoordinator_WhenElectStateTimeoutFires_TransitionsToActive(t *testing.T
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &StateTimeoutIntervalEvent{}))
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must set signing identity")
+	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
 	// action_ClearTimeoutSchedules ran on exit; both cancel funcs must be nil.
 	assert.Nil(t, c.cancelRequestTimeout, "request timeout must be cleared on Elect exit")
 	assert.Nil(t, c.cancelStateTimeout, "state timeout must be cleared on Elect exit")
@@ -555,6 +557,7 @@ func TestCoordinator_WhenPrepared_HeartbeatInterval_GraceExceeded_TransitionsToA
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
 	// guard_InactiveGracePeriodExceeded = true → transitions to Active
 	assert.Equal(t, State_Active, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
 }
 
 func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_TransitionsToActiveAndImportsState(t *testing.T) {
@@ -589,6 +592,7 @@ func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_TransitionsToActiveAnd
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must set signing identity")
+	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
 	// action_ImportStatesAndLocks ran: the grapher must now hold the imported state and lock.
 	exported, err := c.grapher.ExportStatesAndLocks(ctx, "node1")
 	require.NoError(t, err)
@@ -625,6 +629,7 @@ func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_ConfirmedTransactionsI
 	}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 	assert.Equal(t, State_Active, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
 	// action_ProcessConfirmedTransactionsFromSnapshot must have cleaned up the confirmed transaction.
 	assert.NotContains(t, c.transactionsByID, confirmedTxID, "confirmed transaction must be removed from transactionsByID")
 }
@@ -823,6 +828,7 @@ func TestCoordinator_WhenPreparedTransitionsToActive_RefreshesSigningIdentityAnd
 	}))
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.NotEmpty(t, c.signingIdentity.value)
+	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
 	// mock expectation on pooledTx.HandleEvent(SelectedEvent) verified by testify
 }
 
@@ -1566,8 +1572,7 @@ func TestCoordinator_WhenClosingFlushCompletesAndNotCurrentCoordinator_EnteringC
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
-	// Finalising the last dispatched transaction triggers guard_FlushComplete = true and
-	// !guard_IsCurrentActiveCoordinator → transition to Closing, where OnTransitionTo fires action_SendHeartbeat.
+	// Finalising the last dispatched transaction triggers guard_FlushComplete = true
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
 		FromState:     transaction.State_Dispatched,
@@ -1699,6 +1704,7 @@ func TestCoordinator_WhenClosing_DelegatedTransactions_LowerPriority_ActiveCoord
 	}))
 	// GuardNot(IsHigherPriority) AND InactiveGraceExceeded → transitions to Active.
 	assert.Equal(t, State_Active, c.GetCurrentState())
+	assert.Equal(t, "node3", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
 }
 
 func TestCoordinator_WhenClosing_TransactionStateTransition_ToFinal_CleansUpAndStaysClosing(t *testing.T) {

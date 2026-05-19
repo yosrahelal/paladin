@@ -43,11 +43,11 @@ func Test_stopDispatchLoop_StopsRunningLoop(t *testing.T) {
 	require.NoError(t, c.Start(ctx))
 
 	c.startDispatchLoop()
-	require.True(t, c.isDispatchLoopRunning(), "dispatch loop must be running after startDispatchLoop")
+	require.NotNil(t, c.dispatchLoopDone, "dispatch loop must be running after startDispatchLoop")
 
 	c.stopDispatchLoop()
 
-	require.False(t, c.isDispatchLoopRunning(), "dispatch loop must have stopped after stopDispatchLoop")
+	require.Nil(t, c.dispatchLoopDone, "dispatch loop must have stopped after stopDispatchLoop")
 	assert.Nil(t, c.dispatchLoopCancel, "dispatchLoopCancel must be nilled by stopDispatchLoop")
 	assert.Nil(t, c.dispatchLoopDone, "dispatchLoopDone must be nilled by stopDispatchLoop")
 }

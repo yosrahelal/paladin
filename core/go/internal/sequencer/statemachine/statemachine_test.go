@@ -485,6 +485,33 @@ func TestOnTransitionFrom_ExecutedWhenLeavingState(t *testing.T) {
 	assert.Equal(t, []string{"transition", "exit-idle", "entry-active", "exit-active", "entry-complete"}, steps)
 }
 
+func TestOnTransitionFrom_ErrorPropagated(t *testing.T) {
+	exitErr := errors.New("exit action failed")
+
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			OnTransitionFrom: []ActionRule[*TestEntity]{{
+				Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
+					return exitErr
+				},
+			}},
+			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
+				Event_Start: {
+					Transitions: []Transition[TestState, *TestEntity]{{
+						To: State_Active,
+					}},
+				},
+			},
+		},
+		State_Active: {},
+	}
+
+	entity := newTestEntity(definitions, "test-entity")
+	err := entity.sm.ProcessEvent(context.Background(), entity, newTestEvent(Event_Start))
+	assert.ErrorIs(t, err, exitErr)
+	assert.Equal(t, State_Active, entity.sm.GetCurrentState())
+}
+
 func TestOnTransitionFrom_NilSafe_WhenNotDefined(t *testing.T) {
 	// States without OnTransitionFrom should not panic or error when a transition fires from them.
 	definitions := StateDefinitions[TestState, *TestEntity]{

@@ -662,6 +662,53 @@ func TestCoordinatorTransaction_Endorsement_GatheringNoTransition_IfNotAttestati
 	assert.False(t, mocks.SentMessageRecorder.HasSentDispatchConfirmationRequest(), "did not expected a dispatch confirmation request to be sent, but one was sent")
 }
 
+// TestCoordinatorTransaction_Endorsement_Gathering_Threshold1of3_TransitionsAtThreshold verifies
+// that when an AttestationRequest has three parties but threshold=1, receiving one endorsement
+// is sufficient to fulfill the plan and transition to Confirming_Dispatchable.
+func TestCoordinatorTransaction_Endorsement_Gathering_Threshold1of3_TransitionsAtThreshold(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).Build()
+
+	threshold := int32(1)
+	const attName = "group-endorse"
+	const verifierType = "ETH_ADDRESS"
+	txn.pt.PostAssembly = &components.TransactionPostAssembly{
+		AttestationPlan: []*prototk.AttestationRequest{{
+			Name:            attName,
+			AttestationType: prototk.AttestationType_ENDORSE,
+			VerifierType:    verifierType,
+			Parties:         []string{"p1@n1", "p2@n2", "p3@n3"},
+			Threshold:       &threshold,
+		}},
+		Endorsements: []*prototk.AttestationResult{},
+	}
+
+	// Initialise pendingEndorsementRequests manually so applyEndorsement can match the key.
+	clock := common.RealClock()
+	noop := func(_ context.Context, _ uuid.UUID) error { return nil }
+	req1 := common.NewIdempotentRequest(ctx, clock, 0, noop)
+	txn.pendingEndorsementRequests = map[string]map[string]*common.IdempotentRequest{
+		attName: {
+			"p1@n1": req1,
+			"p2@n2": common.NewIdempotentRequest(ctx, clock, 0, noop),
+			"p3@n3": common.NewIdempotentRequest(ctx, clock, 0, noop),
+		},
+	}
+
+	err := txn.HandleEvent(ctx, &EndorsedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		RequestID:            req1.IdempotencyKey(),
+		Endorsement: &prototk.AttestationResult{
+			Name:            attName,
+			AttestationType: prototk.AttestationType_ENDORSE,
+			Verifier:        &prototk.ResolvedVerifier{Lookup: "p1@n1", VerifierType: verifierType},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Confirming_Dispatchable, txn.GetCurrentState(),
+		"threshold=1 met after one endorsement — must transition to Confirming_Dispatchable")
+}
+
 func TestCoordinatorTransaction_Endorsement_Gathering_ToBlocked_OnEndorsed_IfAttestationPlanCompleteAndHasDependenciesNotReady(t *testing.T) {
 	ctx := context.Background()
 

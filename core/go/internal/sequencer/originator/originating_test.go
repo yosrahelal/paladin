@@ -420,3 +420,239 @@ func Test_action_UpdateEndorserCandidates_DoesNotChangeCurrentActiveCoordinator(
 	assert.NotEmpty(t, o.coordinatorPriorityList)
 	assert.Equal(t, "node2", o.currentActiveCoordinator, "action_UpdateEndorserCandidates must not change currentActiveCoordinator")
 }
+
+// action_CalculateCoordinatorPriorities sets currentActiveCoordinator to priorityList[0] on startup
+// (the empty-string guard path), and recalibrates failoverIndex.
+func Test_action_CalculateCoordinatorPriorities_EmptyActiveCoordinator_SetsTopPriorityAndRecalibrates(t *testing.T) {
+	ctx := context.Background()
+	// Use "" as the explicit coordinator so the empty-guard branch runs.
+	o, _ := NewOriginatorBuilderForTesting(t, State_Initial).
+		WithEndorserCandidates("node1", "node2").
+		CurrentActiveCoordinator("").
+		Build()
+
+	err := action_CalculateCoordinatorPriorities(ctx, o, nil)
+	require.NoError(t, err)
+
+	require.NotEmpty(t, o.coordinatorPriorityList)
+	assert.Equal(t, o.coordinatorPriorityList[0], o.currentActiveCoordinator,
+		"when active coordinator is empty, must initialise to top-priority candidate")
+	assert.Equal(t, 1, o.failoverIndex,
+		"failoverIndex must be 1 after initialising to top-priority candidate")
+}
+
+// ── resetFailoverIndex ──────────────────────────────────────────────────
+
+func Test_resetFailoverIndex_ActiveIsTopPriority_SetsIndexToOne(t *testing.T) {
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CoordinatorPriorityList("A", "B", "C").
+		CurrentActiveCoordinator("A").
+		FailoverIndex(0).
+		Build()
+
+	o.resetFailoverIndex()
+
+	assert.Equal(t, 1, o.failoverIndex, "when active is top priority, next walk step should be index 1")
+}
+
+func Test_resetFailoverIndex_ActiveIsNotTopPriority_SetsIndexToZero(t *testing.T) {
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CoordinatorPriorityList("A", "B", "C").
+		CurrentActiveCoordinator("C").
+		FailoverIndex(2).
+		Build()
+
+	o.resetFailoverIndex()
+
+	assert.Equal(t, 0, o.failoverIndex, "when active is not top priority, next walk step should start from index 0")
+}
+
+func Test_resetFailoverIndex_EmptyPriorityList_IsNoOp(t *testing.T) {
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("node1").
+		FailoverIndex(5).
+		Build()
+
+	o.resetFailoverIndex()
+
+	assert.Equal(t, 5, o.failoverIndex, "empty priority list (STATIC/SENDER mode) must be a no-op")
+}
+
+func Test_resetFailoverIndex_SingleNodePriorityList_IsNoOp(t *testing.T) {
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CoordinatorPriorityList("A").
+		CurrentActiveCoordinator("A").
+		FailoverIndex(3).
+		Build()
+
+	o.resetFailoverIndex()
+
+	assert.Equal(t, 3, o.failoverIndex, "single-node pool cannot failover so recalibrate must be a no-op")
+}
+
+func Test_resetFailoverIndex_CalledByHandleDelegationRejected_RecalibratesOnRedirect(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CoordinatorPriorityList("A", "B", "C").
+		CurrentActiveCoordinator("C").
+		FailoverIndex(2).
+		Build()
+
+	// Rejection that names a higher-priority coordinator → redirect and recalibrate.
+	err := action_HandleDelegationRejected(ctx, o, &DelegationRejectedEvent{ActiveCoordinator: "A"})
+	require.NoError(t, err)
+
+	assert.Equal(t, "A", o.currentActiveCoordinator)
+	assert.Equal(t, 1, o.failoverIndex, "failoverIndex must be recalibrated to 1 after redirect to top priority")
+}
+
+func Test_resetFailoverIndex_CalledByHandleDelegationRejected_NoChangeOnLowerPriority(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		CoordinatorPriorityList("A", "B", "C").
+		CurrentActiveCoordinator("A").
+		FailoverIndex(1).
+		Build()
+
+	// Rejection names a lower-priority coordinator → no redirect, no recalibrate.
+	err := action_HandleDelegationRejected(ctx, o, &DelegationRejectedEvent{ActiveCoordinator: "C"})
+	require.NoError(t, err)
+
+	assert.Equal(t, "A", o.currentActiveCoordinator)
+	assert.Equal(t, 1, o.failoverIndex, "failoverIndex must not change when rejection names lower-priority coordinator")
+}
+
+// ── action_FailoverToNextCoordinator ─────────────────────────────────────────
+
+func Test_action_FailoverToNextCoordinator_WithPriorityList_AdvancesCoordinatorAndResetsCounter(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	pt := &components.PrivateTransaction{ID: txID}
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetPrivateTransaction").Return(pt)
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+		CoordinatorPriorityList("A", "B", "C").
+		CurrentActiveCoordinator("A").
+		FailoverIndex(1).
+		WithMockTransportWriter(t)
+	o, mocks := builder.Build()
+	o.transactionsByID[txID] = mockTxn
+	o.transactionsOrdered = []transaction.OriginatorTransaction{mockTxn}
+	o.heartbeatIntervalsSinceLastReceive = 5
+
+	mocks.TransportWriter.EXPECT().
+		SendDelegationRequest(mock.Anything, "B", mock.Anything, mock.Anything).
+		Return(nil).Once()
+
+	err := action_FailoverToNextCoordinator(ctx, o, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "B", o.currentActiveCoordinator)
+	assert.Equal(t, 2, o.failoverIndex)
+	assert.Equal(t, 0, o.heartbeatIntervalsSinceLastReceive, "liveness counter must be reset on failover")
+}
+
+func Test_action_FailoverToNextCoordinator_WrapAround_CyclesBackToStart(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	pt := &components.PrivateTransaction{ID: txID}
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetPrivateTransaction").Return(pt)
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+		CoordinatorPriorityList("A", "B", "C").
+		CurrentActiveCoordinator("B").
+		FailoverIndex(2). // pointing to last slot
+		WithMockTransportWriter(t)
+	o, mocks := builder.Build()
+	o.transactionsByID[txID] = mockTxn
+	o.transactionsOrdered = []transaction.OriginatorTransaction{mockTxn}
+
+	mocks.TransportWriter.EXPECT().
+		SendDelegationRequest(mock.Anything, "C", mock.Anything, mock.Anything).
+		Return(nil).Once()
+
+	err := action_FailoverToNextCoordinator(ctx, o, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "C", o.currentActiveCoordinator)
+	assert.Equal(t, 0, o.failoverIndex, "failoverIndex must wrap to 0 after the last position")
+}
+
+func Test_action_FailoverToNextCoordinator_EmptyPriorityList_DelegatesWithoutReset(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	pt := &components.PrivateTransaction{ID: txID}
+	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
+	mockTxn.On("GetID").Return(txID)
+	mockTxn.On("GetPrivateTransaction").Return(pt)
+	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
+	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+		CurrentActiveCoordinator("static-coordinator").
+		FailoverIndex(0).
+		WithMockTransportWriter(t)
+	o, mocks := builder.Build()
+	o.transactionsByID[txID] = mockTxn
+	o.transactionsOrdered = []transaction.OriginatorTransaction{mockTxn}
+	o.heartbeatIntervalsSinceLastReceive = 3
+
+	mocks.TransportWriter.EXPECT().
+		SendDelegationRequest(mock.Anything, "static-coordinator", mock.Anything, mock.Anything).
+		Return(nil).Once()
+
+	err := action_FailoverToNextCoordinator(ctx, o, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "static-coordinator", o.currentActiveCoordinator, "STATIC/SENDER mode: coordinator must not change")
+	assert.Equal(t, 0, o.failoverIndex, "STATIC/SENDER mode: failoverIndex must not change")
+	assert.Equal(t, 3, o.heartbeatIntervalsSinceLastReceive, "STATIC/SENDER mode: counter must not be reset")
+}
+
+// ── action_ResetToTopPriorityCoordinator ─────────────────────────────────────
+
+func Test_action_ResetToTopPriorityCoordinator_EmptyPriorityList_IsNoOp(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		CurrentActiveCoordinator("static-coordinator").
+		FailoverIndex(5).
+		Build()
+
+	err := action_ResetToTopPriorityCoordinator(ctx, o, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "static-coordinator", o.currentActiveCoordinator, "must be a no-op with empty priority list")
+	assert.Equal(t, 5, o.failoverIndex, "failoverIndex must not change")
+}
+
+func Test_action_ResetToTopPriorityCoordinator_ResetsToTopAndRecalibrates(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		CoordinatorPriorityList("A", "B", "C").
+		CurrentActiveCoordinator("C").
+		FailoverIndex(2).
+		Build()
+
+	err := action_ResetToTopPriorityCoordinator(ctx, o, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "A", o.currentActiveCoordinator, "must reset to priorityList[0]")
+	assert.Equal(t, 1, o.failoverIndex, "failoverIndex must be 1 after reset to top priority")
+}
+
+func Test_action_ResetToTopPriorityCoordinator_AlreadyAtTop_IdempotentAndNoLog(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		CoordinatorPriorityList("A", "B", "C").
+		CurrentActiveCoordinator("A").
+		FailoverIndex(1).
+		Build()
+
+	err := action_ResetToTopPriorityCoordinator(ctx, o, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "A", o.currentActiveCoordinator, "coordinator must remain at top priority (idempotent)")
+	assert.Equal(t, 1, o.failoverIndex, "failoverIndex must remain 1 (idempotent)")
+}
