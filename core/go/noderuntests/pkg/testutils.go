@@ -656,6 +656,23 @@ func (p *partyForTesting) AddPeer(peers ...interface{}) {
 func (p *partyForTesting) Start(t *testing.T, domainConfig any, configPath string, manualTestCleanup bool) {
 	p.instance = NewInstanceForTesting(t, p.domainRegistryAddress, p.nodeConfig, p.peers, domainConfig, false, configPath, manualTestCleanup)
 	p.client = p.instance.GetClient()
+
+	// Mirror the check in Stop(): wait until the transport listener is actually
+	// accepting connections before returning. ConfigureTransport binds the port
+	// via net.Listen but launches grpcServer.Serve() in a goroutine, so the
+	// gRPC Accept() loop may not have started yet when CompleteStart() returns.
+	// A successful TCP dial proves the server is ready to accept gRPC streams,
+	// preventing races where peers send fire-and-forget messages to the freshly
+	// restarted node before it can receive them.
+	listenerAddr := net.JoinHostPort(p.nodeConfig.address, strconv.Itoa(p.nodeConfig.port))
+	require.Eventually(t, func() bool {
+		conn, err := net.DialTimeout("tcp", listenerAddr, 100*time.Millisecond)
+		if err != nil {
+			return false
+		}
+		_ = conn.Close()
+		return true
+	}, 10*time.Second, 100*time.Millisecond, "transport listener not yet accepting connections on %s", listenerAddr)
 }
 
 func (p *partyForTesting) Stop(t *testing.T) {
