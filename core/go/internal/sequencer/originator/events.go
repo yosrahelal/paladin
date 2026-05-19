@@ -49,10 +49,8 @@ func (*OriginatorCreatedEvent) TypeString() string {
 	return "Event_OriginatorCreated"
 }
 
-// DelegationRejectedEvent is queued by the transport client to the originator when a
-// DelegationRequestAcknowledgment arrives with Accepted == false. It carries the name of the
-// coordinator that the rejecting node believes is currently active so the originator can
-// fast-redirect to a higher-priority coordinator.
+// DelegationRejectedEvent carries the name of the coordinator that the rejecting node believes
+// is currently active so the originator can fast-redirect to a higher-priority coordinator.
 type DelegationRejectedEvent struct {
 	common.BaseEvent
 	ActiveCoordinator string

@@ -22,7 +22,7 @@ const (
 	MessageType_AssembleError                    = "AssembleError"
 	MessageType_CoordinatorHeartbeatNotification = "CoordinatorHeartbeatNotification"
 	MessageType_DelegationRequest                = "DelegationRequest"
-	MessageType_DelegationRequestAcknowledgment  = "DelegationRequestAcknowledgment"
+	MessageType_DelegationResponse               = "DelegationResponse"
 	MessageType_Dispatched                       = "Dispatched"
 	MessageType_EndorsementRequest               = "EndorsementRequest"
 	MessageType_EndorsementResponse              = "EndorsementResponse"

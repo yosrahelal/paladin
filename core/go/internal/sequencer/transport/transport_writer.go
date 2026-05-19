@@ -134,7 +134,7 @@ func (tw *transportWriter) SendDelegationRequestAcknowledgment(
 	errors []int64,
 	blockHeight uint64,
 ) error {
-	delegationRequestAcknowledgment := &engineProto.DelegationRequestAcknowledgment{
+	delegationRequestAcknowledgment := &engineProto.DelegationResponse{
 		DelegationId:    delegationId,
 		TransactionIds:  transactionIDs,
 		DelegateNodeId:  delegatingNodeName,
@@ -150,7 +150,7 @@ func (tw *transportWriter) SendDelegationRequestAcknowledgment(
 	}
 
 	return tw.send(ctx, &components.FireAndForgetMessageSend{
-		MessageType: MessageType_DelegationRequestAcknowledgment,
+		MessageType: MessageType_DelegationResponse,
 		Payload:     delegationRequestAcknowledgmentBytes,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        delegatingNodeName,
@@ -164,7 +164,7 @@ func (tw *transportWriter) SendDelegationRequestRejection(
 	blockHeight uint64,
 	activeCoordinator string,
 ) error {
-	rejection := &engineProto.DelegationRequestAcknowledgment{
+	rejection := &engineProto.DelegationResponse{
 		DelegationId:      delegationId,
 		DelegateNodeId:    delegatingNodeName,
 		ContractAddress:   tw.contractAddress.String(),
@@ -179,7 +179,7 @@ func (tw *transportWriter) SendDelegationRequestRejection(
 	}
 
 	return tw.send(ctx, &components.FireAndForgetMessageSend{
-		MessageType: MessageType_DelegationRequestAcknowledgment,
+		MessageType: MessageType_DelegationResponse,
 		Payload:     rejectionBytes,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        delegatingNodeName,

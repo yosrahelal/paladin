@@ -56,8 +56,8 @@ func (sMgr *sequencerManager) HandlePaladinMsg(ctx context.Context, message *com
 		go sMgr.handleCoordinatorHeartbeatNotification(sMgr.ctx, message)
 	case transport.MessageType_DelegationRequest:
 		go sMgr.handleDelegationRequest(sMgr.ctx, message)
-	case transport.MessageType_DelegationRequestAcknowledgment:
-		go sMgr.handleDelegationRequestAcknowledgment(sMgr.ctx, message)
+	case transport.MessageType_DelegationResponse:
+		go sMgr.handleDelegationResponse(sMgr.ctx, message)
 	case transport.MessageType_Dispatched:
 		go sMgr.handleDispatchedEvent(sMgr.ctx, message)
 	case transport.MessageType_PreDispatchRequest:
@@ -405,8 +405,8 @@ func (sMgr *sequencerManager) handleDelegationRequest(ctx context.Context, messa
 	seq.GetCoordinator().QueueEvent(ctx, transactionDelegatedEvent)
 }
 
-func (sMgr *sequencerManager) handleDelegationRequestAcknowledgment(ctx context.Context, message *components.ReceivedMessage) {
-	delegationRequestAcknowledgment := &engineProto.DelegationRequestAcknowledgment{}
+func (sMgr *sequencerManager) handleDelegationResponse(ctx context.Context, message *components.ReceivedMessage) {
+	delegationRequestAcknowledgment := &engineProto.DelegationResponse{}
 	err := proto.Unmarshal(message.Payload, delegationRequestAcknowledgment)
 	if err != nil {
 		sMgr.logPaladinMessageUnmarshalError(ctx, message, err)

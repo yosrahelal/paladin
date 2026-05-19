@@ -133,7 +133,7 @@ func TestHandlePaladinMsg_Routing(t *testing.T) {
 		{"AssembleError", transport.MessageType_AssembleError},
 		{"CoordinatorHeartbeatNotification", transport.MessageType_CoordinatorHeartbeatNotification},
 		{"DelegationRequest", transport.MessageType_DelegationRequest},
-		{"DelegationRequestAcknowledgment", transport.MessageType_DelegationRequestAcknowledgment},
+		{"DelegationResponse", transport.MessageType_DelegationResponse},
 		{"Dispatched", transport.MessageType_Dispatched},
 		{"PreDispatchRequest", transport.MessageType_PreDispatchRequest},
 		{"PreDispatchResponse", transport.MessageType_PreDispatchResponse},
@@ -920,13 +920,13 @@ func TestHandlePreDispatchResponse_Success(t *testing.T) {
 	mocks.coordinator.AssertExpectations(t)
 }
 
-func TestHandleDelegationRequestAcknowledgment_Success(t *testing.T) {
+func TestHandleDelegationResponse_Success(t *testing.T) {
 	ctx := context.Background()
 	mocks := newTransportClientTestMocks(t)
 	sm := newSequencerManagerForTransportClientTesting(t, mocks)
 
 	txID := uuid.New()
-	delegationRequestAcknowledgment := &engineProto.DelegationRequestAcknowledgment{
+	delegationRequestAcknowledgment := &engineProto.DelegationResponse{
 		TransactionIds: []string{txID.String()},
 	}
 	payload, _ := proto.Marshal(delegationRequestAcknowledgment)
@@ -934,15 +934,15 @@ func TestHandleDelegationRequestAcknowledgment_Success(t *testing.T) {
 	message := &components.ReceivedMessage{
 		FromNode:    "test-node",
 		MessageID:   uuid.New(),
-		MessageType: transport.MessageType_DelegationRequestAcknowledgment,
+		MessageType: transport.MessageType_DelegationResponse,
 		Payload:     payload,
 	}
 
 	// Should not panic - this handler just logs
-	sm.handleDelegationRequestAcknowledgment(ctx, message)
+	sm.handleDelegationResponse(ctx, message)
 }
 
-func TestHandleDelegationRequestAcknowledgment_UnmarshalError(t *testing.T) {
+func TestHandleDelegationResponse_UnmarshalError(t *testing.T) {
 	ctx := context.Background()
 	mocks := newTransportClientTestMocks(t)
 	sm := newSequencerManagerForTransportClientTesting(t, mocks)
@@ -950,22 +950,22 @@ func TestHandleDelegationRequestAcknowledgment_UnmarshalError(t *testing.T) {
 	message := &components.ReceivedMessage{
 		FromNode:    "test-node",
 		MessageID:   uuid.New(),
-		MessageType: transport.MessageType_DelegationRequestAcknowledgment,
+		MessageType: transport.MessageType_DelegationResponse,
 		Payload:     []byte("invalid-proto"),
 	}
 
 	// Should not panic
-	sm.handleDelegationRequestAcknowledgment(ctx, message)
+	sm.handleDelegationResponse(ctx, message)
 }
 
-func TestHandleDelegationRequestAcknowledgment_MaxInFlightRejection(t *testing.T) {
+func TestHandleDelegationResponse_MaxInFlightRejection(t *testing.T) {
 	ctx := context.Background()
 	mocks := newTransportClientTestMocks(t)
 	sm := newSequencerManagerForTransportClientTesting(t, mocks)
 
 	txID1 := uuid.New().String()
 	txID2 := uuid.New().String()
-	delegationRequestAcknowledgment := &engineProto.DelegationRequestAcknowledgment{
+	delegationRequestAcknowledgment := &engineProto.DelegationResponse{
 		TransactionIds: []string{txID1, txID2},
 		Errors: []int64{
 			int64(coordinator.DelegationAcknowledgementError_MaxInflightTransactions),
@@ -978,22 +978,22 @@ func TestHandleDelegationRequestAcknowledgment_MaxInFlightRejection(t *testing.T
 	message := &components.ReceivedMessage{
 		FromNode:    "test-node",
 		MessageID:   uuid.New(),
-		MessageType: transport.MessageType_DelegationRequestAcknowledgment,
+		MessageType: transport.MessageType_DelegationResponse,
 		Payload:     payload,
 	}
 
 	// Should not panic; handler logs max in flight rejections
-	sm.handleDelegationRequestAcknowledgment(ctx, message)
+	sm.handleDelegationResponse(ctx, message)
 }
 
-func TestHandleDelegationRequestAcknowledgment_UnknownError(t *testing.T) {
+func TestHandleDelegationResponse_UnknownError(t *testing.T) {
 	ctx := context.Background()
 	mocks := newTransportClientTestMocks(t)
 	sm := newSequencerManagerForTransportClientTesting(t, mocks)
 
 	txID := uuid.New().String()
 	unknownErrorCode := int64(99)
-	delegationRequestAcknowledgment := &engineProto.DelegationRequestAcknowledgment{
+	delegationRequestAcknowledgment := &engineProto.DelegationResponse{
 		TransactionIds: []string{txID},
 		Errors:         []int64{unknownErrorCode},
 	}
@@ -1003,14 +1003,14 @@ func TestHandleDelegationRequestAcknowledgment_UnknownError(t *testing.T) {
 	message := &components.ReceivedMessage{
 		FromNode:    "test-node",
 		MessageID:   uuid.New(),
-		MessageType: transport.MessageType_DelegationRequestAcknowledgment,
+		MessageType: transport.MessageType_DelegationResponse,
 		Payload:     payload,
 	}
 
-	sm.handleDelegationRequestAcknowledgment(ctx, message)
+	sm.handleDelegationResponse(ctx, message)
 }
 
-func TestHandleDelegationRequestAcknowledgment_MixedErrors(t *testing.T) {
+func TestHandleDelegationResponse_MixedErrors(t *testing.T) {
 	ctx := context.Background()
 	mocks := newTransportClientTestMocks(t)
 	sm := newSequencerManagerForTransportClientTesting(t, mocks)
@@ -1018,7 +1018,7 @@ func TestHandleDelegationRequestAcknowledgment_MixedErrors(t *testing.T) {
 	txIDAccepted := uuid.New().String()
 	txIDMaxInFlight := uuid.New().String()
 	txIDUnknown := uuid.New().String()
-	delegationRequestAcknowledgment := &engineProto.DelegationRequestAcknowledgment{
+	delegationRequestAcknowledgment := &engineProto.DelegationResponse{
 		TransactionIds: []string{txIDAccepted, txIDMaxInFlight, txIDUnknown},
 		Errors: []int64{
 			int64(coordinator.DelegationAcknowledgementError_None),
@@ -1032,19 +1032,19 @@ func TestHandleDelegationRequestAcknowledgment_MixedErrors(t *testing.T) {
 	message := &components.ReceivedMessage{
 		FromNode:    "test-node",
 		MessageID:   uuid.New(),
-		MessageType: transport.MessageType_DelegationRequestAcknowledgment,
+		MessageType: transport.MessageType_DelegationResponse,
 		Payload:     payload,
 	}
 
-	sm.handleDelegationRequestAcknowledgment(ctx, message)
+	sm.handleDelegationResponse(ctx, message)
 }
 
-func TestHandleDelegationRequestAcknowledgment_Empty(t *testing.T) {
+func TestHandleDelegationResponse_Empty(t *testing.T) {
 	ctx := context.Background()
 	mocks := newTransportClientTestMocks(t)
 	sm := newSequencerManagerForTransportClientTesting(t, mocks)
 
-	delegationRequestAcknowledgment := &engineProto.DelegationRequestAcknowledgment{
+	delegationRequestAcknowledgment := &engineProto.DelegationResponse{
 		TransactionIds: []string{},
 		Errors:         []int64{},
 	}
@@ -1054,11 +1054,11 @@ func TestHandleDelegationRequestAcknowledgment_Empty(t *testing.T) {
 	message := &components.ReceivedMessage{
 		FromNode:    "test-node",
 		MessageID:   uuid.New(),
-		MessageType: transport.MessageType_DelegationRequestAcknowledgment,
+		MessageType: transport.MessageType_DelegationResponse,
 		Payload:     payload,
 	}
 
-	sm.handleDelegationRequestAcknowledgment(ctx, message)
+	sm.handleDelegationResponse(ctx, message)
 }
 
 func TestHandleEndorsementRequest_Success_Sign(t *testing.T) {

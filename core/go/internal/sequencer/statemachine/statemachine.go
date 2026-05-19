@@ -355,7 +355,6 @@ func (sm *StateMachine[S, E]) evaluateTransitions(
 				}
 			}
 
-			// Transition logging (state machine is sequencer-only; uses state category)
 			log.L(ctx).Debugf("%s | %s | %s | transition to state %s",
 				sm.name,
 				previousState.String(),
@@ -596,20 +595,16 @@ func (sel *StateMachineEventLoop[S, E]) TryQueuePriorityEvent(ctx context.Contex
 	}
 }
 
-// ProcessEvent synchronously processes an event. This bypasses the event loop
-// and should only be used in tests or when you need synchronous processing.
-// ProcessEvent synchronously processes an event through the same pre-processing and routing
-// pipeline used by the event loop goroutine, including the PreProcess hook (e.g. routing
-// transaction events to sub-state-machines). Use this in tests that need deterministic,
+// ProcessEvent synchronously processes an event through the same pre-processing pipeline
+// used by the event loop goroutine. Use this in tests or other cases that need deterministic,
 // synchronous event processing without starting the goroutine-based event loop.
 func (sel *StateMachineEventLoop[S, E]) ProcessEvent(ctx context.Context, event common.Event) error {
 	return sel.processEvent(ctx, event)
 }
 
 // DrainPendingEvents processes all events currently buffered in the priority and regular queues,
-// using the same pipeline as HandleEvent. It stops when both queues are empty.
-// Used in tests to flush internally-queued follow-up events (e.g. TransactionStateTransitionEvents
-// queued by transaction state machines during synchronous processing) before making assertions.
+// using the same pipeline as the event loop. It stops when both queues are empty.
+// Useful in tests to flush internally-queued follow-up events before making assertions.
 func (sel *StateMachineEventLoop[S, E]) DrainPendingEvents(ctx context.Context) error {
 	for {
 		processed := false

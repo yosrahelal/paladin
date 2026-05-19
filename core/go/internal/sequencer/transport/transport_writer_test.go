@@ -351,7 +351,7 @@ func TestSendDelegationRequestAcknowledgment_Success(t *testing.T) {
 	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
-		if msg.MessageType != MessageType_DelegationRequestAcknowledgment {
+		if msg.MessageType != MessageType_DelegationResponse {
 			return false
 		}
 		if msg.Node != delegatingNodeName {
@@ -360,7 +360,7 @@ func TestSendDelegationRequestAcknowledgment_Success(t *testing.T) {
 		if msg.Component.String() != "TRANSACTION_ENGINE" {
 			return false
 		}
-		var ack engineProto.DelegationRequestAcknowledgment
+		var ack engineProto.DelegationResponse
 		err := proto.Unmarshal(msg.Payload, &ack)
 		if err != nil {
 			return false
@@ -435,13 +435,13 @@ func TestSendDelegationRequestRejection_Success(t *testing.T) {
 	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
-		if msg.MessageType != MessageType_DelegationRequestAcknowledgment {
+		if msg.MessageType != MessageType_DelegationResponse {
 			return false
 		}
 		if msg.Node != delegatingNodeName {
 			return false
 		}
-		var ack engineProto.DelegationRequestAcknowledgment
+		var ack engineProto.DelegationResponse
 		if err := proto.Unmarshal(msg.Payload, &ack); err != nil {
 			return false
 		}
