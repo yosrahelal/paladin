@@ -225,7 +225,7 @@ var stateDefinitionsMap = StateDefinitions{
 					// the current design results in noone coordinating if every sending originator agrees
 					// that an unavailable node is the preferred active coordinator
 					{
-						If:     statemachine.GuardOr(guard_InactiveGracePeriodExceeded),
+						If:     guard_InactiveGracePeriodExceeded,
 						Action: action_SendDelegationRequest,
 					},
 				},

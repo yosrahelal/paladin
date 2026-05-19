@@ -25,13 +25,17 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/syncpointsmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -832,4 +836,53 @@ func TestCoordinator_Start_GetBlockHeightError_ReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "block height unavailable")
 	assert.False(t, c.started, "coordinator should not mark itself as started on error")
+}
+
+func TestNewCoordinator_SenderMode_SetsCurrentActiveCoordinatorToNodeName(t *testing.T) {
+	const nodeName = "senderNode"
+	c := NewCoordinator(
+		pldtypes.RandAddress(),
+		componentsmocks.NewDomainSmartContract(t),
+		nil,
+		componentsmocks.NewAllComponents(t),
+		nil,
+		nil,
+		testutil.NewSentMessageRecorder(),
+		common.RealClock(),
+		sequencercommonmocks.NewEngineIntegration(t),
+		syncpointsmocks.NewSyncPoints(t),
+		copySequencerDefaultsForTest(),
+		nodeName,
+		metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
+		func(_ context.Context, _ common.Event) {},
+		&common.CoordinatorSelectionConfig{
+			Mode: prototk.ContractConfig_COORDINATOR_SENDER,
+		},
+	)
+	assert.Equal(t, nodeName, c.currentActiveCoordinator)
+}
+
+func TestNewCoordinator_EndorserMode_SetsEndorserCandidates(t *testing.T) {
+	endorsers := []string{"endorser1@node1", "endorser2@node2"}
+	c := NewCoordinator(
+		pldtypes.RandAddress(),
+		componentsmocks.NewDomainSmartContract(t),
+		nil,
+		componentsmocks.NewAllComponents(t),
+		nil,
+		nil,
+		testutil.NewSentMessageRecorder(),
+		common.RealClock(),
+		sequencercommonmocks.NewEngineIntegration(t),
+		syncpointsmocks.NewSyncPoints(t),
+		copySequencerDefaultsForTest(),
+		"node1",
+		metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
+		func(_ context.Context, _ common.Event) {},
+		&common.CoordinatorSelectionConfig{
+			Mode:      prototk.ContractConfig_COORDINATOR_ENDORSER,
+			Endorsers: endorsers,
+		},
+	)
+	assert.Equal(t, endorsers, c.endorserCandidates)
 }

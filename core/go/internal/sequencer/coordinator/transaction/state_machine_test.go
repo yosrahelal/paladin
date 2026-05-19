@@ -269,6 +269,60 @@ func Test_ChainedDependencyEvicted_AllStates_TransitionToEvicted(t *testing.T) {
 	}
 }
 
+func TestCoordinatorTransaction_Initial_ToReverted_OnDelegated_IfHasRevertedChainedDependency(t *testing.T) {
+	ctx := context.Background()
+	depID := uuid.New()
+	depTx, _ := NewTransactionBuilderForTesting(t, State_Reverted).TransactionID(depID).Build()
+
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Initial).
+		ChainedDependencies(depID).
+		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{depID: depTx}).
+		Build()
+	mocks.SyncPoints.On("QueueTransactionFinalize",
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+	).Return()
+
+	err := txn.HandleEvent(ctx, &DelegatedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Reverted, txn.GetCurrentState())
+}
+
+func TestCoordinatorTransaction_Initial_ToEvicted_OnDelegated_IfHasEvictedChainedDependency(t *testing.T) {
+	ctx := context.Background()
+	depID := uuid.New()
+	depTx, _ := NewTransactionBuilderForTesting(t, State_Evicted).TransactionID(depID).Build()
+
+	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
+		ChainedDependencies(depID).
+		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{depID: depTx}).
+		Build()
+
+	err := txn.HandleEvent(ctx, &DelegatedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Evicted, txn.GetCurrentState())
+}
+
+func TestCoordinatorTransaction_Initial_ToPreAssemblyBlocked_OnDelegated_IfHasUnassembledDependency(t *testing.T) {
+	ctx := context.Background()
+	depID := uuid.New()
+	depTx, _ := NewTransactionBuilderForTesting(t, State_Pooled).TransactionID(depID).Build()
+
+	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
+		ChainedDependencies(depID).
+		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{depID: depTx}).
+		Build()
+
+	err := txn.HandleEvent(ctx, &DelegatedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_PreAssembly_Blocked, txn.GetCurrentState())
+}
+
 func TestCoordinatorTransaction_Initial_ToPooled_OnReceived_IfNoInflightDependencies(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).Build()
@@ -282,6 +336,44 @@ func TestCoordinatorTransaction_Initial_ToPooled_OnReceived_IfNoInflightDependen
 	assert.Equal(t, State_Pooled, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
+func TestCoordinatorTransaction_PreAssemblyBlocked_ToPooled_OnDependencySelectedForAssemble(t *testing.T) {
+	// Chained dep in State_Pooled → unassembled. DependencySelectedForAssemble marks it
+	// assembled, clearing the block.
+	ctx := context.Background()
+	depID := uuid.New()
+	depTx, _ := NewTransactionBuilderForTesting(t, State_Pooled).TransactionID(depID).Build()
+
+	txn, _ := NewTransactionBuilderForTesting(t, State_PreAssembly_Blocked).
+		ChainedDependencies(depID).
+		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{depID: depTx}).
+		Build()
+
+	err := txn.HandleEvent(ctx, &DependencySelectedForAssemblyEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+		SourceTransactionID:  depID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Pooled, txn.GetCurrentState())
+}
+
+func TestCoordinatorTransaction_PreAssemblyBlocked_ToPooled_OnPreAssembleDependencyTerminated(t *testing.T) {
+	// Pre-assemble (FIFO ordering) predecessor terminates → sever the FIFO link and
+	// move to Pooled if there are no remaining unassembled dependencies.
+	ctx := context.Background()
+	depTracker := dependencytracker.NewDependencyTracker()
+	predecessorID := uuid.New()
+
+	txn, _ := NewTransactionBuilderForTesting(t, State_PreAssembly_Blocked).
+		DependencyTracker(depTracker).
+		Build()
+	depTracker.GetPreassemblyDeps().AddPrerequisite(ctx, txn.pt.ID, predecessorID)
+
+	err := txn.HandleEvent(ctx, &PreAssembleDependencyTerminatedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Pooled, txn.GetCurrentState())
+}
 func TestCoordinatorTransaction_Pooled_ToAssembling_OnSelected(t *testing.T) {
 	ctx := context.Background()
 
@@ -341,6 +433,52 @@ func TestCoordinatorTransaction_Assembling_NoTransition_OnAssembleResponse_IfRes
 	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
+func TestCoordinatorTransaction_Assembling_ToConfirmingDispatch_OnAssembleSuccess_IfAttestationPlanFulfilled(t *testing.T) {
+	// 0 required endorsers → attestation plan is immediately fulfilled → skip Endorsement_Gathering.
+	ctx := context.Background()
+	txnBuilder := NewTransactionBuilderForTesting(t, State_Assembling).
+		NumberOfRequiredEndorsers(0).
+		AddPendingAssembleRequest()
+	txn, mocks := txnBuilder.Build()
+
+	successEvent := txnBuilder.BuildAssembleSuccessEvent()
+	mocks.EngineIntegration.EXPECT().MapPotentialStates(mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	mocks.EngineIntegration.EXPECT().WriteStatesForTransaction(mock.Anything, mock.Anything).Return(nil)
+
+	err := txn.HandleEvent(ctx, successEvent)
+	require.NoError(t, err)
+	assert.Equal(t, State_Confirming_Dispatchable, txn.GetCurrentState())
+}
+
+func TestCoordinatorTransaction_Assembling_ToBlocked_OnAssembleSuccess_IfAttestationPlanFulfilledButHasDependenciesNotReady(t *testing.T) {
+	// Dep in Endorsement_Gathering is not ready for dispatch → transaction goes to Blocked instead of Confirming_Dispatchable.
+	ctx := context.Background()
+	mockGrapher := graphermocks.NewGrapher(t)
+
+	txn1, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
+		Grapher(mockGrapher).
+		Build()
+
+	txnBuilder := NewTransactionBuilderForTesting(t, State_Assembling).
+		Grapher(mockGrapher).
+		NumberOfRequiredEndorsers(0).
+		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{txn1.pt.ID: txn1}).
+		AddPendingAssembleRequest()
+	txn2, mocks := txnBuilder.Build()
+
+	successEvent := txnBuilder.BuildAssembleSuccessEvent()
+	mocks.EngineIntegration.EXPECT().MapPotentialStates(mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+	mocks.EngineIntegration.EXPECT().WriteStatesForTransaction(mock.Anything, mock.Anything).Return(nil)
+	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockGrapher.EXPECT().LockMintsOnCreate(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	mockGrapher.EXPECT().LockMintsOnReadAndSpend(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	mockGrapher.EXPECT().GetDependencies(mock.Anything, txn2.pt.ID).Return([]uuid.UUID{txn1.GetID()})
+
+	err := txn2.HandleEvent(ctx, successEvent)
+	require.NoError(t, err)
+	assert.Equal(t, State_Blocked, txn2.GetCurrentState())
+}
+
 func TestCoordinatorTransaction_Assembling_NoTransition_OnRequestTimeout(t *testing.T) {
 	ctx := context.Background()
 	hasNudged := false
@@ -379,6 +517,30 @@ func TestCoordinatorTransaction_Assembling_ToPooled_OnStateTimeout_IfStateTimeou
 	assert.NoError(t, err)
 
 	assert.Equal(t, State_Pooled, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+}
+
+func TestCoordinatorTransaction_Assembling_ToPooled_OnAssembleCancelled(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
+		AddPendingAssembleRequest().
+		Build()
+
+	err := txn.HandleEvent(ctx, &AssembleCancelledEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Pooled, txn.GetCurrentState())
+}
+
+func TestCoordinatorTransaction_Assembling_ToEvicted_OnNotActiveCoordinator(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
+
+	err := txn.HandleEvent(ctx, &NotActiveCoordinatorEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Evicted, txn.GetCurrentState())
 }
 
 func TestCoordinatorTransaction_Assembling_ToReverted_OnAssembleRevertResponse(t *testing.T) {
@@ -421,62 +583,53 @@ func TestCoordinatorTransaction_Assembling_NoTransition_OnAssembleRevertResponse
 	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_Endorsement_Gathering_NudgeRequests_OnRequestTimeout_IfPendingRequests(t *testing.T) {
+func TestCoordinatorTransaction_Assembling_ToPooled_OnAssembleError_IfBelowRetryThreshold(t *testing.T) {
 	ctx := context.Background()
-	var requestCount int
-	incrementCount := func(ctx context.Context, idempotencyKey uuid.UUID) error {
-		requestCount++
-		return nil
-	}
-	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
-		NumberOfRequiredEndorsers(3).
-		AddPendingEndorsementRequestWithCallback(0, incrementCount).
-		AddPendingEndorsementRequestWithCallback(1, incrementCount).
-		AddPendingEndorsementRequestWithCallback(2, incrementCount).
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
+		AddPendingAssembleRequest().
+		AssembleErrorCount(0).
+		AssembleErrorRetryThreshold(3).
 		Build()
 
-	err := txn.HandleEvent(ctx, &RequestTimeoutIntervalEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{
-			TransactionID: txn.GetID(),
-		},
+	err := txn.HandleEvent(ctx, &AssembleErrorResponseEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+		RequestID:            txn.pendingAssembleRequest.IdempotencyKey(),
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 3, requestCount)
-	assert.Equal(t, State_Endorsement_Gathering, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+	assert.Equal(t, State_Pooled, txn.GetCurrentState())
 }
 
-func TestCoordinatorTransaction_Endorsement_Gathering_NudgeRequests_OnRequestTimeout_IfPendingRequests_Partial(t *testing.T) {
-	//emulate the case where only a subset of the endorsement requests have timed out
+func TestCoordinatorTransaction_Assembling_ToEvicted_OnAssembleError_IfAboveRetryThreshold(t *testing.T) {
 	ctx := context.Background()
-	var requestCount int
-	incrementCount := func(ctx context.Context, idempotencyKey uuid.UUID) error {
-		requestCount++
-		return nil
-	}
-	builder := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
-		NumberOfRequiredEndorsers(4).
-		AddPendingEndorsementRequestWithCallback(0, incrementCount).
-		AddPendingEndorsementRequestWithCallback(1, incrementCount).
-		AddPendingEndorsementRequestWithCallback(2, incrementCount).
-		AddPendingEndorsementRequestWithCallback(3, incrementCount)
+	// assembleErrorCount(4) > threshold(3) → cannot retry → Evicted
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
+		AddPendingAssembleRequest().
+		AssembleErrorCount(4).
+		AssembleErrorRetryThreshold(3).
+		Build()
 
-	txn, _ := builder.Build()
-
-	//2 endorsements come back in a timely manner
-	err := txn.HandleEvent(ctx, builder.BuildEndorsedEvent(0))
+	err := txn.HandleEvent(ctx, &AssembleErrorResponseEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+		RequestID:            txn.pendingAssembleRequest.IdempotencyKey(),
+	})
 	require.NoError(t, err)
+	assert.Equal(t, State_Evicted, txn.GetCurrentState())
+}
 
-	err = txn.HandleEvent(ctx, builder.BuildEndorsedEvent(1))
-	require.NoError(t, err)
+func TestCoordinatorTransaction_Assembling_ToFinal_OnTransactionUnknownByOriginator(t *testing.T) {
+	// Test that when an originator reports a transaction as unknown (most likely because
+	// it reverted during assembly but the response was lost and the transaction has since
+	// been cleaned up on the originator), the coordinator transitions to State_Final
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
 
-	err = txn.HandleEvent(ctx, &RequestTimeoutIntervalEvent{
+	err := txn.HandleEvent(ctx, &TransactionUnknownByOriginatorEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{
 			TransactionID: txn.GetID(),
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 2, requestCount)
-	assert.Equal(t, State_Endorsement_Gathering, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+	assert.Equal(t, State_Final, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
 func TestCoordinatorTransaction_Endorsement_Gathering_ToConfirmingDispatch_OnEndorsed_IfAttestationPlanComplete(t *testing.T) {
@@ -555,14 +708,18 @@ func TestCoordinatorTransaction_Endorsement_Gathering_ToPooled_OnEndorseRejected
 	assert.Equal(t, State_Pooled, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_ConfirmingDispatch_NudgeRequest_OnRequestTimeout(t *testing.T) {
+func TestCoordinatorTransaction_Endorsement_Gathering_NudgeRequests_OnRequestTimeout_IfPendingRequests(t *testing.T) {
 	ctx := context.Background()
-	var nudged bool
-	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).
-		AddPendingPreDispatchRequestWithCallback(func(ctx context.Context, idempotencyKey uuid.UUID) error {
-			nudged = true
-			return nil
-		}).
+	var requestCount int
+	incrementCount := func(ctx context.Context, idempotencyKey uuid.UUID) error {
+		requestCount++
+		return nil
+	}
+	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
+		NumberOfRequiredEndorsers(3).
+		AddPendingEndorsementRequestWithCallback(0, incrementCount).
+		AddPendingEndorsementRequestWithCallback(1, incrementCount).
+		AddPendingEndorsementRequestWithCallback(2, incrementCount).
 		Build()
 
 	err := txn.HandleEvent(ctx, &RequestTimeoutIntervalEvent{
@@ -571,36 +728,53 @@ func TestCoordinatorTransaction_ConfirmingDispatch_NudgeRequest_OnRequestTimeout
 		},
 	})
 	require.NoError(t, err)
-	assert.True(t, nudged)
-	assert.Equal(t, State_Confirming_Dispatchable, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+	assert.Equal(t, 3, requestCount)
+	assert.Equal(t, State_Endorsement_Gathering, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_ConfirmingDispatch_ToReadyForDispatch_OnDispatchConfirmed(t *testing.T) {
+func TestCoordinatorTransaction_Endorsement_Gathering_NudgeRequests_OnRequestTimeout_IfPendingRequests_Partial(t *testing.T) {
+	//emulate the case where only a subset of the endorsement requests have timed out
 	ctx := context.Background()
-	builder := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).
-		AddPendingPreDispatchRequestWithCallback(func(ctx context.Context, idempotencyKey uuid.UUID) error {
-			return nil
-		})
+	var requestCount int
+	incrementCount := func(ctx context.Context, idempotencyKey uuid.UUID) error {
+		requestCount++
+		return nil
+	}
+	builder := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
+		NumberOfRequiredEndorsers(4).
+		AddPendingEndorsementRequestWithCallback(0, incrementCount).
+		AddPendingEndorsementRequestWithCallback(1, incrementCount).
+		AddPendingEndorsementRequestWithCallback(2, incrementCount).
+		AddPendingEndorsementRequestWithCallback(3, incrementCount)
+
 	txn, _ := builder.Build()
 
-	err := txn.HandleEvent(ctx, builder.BuildDispatchRequestApprovedEvent())
+	//2 endorsements come back in a timely manner
+	err := txn.HandleEvent(ctx, builder.BuildEndorsedEvent(0))
 	require.NoError(t, err)
-	assert.Equal(t, State_Ready_For_Dispatch, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
-}
 
-func TestCoordinatorTransaction_ConfirmingDispatch_NoTransition_OnDispatchConfirmed_IfResponseDoesNotMatchPendingRequest(t *testing.T) {
-	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).Build()
+	err = txn.HandleEvent(ctx, builder.BuildEndorsedEvent(1))
+	require.NoError(t, err)
 
-	err := txn.HandleEvent(ctx, &DispatchRequestApprovedEvent{
+	err = txn.HandleEvent(ctx, &RequestTimeoutIntervalEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{
 			TransactionID: txn.GetID(),
 		},
-		RequestID: uuid.New(),
 	})
 	require.NoError(t, err)
+	assert.Equal(t, 2, requestCount)
+	assert.Equal(t, State_Endorsement_Gathering, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+}
 
-	assert.Equal(t, State_Confirming_Dispatchable, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+func TestCoordinatorTransaction_EndorsementGathering_ToPooled_OnStateTimeout(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).Build()
+
+	err := txn.HandleEvent(ctx, &StateTimeoutIntervalEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Pooled, txn.GetCurrentState())
 }
 
 func TestCoordinatorTransaction_Blocked_ToConfirmingDispatch_OnDependencyReady_IfNotHasDependenciesNotReady(t *testing.T) {
@@ -690,6 +864,76 @@ func TestCoordinatorTransaction_BlockedNoTransition_OnDependencyReady_IfHasDepen
 	assert.Equal(t, State_Blocked, txnA.GetCurrentState(), "current state is %s", txnA.GetCurrentState().String())
 }
 
+func TestCoordinatorTransaction_ConfirmingDispatch_ToReadyForDispatch_OnDispatchConfirmed(t *testing.T) {
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).
+		AddPendingPreDispatchRequestWithCallback(func(ctx context.Context, idempotencyKey uuid.UUID) error {
+			return nil
+		})
+	txn, _ := builder.Build()
+
+	err := txn.HandleEvent(ctx, builder.BuildDispatchRequestApprovedEvent())
+	require.NoError(t, err)
+	assert.Equal(t, State_Ready_For_Dispatch, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+}
+
+func TestCoordinatorTransaction_ConfirmingDispatch_NoTransition_OnDispatchConfirmed_IfResponseDoesNotMatchPendingRequest(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).Build()
+
+	err := txn.HandleEvent(ctx, &DispatchRequestApprovedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{
+			TransactionID: txn.GetID(),
+		},
+		RequestID: uuid.New(),
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, State_Confirming_Dispatchable, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+}
+
+func TestCoordinatorTransaction_ConfirmingDispatch_ToEvicted_OnNotActiveCoordinator(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).Build()
+
+	err := txn.HandleEvent(ctx, &NotActiveCoordinatorEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Evicted, txn.GetCurrentState())
+}
+
+func TestCoordinatorTransaction_ConfirmingDispatch_NudgeRequest_OnRequestTimeout(t *testing.T) {
+	ctx := context.Background()
+	var nudged bool
+	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).
+		AddPendingPreDispatchRequestWithCallback(func(ctx context.Context, idempotencyKey uuid.UUID) error {
+			nudged = true
+			return nil
+		}).
+		Build()
+
+	err := txn.HandleEvent(ctx, &RequestTimeoutIntervalEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{
+			TransactionID: txn.GetID(),
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, nudged)
+	assert.Equal(t, State_Confirming_Dispatchable, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+}
+
+func TestCoordinatorTransaction_ConfirmingDispatch_ToPooled_OnStateTimeout(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).Build()
+
+	err := txn.HandleEvent(ctx, &StateTimeoutIntervalEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Pooled, txn.GetCurrentState())
+}
+
 func TestCoordinatorTransaction_ReadyForDispatch_ToDispatched_OnDispatched(t *testing.T) {
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Ready_For_Dispatch).
@@ -741,6 +985,19 @@ func TestCoordinatorTransaction_Dispatched_NoTransition_OnSubmitted(t *testing.T
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_Dispatched, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+}
+
+func TestCoordinatorTransaction_Dispatched_ToConfirmed_OnConfirmedSuccess(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).Build()
+
+	err := txn.HandleEvent(ctx, &ConfirmedSuccessEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{
+			TransactionID: txn.GetID(),
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Confirmed, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
 func TestCoordinatorTransaction_Dispatched_ToPooled_OnConfirmedRevert_IfRetryable(t *testing.T) {
@@ -812,17 +1069,36 @@ func TestCoordinatorTransaction_Dispatched_ToReverted_OnConfirmedRevert_IfThresh
 	assert.Equal(t, State_Reverted, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_Dispatched_ToConfirmed_OnConfirmedSuccess(t *testing.T) {
+func TestCoordinatorTransaction_Dispatched_ToPreAssemblyBlocked_OnConfirmedRevert_IfRetryableAndHasUnassembledDependency(t *testing.T) {
+	// Trigger the retryable path by using FailureMessage with prefix "PD012256" and an empty
+	// RevertReason. This avoids calling DomainAPI.IsBaseLedgerRevertRetryable.
 	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).Build()
+	depID := uuid.New()
+	depTx, _ := NewTransactionBuilderForTesting(t, State_Pooled).TransactionID(depID).Build()
 
-	err := txn.HandleEvent(ctx, &ConfirmedSuccessEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{
-			TransactionID: txn.GetID(),
-		},
+	txn, _ := NewTransactionBuilderForTesting(t, State_Dispatched).
+		BaseLedgerRevertRetryThreshold(1).
+		ChainedDependencies(depID).
+		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{depID: depTx}).
+		Build()
+
+	err := txn.HandleEvent(ctx, &ConfirmedRevertedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+		FailureMessage:       "PD012256: chained dependency failed",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, State_Confirmed, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+	assert.Equal(t, State_PreAssembly_Blocked, txn.GetCurrentState())
+}
+
+func TestCoordinatorTransaction_Reverted_ToFinal_OnHeartbeat_WhenFinalizingGracePeriodPassed(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Reverted).
+		FinalizingGracePeriod(1).
+		Build()
+
+	err := txn.HandleEvent(ctx, &common.HeartbeatIntervalEvent{})
+	require.NoError(t, err)
+	assert.Equal(t, State_Final, txn.GetCurrentState())
 }
 
 func TestCoordinatorTransaction_Confirmed_ToFinal_OnHeartbeatInterval_IfHasBeenIncludedInEnoughHeartbeats(t *testing.T) {
@@ -847,18 +1123,3 @@ func TestCoordinatorTransaction_Confirmed_NoTransition_OnHeartbeatInterval_IfNot
 	assert.Equal(t, State_Confirmed, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_Assembling_ToFinal_OnTransactionUnknownByOriginator(t *testing.T) {
-	// Test that when an originator reports a transaction as unknown (most likely because
-	// it reverted during assembly but the response was lost and the transaction has since
-	// been cleaned up on the originator), the coordinator transitions to State_Final
-	ctx := context.Background()
-	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
-
-	err := txn.HandleEvent(ctx, &TransactionUnknownByOriginatorEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{
-			TransactionID: txn.GetID(),
-		},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, State_Final, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
-}

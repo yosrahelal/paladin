@@ -460,3 +460,10 @@ func TestNewTransaction_ChainedDependsOn_AddsPrereqOnlyWhenDependencyPastUnassem
 	assert.Equal(t, []uuid.UUID{depID}, ch.GetPrerequisites(ctx, txn.pt.ID))
 	assert.Nil(t, ch.GetUnassembledDependencies(ctx, txn.pt.ID))
 }
+
+func TestTransaction_GetOriginatorNode_ReturnsOriginatorNode(t *testing.T) {
+	// The builder defaults originatorNode to "node1". This test exercises the
+	// GetOriginatorNode() getter (previously 0% coverage).
+	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).Build()
+	assert.Equal(t, "node1", txn.GetOriginatorNode())
+}

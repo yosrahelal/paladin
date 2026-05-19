@@ -20,15 +20,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -329,4 +333,37 @@ func TestOriginator_WaitForDone_NotStarted_ReturnsImmediately(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("WaitForDone should have returned immediately when not started")
 	}
+}
+
+func TestNewOriginator_SenderMode_SetsCurrentActiveCoordinatorToNodeName(t *testing.T) {
+	const nodeName = "senderNode"
+	o := NewOriginator(
+		nodeName,
+		testutil.NewSentMessageRecorder(),
+		sequencercommonmocks.NewEngineIntegration(t),
+		pldtypes.RandAddress(),
+		&pldconf.SequencerDefaults,
+		metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
+		&common.CoordinatorSelectionConfig{
+			Mode: prototk.ContractConfig_COORDINATOR_SENDER,
+		},
+	)
+	assert.Equal(t, nodeName, o.currentActiveCoordinator)
+}
+
+func TestNewOriginator_EndorserMode_SetsEndorserCandidates(t *testing.T) {
+	endorsers := []string{"endorser1@node1", "endorser2@node2"}
+	o := NewOriginator(
+		"node1",
+		testutil.NewSentMessageRecorder(),
+		sequencercommonmocks.NewEngineIntegration(t),
+		pldtypes.RandAddress(),
+		&pldconf.SequencerDefaults,
+		metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
+		&common.CoordinatorSelectionConfig{
+			Mode:      prototk.ContractConfig_COORDINATOR_ENDORSER,
+			Endorsers: endorsers,
+		},
+	)
+	assert.Equal(t, endorsers, o.endorserCandidates)
 }

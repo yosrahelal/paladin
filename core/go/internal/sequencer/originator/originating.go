@@ -202,6 +202,11 @@ func action_CalculateCoordinatorPriorities(ctx context.Context, o *originator, _
 		o.currentBlockHeight,
 		o.blockRange,
 	)
+	if o.currentActiveCoordinator == "" {
+		// this should really only run on start up - after that we never unset the current active coordinator
+		o.currentActiveCoordinator = o.coordinatorPriorityList[0]
+	}
+
 	return nil
 }
 

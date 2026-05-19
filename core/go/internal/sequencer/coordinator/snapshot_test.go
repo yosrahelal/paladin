@@ -169,6 +169,19 @@ func Test_action_PropagateHeartbeatToTransactions_WithTransactions(t *testing.T)
 	require.NoError(t, err)
 }
 
+func TestSendHeartbeat_StaticMode_WithOriginatorActivity_SendsHeartbeats(t *testing.T) {
+	ctx := context.Background()
+	// STATIC mode (default) with a non-empty originatorActivity exercises the
+	// "nodes = append(nodes, node)" branch inside the else-block of sendHeartbeat.
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		OriginatorActivity(map[string]int{"remoteNode": 0}).
+		Build()
+
+	err := c.sendHeartbeat(ctx, c.contractAddress)
+	assert.NoError(t, err)
+	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat())
+}
+
 func TestSendHeartbeat_ExportStatesAndLocksError_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 
