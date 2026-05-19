@@ -201,7 +201,7 @@ func (tm *transportManager) connectPeer(ctx context.Context, nodeName string, se
 	tm.peers[nodeName] = p
 
 	if sending {
-		p.OutboundTransport, p.OutboundError = p.startSender(ctx)
+		p.OutboundTransport, p.OutboundError = p.startSender()
 		if p.OutboundError != nil {
 			// Note the peer is still in our list, but not connected for send.
 			// This means status can be reported for it.
@@ -212,12 +212,10 @@ func (tm *transportManager) connectPeer(ctx context.Context, nodeName string, se
 	return p, nil
 }
 
-func (p *peer) startSender(ctx context.Context) (string, error) {
+func (p *peer) startSender() (string, error) {
 	// Note the registry is responsible for caching to make this call as efficient as if
 	// we maintained the transport details in-memory ourselves.
-	// Use the caller's ctx (not p.ctx) so that shutdown/cancellation of the caller
-	// propagates through these blocking calls, preventing indefinite lock contention.
-	registeredTransportDetails, err := p.tm.registryManager.GetNodeTransports(ctx, p.Name)
+	registeredTransportDetails, err := p.tm.registryManager.GetNodeTransports(p.ctx, p.Name)
 	if err != nil {
 		return "", err
 	}
@@ -240,7 +238,7 @@ func (p *peer) startSender(ctx context.Context) (string, error) {
 	}
 
 	// Activate the connection (the deactivate is deferred to the send loop)
-	res, err := p.transport.api.ActivatePeer(ctx, &prototk.ActivatePeerRequest{
+	res, err := p.transport.api.ActivatePeer(p.ctx, &prototk.ActivatePeerRequest{
 		NodeName:         p.Name,
 		TransportDetails: remoteTransportDetails,
 	})
