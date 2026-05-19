@@ -155,11 +155,6 @@ func (tm *transportManager) Start() error {
 
 func (tm *transportManager) Stop() {
 
-	// Cancel bgCtx first so that any goroutine blocked in startSender (which uses p.ctx,
-	// derived from bgCtx) unblocks and releases the peersLock write-lock before we try
-	// to acquire the read-lock in listActivePeers. Without this, Stop() can deadlock.
-	tm.cancelCtx()
-
 	peers := tm.listActivePeers()
 	for _, p := range peers {
 		tm.reapPeer(p)
@@ -175,6 +170,7 @@ func (tm *transportManager) Stop() {
 		tm.cleanupTransport(t)
 	}
 
+	tm.cancelCtx()
 	if tm.peerReaperDone != nil {
 		<-tm.peerReaperDone
 	}
