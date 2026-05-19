@@ -18,6 +18,7 @@ package transaction
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -63,10 +64,13 @@ func Test_applyPostAssembly_RevertResult(t *testing.T) {
 	}
 	requestID := uuid.New()
 
+	var capturedFailureMessage string
 	mocks.SyncPoints.On("QueueTransactionFinalize",
 		ctx,
 		mock.MatchedBy(func(req *syncpoints.TransactionFinalizeRequest) bool {
-			return req.FailureMessage == revertReason
+			capturedFailureMessage = req.FailureMessage
+			return strings.Contains(req.FailureMessage, "PD012616") &&
+				strings.Contains(req.FailureMessage, revertReason)
 		}),
 		mock.Anything, // onCommit callback
 		mock.Anything, // onRollback callback
@@ -75,6 +79,8 @@ func Test_applyPostAssembly_RevertResult(t *testing.T) {
 	err := txn.applyPostAssembly(ctx, postAssembly, requestID)
 	require.NoError(t, err)
 	assert.Equal(t, postAssembly, txn.pt.PostAssembly)
+	assert.Contains(t, capturedFailureMessage, "PD012616")
+	assert.Contains(t, capturedFailureMessage, revertReason)
 }
 
 func Test_action_AssembleRevertResponse_SetsPostAssemblyAndFinalizes(t *testing.T) {
@@ -86,10 +92,13 @@ func Test_action_AssembleRevertResponse_SetsPostAssemblyAndFinalizes(t *testing.
 		RevertReason:   &revertReason,
 	}
 
+	var capturedFailureMessage string
 	mocks.SyncPoints.On("QueueTransactionFinalize",
 		ctx,
 		mock.MatchedBy(func(req *syncpoints.TransactionFinalizeRequest) bool {
-			return req.FailureMessage == revertReason
+			capturedFailureMessage = req.FailureMessage
+			return strings.Contains(req.FailureMessage, "PD012616") &&
+				strings.Contains(req.FailureMessage, revertReason)
 		}),
 		mock.Anything, // onCommit callback
 		mock.Anything, // onRollback callback
@@ -104,6 +113,8 @@ func Test_action_AssembleRevertResponse_SetsPostAssemblyAndFinalizes(t *testing.
 	err := action_AssembleRevertResponse(ctx, txn, event)
 	require.NoError(t, err)
 	assert.Equal(t, postAssembly, txn.pt.PostAssembly)
+	assert.Contains(t, capturedFailureMessage, "PD012616")
+	assert.Contains(t, capturedFailureMessage, revertReason)
 }
 
 func Test_applyPostAssembly_ParkResult(t *testing.T) {
