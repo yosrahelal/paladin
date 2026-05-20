@@ -1,0 +1,139 @@
+name: 'Run pldtest Integration Tests'
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_name:
+        description: 'Test configuration to run'
+        required: true
+        type: choice
+        options:
+          - public-contract
+          - private-transaction-node-restart
+          - privacy-group-contract-deploy
+          - noto-revertable-hooks
+      paladin_branch:
+        description: 'Branch of Paladin to deploy the cluster from'
+        required: false
+        type: string
+        default: 'main'
+      test_branch:
+        description: 'Branch to build the pldtest CLI from'
+        required: false
+        type: string
+        default: 'main'
+      chart_tag:
+        description: 'Paladin Helm chart version to install (leave empty for latest)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  run-pldtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Paladin branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.paladin_branch }}
+          submodules: recursive
+          path: paladin
+
+      - name: Checkout test branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.test_branch }}
+          submodules: recursive
+          path: test-src
+
+      - name: Free up disk space on runner
+        uses: ./paladin/.github/actions/free-up-disk-space
+
+      - name: Install pre-requisites
+        uses: ./paladin/.github/actions/setup
+
+      - name: Resolve test configuration
+        id: test-config
+        run: |
+          case "${{ inputs.test_name }}" in
+            public-contract)
+              echo "node_count=1" >> $GITHUB_OUTPUT
+              echo "config_file=example-public-contract.yaml" >> $GITHUB_OUTPUT
+              ;;
+            private-transaction-node-restart)
+              echo "node_count=3" >> $GITHUB_OUTPUT
+              echo "config_file=example-private-transaction-node-restart.yaml" >> $GITHUB_OUTPUT
+              ;;
+            privacy-group-contract-deploy)
+              echo "node_count=3" >> $GITHUB_OUTPUT
+              echo "config_file=example-privacy-group-contract-deploy.yaml" >> $GITHUB_OUTPUT
+              ;;
+            noto-revertable-hooks)
+              echo "node_count=3" >> $GITHUB_OUTPUT
+              echo "config_file=example-noto-revertable-hooks.yaml" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Build pldtest
+        working-directory: test-src/test
+        run: make
+
+      - name: Install Kind
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+          ignore_failed_clean: true
+
+      - name: Create cluster
+        run: |
+          kind create cluster --name paladin --config paladin/operator/paladin-kind.yaml
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+
+      - name: Cache Helm repositories
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/helm
+            ~/.config/helm
+          key: ${{ runner.os }}-helm-repos-${{ hashFiles('**/helm-repos.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-helm-repos-
+
+      - name: Install Paladin
+        run: |
+          helm repo add paladin https://LFDT-Paladin.github.io/paladin --force-update
+          helm repo add jetstack https://charts.jetstack.io --force-update
+          helm repo update
+
+          if [ -n "${{ inputs.chart_tag }}" ]; then
+            version_flag="--version ${{ inputs.chart_tag }}"
+          fi
+
+          helm upgrade --install paladin-crds paladin/paladin-operator-crd $version_flag
+          helm install cert-manager --namespace cert-manager --version v1.16.1 jetstack/cert-manager \
+            --create-namespace --set crds.enabled=true
+          kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=300s
+          helm upgrade --install paladin paladin/paladin-operator -n paladin --create-namespace \
+            --set nodeCount=${{ steps.test-config.outputs.node_count }} \
+            --set besuNodeCount=${{ steps.test-config.outputs.node_count }} \
+            --wait $version_flag
+
+      - name: Validate installation
+        working-directory: paladin
+        run: ./scripts/default-installation-validation.sh paladin
+
+      - name: Run test
+        run: |
+          ./test-src/test/pldtest/pldtest run \
+            -c test-src/test/config/${{ steps.test-config.outputs.config_file }} \
+            -i 0
+
+      - name: Print disk usage
+        uses: ./paladin/.github/actions/print-disk-usage
+
+      - name: Cleanup cluster
+        if: always()
+        run: kind delete cluster --name paladin
