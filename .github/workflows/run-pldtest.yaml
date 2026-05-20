@@ -72,7 +72,7 @@ jobs:
 
       - name: Copy solidity artifacts
         working-directory: paladin
-        run: ./gradlew --no-daemon :domains:noto:copyInternalSolidity :test:copySolidity
+        run: ./gradlew --no-daemon :toolkit:go:protoc :domains:noto:copyInternalSolidity :domains:noto:copyPkgSolidity :test:copySolidity
 
       - name: Build test application
         working-directory: paladin/test
