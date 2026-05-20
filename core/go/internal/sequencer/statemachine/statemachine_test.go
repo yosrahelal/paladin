@@ -128,30 +128,30 @@ func newTestEvent(eventType common.EventType) *testEvent {
 func TestBasicStateMachine(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Process: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Process: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Processing,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Processing: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Complete: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Complete: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Complete,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -181,8 +181,8 @@ func TestBasicStateMachine(t *testing.T) {
 func TestGuardedTransitions(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{
 						{
 							To: State_Error,
@@ -197,7 +197,7 @@ func TestGuardedTransitions(t *testing.T) {
 							},
 						},
 					},
-				},
+				}}},
 			},
 		},
 	}
@@ -224,8 +224,8 @@ func TestTransitionValidator(t *testing.T) {
 	t.Run("validator passes, transition fires", func(t *testing.T) {
 		definitions := StateDefinitions[TestState, *TestEntity]{
 			State_Idle: {
-				Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-					Event_Start: {
+				Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+					Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 						Transitions: []Transition[TestState, *TestEntity]{{
 							To: State_Active,
 							Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
@@ -233,7 +233,7 @@ func TestTransitionValidator(t *testing.T) {
 								return ev.data == "go", nil
 							},
 						}},
-					},
+					}}},
 				},
 			},
 		}
@@ -249,8 +249,8 @@ func TestTransitionValidator(t *testing.T) {
 	t.Run("validator fails, skips to next transition", func(t *testing.T) {
 		definitions := StateDefinitions[TestState, *TestEntity]{
 			State_Idle: {
-				Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-					Event_Start: {
+				Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+					Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 						Transitions: []Transition[TestState, *TestEntity]{
 							{
 								To: State_Error,
@@ -263,7 +263,7 @@ func TestTransitionValidator(t *testing.T) {
 								To: State_Active,
 							},
 						},
-					},
+					}}},
 				},
 			},
 		}
@@ -280,15 +280,15 @@ func TestTransitionValidator(t *testing.T) {
 		validatorErr := errors.New("validator boom")
 		definitions := StateDefinitions[TestState, *TestEntity]{
 			State_Idle: {
-				Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-					Event_Start: {
+				Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+					Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 						Transitions: []Transition[TestState, *TestEntity]{{
 							To: State_Active,
 							Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
 								return false, validatorErr
 							},
 						}},
-					},
+					}}},
 				},
 			},
 		}
@@ -305,8 +305,8 @@ func TestActionsOnTransition(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 						Actions: []ActionRule[*TestEntity]{{
@@ -317,7 +317,7 @@ func TestActionsOnTransition(t *testing.T) {
 							},
 						}},
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
@@ -348,8 +348,8 @@ func TestTransitionAndEntryActionRules_OrderAndGuards(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 						Actions: []ActionRule[*TestEntity]{
@@ -374,7 +374,7 @@ func TestTransitionAndEntryActionRules_OrderAndGuards(t *testing.T) {
 							},
 						},
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
@@ -424,8 +424,8 @@ func TestOnTransitionFrom_ExecutedWhenLeavingState(t *testing.T) {
 					},
 				},
 			},
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 						Actions: []ActionRule[*TestEntity]{{
@@ -435,7 +435,7 @@ func TestOnTransitionFrom_ExecutedWhenLeavingState(t *testing.T) {
 							},
 						}},
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
@@ -451,12 +451,12 @@ func TestOnTransitionFrom_ExecutedWhenLeavingState(t *testing.T) {
 					return nil
 				},
 			}},
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Complete: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Complete: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Complete,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Complete: {
@@ -495,12 +495,12 @@ func TestOnTransitionFrom_ErrorPropagated(t *testing.T) {
 					return exitErr
 				},
 			}},
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {},
@@ -516,12 +516,12 @@ func TestOnTransitionFrom_NilSafe_WhenNotDefined(t *testing.T) {
 	// States without OnTransitionFrom should not panic or error when a transition fires from them.
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {},
@@ -539,8 +539,8 @@ func TestTransitionActionRules_ErrorStopsRemainingRules(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 						Actions: []ActionRule[*TestEntity]{
@@ -564,7 +564,7 @@ func TestTransitionActionRules_ErrorStopsRemainingRules(t *testing.T) {
 							},
 						},
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
@@ -592,12 +592,12 @@ func TestEntryActionRules_ErrorStopsRemainingRules(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
@@ -636,8 +636,8 @@ func TestEntryActionRules_ErrorStopsRemainingRules(t *testing.T) {
 func TestEventHandlerActions(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{
 						{
 							Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
@@ -658,7 +658,7 @@ func TestEventHandlerActions(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -683,15 +683,15 @@ func TestEventHandlerActions(t *testing.T) {
 func TestEventValidator(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
 						return e.canProcess, nil
 					},
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -716,8 +716,8 @@ func TestEventValidator(t *testing.T) {
 func TestActionRuleValidator_TrueExecutesAction(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
 							return true, nil
@@ -727,7 +727,7 @@ func TestActionRuleValidator_TrueExecutesAction(t *testing.T) {
 							return nil
 						},
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -743,8 +743,8 @@ func TestActionRuleValidator_TrueExecutesAction(t *testing.T) {
 func TestActionRuleValidator_FalseSkipsAction(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
 							return false, nil
@@ -754,7 +754,7 @@ func TestActionRuleValidator_FalseSkipsAction(t *testing.T) {
 							return nil
 						},
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -772,8 +772,8 @@ func TestActionRuleValidator_ErrorStopsProcessing(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
 							return false, validationErr
@@ -786,7 +786,7 @@ func TestActionRuleValidator_ErrorStopsProcessing(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -803,8 +803,8 @@ func TestActionRuleValidator_ErrorStopsProcessing(t *testing.T) {
 func TestFirstActionAppliesEventData(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							e.applyCounter++
@@ -814,7 +814,7 @@ func TestFirstActionAppliesEventData(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -833,12 +833,12 @@ func TestTransitionCallback(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -863,12 +863,12 @@ func TestTransitionCallback(t *testing.T) {
 func TestWithName(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -885,12 +885,12 @@ func TestWithName(t *testing.T) {
 func TestProcessEvent_LogsEventAtDebug(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -907,12 +907,12 @@ func TestProcessEvent_LogsEventAtDebug(t *testing.T) {
 func TestUnhandledEvent(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -931,8 +931,8 @@ func TestActionError(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{
 						{
 							Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
@@ -943,7 +943,7 @@ func TestActionError(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -960,12 +960,12 @@ func TestActionError(t *testing.T) {
 func TestStateMachineMetadata(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -986,8 +986,8 @@ func TestEventHandlerFirstAction(t *testing.T) {
 	// Test that first action is called and can access event data
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							te := event.(*testEvent)
@@ -999,7 +999,7 @@ func TestEventHandlerFirstAction(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1027,8 +1027,8 @@ func TestFirstActionBeforeGuardedActions(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{
 						{
 							Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
@@ -1050,7 +1050,7 @@ func TestFirstActionBeforeGuardedActions(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1069,8 +1069,8 @@ func TestFirstActionError(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							return expectedErr
@@ -1079,7 +1079,7 @@ func TestFirstActionError(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1098,15 +1098,15 @@ func TestEventValidatorReturnsError(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Validator: func(ctx context.Context, e *TestEntity, event common.Event) (bool, error) {
 						return false, validationErr
 					},
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1124,8 +1124,8 @@ func TestTransitionOnActionError(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 						Actions: []ActionRule[*TestEntity]{{
@@ -1134,7 +1134,7 @@ func TestTransitionOnActionError(t *testing.T) {
 							},
 						}},
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1152,12 +1152,12 @@ func TestStateEntryActionError(t *testing.T) {
 
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
@@ -1181,12 +1181,12 @@ func TestTransitionToStateWithNoEntryAction(t *testing.T) {
 	// Transition to a state that has no OnTransitionTo (or state not in definitions)
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Complete, // State_Complete has no entry in definitions
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1204,12 +1204,12 @@ func TestTransitionToStateWithNoEntryAction(t *testing.T) {
 func TestNewStateMachineEventLoop_Basic(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1230,21 +1230,21 @@ func TestNewStateMachineEventLoop_Basic(t *testing.T) {
 func TestStateMachineEventLoop_StartStopAndMethods(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Process: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Process: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Complete,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1294,12 +1294,12 @@ func TestStateMachineEventLoop_StartStopAndMethods(t *testing.T) {
 func TestStateMachineEventLoop_ProcessEventSync(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1322,12 +1322,12 @@ func TestStateMachineEventLoop_ProcessEventSync(t *testing.T) {
 func TestStateMachineEventLoop_CancelWaitForDone(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1356,12 +1356,12 @@ func TestStateMachineEventLoop_CancelWaitForDone(t *testing.T) {
 func TestStateMachineEventLoop_StopCancelsWithoutFinalEvent(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1392,12 +1392,12 @@ func TestStateMachineEventLoop_WithTransitionCallback(t *testing.T) {
 	var fromState, toState TestState
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1425,12 +1425,12 @@ func TestStateMachineEventLoop_WithTransitionCallback(t *testing.T) {
 func TestStateMachineEventLoop_WithName(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1452,12 +1452,12 @@ func TestStateMachineEventLoop_WithName(t *testing.T) {
 func TestStateMachineEventLoop_WithPreProcessHandled(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1503,12 +1503,12 @@ func TestStateMachineEventLoop_WithPreProcessError(t *testing.T) {
 	preErr := errors.New("preprocess failed")
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1550,8 +1550,8 @@ func TestStateMachineEventLoop_WithPreProcessError(t *testing.T) {
 func TestStateMachineEventLoop_PriorityQueueDrainedBeforeMain(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							e.ProcessOrder = append(e.ProcessOrder, event.TypeString())
@@ -1561,12 +1561,12 @@ func TestStateMachineEventLoop_PriorityQueueDrainedBeforeMain(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Process: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Process: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							e.ProcessOrder = append(e.ProcessOrder, event.TypeString())
@@ -1576,12 +1576,12 @@ func TestStateMachineEventLoop_PriorityQueueDrainedBeforeMain(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Complete,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Complete: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Reset: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Reset: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							e.ProcessOrder = append(e.ProcessOrder, event.TypeString())
@@ -1591,7 +1591,7 @@ func TestStateMachineEventLoop_PriorityQueueDrainedBeforeMain(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Idle,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1635,21 +1635,21 @@ func TestStateMachineEventLoop_PriorityQueueDrainedBeforeMain(t *testing.T) {
 func TestStateMachineEventLoop_QueuePriorityEvent(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Process: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Process: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Complete,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1691,12 +1691,12 @@ func TestStateMachineEventLoop_QueuePriorityEvent(t *testing.T) {
 func TestStateMachineEventLoop_TryQueuePriorityEvent(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1755,12 +1755,12 @@ func TestStateMachineEventLoop_TryQueuePriorityEvent(t *testing.T) {
 func TestStateMachineEventLoop_PrioritySyncEvent(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1795,12 +1795,12 @@ func TestStateMachineEventLoop_PrioritySyncEvent(t *testing.T) {
 func TestStateMachineEventLoop_PriorityEventQueueSize(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1856,12 +1856,12 @@ func TestStateMachineEventLoop_PriorityEventQueueSize(t *testing.T) {
 func TestStateMachineEventLoop_TryQueueEvent_BufferFull(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1917,12 +1917,12 @@ func TestStateMachineEventLoop_TryQueueEvent_BufferFull(t *testing.T) {
 func TestStateMachineEventLoop_QueueEvent_ContextCancelledWhenBufferFull(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1955,12 +1955,12 @@ func TestStateMachineEventLoop_QueueEvent_ContextCancelledWhenBufferFull(t *test
 func TestStateMachineEventLoop_QueuePriorityEvent_ContextCancelledWhenBufferFull(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -1992,12 +1992,12 @@ func TestStateMachineEventLoop_QueuePriorityEvent_ContextCancelledWhenBufferFull
 func TestStateMachineEventLoop_Cancel_WhenAlreadyStopped(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2030,12 +2030,12 @@ func TestStateMachineEventLoop_Cancel_WhenAlreadyStopped(t *testing.T) {
 func TestStateMachineEventLoop_Cancel_ConcurrentCalls(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2080,12 +2080,12 @@ func TestStateMachineEventLoop_Cancel_ConcurrentCalls(t *testing.T) {
 func TestStateMachineEventLoop_Cancel_WhenAlreadyStopped_Equivalent(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2118,12 +2118,12 @@ func TestStateMachineEventLoop_Cancel_WhenAlreadyStopped_Equivalent(t *testing.T
 func TestStateMachineEventLoop_Cancel_ConcurrentCalls_Equivalent(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2168,12 +2168,12 @@ func TestStateMachineEventLoop_Cancel_ConcurrentCalls_Equivalent(t *testing.T) {
 func TestStateMachineEventLoop_ContextCancelled(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2207,12 +2207,12 @@ func TestStateMachineEventLoop_ContextCancelled(t *testing.T) {
 func TestStateMachineEventLoop_StopAfterWork(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2243,8 +2243,8 @@ func TestStateMachineEventLoop_ProcessEventError_Priority(t *testing.T) {
 	processErr := errors.New("priority event failed")
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							return processErr
@@ -2253,7 +2253,7 @@ func TestStateMachineEventLoop_ProcessEventError_Priority(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2290,8 +2290,8 @@ func TestStateMachineEventLoop_ProcessEventError_Main(t *testing.T) {
 	processErr := errors.New("main event failed")
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							return processErr
@@ -2300,7 +2300,7 @@ func TestStateMachineEventLoop_ProcessEventError_Main(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2336,17 +2336,17 @@ func TestStateMachineEventLoop_ProcessEventError_PriorityDrain(t *testing.T) {
 	processErr := errors.New("priority drain failed")
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Process: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Process: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							return processErr
@@ -2355,7 +2355,7 @@ func TestStateMachineEventLoop_ProcessEventError_PriorityDrain(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Complete,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2393,12 +2393,12 @@ func TestStateMachineEventLoop_ProcessEventError_PriorityDrain(t *testing.T) {
 func TestStateMachineEventLoop_SyncEventFromPrioritySelect(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2452,21 +2452,21 @@ func TestDrainPendingEvents_Empty(t *testing.T) {
 func TestDrainPendingEvents_PriorityAndRegular(t *testing.T) {
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 		State_Active: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Process: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Process: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Processing,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2498,8 +2498,8 @@ func TestDrainPendingEvents_PriorityError(t *testing.T) {
 	priorityErr := errors.New("priority drain error")
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							return priorityErr
@@ -2508,7 +2508,7 @@ func TestDrainPendingEvents_PriorityError(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2536,8 +2536,8 @@ func TestDrainPendingEvents_RegularError(t *testing.T) {
 	regularErr := errors.New("regular drain error")
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							return regularErr
@@ -2546,7 +2546,7 @@ func TestDrainPendingEvents_RegularError(t *testing.T) {
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2574,8 +2574,8 @@ func TestStateMachineEventLoop_ProcessEventError_PriorityFromSelect(t *testing.T
 	processErr := errors.New("priority from select failed")
 	definitions := StateDefinitions[TestState, *TestEntity]{
 		State_Idle: {
-			Events: map[common.EventType]EventHandler[TestState, *TestEntity]{
-				Event_Start: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {Handlers: []EventHandler[TestState, *TestEntity]{{
 					Actions: []ActionRule[*TestEntity]{{
 						Action: func(ctx context.Context, e *TestEntity, event common.Event) error {
 							return processErr
@@ -2584,7 +2584,7 @@ func TestStateMachineEventLoop_ProcessEventError_PriorityFromSelect(t *testing.T
 					Transitions: []Transition[TestState, *TestEntity]{{
 						To: State_Active,
 					}},
-				},
+				}}},
 			},
 		},
 	}
@@ -2613,4 +2613,106 @@ func TestStateMachineEventLoop_ProcessEventError_PriorityFromSelect(t *testing.T
 	assert.Equal(t, State_Idle, sel.GetCurrentState())
 	cancel()
 	waitForLoopDone(t, sel)
+}
+
+// --- MatchAll (Pipeline) tests ---
+
+func TestMatchAll_AllMatchingHandlersFire(t *testing.T) {
+	// Three handlers, all match (nil Validator). All three actions should run.
+	var fired []string
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {
+					Match: MatchAll,
+					Handlers: []EventHandler[TestState, *TestEntity]{
+						{Actions: []ActionRule[*TestEntity]{{Action: func(ctx context.Context, e *TestEntity, _ common.Event) error { fired = append(fired, "a"); return nil }}}},
+						{Actions: []ActionRule[*TestEntity]{{Action: func(ctx context.Context, e *TestEntity, _ common.Event) error { fired = append(fired, "b"); return nil }}}},
+						{Actions: []ActionRule[*TestEntity]{{Action: func(ctx context.Context, e *TestEntity, _ common.Event) error { fired = append(fired, "c"); return nil }}}},
+					},
+				},
+			},
+		},
+	}
+	entity := newTestEntity(definitions, "test-match-all")
+	err := entity.sm.ProcessEvent(context.Background(), entity, newTestEvent(Event_Start))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b", "c"}, fired)
+	assert.Equal(t, State_Idle, entity.sm.GetCurrentState())
+}
+
+func TestMatchAll_ValidatorFiltersHandlers(t *testing.T) {
+	// Three handlers; only the ones whose Validator passes fire.
+	var fired []string
+	passValidator := func(_ context.Context, _ *TestEntity, _ common.Event) (bool, error) { return true, nil }
+	failValidator := func(_ context.Context, _ *TestEntity, _ common.Event) (bool, error) { return false, nil }
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {
+					Match: MatchAll,
+					Handlers: []EventHandler[TestState, *TestEntity]{
+						{Validator: passValidator, Actions: []ActionRule[*TestEntity]{{Action: func(ctx context.Context, e *TestEntity, _ common.Event) error { fired = append(fired, "a"); return nil }}}},
+						{Validator: failValidator, Actions: []ActionRule[*TestEntity]{{Action: func(ctx context.Context, e *TestEntity, _ common.Event) error { fired = append(fired, "b"); return nil }}}},
+						{Validator: passValidator, Actions: []ActionRule[*TestEntity]{{Action: func(ctx context.Context, e *TestEntity, _ common.Event) error { fired = append(fired, "c"); return nil }}}},
+					},
+				},
+			},
+		},
+	}
+	entity := newTestEntity(definitions, "test-match-all-filter")
+	err := entity.sm.ProcessEvent(context.Background(), entity, newTestEvent(Event_Start))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "c"}, fired)
+}
+
+func TestMatchAll_StopsOnTransition(t *testing.T) {
+	// Three handlers; second causes a transition. Third should NOT fire.
+	var fired []string
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {
+					Match: MatchAll,
+					Handlers: []EventHandler[TestState, *TestEntity]{
+						{Actions: []ActionRule[*TestEntity]{{Action: func(ctx context.Context, e *TestEntity, _ common.Event) error { fired = append(fired, "a"); return nil }}}},
+						{
+							Actions:     []ActionRule[*TestEntity]{{Action: func(ctx context.Context, e *TestEntity, _ common.Event) error { fired = append(fired, "b"); return nil }}},
+							Transitions: []Transition[TestState, *TestEntity]{{To: State_Active}},
+						},
+						{Actions: []ActionRule[*TestEntity]{{Action: func(ctx context.Context, e *TestEntity, _ common.Event) error { fired = append(fired, "c"); return nil }}}},
+					},
+				},
+			},
+		},
+	}
+	entity := newTestEntity(definitions, "test-match-all-stop")
+	err := entity.sm.ProcessEvent(context.Background(), entity, newTestEvent(Event_Start))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b"}, fired)
+	assert.Equal(t, State_Active, entity.sm.GetCurrentState())
+}
+
+func TestMatchFirst_NilValidatorWarning(t *testing.T) {
+	// In MatchFirst mode a nil-Validator handler that is not last should log a warning.
+	// We just verify the state machine is created without panic and behaves correctly
+	// (the warning goes to the logger; verifying the log output is out of scope here).
+	definitions := StateDefinitions[TestState, *TestEntity]{
+		State_Idle: {
+			Events: map[common.EventType]EventHandlers[TestState, *TestEntity]{
+				Event_Start: {
+					// nil Validator at index 0 is not last — should warn at startup
+					Handlers: []EventHandler[TestState, *TestEntity]{
+						{Transitions: []Transition[TestState, *TestEntity]{{To: State_Active}}},
+						{Transitions: []Transition[TestState, *TestEntity]{{To: State_Error}}},
+					},
+				},
+			},
+		},
+	}
+	entity := newTestEntity(definitions, "test-warning")
+	// First handler (nil Validator, always matches) fires; second is unreachable
+	err := entity.sm.ProcessEvent(context.Background(), entity, newTestEvent(Event_Start))
+	require.NoError(t, err)
+	assert.Equal(t, State_Active, entity.sm.GetCurrentState())
 }
