@@ -54,9 +54,10 @@ type RPCServer interface {
 
 func NewRPCServer(ctx context.Context, conf *pldconf.RPCServerConfig) (_ *rpcServer, err error) {
 	s := &rpcServer{
-		bgCtx:         ctx,
-		wsConnections: make(map[string]*webSocketConnection),
-		rpcModules:    make(map[string]*RPCModule),
+		bgCtx:             ctx,
+		wsConnections:     make(map[string]*webSocketConnection),
+		rpcModules:        make(map[string]*RPCModule),
+		legacyReturnCodes: conf.LegacyReturnCodes,
 	}
 
 	// Add the HTTP server
@@ -100,14 +101,15 @@ func NewRPCServer(ctx context.Context, conf *pldconf.RPCServerConfig) (_ *rpcSer
 var _ RPCServer = &rpcServer{}
 
 type rpcServer struct {
-	bgCtx         context.Context
-	httpServer    httpserver.Server
-	wsServer      httpserver.Server
-	wsMux         sync.Mutex
-	wsUpgrader    *websocket.Upgrader
-	wsConnections map[string]*webSocketConnection
-	rpcModules    map[string]*RPCModule
-	authorizers   []Authorizer
+	bgCtx             context.Context
+	httpServer        httpserver.Server
+	wsServer          httpserver.Server
+	wsMux             sync.Mutex
+	wsUpgrader        *websocket.Upgrader
+	wsConnections     map[string]*webSocketConnection
+	rpcModules        map[string]*RPCModule
+	authorizers       []Authorizer
+	legacyReturnCodes bool
 }
 
 type Authorizer interface {
@@ -179,11 +181,41 @@ func (s *rpcServer) httpHandler(res http.ResponseWriter, req *http.Request) {
 
 	res.Header().Set("Content-Type", "application/json; charset=utf-8")
 	status := r.httpStatus
-	if status == 0 {
+	if s.legacyReturnCodes {
+		// Legacy mode: run with the pre-v1 behaviour where any JSON/RPC error (including
+		// authorization failures) returned HTTP 500. This is a temporary config option while
+		// we ensure that the new default behaviour hasn't affected user applications.
+		if (status == 0 || status == http.StatusForbidden) && rpcResponseHasError(r.res) {
+			status = http.StatusInternalServerError
+		} else if status == 0 {
+			status = http.StatusOK
+		}
+	} else if status == 0 {
 		status = http.StatusOK
 	}
 	res.WriteHeader(status)
 	_ = json.NewEncoder(res).Encode(r.res)
+}
+
+// Reports whether the response value contains a JSON/RPC error.
+// For batch responses it returns true only when every entry has an error (matching the
+// pre-v1 batch behaviour: 200 if at least one request succeeded).
+func rpcResponseHasError(res any) bool {
+	switch v := res.(type) {
+	case *rpcclient.RPCResponse:
+		return v != nil && v.Error != nil
+	case []*rpcclient.RPCResponse:
+		if len(v) == 0 {
+			return false
+		}
+		for _, r := range v {
+			if r == nil || r.Error == nil {
+				return false // at least one success → not a full failure
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func (s *rpcServer) wsHandler(res http.ResponseWriter, req *http.Request) {
