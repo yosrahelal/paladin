@@ -57,6 +57,7 @@ import (
 type ComponentTestInstance interface {
 	GetName() string
 	GetClient() pldclient.PaladinClient
+	GetHTTPURL() string
 	GetWSConfig() *pldconf.WSClientConfig
 	ResolveEthereumAddress(identity string) string
 	GetComponentManager() componentmgr.ComponentManager
@@ -71,6 +72,7 @@ type componentTestInstance struct {
 	ctx                    context.Context
 	cancelCtx              context.CancelFunc
 	client                 pldclient.PaladinClient
+	httpURL                string
 	resolveEthereumAddress func(identity string) string
 	cm                     componentmgr.ComponentManager
 	pluginManager          plugins.UnitTestPluginLoader
@@ -105,6 +107,10 @@ func (testutils *componentTestInstance) GetName() string {
 
 func (testutils *componentTestInstance) GetClient() pldclient.PaladinClient {
 	return testutils.client
+}
+
+func (testutils *componentTestInstance) GetHTTPURL() string {
+	return testutils.httpURL
 }
 
 func (testutils *componentTestInstance) GetWSConfig() *pldconf.WSClientConfig {
@@ -307,7 +313,8 @@ func NewInstanceForTesting(t *testing.T, domainRegistryAddress *pldtypes.EthAddr
 		})
 	}
 
-	client, err := rpcclient.NewHTTPClient(log.WithLogField(t.Context(), "client-for", binding.name), &pldconf.HTTPClientConfig{URL: "http://localhost:" + strconv.Itoa(*i.conf.RPCServer.HTTP.Port)})
+	i.httpURL = "http://localhost:" + strconv.Itoa(*i.conf.RPCServer.HTTP.Port)
+	client, err := rpcclient.NewHTTPClient(log.WithLogField(t.Context(), "client-for", binding.name), &pldconf.HTTPClientConfig{URL: i.httpURL})
 	require.NoError(t, err)
 	i.client = pldclient.Wrap(client).ReceiptPollingInterval(100 * time.Millisecond)
 
@@ -532,6 +539,7 @@ type Party interface {
 	GetNodeName() string
 	GetNodeConfig() *nodeConfiguration
 	GetClient() pldclient.PaladinClient
+	GetHTTPURL() string
 	AddPeer(peers ...interface{})
 	Start(t *testing.T, domainConfig any, configPath string, manualTestCleanup bool)
 	Stop(t *testing.T)
@@ -562,6 +570,10 @@ func (p *partyForTesting) GetNodeConfig() *nodeConfiguration {
 
 func (p *partyForTesting) GetClient() pldclient.PaladinClient {
 	return p.client
+}
+
+func (p *partyForTesting) GetHTTPURL() string {
+	return p.instance.GetHTTPURL()
 }
 
 func (p *partyForTesting) GetIdentityLocator() string {

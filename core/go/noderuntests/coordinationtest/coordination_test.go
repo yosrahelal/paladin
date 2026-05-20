@@ -22,6 +22,7 @@ package coordinationtest
 import (
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -1949,6 +1950,22 @@ func TestCoordinatorFailover(t *testing.T) {
 	// Step 3 — bob restarted: alice remains the active coordinator.
 	// The ClosingGracePeriod is 20s, so alice should remain active for the duration of this step.
 	startNode(t, bob, domainConfig)
+
+	// Warm up alice's gRPC connection to bob before submitting aliceTx2. Even though the TCP port
+	// is listening (checked by startNode), alice's existing ClientConn may still be in a backoff
+	// state from when bob was stopped. We poll ptx_resolveVerifier with a fresh unique key
+	// (bypassing alice's local verifier cache) to force a cross-node round-trip to bob.
+	// PD012701 means alice reached bob at the application layer (the UUID simply doesn't exist
+	// as a key on bob) — that's sufficient to confirm the connection is live. Any other error
+	// indicates a transport-level failure and we keep retrying.
+	require.Eventually(t, func() bool {
+		_, err := alice.GetClient().PTX().ResolveVerifier(ctx,
+			uuid.New().String()+"@"+bob.GetNodeName(),
+			algorithms.ECDSA_SECP256K1,
+			verifiers.ETH_ADDRESS,
+		)
+		return err == nil || strings.Contains(err.Error(), "PD012701")
+	}, 10*time.Second, 100*time.Millisecond, "alice could not reach bob within timeout")
 
 	aliceTx2 := submitTx(alice)
 	require.NoError(t, aliceTx2.Error())
