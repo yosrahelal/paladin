@@ -426,13 +426,14 @@ func TestForgetTransactionAndLocks_ClearsLocksForTransaction(t *testing.T) {
 	g := testGrapherUnlocked(t)
 	txID := uuid.New()
 	s := pldtypes.MustParseHexBytes("0x" + strings.Repeat("ab", 32))
+	// Read lock → lands in readLocksByStateID
 	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{{ID: s}}, []*components.FullState{}, txID)
 	require.Contains(t, g.locksByTransaction, txID)
-	require.Contains(t, g.locksByStateID, s.String())
+	require.Contains(t, g.readLocksByStateID, s.String())
 	g.ForgetTransactionAndLocks(ctx, txID)
 	_, ok := g.locksByTransaction[txID]
 	assert.False(t, ok)
-	_, ok = g.locksByStateID[s.String()]
+	_, ok = g.readLocksByStateID[s.String()]
 	assert.False(t, ok)
 }
 
@@ -493,13 +494,68 @@ func TestForgetTransaction_StampsConfirmedAtBlockAndClearsTransaction(t *testing
 	assert.NotContains(t, g.transactionByID, txID)
 	assert.NotContains(t, g.locksByTransaction, txID)
 
-	// Lock still present — transaction cleared, confirmedAtBlock set
-	lock, ok := g.locksByStateID[s.String()]
+	// Create lock still present — transaction cleared, confirmedAtBlock set
+	lock, ok := g.createLocksByStateID[s.String()]
 	require.True(t, ok)
 	assert.Nil(t, lock.Transaction)
 	require.NotNil(t, lock.ConfirmedAtBlock)
 	assert.Equal(t, uint64(100), *lock.ConfirmedAtBlock)
 	assert.True(t, lock.State.Equals(s))
+}
+
+// TestForgetTransaction_CreateAndSpendLocksStampedIndependently verifies that when a minter
+// transaction and a consumer transaction both confirm, each lock (create and spend) receives the
+// confirmedAtBlock of its own transaction. This relies on the stateLock object being shared by
+// pointer between locksByTransaction and the type-segregated maps: stamping via the transaction
+// index propagates to the state-ID index automatically without direct map access.
+func TestForgetTransaction_CreateAndSpendLocksStampedIndependently(t *testing.T) {
+	ctx := t.Context()
+	g := testGrapherUnlocked(t)
+
+	minterTx := uuid.New()
+	consumerTx := uuid.New()
+	createdBy := uuid.New()
+	stateID := pldtypes.MustParseHexBytes("0x" + strings.Repeat("5c", 32))
+	state := &components.FullState{ID: stateID}
+
+	// Minter assembles: create lock recorded in createLocksByStateID.
+	g.LockMintsOnCreate(ctx,
+		[]*components.StateUpsert{{ID: stateID, CreatedBy: &createdBy}},
+		[]*components.FullState{{ID: stateID}},
+		minterTx,
+	)
+	// Consumer assembles: spend lock recorded in spendLocksByStateID.
+	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{}, []*components.FullState{state}, consumerTx)
+
+	// Minter confirms first at block 10.
+	g.ForgetTransaction(ctx, minterTx, 10)
+
+	// Create lock should carry block 10; spend lock still transaction-owned.
+	createLock, ok := g.createLocksByStateID[stateID.String()]
+	require.True(t, ok)
+	assert.Nil(t, createLock.Transaction)
+	require.NotNil(t, createLock.ConfirmedAtBlock)
+	assert.Equal(t, uint64(10), *createLock.ConfirmedAtBlock)
+
+	spendLock, ok := g.spendLocksByStateID[stateID.String()]
+	require.True(t, ok)
+	require.NotNil(t, spendLock.Transaction, "spend lock must still be transaction-owned")
+	assert.Equal(t, consumerTx, *spendLock.Transaction)
+
+	// Consumer confirms later at block 20.
+	g.ForgetTransaction(ctx, consumerTx, 20)
+
+	// Spend lock now carries block 20, independently of the create lock's block 10.
+	spendLock, ok = g.spendLocksByStateID[stateID.String()]
+	require.True(t, ok)
+	assert.Nil(t, spendLock.Transaction)
+	require.NotNil(t, spendLock.ConfirmedAtBlock)
+	assert.Equal(t, uint64(20), *spendLock.ConfirmedAtBlock)
+
+	// Create lock is unaffected by the consumer confirmation.
+	createLock = g.createLocksByStateID[stateID.String()]
+	require.NotNil(t, createLock.ConfirmedAtBlock)
+	assert.Equal(t, uint64(10), *createLock.ConfirmedAtBlock, "create lock must retain its own confirmedAtBlock")
 }
 
 func TestForgetTransaction_ClearsInFlightIndexesButKeepsStateData(t *testing.T) {
@@ -657,7 +713,9 @@ func TestImportStatesAndLocks_SkipsInFlightLocks(t *testing.T) {
 	g.ImportStatesAndLocks(ctx, outputStates, locks)
 
 	// In-flight lock must not be imported — the new coordinator has no state machine for it
-	assert.Empty(t, g.locksByStateID)
+	assert.Empty(t, g.createLocksByStateID)
+	assert.Empty(t, g.spendLocksByStateID)
+	assert.Empty(t, g.readLocksByStateID)
 
 	// Output state must also be skipped — no confirmed lock to anchor it
 	assert.Empty(t, g.outputStatesByStateID)
@@ -836,4 +894,100 @@ func TestAddMinter_DuplicateStateIDWithinOneCall_ReturnsError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorContains(t, err, string(msgs.MsgSequencerGrapherAddMinterAlreadyExistsError))
+}
+
+// TestCreateLockSurvivesSpendLockRevert verifies that an optimistic spend of a create-locked state
+// followed by rollback of the spend does not affect the create lock. A minter holds a create lock
+// on a state; a consumer optimistically spends it, adding a spend lock; if the consumer reverts
+// only the spend lock is removed — the minter's create lock must remain intact and exported.
+func TestCreateLockSurvivesSpendLockRevert(t *testing.T) {
+	ctx := t.Context()
+	g := testGrapherUnlocked(t)
+
+	minterTx := uuid.New()
+	consumerTx := uuid.New()
+	createdBy := uuid.New()
+	stateID := pldtypes.MustParseHexBytes("0x" + strings.Repeat("ca", 32))
+	state := &components.FullState{ID: stateID, Schema: pldtypes.MustParseBytes32("0x" + strings.Repeat("cb", 32)), Data: pldtypes.RawJSON(`{}`)}
+
+	// Step 1: minterTx assembles and produces stateID with a create lock.
+	require.NoError(t, g.AddMinter(ctx, []*components.FullState{state}, minterTx, nil))
+	g.LockMintsOnCreate(ctx,
+		[]*components.StateUpsert{{ID: stateID, CreatedBy: &createdBy}},
+		[]*components.FullState{{ID: stateID}},
+		minterTx,
+	)
+
+	require.Contains(t, g.createLocksByStateID, stateID.String(), "create lock must be recorded for minterTx")
+	assert.Empty(t, g.spendLocksByStateID, "no spend lock yet")
+
+	// Step 2: consumerTx optimistically spends stateID — this must NOT displace the create lock.
+	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{}, []*components.FullState{state}, consumerTx)
+
+	require.Contains(t, g.createLocksByStateID, stateID.String(), "create lock must still exist after spend lock added")
+	require.Contains(t, g.spendLocksByStateID, stateID.String(), "spend lock must be recorded for consumerTx")
+
+	// Step 3: consumerTx reverts — its spend lock is deleted.
+	g.ForgetTransactionAndLocks(ctx, consumerTx)
+
+	assert.NotContains(t, g.spendLocksByStateID, stateID.String(), "spend lock must be removed after revert")
+
+	// Step 4: the create lock from minterTx must survive.
+	require.Contains(t, g.createLocksByStateID, stateID.String(), "create lock must survive the consumer revert")
+	createLock := g.createLocksByStateID[stateID.String()]
+	require.NotNil(t, createLock.Transaction)
+	assert.Equal(t, minterTx, *createLock.Transaction)
+	assert.Equal(t, pldapi.StateLockTypeCreate.Enum(), createLock.Type)
+
+	// Step 5: ExportStatesAndLocks must still include the create lock so that a reassembled
+	// transaction on the assembler node can find stateID via ImportSnapshot → creatingStates.
+	data, err := g.ExportStatesAndLocks(ctx, "test-node")
+	require.NoError(t, err)
+	require.Len(t, data.LockedState, 1, "exactly the create lock must be exported")
+	assert.Equal(t, pldapi.StateLockTypeCreate.Enum(), data.LockedState[0].Type)
+	require.NotNil(t, data.LockedState[0].Transaction)
+	assert.Equal(t, minterTx, *data.LockedState[0].Transaction)
+}
+
+// TestReadLockSurvivesSpendLockRevert verifies that an optimistic spend of a read-locked state
+// followed by rollback of the spend does not affect the read lock. A reader holds a read lock on
+// a state; an independent spender optimistically spends it, adding a spend lock; if the spender
+// reverts only the spend lock is removed — the reader's read lock must remain intact and exported.
+func TestReadLockSurvivesSpendLockRevert(t *testing.T) {
+	ctx := t.Context()
+	g := testGrapherUnlocked(t)
+
+	readerTx := uuid.New()
+	spenderTx := uuid.New()
+	stateID := pldtypes.MustParseHexBytes("0x" + strings.Repeat("cc", 32))
+	state := &components.FullState{ID: stateID}
+
+	// txB reads stateID → read lock in readLocksByStateID.
+	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{state}, []*components.FullState{}, readerTx)
+	require.Contains(t, g.readLocksByStateID, stateID.String(), "read lock must be recorded for readerTx")
+	assert.Empty(t, g.spendLocksByStateID, "no spend lock yet")
+
+	// txC spends stateID → spend lock in spendLocksByStateID, must NOT displace the read lock.
+	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{}, []*components.FullState{state}, spenderTx)
+	require.Contains(t, g.readLocksByStateID, stateID.String(), "read lock must still exist after spend lock added")
+	require.Contains(t, g.spendLocksByStateID, stateID.String(), "spend lock must be recorded for spenderTx")
+
+	// txC reverts — only the spend lock is deleted.
+	g.ForgetTransactionAndLocks(ctx, spenderTx)
+	assert.NotContains(t, g.spendLocksByStateID, stateID.String(), "spend lock must be removed after revert")
+
+	// txB's read lock must survive.
+	require.Contains(t, g.readLocksByStateID, stateID.String(), "read lock must survive the spender revert")
+	readLock := g.readLocksByStateID[stateID.String()]
+	require.NotNil(t, readLock.Transaction)
+	assert.Equal(t, readerTx, *readLock.Transaction)
+	assert.Equal(t, pldapi.StateLockTypeRead.Enum(), readLock.Type)
+
+	// Export must include the read lock so the assembler knows stateID is still in use.
+	data, err := g.ExportStatesAndLocks(ctx, "test-node")
+	require.NoError(t, err)
+	require.Len(t, data.LockedState, 1, "exactly the read lock must be exported")
+	assert.Equal(t, pldapi.StateLockTypeRead.Enum(), data.LockedState[0].Type)
+	require.NotNil(t, data.LockedState[0].Transaction)
+	assert.Equal(t, readerTx, *data.LockedState[0].Transaction)
 }

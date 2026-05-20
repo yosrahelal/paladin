@@ -103,7 +103,9 @@ type grapher struct {
 	outputStatesByStateID    map[string]*OutputState      // all output states
 	transactionByOutputState map[string]*grapherTX        // states minted by a known transaction
 	outputStatesByMinter     map[uuid.UUID][]*OutputState // reverse lookup for cleaning up transactions
-	locksByStateID           map[string]*stateLock        // authoritative map of all current locks
+	createLocksByStateID     map[string]*stateLock        // create locks keyed by state ID (at most one per state, from its minter)
+	spendLocksByStateID      map[string]*stateLock        // spend locks keyed by state ID (at most one per state)
+	readLocksByStateID       map[string]*stateLock        // read locks keyed by state ID (at most one per state)
 	locksByTransaction       map[uuid.UUID][]*stateLock   // secondary index for O(1) transaction-driven cleanup
 }
 
@@ -119,7 +121,9 @@ func NewGrapher(dependencyTracker dependencytracker.DependencyTracker, blockHeig
 		transactionByID:          make(map[uuid.UUID]*grapherTX),
 		outputStatesByMinter:     make(map[uuid.UUID][]*OutputState),
 		outputStatesByStateID:    make(map[string]*OutputState),
-		locksByStateID:           make(map[string]*stateLock),
+		createLocksByStateID:     make(map[string]*stateLock),
+		spendLocksByStateID:      make(map[string]*stateLock),
+		readLocksByStateID:       make(map[string]*stateLock),
 		locksByTransaction:       make(map[uuid.UUID][]*stateLock),
 	}
 }
@@ -215,6 +219,12 @@ func (g *grapher) ForgetTransaction(ctx context.Context, transactionID uuid.UUID
 	g.forgetTxMints(transactionID)
 
 	// Stamp confirmedAtBlock on the transaction's locks and clear the transaction reference.
+	// Each stateLock object is shared by pointer between locksByTransaction and the type-segregated
+	// maps (createLocksByStateID / spendLocksByStateID / readLocksByStateID). Mutating the fields
+	// here propagates to whichever of those maps holds the same pointer, so after this loop every
+	// type-segregated entry for this transaction reflects the confirmed state — even though
+	// locksByTransaction is deleted immediately below. Each lock carries the confirmedAtBlock of
+	// its own transaction, independently of any other lock on the same state.
 	txLocks := g.locksByTransaction[transactionID]
 	for _, lock := range txLocks {
 		lock.Transaction = nil
@@ -236,15 +246,31 @@ func (g *grapher) ForgetLocks(ctx context.Context, currentBlockHeight uint64) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	for stateID, lock := range g.locksByStateID {
+	for stateID, lock := range g.createLocksByStateID {
 		if lock.Transaction == nil && lock.ConfirmedAtBlock != nil {
 			if currentBlockHeight >= *lock.ConfirmedAtBlock+g.blockHeightTolerance {
-				log.L(ctx).Debugf("ForgetLocks: removing lock on state %s (confirmedAtBlock=%d, tolerance=%d, currentBlock=%d)",
+				log.L(ctx).Debugf("ForgetLocks: removing create lock on state %s (confirmedAtBlock=%d, tolerance=%d, currentBlock=%d)",
 					stateID, *lock.ConfirmedAtBlock, g.blockHeightTolerance, currentBlockHeight)
-				delete(g.locksByStateID, stateID)
-				if lock.Type.V() == pldapi.StateLockTypeCreate {
-					delete(g.outputStatesByStateID, stateID)
-				}
+				delete(g.createLocksByStateID, stateID)
+				delete(g.outputStatesByStateID, stateID)
+			}
+		}
+	}
+	for stateID, lock := range g.spendLocksByStateID {
+		if lock.Transaction == nil && lock.ConfirmedAtBlock != nil {
+			if currentBlockHeight >= *lock.ConfirmedAtBlock+g.blockHeightTolerance {
+				log.L(ctx).Debugf("ForgetLocks: removing spend lock on state %s (confirmedAtBlock=%d, tolerance=%d, currentBlock=%d)",
+					stateID, *lock.ConfirmedAtBlock, g.blockHeightTolerance, currentBlockHeight)
+				delete(g.spendLocksByStateID, stateID)
+			}
+		}
+	}
+	for stateID, lock := range g.readLocksByStateID {
+		if lock.Transaction == nil && lock.ConfirmedAtBlock != nil {
+			if currentBlockHeight >= *lock.ConfirmedAtBlock+g.blockHeightTolerance {
+				log.L(ctx).Debugf("ForgetLocks: removing read lock on state %s (confirmedAtBlock=%d, tolerance=%d, currentBlock=%d)",
+					stateID, *lock.ConfirmedAtBlock, g.blockHeightTolerance, currentBlockHeight)
+				delete(g.readLocksByStateID, stateID)
 			}
 		}
 	}
@@ -289,12 +315,22 @@ func (g *grapher) ImportStatesAndLocks(ctx context.Context, outputStates []*Outp
 	}
 
 	// Import confirmed locks, preserving existing entries.
+	// Route each lock into the appropriate type-segregated map.
 	for stateID, lock := range confirmedLockByStateID {
-		if _, exists := g.locksByStateID[stateID]; exists {
+		var targetMap map[string]*stateLock
+		switch lock.Type.V() {
+		case pldapi.StateLockTypeCreate:
+			targetMap = g.createLocksByStateID
+		case pldapi.StateLockTypeSpend:
+			targetMap = g.spendLocksByStateID
+		default:
+			targetMap = g.readLocksByStateID
+		}
+		if _, exists := targetMap[stateID]; exists {
 			log.L(ctx).Debugf("ImportStatesAndLocks: skipping lock on state %s — existing lock takes precedence", stateID)
 			continue
 		}
-		g.locksByStateID[stateID] = &stateLock{
+		targetMap[stateID] = &stateLock{
 			State:            lock.State,
 			Type:             lock.Type,
 			ConfirmedAtBlock: lock.ConfirmedAtBlock,
@@ -317,16 +353,21 @@ func (g *grapher) forgetTxMints(transactionID uuid.UUID) {
 	}
 }
 
-// forgetLocks removes all locks owned by a transaction from both lock indexes.
+// forgetLocks removes all locks owned by a transaction from all lock indexes.
 // Removing a create lock cascades to delete the corresponding private state data
 // from outputStatesByStateID — the create lock governs the state's lifetime in the grapher.
 // Caller must hold g.mu write lock.
 func (g *grapher) forgetLocks(transactionID uuid.UUID) {
 	for _, lock := range g.locksByTransaction[transactionID] {
 		stateID := lock.State.String()
-		delete(g.locksByStateID, stateID)
-		if lock.Type.V() == pldapi.StateLockTypeCreate {
+		switch lock.Type.V() {
+		case pldapi.StateLockTypeCreate:
+			delete(g.createLocksByStateID, stateID)
 			delete(g.outputStatesByStateID, stateID)
+		case pldapi.StateLockTypeSpend:
+			delete(g.spendLocksByStateID, stateID)
+		default:
+			delete(g.readLocksByStateID, stateID)
 		}
 	}
 	delete(g.locksByTransaction, transactionID)
@@ -361,7 +402,14 @@ func (g *grapher) lockMints(states []*components.FullState, transactionID uuid.U
 			Transaction: &transactionID,
 			Type:        lockType.Enum(),
 		}
-		g.locksByStateID[state.ID.String()] = lock
+		switch lockType {
+		case pldapi.StateLockTypeCreate:
+			g.createLocksByStateID[state.ID.String()] = lock
+		case pldapi.StateLockTypeSpend:
+			g.spendLocksByStateID[state.ID.String()] = lock
+		default:
+			g.readLocksByStateID[state.ID.String()] = lock
+		}
 		g.locksByTransaction[transactionID] = append(g.locksByTransaction[transactionID], lock)
 	}
 }
@@ -422,8 +470,14 @@ func (g *grapher) ExportStatesAndLocks(ctx context.Context, node string) (Export
 		}
 	}
 	// All locks are returned unfiltered — lock data is on-chain metadata and needs no privacy protection.
-	result.LockedState = make([]*stateLock, 0, len(g.locksByStateID))
-	for _, lock := range g.locksByStateID {
+	result.LockedState = make([]*stateLock, 0, len(g.createLocksByStateID)+len(g.spendLocksByStateID)+len(g.readLocksByStateID))
+	for _, lock := range g.createLocksByStateID {
+		result.LockedState = append(result.LockedState, lock)
+	}
+	for _, lock := range g.spendLocksByStateID {
+		result.LockedState = append(result.LockedState, lock)
+	}
+	for _, lock := range g.readLocksByStateID {
 		result.LockedState = append(result.LockedState, lock)
 	}
 	log.L(ctx).Debugf("ExportStatesAndLocks: %d output states, %d locks (node=%q)", len(result.OutputState), len(result.LockedState), node)
