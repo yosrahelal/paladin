@@ -68,10 +68,10 @@ jobs:
         if: inputs.length != ''
         run: |
           sed -i "s/^\(\s*\)length:.*$/\1length: ${{ inputs.length }}/" \
-            test/config/${{ steps.test-config.outputs.config_file }}
+            paladin/test/config/${{ steps.test-config.outputs.config_file }}
 
       - name: Build test application
-        working-directory: test
+        working-directory: paladin/test
         run: make
 
       - name: Install Kind
@@ -88,8 +88,8 @@ jobs:
 
       - name: Run test
         run: |
-          ./test/pldtest/pldtest run \
-            -c test/config/${{ steps.test-config.outputs.config_file }} \
+          ./paladin/test/pldtest/pldtest run \
+            -c paladin/test/config/${{ steps.test-config.outputs.config_file }} \
             -i 0
 
       - name: Cleanup cluster
