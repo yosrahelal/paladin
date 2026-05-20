@@ -754,3 +754,13 @@ func TestLegacyReturnCodes_BatchPartialFail_Returns200(t *testing.T) {
 	assert.True(t, res.IsSuccess())
 	assert.Equal(t, http.StatusOK, res.StatusCode())
 }
+
+func TestRPCResponseHasError_EmptyBatch(t *testing.T) {
+	// An empty batch slice is not considered an error
+	assert.False(t, rpcResponseHasError([]*rpcclient.RPCResponse{}))
+}
+
+func TestRPCResponseHasError_UnknownType(t *testing.T) {
+	// An unrecognised type is not considered an error
+	assert.False(t, rpcResponseHasError("unexpected"))
+}
