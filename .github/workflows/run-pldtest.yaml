@@ -70,6 +70,10 @@ jobs:
           sed -i "s/^\(\s*\)length:.*$/\1length: ${{ inputs.length }}/" \
             paladin/test/config/${{ steps.test-config.outputs.config_file }}
 
+      - name: Copy solidity artifacts
+        working-directory: paladin
+        run: ./gradlew --no-daemon :domains:noto:copyInternalSolidity :test:copySolidity
+
       - name: Build test application
         working-directory: paladin/test
         run: make
@@ -85,10 +89,6 @@ jobs:
         run: |
           ./gradlew --no-daemon :operator:installOperatorDefault \
             -x :operator:helmUnitTest
-
-      - name: Copy solidity artifacts
-        working-directory: paladin
-        run: ./gradlew --no-daemon :domains:noto:copyInternalSolidity :test:copySolidity
 
       - name: Run test
         run: |
