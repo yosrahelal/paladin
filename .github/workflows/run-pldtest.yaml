@@ -1,4 +1,4 @@
-name: "Run pldtest Integration Tests"
+name: "Run integration test"
 
 permissions:
   contents: read
@@ -70,7 +70,7 @@ jobs:
           sed -i "s/^\(\s*\)length:.*$/\1length: ${{ inputs.length }}/" \
             test/config/${{ steps.test-config.outputs.config_file }}
 
-      - name: Build pldtest
+      - name: Build test application
         working-directory: test
         run: make
 
