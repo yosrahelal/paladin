@@ -86,6 +86,10 @@ jobs:
           ./gradlew --no-daemon :operator:installOperatorDefault \
             -x :operator:helmUnitTest
 
+      - name: Copy solidity artifacts
+        working-directory: paladin
+        run: ./gradlew --no-daemon :domains:noto:copyInternalSolidity :test:copySolidity
+
       - name: Run test
         run: |
           ./paladin/test/pldtest/pldtest run \
