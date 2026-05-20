@@ -11,6 +11,7 @@ on:
         required: true
         type: choice
         options:
+          - all
           - public-contract
           - private-transaction-node-restart
           - privacy-group-contract-deploy
@@ -67,8 +68,9 @@ jobs:
       - name: Override test length
         if: inputs.length != ''
         run: |
-          sed -i "s/^\(\s*\)length:.*$/\1length: ${{ inputs.length }}/" \
-            paladin/test/config/${{ steps.test-config.outputs.config_file }}
+          for config in paladin/test/config/example-*.yaml; do
+            sed -i "s/^\(\s*\)length:.*$/\1length: ${{ inputs.length }}/" "$config"
+          done
 
       - name: Copy solidity artifacts
         working-directory: paladin
@@ -92,9 +94,21 @@ jobs:
 
       - name: Run test
         run: |
-          ./paladin/test/pldtest/pldtest run \
-            -c paladin/test/config/${{ steps.test-config.outputs.config_file }} \
-            -i 0
+          if [ "${{ inputs.test_name }}" = "all" ]; then
+            for config in \
+              example-public-contract.yaml \
+              example-private-transaction-node-restart.yaml \
+              example-privacy-group-contract-deploy.yaml \
+              example-noto-revertable-hooks.yaml; do
+              ./paladin/test/pldtest/pldtest run \
+                -c paladin/test/config/$config \
+                -i 0
+            done
+          else
+            ./paladin/test/pldtest/pldtest run \
+              -c paladin/test/config/${{ steps.test-config.outputs.config_file }} \
+              -i 0
+          fi
 
       - name: Cleanup cluster
         if: always()
