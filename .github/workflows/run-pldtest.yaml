@@ -1,4 +1,4 @@
-name: "Run integration test"
+name: "Run integration tests"
 
 permissions:
   contents: read
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       test_name:
-        description: "Test configuration to run"
+        description: "Test to run"
         required: true
         type: choice
         options:
