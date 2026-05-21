@@ -29,6 +29,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibility"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
@@ -70,6 +71,7 @@ type TransactionBuilderForTesting struct {
 	useMockTransportWriter             bool
 	useMockClock                       bool
 	grapher                            grapher.Grapher
+	stateVisibility                    statevisibility.StateVisibilityStore
 	dependencyTracker                  dependencytracker.DependencyTracker
 	txn                                *coordinatorTransaction
 	requestTimeout                     int
@@ -209,6 +211,11 @@ func (b *TransactionBuilderForTesting) Grapher(grapher grapher.Grapher) *Transac
 
 func (b *TransactionBuilderForTesting) DependencyTracker(dependencyTracker dependencytracker.DependencyTracker) *TransactionBuilderForTesting {
 	b.dependencyTracker = dependencyTracker
+	return b
+}
+
+func (b *TransactionBuilderForTesting) StateVisibility(stateVisibility statevisibility.StateVisibilityStore) *TransactionBuilderForTesting {
+	b.stateVisibility = stateVisibility
 	return b
 }
 
@@ -445,8 +452,11 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 	if b.dependencyTracker == nil {
 		b.dependencyTracker = dependencytracker.NewDependencyTracker()
 	}
+	if b.stateVisibility == nil {
+		b.stateVisibility = statevisibility.NewStore()
+	}
 	if b.grapher == nil {
-		b.grapher = grapher.NewGrapher(b.dependencyTracker, 5)
+		b.grapher = grapher.NewGrapher(b.dependencyTracker, b.stateVisibility, 5)
 	}
 
 	mp, err := mockpersistence.NewSQLMockProvider()
@@ -526,6 +536,7 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		b.baseLedgerRevertRetryThreshold,
 		b.assembleErrorRetryThreshhold,
 		b.grapher,
+		b.stateVisibility,
 		b.dependencyTracker,
 		metrics.InitMetrics(ctx, prometheus.NewRegistry()),
 	)
@@ -563,7 +574,7 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 
 	if privateTransaction.PostAssembly != nil {
 		for _, state := range privateTransaction.PostAssembly.OutputStates {
-			err := b.grapher.AddMinter(ctx, []*components.FullState{state}, txn.pt.ID, nil)
+			err := b.grapher.AddMinter(ctx, []*components.FullState{state}, txn.pt.ID)
 			require.NoError(b.t, err)
 		}
 	}

@@ -44,6 +44,9 @@ packages:
   github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher:
     config:
       all: true
+  github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibility:
+    config:
+      all: true
   github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction:
     config:
       pkgname: coordinatortransactionmocks

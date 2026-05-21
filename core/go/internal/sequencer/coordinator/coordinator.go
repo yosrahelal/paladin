@@ -26,6 +26,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibility"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
@@ -84,6 +85,7 @@ type coordinator struct {
 	currentBlockHeight                 uint64
 	dependencyTracker                  dependencytracker.DependencyTracker
 	grapher                            grapher.Grapher
+	stateVisibility                    statevisibility.StateVisibilityStore
 	endorserCandidates                 []string       // ENDORSER mode only: candidate nodes for coordinator priority list and heartbeat fan-out
 	originatorActivity                 map[string]int // STATIC/SENDER only: heartbeat-intervals since last delegation activity per originator node
 	coordinatorPriorityList            []string       // priority-ordered list; index 0 is current active coordinator
@@ -151,6 +153,7 @@ func NewCoordinator(
 	selectionConfig *common.CoordinatorSelectionConfig,
 ) *coordinator {
 	dependencyTracker := dependencytracker.NewDependencyTracker()
+	stateVisibility := statevisibility.NewStore()
 	c := &coordinator{
 		heartbeatIntervalsSinceStateChange: 0,
 		transactionsByID:                   make(map[uuid.UUID]transaction.CoordinatorTransaction),
@@ -162,7 +165,8 @@ func NewCoordinator(
 		transportWriter:                    transportWriter,
 		contractAddress:                    contractAddress,
 		dependencyTracker:                  dependencyTracker,
-		grapher:                            grapher.NewGrapher(dependencyTracker, confutil.Uint64Min(configuration.BlockHeightTolerance, pldconf.SequencerMinimum.BlockHeightTolerance, *pldconf.SequencerDefaults.BlockHeightTolerance)),
+		stateVisibility:                    stateVisibility,
+		grapher:                            grapher.NewGrapher(dependencyTracker, stateVisibility, confutil.Uint64Min(configuration.BlockHeightTolerance, pldconf.SequencerMinimum.BlockHeightTolerance, *pldconf.SequencerDefaults.BlockHeightTolerance)),
 		clock:                              clock,
 		engineIntegration:                  engineIntegration,
 		syncPoints:                         syncPoints,
