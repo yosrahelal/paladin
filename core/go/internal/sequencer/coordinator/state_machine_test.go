@@ -817,6 +817,8 @@ func TestCoordinator_WhenPreparedTransitionsToActive_RefreshesSigningIdentityAnd
 	pooledTxID := uuid.New()
 	pooledTx.EXPECT().GetID().Return(pooledTxID).Maybe()
 	pooledTx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
+	// action_SendHeartbeat (OnTransitionTo Active) builds the payload by calling GetSnapshot on each transaction.
+	pooledTx.EXPECT().GetSnapshot(mock.Anything).Return(&common.SnapshotPooledTransaction{ID: pooledTxID}, nil, nil).Maybe()
 	pooledTx.EXPECT().HandleEvent(mock.Anything, mock.AnythingOfType("*transaction.SelectedEvent")).Return(nil).Once()
 
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Prepared).
