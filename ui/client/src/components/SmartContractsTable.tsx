@@ -92,6 +92,12 @@ export const SmartContractsTable: React.FC<Props> = ({
     }
   }, [contracts, rowsPerPage, page]);
 
+  useEffect(() => {
+    if (count !== -1 && page !== 0 && page * rowsPerPage === count) {
+      handleChangePage(null, page - 1);
+    }
+  }, [count, rowsPerPage, page]);
+
   const handleChangePage = (
     _event: React.MouseEvent<HTMLButtonElement> | null,
     newPage: number
@@ -231,7 +237,7 @@ export const SmartContractsTable: React.FC<Props> = ({
           ))}
         </TableBody>
       </Table>
-      {contracts?.length === 0 ?
+      {contracts?.length === 0 && page === 0 ?
         <Typography color="textSecondary" align="center" variant="h6" sx={{ marginTop: '40px' }}>
           {t('noSmartContracts')}
         </Typography>
