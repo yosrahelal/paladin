@@ -252,10 +252,11 @@ func TestCreateBurnLock(t *testing.T) {
 			pldtypes.MustParseBytes32(*dataState.Id),
 			pldtypes.MustParseBytes32(*cancelCoinState.Id),
 		},
+		From: (*pldtypes.EthAddress)(&senderKey.Address),
 	}, data)
 
 	// Decode the options we store into the lockInfo
-	unlockTxData, err := n.encodeTransactionDataV1(ctx, newStateToEndorsableState([]*prototk.NewState{unlockDataState}))
+	unlockTxData, err := n.encodeTransactionDataV1(ctx, tx, newStateToEndorsableState([]*prototk.NewState{unlockDataState}), verifiers)
 	require.NoError(t, err)
 	notoOptions := decodeSingleABITuple[types.NotoLockOptions](t, types.NotoLockOptionsABI, fnParams.Params.Options)
 	expectedSpendHash, err := n.unlockHashFromIDs_V1(ctx, ethtypes.MustNewAddress(contractAddress), lockID, notoOptions.SpendTxId.HexString(), endorsableStateIDs(outputStates[1:2]), []string{}, unlockTxData)

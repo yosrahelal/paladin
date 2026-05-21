@@ -65,8 +65,7 @@ type ReceiptTransfer struct {
 }
 
 type ReceiptRequester struct {
-	Lookup  *string              `json:"lookup,omitempty"`  // Transaction requester identity lookup
-	Address *pldtypes.EthAddress `json:"address,omitempty"` // Resolved Ethereum address of the requester
+	From *pldtypes.EthAddress `json:"from,omitempty"` // Resolved Ethereum address of the transaction requester
 }
 
 type NotoCoinState struct {
@@ -206,9 +205,10 @@ var NotoLockInfoABI_V1 = &abi.Parameter{
 }
 
 type TransactionData struct {
-	Salt    pldtypes.Bytes32   `json:"salt"`
-	Data    pldtypes.HexBytes  `json:"data"`
-	Variant pldtypes.HexUint64 `json:"variant"` // Noto contract variant
+	Salt    pldtypes.Bytes32     `json:"salt"`
+	Data    pldtypes.HexBytes    `json:"data"`
+	Variant pldtypes.HexUint64   `json:"variant"` // Noto contract variant
+	From    *pldtypes.EthAddress `json:"from,omitempty"` // Resolved Ethereum address of the transaction requester
 }
 
 // TransactionDataABI_V0 is the original schema
@@ -231,5 +231,6 @@ var TransactionDataABI_V1 = &abi.Parameter{
 		{Name: "salt", Type: "bytes32"},
 		{Name: "data", Type: "bytes"},
 		{Name: "variant", Type: "uint64"},
+		{Name: "from", Type: "address"},
 	},
 }

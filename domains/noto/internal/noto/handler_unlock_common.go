@@ -93,7 +93,7 @@ func (h *unlockCommon) init(ctx context.Context, tx *types.ParsedTransaction, pa
 func (h *unlockCommon) buildUnlockData(ctx context.Context, notaryID, senderID, fromID *identityPair, tx *types.ParsedTransaction, recipients []*types.UnlockRecipient, resolvedVerifiers []*prototk.ResolvedVerifier, stateQueryContext string, unlockData []byte) (encodedUnlockData []byte, infoStates []*prototk.NewState, infoDistribution identityList, err error) {
 	infoDistribution, err = h.getAllRecipientsDistribution(ctx, tx, notaryID, senderID, fromID, recipients, resolvedVerifiers)
 	if err == nil {
-		infoStates, err = h.noto.prepareDataInfo(unlockData, tx.DomainConfig.Variant, infoDistribution.identities())
+		infoStates, err = h.noto.prepareDataInfo(ctx, unlockData, tx.DomainConfig.Variant, infoDistribution.identities(), tx.Transaction, resolvedVerifiers)
 	}
 	if err == nil {
 		// We need to know the IDs of the states at this point
@@ -356,7 +356,7 @@ func (h *unlockCommon) endorse(
 	}, nil
 }
 
-func (h *unlockCommon) buildPrepareUnlockParams(ctx context.Context, tx *types.ParsedTransaction, lt *lockTransition, proof pldtypes.HexBytes, lockedInputs, spendOutputs, cancelOutputs, infoStates []*prototk.EndorsableState) (_ *UpdateLockParams, err error) {
+func (h *unlockCommon) buildPrepareUnlockParams(ctx context.Context, tx *types.ParsedTransaction, lt *lockTransition, proof pldtypes.HexBytes, lockedInputs, spendOutputs, cancelOutputs, infoStates []*prototk.EndorsableState, verifiers []*prototk.ResolvedVerifier) (_ *UpdateLockParams, err error) {
 	lockID := lt.prevLockInfo.LockID
 	spendData := lt.newLockInfo.SpendData
 	cancelData := lt.newLockInfo.CancelData
@@ -386,7 +386,7 @@ func (h *unlockCommon) buildPrepareUnlockParams(ctx context.Context, tx *types.P
 		return nil, err
 	}
 
-	txData, err := h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, infoStates)
+	txData, err := h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, infoStates, verifiers)
 	if err != nil {
 		return nil, err
 	}

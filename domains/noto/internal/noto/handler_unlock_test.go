@@ -271,6 +271,7 @@ func TestUnlock(t *testing.T) {
 		InfoStates: []pldtypes.Bytes32{
 			pldtypes.MustParseBytes32(*dataState.Id),
 		},
+		From: (*pldtypes.EthAddress)(&senderKey.Address),
 	}, data)
 
 	var invokeFn abi.Entry

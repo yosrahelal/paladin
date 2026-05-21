@@ -119,7 +119,7 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	}
 
 	// Build the data info for this prepare transaction
-	prepareDataInfo, err := h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, infoDistribution.identities())
+	prepareDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +270,7 @@ func (h *prepareMintUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *typ
 	}
 
 	interfaceABI := h.noto.getInterfaceABI(types.NotoVariantDefault)
-	lockParams, err := h.buildPrepareUnlockParams(ctx, tx, lockTransition, sender.Payload, []*prototk.EndorsableState{}, spendOutputs, []*prototk.EndorsableState{}, req.InfoStates)
+	lockParams, err := h.buildPrepareUnlockParams(ctx, tx, lockTransition, sender.Payload, []*prototk.EndorsableState{}, spendOutputs, []*prototk.EndorsableState{}, req.InfoStates, req.ResolvedVerifiers)
 	var paramsJSON []byte
 	if err == nil {
 		paramsJSON, err = json.Marshal(lockParams)

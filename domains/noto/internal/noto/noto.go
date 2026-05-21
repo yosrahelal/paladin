@@ -1067,24 +1067,16 @@ func (n *Noto) encodeTransactionDataV1(ctx context.Context, transaction *prototk
 		}
 	}
 
-	// Extract the requester identity and resolved address
-	var from *string
+	// Extract the resolved sender address
 	var fromAddress *pldtypes.EthAddress
-	if transaction != nil && transaction.From != "" {
-		from = &transaction.From
-		// Try to find the resolved Ethereum address for the requester
-		if verifiers != nil {
-			fromAddr, err := n.findEthAddressVerifier(ctx, "from", transaction.From, verifiers)
-			if err == nil && fromAddr != nil {
-				fromAddress = fromAddr.address
-			}
-		}
+	fromAddr, err := n.findEthAddressVerifier(ctx, "from", transaction.From, verifiers)
+	if err == nil && fromAddr != nil {
+		fromAddress = fromAddr.address
 	}
 
 	dataValues := &types.NotoTransactionData_V1{
-		InfoStates:  stateIDs,
-		From:        from,
-		FromAddress: fromAddress,
+		InfoStates: stateIDs,
+		From:       fromAddress,
 	}
 	dataJSON, err := json.Marshal(dataValues)
 	if err != nil {

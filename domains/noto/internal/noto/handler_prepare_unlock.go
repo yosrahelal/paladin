@@ -91,7 +91,7 @@ func (h *prepareUnlockHandler) Assemble(ctx context.Context, tx *types.ParsedTra
 		// The tx data for the prepareUnlock itself needs to be distributed (separate to the unlockData)
 		var prepareInfoStates []*prototk.NewState
 		if err == nil {
-			prepareInfoStates, err = h.noto.prepareDataInfo(params.Data, tx.DomainConfig.Variant, states.infoDistribution.identities())
+			prepareInfoStates, err = h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, states.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
 		}
 		if err == nil {
 			states.info = append(states.info /* the unlockData */, prepareInfoStates...)
@@ -253,7 +253,7 @@ func (h *prepareUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.P
 	switch tx.DomainConfig.Variant {
 	case types.NotoVariantDefault:
 		var lockParams *UpdateLockParams
-		lockParams, err = h.buildPrepareUnlockParams(ctx, tx, lockTransition, sender.Payload, lockedInputs, spendOutputs, cancelOutputs, req.InfoStates)
+		lockParams, err = h.buildPrepareUnlockParams(ctx, tx, lockTransition, sender.Payload, lockedInputs, spendOutputs, cancelOutputs, req.InfoStates, req.ResolvedVerifiers)
 		if err == nil {
 			interfaceABI = h.noto.getInterfaceABI(types.NotoVariantDefault)
 			functionName = "updateLock"
