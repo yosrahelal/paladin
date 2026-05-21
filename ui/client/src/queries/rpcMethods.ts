@@ -48,4 +48,5 @@ export const RpcMethods = {
   transport_peers: 'transport_peers',
   keymgr_queryKeys: 'keymgr_queryKeys',
   keymgr_reverseKeyLookup: 'keymgr_reverseKeyLookup',
+  ptx_call: 'ptx_call',
 };
