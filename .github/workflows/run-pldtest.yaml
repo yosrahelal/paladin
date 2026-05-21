@@ -60,7 +60,7 @@ jobs:
           esac
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
 
-  run-pldtest:
+  run-pld-integration-test:
     needs: setup
     runs-on: ubuntu-latest
     strategy:
@@ -109,7 +109,23 @@ jobs:
           ./gradlew --no-daemon :operator:installOperatorDefault \
             -x :operator:helmUnitTest
 
+      # Limit the step to 2 x the chosen test length to prevent a hang resulting in hitting 6h GHA limit
+      - name: Compute test timeout
+        id: test-timeout
+        run: |
+          length="${{ inputs.length }}"
+          if [ -z "$length" ]; then
+            echo "minutes=30" >> $GITHUB_OUTPUT
+          else
+            total_seconds=0
+            [[ "$length" =~ ([0-9]+)h ]] && total_seconds=$((total_seconds + ${BASH_REMATCH[1]} * 3600))
+            [[ "$length" =~ ([0-9]+)m ]] && total_seconds=$((total_seconds + ${BASH_REMATCH[1]} * 60))
+            [[ "$length" =~ ([0-9]+)s ]] && total_seconds=$((total_seconds + ${BASH_REMATCH[1]}))
+            echo "minutes=$(( (total_seconds * 2 + 59) / 60 ))" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run test
+        timeout-minutes: ${{ fromJson(steps.test-timeout.outputs.minutes) }}
         run: |
           ./paladin/test/pldtest/pldtest run \
             -c paladin/test/config/${{ matrix.config_file }} \
