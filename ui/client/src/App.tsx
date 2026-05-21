@@ -112,7 +112,9 @@ function App() {
         <ApplicationContextProvider colorMode={colorMode}>
           <ThemeProvider theme={theme}>
             <CssBaseline />
-            <BrowserRouter basename={basePath}>
+            <BrowserRouter basename={basePath}
+              future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+            >
               <Header />
               <Routes>
                 <Route path={AppRoutes.Transactions} element={<Transactions

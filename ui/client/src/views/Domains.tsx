@@ -107,7 +107,7 @@ export const Domains: React.FC<Props> = ({
                     },
                   },
                 }}
-                select
+                select={domains !== undefined && domains.length > 0}
                 value={selectedDomain ?? ''}
                 onChange={(event) => setSelectedDomain(event.target.value)}
               >
