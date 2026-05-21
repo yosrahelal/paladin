@@ -904,7 +904,37 @@ func TestCoordinator_WhenActive_HeartbeatInterval_WithInflight_SendsHeartbeatAnd
 	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "action_SendHeartbeat must fire in Active HeartbeatInterval")
 }
 
-func TestCoordinator_WhenActive_HigherPriorityHeartbeat_CleansUpPooledAndTransitionsToClosingFlush(t *testing.T) {
+func TestCoordinator_WhenActive_HigherPriorityHeartbeat_WithUnconfirmedDispatchedTx_CleansUpPooledAndTransitionsToClosingFlush(t *testing.T) {
+	ctx := t.Context()
+	pooledTx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	pooledTxID := uuid.New()
+	pooledTx.EXPECT().GetID().Return(pooledTxID).Maybe()
+	pooledTx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
+	dispatchedTx, _ := newDispatchedTxMock(t)
+
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
+		NodeName("node3"). // node3 is lower priority than node1
+		CurrentActiveCoordinator("node3").
+		EndorserCandidates("node1", "node2", "node3").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		PooledTransactions(pooledTx).
+		Transactions(dispatchedTx).
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+	require.Equal(t, 2, len(c.transactionsByID), "pooled and dispatched txns must be registered before event")
+	// node1 sends an Active heartbeat while node3 is coordinating → preemption
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode: "node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	}))
+	// action_CleanUpTransactionsNotYetDispatched removed the pooled tx; dispatched tx remains → flush required
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	assert.Equal(t, uint64(1), uint64(len(c.transactionsByID)), "only pooled tx must be cleaned up; dispatched tx remains for flush")
+}
+
+func TestCoordinator_WhenActive_HigherPriorityHeartbeat_CleansUpPooledAndTransitionsToClosing(t *testing.T) {
 	ctx := t.Context()
 	pooledTx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	pooledTxID := uuid.New()
@@ -927,8 +957,8 @@ func TestCoordinator_WhenActive_HigherPriorityHeartbeat_CleansUpPooledAndTransit
 			CoordinatorState: common.CoordinatorState_Active,
 		},
 	}))
-	// action_CleanUpTransactionsNotYetDispatched removed the pooled transaction
-	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	// action_CleanUpTransactionsNotYetDispatched removed the pooled transaction; no dispatched txns → no flush needed
+	assert.Equal(t, State_Closing, c.GetCurrentState())
 	assert.Equal(t, uint64(0), uint64(len(c.transactionsByID)), "pooled txns must be cleaned up on preemption")
 }
 

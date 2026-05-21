@@ -821,8 +821,6 @@ func TestStateMachine_Sending_TransactionFinal_OtherTxnsRemain_StaysSending(t *t
 	mockTxn1.On("GetID").Return(txID1)
 	mockTxn2 := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn2.On("GetID").Return(txID2)
-	// guard_HasUnconfirmedTransactions calls GetCurrentState on remaining transactions.
-	mockTxn2.On("GetCurrentState").Return(transaction.State_Delegated)
 	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		Transactions(mockTxn1, mockTxn2).
 		Build()
@@ -941,15 +939,13 @@ func TestStateMachine_Sending_HeartbeatReceived_Step3_GraceExceeded_SwitchesCoor
 	assert.Equal(t, 0, o.failoverIndex, "failoverIndex must be recalibrated: 0 when active is not top priority")
 }
 
-// TransactionStateTransition to Confirmed for the last transaction in Sending transitions to Observing.
-func TestStateMachine_Sending_TransactionConfirmed_LastTxn_TransitionsToObserving(t *testing.T) {
+// TransactionStateTransition to Confirmed in Sending runs action_FinalizeTransaction (queues an
+// internal FinalizeEvent) but does not remove the transaction or trigger a state transition.
+func TestStateMachine_Sending_TransactionConfirmed_LastTxn_StaysInSending(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.On("GetID").Return(txID)
-	// guard_HasUnconfirmedTransactions calls GetCurrentState; returning Confirmed means the tx
-	// is not counted as unconfirmed, so the guard returns false → transition to Observing fires.
-	mockTxn.On("GetCurrentState").Return(transaction.State_Confirmed)
 	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		Transactions(mockTxn).
 		Build()
@@ -959,22 +955,21 @@ func TestStateMachine_Sending_TransactionConfirmed_LastTxn_TransitionsToObservin
 		ToState:       transaction.State_Confirmed,
 	}))
 
-	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Len(t, o.transactionsByID, 1, "action_FinalizeTransaction does not remove; transaction stays until Final")
 }
 
 // TransactionStateTransition to Reverted in Sending when other transactions remain → stays Sending.
 // action_FinalizeTransaction queues a FinalizeEvent; the transaction stays in memory until Final.
+// guard_HasTransactions checks len(transactionsByID), not transaction state, so no GetCurrentState needed.
 func TestStateMachine_Sending_TransactionReverted_OtherTxnsRemain_StaysSending(t *testing.T) {
 	ctx := context.Background()
 	txID1 := uuid.New()
 	txID2 := uuid.New()
 	mockTxn1 := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn1.On("GetID").Return(txID1)
-	mockTxn1.On("GetCurrentState").Return(transaction.State_Reverted)
 	mockTxn2 := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn2.On("GetID").Return(txID2)
-	// guard_HasUnconfirmedTransactions: txID2 is Delegated (≠ Confirmed) → unconfirmed → stays Sending.
-	mockTxn2.On("GetCurrentState").Return(transaction.State_Delegated)
 	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		Transactions(mockTxn1, mockTxn2).
 		Build()

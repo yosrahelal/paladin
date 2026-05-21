@@ -315,13 +315,13 @@ var stateDefinitionsMap = StateDefinitions{
 					Actions: []ActionRule{{Action: action_FinalizeAsUnknownByOriginator}},
 				}},
 			}}},
-			// A dependency resetting while we are assembling must be a chained dependency
-			// (post-assembly dependencies don't exist yet). The reset dependency is
-			// unassembled, so we always go to PreAssembly_Blocked.
+			// A dependency resetting or reverting while we are assembling must be a chained dependency
+			// (post-assembly dependencies don't exist yet).
+			// The dependency is now unassembled, so we always go to PreAssembly_Blocked.
 			Event_DependencyReset: {Handlers: []EventHandler{{
+				Validator: validator_IsChainedDependency,
 				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
+					Action: action_MarkChainedDependencyUnassembled,
 				}},
 				Transitions: []Transition{{
 					To:      State_PreAssembly_Blocked,
@@ -329,9 +329,9 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			}}},
 			Event_DependencyConfirmedReverted: {Handlers: []EventHandler{{
+				Validator: validator_IsChainedDependency,
 				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
+					Action: action_MarkChainedDependencyUnassembled,
 				}},
 				Transitions: []Transition{{
 					To:      State_PreAssembly_Blocked,
@@ -398,41 +398,42 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			}}},
+			// When we see a dependency reset or revert while in Endorsement_Gathering:
+			// - A transaction with a chained dependency will always go to PreAssembly_Blocked as its
+			// chained dependency is now unassembled.
+			// - A trasanction without a chained dependency will always go to Pooled as its post assembly
+			// dependencies are now cleared, and it too far along to have preassembly dependencies.
 			Event_DependencyReset: {Handlers: []EventHandler{{
+				Validator: validator_IsChainedDependency,
 				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
+					Action: action_MarkChainedDependencyUnassembled,
 				}},
-				Transitions: []Transition{
-					{
-						To:      State_PreAssembly_Blocked,
-						If:      guard_HasUnassembledDependencies,
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-					{
-						To:      State_Pooled,
-						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-				},
+				Transitions: []Transition{{
+					To:      State_PreAssembly_Blocked,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
+			}, {
+				Validator: statemachine.ValidatorNot(validator_IsChainedDependency),
+				Transitions: []Transition{{
+					To:      State_Pooled,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
 			}}},
 			Event_DependencyConfirmedReverted: {Handlers: []EventHandler{{
+				Validator: validator_IsChainedDependency,
 				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
+					Action: action_MarkChainedDependencyUnassembled,
 				}},
-				Transitions: []Transition{
-					{
-						To:      State_PreAssembly_Blocked,
-						If:      guard_HasUnassembledDependencies,
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-					{
-						To:      State_Pooled,
-						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-				},
+				Transitions: []Transition{{
+					To:      State_PreAssembly_Blocked,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
+			}, {
+				Validator: statemachine.ValidatorNot(validator_IsChainedDependency),
+				Transitions: []Transition{{
+					To:      State_Pooled,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
 			}}},
 			Event_ChainedDependencyFailed: {Handlers: []EventHandler{{
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
@@ -453,41 +454,42 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardNot(guard_HasDependenciesNotReady),
 				}},
 			}}},
+			// When we see a dependency reset or revert while in Blocked:
+			// - A transaction with a chained dependency will always go to PreAssembly_Blocked as its
+			// chained dependency is now unassembled.
+			// - A trasanction without a chained dependency will always go to Pooled as its post assembly
+			// dependencies are now cleared, and it too far along to have preassembly dependencies.
 			Event_DependencyReset: {Handlers: []EventHandler{{
+				Validator: validator_IsChainedDependency,
 				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
+					Action: action_MarkChainedDependencyUnassembled,
 				}},
-				Transitions: []Transition{
-					{
-						To:      State_PreAssembly_Blocked,
-						If:      guard_HasUnassembledDependencies,
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-					{
-						To:      State_Pooled,
-						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-				},
+				Transitions: []Transition{{
+					To:      State_PreAssembly_Blocked,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
+			}, {
+				Validator: statemachine.ValidatorNot(validator_IsChainedDependency),
+				Transitions: []Transition{{
+					To:      State_Pooled,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
 			}}},
 			Event_DependencyConfirmedReverted: {Handlers: []EventHandler{{
+				Validator: validator_IsChainedDependency,
 				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
+					Action: action_MarkChainedDependencyUnassembled,
 				}},
-				Transitions: []Transition{
-					{
-						To:      State_PreAssembly_Blocked,
-						If:      guard_HasUnassembledDependencies,
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-					{
-						To:      State_Pooled,
-						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-				},
+				Transitions: []Transition{{
+					To:      State_PreAssembly_Blocked,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
+			}, {
+				Validator: statemachine.ValidatorNot(validator_IsChainedDependency),
+				Transitions: []Transition{{
+					To:      State_Pooled,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
 			}}},
 			Event_ChainedDependencyFailed: {Handlers: []EventHandler{{
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
@@ -543,41 +545,42 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			}}},
+			// When we see a dependency reset or revert while in Confirming_Dispatchable:
+			// - A transaction with a chained dependency will always go to PreAssembly_Blocked as its
+			// chained dependency is now unassembled.
+			// - A trasanction without a chained dependency will always go to Pooled as its post assembly
+			// dependencies are now cleared, and it too far along to have preassembly dependencies.
 			Event_DependencyReset: {Handlers: []EventHandler{{
+				Validator: validator_IsChainedDependency,
 				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
+					Action: action_MarkChainedDependencyUnassembled,
 				}},
-				Transitions: []Transition{
-					{
-						To:      State_PreAssembly_Blocked,
-						If:      guard_HasUnassembledDependencies,
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-					{
-						To:      State_Pooled,
-						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-				},
+				Transitions: []Transition{{
+					To:      State_PreAssembly_Blocked,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
+			}, {
+				Validator: statemachine.ValidatorNot(validator_IsChainedDependency),
+				Transitions: []Transition{{
+					To:      State_Pooled,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
 			}}},
 			Event_DependencyConfirmedReverted: {Handlers: []EventHandler{{
+				Validator: validator_IsChainedDependency,
 				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
+					Action: action_MarkChainedDependencyUnassembled,
 				}},
-				Transitions: []Transition{
-					{
-						To:      State_PreAssembly_Blocked,
-						If:      guard_HasUnassembledDependencies,
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-					{
-						To:      State_Pooled,
-						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-				},
+				Transitions: []Transition{{
+					To:      State_PreAssembly_Blocked,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
+			}, {
+				Validator: statemachine.ValidatorNot(validator_IsChainedDependency),
+				Transitions: []Transition{{
+					To:      State_Pooled,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
 			}}},
 			Event_ChainedDependencyFailed: {Handlers: []EventHandler{{
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
@@ -601,41 +604,42 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			}}},
+			// When we see a dependency reset or revert while in Ready_For_Dispatch:
+			// - A transaction with a chained dependency will always go to PreAssembly_Blocked as its
+			// chained dependency is now unassembled.
+			// - A trasanction without a chained dependency will always go to Pooled as its post assembly
+			// dependencies are now cleared, and it too far along to have preassembly dependencies.
 			Event_DependencyReset: {Handlers: []EventHandler{{
+				Validator: validator_IsChainedDependency,
 				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
+					Action: action_MarkChainedDependencyUnassembled,
 				}},
-				Transitions: []Transition{
-					{
-						To:      State_PreAssembly_Blocked,
-						If:      guard_HasUnassembledDependencies,
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-					{
-						To:      State_Pooled,
-						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-				},
+				Transitions: []Transition{{
+					To:      State_PreAssembly_Blocked,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
+			}, {
+				Validator: statemachine.ValidatorNot(validator_IsChainedDependency),
+				Transitions: []Transition{{
+					To:      State_Pooled,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
 			}}},
 			Event_DependencyConfirmedReverted: {Handlers: []EventHandler{{
+				Validator: validator_IsChainedDependency,
 				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
+					Action: action_MarkChainedDependencyUnassembled,
 				}},
-				Transitions: []Transition{
-					{
-						To:      State_PreAssembly_Blocked,
-						If:      guard_HasUnassembledDependencies,
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-					{
-						To:      State_Pooled,
-						If:      statemachine.GuardNot(guard_HasUnassembledDependencies),
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
-					},
-				},
+				Transitions: []Transition{{
+					To:      State_PreAssembly_Blocked,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
+			}, {
+				Validator: statemachine.ValidatorNot(validator_IsChainedDependency),
+				Transitions: []Transition{{
+					To:      State_Pooled,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
 			}}},
 			Event_ChainedDependencyFailed: {Handlers: []EventHandler{{
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
@@ -700,34 +704,36 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			}}},
-			Event_DependencyReset: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{
-						Action:    action_MarkChainedDependencyUnassembled,
-						Validator: validator_IsChainedDependency,
+			Event_DependencyReset: {
+				Match: statemachine.MatchAll,
+				Handlers: []EventHandler{{
+					Validator: validator_IsChainedDependency,
+					Actions:   []ActionRule{{Action: action_MarkChainedDependencyUnassembled}},
+				}, {
+					Actions: []ActionRule{
+						{Action: action_ResetTransactionLocks},
+						{Action: action_NotifyDependentsOfReset},
 					},
-					{Action: action_ResetTransactionLocks},
-					{Action: action_NotifyDependentsOfReset},
-				},
-			}}},
+				}},
+			},
 			// This event will be received if a chained dependency has reverted, we are still waiting for
 			// our revert event, and the chained dependency is reassembled in that time.
 			Event_DependencySelectedForAssemble: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyAssembled,
+				Validator: validator_IsChainedDependency,
+				Actions:   []ActionRule{{Action: action_MarkChainedDependencyAssembled}},
+			}}},
+			Event_DependencyConfirmedReverted: {
+				Match: statemachine.MatchAll,
+				Handlers: []EventHandler{{
 					Validator: validator_IsChainedDependency,
-				}},
-			}}},
-			Event_DependencyConfirmedReverted: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{
-						Action:    action_MarkChainedDependencyUnassembled,
-						Validator: validator_IsChainedDependency,
+					Actions:   []ActionRule{{Action: action_MarkChainedDependencyUnassembled}},
+				}, {
+					Actions: []ActionRule{
+						{Action: action_ResetTransactionLocks},
+						{Action: action_NotifyDependentsOfReset},
 					},
-					{Action: action_ResetTransactionLocks},
-					{Action: action_NotifyDependentsOfReset},
-				},
-			}}},
+				}},
+			},
 			Event_ChainedDependencyFailed: {Handlers: []EventHandler{{
 				Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
 				Transitions: []Transition{{To: State_Reverted}},

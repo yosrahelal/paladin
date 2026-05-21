@@ -103,19 +103,14 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			}}},
 			common.Event_TransactionStateTransition: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{
-						Validator: validator_OriginatorTransactionStateTransitionToFinal,
-						Action:    action_CleanUpTransaction,
-					},
-					{
-						Validator: statemachine.ValidatorOr(
-							validator_OriginatorTransactionStateTransitionToConfirmed,
-							validator_OriginatorTransactionStateTransitionToReverted,
-						),
-						Action: action_FinalizeTransaction,
-					},
-				},
+				Validator: validator_OriginatorTransactionStateTransitionToFinal,
+				Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
+			}, {
+				Validator: statemachine.ValidatorOr(
+					validator_OriginatorTransactionStateTransitionToConfirmed,
+					validator_OriginatorTransactionStateTransitionToReverted,
+				),
+				Actions: []ActionRule{{Action: action_FinalizeTransaction}},
 			}}},
 		},
 	},
@@ -152,19 +147,14 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			}}},
 			common.Event_TransactionStateTransition: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{
-						Validator: validator_OriginatorTransactionStateTransitionToFinal,
-						Action:    action_CleanUpTransaction,
-					},
-					{
-						Validator: statemachine.ValidatorOr(
-							validator_OriginatorTransactionStateTransitionToConfirmed,
-							validator_OriginatorTransactionStateTransitionToReverted,
-						),
-						Action: action_FinalizeTransaction,
-					},
-				},
+				Validator: validator_OriginatorTransactionStateTransitionToFinal,
+				Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
+			}, {
+				Validator: statemachine.ValidatorOr(
+					validator_OriginatorTransactionStateTransitionToConfirmed,
+					validator_OriginatorTransactionStateTransitionToReverted,
+				),
+				Actions: []ActionRule{{Action: action_FinalizeTransaction}},
 			}}},
 		},
 	},
@@ -183,49 +173,42 @@ var stateDefinitionsMap = StateDefinitions{
 					{Action: action_SendDelegationRequest},
 				},
 			}}},
-			common.Event_HeartbeatReceived: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					// 1. Process confirmed transactions from every heartbeat regardless of sender state or identity.
-					{Action: action_ProcessConfirmedTransactions},
-					// 2. Higher-priority coordinator announced; redirect and reset liveness timer.
-					{
-						Validator: statemachine.ValidatorAnd(
-							validator_IsHeartbeatSenderLive,
-							validator_IsSenderHigherPriorityThanCurrentCoordinator,
-						),
-						Action: action_SwitchActiveCoordinator,
+			common.Event_HeartbeatReceived: {
+				Match: statemachine.MatchAll,
+				Handlers: []EventHandler{{
+					// Process confirmed transactions from every heartbeat regardless of sender state or identity.
+					Actions: []ActionRule{{Action: action_ProcessConfirmedTransactions}},
+				}, {
+					// Higher-priority coordinator announced; redirect and reset liveness timer.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatSenderLive,
+						validator_IsSenderHigherPriorityThanCurrentCoordinator,
+					),
+					Actions: []ActionRule{
+						{Action: action_SwitchActiveCoordinator},
 					},
-					// 3. Any live non-current node becomes coordinator when ours has gone silent.
-					{
-						Validator: statemachine.ValidatorAnd(
-							validator_IsHeartbeatSenderLive,
-							statemachine.ValidatorNot(validator_IsFromCurrentCoordinator),
-						),
-						If:     guard_InactiveGracePeriodExceeded,
-						Action: action_SwitchActiveCoordinator,
-					},
-					// 4. Heartbeat from the (possibly just-elected) current coordinator:
-					//    reset the liveness timer and process dispatched transactions.
-					//    Steps 2/3 may have updated currentActiveCoordinator to the heartbeat
-					//    sender, so this naturally fires for the same heartbeat in those cases.
-					{
-						Validator: validator_IsFromCurrentCoordinator,
-
-						Action: action_ProcessCurrentCoordinatorHeartbeat,
-					},
-					// 5. Our coordinator has dropped transactions (or our new coordinator from the earlier action
-					//    has never heard of our transactions); redelegate everything.
-					//    No liveness check: a closing coordinator that drops transactions also
-					//    needs to trigger a redelegate.
-					{
-						Validator: statemachine.ValidatorAnd(
-							validator_IsFromCurrentCoordinator,
-							validator_HasDroppedTransactions,
-						),
-						Action: action_SendDelegationRequest,
-					},
-				},
-			}}},
+				}, {
+					// Any live non-current node becomes coordinator when ours has gone silent.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatSenderLive,
+						statemachine.ValidatorNot(validator_IsFromCurrentCoordinator),
+					),
+					Actions: []ActionRule{{If: guard_InactiveGracePeriodExceeded, Action: action_SwitchActiveCoordinator}},
+				}, {
+					// Heartbeat from the (possibly just-elected) current coordinator:
+					Validator: validator_IsFromCurrentCoordinator,
+					Actions:   []ActionRule{{Action: action_ProcessCurrentCoordinatorHeartbeat}},
+				}, {
+					// Our coordinator has dropped transactions (or our new coordinator from the earlier action
+					// has never heard of our transactions); redelegate everything.
+					// No liveness check: a closing coordinator that drops transactions also needs to trigger a redelegate.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsFromCurrentCoordinator,
+						validator_HasDroppedTransactions,
+					),
+					Actions: []ActionRule{{Action: action_SendDelegationRequest}},
+				}},
+			},
 			common.Event_HeartbeatInterval: {Handlers: []EventHandler{{
 				Actions: []ActionRule{
 					{Action: action_IncrementHeartbeatIntervalCounts},
@@ -245,22 +228,17 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			}}},
 			common.Event_TransactionStateTransition: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{
-						Validator: validator_OriginatorTransactionStateTransitionToFinal,
-						Action:    action_CleanUpTransaction,
-					},
-					{
-						Validator: statemachine.ValidatorOr(
-							validator_OriginatorTransactionStateTransitionToConfirmed,
-							validator_OriginatorTransactionStateTransitionToReverted,
-						),
-						Action: action_FinalizeTransaction,
-					},
-				},
+				Validator: validator_OriginatorTransactionStateTransitionToFinal,
+				Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
 				Transitions: []Transition{
-					{To: State_Observing, If: statemachine.GuardNot(guard_HasUnconfirmedTransactions)},
+					{To: State_Observing, If: statemachine.GuardNot(guard_HasTransactions)},
 				},
+			}, {
+				Validator: statemachine.ValidatorOr(
+					validator_OriginatorTransactionStateTransitionToConfirmed,
+					validator_OriginatorTransactionStateTransitionToReverted,
+				),
+				Actions: []ActionRule{{Action: action_FinalizeTransaction}},
 			}}},
 			common.Event_NewBlock: {Handlers: []EventHandler{{
 				Actions: []ActionRule{

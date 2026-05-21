@@ -37,13 +37,13 @@ func action_CalculateCoordinatorPriorities(ctx context.Context, c *coordinator, 
 	return nil
 }
 
-func action_UpdateBlockHeight(ctx context.Context, c *coordinator, event common.Event) error {
-	c.currentBlockHeight, c.onEpochBoundary = common.DecodeNewBlockHeight(c.currentBlockHeight, c.coordinatorSelectionBlockRange, event)
-	c.grapher.ForgetLocks(ctx, c.currentBlockHeight)
-	return nil
+func validator_IsOnEpochBoundary(_ context.Context, c *coordinator, event common.Event) (bool, error) {
+	_, isOnBoundary := common.DecodeNewBlockHeight(c.currentBlockHeight, c.coordinatorSelectionBlockRange, event)
+	return isOnBoundary, nil
 }
 
-func guard_IsOnEpochBoundary(_ context.Context, c *coordinator) bool {
-	// This is set when we update the block height, and remains valid until the next block height update
-	return c.onEpochBoundary
+func action_UpdateBlockHeight(ctx context.Context, c *coordinator, event common.Event) error {
+	c.currentBlockHeight, _ = common.DecodeNewBlockHeight(c.currentBlockHeight, c.coordinatorSelectionBlockRange, event)
+	c.grapher.ForgetLocks(ctx, c.currentBlockHeight)
+	return nil
 }
