@@ -136,9 +136,11 @@ func TestCoordinator_WhenIdle_StaysIdle_OnHeartbeatFromNodeInNonActiveState(t *t
 
 func TestCoordinator_WhenIdleAndTransactionsDelegatedToSelf_TransitionsToActive(t *testing.T) {
 	ctx := t.Context()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
 		NodeName("node1").
 		CurrentActiveCoordinator("node1").
+		EndorserCandidates("node2"). // gives action_SendHeartbeat a recipient
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	event := &TransactionsDelegatedEvent{
 		FromNode:     "senderNode",
@@ -149,6 +151,7 @@ func TestCoordinator_WhenIdleAndTransactionsDelegatedToSelf_TransitionsToActive(
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must set signing identity")
 	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
+	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "OnTransitionTo Active must send an immediate heartbeat")
 }
 
 func TestCoordinator_WhenIdle_NewBlock_NewEpoch_UpdatesPriorityListAndStaysIdle(t *testing.T) {
@@ -558,6 +561,7 @@ func TestCoordinator_WhenPrepared_HeartbeatInterval_GraceExceeded_TransitionsToA
 	// guard_InactiveGracePeriodExceeded = true → transitions to Active
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
+	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must call action_NewSigningIdentity")
 }
 
 func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_TransitionsToActiveAndImportsState(t *testing.T) {
@@ -1705,6 +1709,7 @@ func TestCoordinator_WhenClosing_DelegatedTransactions_LowerPriority_ActiveCoord
 	// GuardNot(IsHigherPriority) AND InactiveGraceExceeded → transitions to Active.
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.Equal(t, "node3", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
+	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must call action_NewSigningIdentity")
 }
 
 func TestCoordinator_WhenClosing_TransactionStateTransition_ToFinal_CleansUpAndStaysClosing(t *testing.T) {

@@ -400,6 +400,7 @@ var stateDefinitionsMap = StateDefinitions{
 	State_Active: {
 		OnTransitionTo: []ActionRule{
 			{Action: action_SetSelfAsActiveCoordinator},
+			{Action: action_SendHeartbeat},
 			{Action: action_NewSigningIdentity},
 			{Action: action_StartDispatchLoop},
 			{
