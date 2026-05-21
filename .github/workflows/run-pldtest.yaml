@@ -36,12 +36,7 @@ jobs:
       - name: Set matrix
         id: set-matrix
         run: |
-          ALL='{"include":[
-            {"name":"public-contract","config_file":"example-public-contract.yaml"},
-            {"name":"private-transaction-node-restart","config_file":"example-private-transaction-node-restart.yaml"},
-            {"name":"privacy-group-contract-deploy","config_file":"example-privacy-group-contract-deploy.yaml"},
-            {"name":"noto-revertable-hooks","config_file":"example-noto-revertable-hooks.yaml"}
-          ]}'
+          ALL='{"include":[{"name":"public-contract","config_file":"example-public-contract.yaml"},{"name":"private-transaction-node-restart","config_file":"example-private-transaction-node-restart.yaml"},{"name":"privacy-group-contract-deploy","config_file":"example-privacy-group-contract-deploy.yaml"},{"name":"noto-revertable-hooks","config_file":"example-noto-revertable-hooks.yaml"}]}'
           case "${{ inputs.test_name }}" in
             all)
               echo "matrix=$ALL" >> $GITHUB_OUTPUT
