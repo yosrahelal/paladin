@@ -78,8 +78,7 @@ type NotoTransactionData_V0 struct {
 }
 
 type NotoTransactionData_V1 struct {
-	InfoStates []pldtypes.Bytes32   `json:"infoStates"`
-	From       *pldtypes.EthAddress `json:"from,omitempty"` // Resolved Ethereum address of the transaction requester
+	InfoStates []pldtypes.Bytes32 `json:"infoStates"`
 }
 
 // This is the structure we parse the config into in InitConfig and gets passed back to us on every call
@@ -124,7 +123,6 @@ var NotoTransactionDataABI_V0 = &abi.ParameterArray{
 
 var NotoTransactionDataABI_V1 = &abi.ParameterArray{
 	{Name: "infoStates", Type: "bytes32[]"},
-	{Name: "from", Type: "address"},
 }
 
 type DomainHandler = domain.DomainHandler[NotoParsedConfig]

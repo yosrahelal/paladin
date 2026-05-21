@@ -108,7 +108,7 @@ func (h *unlockCommon) buildUnlockData(ctx context.Context, notaryID, senderID, 
 				StateDataJson: s.StateDataJson,
 			}
 		}
-		encodedUnlockData, err = h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, endorsableInfoStates, resolvedVerifiers)
+		encodedUnlockData, err = h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, endorsableInfoStates)
 	}
 	return
 }
@@ -386,7 +386,7 @@ func (h *unlockCommon) buildPrepareUnlockParams(ctx context.Context, tx *types.P
 		return nil, err
 	}
 
-	txData, err := h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, infoStates, verifiers)
+	txData, err := h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, infoStates)
 	if err != nil {
 		return nil, err
 	}
@@ -432,7 +432,7 @@ func (h *unlockCommon) buildCreateLockParams(ctx context.Context, tx *types.Pars
 		return nil, err
 	}
 
-	txData, err := h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, infoStates, verifiers)
+	txData, err := h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, infoStates)
 	if err != nil {
 		return nil, err
 	}

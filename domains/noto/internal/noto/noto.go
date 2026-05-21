@@ -122,6 +122,7 @@ var allSchemas = []*abi.Parameter{
 	types.NotoLockedCoinABI,
 	types.TransactionDataABI_V0,
 	types.TransactionDataABI_V1,
+	types.TransactionDataABI_V2,
 	types.NotoManifestABI,
 }
 
@@ -142,6 +143,7 @@ type Noto struct {
 	lockedCoinSchema     *prototk.StateSchema
 	dataSchemaV0         *prototk.StateSchema
 	dataSchemaV1         *prototk.StateSchema
+	dataSchemaV2         *prototk.StateSchema
 	lockInfoSchemaV0     *prototk.StateSchema
 	lockInfoSchemaV1     *prototk.StateSchema
 	manifestSchema       *prototk.StateSchema
@@ -475,7 +477,10 @@ func (n *Noto) LockInfoSchemaID() string {
 }
 
 func (n *Noto) DataSchemaID() string {
-	return n.dataSchemaV1.Id
+	if n.dataSchemaV2 == nil {
+		return n.dataSchemaV1.Id
+	}
+	return n.dataSchemaV2.Id
 }
 
 func (n *Noto) ManifestSchemaID() string {
@@ -513,6 +518,8 @@ func (n *Noto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (
 			n.dataSchemaV0 = req.AbiStateSchemas[i]
 		case types.TransactionDataABI_V1.Name:
 			n.dataSchemaV1 = req.AbiStateSchemas[i]
+		case types.TransactionDataABI_V2.Name:
+			n.dataSchemaV2 = req.AbiStateSchemas[i]
 		case types.NotoLockInfoABI_V0.Name:
 			n.lockInfoSchemaV0 = req.AbiStateSchemas[i]
 		case types.NotoLockInfoABI_V1.Name:
@@ -1016,9 +1023,9 @@ func (n *Noto) encodeNotoUnlockOperation(ctx context.Context, lockID pldtypes.By
 	return abiData, err
 }
 
-func (n *Noto) encodeTransactionData(ctx context.Context, domainConfig *types.NotoParsedConfig, transaction *prototk.TransactionSpecification, infoStates []*prototk.EndorsableState, verifiers []*prototk.ResolvedVerifier) (pldtypes.HexBytes, error) {
+func (n *Noto) encodeTransactionData(ctx context.Context, domainConfig *types.NotoParsedConfig, transaction *prototk.TransactionSpecification, infoStates []*prototk.EndorsableState) (pldtypes.HexBytes, error) {
 	if domainConfig.IsV1() {
-		return n.encodeTransactionDataV1(ctx, transaction, infoStates, verifiers)
+		return n.encodeTransactionDataV1(ctx, transaction, infoStates)
 	} else {
 		return n.encodeTransactionDataV0(ctx, transaction, infoStates)
 	}
@@ -1057,7 +1064,7 @@ func (n *Noto) encodeTransactionDataV0(ctx context.Context, transaction *prototk
 	return data, nil
 }
 
-func (n *Noto) encodeTransactionDataV1(ctx context.Context, transaction *prototk.TransactionSpecification, infoStates []*prototk.EndorsableState, verifiers []*prototk.ResolvedVerifier) (pldtypes.HexBytes, error) {
+func (n *Noto) encodeTransactionDataV1(ctx context.Context, transaction *prototk.TransactionSpecification, infoStates []*prototk.EndorsableState) (pldtypes.HexBytes, error) {
 	var err error
 	stateIDs := make([]pldtypes.Bytes32, len(infoStates))
 	for i, state := range infoStates {
@@ -1067,16 +1074,8 @@ func (n *Noto) encodeTransactionDataV1(ctx context.Context, transaction *prototk
 		}
 	}
 
-	// Extract the resolved sender address
-	var fromAddress *pldtypes.EthAddress
-	fromAddr, err := n.findEthAddressVerifier(ctx, "from", transaction.From, verifiers)
-	if err == nil && fromAddr != nil {
-		fromAddress = fromAddr.address
-	}
-
 	dataValues := &types.NotoTransactionData_V1{
 		InfoStates: stateIDs,
-		From:       fromAddress,
 	}
 	dataJSON, err := json.Marshal(dataValues)
 	if err != nil {

@@ -242,7 +242,6 @@ func TestLock(t *testing.T) {
 		InfoStates: []pldtypes.Bytes32{
 			pldtypes.MustParseBytes32(*dataState.Id),
 		},
-		From: (*pldtypes.EthAddress)(&senderKey.Address),
 	}, data)
 
 	var invokeFn abi.Entry
@@ -329,7 +328,7 @@ func TestLock(t *testing.T) {
 	require.Equal(t, lockInfo.LockID, receipt.LockInfo.LockID)
 	require.Empty(t, receipt.LockInfo.UnlockFunction) // not prepared
 	require.Nil(t, receipt.LockInfo.UnlockParams)     // not prepared
-	require.Equal(t, &types.ReceiptRequester{From: (*pldtypes.EthAddress)(&senderKey.Address)}, receipt.Requester)
+	require.Equal(t, (*pldtypes.EthAddress)(&senderKey.Address), receipt.Sender)
 }
 
 func TestLock_V0(t *testing.T) {
@@ -743,7 +742,6 @@ func TestLockEmpty(t *testing.T) {
 		InfoStates: []pldtypes.Bytes32{
 			pldtypes.MustParseBytes32(*dataState.Id),
 		},
-		From: (*pldtypes.EthAddress)(&senderKey.Address),
 	}, data)
 
 	var invokeFn abi.Entry

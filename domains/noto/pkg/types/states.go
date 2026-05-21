@@ -25,7 +25,7 @@ type NotoDomainReceipt struct {
 	Transfers []*ReceiptTransfer `json:"transfers,omitempty"`
 	LockInfo  *ReceiptLockInfo   `json:"lockInfo,omitempty"`
 	Data      pldtypes.HexBytes  `json:"data,omitempty"`
-	Requester *ReceiptRequester  `json:"requester,omitempty"`
+	Sender    *pldtypes.EthAddress `json:"sender,omitempty"`
 }
 
 type ReceiptStates struct {
@@ -64,9 +64,7 @@ type ReceiptTransfer struct {
 	Amount *pldtypes.HexUint256 `json:"amount"`
 }
 
-type ReceiptRequester struct {
-	From *pldtypes.EthAddress `json:"from,omitempty"` // Resolved Ethereum address of the transaction requester
-}
+
 
 type NotoCoinState struct {
 	ID              pldtypes.Bytes32    `json:"id"`
@@ -227,6 +225,18 @@ var TransactionDataABI_V1 = &abi.Parameter{
 	Name:         "TransactionData_V1",
 	Type:         "tuple",
 	InternalType: "struct TransactionData_V1",
+	Components: abi.ParameterArray{
+		{Name: "salt", Type: "bytes32"},
+		{Name: "data", Type: "bytes"},
+		{Name: "variant", Type: "uint64"},
+	},
+}
+
+// TransactionDataABI_V2 is the new schema with Noto variant and from fields
+var TransactionDataABI_V2 = &abi.Parameter{
+	Name:         "TransactionData_V2",
+	Type:         "tuple",
+	InternalType: "struct TransactionData_V2",
 	Components: abi.ParameterArray{
 		{Name: "salt", Type: "bytes32"},
 		{Name: "data", Type: "bytes"},

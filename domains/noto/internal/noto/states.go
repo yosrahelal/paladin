@@ -190,8 +190,12 @@ func (n *Noto) makeNewInfoState(info *types.TransactionData, variant pldtypes.He
 			DistributionList: distributionList,
 		}, nil
 	}
+	schemaID := n.dataSchemaV1.Id
+	if n.dataSchemaV2 != nil {
+		schemaID = n.dataSchemaV2.Id
+	}
 	return &prototk.NewState{
-		SchemaId:         n.dataSchemaV1.Id,
+		SchemaId:         schemaID,
 		StateDataJson:    string(infoJSON),
 		DistributionList: distributionList,
 	}, nil

@@ -257,7 +257,6 @@ func TestDelegateLock(t *testing.T) {
 			pldtypes.MustParseBytes32("0x4cc7840e186de23c4127b4853c878708d2642f1942959692885e098f1944547d"),
 			pldtypes.MustParseBytes32("0x4cc7840e186de23c4127b4853c878708d2642f1942959692885e098f1944547d"),
 		},
-		From: (*pldtypes.EthAddress)(&senderKey.Address),
 	}, data)
 
 	var invokeFn abi.Entry

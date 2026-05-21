@@ -305,11 +305,10 @@ func TestPrepareUnlock(t *testing.T) {
 			pldtypes.MustParseBytes32(*spendCoinState.Id),
 			pldtypes.MustParseBytes32(*cancelCoinState.Id),
 		},
-		From: (*pldtypes.EthAddress)(&senderKey.Address),
 	}, data)
 
 	// Decode the options we store into the lockInfo
-	unlockTxData, err := n.encodeTransactionDataV1(ctx, tx, newStateToEndorsableState([]*prototk.NewState{unlockDataState}), verifiers)
+	unlockTxData, err := n.encodeTransactionDataV1(ctx, tx, newStateToEndorsableState([]*prototk.NewState{unlockDataState}))
 	require.NoError(t, err)
 	notoOptions := decodeSingleABITuple[types.NotoLockOptions](t, types.NotoLockOptionsABI, fnParams.Params.Options)
 	expectedSpendHash, err := n.unlockHashFromIDs_V1(ctx, ethtypes.MustNewAddress(contractAddress), lockID, notoOptions.SpendTxId.HexString(), endorsableStateIDs(readStates), endorsableStateIDs(infoStates[1:2]), unlockTxData)
