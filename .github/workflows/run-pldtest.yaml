@@ -36,24 +36,29 @@ jobs:
       - name: Set matrix
         id: set-matrix
         run: |
-          ALL='{"include":[{"name":"public-contract","config_file":"example-public-contract.yaml"},{"name":"private-transaction-node-restart","config_file":"example-private-transaction-node-restart.yaml"},{"name":"privacy-group-contract-deploy","config_file":"example-privacy-group-contract-deploy.yaml"},{"name":"noto-revertable-hooks","config_file":"example-noto-revertable-hooks.yaml"}]}'
           case "${{ inputs.test_name }}" in
             all)
-              echo "matrix=$ALL" >> $GITHUB_OUTPUT
+              matrix=$(jq -cn '{include:[
+                {name:"public-contract",               config_file:"example-public-contract.yaml"},
+                {name:"private-transaction-node-restart", config_file:"example-private-transaction-node-restart.yaml"},
+                {name:"privacy-group-contract-deploy", config_file:"example-privacy-group-contract-deploy.yaml"},
+                {name:"noto-revertable-hooks",         config_file:"example-noto-revertable-hooks.yaml"}
+              ]}')
               ;;
             public-contract)
-              echo 'matrix={"include":[{"name":"public-contract","config_file":"example-public-contract.yaml"}]}' >> $GITHUB_OUTPUT
+              matrix=$(jq -cn '{include:[{name:"public-contract",config_file:"example-public-contract.yaml"}]}')
               ;;
             private-transaction-node-restart)
-              echo 'matrix={"include":[{"name":"private-transaction-node-restart","config_file":"example-private-transaction-node-restart.yaml"}]}' >> $GITHUB_OUTPUT
+              matrix=$(jq -cn '{include:[{name:"private-transaction-node-restart",config_file:"example-private-transaction-node-restart.yaml"}]}')
               ;;
             privacy-group-contract-deploy)
-              echo 'matrix={"include":[{"name":"privacy-group-contract-deploy","config_file":"example-privacy-group-contract-deploy.yaml"}]}' >> $GITHUB_OUTPUT
+              matrix=$(jq -cn '{include:[{name:"privacy-group-contract-deploy",config_file:"example-privacy-group-contract-deploy.yaml"}]}')
               ;;
             noto-revertable-hooks)
-              echo 'matrix={"include":[{"name":"noto-revertable-hooks","config_file":"example-noto-revertable-hooks.yaml"}]}' >> $GITHUB_OUTPUT
+              matrix=$(jq -cn '{include:[{name:"noto-revertable-hooks",config_file:"example-noto-revertable-hooks.yaml"}]}')
               ;;
           esac
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
 
   run-pldtest:
     needs: setup
@@ -82,7 +87,7 @@ jobs:
         if: inputs.length != ''
         run: |
           sed -i "s/^\(\s*\)length:.*$/\1length: ${{ inputs.length }}/" \
-            paladin/test/config/${{ matrix.test.config_file }}
+            paladin/test/config/${{ matrix.config_file }}
 
       - name: Copy solidity artifacts
         working-directory: paladin
@@ -107,7 +112,7 @@ jobs:
       - name: Run test
         run: |
           ./paladin/test/pldtest/pldtest run \
-            -c paladin/test/config/${{ matrix.test.config_file }} \
+            -c paladin/test/config/${{ matrix.config_file }} \
             -i 0
 
       - name: Cleanup cluster
