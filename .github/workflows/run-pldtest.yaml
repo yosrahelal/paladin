@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       test_name:
-        description: "Test to run"
+        description: "Test to run (leave as 'all' to run all tests in parallel)"
         required: true
         type: choice
         options:
@@ -28,8 +28,44 @@ on:
         default: ""
 
 jobs:
-  run-pldtest:
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          ALL='{"include":[
+            {"name":"public-contract","config_file":"example-public-contract.yaml"},
+            {"name":"private-transaction-node-restart","config_file":"example-private-transaction-node-restart.yaml"},
+            {"name":"privacy-group-contract-deploy","config_file":"example-privacy-group-contract-deploy.yaml"},
+            {"name":"noto-revertable-hooks","config_file":"example-noto-revertable-hooks.yaml"}
+          ]}'
+          case "${{ inputs.test_name }}" in
+            all)
+              echo "matrix=$ALL" >> $GITHUB_OUTPUT
+              ;;
+            public-contract)
+              echo 'matrix={"include":[{"name":"public-contract","config_file":"example-public-contract.yaml"}]}' >> $GITHUB_OUTPUT
+              ;;
+            private-transaction-node-restart)
+              echo 'matrix={"include":[{"name":"private-transaction-node-restart","config_file":"example-private-transaction-node-restart.yaml"}]}' >> $GITHUB_OUTPUT
+              ;;
+            privacy-group-contract-deploy)
+              echo 'matrix={"include":[{"name":"privacy-group-contract-deploy","config_file":"example-privacy-group-contract-deploy.yaml"}]}' >> $GITHUB_OUTPUT
+              ;;
+            noto-revertable-hooks)
+              echo 'matrix={"include":[{"name":"noto-revertable-hooks","config_file":"example-noto-revertable-hooks.yaml"}]}' >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  run-pldtest:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     steps:
       - name: Checkout Paladin branch
         uses: actions/checkout@v4
@@ -47,30 +83,11 @@ jobs:
       - name: Setup kustomize
         uses: imranismail/setup-kustomize@v2
 
-      - name: Resolve test configuration
-        id: test-config
-        run: |
-          case "${{ inputs.test_name }}" in
-            public-contract)
-              echo "config_file=example-public-contract.yaml" >> $GITHUB_OUTPUT
-              ;;
-            private-transaction-node-restart)
-              echo "config_file=example-private-transaction-node-restart.yaml" >> $GITHUB_OUTPUT
-              ;;
-            privacy-group-contract-deploy)
-              echo "config_file=example-privacy-group-contract-deploy.yaml" >> $GITHUB_OUTPUT
-              ;;
-            noto-revertable-hooks)
-              echo "config_file=example-noto-revertable-hooks.yaml" >> $GITHUB_OUTPUT
-              ;;
-          esac
-
       - name: Override test length
         if: inputs.length != ''
         run: |
-          for config in paladin/test/config/example-*.yaml; do
-            sed -i "s/^\(\s*\)length:.*$/\1length: ${{ inputs.length }}/" "$config"
-          done
+          sed -i "s/^\(\s*\)length:.*$/\1length: ${{ inputs.length }}/" \
+            paladin/test/config/${{ matrix.test.config_file }}
 
       - name: Copy solidity artifacts
         working-directory: paladin
@@ -94,21 +111,9 @@ jobs:
 
       - name: Run test
         run: |
-          if [ "${{ inputs.test_name }}" = "all" ]; then
-            for config in \
-              example-public-contract.yaml \
-              example-private-transaction-node-restart.yaml \
-              example-privacy-group-contract-deploy.yaml \
-              example-noto-revertable-hooks.yaml; do
-              ./paladin/test/pldtest/pldtest run \
-                -c paladin/test/config/$config \
-                -i 0
-            done
-          else
-            ./paladin/test/pldtest/pldtest run \
-              -c paladin/test/config/${{ steps.test-config.outputs.config_file }} \
-              -i 0
-          fi
+          ./paladin/test/pldtest/pldtest run \
+            -c paladin/test/config/${{ matrix.test.config_file }} \
+            -i 0
 
       - name: Cleanup cluster
         if: always()
