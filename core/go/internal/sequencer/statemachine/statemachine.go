@@ -118,27 +118,21 @@ const (
 )
 
 // ActionRule pairs an action with an optional guard condition.
-// Validator is evaluated first for event-aware filtering.
 // If the guard (If) is nil, the action is always executed.
 // If the guard returns true, the action is executed.
 type ActionRule[E any] struct {
-	Action    Action[E]
-	Validator Validator[E]
-	If        Guard[E]
+	Action Action[E]
+	If     Guard[E]
 }
 
 // Transition defines a possible state transition.
 // To: The target state to transition to
-// Validator: Optional event-aware condition checked before the guard; if it returns false the transition is skipped
 // If: Optional guard condition - if nil, transition is always taken (when matched)
 // Actions: Optional transition-specific action rules to execute before state-entry actions
-//
-// Evaluation order: Validator (event-aware) → If (entity-only guard) → transition fires.
 type Transition[S State, E any] struct {
-	To        S               // Target state
-	Validator Validator[E]    // Event-aware condition (optional)
-	If        Guard[E]        // Guard condition (optional)
-	Actions   []ActionRule[E] // Transition-specific action rules (optional)
+	To      S               // Target state
+	If      Guard[E]        // Guard condition (optional)
+	Actions []ActionRule[E] // Transition-specific action rules (optional)
 }
 
 // Validator is a function that validates whether an event is valid for the current
@@ -359,18 +353,8 @@ func (sm *StateMachine[S, E]) executeActionRules(
 	actionRules []ActionRule[E],
 ) error {
 	for _, rule := range actionRules {
-		if rule.Validator != nil {
-			valid, err := rule.Validator(ctx, entity, event)
-			if err != nil {
-				return err
-			}
-			if !valid {
-				continue
-			}
-		}
 		if rule.If == nil || rule.If(ctx, entity) {
-			err := rule.Action(ctx, entity, event)
-			if err != nil {
+			if err := rule.Action(ctx, entity, event); err != nil {
 				return err
 			}
 		}
@@ -387,18 +371,6 @@ func (sm *StateMachine[S, E]) evaluateTransitions(
 	eventHandler EventHandler[S, E],
 ) (bool, error) {
 	for _, rule := range eventHandler.Transitions {
-		// Check event-aware validator first (if set)
-		if rule.Validator != nil {
-			valid, err := rule.Validator(ctx, entity, event)
-			if err != nil {
-				log.L(ctx).Errorf("%s | %s | %s | error in transition validator for target state %s: %v", sm.name, sm.GetCurrentState().String(), event.TypeString(), rule.To.String(), err)
-				return false, err
-			}
-			if !valid {
-				continue
-			}
-		}
-		// Check guard (if set)
 		if rule.If != nil && !rule.If(ctx, entity) {
 			continue
 		}

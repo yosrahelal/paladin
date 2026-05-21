@@ -128,27 +128,26 @@ var stateDefinitionsMap = StateDefinitions{
 			// State_Pooled depending on its dependencies.
 			{Action: action_InitializeForNewAssembly},
 		},
+
 		Events: map[EventType]EventHandlers{
 			// Waiting for this event before we move to pooled ensures FIFO ordering for first assembly within an originator
 			// and preservers chained dependency ordering
-			Event_DependencySelectedForAssemble: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{
-						Action:    action_RemovePreAssembleDependency,
-						Validator: validator_IsPreAssembleDependency,
+			Event_DependencySelectedForAssemble: {
+				Match: statemachine.MatchAll,
+				Handlers: []EventHandler{{
+					Validator: validator_IsPreAssembleDependency,
+					Actions:   []ActionRule{{Action: action_RemovePreAssembleDependency}},
+				}, {
+					Validator: validator_IsChainedDependency,
+					Actions:   []ActionRule{{Action: action_MarkChainedDependencyAssembled}},
+				}, {
+					Transitions: []Transition{
+						{
+							To: State_Pooled,
+							If: statemachine.GuardNot(guard_HasUnassembledDependencies),
+						},
 					},
-					{
-						Action:    action_MarkChainedDependencyAssembled,
-						Validator: validator_IsChainedDependency,
-					},
-				},
-				Transitions: []Transition{
-					{
-						To: State_Pooled,
-						If: statemachine.GuardNot(guard_HasUnassembledDependencies),
-					},
-				},
-			}}},
+				}}},
 			// The pre-assemble predecessor reached a terminal state — sever the FIFO link
 			// so this transaction is not stuck waiting forever
 			Event_PreAssembleDependencyTerminated: {Handlers: []EventHandler{{
@@ -189,27 +188,26 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Assembling,
 					}},
 			}}},
+			// Dependency reset and revert events when we're in pooled state are always from chained dependencies.
+			// Preassembly dependencies have been cleared by the time we get to pooled state.
+			// Postassembly are not established until after we've assembled.
 			Event_DependencyReset: {Handlers: []EventHandler{{
+				Validator: validator_IsChainedDependency,
 				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
+					Action: action_MarkChainedDependencyUnassembled,
 				}},
 				Transitions: []Transition{
 					{
 						To: State_PreAssembly_Blocked,
-						If: guard_HasUnassembledDependencies,
 					},
 				},
 			}}},
 			Event_DependencyConfirmedReverted: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{
-					Action:    action_MarkChainedDependencyUnassembled,
-					Validator: validator_IsChainedDependency,
-				}},
+				Validator: validator_IsChainedDependency,
+				Actions:   []ActionRule{{Action: action_MarkChainedDependencyUnassembled}},
 				Transitions: []Transition{
 					{
 						To: State_PreAssembly_Blocked,
-						If: guard_HasUnassembledDependencies,
 					},
 				},
 			}}},
