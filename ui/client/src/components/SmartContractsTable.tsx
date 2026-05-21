@@ -48,6 +48,7 @@ type Props = {
   setRowsPerPage: Dispatch<SetStateAction<number>>
   refTimestamps: string[]
   setRefTimestamps: Dispatch<SetStateAction<string[]>>
+  selectedDomain?: string
 };
 
 export const SmartContractsTable: React.FC<Props> = ({
@@ -59,7 +60,8 @@ export const SmartContractsTable: React.FC<Props> = ({
   rowsPerPage,
   setRowsPerPage,
   refTimestamps,
-  setRefTimestamps
+  setRefTimestamps,
+  selectedDomain
 }) => {
 
   const [count, setCount] = useState(-1);
@@ -137,16 +139,47 @@ export const SmartContractsTable: React.FC<Props> = ({
               <TableSortLabel
                 active={true}
                 direction={sortAscending ? 'asc' : 'desc'}
-                onClick={() => 
-                  {
-                    setSortAscending(!sortAscending);
-                    setRefTimestamps([]);
-                    setPage(0);
-                  }}
+                onClick={() => {
+                  setSortAscending(!sortAscending);
+                  setRefTimestamps([]);
+                  setPage(0);
+                }}
               >
                 {t('deployed')}
               </TableSortLabel>
             </TableCell>
+            {selectedDomain === 'noto' &&
+              <TableCell
+                sx={{
+                  backgroundColor: (theme) => theme.palette.background.paper,
+                }}
+              >
+                {t('name')}
+              </TableCell>}
+            {selectedDomain === 'noto' &&
+              <TableCell
+                sx={{
+                  backgroundColor: (theme) => theme.palette.background.paper,
+                }}
+              >
+                {t('symbol')}
+              </TableCell>}
+            {selectedDomain === 'noto' &&
+              <TableCell
+                sx={{
+                  backgroundColor: (theme) => theme.palette.background.paper,
+                }}
+              >
+                {t('isNotary')}
+              </TableCell>}
+            {selectedDomain === 'zeto' &&
+              <TableCell
+                sx={{
+                  backgroundColor: (theme) => theme.palette.background.paper,
+                }}
+              >
+                {t('tokenName')}
+              </TableCell>}
             <TableCell
               sx={{
                 backgroundColor: (theme) => theme.palette.background.paper,
@@ -169,6 +202,22 @@ export const SmartContractsTable: React.FC<Props> = ({
               <TableCell>
                 <Timestamp timestamp={contract.created} />
               </TableCell>
+              {selectedDomain === 'noto' &&
+                <TableCell>
+                  {'name' in contract.config.contractConfig ? contract.config.contractConfig.name : '--'}
+                </TableCell>}
+              {selectedDomain === 'noto' &&
+                <TableCell>
+                  {'symbol' in contract.config.contractConfig ? contract.config.contractConfig.symbol : '--'}
+                </TableCell>}
+              {selectedDomain === 'noto' &&
+                <TableCell>
+                  {'isNotary' in contract.config.contractConfig ? t(contract.config.contractConfig.isNotary ? 'yes' : 'no') : '--'}
+                </TableCell>}
+              {selectedDomain === 'zeto' &&
+                <TableCell>
+                  {'tokenName' in contract.config.contractConfig ? contract.config.contractConfig.tokenName : '--'}
+                </TableCell>}
               <TableCell>
                 <Hash title={t('address')} hash={contract.address} />
               </TableCell>

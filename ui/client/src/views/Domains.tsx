@@ -184,6 +184,7 @@ export const Domains: React.FC<Props> = ({
               setRowsPerPage={setRowsPerPage}
               refTimestamps={refTimestamps}
               setRefTimestamps={setRefTimestamps}
+              selectedDomain={selectedDomain}
             />
           )}
         </Box>

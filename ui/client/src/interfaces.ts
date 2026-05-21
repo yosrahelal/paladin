@@ -222,10 +222,24 @@ export interface ITransactionInput {
   bytecode?: string;
 }
 
+export interface INotoContractConfig {
+  name: string
+  symbol: string
+  isNotary: boolean
+}
+
+export interface IZetoContractConfig {
+  tokenName: string
+}
+
+export type ContractConfig = INotoContractConfig | IZetoContractConfig;
+
 export interface IDomainContract {
   domainName: string
   domainAddress: string
   address: string
-  config: string
+  config: {
+    contractConfig: ContractConfig
+  }
   created: string
 }
