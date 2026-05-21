@@ -149,12 +149,6 @@ export const Submissions: React.FC<Props> = ({
               </Grid2>
             </Grid2>
           </Grid2>
-
-
-
-
-
-
           <Box sx={{ marginTop: '15px', marginBottom: '15px', textAlign: 'center' }}>
             <ToggleButtonGroup exclusive onChange={(_event, value) => setSection(value)} value={section}>
               <ToggleButton color="primary" value="pending" sx={{ width: '130px', height: '45px' }}>{t('pending')}</ToggleButton>
@@ -164,12 +158,6 @@ export const Submissions: React.FC<Props> = ({
           <Box sx={{ marginBottom: '20px' }}>
             <Filters
               filterFields={[
-                {
-                  label: t('id'),
-                  name: 'id',
-                  type: 'string',
-                  isUUID: true
-                },
                 {
                   label: t('from'),
                   name: 'from',
@@ -212,7 +200,6 @@ export const Submissions: React.FC<Props> = ({
                 />
               )
               )}
-
             {transactions?.length === 0 ?
               <Typography color="textSecondary" align="center" variant="h6" sx={{ marginTop: '40px' }}>
                 {t(section === 'pending' ? 'noPendingTransactions' : 'noFailedTransactions')}

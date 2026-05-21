@@ -221,3 +221,11 @@ export interface ITransactionInput {
   abi?: any;
   bytecode?: string;
 }
+
+export interface IDomainContract {
+  domainName: string
+  domainAddress: string
+  address: string
+  config: string
+  created: string
+}
