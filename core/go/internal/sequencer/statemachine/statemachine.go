@@ -115,12 +115,16 @@ type ActionRule[E any] struct {
 
 // Transition defines a possible state transition.
 // To: The target state to transition to
+// Validator: Optional event-aware condition checked before the guard; if it returns false the transition is skipped
 // If: Optional guard condition - if nil, transition is always taken (when matched)
 // Actions: Optional transition-specific action rules to execute before state-entry actions
+//
+// Evaluation order: Validator (event-aware) → If (entity-only guard) → transition fires.
 type Transition[S State, E any] struct {
-	To      S               // Target state
-	If      Guard[E]        // Guard condition (optional)
-	Actions []ActionRule[E] // Transition-specific action rules (optional)
+	To        S               // Target state
+	Validator Validator[E]    // Event-aware condition (optional)
+	If        Guard[E]        // Guard condition (optional)
+	Actions   []ActionRule[E] // Transition-specific action rules (optional)
 }
 
 // Validator is a function that validates whether an event is valid for the current
@@ -140,10 +144,12 @@ type EventHandler[S State, E any] struct {
 
 // StateDefinition defines the behavior of a particular state.
 // OnTransitionTo: Action rules executed when entering this state (after transition-specific actions)
+// OnTransitionFrom: Action rules executed when leaving this state (after transition-specific actions, before entry actions)
 // Events: Map of event types to their handlers in this state
 type StateDefinition[S State, E any] struct {
-	OnTransitionTo []ActionRule[E]
-	Events         map[common.EventType]EventHandler[S, E]
+	OnTransitionTo   []ActionRule[E]
+	OnTransitionFrom []ActionRule[E]
+	Events           map[common.EventType]EventHandler[S, E]
 }
 
 // StateDefinitions is a map from states to their definitions.
@@ -303,6 +309,17 @@ func (sm *StateMachine[S, E]) evaluateTransitions(
 	eventHandler EventHandler[S, E],
 ) error {
 	for _, rule := range eventHandler.Transitions {
+		// Check event-aware validator first (if set)
+		if rule.Validator != nil {
+			valid, err := rule.Validator(ctx, entity, event)
+			if err != nil {
+				log.L(ctx).Errorf("%s | %s | %s | error in transition validator for target state %s: %v", sm.name, sm.GetCurrentState().String(), event.TypeString(), rule.To.String(), err)
+				return err
+			}
+			if !valid {
+				continue
+			}
+		}
 		// Check if transition guard passes (or is nil)
 		if rule.If == nil || rule.If(ctx, entity) {
 			previousState := sm.GetCurrentState()
@@ -317,6 +334,16 @@ func (sm *StateMachine[S, E]) evaluateTransitions(
 				return err
 			}
 
+			// Execute exit actions for the previous state
+			previousStateDefinition, exists := sm.definitions[previousState]
+			if exists && len(previousStateDefinition.OnTransitionFrom) > 0 {
+				err := sm.executeActionRules(ctx, entity, event, previousStateDefinition.OnTransitionFrom)
+				if err != nil {
+					log.L(ctx).Errorf("%s | %s | %s | error executing state exit action for transition from state %s : %v", sm.name, previousState.String(), event.TypeString(), previousState.String(), err)
+					return err
+				}
+			}
+
 			// Execute state entry actions
 			newState := sm.GetCurrentState()
 			newStateDefinition, exists := sm.definitions[newState]
@@ -328,7 +355,6 @@ func (sm *StateMachine[S, E]) evaluateTransitions(
 				}
 			}
 
-			// Transition logging (state machine is sequencer-only; uses state category)
 			log.L(ctx).Debugf("%s | %s | %s | transition to state %s",
 				sm.name,
 				previousState.String(),
@@ -569,10 +595,44 @@ func (sel *StateMachineEventLoop[S, E]) TryQueuePriorityEvent(ctx context.Contex
 	}
 }
 
-// ProcessEvent synchronously processes an event. This bypasses the event loop
-// and should only be used in tests or when you need synchronous processing.
+// ProcessEvent synchronously processes an event through the same pre-processing pipeline
+// used by the event loop goroutine. Use this in tests or other cases that need deterministic,
+// synchronous event processing without starting the goroutine-based event loop.
 func (sel *StateMachineEventLoop[S, E]) ProcessEvent(ctx context.Context, event common.Event) error {
-	return sel.stateMachine.ProcessEvent(ctx, sel.entity, event)
+	return sel.processEvent(ctx, event)
+}
+
+// DrainPendingEvents processes all events currently buffered in the priority and regular queues,
+// using the same pipeline as the event loop. It stops when both queues are empty.
+// Useful in tests to flush internally-queued follow-up events before making assertions.
+func (sel *StateMachineEventLoop[S, E]) DrainPendingEvents(ctx context.Context) error {
+	for {
+		processed := false
+		// Drain all priority events before touching the regular queue.
+		for draining := true; draining; {
+			select {
+			case event := <-sel.eventsPriority:
+				if err := sel.processEvent(ctx, event); err != nil {
+					return err
+				}
+				processed = true
+			default:
+				draining = false
+			}
+		}
+		// Process one regular event (priority events queued by it will be picked up next iteration).
+		select {
+		case event := <-sel.events:
+			if err := sel.processEvent(ctx, event); err != nil {
+				return err
+			}
+			processed = true
+		default:
+		}
+		if !processed {
+			return nil
+		}
+	}
 }
 
 // WaitForDone waits for the event loop to complete after context cancellation.

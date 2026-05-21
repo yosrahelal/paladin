@@ -27,6 +27,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
+	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -164,8 +165,8 @@ func Test_applyPostAssembly_Success_WriteLockStatesError(t *testing.T) {
 func Test_applyPostAssembly_Success_AddMinterError(t *testing.T) {
 	ctx := t.Context()
 	stateID := pldtypes.HexBytes(uuid.New().String())
-	mockGrapher := grapher.NewMockGrapher(t)
-	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(errors.New("add minter error"))
+	mockGrapher := graphermocks.NewGrapher(t)
+	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("add minter error"))
 
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).Grapher(mockGrapher).Build()
 	postAssembly := &components.TransactionPostAssembly{
@@ -184,8 +185,8 @@ func Test_applyPostAssembly_Success_AddMinterError(t *testing.T) {
 
 func Test_applyPostAssembly_Success_MapPotentialStatesError(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
-	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockGrapher := graphermocks.NewGrapher(t)
+	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
 		Grapher(mockGrapher).
@@ -254,8 +255,8 @@ func Test_sendAssembleRequest_GetBlockHeightError(t *testing.T) {
 
 func Test_sendAssembleRequest_ExportStatesAndLocksError(t *testing.T) {
 	ctx := t.Context()
-	mockGrapher := grapher.NewMockGrapher(t)
-	mockGrapher.EXPECT().ExportStatesAndLocks(mock.Anything).Return(grapher.ExportableStates{}, errors.New("export states and locks failed"))
+	mockGrapher := graphermocks.NewGrapher(t)
+	mockGrapher.EXPECT().ExportStatesAndLocks(mock.Anything, mock.Anything).Return(grapher.ExportableStates{}, errors.New("export states and locks failed"))
 
 	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
 		Grapher(mockGrapher).
@@ -708,7 +709,7 @@ func Test_notifyDependentsOfSelection_PreAssembleDependent(t *testing.T) {
 	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
 		Grapher(g).DependencyTracker(dt).
 		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{
-			dependentTxn.GetPrivateTransaction().ID: dependentTxn,
+			dependentTxn.pt.ID: dependentTxn,
 		}).
 		Build()
 
@@ -729,7 +730,7 @@ func Test_notifyDependentsOfSelection_ChainedDependent(t *testing.T) {
 	txn, _ := NewTransactionBuilderForTesting(t, State_Pooled).
 		Grapher(g).DependencyTracker(dt).
 		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{
-			depTx.GetPrivateTransaction().ID: depTx,
+			depTx.pt.ID: depTx,
 		}).
 		Build()
 
@@ -875,7 +876,7 @@ func Test_action_NotifyPreAssembleDependentOfSelection_Success(t *testing.T) {
 	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
 		Grapher(g).DependencyTracker(dt).
 		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{
-			dependentTxn.GetPrivateTransaction().ID: dependentTxn,
+			dependentTxn.pt.ID: dependentTxn,
 		}).
 		Build()
 
@@ -883,4 +884,40 @@ func Test_action_NotifyPreAssembleDependentOfSelection_Success(t *testing.T) {
 
 	err := action_NotifyDependentsOfSelection(ctx, txn, nil)
 	require.NoError(t, err)
+}
+
+func Test_allowedNodesFromDistributionList_MoreStatesThanPotentials_Breaks(t *testing.T) {
+	ctx := t.Context()
+	// Two output states but only one potential: the second state must be silently skipped.
+	s1 := pldtypes.RandBytes32()
+	s2 := pldtypes.RandBytes32()
+	states := []*components.FullState{
+		{ID: pldtypes.HexBytes(s1[:])},
+		{ID: pldtypes.HexBytes(s2[:])},
+	}
+	potentials := []*prototk.NewState{
+		{DistributionList: []string{"node1@node1"}},
+		// no second potential — only one entry
+	}
+	// Slice potentials to length 1 to trigger the i >= len(potentials) break on the second state.
+	result := allowedNodesFromDistributionList(ctx, states, potentials[:1])
+	// First state should have a node; second state should have no entry because the loop broke.
+	assert.Len(t, result[s1.String()], 1)
+	assert.NotContains(t, result, s2.String())
+}
+
+func Test_allowedNodesFromDistributionList_InvalidLocator_WarnAndContinue(t *testing.T) {
+	ctx := t.Context()
+	s1 := pldtypes.RandBytes32()
+	states := []*components.FullState{
+		{ID: pldtypes.HexBytes(s1[:])},
+	}
+	// Mix of an invalid locator (no "@node" separator) and a valid one.
+	potentials := []*prototk.NewState{
+		{DistributionList: []string{"not-a-valid-locator", "valid@node2"}},
+	}
+	result := allowedNodesFromDistributionList(ctx, states, potentials)
+	// The invalid locator must have been skipped; the valid one must be present.
+	require.Contains(t, result, s1.String())
+	assert.Equal(t, []string{"node2"}, result[s1.String()])
 }

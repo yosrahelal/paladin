@@ -27,26 +27,27 @@ import (
 	"github.com/google/uuid"
 )
 
-type State int
+type State = common.OriginatorState
 type EventType = common.EventType
 
 const (
-	State_Idle      State = iota //Not acting as a originator and not aware of any active coordinators
-	State_Observing              //Not acting as a originator but aware of a node (which may be the same node) acting as a coordinator
-	State_Sending                //Has some transactions that have been sent to a coordinator but not yet confirmed TODO should this be named State_Monitoring or State_Delegated or even State_Sent.  Sending sounds like it is in the process of sending the request message.
+	State_Initial   = common.OriginatorState_Initial   // Waiting for OriginatorCreatedEvent to fire initial coordinator selection
+	State_Idle      = common.OriginatorState_Idle      // Not acting as an originator and not aware of any active coordinators
+	State_Observing = common.OriginatorState_Observing // Not acting as an originator but aware of a node acting as a coordinator
+	State_Sending   = common.OriginatorState_Sending   // Has some transactions that have been sent to a coordinator but not yet confirmed
 )
 
 const (
-	Event_HeartbeatReceived        EventType = iota + 300 // a heartbeat message was received from the current active coordinator
-	Event_TransactionCreated                              // a new transaction has been created and is ready to be sent to the coordinator TODO maybe name something like Intent created?
-	Event_NewBlock                                        // a new block has been mined on the base ledger
-	Event_ActiveCoordinatorUpdated                        // a new active coordinator is available
+	Event_OriginatorCreated  EventType = iota + 300 // fired once by Start to drive the initial coordinator selection
+	Event_TransactionCreated                        // a new transaction has been created and is ready to be sent to the coordinator TODO maybe name something like Intent created?
+	Event_DelegationRejected                        // pushed by transport_client when a DelegationResponse arrives with Accepted == false
 )
 
 // Type aliases for the generic statemachine types, specialized for originator
 type (
 	Action           = statemachine.Action[*originator]
 	Guard            = statemachine.Guard[*originator]
+	Validator        = statemachine.Validator[*originator]
 	ActionRule       = statemachine.ActionRule[*originator]
 	Transition       = statemachine.Transition[State, *originator]
 	EventHandler     = statemachine.EventHandler[State, *originator]
@@ -55,13 +56,27 @@ type (
 )
 
 var stateDefinitionsMap = StateDefinitions{
-	State_Idle: {
+	State_Initial: {
 		Events: map[EventType]EventHandler{
-			Event_ActiveCoordinatorUpdated: {
-				Actions: []ActionRule{{Action: action_ActiveCoordinatorUpdated}},
+			Event_OriginatorCreated: {
+				Actions:     []ActionRule{{Action: action_CalculateCoordinatorPriorities}},
+				Transitions: []Transition{{To: State_Idle}},
 			},
-			Event_HeartbeatReceived: {
-				Actions:     []ActionRule{{Action: action_HeartbeatReceived}},
+		},
+	},
+	State_Idle: {
+		OnTransitionTo: []ActionRule{
+			// When entering Idle the last known active coordinator has gone silent.
+			// Reset to the highest-priority candidate so the next Sending entry starts fresh.
+			{Action: action_ResetToTopPriorityCoordinator},
+		},
+		Events: map[EventType]EventHandler{
+			common.Event_HeartbeatReceived: {
+				Validator: validator_IsHeartbeatSenderLive,
+				Actions: []ActionRule{
+					{Action: action_UpdateActiveCoordinatorFromHeartbeat},
+					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
+				},
 				Transitions: []Transition{{To: State_Observing}},
 			},
 			Event_TransactionCreated: {
@@ -70,6 +85,21 @@ var stateDefinitionsMap = StateDefinitions{
 				Transitions: []Transition{{
 					To: State_Sending,
 				}},
+			},
+			common.Event_NewBlock: {
+				Actions: []ActionRule{
+					{Action: action_UpdateBlockHeight},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
+					// Re-align to the new epoch's top-priority coordinator while still idle.
+					{If: guard_IsOnEpochBoundary, Action: action_ResetToTopPriorityCoordinator},
+				},
+			},
+			common.Event_EndorserNodesDiscovered: {
+				Actions: []ActionRule{
+					{Action: action_UpdateEndorserCandidates},
+					{Action: action_CalculateCoordinatorPriorities},
+					{Action: action_ResetToTopPriorityCoordinator},
+				},
 			},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
@@ -90,12 +120,16 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Observing: {
 		Events: map[EventType]EventHandler{
-			Event_ActiveCoordinatorUpdated: {
-				Actions: []ActionRule{{Action: action_ActiveCoordinatorUpdated}},
+			common.Event_HeartbeatReceived: {
+				Validator: validator_IsHeartbeatSenderLive,
+				Actions: []ActionRule{
+					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
+					{Action: action_UpdateActiveCoordinatorFromHeartbeat},
+				},
 			},
 			common.Event_HeartbeatInterval: {
-				Actions:     []ActionRule{{Action: action_IncrementHeartbeatIntervalsSinceLastReceive}},
-				Transitions: []Transition{{To: State_Idle, If: guard_IdleThresholdExceeded}},
+				Actions:     []ActionRule{{Action: action_IncrementHeartbeatIntervalCounts}},
+				Transitions: []Transition{{To: State_Idle, If: guard_InactiveGracePeriodExceeded}},
 			},
 			Event_TransactionCreated: {
 				Validator: validator_TransactionDoesNotExist,
@@ -104,7 +138,18 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Sending,
 				}},
 			},
-			Event_HeartbeatReceived: {Actions: []ActionRule{{Action: action_HeartbeatReceived}}},
+			common.Event_NewBlock: {
+				Actions: []ActionRule{
+					{Action: action_UpdateBlockHeight},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
+				},
+			},
+			common.Event_EndorserNodesDiscovered: {
+				Actions: []ActionRule{
+					{Action: action_UpdateEndorserCandidates},
+					{Action: action_CalculateCoordinatorPriorities},
+				},
+			},
 			common.Event_TransactionStateTransition: {
 				Actions: []ActionRule{
 					{
@@ -124,15 +169,12 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Sending: {
 		OnTransitionTo: []ActionRule{
+			// Delegate immediately to the current active coordinator on entering Sending.
+			// If the coordinator is still in Elect or Prepared it will accept the delegation
+			// and manage the handover itself.
 			{Action: action_SendDelegationRequest},
 		},
 		Events: map[EventType]EventHandler{
-			Event_ActiveCoordinatorUpdated: {
-				Actions: []ActionRule{
-					{Action: action_ActiveCoordinatorUpdated},
-					{Action: action_SendDelegationRequest},
-				},
-			},
 			Event_TransactionCreated: {
 				Validator: validator_TransactionDoesNotExist,
 				Actions: []ActionRule{
@@ -140,27 +182,65 @@ var stateDefinitionsMap = StateDefinitions{
 					{Action: action_SendDelegationRequest},
 				},
 			},
-			Event_HeartbeatReceived: {
+			common.Event_HeartbeatReceived: {
 				Actions: []ActionRule{
-					{Action: action_HeartbeatReceived},
-					{Action: action_SendDelegationRequest, If: guard_HasDroppedTransactions},
+					// 1. Process confirmed transactions from every heartbeat regardless of sender state or identity.
+					{Action: action_ProcessConfirmedTransactions},
+					// 2. Higher-priority coordinator announced; redirect and reset liveness timer.
+					{
+						Validator: statemachine.ValidatorAnd(
+							validator_IsHeartbeatSenderLive,
+							validator_IsSenderHigherPriorityThanCurrentCoordinator,
+						),
+						Action: action_SwitchActiveCoordinator,
+					},
+					// 3. Any live non-current node becomes coordinator when ours has gone silent.
+					{
+						Validator: statemachine.ValidatorAnd(
+							validator_IsHeartbeatSenderLive,
+							statemachine.ValidatorNot(validator_IsFromCurrentCoordinator),
+						),
+						If:     guard_InactiveGracePeriodExceeded,
+						Action: action_SwitchActiveCoordinator,
+					},
+					// 4. Heartbeat from the (possibly just-elected) current coordinator:
+					//    reset the liveness timer and process dispatched transactions.
+					//    Steps 2/3 may have updated currentActiveCoordinator to the heartbeat
+					//    sender, so this naturally fires for the same heartbeat in those cases.
+					{
+						Validator: validator_IsFromCurrentCoordinator,
+
+						Action: action_ProcessCurrentCoordinatorHeartbeat,
+					},
+					// 5. Our coordinator has dropped transactions (or our new coordinator from the earlier action
+					//    has never heard of our transactions); redelegate everything.
+					//    No liveness check: a closing coordinator that drops transactions also
+					//    needs to trigger a redelegate.
+					{
+						Validator: statemachine.ValidatorAnd(
+							validator_IsFromCurrentCoordinator,
+							validator_HasDroppedTransactions,
+						),
+						Action: action_SendDelegationRequest,
+					},
 				},
 			},
 			common.Event_HeartbeatInterval: {
 				Actions: []ActionRule{
+					{Action: action_IncrementHeartbeatIntervalCounts},
+					// When the active coordinator has been silent too long, failover to the next
+					// highest-priority candidate if one is available. Otherwise redelegate to the same node.
 					{
-						Action: action_IncrementHeartbeatIntervalsSinceLastReceive,
+						If:     guard_InactiveGracePeriodExceeded,
+						Action: action_FailoverToNextCoordinator,
 					},
-					{
-						// Resend all the delegation requests if we have not seen a heartbeat in a while
-						// It could be that no one thinks they are coordinating, so this will nudge the node who
-						// we think should be the active coordinator.
-						// If we have been seeing heartbeats, the handling for Event_HeartbeatReceived will ensure we
-						// are resending delegation requests only if we have transactions that the active coordinator
-						// does not know about.
-						Action: action_SendDelegationRequest,
-						If:     guard_RedelegateThresholdExceeded,
-					},
+				},
+			},
+			Event_DelegationRejected: {
+				Actions: []ActionRule{
+					{Action: action_HandleDelegationRejected},
+					// We always redelegate after a rejection, regardless of whether the current active coordinator has changed
+					{Action: action_SendDelegationRequest},
 				},
 			},
 			common.Event_TransactionStateTransition: {
@@ -179,6 +259,18 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 				Transitions: []Transition{
 					{To: State_Observing, If: statemachine.GuardNot(guard_HasUnconfirmedTransactions)},
+				},
+			},
+			common.Event_NewBlock: {
+				Actions: []ActionRule{
+					{Action: action_UpdateBlockHeight},
+					{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
+				},
+			},
+			common.Event_EndorserNodesDiscovered: {
+				Actions: []ActionRule{
+					{Action: action_UpdateEndorserCandidates},
+					{Action: action_CalculateCoordinatorPriorities},
 				},
 			},
 		},
@@ -215,16 +307,4 @@ func (o *originator) GetTxStatus(ctx context.Context, txID uuid.UUID) (status co
 		TxID:   txID.String(),
 		Status: "unknown",
 	}, nil
-}
-
-func (s State) String() string {
-	switch s {
-	case State_Idle:
-		return "Idle"
-	case State_Observing:
-		return "Observing"
-	case State_Sending:
-		return "Sending"
-	}
-	return "Unknown"
 }
