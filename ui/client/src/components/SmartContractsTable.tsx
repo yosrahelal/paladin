@@ -34,7 +34,7 @@ import { querySmartContractsByDomain } from '../queries/domains';
 import { getAltModeScrollBarStyle } from '../themes/default';
 import { DomainButtons } from './DomainButtons';
 import { Hash } from './Hash';
-import { IDomainContract } from '../interfaces';
+import { ContractConfig, IDomainContract } from '../interfaces';
 import { Timestamp } from './Timestamp';
 import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 
@@ -208,21 +208,21 @@ export const SmartContractsTable: React.FC<Props> = ({
               <TableCell>
                 <Timestamp timestamp={contract.created} />
               </TableCell>
-              {selectedDomain === 'noto' &&
+              {selectedDomain === 'noto' && 'name' in contract.config.contractConfig &&
                 <TableCell>
-                  {'name' in contract.config.contractConfig ? contract.config.contractConfig.name : '--'}
+                  {contract.config.contractConfig.name.length > 0 ? contract.config.contractConfig.name : '--'}
                 </TableCell>}
-              {selectedDomain === 'noto' &&
+              {selectedDomain === 'noto' && 'symbol' in contract.config.contractConfig &&
                 <TableCell>
-                  {'symbol' in contract.config.contractConfig ? contract.config.contractConfig.symbol : '--'}
+                  {contract.config.contractConfig.symbol.length > 0 ? contract.config.contractConfig.symbol : '--'}
                 </TableCell>}
-              {selectedDomain === 'noto' &&
+              {selectedDomain === 'noto' && 'isNotary' in contract.config.contractConfig &&
                 <TableCell>
-                  {'isNotary' in contract.config.contractConfig ? t(contract.config.contractConfig.isNotary ? 'yes' : 'no') : '--'}
+                  {t(contract.config.contractConfig.isNotary ? 'yes' : 'no')}
                 </TableCell>}
-              {selectedDomain === 'zeto' &&
+              {selectedDomain === 'zeto' && 'tokenName' in contract.config.contractConfig &&
                 <TableCell>
-                  {'tokenName' in contract.config.contractConfig ? contract.config.contractConfig.tokenName : '--'}
+                  {contract.config.contractConfig.tokenName.length > 0 ? contract.config.contractConfig.tokenName : '--'}
                 </TableCell>}
               <TableCell>
                 <Hash title={t('address')} hash={contract.address} />
