@@ -190,12 +190,8 @@ func (n *Noto) makeNewInfoState(info *types.TransactionData, variant pldtypes.He
 			DistributionList: distributionList,
 		}, nil
 	}
-	schemaID := n.dataSchemaV1.Id
-	if n.dataSchemaV2 != nil {
-		schemaID = n.dataSchemaV2.Id
-	}
 	return &prototk.NewState{
-		SchemaId:         schemaID,
+		SchemaId:         n.dataSchemaV2.Id,
 		StateDataJson:    string(infoJSON),
 		DistributionList: distributionList,
 	}, nil
@@ -461,11 +457,9 @@ func (n *Noto) prepareDataInfo(ctx context.Context, data pldtypes.HexBytes, vari
 		Data:    data,
 		Variant: variant,
 	}
-	if variant == types.NotoVariantDefault {
-		fromAddr, err := n.findEthAddressVerifier(ctx, "from", transaction.From, verifiers)
-		if err == nil && fromAddr != nil {
-			newData.From = fromAddr.address
-		}
+	fromAddr, err := n.findEthAddressVerifier(ctx, "from", transaction.From, verifiers)
+	if err == nil && fromAddr != nil {
+		newData.From = fromAddr.address
 	}
 	newState, err := n.makeNewInfoState(newData, variant, distributionList)
 	return []*prototk.NewState{newState}, err

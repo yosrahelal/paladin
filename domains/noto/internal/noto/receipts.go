@@ -31,11 +31,7 @@ import (
 func (n *Noto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptRequest) (res *prototk.BuildReceiptResponse, err error) {
 	receipt := &types.NotoDomainReceipt{}
 
-	schemas := []string{n.dataSchemaV0.Id, n.dataSchemaV1.Id}
-	if n.dataSchemaV2 != nil {
-		schemas = append(schemas, n.dataSchemaV2.Id)
-	}
-	infoStates := n.filterSchema(req.InfoStates, schemas)
+	infoStates := n.filterSchema(req.InfoStates, []string{n.dataSchemaV0.Id, n.dataSchemaV1.Id, n.dataSchemaV2.Id})
 	var variant pldtypes.HexUint64
 	if len(infoStates) > 0 {
 		// For prepareUnlock we have two data states - one for the unlockData, and one for the prepareUnlock data.

@@ -44,6 +44,7 @@ func TestPrepareUnlock(t *testing.T) {
 		lockInfoSchemaV1: testSchema("lockInfo_v1"),
 		dataSchemaV0:     testSchema("data"),
 		dataSchemaV1:     testSchema("data_v1"),
+		dataSchemaV2:     testSchema("data_v2"),
 		manifestSchema:   testSchema("manifest"),
 	}
 	ctx := t.Context()
@@ -214,7 +215,7 @@ func TestPrepareUnlock(t *testing.T) {
 	}
 	infoStates := []*prototk.EndorsableState{
 		{
-			SchemaId:      n.dataSchemaV1.Id,
+			SchemaId:      n.dataSchemaV2.Id,
 			Id:            *unlockDataState.Id,
 			StateDataJson: unlockDataState.StateDataJson,
 		},
@@ -308,7 +309,7 @@ func TestPrepareUnlock(t *testing.T) {
 	}, data)
 
 	// Decode the options we store into the lockInfo
-	unlockTxData, err := n.encodeTransactionDataV1(ctx, tx, newStateToEndorsableState([]*prototk.NewState{unlockDataState}))
+	unlockTxData, err := n.encodeTransactionDataV1(ctx, newStateToEndorsableState([]*prototk.NewState{unlockDataState}))
 	require.NoError(t, err)
 	notoOptions := decodeSingleABITuple[types.NotoLockOptions](t, types.NotoLockOptionsABI, fnParams.Params.Options)
 	expectedSpendHash, err := n.unlockHashFromIDs_V1(ctx, ethtypes.MustNewAddress(contractAddress), lockID, notoOptions.SpendTxId.HexString(), endorsableStateIDs(readStates), endorsableStateIDs(infoStates[1:2]), unlockTxData)
@@ -435,6 +436,7 @@ func TestPrepareUnlock_V0(t *testing.T) {
 		lockInfoSchemaV1: testSchema("UNUSED"), // needs to be there for coin filtering
 		dataSchemaV0:     testSchema("data"),
 		dataSchemaV1:     testSchema("UNUSED"), // needs to be there for coin filtering
+		dataSchemaV2:     testSchema("data_v2"),
 	}
 	ctx := t.Context()
 	fn := types.NotoABI.Functions()["prepareUnlock"]

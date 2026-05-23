@@ -138,7 +138,7 @@ func TestCreateMintLock(t *testing.T) {
 	}
 	infoStates := []*prototk.EndorsableState{
 		{
-			SchemaId:      n.dataSchemaV1.Id,
+			SchemaId:      n.dataSchemaV2.Id,
 			Id:            *dataState.Id,
 			StateDataJson: dataState.StateDataJson,
 		},
@@ -211,7 +211,7 @@ func TestCreateMintLock(t *testing.T) {
 	}, data)
 
 	// Decode the options we store into the lockInfo
-	unlockTxData, err := n.encodeTransactionDataV1(ctx, tx, newStateToEndorsableState([]*prototk.NewState{unlockDataState}))
+	unlockTxData, err := n.encodeTransactionDataV1(ctx, newStateToEndorsableState([]*prototk.NewState{unlockDataState}))
 	require.NoError(t, err)
 	notoOptions := decodeSingleABITuple[types.NotoLockOptions](t, types.NotoLockOptionsABI, fnParams.Params.Options)
 	expectedSpendHash, err := n.unlockHashFromIDs_V1(ctx, ethtypes.MustNewAddress(contractAddress), lockID, notoOptions.SpendTxId.HexString(), []string{}, endorsableStateIDs(infoStates[1:2]), unlockTxData)

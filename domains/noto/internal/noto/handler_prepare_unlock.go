@@ -253,7 +253,7 @@ func (h *prepareUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.P
 	switch tx.DomainConfig.Variant {
 	case types.NotoVariantDefault:
 		var lockParams *UpdateLockParams
-		lockParams, err = h.buildPrepareUnlockParams(ctx, tx, lockTransition, sender.Payload, lockedInputs, spendOutputs, cancelOutputs, req.InfoStates, req.ResolvedVerifiers)
+		lockParams, err = h.buildPrepareUnlockParams(ctx, tx, lockTransition, sender.Payload, lockedInputs, spendOutputs, cancelOutputs, req.InfoStates)
 		if err == nil {
 			interfaceABI = h.noto.getInterfaceABI(types.NotoVariantDefault)
 			functionName = "updateLock"

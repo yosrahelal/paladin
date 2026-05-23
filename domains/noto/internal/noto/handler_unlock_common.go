@@ -356,7 +356,7 @@ func (h *unlockCommon) endorse(
 	}, nil
 }
 
-func (h *unlockCommon) buildPrepareUnlockParams(ctx context.Context, tx *types.ParsedTransaction, lt *lockTransition, proof pldtypes.HexBytes, lockedInputs, spendOutputs, cancelOutputs, infoStates []*prototk.EndorsableState, verifiers []*prototk.ResolvedVerifier) (_ *UpdateLockParams, err error) {
+func (h *unlockCommon) buildPrepareUnlockParams(ctx context.Context, tx *types.ParsedTransaction, lt *lockTransition, proof pldtypes.HexBytes, lockedInputs, spendOutputs, cancelOutputs, infoStates []*prototk.EndorsableState) (_ *UpdateLockParams, err error) {
 	lockID := lt.prevLockInfo.LockID
 	spendData := lt.newLockInfo.SpendData
 	cancelData := lt.newLockInfo.CancelData
@@ -400,7 +400,7 @@ func (h *unlockCommon) buildPrepareUnlockParams(ctx context.Context, tx *types.P
 
 }
 
-func (h *unlockCommon) buildCreateLockParams(ctx context.Context, tx *types.ParsedTransaction, lockTransition *lockTransition, proof pldtypes.HexBytes, inputs, lockedOutputs, additionalOutputs, spendOutputs, cancelOutputs, infoStates []*prototk.EndorsableState, verifiers []*prototk.ResolvedVerifier) (_ *CreateLockParams, err error) {
+func (h *unlockCommon) buildCreateLockParams(ctx context.Context, tx *types.ParsedTransaction, lockTransition *lockTransition, proof pldtypes.HexBytes, inputs, lockedOutputs, additionalOutputs, spendOutputs, cancelOutputs, infoStates []*prototk.EndorsableState) (_ *CreateLockParams, err error) {
 	lockID := lockTransition.newLockInfo.LockID
 	spendData := lockTransition.newLockInfo.SpendData
 	cancelData := lockTransition.newLockInfo.CancelData

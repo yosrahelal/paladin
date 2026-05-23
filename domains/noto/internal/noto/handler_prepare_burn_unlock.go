@@ -308,7 +308,7 @@ func (h *prepareBurnUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *typ
 	}
 
 	interfaceABI := h.noto.getInterfaceABI(types.NotoVariantDefault)
-	lockParams, err := h.buildPrepareUnlockParams(ctx, tx, lockTransition, sender.Payload, lockedInputs, spendOutputs, cancelOutputs, req.InfoStates, req.ResolvedVerifiers)
+	lockParams, err := h.buildPrepareUnlockParams(ctx, tx, lockTransition, sender.Payload, lockedInputs, spendOutputs, cancelOutputs, req.InfoStates)
 	var paramsJSON []byte
 	if err == nil {
 		paramsJSON, err = json.Marshal(lockParams)

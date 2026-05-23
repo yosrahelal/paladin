@@ -477,9 +477,6 @@ func (n *Noto) LockInfoSchemaID() string {
 }
 
 func (n *Noto) DataSchemaID() string {
-	if n.dataSchemaV2 == nil {
-		return n.dataSchemaV1.Id
-	}
 	return n.dataSchemaV2.Id
 }
 
@@ -1025,7 +1022,7 @@ func (n *Noto) encodeNotoUnlockOperation(ctx context.Context, lockID pldtypes.By
 
 func (n *Noto) encodeTransactionData(ctx context.Context, domainConfig *types.NotoParsedConfig, transaction *prototk.TransactionSpecification, infoStates []*prototk.EndorsableState) (pldtypes.HexBytes, error) {
 	if domainConfig.IsV1() {
-		return n.encodeTransactionDataV1(ctx, transaction, infoStates)
+		return n.encodeTransactionDataV1(ctx, infoStates)
 	} else {
 		return n.encodeTransactionDataV0(ctx, transaction, infoStates)
 	}
@@ -1064,7 +1061,7 @@ func (n *Noto) encodeTransactionDataV0(ctx context.Context, transaction *prototk
 	return data, nil
 }
 
-func (n *Noto) encodeTransactionDataV1(ctx context.Context, transaction *prototk.TransactionSpecification, infoStates []*prototk.EndorsableState) (pldtypes.HexBytes, error) {
+func (n *Noto) encodeTransactionDataV1(ctx context.Context, infoStates []*prototk.EndorsableState) (pldtypes.HexBytes, error) {
 	var err error
 	stateIDs := make([]pldtypes.Bytes32, len(infoStates))
 	for i, state := range infoStates {
