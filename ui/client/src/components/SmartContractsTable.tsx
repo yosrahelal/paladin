@@ -16,6 +16,7 @@
 
 import {
   Alert,
+  IconButton,
   Paper,
   Table,
   TableBody,
@@ -25,6 +26,7 @@ import {
   TablePagination,
   TableRow,
   TableSortLabel,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material';
@@ -37,6 +39,8 @@ import { Hash } from './Hash';
 import { IDomainContract } from '../interfaces';
 import { Timestamp } from './Timestamp';
 import { Dispatch, SetStateAction, useEffect, useState } from 'react';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { useNavigate } from 'react-router-dom';
 
 type Props = {
   domainAddress: string
@@ -67,10 +71,12 @@ export const SmartContractsTable: React.FC<Props> = ({
   const [count, setCount] = useState(-1);
   const { t } = useTranslation();
   const theme = useTheme();
+  const navigate = useNavigate();
 
   const {
     data: contracts,
     error,
+    isFetching
   } = useQuery({
     queryKey: ['contracts', domainAddress, sortAscending, page, rowsPerPage, refTimestamps],
     queryFn: () => querySmartContractsByDomain(domainAddress, sortAscending, rowsPerPage, refTimestamps[refTimestamps.length - 1]),
@@ -126,6 +132,10 @@ export const SmartContractsTable: React.FC<Props> = ({
     setRefTimestamps([]);
     setPage(0);
   };
+
+  if(isFetching) {
+    return <></>
+  }
 
   return (
     <TableContainer
@@ -200,6 +210,11 @@ export const SmartContractsTable: React.FC<Props> = ({
             >
               {t('actions')}
             </TableCell>
+            <TableCell
+              sx={{
+                backgroundColor: (theme) => theme.palette.background.paper,
+              }}
+            />
           </TableRow>
         </TableHead>
         <TableBody>
@@ -232,6 +247,14 @@ export const SmartContractsTable: React.FC<Props> = ({
                   domainName={contract.domainName}
                   contractAddress={contract.address}
                 />
+              </TableCell>
+              <TableCell align="right" sx={{ padding: '8px' }}>
+                <Tooltip title={t('open')} arrow>
+                  <IconButton
+                    onClick={() => navigate(`/ui/domains/${contract.address}`)}>
+                    <OpenInNewIcon color="secondary" fontSize="medium" />
+                  </IconButton>
+                </Tooltip>
               </TableCell>
             </TableRow>
           ))}

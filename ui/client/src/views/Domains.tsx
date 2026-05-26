@@ -26,7 +26,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { t } from 'i18next';
 import { Captions } from 'lucide-react';
-import { Dispatch, SetStateAction, useEffect, useState } from 'react';
+import { Dispatch, SetStateAction, useEffect } from 'react';
 import { DomainDeploy } from '../components/DomainDeploy';
 import { Hash } from '../components/Hash';
 import { SmartContractsTable } from '../components/SmartContractsTable';
@@ -41,6 +41,8 @@ type Props = {
   setRowsPerPage: Dispatch<SetStateAction<number>>
   refTimestamps: string[]
   setRefTimestamps: Dispatch<SetStateAction<string[]>>
+  selectedDomain: string | undefined
+  setSelectedDomain: Dispatch<SetStateAction<string | undefined>>
 };
 
 export const Domains: React.FC<Props> = ({
@@ -51,9 +53,10 @@ export const Domains: React.FC<Props> = ({
   rowsPerPage,
   setRowsPerPage,
   refTimestamps,
-  setRefTimestamps
+  setRefTimestamps,
+  selectedDomain,
+  setSelectedDomain
 }) => {
-  const [selectedDomain, setSelectedDomain] = useState<string>();
 
   const {
     data: domains,

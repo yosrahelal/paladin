@@ -107,3 +107,22 @@ export const fetchDomainReceipt = async (
     )
   );
 };
+
+export const getDomainContractByAddress = async (
+  address: string,
+): Promise<IDomainContract> => {
+  const payload = {
+    jsonrpc: '2.0',
+    id: Date.now(),
+    method: RpcMethods.domain_getSmartContractByAddress,
+    params: [address],
+  };
+
+  return <Promise<IDomainContract>>(
+    returnResponse(
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
+      i18next.t('errorFetchingDomainReceipt'), [500]
+    )
+  );
+};
+

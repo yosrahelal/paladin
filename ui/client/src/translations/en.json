@@ -64,6 +64,7 @@
 	"doesNotEndWith": "Does not end with",
 	"doesNotStartWith": "Does not start with",
 	"domain": "Domain",
+	"domainSmartContract": "Domain Smart Contract",
 	"domains": "Domains",
 	"domainDetails": "Domain Details",
 	"domainReceipt": "Domain Receipt",

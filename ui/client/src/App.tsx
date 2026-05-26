@@ -37,6 +37,7 @@ import { Transactions } from "./views/Transactions";
 import { TransactionDetails } from "./views/TransactionDetails";
 import { IPaladinTransactionPagingReference, ITransactionPagingReference } from "./interfaces";
 import { Submissions } from "./views/Submissions";
+import { DomainContract } from "./views/DomainContract";
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({}),
@@ -57,6 +58,7 @@ function App() {
   const [submissionsRefEntries, setSubmissionsSetRefEntries] = useState<IPaladinTransactionPagingReference[]>([]);
   const [submissionsPage, setSubmissionsPage] = useState(0);
   const [submissionsRowsPerPage, setSubmissionsRowsPerPage] = useState(10);
+  const [selectedDomain, setSelectedDomain] = useState<string>();
 
   const [systemTheme, setSystemTheme] = useState(
     window.matchMedia &&
@@ -149,7 +151,10 @@ function App() {
                   setRowsPerPage={SetDomainsRowsPerPage}
                   refTimestamps={domainsRefTimestamps}
                   setRefTimestamps={setDomainsRefTimestamps}
+                  selectedDomain={selectedDomain}
+                  setSelectedDomain={setSelectedDomain}
                 />} />
+                <Route path={AppRoutes.DomainContract} element={<DomainContract />} />
                 <Route path="*" element={<Navigate to={AppRoutes.Transactions} replace />} />
               </Routes>
             </BrowserRouter>
