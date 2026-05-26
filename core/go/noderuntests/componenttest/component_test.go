@@ -395,7 +395,7 @@ func TestUpdatePublicTransaction(t *testing.T) {
 		require.Len(ct, tx.Public, 1)
 		require.NotNil(ct, tx.Public[0].Activity[0])
 		assert.Regexp(ct, "ERROR.*Intrinsic", tx.Public[0].Activity[0])
-	}, 10*time.Second, 100*time.Millisecond, "Transaction was not processed with error in time")
+	}, 10*time.Second, 100*time.Millisecond, "Transaction was not processed with error in time (txID: %s)", setRes.ID())
 
 	_, err = c.PTX().UpdateTransaction(ctx, *setRes.ID(), &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
@@ -1114,7 +1114,7 @@ func TestNotaryDelegatedPrepare(t *testing.T) {
 		},
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Prepared transaction not available on originator node",
+		"Prepared transaction not available on originator node (txID: %s)", transferA2BTx.ID(),
 	)
 
 }
