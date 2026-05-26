@@ -184,7 +184,7 @@ export const NotoTransferDialog: React.FC<Props> = ({
           <Box sx={{ marginTop: '20px' }}>
             <TextField
               fullWidth
-              label={t('data')}
+              label={t('dataOptional')}
               autoComplete="off"
               value={data}
               onChange={(event) => setData(event.target.value)}
