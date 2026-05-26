@@ -21,6 +21,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
@@ -577,9 +578,47 @@ func TestSendEndorsementRequest_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, attRequest, transactionSpecification, verifiers, signatures, inputStates, readStates, outputStates, infoStates)
+	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, attRequest, transactionSpecification, verifiers, signatures, inputStates, readStates, outputStates, infoStates, time.Time{})
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
+}
+
+func TestSendEndorsementRequest_SerialisesExpiryTimeIntoProto(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	idempotencyKey := uuid.New()
+	party := "party1@node1"
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	transactionSpecification := &prototk.TransactionSpecification{
+		TransactionId: txID.String(),
+		ContractInfo:  &prototk.ContractInfo{ContractAddress: contractAddress.HexString()},
+	}
+	expiry := time.Now().Truncate(time.Millisecond) // truncate to ms precision to match UnixMilli roundtrip
+
+	mockTransportManager := componentsmocks.NewTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
+	var capturedExpiry int64
+	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
+		var req engineProto.EndorsementRequest
+		if err := proto.Unmarshal(msg.Payload, &req); err != nil {
+			return false
+		}
+		capturedExpiry = req.ExpiryTimeUnixMs
+		return msg.MessageType == MessageType_EndorsementRequest
+	})).Return(nil)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTransportManager,
+		loopbackTransport: mockLoopbackTransport,
+		contractAddress:   contractAddress,
+	}
+	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, nil, transactionSpecification, nil, nil, nil, nil, nil, nil, expiry)
+	require.NoError(t, err)
+	mockTransportManager.AssertExpectations(t)
+	assert.Equal(t, expiry.UnixMilli(), capturedExpiry, "ExpiryTimeUnixMs should match expiry.UnixMilli()")
 }
 
 func TestSendEndorsementRequest_NodeLookupError(t *testing.T) {
@@ -611,7 +650,7 @@ func TestSendEndorsementRequest_NodeLookupError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, attRequest, transactionSpecification, nil, nil, nil, nil, nil, nil)
+	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, attRequest, transactionSpecification, nil, nil, nil, nil, nil, nil, time.Time{})
 	require.Error(t, err)
 	mockTransportManager.AssertNotCalled(t, "Send")
 }
@@ -825,9 +864,48 @@ func TestSendAssembleRequest_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendAssembleRequest(ctx, assemblingNode, txID, idempotencyId, preAssembly, stateLocks, blockHeight)
+	err := tw.SendAssembleRequest(ctx, assemblingNode, txID, idempotencyId, preAssembly, stateLocks, blockHeight, time.Time{})
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
+}
+
+func TestSendAssembleRequest_SerialisesExpiryTimeIntoProto(t *testing.T) {
+	ctx := context.Background()
+	assemblingNode := "assembling-node"
+	txID := uuid.New()
+	idempotencyId := uuid.New()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	blockHeight := int64(100)
+	preAssembly := &components.TransactionPreAssembly{
+		TransactionSpecification: &prototk.TransactionSpecification{TransactionId: txID.String()},
+	}
+	stateLocks := grapher.ExportableStates{LockedState: []*grapher.StateLock{}}
+	expiry := time.Now().Truncate(time.Millisecond) // truncate to ms precision to match UnixMilli roundtrip
+
+	mockTransportManager := componentsmocks.NewTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
+	var capturedExpiry int64
+	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
+		var req engineProto.AssembleRequest
+		if err := proto.Unmarshal(msg.Payload, &req); err != nil {
+			return false
+		}
+		capturedExpiry = req.ExpiryTimeUnixMs
+		return msg.MessageType == MessageType_AssembleRequest
+	})).Return(nil)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTransportManager,
+		loopbackTransport: mockLoopbackTransport,
+		contractAddress:   contractAddress,
+	}
+	err := tw.SendAssembleRequest(ctx, assemblingNode, txID, idempotencyId, preAssembly, stateLocks, blockHeight, expiry)
+	require.NoError(t, err)
+	mockTransportManager.AssertExpectations(t)
+	assert.Equal(t, expiry.UnixMilli(), capturedExpiry, "ExpiryTimeUnixMs should match expiry.UnixMilli()")
 }
 
 func TestSendAssembleRequest_SendError(t *testing.T) {
@@ -860,7 +938,7 @@ func TestSendAssembleRequest_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendAssembleRequest(ctx, assemblingNode, txID, idempotencyId, preAssembly, stateLocks, blockHeight)
+	err := tw.SendAssembleRequest(ctx, assemblingNode, txID, idempotencyId, preAssembly, stateLocks, blockHeight, time.Time{})
 	require.Error(t, err)
 	assert.Equal(t, sendError, err)
 	mockTransportManager.AssertExpectations(t)

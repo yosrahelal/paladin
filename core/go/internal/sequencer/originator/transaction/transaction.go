@@ -37,6 +37,7 @@ type assembleRequestFromCoordinator struct {
 	stateLocksJSON          []byte
 	requestID               uuid.UUID
 	preAssembly             []byte
+	expiry                  time.Time
 }
 
 type OriginatorTransaction interface {

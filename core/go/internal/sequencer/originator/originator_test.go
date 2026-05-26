@@ -88,8 +88,9 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	o.QueueEvent(ctx, sync)
 	<-sync.Done
 	assert.True(t, mocks.SentMessageRecorder.HasSentDelegationRequest(), "Delegation request should be sent")
-	// Assert that the transaction was assembled and a response sent
-	require.True(t, mocks.SentMessageRecorder.HasSentAssembleSuccessResponse(), "Assemble success response should be sent")
+	// Assert that the transaction was assembled and a response sent. Assembly runs in a background
+	// goroutine so use Eventually to wait for the originator to process the result event.
+	require.Eventually(t, mocks.SentMessageRecorder.HasSentAssembleSuccessResponse, 2*time.Second, 10*time.Millisecond, "Assemble success response should be sent")
 	// Simulate the coordinator sending a dispatch confirmation
 	o.QueueEvent(ctx, &transaction.PreDispatchRequestReceivedEvent{
 		BaseEvent: transaction.BaseEvent{TransactionID: txn.ID},

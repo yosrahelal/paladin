@@ -129,7 +129,7 @@ type TransactionDependencyFakes struct {
 	TransportWriter     *sequencertransportmocks.TransportWriter
 	EngineIntegration   *sequencercommonmocks.EngineIntegration
 	transactionBuilder  *TransactionBuilderForTesting
-	emittedEvents       []common.Event
+	Events              chan common.Event
 }
 
 func (b *TransactionBuilderForTesting) BuildWithMocks() (*originatorTransaction, *TransactionDependencyFakes) {
@@ -137,9 +137,10 @@ func (b *TransactionBuilderForTesting) BuildWithMocks() (*originatorTransaction,
 		SentMessageRecorder: b.sentMessageRecorder,
 		EngineIntegration:   b.fakeEngineIntegration,
 		transactionBuilder:  b,
+		Events:              make(chan common.Event, 16),
 	}
 	b.queueEventForOriginator = func(ctx context.Context, event common.Event) {
-		mocks.emittedEvents = append(mocks.emittedEvents, event)
+		mocks.Events <- event
 	}
 	if b.useMockTransportWriter {
 		b.mockTransportWriter = sequencertransportmocks.NewTransportWriter(b.t)
@@ -264,8 +265,4 @@ func (m *TransactionDependencyFakes) MockForAssembleAndSignRequestPark() *mock.C
 		AssemblyResult: prototk.AssembleTransactionResponse_PARK,
 		RevertReason:   ptrTo("test revert reason"),
 	}, nil)
-}
-
-func (m *TransactionDependencyFakes) GetEmittedEvents() []common.Event {
-	return m.emittedEvents
 }

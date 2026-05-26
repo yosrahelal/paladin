@@ -27,7 +27,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-
 func Test_HandleEvent_ProcessesEvent(t *testing.T) {
 	ctx := context.Background()
 	builder := NewTransactionBuilderForTesting(t, State_Pending)
@@ -41,7 +40,7 @@ func Test_HandleEvent_ProcessesEvent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, coordinator, txn.currentDelegate)
 	// Transition callback should have been invoked
-	require.Len(t, mocks.GetEmittedEvents(), 1)
+	<-mocks.Events
 }
 
 func Test_initializeStateMachine_InvokesTransitionCallback(t *testing.T) {
@@ -55,9 +54,7 @@ func Test_initializeStateMachine_InvokesTransitionCallback(t *testing.T) {
 	err := txn.HandleEvent(ctx, event)
 	require.NoError(t, err)
 	// Should have emitted a state transition event
-	events := mocks.GetEmittedEvents()
-	require.Len(t, events, 1)
-	_, ok := events[0].(*common.TransactionStateTransitionEvent[State])
+	_, ok := (<-mocks.Events).(*common.TransactionStateTransitionEvent[State])
 	require.True(t, ok)
 }
 
@@ -185,11 +182,12 @@ func TestOriginatorTransaction_Delegated_ToAssembling_OnAssembleRequestReceived_
 		Coordinator: builder.GetCoordinator(),
 	})
 	assert.NoError(t, err)
-	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
 
-	require.Len(t, mocks.GetEmittedEvents(), 2)
-	require.IsType(t, &AssembleAndSignSuccessEvent{}, mocks.GetEmittedEvents()[0])
-	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, mocks.GetEmittedEvents()[1])
+	e0 := <-mocks.Events
+	e1 := <-mocks.Events
+	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
+	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, e0)
+	require.IsType(t, &AssembleAndSignSuccessEvent{}, e1)
 
 	//We haven't fed that event back into the state machine yet, so the state should still be Assembling
 	currentState := txn.GetCurrentState()
@@ -212,11 +210,12 @@ func TestOriginatorTransaction_Delegated_ToAssembling_OnAssembleRequestReceived_
 		Coordinator: builder.GetCoordinator(),
 	})
 	assert.NoError(t, err)
-	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
 
-	require.Len(t, mocks.GetEmittedEvents(), 2)
-	require.IsType(t, &AssembleRevertEvent{}, mocks.GetEmittedEvents()[0])
-	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, mocks.GetEmittedEvents()[1])
+	e0 := <-mocks.Events
+	e1 := <-mocks.Events
+	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
+	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, e0)
+	require.IsType(t, &AssembleRevertEvent{}, e1)
 
 	//We haven't fed that event back into the state machine yet, so the state should still be Assembling
 	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
@@ -238,11 +237,12 @@ func TestOriginatorTransaction_Delegated_ToAssembling_OnAssembleRequestReceived_
 		Coordinator: builder.GetCoordinator(),
 	})
 	assert.NoError(t, err)
-	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
 
-	require.Len(t, mocks.GetEmittedEvents(), 2)
-	require.IsType(t, &AssembleParkEvent{}, mocks.GetEmittedEvents()[0])
-	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, mocks.GetEmittedEvents()[1])
+	e0 := <-mocks.Events
+	e1 := <-mocks.Events
+	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
+	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, e0)
+	require.IsType(t, &AssembleParkEvent{}, e1)
 
 	//We haven't fed that event back into the state machine yet, so the state should still be Assembling
 	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
@@ -349,12 +349,13 @@ func TestOriginatorTransaction_Delegated_ToReverted_OnAssembleRequestReceived_Af
 		Coordinator: builder.GetCoordinator(),
 	})
 	assert.NoError(t, err)
-	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
 
-	require.Len(t, mocks.GetEmittedEvents(), 2)
-	require.IsType(t, &AssembleRevertEvent{}, mocks.GetEmittedEvents()[0])
-	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, mocks.GetEmittedEvents()[1])
-	err = txn.HandleEvent(ctx, mocks.GetEmittedEvents()[0])
+	e0 := <-mocks.Events
+	e1 := <-mocks.Events
+	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
+	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, e0)
+	require.IsType(t, &AssembleRevertEvent{}, e1)
+	err = txn.HandleEvent(ctx, e1)
 	assert.NoError(t, err)
 
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRevertResponse(), "assemble revert response was not sent back to coordinator")
@@ -376,12 +377,13 @@ func TestOriginatorTransaction_Delegated_ToParked_OnAssembleRequestReceived_Afte
 		Coordinator: builder.GetCoordinator(),
 	})
 	assert.NoError(t, err)
-	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
 
-	require.Len(t, mocks.GetEmittedEvents(), 2)
-	require.IsType(t, &AssembleParkEvent{}, mocks.GetEmittedEvents()[0])
-	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, mocks.GetEmittedEvents()[1])
-	err = txn.HandleEvent(ctx, mocks.GetEmittedEvents()[0])
+	e0 := <-mocks.Events
+	e1 := <-mocks.Events
+	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
+	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, e0)
+	require.IsType(t, &AssembleParkEvent{}, e1)
+	err = txn.HandleEvent(ctx, e1)
 	assert.NoError(t, err)
 
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleParkResponse(), "assemble park response was not sent back to coordinator")
@@ -395,9 +397,9 @@ func TestOriginatorTransaction_Delegated_ToDispatched_OnDispatched_IfCurrentDele
 	txn := builder.Build()
 
 	err := txn.HandleEvent(ctx, &DispatchedEvent{
-		BaseEvent:    BaseEvent{TransactionID: txn.GetID()},
+		BaseEvent:     BaseEvent{TransactionID: txn.GetID()},
 		SignerAddress: pldtypes.EthAddress(pldtypes.RandBytes(20)),
-		Coordinator:  builder.GetCoordinator(), // must match currentDelegate for validator to pass
+		Coordinator:   builder.GetCoordinator(), // must match currentDelegate for validator to pass
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, State_Dispatched, txn.GetCurrentState())
@@ -548,11 +550,11 @@ func TestOriginatorTransaction_Endorsement_Gathering_ToAssembling_OnAssembleRequ
 	})
 	assert.NoError(t, err)
 
+	e0 := <-mocks.Events
+	e1 := <-mocks.Events
 	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
-
-	require.Len(t, mocks.GetEmittedEvents(), 2)
-	require.IsType(t, &AssembleAndSignSuccessEvent{}, mocks.GetEmittedEvents()[0])
-	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, mocks.GetEmittedEvents()[1])
+	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, e0)
+	require.IsType(t, &AssembleAndSignSuccessEvent{}, e1)
 
 	//We haven't fed that event back into the state machine yet, so the state should still be Assembling
 	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
@@ -667,10 +669,11 @@ func TestOriginatorTransaction_Prepared_ToAssembling_OnAssembleRequest_IfNotMatc
 	})
 	assert.NoError(t, err)
 
+	e0 := <-mocks.Events
+	e1 := <-mocks.Events
 	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
-	require.Len(t, mocks.GetEmittedEvents(), 2)
-	require.IsType(t, &AssembleAndSignSuccessEvent{}, mocks.GetEmittedEvents()[0])
-	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, mocks.GetEmittedEvents()[1])
+	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, e0)
+	require.IsType(t, &AssembleAndSignSuccessEvent{}, e1)
 	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
@@ -784,10 +787,11 @@ func TestOriginatorTransaction_Dispatched_ToAssembling_OnAssembleRequest(t *test
 	})
 	assert.NoError(t, err)
 
+	e0 := <-mocks.Events
+	e1 := <-mocks.Events
 	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
-	require.Len(t, mocks.GetEmittedEvents(), 2)
-	require.IsType(t, &AssembleAndSignSuccessEvent{}, mocks.GetEmittedEvents()[0])
-	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, mocks.GetEmittedEvents()[1])
+	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, e0)
+	require.IsType(t, &AssembleAndSignSuccessEvent{}, e1)
 	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
@@ -885,10 +889,11 @@ func TestOriginatorTransaction_Sequenced_ToAssembling_OnAssembleRequest(t *testi
 	})
 	assert.NoError(t, err)
 
+	e0 := <-mocks.Events
+	e1 := <-mocks.Events
 	assert.True(t, mocks.EngineIntegration.AssertExpectations(t))
-	require.Len(t, mocks.GetEmittedEvents(), 2)
-	require.IsType(t, &AssembleAndSignSuccessEvent{}, mocks.GetEmittedEvents()[0])
-	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, mocks.GetEmittedEvents()[1])
+	require.IsType(t, &common.TransactionStateTransitionEvent[State]{}, e0)
+	require.IsType(t, &AssembleAndSignSuccessEvent{}, e1)
 	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 

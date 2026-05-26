@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
@@ -196,6 +197,39 @@ func Test_action_HandleEndorsementRequest_SpawnsGoroutineThatCompletesEndorsemen
 	case <-done:
 	case <-ctx.Done():
 		t.Fatal("timed out waiting for endorsement goroutine to complete")
+	}
+}
+
+func Test_action_HandleEndorsementRequest_AbandonsSilently_WhenExpiryAlreadyElapsed(t *testing.T) {
+	// When the EndorsementRequestReceivedEvent carries an already-elapsed expiry,
+	// action_HandleEndorsementRequest must spawn a goroutine whose context is already cancelled.
+	// The goroutine should exit (via the key-resolution or domain-call error) without sending a
+	// response — context cancellation propagates naturally through every blocking call.
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
+		WithMockTransportWriter().
+		WithKeyManagerError(context.DeadlineExceeded).
+		Build()
+
+	// No SendEndorsementResponse expectation registered — the mock will fail if it is called.
+	doneCh := make(chan struct{})
+	event := buildEndorsementEvent("node2")
+	event.Expiry = time.Now().Add(-time.Second) // already expired
+
+	err := action_HandleEndorsementRequest(ctx, c, event)
+	require.NoError(t, err)
+
+	// The goroutine should terminate without sending any response.  Signal quiescence after a
+	// short delay; the mock's AssertExpectations (auto-called at cleanup) would panic if
+	// SendEndorsementResponse were invoked unexpectedly.
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		close(doneCh)
+	}()
+	select {
+	case <-doneCh:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for goroutine quiescence")
 	}
 }
 

@@ -62,7 +62,15 @@ func action_UpdateActiveCoordinatorFromEndorsementRequest(_ context.Context, c *
 // loopback sends go through a buffered channel.
 func action_HandleEndorsementRequest(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*EndorsementRequestReceivedEvent)
-	go c.handleEndorsementRequest(ctx, e)
+	endorseCtx := ctx
+	cancel := func() {}
+	if !e.Expiry.IsZero() {
+		endorseCtx, cancel = context.WithDeadline(ctx, e.Expiry)
+	}
+	go func() {
+		defer cancel()
+		c.handleEndorsementRequest(endorseCtx, e)
+	}()
 	return nil
 }
 

@@ -64,6 +64,7 @@ type CoordinatorBuilderForTesting struct {
 	useMockClock                             bool
 	grapher                                  grapher.Grapher
 	signingIdentityUsed                      *bool
+	keyManagerResolveErr                     error
 }
 
 type CoordinatorDependencyMocks struct {
@@ -268,6 +269,14 @@ func (b *CoordinatorBuilderForTesting) HeartbeatIntervalsSinceStateChange(n int)
 	return b
 }
 
+// WithKeyManagerError configures the AllComponents KeyManager mock so that
+// ResolveKeyNewDatabaseTX returns the given error.  Use this when testing paths that
+// should abandon work when key resolution fails (e.g. an already-expired deadline).
+func (b *CoordinatorBuilderForTesting) WithKeyManagerError(err error) *CoordinatorBuilderForTesting {
+	b.keyManagerResolveErr = err
+	return b
+}
+
 func (b *CoordinatorBuilderForTesting) WithMockTransportWriter() *CoordinatorBuilderForTesting {
 	b.useMockTransportWriter = true
 	return b
@@ -333,6 +342,13 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	transportManager.On("LocalNodeName").Return(localNode).Maybe()
 	mocks.AllComponents.On("SequencerManager").Return(b.sequencerManager).Maybe()
 	mocks.AllComponents.On("Persistence").Return(mp.P).Maybe()
+
+	if b.keyManagerResolveErr != nil {
+		mockKeyManager := componentsmocks.NewKeyManager(b.t)
+		mockKeyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(nil, b.keyManagerResolveErr).Maybe()
+		mocks.AllComponents.On("KeyManager").Return(mockKeyManager).Maybe()
+	}
 
 	var transportWriter transport.TransportWriter = mocks.SentMessageRecorder
 	if mocks.TransportWriter != nil {

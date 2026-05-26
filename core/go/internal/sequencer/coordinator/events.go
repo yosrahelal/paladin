@@ -16,6 +16,8 @@
 package coordinator
 
 import (
+	"time"
+
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -109,6 +111,7 @@ type EndorsementRequestReceivedEvent struct {
 	Party                     string
 	PrivateEndorsementRequest *components.PrivateTransactionEndorseRequest
 	AttestationRequest        *prototk.AttestationRequest
+	Expiry                    time.Time
 }
 
 func (*EndorsementRequestReceivedEvent) Type() EventType {

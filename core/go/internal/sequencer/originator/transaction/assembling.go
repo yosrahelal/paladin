@@ -34,6 +34,7 @@ func action_AssembleRequestReceived(ctx context.Context, t *originatorTransactio
 		stateLocksJSON:          e.StateLocksJSON,
 		requestID:               e.RequestID,
 		preAssembly:             e.PreAssembly,
+		expiry:                  e.Expiry,
 	}
 	return nil
 }
@@ -83,13 +84,26 @@ func action_AssembleAndSign(ctx context.Context, txn *originatorTransaction, _ c
 	req := *txn.latestAssembleRequest
 	preAssembly := txn.pt.PreAssembly
 	txID := txn.pt.ID
-	go txn.handleAssembleAndSign(ctx, txID, req, preAssembly)
+
+	assembleCtx := ctx
+	cancel := func() {}
+	if !req.expiry.IsZero() {
+		assembleCtx, cancel = context.WithDeadline(ctx, req.expiry)
+	}
+	go func() {
+		defer cancel()
+		txn.handleAssembleAndSign(assembleCtx, txID, req, preAssembly)
+	}()
 	return nil
 }
 
 func (txn *originatorTransaction) handleAssembleAndSign(ctx context.Context, txID uuid.UUID, req assembleRequestFromCoordinator, preAssembly *components.TransactionPreAssembly) {
 	postAssembly, err := txn.engineIntegration.AssembleAndSign(ctx, txID, preAssembly, req.stateLocksJSON, req.coordinatorsBlockHeight)
 	if err != nil {
+		if ctx.Err() != nil {
+			log.L(ctx).Debugf("abandoning assembly for transaction %s: request expired", txID)
+			return
+		}
 		log.L(ctx).Errorf("failed to assemble and sign transaction: %s", err)
 		//This should never happen but if it does, the most likely cause of failure is an error in the local domain code. We should
 		// tell the coordinator so it can park or discard the transaction

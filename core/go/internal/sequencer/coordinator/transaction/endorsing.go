@@ -214,6 +214,7 @@ func (t *coordinatorTransaction) requestEndorsement(ctx context.Context, idempot
 		toEndorsableList(t.pt.PostAssembly.ReadStates),
 		toEndorsableList(t.pt.PostAssembly.OutputStates),
 		toEndorsableList(t.pt.PostAssembly.InfoStates),
+		t.clock.Now().Add(t.stateTimeout),
 	)
 	if err != nil {
 		log.L(ctx).Errorf("failed to send endorsement request to party %s: %s", party, err)

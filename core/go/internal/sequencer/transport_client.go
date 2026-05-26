@@ -141,6 +141,9 @@ func (sMgr *sequencerManager) handleAssembleRequest(ctx context.Context, message
 	assembleRequestEvent.StateLocksJSON = assembleRequest.StateLocks
 	assembleRequestEvent.PreAssembly = assembleRequest.PreAssembly
 	assembleRequestEvent.EventTime = time.Now()
+	if assembleRequest.ExpiryTimeUnixMs != 0 {
+		assembleRequestEvent.Expiry = time.UnixMilli(assembleRequest.ExpiryTimeUnixMs)
+	}
 
 	seq.GetOriginator().QueueEvent(ctx, assembleRequestEvent)
 }
@@ -599,14 +602,18 @@ func (sMgr *sequencerManager) handleEndorsementRequest(ctx context.Context, mess
 		return
 	}
 
-	seq.GetCoordinator().QueueEvent(ctx, &coordinator.EndorsementRequestReceivedEvent{
+	endorsementRequestReceivedEvent := &coordinator.EndorsementRequestReceivedEvent{
 		FromNode:                  message.FromNode,
 		TransactionId:             endorsementRequest.TransactionId,
 		IdempotencyKey:            endorsementRequest.IdempotencyKey,
 		Party:                     endorsementRequest.Party,
 		PrivateEndorsementRequest: privateEndorsementRequest,
 		AttestationRequest:        transactionEndorsement,
-	})
+	}
+	if endorsementRequest.ExpiryTimeUnixMs != 0 {
+		endorsementRequestReceivedEvent.Expiry = time.UnixMilli(endorsementRequest.ExpiryTimeUnixMs)
+	}
+	seq.GetCoordinator().QueueEvent(ctx, endorsementRequestReceivedEvent)
 }
 
 func (sMgr *sequencerManager) handleEndorsementResponse(ctx context.Context, message *components.ReceivedMessage) {

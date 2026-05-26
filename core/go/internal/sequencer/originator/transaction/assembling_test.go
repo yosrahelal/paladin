@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
@@ -75,9 +76,8 @@ func Test_handleAssembleAndSign_EngineIntegrationError(t *testing.T) {
 	txn.handleAssembleAndSign(ctx, txn.pt.ID, req, preAssembly)
 
 	// Verify AssembleErrorEvent was emitted so coordinator can park or discard the transaction
-	events := mocks.GetEmittedEvents()
-	require.Len(t, events, 1, "AssembleErrorEvent should be emitted when AssembleAndSign fails")
-	errorEvent, ok := events[0].(*AssembleErrorEvent)
+	event := <-mocks.Events
+	errorEvent, ok := event.(*AssembleErrorEvent)
 	require.True(t, ok, "Event should be AssembleErrorEvent")
 	assert.Equal(t, txn.pt.ID, errorEvent.TransactionID)
 	assert.Equal(t, req.requestID, errorEvent.RequestID)
@@ -115,10 +115,9 @@ func Test_handleAssembleAndSign_Success_OK(t *testing.T) {
 	txn.handleAssembleAndSign(ctx, txn.pt.ID, req, preAssembly)
 
 	// Verify AssembleAndSignSuccessEvent was emitted
-	events := mocks.GetEmittedEvents()
-	require.Len(t, events, 1, "Should emit exactly one event")
+	event := <-mocks.Events
 
-	successEvent, ok := events[0].(*AssembleAndSignSuccessEvent)
+	successEvent, ok := event.(*AssembleAndSignSuccessEvent)
 	require.True(t, ok, "Event should be AssembleAndSignSuccessEvent")
 	assert.Equal(t, txn.pt.ID, successEvent.TransactionID)
 	assert.Equal(t, req.requestID, successEvent.RequestID)
@@ -159,10 +158,9 @@ func Test_handleAssembleAndSign_Success_REVERT(t *testing.T) {
 	txn.handleAssembleAndSign(ctx, txn.pt.ID, req, preAssembly)
 
 	// Verify AssembleRevertEvent was emitted
-	events := mocks.GetEmittedEvents()
-	require.Len(t, events, 1, "Should emit exactly one event")
+	event := <-mocks.Events
 
-	revertEvent, ok := events[0].(*AssembleRevertEvent)
+	revertEvent, ok := event.(*AssembleRevertEvent)
 	require.True(t, ok, "Event should be AssembleRevertEvent")
 	assert.Equal(t, txn.pt.ID, revertEvent.TransactionID)
 	assert.Equal(t, req.requestID, revertEvent.RequestID)
@@ -201,10 +199,9 @@ func Test_handleAssembleAndSign_PARK(t *testing.T) {
 	txn.handleAssembleAndSign(ctx, txn.pt.ID, req, preAssembly)
 
 	// Verify AssembleParkEvent was emitted
-	events := mocks.GetEmittedEvents()
-	require.Len(t, events, 1, "Should emit exactly one event")
+	event := <-mocks.Events
 
-	parkEvent, ok := events[0].(*AssembleParkEvent)
+	parkEvent, ok := event.(*AssembleParkEvent)
 	require.True(t, ok, "Event should be AssembleParkEvent")
 	assert.Equal(t, txn.pt.ID, parkEvent.TransactionID)
 	assert.Equal(t, req.requestID, parkEvent.RequestID)
@@ -250,9 +247,8 @@ func Test_handleAssembleAndSign_CalledWithCorrectParameters(t *testing.T) {
 	mocks.EngineIntegration.AssertExpectations(t)
 
 	// Verify event was emitted with correct request ID
-	events := mocks.GetEmittedEvents()
-	require.Len(t, events, 1, "Should emit exactly one event")
-	successEvent, ok := events[0].(*AssembleAndSignSuccessEvent)
+	event := <-mocks.Events
+	successEvent, ok := event.(*AssembleAndSignSuccessEvent)
 	require.True(t, ok, "Event should be AssembleAndSignSuccessEvent")
 	assert.Equal(t, req.requestID, successEvent.RequestID)
 }
@@ -413,4 +409,74 @@ func Test_action_SendAssembleErrorResponse_TransportError(t *testing.T) {
 	err := action_SendAssembleErrorResponse(ctx, txn, nil)
 	assert.Error(t, err)
 	assert.Equal(t, expectedError, err)
+}
+
+func Test_handleAssembleAndSign_AbandonsSilently_WhenContextExpired(t *testing.T) {
+	// When the context is already expired (deadline elapsed), handleAssembleAndSign must not
+	// queue any event back to the originator.  The coordinator that sent the request will have
+	// timed out and discarded it, so sending an error event would be spurious.
+	builder := NewTransactionBuilderForTesting(t, State_Assembling)
+	txn, mocks := builder.BuildWithMocks()
+
+	require.NotNil(t, txn.latestAssembleRequest)
+	req := *txn.latestAssembleRequest
+	preAssembly := &components.TransactionPreAssembly{}
+
+	// Context that is already cancelled
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// Mock AssembleAndSign to return an error (as would happen when ctx is cancelled)
+	mocks.EngineIntegration.On(
+		"AssembleAndSign",
+		mock.Anything,
+		txn.pt.ID,
+		preAssembly,
+		mock.Anything,
+		mock.Anything,
+	).Return(nil, context.Canceled)
+
+	txn.handleAssembleAndSign(ctx, txn.pt.ID, req, preAssembly)
+
+	// No event should have been queued — the mock will fail if any unexpected call happens
+	select {
+	case e := <-mocks.Events:
+		t.Fatalf("unexpected event queued when context was cancelled: %T", e)
+	default:
+	}
+}
+
+func Test_action_AssembleAndSign_UsesDeadlineContext_WhenExpirySet(t *testing.T) {
+	// When the assemble request carries a non-zero expiry, action_AssembleAndSign must pass a
+	// context with that deadline to the goroutine.  Verify this by setting an already-elapsed
+	// expiry: the goroutine's AssembleAndSign call will see a cancelled context.
+	ctx := t.Context()
+
+	expiry := time.Now().Add(-time.Second) // already expired
+
+	done := make(chan struct{})
+	builder := NewTransactionBuilderForTesting(t, State_Assembling).
+		QueueEventsTo(func(_ context.Context, _ common.Event) { close(done) })
+	txn := builder.Build()
+	txn.latestAssembleRequest.expiry = expiry
+
+	builder.fakeEngineIntegration.On(
+		"AssembleAndSign",
+		mock.Anything,
+		txn.pt.ID,
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+	).Return(nil, context.DeadlineExceeded)
+
+	err := action_AssembleAndSign(ctx, txn, nil)
+	require.NoError(t, err)
+
+	// The goroutine should exit without queuing any event (no close(done) call).
+	select {
+	case <-done:
+		t.Fatal("unexpected event queued when context was already expired")
+	case <-time.After(200 * time.Millisecond):
+		// Expected: goroutine completed silently
+	}
 }

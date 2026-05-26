@@ -72,6 +72,7 @@ message EndorsementRequest {
     repeated google.protobuf.Any readStates = 10;
     repeated google.protobuf.Any outputStates = 11;
     repeated google.protobuf.Any infoStates = 12;
+    int64 expiry_time_unix_ms = 13;
 }
 
 message EndorsementResponse {
@@ -153,6 +154,7 @@ message AssembleRequest {
     bytes pre_assembly = 5;
     bytes state_locks = 6;
     int64 block_height = 7;
+    int64 expiry_time_unix_ms = 8;
 }
 
 message AssembleResponse {

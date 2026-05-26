@@ -18,6 +18,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
@@ -41,9 +42,9 @@ type TransportWriter interface {
 	SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64, blockHeight uint64) error
 	SendDelegationRequestRejection(ctx context.Context, delegatingNodeName string, delegationId string, blockHeight uint64, activeCoordinator string) error
 	SendHandoverRequest(ctx context.Context, targetNode string, contractAddress *pldtypes.EthAddress) error
-	SendEndorsementRequest(ctx context.Context, txID uuid.UUID, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState) error
+	SendEndorsementRequest(ctx context.Context, txID uuid.UUID, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState, expiryTime time.Time) error
 	SendEndorsementResponse(ctx context.Context, transactionId, idempotencyKey, contractAddress string, attResult *prototk.AttestationResult, endorsementResult *components.EndorsementResult, revertReason, endorsementName, party, node string) error
-	SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, blockHeight int64) error
+	SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, blockHeight int64, expiryTime time.Time) error
 	SendAssembleResponse(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, postAssembly *components.TransactionPostAssembly, preAssembly *components.TransactionPreAssembly, recipient string) error
 	SendAssembleErrorResponse(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string) error
 	SendNonceAssigned(ctx context.Context, txID uuid.UUID, originatorNode string, contractAddress *pldtypes.EthAddress, nonce uint64) error
@@ -208,7 +209,7 @@ func (tw *transportWriter) SendHandoverRequest(ctx context.Context, targetNode s
 }
 
 // TODO do we have duplication here?  contractAddress and transactionID are in the transactionSpecification
-func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, txID uuid.UUID, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState) error {
+func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, txID uuid.UUID, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState, expiryTime time.Time) error {
 	attRequestAny, err := anypb.New(attRequest)
 	if err != nil {
 		log.L(ctx).Error("error marshalling attestation request", err)
@@ -298,6 +299,7 @@ func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, txID uuid
 		ReadStates:               readStatesAny,
 		OutputStates:             outputStatesAny,
 		InfoStates:               infoStatesAny,
+		ExpiryTimeUnixMs:         expiryTime.UnixMilli(),
 	}
 
 	endorsementRequestBytes, err := proto.Marshal(endorsementRequest)
@@ -357,7 +359,7 @@ func (tw *transportWriter) SendEndorsementResponse(ctx context.Context, transact
 	return err
 }
 
-func (tw *transportWriter) SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, blockHeight int64) error {
+func (tw *transportWriter) SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, blockHeight int64, expiryTime time.Time) error {
 
 	log.L(ctx).Tracef("transport writer attempting to send assemble request to assembling node %s", assemblingNode)
 
@@ -380,6 +382,7 @@ func (tw *transportWriter) SendAssembleRequest(ctx context.Context, assemblingNo
 		PreAssembly:       preAssemblyBytes,
 		StateLocks:        stateLocksJSON,
 		BlockHeight:       blockHeight,
+		ExpiryTimeUnixMs:  expiryTime.UnixMilli(),
 	}
 
 	assembleRequestBytes, err := proto.Marshal(assembleRequest)

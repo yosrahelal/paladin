@@ -17,6 +17,7 @@ package testutil
 
 import (
 	"context"
+	"time"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
@@ -171,6 +172,7 @@ func (r *SentMessageRecorder) SendAssembleRequest(
 	transactionPreassembly *components.TransactionPreAssembly,
 	stateLocks grapher.ExportableStates,
 	blockHeight int64,
+	expiryTime time.Time,
 ) error {
 	r.hasSentAssembleRequest = true
 	r.sentAssembleRequestIdempotencyKey = idempotencyKey
@@ -192,6 +194,7 @@ func (r *SentMessageRecorder) SendEndorsementRequest(
 	readStates []*prototk.EndorsableState,
 	outputStates []*prototk.EndorsableState,
 	infoStates []*prototk.EndorsableState,
+	expiryTime time.Time,
 ) error {
 	r.numberOfSentEndorsementRequests++
 	if _, ok := r.numberOfEndorsementRequestsForParty[party]; ok {
