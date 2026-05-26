@@ -198,12 +198,7 @@ func TestHandleAssembleRequest_Success(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -265,7 +260,7 @@ func TestHandleAssembleRequest_InvalidContractAddress(t *testing.T) {
 	sm.handleAssembleRequest(ctx, message)
 }
 
-func TestHandleAssembleRequest_LoadSequencerError(t *testing.T) {
+func TestHandleAssembleRequest_SequencerNotLoaded(t *testing.T) {
 	ctx := context.Background()
 	mocks := newTransportClientTestMocks(t)
 	sm := newSequencerManagerForTransportClientTesting(t, mocks)
@@ -293,13 +288,7 @@ func TestHandleAssembleRequest_LoadSequencerError(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will fail
-	mocks.components.EXPECT().DomainManager().Return(mocks.domainManager).Once()
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Once()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Once()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, errors.New("not found")).Once()
-
-	// Should not panic
+	// GetSequencer is used and returns nil since no sequencer is in memory - should not panic
 	sm.handleAssembleRequest(ctx, message)
 }
 
@@ -334,12 +323,7 @@ func TestHandleAssembleResponse_Success(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called, so we need to mock its dependencies
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -384,12 +368,7 @@ func TestHandleAssembleResponse_Revert(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -426,12 +405,7 @@ func TestHandleAssembleError_Success(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -518,12 +492,7 @@ func TestHandleNonceAssigned_Success(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -559,12 +528,7 @@ func TestHandleTransactionSubmitted_Success(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -599,12 +563,7 @@ func TestHandleTransactionConfirmed_Success(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -644,12 +603,7 @@ func TestHandleTransactionConfirmed_Reverted(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -685,11 +639,7 @@ func TestHandleTransactionConfirmed_RevertedWhenWillRetryTrueAndNoRevertReason(t
 		Payload:     payload,
 	}
 
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -727,12 +677,7 @@ func TestHandleDispatchedEvent_Success(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -824,6 +769,12 @@ func TestHandleCoordinatorHeartbeatNotification_SequencerNotLoaded(t *testing.T)
 		Payload:     payload,
 	}
 
+	// LoadSequencer is called; returning an error causes it to return (nil, nil)
+	mocks.components.EXPECT().DomainManager().Return(mocks.domainManager).Once()
+	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Once()
+	mocks.persistence.EXPECT().NOTX().Return(nil).Once()
+	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, errors.New("not found")).Once()
+
 	sm.handleCoordinatorHeartbeatNotification(ctx, message)
 	assert.Empty(t, sm.sequencers)
 }
@@ -856,12 +807,7 @@ func TestHandlePreDispatchRequest_Success(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -901,12 +847,7 @@ func TestHandlePreDispatchResponse_Success(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -2204,12 +2145,7 @@ func TestHandleEndorsementResponse_Success(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -2250,12 +2186,7 @@ func TestHandleEndorsementResponse_Revert(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
@@ -2311,7 +2242,7 @@ func TestHandleEndorsementResponse_InvalidContractAddress(t *testing.T) {
 	sm.handleEndorsementResponse(ctx, message)
 }
 
-func TestHandleEndorsementResponse_LoadSequencerError(t *testing.T) {
+func TestHandleEndorsementResponse_SequencerNotLoaded(t *testing.T) {
 	ctx := context.Background()
 	mocks := newTransportClientTestMocks(t)
 	sm := newSequencerManagerForTransportClientTesting(t, mocks)
@@ -2334,13 +2265,7 @@ func TestHandleEndorsementResponse_LoadSequencerError(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will fail
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Once()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Once()
-	mocks.components.EXPECT().DomainManager().Return(mocks.domainManager).Once()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, errors.New("not found")).Once()
-
-	// Should not panic
+	// GetSequencer is used and returns nil since no sequencer is in memory - should not panic
 	sm.handleEndorsementResponse(ctx, message)
 }
 
@@ -2372,12 +2297,7 @@ func TestHandleEndorsementResponse_EndorsementUnmarshalError(t *testing.T) {
 		Payload:     payload,
 	}
 
-	// Setup mocks - LoadSequencer will be called
-	setupDefaultMocks(ctx, mocks, contractAddr)
-	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
-	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
-	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
-
+	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 

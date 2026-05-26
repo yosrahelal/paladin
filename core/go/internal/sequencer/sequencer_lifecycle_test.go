@@ -413,8 +413,7 @@ func TestSequencerManager_GetSequencer_NotLoaded(t *testing.T) {
 	mocks := newSequencerLifecycleTestMocks(t)
 	sm := newSequencerManagerForTesting(t, mocks)
 
-	seq, err := sm.GetSequencer(ctx, *contractAddr)
-	require.NoError(t, err)
+	seq := sm.GetSequencer(ctx, *contractAddr)
 	assert.Nil(t, seq)
 }
 
@@ -429,8 +428,7 @@ func TestSequencerManager_GetSequencer_Loaded(t *testing.T) {
 	sm.sequencers[contractAddr.String()] = existing
 	sm.sequencersLock.Unlock()
 
-	seq, err := sm.GetSequencer(ctx, *contractAddr)
-	require.NoError(t, err)
+	seq := sm.GetSequencer(ctx, *contractAddr)
 	assert.Equal(t, existing, seq)
 }
 

@@ -106,17 +106,8 @@ func (seq *sequencer) heartbeatLoop(ctx context.Context, heartbeatInterval time.
 
 // Return the sequencer for the requested contract address, instantiating it first if this is its first use.
 func (sMgr *sequencerManager) LoadSequencer(ctx context.Context, dbTX persistence.DBTX, contractAddr pldtypes.EthAddress, domainAPI components.DomainSmartContract, tx *components.PrivateTransaction) (Sequencer, error) {
-	return sMgr.loadSequencer(ctx, dbTX, contractAddr, domainAPI, tx, true)
-}
-
-// Return the sequencer only if it is already in memory. This never instantiates a new sequencer.
-func (sMgr *sequencerManager) GetSequencer(ctx context.Context, contractAddr pldtypes.EthAddress) (Sequencer, error) {
-	return sMgr.loadSequencer(ctx, nil, contractAddr, nil, nil, false)
-}
-
-func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistence.DBTX, contractAddr pldtypes.EthAddress, domainAPI components.DomainSmartContract, tx *components.PrivateTransaction, instantiate bool) (Sequencer, error) {
 	var err error
-	if instantiate && domainAPI == nil {
+	if domainAPI == nil {
 		// Does a domain exist at this address?
 		_, err = sMgr.components.DomainManager().GetSmartContractByAddress(ctx, dbTX, contractAddr)
 		if err != nil {
@@ -135,10 +126,6 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 	}()
 
 	if sMgr.sequencers[contractAddr.String()] == nil {
-		if !instantiate {
-			return nil, nil
-		}
-
 		//swap the read lock for a write lock
 		sMgr.sequencersLock.RUnlock()
 		readlock = false
@@ -258,6 +245,17 @@ func (sMgr *sequencerManager) loadSequencer(ctx context.Context, dbTX persistenc
 	}
 
 	return sMgr.sequencers[contractAddr.String()], nil
+}
+
+// Return the sequencer only if it is already in memory. This never instantiates a new sequencer.
+func (sMgr *sequencerManager) GetSequencer(ctx context.Context, contractAddr pldtypes.EthAddress) Sequencer {
+	sMgr.sequencersLock.RLock()
+	defer sMgr.sequencersLock.RUnlock()
+	s := sMgr.sequencers[contractAddr.String()]
+	if s == nil {
+		return nil
+	}
+	return s
 }
 
 func (sMgr *sequencerManager) StopAllSequencers(ctx context.Context) {
