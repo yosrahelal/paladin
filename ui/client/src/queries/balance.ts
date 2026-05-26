@@ -31,7 +31,6 @@ export interface BalanceOfResult {
 export const callBalanceOf = async (
   domain: string,
   contractAddress: string,
-  from: string,
   params: BalanceOfParams
 ): Promise<BalanceOfResult> => {
   const payload = {
@@ -43,7 +42,6 @@ export const callBalanceOf = async (
         type: 'private',
         domain,
         function: 'balanceOf',
-        from,
         to: contractAddress,
         data: params,
         abi: [

@@ -88,6 +88,7 @@ export interface ITransactionReceipt {
   id: string;
   success: boolean;
   transactionHash: string;
+  failureMessage?: string;
 }
 
 export interface IStateReceipt {

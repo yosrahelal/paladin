@@ -45,14 +45,13 @@ export const CheckBalanceDialog: React.FC<Props> = ({
   contractAddress,
 }) => {
   const [account, setAccount] = useState('');
-  const [from, setFrom] = useState('');
   const [isError, setIsError] = useState(false);
   const [result, setResult] = useState<BalanceOfResult>();
   const { t } = useTranslation();
 
   const { refetch } = useQuery({
-    queryKey: ['balanceOf', domain, contractAddress, account, from],
-    queryFn: () => callBalanceOf(domain, contractAddress, from, { account }),
+    queryKey: ['balanceOf', domain, contractAddress, account],
+    queryFn: () => callBalanceOf(domain, contractAddress, { account }),
     enabled: false,
     refetchOnMount: false,
     retry: false,
@@ -60,13 +59,10 @@ export const CheckBalanceDialog: React.FC<Props> = ({
   });
 
   useEffect(() => {
-    if (!dialogOpen) {
-      setTimeout(() => {
-        setAccount('');
-        setFrom('');
-        setIsError(false);
-        setResult(undefined);
-      }, 200);
+    if (dialogOpen) {
+      setAccount('');
+      setIsError(false);
+      setResult(undefined);
     }
   }, [dialogOpen]);
 
@@ -77,7 +73,7 @@ export const CheckBalanceDialog: React.FC<Props> = ({
     });
   };
 
-  const canSubmit = account.length > 0 && from.length > 0;
+  const canSubmit = account.length > 0;
 
   const formatBalance = (hexValue: string) => {
     try {
@@ -154,16 +150,6 @@ export const CheckBalanceDialog: React.FC<Props> = ({
           )}
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ marginTop: '5px' }}>
-            <TextField
-              fullWidth
-              label={t('from')}
-              autoComplete="off"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
-              sx={{ marginBottom: '20px' }}
-            />
-          </Box>
           <Box sx={{ marginTop: '5px' }}>
             <TextField
               fullWidth

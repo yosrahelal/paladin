@@ -89,8 +89,10 @@ export const EnrichedTransaction: React.FC<Props> = ({
               <TransactionStatus transaction={enrichedTransaction} />
             </Grid2>
             <Grid2>
+              <Box sx={{ minWidth: '100px', textAlign: 'center' }}>
               <Typography align="center" variant="body2" color="textSecondary">{t('time')}</Typography>
-              <EllapsedTime icon={<></>} timestamp={enrichedTransaction.block.timestamp} />
+              <EllapsedTime icon={null} timestamp={enrichedTransaction.block.timestamp} />
+              </Box>
             </Grid2>
             <Grid2 alignContent="center">
               <Tooltip arrow title={t('open')}>
