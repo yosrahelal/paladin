@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -45,19 +46,19 @@ func TestAction_AssembleAndSign_NoAssembleRequest(t *testing.T) {
 	assert.Contains(t, err.Error(), "No assemble request found")
 }
 
-func TestAction_AssembleAndSign_EngineIntegrationError(t *testing.T) {
-	// Test that action_AssembleAndSign returns error when AssembleAndSign fails
+func Test_handleAssembleAndSign_EngineIntegrationError(t *testing.T) {
+	// Test that handleAssembleAndSign queues AssembleErrorEvent when AssembleAndSign fails
 	ctx := context.Background()
 	builder := NewTransactionBuilderForTesting(t, State_Assembling)
 	txn, mocks := builder.BuildWithMocks()
 
 	// Ensure latestAssembleRequest is set (should be set by builder for State_Assembling)
 	require.NotNil(t, txn.latestAssembleRequest, "latestAssembleRequest should be set for State_Assembling")
+	req := *txn.latestAssembleRequest
 
 	// Set up PreAssembly
-	if txn.pt.PreAssembly == nil {
-		txn.pt.PreAssembly = &components.TransactionPreAssembly{}
-	}
+	preAssembly := &components.TransactionPreAssembly{}
+	txn.pt.PreAssembly = preAssembly
 
 	// Mock AssembleAndSign to return an error
 	expectedError := errors.New("assembly failed")
@@ -65,17 +66,13 @@ func TestAction_AssembleAndSign_EngineIntegrationError(t *testing.T) {
 		"AssembleAndSign",
 		mock.Anything,
 		txn.pt.ID,
-		txn.pt.PreAssembly,
+		preAssembly,
 		mock.Anything,
 		mock.Anything,
 	).Return(nil, expectedError)
 
-	// Execute the action
-	err := action_AssembleAndSign(ctx, txn, nil)
-
-	// Verify error is returned
-	assert.Error(t, err)
-	assert.Equal(t, expectedError, err)
+	// Execute the method
+	txn.handleAssembleAndSign(ctx, txn.pt.ID, req, preAssembly)
 
 	// Verify AssembleErrorEvent was emitted so coordinator can park or discard the transaction
 	events := mocks.GetEmittedEvents()
@@ -83,23 +80,21 @@ func TestAction_AssembleAndSign_EngineIntegrationError(t *testing.T) {
 	errorEvent, ok := events[0].(*AssembleErrorEvent)
 	require.True(t, ok, "Event should be AssembleErrorEvent")
 	assert.Equal(t, txn.pt.ID, errorEvent.TransactionID)
-	assert.Equal(t, txn.latestAssembleRequest.requestID, errorEvent.RequestID)
+	assert.Equal(t, req.requestID, errorEvent.RequestID)
 }
 
-func TestAction_AssembleAndSign_Success_OK(t *testing.T) {
-	// Test that action_AssembleAndSign emits AssembleAndSignSuccessEvent when AssembleAndSign returns OK
+func Test_handleAssembleAndSign_Success_OK(t *testing.T) {
+	// Test that handleAssembleAndSign emits AssembleAndSignSuccessEvent when AssembleAndSign returns OK
 	ctx := context.Background()
 	builder := NewTransactionBuilderForTesting(t, State_Assembling)
 	txn, mocks := builder.BuildWithMocks()
 
 	// Ensure latestAssembleRequest is set
 	require.NotNil(t, txn.latestAssembleRequest, "latestAssembleRequest should be set for State_Assembling")
-	requestID := txn.latestAssembleRequest.requestID
+	req := *txn.latestAssembleRequest
 
 	// Set up PreAssembly
-	if txn.pt.PreAssembly == nil {
-		txn.pt.PreAssembly = &components.TransactionPreAssembly{}
-	}
+	preAssembly := &components.TransactionPreAssembly{}
 
 	// Create expected post assembly with OK result
 	expectedPostAssembly := &components.TransactionPostAssembly{
@@ -111,16 +106,13 @@ func TestAction_AssembleAndSign_Success_OK(t *testing.T) {
 		"AssembleAndSign",
 		mock.Anything,
 		txn.pt.ID,
-		txn.pt.PreAssembly,
+		preAssembly,
 		mock.Anything,
 		mock.Anything,
 	).Return(expectedPostAssembly, nil)
 
-	// Execute the action
-	err := action_AssembleAndSign(ctx, txn, nil)
-
-	// Verify no error
-	assert.NoError(t, err)
+	// Execute the method
+	txn.handleAssembleAndSign(ctx, txn.pt.ID, req, preAssembly)
 
 	// Verify AssembleAndSignSuccessEvent was emitted
 	events := mocks.GetEmittedEvents()
@@ -129,24 +121,22 @@ func TestAction_AssembleAndSign_Success_OK(t *testing.T) {
 	successEvent, ok := events[0].(*AssembleAndSignSuccessEvent)
 	require.True(t, ok, "Event should be AssembleAndSignSuccessEvent")
 	assert.Equal(t, txn.pt.ID, successEvent.TransactionID)
-	assert.Equal(t, requestID, successEvent.RequestID)
+	assert.Equal(t, req.requestID, successEvent.RequestID)
 	assert.Equal(t, expectedPostAssembly, successEvent.PostAssembly)
 }
 
-func TestAction_AssembleAndSign_Success_REVERT(t *testing.T) {
-	// Test that action_AssembleAndSign emits AssembleRevertEvent when AssembleAndSign returns REVERT
+func Test_handleAssembleAndSign_Success_REVERT(t *testing.T) {
+	// Test that handleAssembleAndSign emits AssembleRevertEvent when AssembleAndSign returns REVERT
 	ctx := context.Background()
 	builder := NewTransactionBuilderForTesting(t, State_Assembling)
 	txn, mocks := builder.BuildWithMocks()
 
 	// Ensure latestAssembleRequest is set
 	require.NotNil(t, txn.latestAssembleRequest, "latestAssembleRequest should be set for State_Assembling")
-	requestID := txn.latestAssembleRequest.requestID
+	req := *txn.latestAssembleRequest
 
 	// Set up PreAssembly
-	if txn.pt.PreAssembly == nil {
-		txn.pt.PreAssembly = &components.TransactionPreAssembly{}
-	}
+	preAssembly := &components.TransactionPreAssembly{}
 
 	// Create expected post assembly with REVERT result
 	revertReason := "transaction reverted"
@@ -160,16 +150,13 @@ func TestAction_AssembleAndSign_Success_REVERT(t *testing.T) {
 		"AssembleAndSign",
 		mock.Anything,
 		txn.pt.ID,
-		txn.pt.PreAssembly,
+		preAssembly,
 		mock.Anything,
 		mock.Anything,
 	).Return(expectedPostAssembly, nil)
 
-	// Execute the action
-	err := action_AssembleAndSign(ctx, txn, nil)
-
-	// Verify no error
-	assert.NoError(t, err)
+	// Execute the method
+	txn.handleAssembleAndSign(ctx, txn.pt.ID, req, preAssembly)
 
 	// Verify AssembleRevertEvent was emitted
 	events := mocks.GetEmittedEvents()
@@ -178,24 +165,22 @@ func TestAction_AssembleAndSign_Success_REVERT(t *testing.T) {
 	revertEvent, ok := events[0].(*AssembleRevertEvent)
 	require.True(t, ok, "Event should be AssembleRevertEvent")
 	assert.Equal(t, txn.pt.ID, revertEvent.TransactionID)
-	assert.Equal(t, requestID, revertEvent.RequestID)
+	assert.Equal(t, req.requestID, revertEvent.RequestID)
 	assert.Equal(t, expectedPostAssembly, revertEvent.PostAssembly)
 }
 
-func TestAction_AssembleAndSign_PARK(t *testing.T) {
-	// Test that action_AssembleAndSign emits AssembleParkEvent when AssembleAndSign returns PARK
+func Test_handleAssembleAndSign_PARK(t *testing.T) {
+	// Test that handleAssembleAndSign emits AssembleParkEvent when AssembleAndSign returns PARK
 	ctx := context.Background()
 	builder := NewTransactionBuilderForTesting(t, State_Assembling)
 	txn, mocks := builder.BuildWithMocks()
 
 	// Ensure latestAssembleRequest is set
 	require.NotNil(t, txn.latestAssembleRequest, "latestAssembleRequest should be set for State_Assembling")
-	requestID := txn.latestAssembleRequest.requestID
+	req := *txn.latestAssembleRequest
 
 	// Set up PreAssembly
-	if txn.pt.PreAssembly == nil {
-		txn.pt.PreAssembly = &components.TransactionPreAssembly{}
-	}
+	preAssembly := &components.TransactionPreAssembly{}
 
 	// Create expected post assembly with PARK result
 	expectedPostAssembly := &components.TransactionPostAssembly{
@@ -207,16 +192,13 @@ func TestAction_AssembleAndSign_PARK(t *testing.T) {
 		"AssembleAndSign",
 		mock.Anything,
 		txn.pt.ID,
-		txn.pt.PreAssembly,
+		preAssembly,
 		mock.Anything,
 		mock.Anything,
 	).Return(expectedPostAssembly, nil)
 
-	// Execute the action
-	err := action_AssembleAndSign(ctx, txn, nil)
-
-	// Verify no error
-	assert.NoError(t, err)
+	// Execute the method
+	txn.handleAssembleAndSign(ctx, txn.pt.ID, req, preAssembly)
 
 	// Verify AssembleParkEvent was emitted
 	events := mocks.GetEmittedEvents()
@@ -225,11 +207,11 @@ func TestAction_AssembleAndSign_PARK(t *testing.T) {
 	parkEvent, ok := events[0].(*AssembleParkEvent)
 	require.True(t, ok, "Event should be AssembleParkEvent")
 	assert.Equal(t, txn.pt.ID, parkEvent.TransactionID)
-	assert.Equal(t, requestID, parkEvent.RequestID)
+	assert.Equal(t, req.requestID, parkEvent.RequestID)
 	assert.Equal(t, expectedPostAssembly, parkEvent.PostAssembly)
 }
 
-func TestAction_AssembleAndSign_AssembleAndSignCalledWithCorrectParameters(t *testing.T) {
+func Test_handleAssembleAndSign_CalledWithCorrectParameters(t *testing.T) {
 	// Test that AssembleAndSign is called with correct parameters
 	ctx := context.Background()
 	builder := NewTransactionBuilderForTesting(t, State_Assembling)
@@ -237,9 +219,7 @@ func TestAction_AssembleAndSign_AssembleAndSignCalledWithCorrectParameters(t *te
 
 	// Ensure latestAssembleRequest is set
 	require.NotNil(t, txn.latestAssembleRequest, "latestAssembleRequest should be set for State_Assembling")
-	requestID := txn.latestAssembleRequest.requestID
-	stateLocksJSON := txn.latestAssembleRequest.stateLocksJSON
-	coordinatorsBlockHeight := txn.latestAssembleRequest.coordinatorsBlockHeight
+	req := *txn.latestAssembleRequest
 
 	// Set up PreAssembly
 	preAssembly := &components.TransactionPreAssembly{
@@ -247,7 +227,6 @@ func TestAction_AssembleAndSign_AssembleAndSignCalledWithCorrectParameters(t *te
 			TransactionId: txn.pt.ID.String(),
 		},
 	}
-	txn.pt.PreAssembly = preAssembly
 
 	// Create expected post assembly
 	expectedPostAssembly := &components.TransactionPostAssembly{
@@ -260,15 +239,12 @@ func TestAction_AssembleAndSign_AssembleAndSignCalledWithCorrectParameters(t *te
 		ctx,
 		txn.pt.ID,
 		preAssembly,
-		stateLocksJSON,
-		coordinatorsBlockHeight,
+		req.stateLocksJSON,
+		req.coordinatorsBlockHeight,
 	).Return(expectedPostAssembly, nil)
 
-	// Execute the action
-	err := action_AssembleAndSign(ctx, txn, nil)
-
-	// Verify no error
-	assert.NoError(t, err)
+	// Execute the method
+	txn.handleAssembleAndSign(ctx, txn.pt.ID, req, preAssembly)
 
 	// Verify AssembleAndSign was called with correct parameters
 	mocks.EngineIntegration.AssertExpectations(t)
@@ -278,7 +254,36 @@ func TestAction_AssembleAndSign_AssembleAndSignCalledWithCorrectParameters(t *te
 	require.Len(t, events, 1, "Should emit exactly one event")
 	successEvent, ok := events[0].(*AssembleAndSignSuccessEvent)
 	require.True(t, ok, "Event should be AssembleAndSignSuccessEvent")
-	assert.Equal(t, requestID, successEvent.RequestID)
+	assert.Equal(t, req.requestID, successEvent.RequestID)
+}
+
+func Test_action_AssembleAndSign_SpawnsGoroutineThatQueuesEvent(t *testing.T) {
+	ctx := t.Context()
+
+	done := make(chan struct{})
+	builder := NewTransactionBuilderForTesting(t, State_Assembling).
+		QueueEventsTo(func(_ context.Context, _ common.Event) { close(done) })
+	txn := builder.Build()
+
+	builder.fakeEngineIntegration.On(
+		"AssembleAndSign",
+		mock.Anything,
+		txn.pt.ID,
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+	).Return(&components.TransactionPostAssembly{
+		AssemblyResult: prototk.AssembleTransactionResponse_OK,
+	}, nil)
+
+	err := action_AssembleAndSign(ctx, txn, nil)
+	require.NoError(t, err)
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for assemble goroutine to queue event")
+	}
 }
 
 func Test_action_AssembleRequestReceived_SetsDelegateAndLatestRequest(t *testing.T) {
