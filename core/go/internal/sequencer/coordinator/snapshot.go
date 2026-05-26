@@ -20,24 +20,25 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
 
 func action_SendHeartbeat(ctx context.Context, c *coordinator, _ common.Event) error {
-	return c.sendHeartbeat(ctx, c.contractAddress)
+	return c.sendHeartbeat(ctx, false)
+}
+
+func action_SendHeartbeatWithLocks(ctx context.Context, c *coordinator, _ common.Event) error {
+	return c.sendHeartbeat(ctx, true)
 }
 
 // sendHeartbeat builds the base snapshot once, then sends a per-node copy to each heartbeat
 // recipient. In ENDORSER mode the recipients are the endorser candidates; in STATIC/SENDER modes
 // the originator activity map is updated first and its surviving keys are used.
-// In Active_Flush/Closing_Flush/Closing states, the grapher is queried per-node:
+// In Closing_Flush/Closing states, the grapher is queried per-node:
 // each node receives all locks (unfiltered) plus only the OutputStates it is permitted to hold
 // (filtered by AllowedNodes).
-func (c *coordinator) sendHeartbeat(ctx context.Context, contractAddress *pldtypes.EthAddress) error {
+func (c *coordinator) sendHeartbeat(ctx context.Context, includeLocks bool) error {
 	baseSnapshot := c.getSnapshot(ctx)
-	coordinatorState := baseSnapshot.CoordinatorState
-	includeLocks := coordinatorState == common.CoordinatorState_Closing_Flush || coordinatorState == common.CoordinatorState_Closing
 
 	var nodes []string
 	if c.coordinatorSelection == prototk.ContractConfig_COORDINATOR_ENDORSER {
@@ -49,7 +50,7 @@ func (c *coordinator) sendHeartbeat(ctx context.Context, contractAddress *pldtyp
 		}
 	}
 
-	log.L(ctx).Debugf("sending heartbeats for sequencer %s to %d nodes (includeLocks=%v)", contractAddress.String(), len(nodes), includeLocks)
+	log.L(ctx).Debugf("sending heartbeats for sequencer %s to %d nodes (includeLocks=%v)", c.contractAddress.String(), len(nodes), includeLocks)
 	var err error
 	for _, node := range nodes {
 		log.L(ctx).Debugf("sending heartbeat to %s", node)
@@ -71,7 +72,7 @@ func (c *coordinator) sendHeartbeat(ctx context.Context, contractAddress *pldtyp
 				OutputStates:           statesAndLocks.OutputState,
 			}
 		}
-		if sendErr := c.transportWriter.SendHeartbeat(ctx, node, contractAddress, snapshot); sendErr != nil {
+		if sendErr := c.transportWriter.SendHeartbeat(ctx, node, c.contractAddress, snapshot); sendErr != nil {
 			log.L(ctx).Errorf("error sending heartbeat to %s: %v", node, sendErr)
 			err = sendErr
 		}

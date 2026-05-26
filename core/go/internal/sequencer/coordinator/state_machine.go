@@ -583,14 +583,14 @@ var stateDefinitionsMap = StateDefinitions{
 		// Send an immediate heartbeat on entry so any node waiting in State_Elect sees the
 		// flush acknowledgement without waiting for the next heartbeat interval.
 		OnTransitionTo: []ActionRule{
-			{Action: action_SendHeartbeat},
+			{Action: action_SendHeartbeatWithLocks},
 		},
 		Events: map[EventType]EventHandlers{
 			common.Event_HeartbeatInterval: {Handlers: []EventHandler{{
 				Actions: []ActionRule{
 					{Action: action_UpdateOriginatorActivity},
 					{Action: action_IncrementHeartbeatIntervalsSinceStateChange},
-					{Action: action_SendHeartbeat},
+					{Action: action_SendHeartbeatWithLocks},
 					{Action: action_PropagateHeartbeatIntervalToTransactions},
 				},
 			}}},
@@ -655,7 +655,7 @@ var stateDefinitionsMap = StateDefinitions{
 	State_Closing: {
 		// Send an immediate heartbeat on entry so that any node waiting in State_Prepared sees
 		// the flush-complete signal without waiting for the next heartbeat interval.
-		OnTransitionTo: []ActionRule{{Action: action_SendHeartbeat}},
+		OnTransitionTo: []ActionRule{{Action: action_SendHeartbeatWithLocks}},
 		Events: map[EventType]EventHandlers{
 			common.Event_HeartbeatReceived: {Handlers: []EventHandler{{
 				Validator: validator_IsHeartbeatSenderLive,
@@ -668,7 +668,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{Action: action_UpdateOriginatorActivity},
 					{Action: action_IncrementHeartbeatIntervalsSinceStateChange},
-					{Action: action_SendHeartbeat},
+					{Action: action_SendHeartbeatWithLocks},
 					{Action: action_PropagateHeartbeatIntervalToTransactions},
 				},
 				Transitions: []Transition{
