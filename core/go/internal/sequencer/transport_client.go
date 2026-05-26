@@ -18,7 +18,6 @@ package sequencer
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
@@ -36,8 +35,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// TODO AM: lots of these functions load a sequencer even if they rely on the transaction existing in memory. They
-// should switch to using the get version instead
 func (sMgr *sequencerManager) HandlePaladinMsg(ctx context.Context, message *components.ReceivedMessage) {
 	//TODO this need to become an ultra low latency, non blocking, handover to the event loop thread.
 	// need some thought on how to handle errors, retries, buffering, swapping idle sequencers in and out of memory etc...
@@ -493,15 +490,8 @@ func (sMgr *sequencerManager) handleHandoverRequest(ctx context.Context, message
 	seq.GetCoordinator().QueueEvent(ctx, handoverEvent)
 }
 
-// TODO AM: this is being handled outside the sequencer, although a sequencer is loaded at the end purely to send the response.
-// This means there is no access to the sequencer's knowledge of current block height, current active coordinator etc, and logs
-// will be missing key context fields.
-// It does mean that endorsement is not single threaded which is important.
-// This should probably be moved into the sequencer (coordinator or originator?) but preserving the concurrency handling the event
-// with a new goroutine.
 func (sMgr *sequencerManager) handleEndorsementRequest(ctx context.Context, message *components.ReceivedMessage) {
 	endorsementRequest := &engineProto.EndorsementRequest{}
-
 	err := proto.Unmarshal(message.Payload, endorsementRequest)
 	if err != nil {
 		sMgr.logPaladinMessageUnmarshalError(ctx, message, err)
@@ -510,11 +500,6 @@ func (sMgr *sequencerManager) handleEndorsementRequest(ctx context.Context, mess
 
 	contractAddress := sMgr.parseContractAddressString(ctx, endorsementRequest.ContractAddress, message)
 	if contractAddress == nil {
-		return
-	}
-
-	psc, err := sMgr.components.DomainManager().GetSmartContractByAddress(ctx, sMgr.components.Persistence().NOTX(), *contractAddress)
-	if err != nil {
 		return
 	}
 
@@ -592,108 +577,36 @@ func (sMgr *sequencerManager) handleEndorsementRequest(ctx context.Context, mess
 		return
 	}
 
-	unqualifiedLookup, err := pldtypes.PrivateIdentityLocator(endorsementRequest.Party).Identity(ctx)
-	if err != nil {
-		log.L(ctx).Error(err)
-		return
+	privateEndorsementRequest := &components.PrivateTransactionEndorseRequest{
+		TransactionSpecification: transactionSpecification,
+		Verifiers:                transactionVerifiers,
+		Signatures:               transactionSignatures,
+		InputStates:              transactionInputStates,
+		ReadStates:               transactionReadStates,
+		OutputStates:             transactionOutputStates,
+		InfoStates:               transactionInfoStates,
+		Endorsement:              transactionEndorsement,
+		// Endorser is resolved by the coordinator goroutine via KeyManager.
 	}
 
-	resolvedSigner, err := sMgr.components.KeyManager().ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, transactionEndorsement.Algorithm, transactionEndorsement.VerifierType)
-	if err != nil {
-		errorMessage := fmt.Sprintf("failed to resolve key for party %s", endorsementRequest.Party)
-		log.L(ctx).Error(errorMessage)
-		return
-	}
-
-	privateEndorsementRequest := &components.PrivateTransactionEndorseRequest{}
-	privateEndorsementRequest.TransactionSpecification = transactionSpecification
-	privateEndorsementRequest.Verifiers = transactionVerifiers
-	privateEndorsementRequest.Signatures = transactionSignatures
-	privateEndorsementRequest.InputStates = transactionInputStates
-	privateEndorsementRequest.ReadStates = transactionReadStates
-	privateEndorsementRequest.OutputStates = transactionOutputStates
-	privateEndorsementRequest.InfoStates = transactionInfoStates
-
-	// Log private endorsement info states length
 	for _, state := range privateEndorsementRequest.InfoStates {
 		log.L(ctx).Debugf("private endorsement info state: %+v", state)
 	}
 
-	privateEndorsementRequest.Endorsement = transactionEndorsement
-	privateEndorsementRequest.Endorser = &prototk.ResolvedVerifier{
-		Lookup:       endorsementRequest.Party,
-		Algorithm:    transactionEndorsement.Algorithm,
-		Verifier:     resolvedSigner.Verifier.Verifier,
-		VerifierType: transactionEndorsement.VerifierType,
-	}
-
-	// Create a throwaway domain context for this call
-	dCtx := sMgr.components.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
-	defer dCtx.Close()
-	endorsementResult, err := psc.EndorseTransaction(dCtx, sMgr.components.Persistence().NOTX(), privateEndorsementRequest)
-	if err != nil {
-		log.L(ctx).Errorf("handleEndorsementRequest failed to endorse transaction: %s", err)
-		return
-	}
-	transactionEndorsement.Payload = endorsementResult.Payload
-
-	attResult := &prototk.AttestationResult{
-		Name:            transactionEndorsement.Name,
-		AttestationType: transactionEndorsement.AttestationType,
-		Verifier:        endorsementResult.Endorser,
-	}
-
-	revertReason := ""
-
-	switch endorsementResult.Result {
-	case prototk.EndorseTransactionResponse_REVERT:
-		revertReason = "(no revert reason)"
-		if endorsementResult.RevertReason != nil {
-			revertReason = *endorsementResult.RevertReason
-		}
-	case prototk.EndorseTransactionResponse_SIGN:
-		unqualifiedLookup, signerNode, err := pldtypes.PrivateIdentityLocator(endorsementResult.Endorser.Lookup).Validate(ctx, sMgr.nodeName, true)
-		if err != nil {
-			log.L(ctx).Errorf("handleEndorsementRequest failed to validate endorser: %s", err)
-			return
-		}
-		if signerNode == sMgr.nodeName {
-
-			log.L(ctx).Info("endorsement response signing request includes us - signing it now")
-			keyMgr := sMgr.components.KeyManager()
-			resolvedKey, err := keyMgr.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, transactionEndorsement.Algorithm, transactionEndorsement.VerifierType)
-			if err != nil {
-				log.L(ctx).Errorf("handleEndorsementRequest failed to resolve key for endorser: %s", err)
-				return
-			}
-
-			signaturePayload, err := keyMgr.Sign(ctx, resolvedKey, transactionEndorsement.PayloadType, transactionEndorsement.Payload)
-			if err != nil {
-				log.L(ctx).Errorf("handleEndorsementRequest failed to sign endorsement request: %s", err)
-				return
-			}
-			attResult.Payload = signaturePayload
-
-		} else {
-			// This can presumably never happen, since this endorsement request came to us
-			log.L(ctx).Errorf("handleEndorsementRequest received isn't for this node: %s", signerNode)
-		}
-	case prototk.EndorseTransactionResponse_ENDORSER_SUBMIT:
-		attResult.Constraints = append(attResult.Constraints, prototk.AttestationResult_ENDORSER_MUST_SUBMIT)
-	}
-
 	seq, err := sMgr.LoadSequencer(ctx, sMgr.components.Persistence().NOTX(), *contractAddress, nil, nil)
 	if seq == nil || err != nil {
-		log.L(ctx).Errorf("handleEndorsementRequest failed to obtain sequencer to pass endorsement event %v:", err)
+		log.L(ctx).Errorf("handleEndorsementRequest failed to obtain sequencer: %v", err)
 		return
 	}
 
-	sMgr.metrics.IncEndorsedTransactions()
-	err = seq.GetTransportWriter().SendEndorsementResponse(ctx, endorsementRequest.TransactionId, endorsementRequest.IdempotencyKey, contractAddress.String(), attResult, endorsementResult, revertReason, transactionEndorsement.Name, endorsementRequest.Party, message.FromNode)
-	if err != nil {
-		log.L(ctx).Errorf("handleEndorsementRequest failed to send endorsement response: %s", err)
-		return
-	}
+	seq.GetCoordinator().QueueEvent(ctx, &coordinator.EndorsementRequestReceivedEvent{
+		FromNode:                  message.FromNode,
+		TransactionId:             endorsementRequest.TransactionId,
+		IdempotencyKey:            endorsementRequest.IdempotencyKey,
+		Party:                     endorsementRequest.Party,
+		PrivateEndorsementRequest: privateEndorsementRequest,
+		AttestationRequest:        transactionEndorsement,
+	})
 }
 
 func (sMgr *sequencerManager) handleEndorsementResponse(ctx context.Context, message *components.ReceivedMessage) {

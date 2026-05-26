@@ -17,12 +17,15 @@ package coordinator
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
+	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -186,6 +189,21 @@ func TestCoordinator_WhenIdle_NewBlock_NotNewEpoch_UpdatesBlockHeightAndStaysIdl
 	assert.Empty(t, c.coordinatorPriorityList, "action_CalculateCoordinatorPriorities must NOT run within the same epoch")
 }
 
+func TestCoordinator_WhenIdle_EndorsementRequestReceived_UpdatesActiveCoordinatorAndTransitionsToObserving(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node2", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Observing, c.GetCurrentState())
+	assert.Equal(t, "node2", c.currentActiveCoordinator)
+}
+
 func TestCoordinator_WhenObserving_TransitionsToIdle_OnHeartbeatIntervalInactiveGrace(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
@@ -281,6 +299,21 @@ func TestCoordinator_WhenObserving_NewBlock_NotNewEpoch_UpdatesBlockHeightAndSta
 	assert.Equal(t, State_Observing, c.GetCurrentState())
 	assert.Equal(t, uint64(120), c.currentBlockHeight)
 	assert.Empty(t, c.coordinatorPriorityList, "action_CalculateCoordinatorPriorities must NOT run within the same epoch")
+}
+
+func TestCoordinator_WhenObserving_EndorsementRequestReceived_UpdatesActiveCoordinatorAndStaysObserving(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
+		NodeName("node2").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Observing, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_WhenElectRequestTimeoutFires_NudgesHandoverRequest(t *testing.T) {
@@ -572,6 +605,79 @@ func TestCoordinator_WhenElect_TransactionStateTransition_ToFinal_CleansUpAndSta
 	}))
 	assert.Equal(t, State_Elect, c.GetCurrentState())
 	assert.Empty(t, c.transactionsByID, "action_CleanUpTransaction must remove the finalised transaction")
+}
+
+func TestCoordinator_WhenElect_EndorsementRequestReceived_HigherPriority_NoInflight_TransitionsToObserving(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+	// No transactions in memory: guard_HasTransactionsInflight = false → Observing.
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Observing, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenElect_EndorsementRequestReceived_HigherPriority_InflightAndUnconfirmed_TransitionsToClosingFlush(t *testing.T) {
+	ctx := t.Context()
+	tx, txID := newDispatchedTxMock(t)
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Transactions(tx).
+		Build()
+	c.inFlightTxns[txID] = tx // mark as unconfirmed dispatched
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenElect_EndorsementRequestReceived_HigherPriority_InflightNoUnconfirmed_TransitionsToClosing(t *testing.T) {
+	ctx := t.Context()
+	// Use newDispatchedTxMock so GetSnapshot/.Maybe() is already set up for the OnTransitionTo
+	// action_SendHeartbeat that fires when entering State_Closing.
+	tx, _ := newDispatchedTxMock(t)
+	// Override state to Confirmed so the tx counts as inflight-but-no-unconfirmed-dispatched.
+	tx.EXPECT().GetCurrentState().Unset()
+	tx.EXPECT().GetCurrentState().Return(transaction.State_Confirmed).Maybe()
+
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Transactions(tx).
+		Build()
+	// Tx is inflight (in memory) but NOT in inFlightTxns (no unconfirmed dispatched).
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Closing, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenElect_EndorsementRequestReceived_LowerPriority_Ignored(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node1").
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks) // node3 < node1 in priority
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Elect, c.GetCurrentState())
+	assert.Equal(t, "node2", c.currentActiveCoordinator, "lower-priority sender must not update active coordinator")
 }
 
 func TestCoordinator_WhenPrepared_HeartbeatInterval_WithinGrace_SendsHeartbeatAndStaysPrepared(t *testing.T) {
@@ -877,6 +983,74 @@ func TestCoordinator_WhenPreparedTransitionsToActive_RefreshesSigningIdentityAnd
 	assert.NotEmpty(t, c.signingIdentity.value)
 	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
 	// mock expectation on pooledTx.HandleEvent(SelectedEvent) verified by testify
+}
+
+func TestCoordinator_WhenPrepared_EndorsementRequestReceived_HigherPriority_NoInflight_TransitionsToObserving(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Observing, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenPrepared_EndorsementRequestReceived_HigherPriority_InflightAndUnconfirmed_TransitionsToClosingFlush(t *testing.T) {
+	ctx := t.Context()
+	tx, txID := newDispatchedTxMock(t)
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Transactions(tx).
+		Build()
+	c.inFlightTxns[txID] = tx // mark as unconfirmed dispatched
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenPrepared_EndorsementRequestReceived_HigherPriority_InflightNoUnconfirmed_TransitionsToClosing(t *testing.T) {
+	ctx := t.Context()
+	tx, _ := newDispatchedTxMock(t)
+	tx.EXPECT().GetCurrentState().Unset()
+	tx.EXPECT().GetCurrentState().Return(transaction.State_Confirmed).Maybe()
+
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Transactions(tx).
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Closing, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenPrepared_EndorsementRequestReceived_LowerPriority_Ignored(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
+		NodeName("node1").
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Prepared, c.GetCurrentState())
+	assert.Equal(t, "node2", c.currentActiveCoordinator, "lower-priority sender must not update active coordinator")
 }
 
 func TestCoordinator_WhenActive_TransitionsToIdle_OnHeartbeatInterval_WhenNoInflight(t *testing.T) {
@@ -1242,6 +1416,71 @@ func TestCoordinator_WhenActive_RestartDispatchLoop_StaysActive(t *testing.T) {
 	assert.Equal(t, State_Active, c.GetCurrentState())
 }
 
+func TestCoordinator_WhenActive_EndorsementRequestReceived_HigherPriority_UnconfirmedDispatched_TransitionsToClosingFlush(t *testing.T) {
+	ctx := t.Context()
+	tx, txID := newDispatchedTxMock(t)
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
+		NodeName("node2").
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2").
+		Transactions(tx).
+		Build()
+	c.inFlightTxns[txID] = tx
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenActive_EndorsementRequestReceived_HigherPriority_NoUnconfirmedDispatched_TransitionsToClosing(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
+		NodeName("node2").
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2").
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Closing, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenActive_EndorsementRequestReceived_FromSelf_HandlesWithoutSteppingDown(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Active, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator, "self-request must not change active coordinator")
+}
+
+func TestCoordinator_WhenActive_EndorsementRequestReceived_LowerPriority_Ignored(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		EndorserCandidates("node2", "node3").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Active, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator, "lower-priority sender must not update active coordinator or trigger step-down")
+}
+
 func TestCoordinator_WhenActiveFLush_HeartbeatInterval_SendsHeartbeatAndStaysActiveFLush(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
@@ -1464,6 +1703,54 @@ func TestCoordinator_WhenActiveFLush_NewBlock_NotNewEpoch_UpdatesBlockHeightAndS
 	assert.Equal(t, prevPriorityList, c.coordinatorPriorityList, "priority list must not change within an epoch")
 }
 
+func TestCoordinator_WhenActiveFLush_EndorsementRequestReceived_HigherPriority_TransitionsToClosingFlush(t *testing.T) {
+	ctx := t.Context()
+	tx, txID := newDispatchedTxMock(t)
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
+		NodeName("node2").
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2").
+		Transactions(tx).
+		Build()
+	c.inFlightTxns[txID] = tx
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_FromSelf_HandlesWithoutSteppingDown(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator, "self-request must not change active coordinator")
+}
+
+func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_LowerPriority_Ignored(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node2", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
 func TestCoordinator_WhenEnteringClosingFlush_OnTransitionTo_SendsImmediateHeartbeat(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
@@ -1659,6 +1946,42 @@ func TestCoordinator_WhenClosingFlushCompletesAndNotCurrentCoordinator_EnteringC
 	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "OnTransitionTo Closing must emit an immediate heartbeat")
 }
 
+func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_UpdatesActiveCoordinatorAndStaysClosingFlush(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenClosingFlush_HeartbeatReceived_LiveSender_UpdatesActiveCoordinator(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		HeartbeatIntervalsSinceLastReceive(5).
+		Build()
+
+	event := &common.HeartbeatReceivedEvent{
+		FromNode: "node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator, "active coordinator must be updated on live heartbeat in Closing_Flush")
+	assert.Equal(t, 0, c.heartbeatIntervalsSinceLastReceive, "liveness counter must be reset")
+}
+
 func TestCoordinator_WhenClosing_HeartbeatReceived_FromLiveSender_ResetsCounterAndUpdatesCoordinator(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
@@ -1823,6 +2146,21 @@ func TestCoordinator_WhenClosing_NewBlock_UpdatesPriorityListAndStaysClosing(t *
 	assert.NotEmpty(t, c.coordinatorPriorityList, "priority list must be populated")
 }
 
+func TestCoordinator_WhenClosing_EndorsementRequestReceived_UpdatesActiveCoordinatorAndStaysClosing(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Closing, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
 func TestCoordinator_PreProcessEvent_OwnHeartbeat_IsFilteredOut(t *testing.T) {
 	ctx := t.Context()
 	// The coordinator is in Observing state so a non-self heartbeat would normally update the
@@ -1845,4 +2183,27 @@ func TestCoordinator_PreProcessEvent_OwnHeartbeat_IsFilteredOut(t *testing.T) {
 	// and currentActiveCoordinator must not have been updated to "node1".
 	assert.Equal(t, State_Observing, c.GetCurrentState(), "own heartbeat must not trigger a state transition")
 	assert.Equal(t, "node2", c.currentActiveCoordinator, "own heartbeat must not update currentActiveCoordinator")
+}
+
+// newEndorsementEventForStateMachineTest creates an EndorsementRequestReceivedEvent and
+// wires the coordinator's mocks so the background endorsement goroutine exits immediately
+// (at party key resolution) without touching SendEndorsementResponse.  All mock expectations
+// use .Maybe() so they tolerate asynchronous execution after the test's synchronous assertions.
+func newEndorsementEventForStateMachineTest(t *testing.T, fromNode string, mocks *CoordinatorDependencyMocks) *EndorsementRequestReceivedEvent {
+	t.Helper()
+
+	// Fail at party key resolution so the goroutine exits as early as possible.
+	mockKeyManager := componentsmocks.NewKeyManager(t)
+	mockKeyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, fmt.Errorf("test: goroutine exit early")).Maybe()
+	mocks.AllComponents.On("KeyManager").Return(mockKeyManager).Maybe()
+
+	return &EndorsementRequestReceivedEvent{
+		FromNode:                  fromNode,
+		TransactionId:             "tx-test",
+		IdempotencyKey:            "ik-test",
+		Party:                     "party@" + fromNode,
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{},
+		AttestationRequest:        &prototk.AttestationRequest{},
+	}
 }

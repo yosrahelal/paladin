@@ -48,8 +48,9 @@ const (
 	Event_TransactionsDelegated
 	Event_RequestTimeoutInterval
 	Event_StateTimeoutInterval
-	Event_HandoverRequest     // pushed by transport_client when a CoordinatorHandoverRequest message is received from a higher-priority node
-	Event_RestartDispatchLoop // queued internally after an in-place key rotation so the loop restarts after TransactionStateTransitionEvents are processed
+	Event_HandoverRequest            // pushed by transport_client when a CoordinatorHandoverRequest message is received from a higher-priority node
+	Event_RestartDispatchLoop        // queued internally after an in-place key rotation so the loop restarts after TransactionStateTransitionEvents are processed
+	Event_EndorsementRequestReceived // pushed by transport_client when an EndorsementRequest message arrives for this coordinator
 )
 
 // Type aliases for the generic statemachine types, specialized for coordinator
@@ -85,6 +86,13 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Observing,
 				}},
 			}}},
+			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Actions: []ActionRule{
+					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+					{Action: action_HandleEndorsementRequest},
+				},
+				Transitions: []Transition{{To: State_Observing}},
+			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
 				// Any node in Idle accepts a delegation and becomes the active coordinator.
 				// A higher-priority node that later announces itself will trigger preemption from Active.
@@ -110,6 +118,12 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
 					{Action: action_UpdateActiveCoordinator},
+				},
+			}}},
+			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Actions: []ActionRule{
+					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+					{Action: action_HandleEndorsementRequest},
 				},
 			}}},
 			common.Event_HeartbeatInterval: {Handlers: []EventHandler{{
@@ -237,6 +251,26 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
 				}},
 			}}},
+			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				// A higher-priority node is sending endorsement requests; step down and handle.
+				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+				Actions: []ActionRule{
+					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+					{Action: action_CleanUpTransactionsNotYetDispatched},
+					{Action: action_ClearTimeoutSchedules},
+					{Action: action_HandleEndorsementRequest},
+				},
+				Transitions: []Transition{{
+					To: State_Observing,
+					If: statemachine.GuardNot(guard_HasTransactionsInflight),
+				}, {
+					To: State_Closing_Flush,
+					If: statemachine.GuardAnd(guard_HasTransactionsInflight, guard_HasUnconfirmedDispatchedTransactions),
+				}, {
+					To: State_Closing,
+					If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
+				}},
+			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
 				// Accept delegations while in Elect so originators are not bounced while we wait.
 				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
@@ -336,6 +370,25 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
 				}},
 			}}},
+			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				// A higher-priority node is sending endorsement requests; step down and handle.
+				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+				Actions: []ActionRule{
+					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+					{Action: action_CleanUpTransactionsNotYetDispatched},
+					{Action: action_HandleEndorsementRequest},
+				},
+				Transitions: []Transition{{
+					To: State_Observing,
+					If: statemachine.GuardNot(guard_HasTransactionsInflight),
+				}, {
+					To: State_Closing_Flush,
+					If: statemachine.GuardAnd(guard_HasTransactionsInflight, guard_HasUnconfirmedDispatchedTransactions),
+				}, {
+					To: State_Closing,
+					If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
+				}},
+			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
 				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 			}}},
@@ -424,6 +477,29 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Closing,
 					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
 				}},
+			}}},
+			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				// A higher-priority node is sending endorsement requests; step down and handle.
+				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+				Actions: []ActionRule{
+					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+					{Action: action_StopDispatchLoop},
+					// Once the dispatch loop is stopped we know there won't be anymore
+					// State_Ready_For_Dispatch to State_Dispatched transitions so it is safe to clean up
+					{Action: action_CleanUpTransactionsNotYetDispatched},
+					{Action: action_HandleEndorsementRequest},
+				},
+				Transitions: []Transition{{
+					To: State_Closing_Flush,
+					If: guard_HasUnconfirmedDispatchedTransactions,
+				}, {
+					To: State_Closing,
+					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+				}},
+			}, {
+				// We are both the coordinator and the endorser; handle directly without stepping down.
+				Validator: validator_IsEndorsementRequestFromSelf,
+				Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
 			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
 				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
@@ -531,6 +607,22 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
 				}},
 			}}},
+			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				// A higher-priority node is sending endorsement requests; step down to Closing_Flush and handle.
+				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+				Actions: []ActionRule{
+					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+					{Action: action_CleanUpTransactionsNotYetDispatched},
+					{Action: action_HandleEndorsementRequest},
+				},
+				Transitions: []Transition{{
+					To: State_Closing_Flush,
+				}},
+			}, {
+				// We are both the coordinator and the endorser; handle directly without stepping down.
+				Validator: validator_IsEndorsementRequestFromSelf,
+				Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
+			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
 				// Still the active coordinator — accept delegations normally- we can process transactions, just not dispatch them
 				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
@@ -597,7 +689,16 @@ var stateDefinitionsMap = StateDefinitions{
 			}}},
 			common.Event_HeartbeatReceived: {Handlers: []EventHandler{{
 				Validator: validator_IsHeartbeatSenderLive,
-				Actions:   []ActionRule{{Action: action_ResetHeartbeatIntervalsSinceLastReceive}},
+				Actions: []ActionRule{
+					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
+					{Action: action_UpdateActiveCoordinator},
+				},
+			}}},
+			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Actions: []ActionRule{
+					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+					{Action: action_HandleEndorsementRequest},
+				},
 			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
 				Actions: []ActionRule{
@@ -663,6 +764,12 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions: []ActionRule{
 					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
 					{Action: action_UpdateActiveCoordinator},
+				},
+			}}},
+			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Actions: []ActionRule{
+					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+					{Action: action_HandleEndorsementRequest},
 				},
 			}}},
 			common.Event_HeartbeatInterval: {Handlers: []EventHandler{{

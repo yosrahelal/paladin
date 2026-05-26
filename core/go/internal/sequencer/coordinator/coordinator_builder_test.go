@@ -72,6 +72,8 @@ type CoordinatorDependencyMocks struct {
 	SyncPoints          *syncpointsmocks.SyncPoints
 	TransportWriter     *sequencertransportmocks.TransportWriter
 	Clock               *sequencercommonmocks.Clock
+	AllComponents       *componentsmocks.AllComponents
+	DomainAPI           *componentsmocks.DomainSmartContract
 }
 
 // copySequencerDefaultsForTest returns a deep copy of SequencerDefaults so tests that mutate
@@ -305,6 +307,8 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		EngineIntegration:   sequencercommonmocks.NewEngineIntegration(b.t),
 		SyncPoints:          syncpointsmocks.NewSyncPoints(b.t),
 		Clock:               sequencercommonmocks.NewClock(b.t),
+		AllComponents:       componentsmocks.NewAllComponents(b.t),
+		DomainAPI:           b.domainAPI,
 	}
 
 	if b.useMockTransportWriter {
@@ -315,7 +319,6 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		mocks.TransportWriter = mockTransportWriter
 	}
 
-	allComponents := componentsmocks.NewAllComponents(b.t)
 	mp, err := mockpersistence.NewSQLMockProvider()
 	if err != nil {
 		panic(err)
@@ -328,10 +331,8 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 
 	transportManager := componentsmocks.NewTransportManager(b.t)
 	transportManager.On("LocalNodeName").Return(localNode).Maybe()
-	allComponents.On("TransportManager").Return(transportManager).Maybe()
-	allComponents.On("TxManager").Return(b.txManager).Maybe()
-	allComponents.On("SequencerManager").Return(b.sequencerManager).Maybe()
-	allComponents.On("Persistence").Return(mp.P).Maybe()
+	mocks.AllComponents.On("SequencerManager").Return(b.sequencerManager).Maybe()
+	mocks.AllComponents.On("Persistence").Return(mp.P).Maybe()
 
 	var transportWriter transport.TransportWriter = mocks.SentMessageRecorder
 	if mocks.TransportWriter != nil {
@@ -349,7 +350,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		b.contractAddress,
 		b.domainAPI,
 		nil,
-		allComponents,
+		mocks.AllComponents,
 		nil,
 		nil,
 		transportWriter,
