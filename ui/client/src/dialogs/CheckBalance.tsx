@@ -56,6 +56,7 @@ export const CheckBalanceDialog: React.FC<Props> = ({
     enabled: false,
     refetchOnMount: false,
     retry: false,
+    staleTime: 0
   });
 
   useEffect(() => {

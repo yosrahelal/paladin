@@ -34,7 +34,7 @@ import { querySmartContractsByDomain } from '../queries/domains';
 import { getAltModeScrollBarStyle } from '../themes/default';
 import { DomainButtons } from './DomainButtons';
 import { Hash } from './Hash';
-import { ContractConfig, IDomainContract } from '../interfaces';
+import { IDomainContract } from '../interfaces';
 import { Timestamp } from './Timestamp';
 import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 
