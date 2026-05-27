@@ -423,7 +423,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
 
         lock.owner = msg.sender;
         lock.spender = msg.sender;
-        lock.lockedStateCount = args.content.length;
+        lock.lockedStateCount = args.contents.length;
 
         _createLock(args, spendCommitment, cancelCommitment, lockId, lock);
 
@@ -442,7 +442,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
             msg.sender,
             args.inputs,
             args.outputs,
-            args.content,
+            args.contents,
             args.newLockState,
             args.proof,
             data
@@ -493,6 +493,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
             args.txId,
             lockId,
             msg.sender,
+            args.contents,
             args.oldLockState,
             args.newLockState,
             args.proof,
@@ -511,7 +512,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
 
         _processInputs(args.inputs);
         _processOutputs(args.outputs);
-        _processLockContent(lockId, args.content);
+        _processLockContents(lockId, args.contents);
 
         _processOutput(args.newLockState);
         _lockStates[lockId] = args.newLockState;
@@ -532,6 +533,14 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
         NotoLockInfo storage lock
     ) internal virtual {
         useTxId(args.txId);
+
+        if (lock.lockedStateCount != args.contents.length) {
+            revert NotoInvalidUnlockInputs(
+                lock.lockedStateCount,
+                args.contents.length
+            );
+        }
+        _checkLockedInputs(lockId, args.contents);
 
         _transitionLockState(lockId, args.oldLockState, args.newLockState);
 
@@ -803,7 +812,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     /**
      * @dev Check the outputs are all new, and mark them as locked.
      */
-    function _processLockContent(
+    function _processLockContents(
         bytes32 lockId,
         bytes32[] memory outputs
     ) internal {

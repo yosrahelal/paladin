@@ -17,7 +17,7 @@ interface INoto is IConfidentialToken, ILockableCapability {
         bytes32 txId; // unique identifier for the transaction
         bytes32[] inputs; // unlocked states spent in the transaction
         bytes32[] outputs; // created outside the lock by the transaction
-        bytes32[] content; // created inside of the lock - this is the lock contents (empty for mint-locks)
+        bytes32[] contents; // created inside of the lock - this is the lock contents (empty for mint-locks)
         bytes32 newLockState; // new state for the lock itself
         NotoLockOptions options; // options for the lock
         bytes proof; // recorded signature for the lock operation
@@ -28,6 +28,7 @@ interface INoto is IConfidentialToken, ILockableCapability {
     // - The output states to be generated in this operation. e.g. the new lock record
     struct NotoUpdateLockArgs {
         bytes32 txId; // unique identifier for the transaction
+        bytes32[] contents; // locked states in the lock (empty for mint-locks)
         bytes32 oldLockState; // old state for the lock
         bytes32 newLockState; // new state for the lock
         NotoLockOptions options; // options for the lock
@@ -76,6 +77,7 @@ interface INoto is IConfidentialToken, ILockableCapability {
         bytes32 indexed txId,
         bytes32 indexed lockId,
         address indexed owner,
+        bytes32[] contents,
         bytes32 oldLockState,
         bytes32 newLockState,
         bytes proof,

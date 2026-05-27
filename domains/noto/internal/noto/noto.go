@@ -312,6 +312,7 @@ type NotoLockUpdated_Event struct {
 	TxId         pldtypes.Bytes32     `json:"txId"`
 	LockID       pldtypes.Bytes32     `json:"lockId"`
 	Owner        *pldtypes.EthAddress `json:"owner"`
+	Contents     []pldtypes.Bytes32   `json:"contents"`
 	OldLockState pldtypes.Bytes32     `json:"oldLockState"`
 	NewLockState pldtypes.Bytes32     `json:"newLockState"`
 	Proof        pldtypes.HexBytes    `json:"proof"`
@@ -1425,4 +1426,3 @@ func (n *Noto) computeLockIDForLockTX(ctx context.Context, tx *types.ParsedTrans
 	}
 	return n.computeLockId(ctx, contractAddress, senderAddress, tx.Transaction.TransactionId)
 }
-

@@ -10,7 +10,7 @@ import {IConfidentialToken} from "../interfaces/IConfidentialToken.sol";
 interface INoto_V1 is IConfidentialToken {
     struct LockInfo {
         address owner;
-        bytes content;
+        bytes contents;
         address spender;
         bytes32 spendHash;
         bytes32 cancelHash;
@@ -105,6 +105,7 @@ interface INoto_V1 is IConfidentialToken {
         bytes32 indexed txId,
         bytes32 indexed lockId,
         address indexed owner,
+        bytes32[] contents,
         bytes32 oldLockState,
         bytes32 newLockState,
         bytes proof,

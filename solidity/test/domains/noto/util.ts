@@ -20,6 +20,7 @@ export interface NotoCreateLockArgs {
 
 export interface NotoUpdateLockArgs {
   txId: BytesLike;
+  contents: BytesLike[];
   oldLockState: BytesLike;
   newLockState: BytesLike;
   options: NotoLockOptions;
@@ -173,10 +174,11 @@ export function encodeUpdateLockArgs(
   lockOp: NotoUpdateLockArgs,
 ): BytesLike {
   return ethers.AbiCoder.defaultAbiCoder().encode(
-    ["tuple(bytes32,bytes32,bytes32,tuple(bytes32),bytes)"],
+    ["tuple(bytes32,bytes32[],bytes32,bytes32,tuple(bytes32),bytes)"],
     [
       [
         lockOp.txId,
+        lockOp.contents,
         lockOp.oldLockState,
         lockOp.newLockState,
         [lockOp.options.spendTxId],
@@ -331,6 +333,7 @@ export async function doPrepareUnlock(
   notary: Signer,
   noto: Noto,
   lockId: string,
+  contents: BytesLike[],
   spendTxId: string,
   oldLockStateId: string,
   newLockStateId: string,
@@ -342,6 +345,7 @@ export async function doPrepareUnlock(
 
   const encodedParams = encodeUpdateLockArgs({
     txId,
+    contents,
     oldLockState: oldLockStateId,
     newLockState: newLockStateId,
     options: { spendTxId },
@@ -366,6 +370,7 @@ export async function doPrepareUnlock(
   const event1 = noto.interface.parseLog(results!.logs[1]);
   expect(event1).to.exist;
   expect(event1?.name).to.equal("NotoLockUpdated");
+  expect(event1?.args.contents).to.deep.equal(contents);
   expect(event1?.args.oldLockState).to.deep.equal(oldLockStateId);
   expect(event1?.args.newLockState).to.deep.equal(newLockStateId);
   expect(event1?.args.proof).to.deep.equal("0x");
