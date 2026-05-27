@@ -44,7 +44,7 @@ packages:
   github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher:
     config:
       all: true
-  github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibility:
+  github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibilitytracker:
     config:
       all: true
   github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction:

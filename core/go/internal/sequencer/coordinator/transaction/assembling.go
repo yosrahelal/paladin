@@ -90,7 +90,7 @@ func (t *coordinatorTransaction) applyPostAssembly(ctx context.Context, postAsse
 	}
 
 	// Record private state visibility after AddMinter succeeds
-	t.stateVisibility.RecordAssemblyOutput(ctx, postAssembly.OutputStates, postAssembly.OutputStatesPotential)
+	t.stateVisibilityTracker.RecordAssemblyOutput(ctx, postAssembly.OutputStates, postAssembly.OutputStatesPotential)
 
 	// Add a lock for every output we create.
 	createLocks, err := t.engineIntegration.MapPotentialStates(ctx, postAssembly.OutputStatesPotential, t.pt)

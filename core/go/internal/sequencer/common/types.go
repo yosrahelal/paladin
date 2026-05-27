@@ -16,7 +16,7 @@ package common
 
 import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibility"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibilitytracker"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
 )
@@ -34,7 +34,7 @@ type CoordinatorSnapshot struct {
 	// the OutputStates where it appears in AllowedNodes. A receiving coordinator can cross-reference the
 	// create locks against its OutputStates to validate it has all the private data it needs.
 	Locks        []*grapher.StateLock          `json:"locks,omitempty"`
-	OutputStates []*statevisibility.OutputState `json:"outputStates,omitempty"`
+	OutputStates []*statevisibilitytracker.OutputState `json:"outputStates,omitempty"`
 }
 
 type SnapshotPooledTransaction struct {

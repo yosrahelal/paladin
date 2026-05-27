@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Package statevisibility is the single control point for private state visibility in the sequencer.
+// Package statevisibilitytracker is the single control point for private state visibility in the sequencer.
 //
 // It tracks which nodes are permitted to hold each private state's data, derived from the assembly
 // response DistributionList. The default posture is deny: a state whose AllowedNodes is nil or empty
@@ -21,14 +21,7 @@
 // is leaked by default.
 //
 // The store is internally thread-safe; callers do not need external synchronisation.
-//
-// Two callers interact with this package:
-//   - The assembly path (assembling.go) calls RecordAssemblyOutput — the only path that writes new
-//     visibility entries. It must be called after the grapher's AddMinter has succeeded, so that a
-//     failed AddMinter (duplicate state) leaves no stale visibility entry.
-//   - The grapher calls GetForNode, ImportIfAbsent, Has, and Delete for export, handover import,
-//     and lock-expiry cleanup respectively.
-package statevisibility
+package statevisibilitytracker
 
 import (
 	"context"
@@ -143,7 +136,7 @@ func allowedNodesFromDistributionList(ctx context.Context, states []*components.
 		for _, recipient := range potentials[i].DistributionList {
 			node, err := pldtypes.PrivateIdentityLocator(recipient).Node(ctx, false)
 			if err != nil {
-				log.L(ctx).Warnf("statevisibility: could not extract node from locator %q: %s", recipient, err)
+				log.L(ctx).Warnf("statevisibilitytracker: could not extract node from locator %q: %s", recipient, err)
 				continue
 			}
 			allowedNodes[stateID] = append(allowedNodes[stateID], node)

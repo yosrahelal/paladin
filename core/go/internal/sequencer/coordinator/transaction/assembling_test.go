@@ -28,7 +28,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
-	"github.com/LFDT-Paladin/paladin/core/mocks/statevisibilitymocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/statevisibilitytrackermocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -167,7 +167,7 @@ func Test_applyPostAssembly_Success_AddMinterError(t *testing.T) {
 	ctx := t.Context()
 	stateID := pldtypes.HexBytes(uuid.New().String())
 	mockGrapher := graphermocks.NewGrapher(t)
-	mockVisibility := statevisibilitymocks.NewStateVisibilityStore(t)
+	mockVisibility := statevisibilitytrackermocks.NewStateVisibilityStore(t)
 	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(errors.New("add minter error"))
 
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
@@ -212,7 +212,7 @@ func Test_applyPostAssembly_Success_MapPotentialStatesError(t *testing.T) {
 
 func Test_applyPostAssembly_Success_Complete(t *testing.T) {
 	ctx := t.Context()
-	mockVisibility := statevisibilitymocks.NewStateVisibilityStore(t)
+	mockVisibility := statevisibilitytrackermocks.NewStateVisibilityStore(t)
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).StateVisibility(mockVisibility).Build()
 
 	postAssembly := &components.TransactionPostAssembly{

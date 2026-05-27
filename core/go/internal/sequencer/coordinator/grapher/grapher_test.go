@@ -22,7 +22,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibility"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibilitytracker"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/google/uuid"
@@ -34,12 +34,12 @@ const testBlockHeightTolerance uint64 = 5
 
 func testGrapher(t *testing.T) Grapher {
 	t.Helper()
-	return NewGrapher(dependencytracker.NewDependencyTracker(), statevisibility.NewStore(), testBlockHeightTolerance)
+	return NewGrapher(dependencytracker.NewDependencyTracker(), statevisibilitytracker.NewStore(), testBlockHeightTolerance)
 }
 
 func testGrapherUnlocked(t *testing.T) *grapher {
 	t.Helper()
-	return NewGrapher(dependencytracker.NewDependencyTracker(), statevisibility.NewStore(), testBlockHeightTolerance).(*grapher)
+	return NewGrapher(dependencytracker.NewDependencyTracker(), statevisibilitytracker.NewStore(), testBlockHeightTolerance).(*grapher)
 }
 
 func TestGrapher_NewGrapher(t *testing.T) {
@@ -308,7 +308,7 @@ func TestExportStatesAndLocks_OutputAndLocks(t *testing.T) {
 
 	require.NoError(t, g.AddMinter(ctx, []*components.FullState{state}, minterID))
 	// Seed visibility directly so ExportStatesAndLocks can return this state for "test-node"
-	g.stateVisibility.ImportIfAbsent(stateID.String(), &statevisibility.OutputState{
+	g.stateVisibilityTracker.ImportIfAbsent(stateID.String(), &statevisibilitytracker.OutputState{
 		StateUpsert:  components.StateUpsert{ID: stateID, Schema: state.Schema, Data: state.Data},
 		AllowedNodes: []string{"test-node"},
 	})
@@ -442,9 +442,9 @@ func TestForgetTransactionAndLocks_ClearsMinterConsumerAndLocks(t *testing.T) {
 	assert.False(t, ok)
 	_, ok = g.outputStatesByMinter[minterID]
 	assert.False(t, ok)
-	// statevisibility store must be empty — no AllowedNodes were ever set, and forgetLocks
+	// statevisibilitytracker store must be empty — no AllowedNodes were ever set, and forgetLocks
 	// must not leave stale entries even after a cascade delete on an absent key.
-	assert.Empty(t, g.stateVisibility.GetForNode("any-node"))
+	assert.Empty(t, g.stateVisibilityTracker.GetForNode("any-node"))
 }
 
 func TestForgetTransactionAndLocks_ClearsLocksForTransaction(t *testing.T) {
@@ -488,7 +488,7 @@ func TestForgetTransaction_OutputStateRemainsForHeartbeatsUntilLockExpires(t *te
 
 	require.NoError(t, g.AddMinter(ctx, []*components.FullState{state}, txID))
 	// Seed visibility so ExportStatesAndLocks returns this state for "test-node"
-	g.stateVisibility.ImportIfAbsent(s.String(), &statevisibility.OutputState{
+	g.stateVisibilityTracker.ImportIfAbsent(s.String(), &statevisibilitytracker.OutputState{
 		StateUpsert:  components.StateUpsert{ID: s, Schema: state.Schema, Data: state.Data},
 		AllowedNodes: []string{"test-node"},
 	})
@@ -598,7 +598,7 @@ func TestForgetTransaction_ClearsInFlightIndexesButKeepsStateData(t *testing.T) 
 
 	require.NoError(t, g.AddMinter(ctx, []*components.FullState{state}, txID))
 	// Seed visibility for node1
-	g.stateVisibility.ImportIfAbsent(stateID.String(), &statevisibility.OutputState{
+	g.stateVisibilityTracker.ImportIfAbsent(stateID.String(), &statevisibilitytracker.OutputState{
 		StateUpsert:  components.StateUpsert{ID: stateID, Schema: state.Schema, Data: state.Data},
 		AllowedNodes: []string{"node1"},
 	})
@@ -612,12 +612,12 @@ func TestForgetTransaction_ClearsInFlightIndexesButKeepsStateData(t *testing.T) 
 	assert.NotContains(t, g.outputStatesByMinter, txID)
 	assert.NotContains(t, g.transactionByOutputState, stateID.String())
 
-	// Private state data kept in statevisibility store until the lock expires
-	assert.Len(t, g.stateVisibility.GetForNode("node1"), 1, "state must remain visible to node1 after confirmation")
+	// Private state data kept in statevisibilitytracker store until the lock expires
+	assert.Len(t, g.stateVisibilityTracker.GetForNode("node1"), 1, "state must remain visible to node1 after confirmation")
 
 	// Once the lock expires, OutputState is also cleaned up
 	g.ForgetLocks(ctx, 50+testBlockHeightTolerance)
-	assert.Empty(t, g.stateVisibility.GetForNode("node1"), "state must be gone after lock expires")
+	assert.Empty(t, g.stateVisibilityTracker.GetForNode("node1"), "state must be gone after lock expires")
 }
 
 func TestForgetTransaction_UnknownTransaction_NoOp(t *testing.T) {
@@ -739,7 +739,7 @@ func TestImportStatesAndLocks_SkipsInFlightLocks(t *testing.T) {
 	locks := []*StateLock{
 		{State: s, Type: pldapi.StateLockTypeCreate.Enum(), Transaction: &txID},
 	}
-	outputStates := []*statevisibility.OutputState{
+	outputStates := []*statevisibilitytracker.OutputState{
 		{
 			StateUpsert:  components.StateUpsert{ID: s, Schema: schema, Data: pldtypes.RawJSON(`{"v":1}`)},
 			AllowedNodes: []string{"node1"},
@@ -754,7 +754,7 @@ func TestImportStatesAndLocks_SkipsInFlightLocks(t *testing.T) {
 	assert.Empty(t, g.readLocksByStateID)
 
 	// Output state must also be skipped — no confirmed lock to anchor it
-	assert.Empty(t, g.stateVisibility.GetForNode("node1"), "in-flight state must not be added to visibility")
+	assert.Empty(t, g.stateVisibilityTracker.GetForNode("node1"), "in-flight state must not be added to visibility")
 
 	// Transaction-indexed maps must be untouched
 	assert.Empty(t, g.transactionByID)
@@ -772,7 +772,7 @@ func TestImportStatesAndLocks_ImportsConfirmedOutputStates(t *testing.T) {
 	locks := []*StateLock{
 		{State: s, Type: pldapi.StateLockTypeCreate.Enum(), ConfirmedAtBlock: &confirmedAt},
 	}
-	outputStates := []*statevisibility.OutputState{
+	outputStates := []*statevisibilitytracker.OutputState{
 		{
 			StateUpsert:  components.StateUpsert{ID: s},
 			AllowedNodes: []string{"node1"},
@@ -781,8 +781,8 @@ func TestImportStatesAndLocks_ImportsConfirmedOutputStates(t *testing.T) {
 
 	g.ImportStatesAndLocks(ctx, outputStates, locks)
 
-	// Private state data in statevisibility store and visible to node1
-	assert.Len(t, g.stateVisibility.GetForNode("node1"), 1)
+	// Private state data in statevisibilitytracker store and visible to node1
+	assert.Len(t, g.stateVisibilityTracker.GetForNode("node1"), 1)
 
 	// In-flight indexes NOT populated (no txID known)
 	assert.Empty(t, g.outputStatesByMinter)
@@ -794,14 +794,14 @@ func TestImportStatesAndLocks_SkipsOutputStateWithNoMatchingLock(t *testing.T) {
 	g := testGrapherUnlocked(t)
 	s := pldtypes.MustParseHexBytes("0x" + strings.Repeat("c5", 32))
 
-	outputStates := []*statevisibility.OutputState{
+	outputStates := []*statevisibilitytracker.OutputState{
 		{StateUpsert: components.StateUpsert{ID: s}},
 	}
 	// No lock provided for this state
 	g.ImportStatesAndLocks(ctx, outputStates, nil)
 
 	// ImportIfAbsent returns true (stored now) only if the state was absent before — confirms it was not added.
-	assert.True(t, g.stateVisibility.ImportIfAbsent(s.String(), &statevisibility.OutputState{StateUpsert: components.StateUpsert{ID: s}}),
+	assert.True(t, g.stateVisibilityTracker.ImportIfAbsent(s.String(), &statevisibilitytracker.OutputState{StateUpsert: components.StateUpsert{ID: s}}),
 		"state must not have been stored by ImportStatesAndLocks")
 	assert.Empty(t, g.outputStatesByMinter)
 	assert.Empty(t, g.transactionByOutputState)
@@ -817,15 +817,15 @@ func TestImportStatesAndLocks_ExistingOutputStatePreserved(t *testing.T) {
 	// Seed an existing output state via direct visibility store access
 	err := g.AddMinter(ctx, []*components.FullState{{ID: stateID}}, txID)
 	require.NoError(t, err)
-	original := &statevisibility.OutputState{
+	original := &statevisibilitytracker.OutputState{
 		StateUpsert:  components.StateUpsert{ID: stateID},
 		AllowedNodes: []string{"node1"},
 	}
-	g.stateVisibility.ImportIfAbsent(stateID.String(), original)
+	g.stateVisibilityTracker.ImportIfAbsent(stateID.String(), original)
 
 	// Build an import with a confirmed lock for the same state ID but different AllowedNodes.
 	blockNum := uint64(10)
-	importState := &statevisibility.OutputState{
+	importState := &statevisibilitytracker.OutputState{
 		StateUpsert:  components.StateUpsert{ID: stateID},
 		AllowedNodes: []string{"node2"},
 	}
@@ -836,14 +836,14 @@ func TestImportStatesAndLocks_ExistingOutputStatePreserved(t *testing.T) {
 	}
 
 	// ImportStatesAndLocks should skip the state because an existing entry already exists.
-	g.ImportStatesAndLocks(ctx, []*statevisibility.OutputState{importState}, []*StateLock{lock})
+	g.ImportStatesAndLocks(ctx, []*statevisibilitytracker.OutputState{importState}, []*StateLock{lock})
 
 	// The original output state must not have been overwritten — check via GetForNode.
-	node1States := g.stateVisibility.GetForNode("node1")
+	node1States := g.stateVisibilityTracker.GetForNode("node1")
 	require.Len(t, node1States, 1, "node1 must still see the original state")
 	assert.Equal(t, []string{"node1"}, node1States[0].AllowedNodes, "AllowedNodes must remain from original entry")
 
-	node2States := g.stateVisibility.GetForNode("node2")
+	node2States := g.stateVisibilityTracker.GetForNode("node2")
 	assert.Empty(t, node2States, "node2 must not see the state — import was skipped")
 }
 
