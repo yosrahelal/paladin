@@ -17,6 +17,7 @@
 import {
   Alert,
   Box,
+  Button,
   Fade,
   Grid2,
   MenuItem,
@@ -26,11 +27,13 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { t } from 'i18next';
 import { Captions } from 'lucide-react';
-import { Dispatch, SetStateAction, useEffect } from 'react';
+import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import { DomainDeploy } from '../components/DomainDeploy';
 import { Hash } from '../components/Hash';
 import { SmartContractsTable } from '../components/SmartContractsTable';
 import { getDomainByName, listDomains } from '../queries/domains';
+import SearchIcon from '@mui/icons-material/Search';
+import { DomainContractLookupDialog } from '../dialogs/DomainContractLookp';
 
 type Props = {
   sortAscending: boolean
@@ -57,6 +60,8 @@ export const Domains: React.FC<Props> = ({
   selectedDomain,
   setSelectedDomain
 }) => {
+
+  const [lookupDomainContractDialogOpen, setLookupDomainContractDialogOpen] = useState(false);
 
   const {
     data: domains,
@@ -170,10 +175,26 @@ export const Domains: React.FC<Props> = ({
               </Grid2>
             </Grid2>
           </Box>
-          <Grid2>
-            <Typography align="center" variant="h5">
-              {t('smartContracts')}
-            </Typography>
+          <Grid2 container alignItems="center" spacing={2}>
+            <Grid2 sx={{ display: { xs: 'none', sm: 'none', md: 'block' } }} size={{ md: 4 }} />
+            <Grid2 size={{ xs: 12, md: 4 }}>
+              <Typography align="center" variant="h5">
+                {t('smartContracts')}
+              </Typography>
+            </Grid2>
+            <Grid2 size={{ xs: 12, md: 4 }} container justifyContent="right">
+              <Grid2>
+                <Button
+                  sx={{ borderRadius: '20px', minWidth: '180px' }}
+                  size="large"
+                  variant="outlined"
+                  startIcon={<SearchIcon />}
+                  onClick={() => setLookupDomainContractDialogOpen(true)}
+                >
+                  {t('lookup')}
+                </Button>
+              </Grid2>
+            </Grid2>
           </Grid2>
           <Box sx={{ height: '10px' }} />
           {domain?.registryAddress && (
@@ -192,6 +213,10 @@ export const Domains: React.FC<Props> = ({
           )}
         </Box>
       </Fade>
+      <DomainContractLookupDialog
+        dialogOpen={lookupDomainContractDialogOpen}
+        setDialogOpen={setLookupDomainContractDialogOpen}
+      />
     </>
   );
 };

@@ -121,3 +121,5 @@ export const isValidTransactionHash = (value: string) => /^(0x)?[a-fA-F0-9]{64}$
 
 export const capitalize = (value: string): string =>
   value.charAt(0).toUpperCase() + value.slice(1);
+
+export const isValidAddress = (value: string) => /^0x[a-fA-F0-9]{40}$/.test(value);
