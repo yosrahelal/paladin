@@ -78,6 +78,7 @@ export const NotoMintDialog: React.FC<Props> = ({
   useEffect(() => {
     if (dialogOpen) {
         setRecipient('');
+        setSender('');
         setAmount('');
         setData('');
     }

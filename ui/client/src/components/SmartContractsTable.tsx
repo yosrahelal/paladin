@@ -75,8 +75,7 @@ export const SmartContractsTable: React.FC<Props> = ({
 
   const {
     data: contracts,
-    error,
-    isFetching
+    error
   } = useQuery({
     queryKey: ['contracts', domainAddress, sortAscending, page, rowsPerPage, refTimestamps],
     queryFn: () => querySmartContractsByDomain(domainAddress, sortAscending, rowsPerPage, refTimestamps[refTimestamps.length - 1]),
@@ -132,10 +131,6 @@ export const SmartContractsTable: React.FC<Props> = ({
     setRefTimestamps([]);
     setPage(0);
   };
-
-  if(isFetching) {
-    return <></>
-  }
 
   return (
     <TableContainer

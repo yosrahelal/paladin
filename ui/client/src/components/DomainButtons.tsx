@@ -23,6 +23,7 @@ import { ZetoMintDialog } from '../dialogs/domains/zeto/ZetoMint';
 import { ZetoTransferDialog } from '../dialogs/domains/zeto/ZetoTransfer';
 import { NotoCheckBalanceDialog } from '../dialogs/domains/noto/NotoCheckBalance';
 import { ZetoCheckBalanceDialog } from '../dialogs/domains/zeto/ZetoCheckBalance';
+import { NotoBurnDialog } from '../dialogs/domains/noto/NotoBurn';
 
 type Props = {
   domainName: string;
@@ -46,7 +47,7 @@ export const DomainButtons: React.FC<Props> = ({
   const [zetoTransferDialogOpen, setZetoTransferDialogOpen] = useState(false);
   const [notoCheckBalanceDialogOpen, setNotoCheckBalanceDialogOpen] = useState(false);
   const [zetoCheckBalanceDialogOpen, setZetoCheckBalanceDialogOpen] = useState(false);
-
+  const [notoBurnDialogOpen, setNotoBurnDialogOpen] = useState(false);
 
   useEffect(() => {
     const tmpButtons: DomainButton[] = [];
@@ -54,6 +55,10 @@ export const DomainButtons: React.FC<Props> = ({
     // TODO: should key off of the domain "type" instead of expecting a specific name
     switch (domainName) {
       case 'noto': {
+        tmpButtons.push({
+          name: 'checkBalance',
+          action: () => setNotoCheckBalanceDialogOpen(true),
+        });
         tmpButtons.push({
           name: 'mint',
           action: () => setNotoMintDialogOpen(true),
@@ -63,12 +68,16 @@ export const DomainButtons: React.FC<Props> = ({
           action: () => setNotoTransferDialogOpen(true),
         });
         tmpButtons.push({
-          name: 'checkBalance',
-          action: () => setNotoCheckBalanceDialogOpen(true),
+          name: 'burn',
+          action: () => setNotoBurnDialogOpen(true),
         });
         break;
       }
       case 'zeto': {
+        tmpButtons.push({
+          name: 'checkBalance',
+          action: () => setZetoCheckBalanceDialogOpen(true),
+        });
         tmpButtons.push({
           name: 'mint',
           action: () => setZetoMintDialogOpen(true),
@@ -76,10 +85,6 @@ export const DomainButtons: React.FC<Props> = ({
         tmpButtons.push({
           name: 'transfer',
           action: () => setZetoTransferDialogOpen(true),
-        });
-        tmpButtons.push({
-          name: 'checkBalance',
-          action: () => setZetoCheckBalanceDialogOpen(true),
         });
         break;
       }
@@ -113,6 +118,12 @@ export const DomainButtons: React.FC<Props> = ({
       <NotoTransferDialog
         dialogOpen={notoTransferDialogOpen}
         setDialogOpen={setNotoTransferDialogOpen}
+        contractAddress={contractAddress}
+      />
+
+      <NotoBurnDialog
+        dialogOpen={notoBurnDialogOpen}
+        setDialogOpen={setNotoBurnDialogOpen}
         contractAddress={contractAddress}
       />
 

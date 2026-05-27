@@ -38,45 +38,32 @@ type Props = {
   setDialogOpen: Dispatch<SetStateAction<boolean>>;
 };
 
-const mintAbi = {
+const burnAbi = {
   inputs: [
     {
-      components: [
-        {
-          internalType: 'string',
-          name: 'to',
-          type: 'string',
-        },
-        {
-          internalType: 'uint256',
-          name: 'amount',
-          type: 'uint256',
-        },
-        {
-          internalType: 'bytes',
-          name: 'data',
-          type: 'bytes',
-        },
-      ],
-      internalType: 'struct IZetoFungible.TransferParam[]',
-      name: 'mints',
-      type: 'tuple[]',
+      internalType: 'uint256',
+      name: 'amount',
+      type: 'uint256'
     },
+    {
+      internalType: 'bytes',
+      name: 'data',
+      type: 'bytes'
+    }
   ],
-  name: 'mint',
+  name: 'burn',
   outputs: [],
   stateMutability: 'nonpayable',
-  type: 'function',
+  type: 'function'
 };
 
-export const ZetoMintDialog: React.FC<Props> = ({
+export const NotoBurnDialog: React.FC<Props> = ({
   contractAddress,
   dialogOpen,
   setDialogOpen,
 }) => {
   const { t } = useTranslation();
   const [sender, setSender] = useState('');
-  const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [data, setData] = useState('');
   const [errorMessage, setErrorMessage] = useState<string>();
@@ -84,7 +71,6 @@ export const ZetoMintDialog: React.FC<Props> = ({
 
   useEffect(() => {
     if (dialogOpen) {
-      setRecipient('');
       setSender('');
       setAmount('');
       setData('');
@@ -97,16 +83,11 @@ export const ZetoMintDialog: React.FC<Props> = ({
         type: TransactionType.PRIVATE,
         from: sender,
         to: contractAddress,
-        abi: [mintAbi],
-        function: 'mint',
+        abi: [burnAbi],
+        function: 'burn',
         data: {
-          mints: [
-            {
-              to: recipient,
-              amount,
-              data: encodeHex(data),
-            }
-          ]
+          amount,
+          data: encodeHex(data),
         }
       })
   });
@@ -114,12 +95,10 @@ export const ZetoMintDialog: React.FC<Props> = ({
   useEffect(() => {
     if (error !== null) {
       setErrorMessage(t('mintFailed'));
-      console.log(error)
     }
   }, [error]);
 
-  const canSubmit = sender.length > 0 &&
-    recipient.length > 0 && amount.length > 0 && !isNaN(parseInt(amount));
+  const canSubmit = amount.length > 0 && !isNaN(parseInt(amount));
 
   return (
     <Dialog
@@ -135,7 +114,7 @@ export const ZetoMintDialog: React.FC<Props> = ({
         }}
       >
         <DialogTitle sx={{ textAlign: 'center' }}>
-          {t('mint')}
+          {t('burn')}
           <Box sx={{ marginTop: '10px' }}>
             {errorMessage !== undefined && (
               <Alert variant="filled" severity="error">
@@ -176,15 +155,6 @@ export const ZetoMintDialog: React.FC<Props> = ({
           <Box sx={{ marginTop: '20px' }}>
             <TextField
               fullWidth
-              label={t('to')}
-              autoComplete="off"
-              value={recipient}
-              onChange={(event) => setRecipient(event.target.value)}
-            />
-          </Box>
-          <Box sx={{ marginTop: '20px' }}>
-            <TextField
-              fullWidth
               label={t('amount')}
               autoComplete="off"
               value={amount}
@@ -210,7 +180,7 @@ export const ZetoMintDialog: React.FC<Props> = ({
             disabled={!canSubmit}
             type="submit"
           >
-            {t('mint')}
+            {t('burn')}
           </Button>
           <Button
             sx={{ minWidth: '100px' }}
