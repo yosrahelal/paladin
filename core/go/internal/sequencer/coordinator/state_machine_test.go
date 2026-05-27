@@ -372,7 +372,7 @@ func TestCoordinator_WhenElect_ActiveCoordinatorClosing_TransitionsDirectlyToAct
 		State:            stateID,
 		ConfirmedAtBlock: &confirmedAtBlock,
 	}
-	outputState := &grapher.OutputState{
+	outputState := &statevisibilitytracker.OutputState{
 		AllowedNodes: []string{"node1"},
 	}
 	outputState.ID = stateID
@@ -382,7 +382,7 @@ func TestCoordinator_WhenElect_ActiveCoordinatorClosing_TransitionsDirectlyToAct
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing,
 			Locks:            []*grapher.StateLock{lock},
-			OutputStates:     []*grapher.OutputState{outputState},
+			OutputStates:     []*statevisibilitytracker.OutputState{outputState},
 		},
 	}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
