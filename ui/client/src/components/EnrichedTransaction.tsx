@@ -27,6 +27,7 @@ import DnsIcon from '@mui/icons-material/Dns';
 import { EventChip } from "./EventChip";
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useNavigate } from "react-router-dom";
+import { customNavigate } from "../utils";
 
 type Props = {
   enrichedTransaction: IEnrichedTransaction
@@ -90,17 +91,17 @@ export const EnrichedTransaction: React.FC<Props> = ({
             </Grid2>
             <Grid2>
               <Box sx={{ minWidth: '100px', textAlign: 'center' }}>
-              <Typography align="center" variant="body2" color="textSecondary">{t('time')}</Typography>
-              <EllapsedTime icon={null} timestamp={enrichedTransaction.block.timestamp} />
+                <Typography align="center" variant="body2" color="textSecondary">{t('time')}</Typography>
+                <EllapsedTime icon={null} timestamp={enrichedTransaction.block.timestamp} />
               </Box>
             </Grid2>
             <Grid2 alignContent="center">
               <Tooltip arrow title={t('open')}>
-              <IconButton
-              onClick={() => navigate(`/ui/transactions/${enrichedTransaction.hash}`)}
-              >
-                <OpenInNewIcon color="secondary" fontSize="medium" />
-              </IconButton>
+                <IconButton
+                  onClick={event => customNavigate(`/ui/transactions/${enrichedTransaction.hash}`, event, navigate)}
+                >
+                  <OpenInNewIcon color="secondary" fontSize="medium" />
+                </IconButton>
               </Tooltip>
             </Grid2>
           </Grid2>

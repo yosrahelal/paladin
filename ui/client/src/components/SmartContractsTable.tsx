@@ -41,6 +41,7 @@ import { Timestamp } from './Timestamp';
 import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useNavigate } from 'react-router-dom';
+import { customNavigate } from '../utils';
 
 type Props = {
   domainAddress: string
@@ -246,7 +247,7 @@ export const SmartContractsTable: React.FC<Props> = ({
               <TableCell align="right" sx={{ padding: '8px' }}>
                 <Tooltip title={t('open')} arrow>
                   <IconButton
-                    onClick={() => navigate(`/ui/domains/${contract.address}`)}>
+                    onClick={mouseEvent => customNavigate(`/ui/domains/${contract.address}`, mouseEvent, navigate)}>
                     <OpenInNewIcon color="secondary" fontSize="medium" />
                   </IconButton>
                 </Tooltip>
