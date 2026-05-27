@@ -31,6 +31,13 @@ type unlockCommon struct {
 	noto *Noto
 }
 
+type unlockDataResult struct {
+	spendEncoded     []byte
+	cancelEncoded    []byte
+	infoStates       []*prototk.NewState
+	infoDistribution identityList
+}
+
 type unlockStates struct {
 	oldLock           *loadedLockInfo // V1 only
 	lockedInputs      *preparedLockedInputs
@@ -100,6 +107,17 @@ func (h *unlockCommon) buildUnlockData(ctx context.Context, notaryID, senderID, 
 		// We need to know the IDs of the states at this point
 		err = h.noto.allocateStateIDs(ctx, stateQueryContext, infoStates)
 	}
+	var manifestState *prototk.NewState
+	if tx.DomainConfig.IsV1() {
+		manifestState, err = h.noto.newManifestBuilder().addInfoStates(infoDistribution, infoStates...).buildManifest(ctx, stateQueryContext)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		err = h.noto.allocateStateIDs(ctx, stateQueryContext, []*prototk.NewState{manifestState})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
 	if err == nil {
 		endorsableInfoStates := make([]*prototk.EndorsableState, len(infoStates))
 		for i, s := range infoStates {
@@ -108,6 +126,18 @@ func (h *unlockCommon) buildUnlockData(ctx context.Context, notaryID, senderID, 
 				SchemaId:      s.SchemaId,
 				StateDataJson: s.StateDataJson,
 			}
+		}
+
+		if tx.DomainConfig.IsV1() {
+			// add the manifest state first
+			endorsableInfoStates = append([]*prototk.EndorsableState{{
+				Id:            *manifestState.Id,
+				SchemaId:      manifestState.SchemaId,
+				StateDataJson: manifestState.StateDataJson,
+			}}, endorsableInfoStates...)
+
+			// also append to info states being returned
+			infoStates = append([]*prototk.NewState{manifestState}, infoStates...)
 		}
 		encodedUnlockData, err = h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, endorsableInfoStates)
 	}

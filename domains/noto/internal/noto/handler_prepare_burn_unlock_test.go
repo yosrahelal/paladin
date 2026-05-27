@@ -153,16 +153,17 @@ func TestPrepareBurnUnlock(t *testing.T) {
 	require.Len(t, assembleRes.AssembledTransaction.InputStates, 1)  // old info
 	require.Len(t, assembleRes.AssembledTransaction.OutputStates, 1) // new info
 	require.Len(t, assembleRes.AssembledTransaction.ReadStates, 1)
-	require.Len(t, assembleRes.AssembledTransaction.InfoStates, 4) // manifest + unlock-data-info + prepare-data-info + cancel-coin
+	require.Len(t, assembleRes.AssembledTransaction.InfoStates, 5) // both manifests + unlock-data-info + prepare-data-info + cancel-coin
 
 	assert.Equal(t, inputLockInfo.Id, assembleRes.AssembledTransaction.InputStates[0].Id)
 	assert.Equal(t, hashName("lockInfo_v1"), assembleRes.AssembledTransaction.OutputStates[0].SchemaId)
 
 	inputCoinState := assembleRes.AssembledTransaction.ReadStates[0]
 	manifestState := assembleRes.AssembledTransaction.InfoStates[0]
-	unlockDataState := assembleRes.AssembledTransaction.InfoStates[1]
-	prepareDataState := assembleRes.AssembledTransaction.InfoStates[2]
-	cancelCoinState := assembleRes.AssembledTransaction.InfoStates[3]
+	unlockManifestState := assembleRes.AssembledTransaction.InfoStates[1]
+	unlockDataState := assembleRes.AssembledTransaction.InfoStates[2]
+	prepareDataState := assembleRes.AssembledTransaction.InfoStates[3]
+	cancelCoinState := assembleRes.AssembledTransaction.InfoStates[4]
 	newLockInfoState := assembleRes.AssembledTransaction.OutputStates[0]
 
 	assert.Equal(t, inputCoin.ID.String(), inputCoinState.Id)
@@ -291,7 +292,7 @@ func TestPrepareBurnUnlock(t *testing.T) {
 	}, data)
 
 	// Decode the options we store into the lockInfo
-	unlockTxData, err := n.encodeTransactionDataV1(ctx, newStateToEndorsableState([]*prototk.NewState{unlockDataState}))
+	unlockTxData, err := n.encodeTransactionDataV1(ctx, newStateToEndorsableState([]*prototk.NewState{unlockManifestState, unlockDataState}))
 	require.NoError(t, err)
 	notoParams := decodeSingleABITuple[types.NotoUpdateLockArgs](t, types.NotoUpdateLockArgsABI, fnParams.UpdateArgs)
 	notoOptions := notoParams.Options
@@ -418,6 +419,9 @@ func TestPrepareBurnUnlock(t *testing.T) {
 		completeForIdentity(notaryAddress).
 		completeForIdentity(senderKey.Address.String())
 	mt.withMissingNewStates(manifestState, unlockDataState).
+		incompleteForIdentity(notaryAddress).
+		incompleteForIdentity(senderKey.Address.String())
+	mt.withMissingNewStates(unlockManifestState, unlockDataState).
 		incompleteForIdentity(notaryAddress).
 		incompleteForIdentity(senderKey.Address.String())
 	mt.withMissingNewStates(unlockDataState).
