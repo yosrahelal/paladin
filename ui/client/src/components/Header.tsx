@@ -37,6 +37,7 @@ import logoLight from '../../public/paladin-title-light.svg';
 import { ApplicationContext } from '../contexts/ApplicationContext';
 import { SettingsMenu } from '../menus/Settings';
 import { AppRoutes } from '../routes';
+import { customNavigate } from '../utils';
 
 enum HeaderTab {
   Transactions = 0,
@@ -72,24 +73,6 @@ export const Header: React.FC = () => {
 
   const [tab, setTab] = useState(getTabFromPath(pathname));
 
-  const handleNavigation = (tab: number) => {
-    setTab(tab);
-    switch (tab) {
-      case HeaderTab.Submissions:
-        navigate(AppRoutes.Submissions);
-        break;
-      case HeaderTab.Keys:
-        navigate(AppRoutes.Keys);
-        break;
-      case HeaderTab.Registry:
-        navigate(AppRoutes.Registry);
-        break;
-      case HeaderTab.Domains:
-        navigate(AppRoutes.Domains);
-        break;
-    }
-  };
-
   return (
     <>
       <AppBar>
@@ -110,25 +93,29 @@ export const Header: React.FC = () => {
                 textAlign={lessThanMedium ? 'center' : 'left'}
               >
                 <ButtonBase
-                onClick={() => window.location.href = '/ui'}>
-                <img
-                  src={theme.palette.mode === 'dark' ? logoDark : logoLight}
-                  style={{ marginTop: '7px' }}
-                />
+                  onClick={() => window.location.href = '/ui'}>
+                  <img
+                    src={theme.palette.mode === 'dark' ? logoDark : logoLight}
+                    style={{ marginTop: '7px' }}
+                  />
                 </ButtonBase>
               </Grid2>
               <Grid2 size={{ xs: 12, sm: 12, md: 6 }} alignContent="center">
                 <Tabs
                   TabIndicatorProps={{ style: { height: '4px' } }}
                   value={tab}
-                  onChange={(_event, value) => handleNavigation(value)}
+                  onChange={(event: any, value) => {
+                    if (!(event.metaKey || event.ctrlKey || event.button === 1)) {
+                      setTab(value);
+                    }
+                  }}
                   centered
                 >
-                  <Tab sx={{ minWidth: '120px'}} label={t('transactions')} onClick={() => navigate(AppRoutes.Transactions)} />
-                  <Tab sx={{ minWidth: '120px'}} label={t('submissions')} onClick={() => navigate(AppRoutes.Submissions)} />
-                  <Tab sx={{ minWidth: '120px'}} label={t('localKeys')} />
-                  <Tab sx={{ minWidth: '120px'}} label={t('registry')} />
-                  <Tab sx={{ minWidth: '120px'}} label={t('domains')} onClick={() => navigate(AppRoutes.Domains)} />
+                  <Tab sx={{ minWidth: '120px' }} label={t('transactions')} onClick={event => customNavigate(AppRoutes.Transactions, event, navigate)} />
+                  <Tab sx={{ minWidth: '120px' }} label={t('submissions')} onClick={event => customNavigate(AppRoutes.Submissions, event, navigate)} />
+                  <Tab sx={{ minWidth: '120px' }} label={t('localKeys')} onClick={event => customNavigate(AppRoutes.Keys, event, navigate)} />
+                  <Tab sx={{ minWidth: '120px' }} label={t('registry')} onClick={event => customNavigate(AppRoutes.Registry, event, navigate)} />
+                  <Tab sx={{ minWidth: '120px' }} label={t('domains')} onClick={event => customNavigate(AppRoutes.Domains, event, navigate)} />
                 </Tabs>
               </Grid2>
               <Grid2 size={{ xs: 12, sm: 12, md: 3 }}>

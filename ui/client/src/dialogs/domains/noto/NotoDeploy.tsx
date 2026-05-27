@@ -30,6 +30,7 @@ import { useTranslation } from 'react-i18next';
 import { TransactionType } from '../../../interfaces';
 import { sendTransaction } from '../../../queries/transactions';
 import { useNavigate } from 'react-router-dom';
+import { customNavigate } from '../../../utils';
 
 const notoConstructorABI = {
   type: 'constructor',
@@ -111,7 +112,7 @@ export const NotoDeployDialog: React.FC<Props> = ({
             <Alert variant="filled" severity="success" sx={{ marginBottom: '20px' }}
               action={
                 <Button variant="outlined" color="inherit" size="small"
-                  onClick={() => navigate(`/ui/transactions/${transactionId}`, { state: { from: 'domains' } })}
+                  onClick={event => customNavigate(`/ui/transactions/${transactionId}?back=domains`, event, navigate)}
                 >{t('view')}</Button>
               }
             >

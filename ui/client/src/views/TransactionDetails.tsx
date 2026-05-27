@@ -18,7 +18,7 @@ import { Alert, Box, Button, Fade, Grid2, Tab, Tabs, Typography } from "@mui/mat
 import { useQuery } from "@tanstack/react-query";
 import { fetchPaladinTransaction, fetchEnrichedTransaction, fetchTransactionReceipt } from "../queries/transactions";
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { capitalize, getShortId, isValidTransactionHash, isValidUUID } from "../utils";
 import { useTranslation } from "react-i18next";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -33,9 +33,9 @@ export const TransactionDetails: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { hashOrId } = useParams();
+  const [searchParams] = useSearchParams();
   const [hash, setHash] = useState<string>();
   const [id, setId] = useState<string>();
-  const location = useLocation();
 
   useEffect(() => {
     if (hashOrId === undefined) {
@@ -83,10 +83,8 @@ export const TransactionDetails: React.FC = () => {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{blockchainTransactionError?.message ?? paladinTransactionError?.message}</Alert>
   }
 
-  let backTo = 'transactions';
-  if(['submissions', 'domains'].includes(location.state?.from)) {
-    backTo = location.state.from;
-  }
+  const back = searchParams.get('back');
+  const backTo = (back !== null && ['submissions', 'domains'].includes(back)) ? back : 'transactions';
 
   return (
     <Fade timeout={600} in={true}>

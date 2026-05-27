@@ -23,6 +23,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { getDomainContractByAddress } from "../queries/domains";
 import { JSONBox } from "../components/JSONBox";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { DomainButtons } from "../components/DomainButtons";
 
 export const DomainContract: React.FC = () => {
 
@@ -64,8 +65,10 @@ export const DomainContract: React.FC = () => {
           </Button>
         </Box>
         <Typography align="center" variant="h6" sx={{ marginBottom: '5px' }}>{t('domainSmartContract')}</Typography>
-        <Tabs>
-          <Tab value="paladin-transaction"
+        <Tabs value="contract"
+          TabIndicatorProps={{ style: { display: 'none' } }}
+        >
+          <Tab value="contract"
             sx={{
               backgroundColor: theme => theme.palette.background.paper,
               borderTopLeftRadius: '4px',
@@ -78,6 +81,16 @@ export const DomainContract: React.FC = () => {
               </Box>
             } />
         </Tabs>
+        <Box sx={{
+          paddingLeft: '5px',
+          paddingTop: '15px',
+          paddingBottom: '5px',
+          backgroundColor: theme => theme.palette.background.paper,
+        }}>
+        <DomainButtons
+          domainName={domainContract.domainName}
+          contractAddress={domainContract.address} />
+        </Box>
         <Accordion elevation={0} disableGutters defaultExpanded>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             {t('details')}

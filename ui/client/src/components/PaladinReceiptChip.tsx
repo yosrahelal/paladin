@@ -39,7 +39,7 @@ export const PaladinReceiptChip: React.FC<Props> = ({
         paddingTop: 0, paddingBottom: 0, fontWeight: '400', whiteSpace: 'nowrap',
         minWidth: '170px'
       }}
-      onClick={event => customNavigate(`/ui/transactions/${receipt.id}`, event, navigate, { state: { from: 'transactions' } })}
+      onClick={event => customNavigate(`/ui/transactions/${receipt.id}`, event, navigate )}
       endIcon={<OpenInNewIcon />}
     >
       <span style={{ fontWeight: 600, marginRight: '6px' }}>{t(receipt.domain ??  'public')}</span>

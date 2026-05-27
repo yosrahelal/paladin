@@ -126,13 +126,13 @@ export const capitalize = (value: string): string =>
 
 export const isValidAddress = (value: string) => /^0x[a-fA-F0-9]{40}$/.test(value);
 
-export const customNavigate = (destination: string, mouseEvent: React.MouseEvent<HTMLButtonElement>, navigate: (to: To, options?: NavigateOptions) => void, options?: NavigateOptions) => {
+export const customNavigate = (destination: string, mouseEvent: React.MouseEvent<HTMLElement>, navigate: (to: To, options?: NavigateOptions) => void) => {
   if (mouseEvent.metaKey || mouseEvent.ctrlKey || mouseEvent.button === 1) {
     const newTab = window.open(destination, '_blank');
     if (newTab) {
       newTab.focus();
     }
   } else {
-    navigate(destination, options);
+    navigate(destination);
   }
 };

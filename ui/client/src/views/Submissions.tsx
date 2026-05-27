@@ -14,13 +14,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Button, Fade, Grid2, TablePagination, ToggleButton, ToggleButtonGroup, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Button, Fade, Grid2, TablePagination, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { Dispatch, SetStateAction, useContext, useEffect, useState } from "react";
 import { PaladinTransaction } from "../components/PaladinTransaction";
 import { ApplicationContext } from "../contexts/ApplicationContext";
 import { fetchSubmissions } from "../queries/transactions";
-import { getAltModeScrollBarStyle } from "../themes/default";
 import { IFilter, IPaladinTransactionPagingReference } from "../interfaces";
 import { useTranslation } from "react-i18next";
 import { Filters } from "../components/Filters";
@@ -64,7 +63,6 @@ export const Submissions: React.FC<Props> = ({
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
   const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
   const [count, setCount] = useState(-1);
-  const theme = useTheme();
   const { t } = useTranslation();
 
   const { data: transactions, error } = useQuery({
@@ -184,14 +182,7 @@ export const Submissions: React.FC<Props> = ({
               setFilters={setFilters}
             />
           </Box>
-          <Box
-            id="scrollableDivSubmissions"
-            sx={{
-              paddingRight: "15px",
-              height: "calc(100vh - 250px)",
-              ...getAltModeScrollBarStyle(theme.palette.mode)
-            }}
-          >
+          <Box>
             {
               transactions?.map(transaction => (
                 <PaladinTransaction

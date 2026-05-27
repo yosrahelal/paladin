@@ -86,7 +86,7 @@ export const PaladinTransaction: React.FC<Props> = ({ paladinTransaction }) => {
             <Grid2 size={{ md: 1 }} sx={{ textAlign: 'right'}}>
               <Tooltip arrow title={t('open')}>
                 <IconButton
-                  onClick={event => customNavigate(`/ui/transactions/${paladinTransaction.id}`, event, navigate)}
+                  onClick={event => customNavigate(`/ui/transactions/${paladinTransaction.id}?back=submissions`, event, navigate)}
                 >
                   <OpenInNewIcon color="secondary" fontSize="medium" />
                 </IconButton>

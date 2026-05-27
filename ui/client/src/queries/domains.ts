@@ -26,12 +26,13 @@ export const listDomains = async (): Promise<string[]> => {
     method: RpcMethods.domain_listDomains,
     params: [],
   };
-  return <Promise<string[]>>(
+  const result = await <Promise<string[]>>(
     returnResponse(
       () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
       i18next.t('errorFetchingDomains')
     )
   );
+  return result.sort();
 };
 
 export const getDomainByName = async (name: string): Promise<any> => {

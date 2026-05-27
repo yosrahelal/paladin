@@ -29,7 +29,7 @@ import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TransactionType } from '../../../interfaces';
 import { sendTransaction } from '../../../queries/transactions';
-import { encodeHex } from '../../../utils';
+import { customNavigate, encodeHex } from '../../../utils';
 import { useNavigate } from 'react-router-dom';
 
 type Props = {
@@ -128,7 +128,7 @@ export const NotoBurnDialog: React.FC<Props> = ({
             <Alert variant="filled" severity="success" sx={{ marginBottom: '20px' }}
               action={
                 <Button variant="outlined" color="inherit" size="small"
-                  onClick={() => navigate(`/ui/transactions/${transactionId}`, { state: { from: 'domains' } })}
+                  onClick={event => customNavigate(`/ui/transactions/${transactionId}?back=domains`, event, navigate)}
                 >{t('view')}</Button>
               }
             >

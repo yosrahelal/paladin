@@ -162,39 +162,49 @@ export const SmartContractsTable: React.FC<Props> = ({
             </TableCell>
             {selectedDomain === 'noto' &&
               <TableCell
+                width={1}
                 sx={{
                   backgroundColor: (theme) => theme.palette.background.paper,
+                  whiteSpace: 'nowrap'
                 }}
               >
                 {t('name')}
               </TableCell>}
             {selectedDomain === 'noto' &&
               <TableCell
+                width={1}
                 sx={{
                   backgroundColor: (theme) => theme.palette.background.paper,
+                  whiteSpace: 'nowrap'
                 }}
               >
                 {t('symbol')}
               </TableCell>}
             {selectedDomain === 'noto' &&
               <TableCell
+                width={1}
                 sx={{
                   backgroundColor: (theme) => theme.palette.background.paper,
+                  whiteSpace: 'nowrap'
                 }}
               >
                 {t('isNotary')}
               </TableCell>}
             {selectedDomain === 'zeto' &&
               <TableCell
+                width={1}
                 sx={{
                   backgroundColor: (theme) => theme.palette.background.paper,
+                  whiteSpace: 'nowrap'
                 }}
               >
                 {t('tokenName')}
               </TableCell>}
             <TableCell
+              width={1}
               sx={{
                 backgroundColor: (theme) => theme.palette.background.paper,
+                whiteSpace: 'nowrap'
               }}
             >
               {t('contractAddress')}
@@ -202,6 +212,7 @@ export const SmartContractsTable: React.FC<Props> = ({
             <TableCell
               sx={{
                 backgroundColor: (theme) => theme.palette.background.paper,
+                whiteSpace: 'nowrap'
               }}
             >
               {t('actions')}
@@ -209,6 +220,7 @@ export const SmartContractsTable: React.FC<Props> = ({
             <TableCell
               sx={{
                 backgroundColor: (theme) => theme.palette.background.paper,
+                whiteSpace: 'nowrap'
               }}
             />
           </TableRow>
@@ -247,7 +259,7 @@ export const SmartContractsTable: React.FC<Props> = ({
               <TableCell align="right" sx={{ padding: '8px' }}>
                 <Tooltip title={t('open')} arrow>
                   <IconButton
-                    onClick={mouseEvent => customNavigate(`/ui/domains/${contract.address}`, mouseEvent, navigate)}>
+                    onClick={mouseEvent => customNavigate(`/ui/domains/${contract.address}?back=domains`, mouseEvent, navigate)}>
                     <OpenInNewIcon color="secondary" fontSize="medium" />
                   </IconButton>
                 </Tooltip>
