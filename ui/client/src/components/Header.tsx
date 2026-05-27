@@ -128,7 +128,7 @@ export const Header: React.FC = () => {
                   <Tab sx={{ minWidth: '120px'}} label={t('submissions')} onClick={() => navigate(AppRoutes.Submissions)} />
                   <Tab sx={{ minWidth: '120px'}} label={t('localKeys')} />
                   <Tab sx={{ minWidth: '120px'}} label={t('registry')} />
-                  <Tab sx={{ minWidth: '120px'}} label={t('domains')} />
+                  <Tab sx={{ minWidth: '120px'}} label={t('domains')} onClick={() => navigate(AppRoutes.Domains)} />
                 </Tabs>
               </Grid2>
               <Grid2 size={{ xs: 12, sm: 12, md: 3 }}>

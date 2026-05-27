@@ -33,16 +33,16 @@ export const DomainContract: React.FC = () => {
   const { data: domainContract, error } = useQuery({
     queryKey: [`domain-contract-${address}`],
     queryFn: () => getDomainContractByAddress(address!),
-    enabled: address !== undefined
+    enabled: address !== undefined,
+    retry: false
   });
-
-
-  if (domainContract === undefined) {
-    return <></>;
-  }
 
   if (error) {
     return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">{error?.message}</Alert>
+  }
+
+  if (domainContract === undefined) {
+    return <></>;
   }
 
   return (
@@ -64,7 +64,6 @@ export const DomainContract: React.FC = () => {
           </Button>
         </Box>
         <Typography align="center" variant="h6" sx={{ marginBottom: '5px' }}>{t('domainSmartContract')}</Typography>
-
         <Tabs>
           <Tab value="paladin-transaction"
             sx={{
@@ -79,7 +78,6 @@ export const DomainContract: React.FC = () => {
               </Box>
             } />
         </Tabs>
-
         <Accordion elevation={0} disableGutters defaultExpanded>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             {t('details')}

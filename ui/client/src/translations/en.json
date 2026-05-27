@@ -76,6 +76,7 @@
 	"errorConnectingToPaladinNode": "Error connecting to Paladin node",
 	"errorFetchingBlock": "Error fetching block",
 	"errorFetchingDomain": "Error fetching domain",
+	"errorFetchingDomainContract": "Error fetching domain contract",
 	"errorFetchingDomains": "Error fetching domains",
 	"errorFetchingDomainReceipt": "Error fetching domain receipt",
 	"errorFetchingEvents": "Error fetching events",

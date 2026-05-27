@@ -121,7 +121,7 @@ export const getDomainContractByAddress = async (
   return <Promise<IDomainContract>>(
     returnResponse(
       () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(payload))),
-      i18next.t('errorFetchingDomainReceipt'), [500]
+      i18next.t('errorFetchingDomainContract')
     )
   );
 };
