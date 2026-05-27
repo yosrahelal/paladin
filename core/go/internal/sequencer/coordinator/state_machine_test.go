@@ -137,9 +137,11 @@ func TestCoordinator_WhenIdle_StaysIdle_OnHeartbeatFromNodeInNonActiveState(t *t
 
 func TestCoordinator_WhenIdleAndTransactionsDelegatedToSelf_TransitionsToActive(t *testing.T) {
 	ctx := t.Context()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
 		NodeName("node1").
 		CurrentActiveCoordinator("node1").
+		EndorserCandidates("node2"). // gives action_SendHeartbeat a recipient
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 	event := &TransactionsDelegatedEvent{
 		FromNode:     "senderNode",
@@ -150,6 +152,7 @@ func TestCoordinator_WhenIdleAndTransactionsDelegatedToSelf_TransitionsToActive(
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must set signing identity")
 	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
+	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "OnTransitionTo Active must send an immediate heartbeat")
 }
 
 func TestCoordinator_WhenIdle_NewBlock_NewEpoch_UpdatesPriorityListAndStaysIdle(t *testing.T) {
@@ -353,6 +356,47 @@ func TestCoordinator_WhenElect_ActiveCoordinatorStartsFlushing_TransitionsToPrep
 	// action_ClearTimeoutSchedules ran on the Elect → Prepared transition.
 	assert.Nil(t, c.cancelRequestTimeout, "request timeout must be cleared on Elect exit")
 	assert.Nil(t, c.cancelStateTimeout, "state timeout must be cleared on Elect exit")
+}
+
+func TestCoordinator_WhenElect_ActiveCoordinatorClosing_TransitionsDirectlyToActiveAndImportsState(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node1").
+		CurrentActiveCoordinator("node2").
+		Build()
+
+	// Construct a confirmed lock + its output state so we can verify the grapher absorbed them.
+	stateID := pldtypes.HexBytes{0x01, 0x02, 0x03, 0x04}
+	confirmedAtBlock := uint64(99)
+	lock := &grapher.StateLock{
+		State:            stateID,
+		ConfirmedAtBlock: &confirmedAtBlock,
+	}
+	outputState := &grapher.OutputState{
+		AllowedNodes: []string{"node1"},
+	}
+	outputState.ID = stateID
+
+	event := &common.HeartbeatReceivedEvent{
+		FromNode: "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Closing,
+			Locks:            []*grapher.StateLock{lock},
+			OutputStates:     []*grapher.OutputState{outputState},
+		},
+	}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+	assert.Equal(t, State_Active, c.GetCurrentState(), "Closing heartbeat from current active must drive Elect → Active directly")
+	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must set signing identity")
+	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
+	// action_ClearTimeoutSchedules ran on the Elect → Active transition.
+	assert.Nil(t, c.cancelRequestTimeout, "request timeout must be cleared on Elect exit")
+	assert.Nil(t, c.cancelStateTimeout, "state timeout must be cleared on Elect exit")
+	// action_ImportStatesAndLocks ran: the grapher must now hold the imported state and lock.
+	exported, err := c.grapher.ExportStatesAndLocks(ctx, "node1")
+	require.NoError(t, err)
+	assert.Len(t, exported.OutputState, 1, "imported output state must be visible to node1")
+	assert.Len(t, exported.LockedState, 1, "imported confirmed lock must be present in grapher")
 }
 
 func TestCoordinator_WhenElect_StaysElect_OnHeartbeatFromCurrentCoordinator_WhenStillActive(t *testing.T) {
@@ -559,6 +603,7 @@ func TestCoordinator_WhenPrepared_HeartbeatInterval_GraceExceeded_TransitionsToA
 	// guard_InactiveGracePeriodExceeded = true → transitions to Active
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.Equal(t, "node1", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
+	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must call action_NewSigningIdentity")
 }
 
 func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_TransitionsToActiveAndImportsState(t *testing.T) {
@@ -814,6 +859,8 @@ func TestCoordinator_WhenPreparedTransitionsToActive_RefreshesSigningIdentityAnd
 	pooledTxID := uuid.New()
 	pooledTx.EXPECT().GetID().Return(pooledTxID).Maybe()
 	pooledTx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
+	// action_SendHeartbeat (OnTransitionTo Active) builds the payload by calling GetSnapshot on each transaction.
+	pooledTx.EXPECT().GetSnapshot(mock.Anything).Return(&common.SnapshotPooledTransaction{ID: pooledTxID}, nil, nil).Maybe()
 	pooledTx.EXPECT().HandleEvent(mock.Anything, mock.AnythingOfType("*transaction.SelectedEvent")).Return(nil).Once()
 
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Prepared).
@@ -864,7 +911,37 @@ func TestCoordinator_WhenActive_HeartbeatInterval_WithInflight_SendsHeartbeatAnd
 	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "action_SendHeartbeat must fire in Active HeartbeatInterval")
 }
 
-func TestCoordinator_WhenActive_HigherPriorityHeartbeat_CleansUpPooledAndTransitionsToClosingFlush(t *testing.T) {
+func TestCoordinator_WhenActive_HigherPriorityHeartbeat_WithUnconfirmedDispatchedTx_CleansUpPooledAndTransitionsToClosingFlush(t *testing.T) {
+	ctx := t.Context()
+	pooledTx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	pooledTxID := uuid.New()
+	pooledTx.EXPECT().GetID().Return(pooledTxID).Maybe()
+	pooledTx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
+	dispatchedTx, _ := newDispatchedTxMock(t)
+
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
+		NodeName("node3"). // node3 is lower priority than node1
+		CurrentActiveCoordinator("node3").
+		EndorserCandidates("node1", "node2", "node3").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		PooledTransactions(pooledTx).
+		Transactions(dispatchedTx).
+		CoordinatorPriorityList("node1", "node2", "node3").
+		Build()
+	require.Equal(t, 2, len(c.transactionsByID), "pooled and dispatched txns must be registered before event")
+	// node1 sends an Active heartbeat while node3 is coordinating → preemption
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode: "node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	}))
+	// action_CleanUpTransactionsNotYetDispatched removed the pooled tx; dispatched tx remains → flush required
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	assert.Equal(t, uint64(1), uint64(len(c.transactionsByID)), "only pooled tx must be cleaned up; dispatched tx remains for flush")
+}
+
+func TestCoordinator_WhenActive_HigherPriorityHeartbeat_CleansUpPooledAndTransitionsToClosing(t *testing.T) {
 	ctx := t.Context()
 	pooledTx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	pooledTxID := uuid.New()
@@ -887,8 +964,8 @@ func TestCoordinator_WhenActive_HigherPriorityHeartbeat_CleansUpPooledAndTransit
 			CoordinatorState: common.CoordinatorState_Active,
 		},
 	}))
-	// action_CleanUpTransactionsNotYetDispatched removed the pooled transaction
-	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	// action_CleanUpTransactionsNotYetDispatched removed the pooled transaction; no dispatched txns → no flush needed
+	assert.Equal(t, State_Closing, c.GetCurrentState())
 	assert.Equal(t, uint64(0), uint64(len(c.transactionsByID)), "pooled txns must be cleaned up on preemption")
 }
 
@@ -1706,6 +1783,7 @@ func TestCoordinator_WhenClosing_DelegatedTransactions_LowerPriority_ActiveCoord
 	// GuardNot(IsHigherPriority) AND InactiveGraceExceeded → transitions to Active.
 	assert.Equal(t, State_Active, c.GetCurrentState())
 	assert.Equal(t, "node3", c.currentActiveCoordinator, "OnTransitionTo Active must set currentActiveCoordinator to self")
+	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must call action_NewSigningIdentity")
 }
 
 func TestCoordinator_WhenClosing_TransactionStateTransition_ToFinal_CleansUpAndStaysClosing(t *testing.T) {

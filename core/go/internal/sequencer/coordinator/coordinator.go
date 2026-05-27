@@ -89,7 +89,6 @@ type coordinator struct {
 	endorserCandidates                 []string       // ENDORSER mode only: candidate nodes for coordinator priority list and heartbeat fan-out
 	originatorActivity                 map[string]int // STATIC/SENDER only: heartbeat-intervals since last delegation activity per originator node
 	coordinatorPriorityList            []string       // priority-ordered list; index 0 is current active coordinator
-	onEpochBoundary                    bool
 	signingIdentity                    signingIdentityState
 
 	// Handover request tracking
