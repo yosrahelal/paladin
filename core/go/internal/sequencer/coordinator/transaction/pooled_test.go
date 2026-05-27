@@ -221,7 +221,7 @@ func Test_action_NotifyDependentsOfReset_InitialTransitionHasNoDependents(t *tes
 	require.NoError(t, err)
 }
 
-func Test_notifyDependentsOfRepool_WithDependenciesFromPreAssembly(t *testing.T) {
+func Test_notifyDependentsOfRepool_WithChainedDependency(t *testing.T) {
 	ctx := t.Context()
 	grapher, depTracker := newTestGrapher()
 	dependentID := uuid.New()
@@ -238,7 +238,7 @@ func Test_notifyDependentsOfRepool_WithDependenciesFromPreAssembly(t *testing.T)
 		}).
 		Build()
 
-	depTracker.GetPostAssemblyDeps().AddPrerequisites(ctx, dependentTxn.pt.ID, txn.pt.ID)
+	depTracker.GetChainedDeps().AddPrerequisites(ctx, dependentTxn.pt.ID, txn.pt.ID)
 
 	txn.notifyDependentsOfReset(ctx)
 	assert.Equal(t, State_PreAssembly_Blocked, dependentTxn.GetCurrentState())
