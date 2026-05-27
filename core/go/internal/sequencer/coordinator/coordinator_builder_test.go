@@ -1,3 +1,5 @@
+//go:build !generate_mocks
+
 /*
  * Copyright © 2025 Kaleido, Inc.
  *
