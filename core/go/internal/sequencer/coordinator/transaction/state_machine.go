@@ -50,12 +50,15 @@ const (
 	Event_DependencySelectedForAssemble                                                         // the transaction delegated immediately before the transaction from the same originator has been selected for assembly
 	Event_Selected                                                                              // selected from the pool as the next transaction to be assembled
 	Event_AssembleRequestSent                                                                   // assemble request sent to the assembler
-	Event_Assemble_Success                                                                      // assemble response received from the originator
-	Event_Assemble_Revert_Response                                                              // assemble response received from the originator with a revert reason
-	Event_Assemble_Error_Response                                                               // assemble response received from the originator with an error
-	Event_Assemble_Cancelled                                                                    // the assemble attempt has been cancelled
+	Event_AssembleSuccess                                                                       // assembler returned a successful assembly
+	Event_AssembleRevert                                                                        // assembler returned a revert (domain said assembly is invalid)
+	Event_AssembleError                                                                         // assembler returned an unexpected error
+	Event_AssembleRequestRejected                                                               // originator rejected the assemble request (e.g. block height tolerance exceeded)
+	Event_AssembleCancelled                                                                     // the assemble attempt has been cancelled
 	Event_Endorsed                                                                              // endorsement received from one endorser
-	Event_EndorsedRejected                                                                      // endorsement received from one endorser with a revert reason
+	Event_EndorseRevert                                                                         // endorser responded that the assembly is invalid (domain REVERT)
+	Event_EndorseError                                                                          // endorser encountered an unexpected error processing the request
+	Event_EndorseRequestRejected                                                                // endorser rejected the request before processing (e.g. block height tolerance)
 	Event_DependencyReady                                                                       // another transaction, for which this transaction has a dependency on, has become ready for dispatch
 	Event_DependencyReset                                                                       // another transaction, for which this transaction has a dependency on, has been reset
 	Event_DependencyConfirmedReverted                                                           // another transaction, for which this transaction has a dependency on, has been confirmed as reverted
@@ -226,7 +229,7 @@ var stateDefinitionsMap = StateDefinitions{
 			{Action: action_SendAssembleRequest},
 		},
 		Events: map[EventType]EventHandlers{
-			Event_Assemble_Success: {Handlers: []EventHandler{{
+			Event_AssembleSuccess: {Handlers: []EventHandler{{
 				Validator: validator_MatchesPendingAssembleRequest,
 				Actions: []ActionRule{
 					{
@@ -265,7 +268,7 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			}}},
-			Event_Assemble_Cancelled: {Handlers: []EventHandler{{
+			Event_AssembleCancelled: {Handlers: []EventHandler{{
 				Transitions: []Transition{
 					{
 						To:      State_Pooled,
@@ -281,14 +284,14 @@ var stateDefinitionsMap = StateDefinitions{
 					To: State_Evicted,
 				}},
 			}}},
-			Event_Assemble_Revert_Response: {Handlers: []EventHandler{{
+			Event_AssembleRevert: {Handlers: []EventHandler{{
 				Validator: validator_MatchesPendingAssembleRequest,
 				Actions:   []ActionRule{{Action: action_AssembleRevertResponse}},
 				Transitions: []Transition{{
 					To: State_Reverted,
 				}},
 			}}},
-			Event_Assemble_Error_Response: {Handlers: []EventHandler{{
+			Event_AssembleError: {Handlers: []EventHandler{{
 				Validator: validator_MatchesPendingAssembleRequest,
 				Actions:   []ActionRule{{Action: action_AssembleError}},
 				Transitions: []Transition{
@@ -302,6 +305,14 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Evicted,
 					},
 				},
+			}}},
+			Event_AssembleRequestRejected: {Handlers: []EventHandler{{
+				Validator: validator_IsAssembleBlockHeightRejection,
+				Actions:   []ActionRule{{Action: action_HandleAssembleBlockHeightRejection}},
+				Transitions: []Transition{{
+					To:      State_Pooled,
+					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+				}},
 			}}},
 			// Handle response from originator indicating it doesn't recognize this transaction.
 			// The most likely cause is that the transaction reached a terminal state (e.g., reverted
@@ -348,6 +359,7 @@ var stateDefinitionsMap = StateDefinitions{
 	State_Endorsement_Gathering: {
 		OnTransitionTo: []ActionRule{
 			{Action: action_ScheduleStateTimeout},
+			{Action: action_ComputeEndorseTolerances},
 			{Action: action_SendEndorsementRequests},
 		},
 		Events: map[EventType]EventHandlers{
@@ -375,13 +387,48 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			}}},
-			Event_EndorsedRejected: {Handlers: []EventHandler{{
-				Transitions: []Transition{
-					{
-						To:      State_Pooled,
-						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
+			// Domain returned REVERT: endorser rejected the assembly as invalid. Record the
+			// failed party (stops nudging them) and check whether remaining non-failed parties
+			// can still fulfill the plan. If tolerance exceeded → repool with full request reset;
+			// otherwise stay put — the remaining parties may still provide enough endorsements.
+			Event_EndorseRevert: {Handlers: []EventHandler{{
+				Actions: []ActionRule{{Action: action_RecordEndorseFailure}},
+				Transitions: []Transition{{
+					If: guard_EndorseFailureExceedsTolerance,
+					To: State_Pooled,
+					Actions: []ActionRule{
+						{Action: action_NotifyDependentsOfReset},
+						{Action: action_ResetEndorsementRequests},
 					},
-				},
+				}},
+			}}},
+			// Unexpected endorser error. Record the failed party (stops nudging them),
+			// then check whether remaining non-failed parties can still fulfill the plan.
+			// If tolerance exceeded → repool with full request reset; otherwise stay put
+			// and let the retry/nudge mechanism continue with the remaining parties.
+			Event_EndorseError: {Handlers: []EventHandler{{
+				Actions: []ActionRule{{Action: action_RecordEndorseFailure}},
+				Transitions: []Transition{{
+					If: guard_EndorseFailureExceedsTolerance,
+					To: State_Pooled,
+					Actions: []ActionRule{
+						{Action: action_NotifyDependentsOfReset},
+						{Action: action_ResetEndorsementRequests},
+					},
+				}},
+			}}},
+			// Service-level rejection (block height tolerance). Same as EndorseError:
+			// record the failed party, check tolerance, repool+reset only if tolerance exceeded.
+			Event_EndorseRequestRejected: {Handlers: []EventHandler{{
+				Actions: []ActionRule{{Action: action_RecordEndorseFailure}},
+				Transitions: []Transition{{
+					If: guard_EndorseFailureExceedsTolerance,
+					To: State_Pooled,
+					Actions: []ActionRule{
+						{Action: action_NotifyDependentsOfReset},
+						{Action: action_ResetEndorsementRequests},
+					},
+				}},
 			}}},
 			Event_RequestTimeoutInterval: {Handlers: []EventHandler{{
 				Actions: []ActionRule{{

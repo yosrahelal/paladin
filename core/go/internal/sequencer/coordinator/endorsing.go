@@ -24,6 +24,36 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
 
+// validator_IsEndorsementBlockHeightToleranceExceeded returns true when the absolute difference
+// between this coordinator's current block height and the requesting coordinator's block height
+// exceeds the configured block height tolerance.
+func validator_IsEndorsementBlockHeightToleranceExceeded(_ context.Context, c *coordinator, event common.Event) (bool, error) {
+	e := event.(*EndorsementRequestReceivedEvent)
+	coordinatorBlockHeight := uint64(e.CoordinatorBlockHeight)
+	diff := max(c.currentBlockHeight, coordinatorBlockHeight) - min(c.currentBlockHeight, coordinatorBlockHeight)
+	return diff > c.blockHeightTolerance, nil
+}
+
+// action_RejectEndorsementBlockHeight sends a dedicated EndorsementRejection message indicating
+// that the sender and receiver block heights differ by more than the configured tolerance. It
+// does not call the domain.
+func action_RejectEndorsementBlockHeight(ctx context.Context, c *coordinator, event common.Event) error {
+	e := event.(*EndorsementRequestReceivedEvent)
+	log.L(ctx).Warnf("rejecting endorsement request from %s due to block height tolerance (coordinator=%d, endorser=%d, tolerance=%d)", e.FromNode, e.CoordinatorBlockHeight, c.currentBlockHeight, c.blockHeightTolerance)
+	return c.transportWriter.SendEndorsementRejection(
+		ctx,
+		e.TransactionId,
+		e.IdempotencyKey,
+		c.contractAddress.String(),
+		e.AttestationRequest.Name,
+		e.Party,
+		e.FromNode,
+		e.CoordinatorBlockHeight,
+		int64(c.currentBlockHeight),
+		int64(c.blockHeightTolerance),
+	)
+}
+
 // validator_IsEndorsementRequestFromHigherPriorityCoordinator returns true when the node
 // that sent the endorsement request has strictly higher priority (lower index) than this
 // node in the current coordinator priority list. Uses the same comparison as
@@ -75,14 +105,21 @@ func action_HandleEndorsementRequest(ctx context.Context, c *coordinator, event 
 }
 
 func (c *coordinator) handleEndorsementRequest(ctx context.Context, e *EndorsementRequestReceivedEvent) {
+	sendErr := func(errMsg string) {
+		log.L(ctx).Errorf("handleEndorsementRequest error for tx %s: %s", e.TransactionId, errMsg)
+		if err := c.transportWriter.SendEndorsementError(ctx, e.TransactionId, e.IdempotencyKey, c.contractAddress.String(), errMsg, e.Party, e.AttestationRequest.Name, e.FromNode); err != nil {
+			log.L(ctx).Errorf("handleEndorsementRequest failed to send endorsement error: %s", err)
+		}
+	}
+
 	unqualifiedLookup, err := pldtypes.PrivateIdentityLocator(e.Party).Identity(ctx)
 	if err != nil {
-		log.L(ctx).Errorf("handleEndorsementRequest failed to resolve party identity: %s", err)
+		sendErr(err.Error())
 		return
 	}
 	resolvedSigner, err := c.components.KeyManager().ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, e.AttestationRequest.Algorithm, e.AttestationRequest.VerifierType)
 	if err != nil {
-		log.L(ctx).Errorf("handleEndorsementRequest failed to resolve key for party %s: %s", e.Party, err)
+		sendErr(err.Error())
 		return
 	}
 	endorsementRequest := e.PrivateEndorsementRequest
@@ -98,7 +135,7 @@ func (c *coordinator) handleEndorsementRequest(ctx context.Context, e *Endorseme
 
 	endorsementResult, err := c.domainAPI.EndorseTransaction(dCtx, c.components.Persistence().NOTX(), endorsementRequest)
 	if err != nil {
-		log.L(ctx).Errorf("handleEndorsementRequest failed to endorse transaction: %s", err)
+		sendErr(err.Error())
 		return
 	}
 	e.AttestationRequest.Payload = endorsementResult.Payload
@@ -120,7 +157,7 @@ func (c *coordinator) handleEndorsementRequest(ctx context.Context, e *Endorseme
 	case prototk.EndorseTransactionResponse_SIGN:
 		unqualifiedLookup, signerNode, err := pldtypes.PrivateIdentityLocator(endorsementResult.Endorser.Lookup).Validate(ctx, c.nodeName, true)
 		if err != nil {
-			log.L(ctx).Errorf("handleEndorsementRequest failed to validate endorser: %s", err)
+			sendErr(err.Error())
 			return
 		}
 		if signerNode == c.nodeName {
@@ -128,12 +165,12 @@ func (c *coordinator) handleEndorsementRequest(ctx context.Context, e *Endorseme
 			keyMgr := c.components.KeyManager()
 			resolvedKey, err := keyMgr.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, e.AttestationRequest.Algorithm, e.AttestationRequest.VerifierType)
 			if err != nil {
-				log.L(ctx).Errorf("handleEndorsementRequest failed to resolve key for endorser: %s", err)
+				sendErr(err.Error())
 				return
 			}
 			signaturePayload, err := keyMgr.Sign(ctx, resolvedKey, e.AttestationRequest.PayloadType, e.AttestationRequest.Payload)
 			if err != nil {
-				log.L(ctx).Errorf("handleEndorsementRequest failed to sign endorsement request: %s", err)
+				sendErr(err.Error())
 				return
 			}
 			attResult.Payload = signaturePayload

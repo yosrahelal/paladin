@@ -159,6 +159,40 @@ func action_SendAssembleSuccessResponse(ctx context.Context, txn *originatorTran
 	return txn.transportWriter.SendAssembleResponse(ctx, txn.pt.ID, txn.latestFulfilledAssembleRequestID, txn.pt.PostAssembly, txn.pt.PreAssembly, txn.currentDelegate)
 }
 
-func action_SendAssembleErrorResponse(ctx context.Context, txn *originatorTransaction, _ common.Event) error {
-	return txn.transportWriter.SendAssembleErrorResponse(ctx, txn.pt.ID, txn.latestFulfilledAssembleRequestID, txn.currentDelegate)
+func action_SendAssembleError(ctx context.Context, txn *originatorTransaction, _ common.Event) error {
+	return txn.transportWriter.SendAssembleError(ctx, txn.pt.ID, txn.latestFulfilledAssembleRequestID, txn.currentDelegate)
+}
+
+// validator_AssembleBlockHeightToleranceExceeded returns true when the absolute difference between
+// the coordinator's block height (from the assemble request) and this originator's block height
+// exceeds the configured block height tolerance.
+func validator_AssembleBlockHeightToleranceExceeded(ctx context.Context, t *originatorTransaction, event common.Event) (bool, error) {
+	e := event.(*AssembleRequestReceivedEvent)
+	receiverBlockHeight := t.getCurrentBlockHeight()
+	senderBH := e.CoordinatorsBlockHeight
+	var diff uint64
+	if receiverBlockHeight > senderBH {
+		diff = uint64(receiverBlockHeight - senderBH)
+	} else {
+		diff = uint64(senderBH - receiverBlockHeight)
+	}
+	return diff > t.blockHeightTolerance, nil
+}
+
+// action_SendAssembleBlockHeightRejection sends a dedicated AssembleRejection message indicating
+// the block height difference between coordinator and originator exceeds the configured tolerance.
+func action_SendAssembleBlockHeightRejection(ctx context.Context, t *originatorTransaction, event common.Event) error {
+	e := event.(*AssembleRequestReceivedEvent)
+	receiverBlockHeight := t.getCurrentBlockHeight()
+	log.L(ctx).Warnf("rejecting assemble request from coordinator due to block height tolerance (coordinator=%d, assembler=%d, tolerance=%d)",
+		e.CoordinatorsBlockHeight, receiverBlockHeight, t.blockHeightTolerance)
+	return t.transportWriter.SendAssembleRejection(
+		ctx,
+		t.pt.ID,
+		e.RequestID,
+		e.Coordinator,
+		e.CoordinatorsBlockHeight,
+		receiverBlockHeight,
+		int64(t.blockHeightTolerance),
+	)
 }

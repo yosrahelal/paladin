@@ -216,6 +216,10 @@ func (c *coordinator) getCoordinatorSigningIdentity() string {
 	return c.signingIdentity.value
 }
 
+func (c *coordinator) getCurrentBlockHeight() int64 {
+	return int64(c.currentBlockHeight)
+}
+
 func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator string, originatorNode string, nodeName string, pt *components.PrivateTransaction) transaction.CoordinatorTransaction {
 	return transaction.NewTransaction(
 		ctx,
@@ -231,6 +235,7 @@ func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator 
 		c.getCoordinatorTransactionState,
 		c.updateEndorserCandidates,
 		c.engineIntegration,
+		c.getCurrentBlockHeight,
 		c.syncPoints,
 		c.components,
 		c.domainAPI,
@@ -359,7 +364,7 @@ func (c *coordinator) addToDelegatedTransactions(
 	}
 
 	// Acknowledge the delegate request. Optionally errors can be returned which the originator may use to base re-delegate decisions on
-	err = c.transportWriter.SendDelegationRequestAcknowledgment(ctx, originatorNode, delegationID, delegateAcknowledgementIDs, delegateAcknowledgementErrors, c.currentBlockHeight)
+	err = c.transportWriter.SendDelegationResponse(ctx, originatorNode, delegationID, delegateAcknowledgementIDs, delegateAcknowledgementErrors, c.currentBlockHeight)
 	if err != nil {
 		return err
 	}

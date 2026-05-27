@@ -28,13 +28,41 @@ import (
 	"github.com/google/uuid"
 )
 
+func validator_IsDelegationBlockHeightRejection(_ context.Context, _ *originator, event common.Event) (bool, error) {
+	return event.(*DelegationRequestRejectedEvent).RejectionReason == DelegationRejectionReason_BlockHeightTolerance, nil
+}
+
+func validator_IsDelegationNotActiveCoordinatorRejection(_ context.Context, _ *originator, event common.Event) (bool, error) {
+	return event.(*DelegationRequestRejectedEvent).RejectionReason == DelegationRejectionReason_NotActiveCoordinator, nil
+}
+
+func action_LogDelegationBlockHeightRejection(ctx context.Context, _ *originator, event common.Event) error {
+	e := event.(*DelegationRequestRejectedEvent)
+	log.L(ctx).Warnf("delegation rejected due to block height tolerance exceeded: originator block height=%d, coordinator block height=%d, coordinator tolerance=%d",
+		e.OriginatorBlockHeight, e.CoordinatorBlockHeight, e.BlockHeightTolerance)
+	return nil
+}
+
 func action_TransactionCreated(ctx context.Context, o *originator, event common.Event) error {
 	e := event.(*TransactionCreatedEvent)
 	return o.addToTransactions(ctx, e.Transaction, o.newOriginatorTransaction)
 }
 
+func (o *originator) getCurrentBlockHeight() int64 {
+	return int64(o.currentBlockHeight)
+}
+
 func (o *originator) newOriginatorTransaction(ctx context.Context, pt *components.PrivateTransaction) (transaction.OriginatorTransaction, error) {
-	return transaction.NewTransaction(ctx, pt, o.transportWriter, o.queueEventInternal, o.engineIntegration, o.metrics)
+	return transaction.NewTransaction(
+		ctx,
+		pt,
+		o.transportWriter,
+		o.queueEventInternal,
+		o.engineIntegration,
+		o.metrics,
+		o.blockHeightTolerance,
+		o.getCurrentBlockHeight,
+	)
 }
 
 func (o *originator) addToTransactions(
@@ -287,7 +315,7 @@ func action_UpdateActiveCoordinatorFromHeartbeat(_ context.Context, o *originato
 // action_HandleDelegationRejected processes a rejection from a coordinator. If the rejection names
 // a coordinator that has higher priority than our current one, we redirect to it
 func action_HandleDelegationRejected(_ context.Context, o *originator, event common.Event) error {
-	e := event.(*DelegationRejectedEvent)
+	e := event.(*DelegationRequestRejectedEvent)
 	if e.ActiveCoordinator == "" {
 		return nil
 	}

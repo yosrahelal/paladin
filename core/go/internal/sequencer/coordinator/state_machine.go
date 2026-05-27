@@ -87,6 +87,9 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			}}},
 			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+			}, {
 				Actions: []ActionRule{
 					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 					{Action: action_HandleEndorsementRequest},
@@ -94,6 +97,9 @@ var stateDefinitionsMap = StateDefinitions{
 				Transitions: []Transition{{To: State_Observing}},
 			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
+				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+			}, {
 				// Any node in Idle accepts a delegation and becomes the active coordinator.
 				// A higher-priority node that later announces itself will trigger preemption from Active.
 				Actions:     []ActionRule{{Action: action_ProcessDelegatedTransactions}},
@@ -121,6 +127,9 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			}}},
 			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+			}, {
 				Actions: []ActionRule{
 					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 					{Action: action_HandleEndorsementRequest},
@@ -137,6 +146,9 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
+				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+			}, {
 				Actions: []ActionRule{
 					{
 						// This node is higher-priority than the current active coordinator — initiate a handover.
@@ -252,6 +264,9 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			}}},
 			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+			}, {
 				// A higher-priority node is sending endorsement requests; step down and handle.
 				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
 				Actions: []ActionRule{
@@ -272,6 +287,9 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
+				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+			}, {
 				// Accept delegations while in Elect so originators are not bounced while we wait.
 				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 			}}},
@@ -371,6 +389,9 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			}}},
 			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+			}, {
 				// A higher-priority node is sending endorsement requests; step down and handle.
 				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
 				Actions: []ActionRule{
@@ -390,6 +411,9 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
+				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+			}, {
 				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 			}}},
 			common.Event_NewBlock: {Handlers: []EventHandler{{
@@ -479,6 +503,9 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			}}},
 			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+			}, {
 				// A higher-priority node is sending endorsement requests; step down and handle.
 				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
 				Actions: []ActionRule{
@@ -502,6 +529,9 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
 			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
+				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+			}, {
 				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 			}}},
 			common.Event_TransactionStateTransition: {
@@ -608,6 +638,9 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			}}},
 			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+			}, {
 				// A higher-priority node is sending endorsement requests; step down to Closing_Flush and handle.
 				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
 				Actions: []ActionRule{
@@ -624,6 +657,9 @@ var stateDefinitionsMap = StateDefinitions{
 				Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
 			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
+				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+			}, {
 				// Still the active coordinator — accept delegations normally- we can process transactions, just not dispatch them
 				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 			}}},
@@ -695,12 +731,18 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			}}},
 			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+			}, {
 				Actions: []ActionRule{
 					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 					{Action: action_HandleEndorsementRequest},
 				},
 			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
+				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+			}, {
 				Actions: []ActionRule{
 					{
 						// This node is now higher-priority than the current active coordinator we stepped down for
@@ -767,6 +809,9 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			}}},
 			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
+				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+			}, {
 				Actions: []ActionRule{
 					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 					{Action: action_HandleEndorsementRequest},
@@ -799,6 +844,9 @@ var stateDefinitionsMap = StateDefinitions{
 				},
 			}}},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
+				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+			}, {
 				Actions: []ActionRule{{
 					// Current active coordinator is still live and higher priority; redirect the originator.
 					If: statemachine.GuardAnd(

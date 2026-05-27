@@ -302,7 +302,7 @@ func (s *ChainedDependenciesSuite) TestEvictionCascade() {
 	s.delegate(a, b)
 	s.assertInState(transaction.State_Assembling, a)
 
-	s.handleEvent(&transaction.AssembleErrorResponseEvent{
+	s.handleEvent(&transaction.AssembleErrorEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{TransactionID: a},
 		RequestID:            s.mocks.SentMessageRecorder.SentAssembleRequestIdempotencyKey(),
 	})
@@ -338,7 +338,7 @@ func (s *ChainedDependenciesSuite) TestLateArrivalAfterEvictedDepCleanedUp() {
 	s.delegate(a)
 	s.assertInState(transaction.State_Assembling, a)
 
-	s.handleEvent(&transaction.AssembleErrorResponseEvent{
+	s.handleEvent(&transaction.AssembleErrorEvent{
 		BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{TransactionID: a},
 		RequestID:            s.mocks.SentMessageRecorder.SentAssembleRequestIdempotencyKey(),
 	})

@@ -69,7 +69,7 @@ func (t *coordinatorTransaction) applyPostAssembly(ctx context.Context, postAsse
 	if err != nil {
 		// Internal error. Only option is to revert the transaction
 		revertReason := i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgSequencerInternalError), err)
-		seqRevertEvent := &AssembleRevertResponseEvent{
+		seqRevertEvent := &AssembleRevertEvent{
 			PostAssembly: &components.TransactionPostAssembly{
 				AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
 				RevertReason:   &revertReason,
@@ -145,13 +145,7 @@ func (t *coordinatorTransaction) sendAssembleRequest(ctx context.Context) error 
 			return err
 		}
 
-		blockHeight, err := t.engineIntegration.GetBlockHeight(ctx)
-		if err != nil {
-			log.L(ctx).Errorf("failed to get engine block height: %s", err)
-			return err
-		}
-
-		return t.transportWriter.SendAssembleRequest(ctx, t.originatorNode, t.pt.ID, idempotencyKey, t.pt.PreAssembly, grapherStatesAndLocks, blockHeight, t.clock.Now().Add(t.stateTimeout))
+		return t.transportWriter.SendAssembleRequest(ctx, t.originatorNode, t.pt.ID, idempotencyKey, t.pt.PreAssembly, grapherStatesAndLocks, t.getCurrentBlockHeight(), t.clock.Now().Add(t.stateTimeout))
 	})
 
 	t.scheduleRequestTimeout(ctx)
@@ -208,9 +202,9 @@ func validator_MatchesPendingAssembleRequest(ctx context.Context, txn *coordinat
 	switch event := event.(type) {
 	case *AssembleSuccessEvent:
 		return txn.pendingAssembleRequest != nil && txn.pendingAssembleRequest.IdempotencyKey() == event.RequestID, nil
-	case *AssembleRevertResponseEvent:
+	case *AssembleRevertEvent:
 		return txn.pendingAssembleRequest != nil && txn.pendingAssembleRequest.IdempotencyKey() == event.RequestID, nil
-	case *AssembleErrorResponseEvent:
+	case *AssembleErrorEvent:
 		return txn.pendingAssembleRequest != nil && txn.pendingAssembleRequest.IdempotencyKey() == event.RequestID, nil
 	}
 	return false, nil
@@ -227,7 +221,7 @@ func action_AssembleSuccess(ctx context.Context, t *coordinatorTransaction, even
 }
 
 func action_AssembleRevertResponse(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
-	e := event.(*AssembleRevertResponseEvent)
+	e := event.(*AssembleRevertEvent)
 	return t.applyPostAssembly(ctx, e.PostAssembly, e.RequestID)
 }
 

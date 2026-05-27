@@ -58,7 +58,9 @@ type TransactionBuilderForTesting struct {
 	signerAddress        *pldtypes.EthAddress
 	nonce                *uint64
 
-	metrics metrics.DistributedSequencerMetrics
+	metrics              metrics.DistributedSequencerMetrics
+	blockHeightTolerance uint64
+	currentBlockHeight   int64
 }
 
 // Function NewTransactionBuilderForTesting creates a TransactionBuilderForTesting with random values for all fields.
@@ -124,6 +126,16 @@ func (b *TransactionBuilderForTesting) WithMockTransportWriter() *TransactionBui
 	return b
 }
 
+func (b *TransactionBuilderForTesting) BlockHeightTolerance(tolerance uint64) *TransactionBuilderForTesting {
+	b.blockHeightTolerance = tolerance
+	return b
+}
+
+func (b *TransactionBuilderForTesting) CurrentBlockHeight(blockHeight int64) *TransactionBuilderForTesting {
+	b.currentBlockHeight = blockHeight
+	return b
+}
+
 type TransactionDependencyFakes struct {
 	SentMessageRecorder *testutil.SentMessageRecorder
 	TransportWriter     *sequencertransportmocks.TransportWriter
@@ -165,7 +177,9 @@ func (b *TransactionBuilderForTesting) Build() *originatorTransaction {
 		b.fakeEngineIntegration,
 		transportWriter,
 		b.queueEventForOriginator,
-		b.metrics)
+		b.metrics,
+		b.blockHeightTolerance,
+		func() int64 { return b.currentBlockHeight })
 
 	txn.stateMachine.SetCurrentState(b.state)
 

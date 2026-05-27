@@ -76,7 +76,7 @@ func Test_action_HandleDelegationRejected_HigherPriorityCoordinator_Redirects(t 
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 
-	err := action_HandleDelegationRejected(ctx, o, &DelegationRejectedEvent{
+	err := action_HandleDelegationRejected(ctx, o, &DelegationRequestRejectedEvent{
 		ActiveCoordinator: "node1",
 	})
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func Test_action_HandleDelegationRejected_LowerPriorityCoordinator_NoChange(t *t
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 
-	err := action_HandleDelegationRejected(ctx, o, &DelegationRejectedEvent{
+	err := action_HandleDelegationRejected(ctx, o, &DelegationRequestRejectedEvent{
 		ActiveCoordinator: "node3",
 	})
 	require.NoError(t, err)
@@ -106,7 +106,7 @@ func Test_action_HandleDelegationRejected_NoActiveCoordinator_NoChange(t *testin
 		CurrentActiveCoordinator("node1").
 		Build()
 
-	err := action_HandleDelegationRejected(ctx, o, &DelegationRejectedEvent{
+	err := action_HandleDelegationRejected(ctx, o, &DelegationRequestRejectedEvent{
 		ActiveCoordinator: "",
 	})
 	require.NoError(t, err)
@@ -499,7 +499,7 @@ func Test_resetFailoverIndex_CalledByHandleDelegationRejected_RecalibratesOnRedi
 		Build()
 
 	// Rejection that names a higher-priority coordinator → redirect and recalibrate.
-	err := action_HandleDelegationRejected(ctx, o, &DelegationRejectedEvent{ActiveCoordinator: "A"})
+	err := action_HandleDelegationRejected(ctx, o, &DelegationRequestRejectedEvent{ActiveCoordinator: "A"})
 	require.NoError(t, err)
 
 	assert.Equal(t, "A", o.currentActiveCoordinator)
@@ -515,7 +515,7 @@ func Test_resetFailoverIndex_CalledByHandleDelegationRejected_NoChangeOnLowerPri
 		Build()
 
 	// Rejection names a lower-priority coordinator → no redirect, no recalibrate.
-	err := action_HandleDelegationRejected(ctx, o, &DelegationRejectedEvent{ActiveCoordinator: "C"})
+	err := action_HandleDelegationRejected(ctx, o, &DelegationRequestRejectedEvent{ActiveCoordinator: "C"})
 	require.NoError(t, err)
 
 	assert.Equal(t, "A", o.currentActiveCoordinator)

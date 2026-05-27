@@ -45,7 +45,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type transportClientTestMocks struct {
@@ -183,7 +182,7 @@ func TestHandleAssembleRequest_Success(t *testing.T) {
 		ContractAddress:   contractAddr.String(),
 		PreAssembly:       preAssemblyJSON,
 		StateLocks:        []byte("{}"),
-		BlockHeight:       100,
+		CoordinatorBlockHeight: 100,
 	}
 	payload, _ := proto.Marshal(assembleRequest)
 
@@ -241,7 +240,7 @@ func TestHandleAssembleRequest_InvalidContractAddress(t *testing.T) {
 		ContractAddress:   "invalid-address",
 		PreAssembly:       preAssemblyJSON,
 		StateLocks:        []byte("{}"),
-		BlockHeight:       100,
+		CoordinatorBlockHeight: 100,
 	}
 	payload, _ := proto.Marshal(assembleRequest)
 
@@ -273,7 +272,7 @@ func TestHandleAssembleRequest_SequencerNotLoaded(t *testing.T) {
 		ContractAddress:   contractAddr.String(),
 		PreAssembly:       preAssemblyJSON,
 		StateLocks:        []byte("{}"),
-		BlockHeight:       100,
+		CoordinatorBlockHeight: 100,
 	}
 	payload, _ := proto.Marshal(assembleRequest)
 
@@ -369,7 +368,7 @@ func TestHandleAssembleResponse_Revert(t *testing.T) {
 	sm.sequencers[contractAddr.String()] = seq
 
 	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
-		event, ok := e.(*coordTransaction.AssembleRevertResponseEvent)
+		event, ok := e.(*coordTransaction.AssembleRevertEvent)
 		return ok && event.TransactionID == txID && event.RequestID == requestID
 	})).Once()
 
@@ -406,7 +405,7 @@ func TestHandleAssembleError_Success(t *testing.T) {
 	sm.sequencers[contractAddr.String()] = seq
 
 	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
-		event, ok := e.(*coordTransaction.AssembleErrorResponseEvent)
+		event, ok := e.(*coordTransaction.AssembleErrorEvent)
 		return ok && event.TransactionID == txID && event.RequestID == requestID
 	})).Once()
 
@@ -437,7 +436,7 @@ func TestHandleDelegationRequest_Success(t *testing.T) {
 
 	delegationRequest := &engineProto.DelegationRequest{
 		PrivateTransaction: privateTxJSON,
-		BlockHeight:        100,
+		OriginatorBlockHeight:   100,
 	}
 	payload, _ := proto.Marshal(delegationRequest)
 
@@ -1017,20 +1016,14 @@ func TestHandleEndorsementRequest_Success_Sign(t *testing.T) {
 		PayloadType: "raw", AttestationType: prototk.AttestationType_ENDORSE,
 	}
 
-	txSpecAny, _ := anypb.New(txSpec)
-	verifierAny, _ := anypb.New(verifier)
-	signatureAny, _ := anypb.New(signature)
-	stateAny, _ := anypb.New(state)
-	attestationAny, _ := anypb.New(attestationRequest)
-
 	endorsementRequest := &engineProto.EndorsementRequest{
 		TransactionId: txID, IdempotencyKey: idempotencyKey,
 		ContractAddress: contractAddr.String(), Party: party,
-		TransactionSpecification: txSpecAny,
-		Verifiers: []*anypb.Any{verifierAny}, Signatures: []*anypb.Any{signatureAny},
-		InputStates: []*anypb.Any{stateAny}, ReadStates: []*anypb.Any{stateAny},
-		OutputStates: []*anypb.Any{stateAny}, InfoStates: []*anypb.Any{stateAny},
-		AttestationRequest: attestationAny,
+		TransactionSpecification: txSpec,
+		Verifiers: []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
+		InputStates: []*prototk.EndorsableState{state}, ReadStates: []*prototk.EndorsableState{state},
+		OutputStates: []*prototk.EndorsableState{state}, InfoStates: []*prototk.EndorsableState{state},
+		AttestationRequest: attestationRequest,
 	}
 	payload, _ := proto.Marshal(endorsementRequest)
 	message := &components.ReceivedMessage{
@@ -1075,20 +1068,14 @@ func TestHandleEndorsementRequest_Success_Revert(t *testing.T) {
 		PayloadType: "raw", AttestationType: prototk.AttestationType_ENDORSE,
 	}
 
-	txSpecAny, _ := anypb.New(txSpec)
-	verifierAny, _ := anypb.New(verifier)
-	signatureAny, _ := anypb.New(signature)
-	stateAny, _ := anypb.New(state)
-	attestationAny, _ := anypb.New(attestationRequest)
-
 	endorsementRequest := &engineProto.EndorsementRequest{
 		TransactionId: txID, IdempotencyKey: idempotencyKey,
 		ContractAddress: contractAddr.String(), Party: party,
-		TransactionSpecification: txSpecAny,
-		Verifiers: []*anypb.Any{verifierAny}, Signatures: []*anypb.Any{signatureAny},
-		InputStates: []*anypb.Any{stateAny}, ReadStates: []*anypb.Any{stateAny},
-		OutputStates: []*anypb.Any{stateAny}, InfoStates: []*anypb.Any{stateAny},
-		AttestationRequest: attestationAny,
+		TransactionSpecification: txSpec,
+		Verifiers: []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
+		InputStates: []*prototk.EndorsableState{state}, ReadStates: []*prototk.EndorsableState{state},
+		OutputStates: []*prototk.EndorsableState{state}, InfoStates: []*prototk.EndorsableState{state},
+		AttestationRequest: attestationRequest,
 	}
 	payload, _ := proto.Marshal(endorsementRequest)
 	message := &components.ReceivedMessage{
@@ -1133,20 +1120,14 @@ func TestHandleEndorsementRequest_Success_EndorserSubmit(t *testing.T) {
 		PayloadType: "raw", AttestationType: prototk.AttestationType_ENDORSE,
 	}
 
-	txSpecAny, _ := anypb.New(txSpec)
-	verifierAny, _ := anypb.New(verifier)
-	signatureAny, _ := anypb.New(signature)
-	stateAny, _ := anypb.New(state)
-	attestationAny, _ := anypb.New(attestationRequest)
-
 	endorsementRequest := &engineProto.EndorsementRequest{
 		TransactionId: txID, IdempotencyKey: idempotencyKey,
 		ContractAddress: contractAddr.String(), Party: party,
-		TransactionSpecification: txSpecAny,
-		Verifiers: []*anypb.Any{verifierAny}, Signatures: []*anypb.Any{signatureAny},
-		InputStates: []*anypb.Any{stateAny}, ReadStates: []*anypb.Any{stateAny},
-		OutputStates: []*anypb.Any{stateAny}, InfoStates: []*anypb.Any{stateAny},
-		AttestationRequest: attestationAny,
+		TransactionSpecification: txSpec,
+		Verifiers: []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
+		InputStates: []*prototk.EndorsableState{state}, ReadStates: []*prototk.EndorsableState{state},
+		OutputStates: []*prototk.EndorsableState{state}, InfoStates: []*prototk.EndorsableState{state},
+		AttestationRequest: attestationRequest,
 	}
 	payload, _ := proto.Marshal(endorsementRequest)
 	message := &components.ReceivedMessage{
@@ -1211,104 +1192,6 @@ func TestHandleEndorsementRequest_InvalidContractAddress(t *testing.T) {
 	sm.handleEndorsementRequest(ctx, message)
 }
 
-func TestHandleEndorsementRequest_TransactionSpecificationUnmarshalError(t *testing.T) {
-	ctx := context.Background()
-	mocks := newTransportClientTestMocks(t)
-	sm := newSequencerManagerForTransportClientTesting(t, mocks)
-	contractAddr := pldtypes.RandAddress()
-
-	txID := uuid.New().String()
-	invalidAny, _ := anypb.New(&prototk.TransactionSpecification{})
-	invalidAny.Value = []byte("invalid")
-	endorsementRequest := &engineProto.EndorsementRequest{
-		TransactionId:            txID,
-		ContractAddress:          contractAddr.String(),
-		TransactionSpecification: invalidAny,
-	}
-	payload, _ := proto.Marshal(endorsementRequest)
-
-	message := &components.ReceivedMessage{
-		FromNode:    "test-node",
-		MessageID:   uuid.New(),
-		MessageType: transport.MessageType_EndorsementRequest,
-		Payload:     payload,
-	}
-
-	// Should not panic — parsing fails before reaching LoadSequencer.
-	sm.handleEndorsementRequest(ctx, message)
-}
-
-func TestHandleEndorsementRequest_VerifierUnmarshalError(t *testing.T) {
-	ctx := context.Background()
-	mocks := newTransportClientTestMocks(t)
-	sm := newSequencerManagerForTransportClientTesting(t, mocks)
-	contractAddr := pldtypes.RandAddress()
-
-	txID := uuid.New().String()
-	txSpec := &prototk.TransactionSpecification{
-		TransactionId: txID,
-	}
-	txSpecAny, _ := anypb.New(txSpec)
-	invalidAny, _ := anypb.New(&prototk.ResolvedVerifier{})
-	invalidAny.Value = []byte("invalid")
-
-	endorsementRequest := &engineProto.EndorsementRequest{
-		TransactionId:            txID,
-		ContractAddress:          contractAddr.String(),
-		TransactionSpecification: txSpecAny,
-		Verifiers:                []*anypb.Any{invalidAny},
-	}
-	payload, _ := proto.Marshal(endorsementRequest)
-
-	message := &components.ReceivedMessage{
-		FromNode:    "test-node",
-		MessageID:   uuid.New(),
-		MessageType: transport.MessageType_EndorsementRequest,
-		Payload:     payload,
-	}
-
-	// Should not panic — parsing fails before reaching LoadSequencer.
-	sm.handleEndorsementRequest(ctx, message)
-}
-
-func TestHandleEndorsementRequest_SignatureUnmarshalError(t *testing.T) {
-	ctx := context.Background()
-	mocks := newTransportClientTestMocks(t)
-	sm := newSequencerManagerForTransportClientTesting(t, mocks)
-	contractAddr := pldtypes.RandAddress()
-
-	txID := uuid.New().String()
-	txSpec := &prototk.TransactionSpecification{
-		TransactionId: txID,
-	}
-	txSpecAny, _ := anypb.New(txSpec)
-	verifier := &prototk.ResolvedVerifier{
-		Lookup: "verifier@node1",
-	}
-	verifierAny, _ := anypb.New(verifier)
-	invalidAny, _ := anypb.New(&prototk.AttestationResult{})
-	invalidAny.Value = []byte("invalid")
-
-	endorsementRequest := &engineProto.EndorsementRequest{
-		TransactionId:            txID,
-		ContractAddress:          contractAddr.String(),
-		TransactionSpecification: txSpecAny,
-		Verifiers:                []*anypb.Any{verifierAny},
-		Signatures:               []*anypb.Any{invalidAny},
-	}
-	payload, _ := proto.Marshal(endorsementRequest)
-
-	message := &components.ReceivedMessage{
-		FromNode:    "test-node",
-		MessageID:   uuid.New(),
-		MessageType: transport.MessageType_EndorsementRequest,
-		Payload:     payload,
-	}
-
-	// Should not panic — parsing fails before reaching LoadSequencer.
-	sm.handleEndorsementRequest(ctx, message)
-}
-
 // TestHandleEndorsementRequest_QueuesEventWithDecodedFields verifies that a valid endorsement
 // request results in an EndorsementRequestReceivedEvent being queued on the coordinator with
 // the correct decoded field values. (The former EndorseTransactionError test is superseded by
@@ -1332,20 +1215,14 @@ func TestHandleEndorsementRequest_QueuesEventWithDecodedFields(t *testing.T) {
 		PayloadType: "raw", AttestationType: prototk.AttestationType_ENDORSE,
 	}
 
-	txSpecAny, _ := anypb.New(txSpec)
-	verifierAny, _ := anypb.New(verifier)
-	signatureAny, _ := anypb.New(signature)
-	stateAny, _ := anypb.New(state)
-	attestationAny, _ := anypb.New(attestationRequest)
-
 	endorsementRequest := &engineProto.EndorsementRequest{
 		TransactionId: txID, IdempotencyKey: idempotencyKey,
 		ContractAddress: contractAddr.String(), Party: party,
-		TransactionSpecification: txSpecAny,
-		Verifiers: []*anypb.Any{verifierAny}, Signatures: []*anypb.Any{signatureAny},
-		InputStates: []*anypb.Any{stateAny}, ReadStates: []*anypb.Any{stateAny},
-		OutputStates: []*anypb.Any{stateAny}, InfoStates: []*anypb.Any{stateAny},
-		AttestationRequest: attestationAny,
+		TransactionSpecification: txSpec,
+		Verifiers: []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
+		InputStates: []*prototk.EndorsableState{state}, ReadStates: []*prototk.EndorsableState{state},
+		OutputStates: []*prototk.EndorsableState{state}, InfoStates: []*prototk.EndorsableState{state},
+		AttestationRequest: attestationRequest,
 	}
 	payload, _ := proto.Marshal(endorsementRequest)
 	message := &components.ReceivedMessage{
@@ -1399,19 +1276,13 @@ func TestHandleEndorsementRequest_LoadSequencerError(t *testing.T) {
 		PayloadType: "raw", AttestationType: prototk.AttestationType_ENDORSE,
 	}
 
-	txSpecAny, _ := anypb.New(txSpec)
-	verifierAny, _ := anypb.New(verifier)
-	signatureAny, _ := anypb.New(signature)
-	stateAny, _ := anypb.New(state)
-	attestationAny, _ := anypb.New(attestationRequest)
-
 	endorsementRequest := &engineProto.EndorsementRequest{
 		TransactionId: txID, ContractAddress: contractAddr.String(), Party: party,
-		TransactionSpecification: txSpecAny,
-		Verifiers: []*anypb.Any{verifierAny}, Signatures: []*anypb.Any{signatureAny},
-		InputStates: []*anypb.Any{stateAny}, ReadStates: []*anypb.Any{stateAny},
-		OutputStates: []*anypb.Any{stateAny}, InfoStates: []*anypb.Any{stateAny},
-		AttestationRequest: attestationAny,
+		TransactionSpecification: txSpec,
+		Verifiers: []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
+		InputStates: []*prototk.EndorsableState{state}, ReadStates: []*prototk.EndorsableState{state},
+		OutputStates: []*prototk.EndorsableState{state}, InfoStates: []*prototk.EndorsableState{state},
+		AttestationRequest: attestationRequest,
 	}
 	payload, _ := proto.Marshal(endorsementRequest)
 	message := &components.ReceivedMessage{
@@ -1450,13 +1321,11 @@ func TestHandleEndorsementRequest_SendEndorsementResponseError(t *testing.T) {
 	attestationRequest := &prototk.AttestationRequest{
 		Name: "endorsement1", Algorithm: "ECDSA", VerifierType: "eth_address",
 	}
-	txSpecAny, _ := anypb.New(txSpec)
-	attestationAny, _ := anypb.New(attestationRequest)
 
 	endorsementRequest := &engineProto.EndorsementRequest{
 		TransactionId: txID, IdempotencyKey: idempotencyKey,
 		ContractAddress: contractAddr.String(), Party: party,
-		TransactionSpecification: txSpecAny, AttestationRequest: attestationAny,
+		TransactionSpecification: txSpec, AttestationRequest: attestationRequest,
 	}
 	payload, _ := proto.Marshal(endorsementRequest)
 	message := &components.ReceivedMessage{
@@ -1497,12 +1366,10 @@ func TestHandleEndorsementRequest_SignValidationError(t *testing.T) {
 	attestationRequest := &prototk.AttestationRequest{
 		Name: "endorsement1", Algorithm: "ECDSA", VerifierType: "eth_address",
 	}
-	txSpecAny, _ := anypb.New(txSpec)
-	attestationAny, _ := anypb.New(attestationRequest)
 
 	endorsementRequest := &engineProto.EndorsementRequest{
 		TransactionId: txID, ContractAddress: contractAddr.String(), Party: party,
-		TransactionSpecification: txSpecAny, AttestationRequest: attestationAny,
+		TransactionSpecification: txSpec, AttestationRequest: attestationRequest,
 	}
 	payload, _ := proto.Marshal(endorsementRequest)
 	message := &components.ReceivedMessage{
@@ -1543,13 +1410,12 @@ func TestHandleEndorsementResponse_Success(t *testing.T) {
 	endorsement := &prototk.AttestationResult{
 		Name: "test-endorsement",
 	}
-	endorsementAny, _ := anypb.New(endorsement)
 
 	endorsementResponse := &engineProto.EndorsementResponse{
 		TransactionId:          txID.String(),
 		IdempotencyKey:         idempotencyKey.String(),
 		ContractAddress:        contractAddr.String(),
-		Endorsement:            endorsementAny,
+		Endorsement:            endorsement,
 		AttestationRequestName: attestationRequestName,
 	}
 	payload, _ := proto.Marshal(endorsementResponse)
@@ -1607,7 +1473,7 @@ func TestHandleEndorsementResponse_Revert(t *testing.T) {
 	sm.sequencers[contractAddr.String()] = seq
 
 	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
-		event, ok := e.(*coordTransaction.EndorsedRejectedEvent)
+		event, ok := e.(*coordTransaction.EndorseRevertEvent)
 		return ok && event.TransactionID == txID && event.RequestID == idempotencyKey && event.RevertReason == revertReason && event.AttestationRequestName == attestationRequestName
 	})).Once()
 
@@ -1685,7 +1551,9 @@ func TestHandleEndorsementResponse_SequencerNotLoaded(t *testing.T) {
 	sm.handleEndorsementResponse(ctx, message)
 }
 
-func TestHandleEndorsementResponse_EndorsementUnmarshalError(t *testing.T) {
+// ===== handleEndorsementError Tests =====
+
+func TestHandleEndorsementError_QueuesToCoordinator(t *testing.T) {
 	ctx := context.Background()
 	mocks := newTransportClientTestMocks(t)
 	sm := newSequencerManagerForTransportClientTesting(t, mocks)
@@ -1694,31 +1562,74 @@ func TestHandleEndorsementResponse_EndorsementUnmarshalError(t *testing.T) {
 	txID := uuid.New()
 	idempotencyKey := uuid.New()
 
-	// Create invalid endorsement (corrupted data)
-	invalidEndorsementAny, _ := anypb.New(&prototk.AttestationResult{})
-	invalidEndorsementAny.Value = []byte("invalid-endorsement-data")
-
-	endorsementResponse := &engineProto.EndorsementResponse{
+	endorsementError := &engineProto.EndorsementError{
 		TransactionId:   txID.String(),
 		IdempotencyKey:  idempotencyKey.String(),
 		ContractAddress: contractAddr.String(),
-		Endorsement:     invalidEndorsementAny,
+		ErrorMessage:    "domain returned unexpected error",
 	}
-	payload, _ := proto.Marshal(endorsementResponse)
+	payload, _ := proto.Marshal(endorsementError)
 
 	message := &components.ReceivedMessage{
 		FromNode:    "test-node",
 		MessageID:   uuid.New(),
-		MessageType: transport.MessageType_EndorsementResponse,
+		MessageType: transport.MessageType_EndorsementError,
 		Payload:     payload,
 	}
 
-	// GetSequencer is used - sequencer must already be in memory
 	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
 	sm.sequencers[contractAddr.String()] = seq
 
-	// Should not panic - endorsement unmarshal will fail but function should handle it gracefully
-	sm.handleEndorsementResponse(ctx, message)
+	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
+		event, ok := e.(*coordTransaction.EndorseErrorEvent)
+		return ok && event.TransactionID == txID && event.RequestID == idempotencyKey
+	})).Once()
+
+	sm.handleEndorsementError(ctx, message)
 
 	mocks.coordinator.AssertExpectations(t)
+}
+
+func TestHandleEndorsementError_UnmarshalError(t *testing.T) {
+	ctx := context.Background()
+	mocks := newTransportClientTestMocks(t)
+	sm := newSequencerManagerForTransportClientTesting(t, mocks)
+
+	message := &components.ReceivedMessage{
+		FromNode:    "test-node",
+		MessageID:   uuid.New(),
+		MessageType: transport.MessageType_EndorsementError,
+		Payload:     []byte("invalid-proto"),
+	}
+
+	// Should not panic
+	sm.handleEndorsementError(ctx, message)
+}
+
+func TestHandleEndorsementError_SequencerNotLoaded(t *testing.T) {
+	ctx := context.Background()
+	mocks := newTransportClientTestMocks(t)
+	sm := newSequencerManagerForTransportClientTesting(t, mocks)
+	contractAddr := pldtypes.RandAddress()
+
+	txID := uuid.New()
+	idempotencyKey := uuid.New()
+
+	endorsementError := &engineProto.EndorsementError{
+		TransactionId:   txID.String(),
+		IdempotencyKey:  idempotencyKey.String(),
+		ContractAddress: contractAddr.String(),
+		ErrorMessage:    "some error",
+	}
+	payload, _ := proto.Marshal(endorsementError)
+
+	message := &components.ReceivedMessage{
+		FromNode:    "test-node",
+		MessageID:   uuid.New(),
+		MessageType: transport.MessageType_EndorsementError,
+		Payload:     payload,
+	}
+
+	// GetSequencer returns nil since no sequencer is in memory - should not panic
+	sm.handleEndorsementError(ctx, message)
 }

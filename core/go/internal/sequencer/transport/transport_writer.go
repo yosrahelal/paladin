@@ -32,21 +32,23 @@ import (
 	"github.com/google/uuid"
 
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type TransportWriter interface {
 	StartLoopbackWriter()
 	WaitForDone(ctx context.Context)
 	SendDelegationRequest(ctx context.Context, coordinatorNode string, transactions []*components.PrivateTransaction, blockHeight uint64) error
-	SendDelegationRequestAcknowledgment(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64, blockHeight uint64) error
-	SendDelegationRequestRejection(ctx context.Context, delegatingNodeName string, delegationId string, blockHeight uint64, activeCoordinator string) error
+	SendDelegationResponse(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64, blockHeight uint64) error
+	SendDelegationRejection(ctx context.Context, delegatingNodeName string, delegationId string, rejectionReason engineProto.DelegationRejection_RejectionReason, activeCoordinator string, originatorBlockHeight, coordinatorBlockHeight, blockHeightTolerance int64) error
 	SendHandoverRequest(ctx context.Context, targetNode string, contractAddress *pldtypes.EthAddress) error
-	SendEndorsementRequest(ctx context.Context, txID uuid.UUID, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState, expiryTime time.Time) error
+	SendEndorsementRequest(ctx context.Context, txID uuid.UUID, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState, expiryTime time.Time, coordinatorBlockHeight int64) error
 	SendEndorsementResponse(ctx context.Context, transactionId, idempotencyKey, contractAddress string, attResult *prototk.AttestationResult, endorsementResult *components.EndorsementResult, revertReason, endorsementName, party, node string) error
-	SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, blockHeight int64, expiryTime time.Time) error
+	SendEndorsementError(ctx context.Context, transactionId, idempotencyKey, contractAddress, errorMessage, party, attestationRequestName, node string) error
+	SendEndorsementRejection(ctx context.Context, transactionId, idempotencyKey, contractAddress, endorsementName, party, node string, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance int64) error
+	SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, coordinatorBlockHeight int64, expiryTime time.Time) error
 	SendAssembleResponse(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, postAssembly *components.TransactionPostAssembly, preAssembly *components.TransactionPreAssembly, recipient string) error
-	SendAssembleErrorResponse(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string) error
+	SendAssembleError(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string) error
+	SendAssembleRejection(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string, coordinatorBlockHeight, assemblerBlockHeight, blockHeightTolerance int64) error
 	SendNonceAssigned(ctx context.Context, txID uuid.UUID, originatorNode string, contractAddress *pldtypes.EthAddress, nonce uint64) error
 	SendTransactionSubmitted(ctx context.Context, txID uuid.UUID, originatorNode string, contractAddress *pldtypes.EthAddress, txHash *pldtypes.Bytes32) error
 	SendTransactionConfirmed(ctx context.Context, txID uuid.UUID, originatorNode string, contractAddress *pldtypes.EthAddress, nonce *pldtypes.HexUint64, outcome engineProto.TransactionConfirmed_Outcome, revertReason pldtypes.HexBytes, failureMessage string, willRetry bool) error
@@ -105,10 +107,10 @@ func (tw *transportWriter) SendDelegationRequest(
 		}
 
 		delegationRequest := &engineProto.DelegationRequest{
-			TransactionId:      transaction.ID.String(),
-			DelegateNodeId:     coordinatorNode,
-			PrivateTransaction: transactionBytes,
-			BlockHeight:        int64(blockHeight),
+			TransactionId:         transaction.ID.String(),
+			DelegateNodeId:        coordinatorNode,
+			PrivateTransaction:    transactionBytes,
+			OriginatorBlockHeight: int64(blockHeight),
 		}
 		delegationRequestBytes, err := proto.Marshal(delegationRequest)
 		if err != nil {
@@ -127,7 +129,7 @@ func (tw *transportWriter) SendDelegationRequest(
 	return nil
 }
 
-func (tw *transportWriter) SendDelegationRequestAcknowledgment(
+func (tw *transportWriter) SendDelegationResponse(
 	ctx context.Context,
 	delegatingNodeName string,
 	delegationId string,
@@ -141,8 +143,6 @@ func (tw *transportWriter) SendDelegationRequestAcknowledgment(
 		DelegateNodeId:  delegatingNodeName,
 		ContractAddress: tw.contractAddress.String(),
 		Errors:          errors,
-		Accepted:        true,
-		BlockHeight:     int64(blockHeight),
 	}
 	delegationRequestAcknowledgmentBytes, err := proto.Marshal(delegationRequestAcknowledgment)
 	if err != nil {
@@ -158,20 +158,23 @@ func (tw *transportWriter) SendDelegationRequestAcknowledgment(
 	})
 }
 
-func (tw *transportWriter) SendDelegationRequestRejection(
+func (tw *transportWriter) SendDelegationRejection(
 	ctx context.Context,
 	delegatingNodeName string,
 	delegationId string,
-	blockHeight uint64,
+	rejectionReason engineProto.DelegationRejection_RejectionReason,
 	activeCoordinator string,
+	originatorBlockHeight, coordinatorBlockHeight, blockHeightTolerance int64,
 ) error {
-	rejection := &engineProto.DelegationResponse{
-		DelegationId:      delegationId,
-		DelegateNodeId:    delegatingNodeName,
-		ContractAddress:   tw.contractAddress.String(),
-		Accepted:          false,
-		BlockHeight:       int64(blockHeight),
-		ActiveCoordinator: activeCoordinator,
+	rejection := &engineProto.DelegationRejection{
+		DelegationId:           delegationId,
+		DelegateNodeId:         delegatingNodeName,
+		ContractAddress:        tw.contractAddress.String(),
+		ActiveCoordinator:      activeCoordinator,
+		RejectionReason:        rejectionReason,
+		OriginatorBlockHeight:  originatorBlockHeight,
+		CoordinatorBlockHeight: coordinatorBlockHeight,
+		BlockHeightTolerance:   blockHeightTolerance,
 	}
 	rejectionBytes, err := proto.Marshal(rejection)
 	if err != nil {
@@ -180,7 +183,7 @@ func (tw *transportWriter) SendDelegationRequestRejection(
 	}
 
 	return tw.send(ctx, &components.FireAndForgetMessageSend{
-		MessageType: MessageType_DelegationResponse,
+		MessageType: MessageType_DelegationRejection,
 		Payload:     rejectionBytes,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        delegatingNodeName,
@@ -209,97 +212,23 @@ func (tw *transportWriter) SendHandoverRequest(ctx context.Context, targetNode s
 }
 
 // TODO do we have duplication here?  contractAddress and transactionID are in the transactionSpecification
-func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, txID uuid.UUID, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState, expiryTime time.Time) error {
-	attRequestAny, err := anypb.New(attRequest)
-	if err != nil {
-		log.L(ctx).Error("error marshalling attestation request", err)
-		return err
-	}
-
-	transactionSpecificationAny, err := anypb.New(transactionSpecification)
-	if err != nil {
-		log.L(ctx).Error("error marshalling transaction specification", err)
-		return err
-	}
-
-	verifiersAny := make([]*anypb.Any, len(verifiers))
-	for i, verifier := range verifiers {
-		log.L(ctx).Debugf("marshalling endorsement requestverifier %s", verifier.String())
-		verifierAny, err := anypb.New(verifier)
-		if err != nil {
-			log.L(ctx).Error("error marshalling verifier", err)
-			return err
-		}
-		verifiersAny[i] = verifierAny
-	}
-	signaturesAny := make([]*anypb.Any, len(signatures))
-	for i, signature := range signatures {
-		log.L(ctx).Debugf("marshalling endorsement signature %s", signature.String())
-		signatureAny, err := anypb.New(signature)
-		if err != nil {
-			log.L(ctx).Error("error marshalling signature", err)
-			return err
-		}
-		signaturesAny[i] = signatureAny
-	}
-
-	inputStatesAny := make([]*anypb.Any, len(inputStates))
-	for i, inputState := range inputStates {
-		log.L(ctx).Debugf("marshalling endorsement inputState %s", inputState.String())
-		inputStateAny, err := anypb.New(inputState)
-		if err != nil {
-			log.L(ctx).Error("error marshalling input state", err)
-			return err
-		}
-		inputStatesAny[i] = inputStateAny
-	}
-
-	readStatesAny := make([]*anypb.Any, len(readStates))
-	for i, readState := range readStates {
-		readStateAny, err := anypb.New(readState)
-		if err != nil {
-			log.L(ctx).Error("Error marshalling read state", err)
-			return err
-		}
-		readStatesAny[i] = readStateAny
-	}
-
-	outputStatesAny := make([]*anypb.Any, len(outputStates))
-	for i, outputState := range outputStates {
-		outputStateAny, err := anypb.New(outputState)
-		if err != nil {
-			log.L(ctx).Error("error marshalling output state", err)
-			return err
-		}
-		outputStatesAny[i] = outputStateAny
-	}
-
-	infoStatesAny := make([]*anypb.Any, len(infoStates))
-	log.L(ctx).Debugf("sending endorse request with %+v info states", len(infoStates))
-	for i, infoState := range infoStates {
-		infoStateAny, err := anypb.New(infoState)
-		if err != nil {
-			log.L(ctx).Error("error marshalling output state", err)
-			return err
-		}
-		infoStatesAny[i] = infoStateAny
-	}
-
+func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, txID uuid.UUID, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState, expiryTime time.Time, coordinatorBlockHeight int64) error {
 	log.L(ctx).Debugf("sending endorse request with TX ID %+v", transactionSpecification.TransactionId)
 	endorsementRequest := &engineProto.EndorsementRequest{
 		IdempotencyKey:           idempotencyKey.String(),
 		ContractAddress:          transactionSpecification.ContractInfo.ContractAddress,
 		TransactionId:            txID.String(),
-		AttestationRequest:       attRequestAny,
+		AttestationRequest:       attRequest,
 		Party:                    party,
-		TransactionSpecification: transactionSpecificationAny,
-		Verifiers:                verifiersAny,
-		Signatures:               signaturesAny,
-		InputStates:              inputStatesAny,
-		ReadStates:               readStatesAny,
-		OutputStates:             outputStatesAny,
-		InfoStates:               infoStatesAny,
+		TransactionSpecification: transactionSpecification,
+		Verifiers:                verifiers,
+		Signatures:               signatures,
+		InputStates:              inputStates,
+		ReadStates:               readStates,
+		OutputStates:             outputStates,
+		InfoStates:               infoStates,
 		ExpiryTimeUnixMs:         expiryTime.UnixMilli(),
+		CoordinatorBlockHeight:   coordinatorBlockHeight,
 	}
 
 	endorsementRequestBytes, err := proto.Marshal(endorsementRequest)
@@ -324,23 +253,18 @@ func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, txID uuid
 
 func (tw *transportWriter) SendEndorsementResponse(ctx context.Context, transactionId, idempotencyKey, contractAddress string, attResult *prototk.AttestationResult, endorsementResult *components.EndorsementResult, revertReason, endorsementName, party, node string) error {
 
-	endorsementResponse := &engineProto.EndorsementResponse{}
+	endorsementResponse := &engineProto.EndorsementResponse{
+		Endorsement:            attResult,
+		TransactionId:          transactionId,
+		IdempotencyKey:         idempotencyKey,
+		AttestationRequestName: endorsementName,
+		Party:                  party,
+		ContractAddress:        contractAddress,
+	}
 
 	if revertReason != "" {
 		endorsementResponse.RevertReason = &revertReason
 	}
-
-	attResultAny, err := anypb.New(attResult)
-	if err != nil {
-		log.L(ctx).Error("error marshalling transaction specification", err)
-		return err
-	}
-	endorsementResponse.Endorsement = attResultAny
-	endorsementResponse.TransactionId = transactionId
-	endorsementResponse.IdempotencyKey = idempotencyKey
-	endorsementResponse.AttestationRequestName = endorsementName
-	endorsementResponse.Party = party
-	endorsementResponse.ContractAddress = contractAddress
 
 	endorsementResponseBytes, err := proto.Marshal(endorsementResponse)
 	if err != nil {
@@ -359,7 +283,56 @@ func (tw *transportWriter) SendEndorsementResponse(ctx context.Context, transact
 	return err
 }
 
-func (tw *transportWriter) SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, blockHeight int64, expiryTime time.Time) error {
+func (tw *transportWriter) SendEndorsementError(ctx context.Context, transactionId, idempotencyKey, contractAddress, errorMessage, party, attestationRequestName, node string) error {
+	endorsementError := &engineProto.EndorsementError{
+		TransactionId:          transactionId,
+		IdempotencyKey:         idempotencyKey,
+		ContractAddress:        contractAddress,
+		ErrorMessage:           errorMessage,
+		Party:                  party,
+		AttestationRequestName: attestationRequestName,
+	}
+	endorsementErrorBytes, err := proto.Marshal(endorsementError)
+	if err != nil {
+		log.L(ctx).Errorf("error marshalling endorsement error message: %s", err)
+		return err
+	}
+
+	return tw.send(ctx, &components.FireAndForgetMessageSend{
+		MessageType: MessageType_EndorsementError,
+		Node:        node,
+		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
+		Payload:     endorsementErrorBytes,
+	})
+}
+
+func (tw *transportWriter) SendEndorsementRejection(ctx context.Context, transactionId, idempotencyKey, contractAddress, endorsementName, party, node string, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance int64) error {
+	rejection := &engineProto.EndorsementRejection{
+		TransactionId:          transactionId,
+		IdempotencyKey:         idempotencyKey,
+		ContractAddress:        contractAddress,
+		AttestationRequestName: endorsementName,
+		Party:                  party,
+		RejectionReason:        engineProto.EndorsementRejection_BLOCK_HEIGHT_TOLERANCE,
+		CoordinatorBlockHeight: coordinatorBlockHeight,
+		EndorserBlockHeight:    endorserBlockHeight,
+		BlockHeightTolerance:   blockHeightTolerance,
+	}
+	rejectionBytes, err := proto.Marshal(rejection)
+	if err != nil {
+		log.L(ctx).Errorf("error marshalling endorsement rejection message: %s", err)
+		return err
+	}
+
+	return tw.send(ctx, &components.FireAndForgetMessageSend{
+		MessageType: MessageType_EndorsementRejection,
+		Node:        node,
+		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
+		Payload:     rejectionBytes,
+	})
+}
+
+func (tw *transportWriter) SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, coordinatorBlockHeight int64, expiryTime time.Time) error {
 
 	log.L(ctx).Tracef("transport writer attempting to send assemble request to assembling node %s", assemblingNode)
 
@@ -376,13 +349,13 @@ func (tw *transportWriter) SendAssembleRequest(ctx context.Context, assemblingNo
 	log.L(ctx).Debugf("assemble request state locks for tx %s: %s", txID, string(stateLocksJSON))
 
 	assembleRequest := &engineProto.AssembleRequest{
-		TransactionId:     txID.String(),
-		AssembleRequestId: idempotencyId.String(),
-		ContractAddress:   tw.contractAddress.HexString(),
-		PreAssembly:       preAssemblyBytes,
-		StateLocks:        stateLocksJSON,
-		BlockHeight:       blockHeight,
-		ExpiryTimeUnixMs:  expiryTime.UnixMilli(),
+		TransactionId:          txID.String(),
+		AssembleRequestId:      idempotencyId.String(),
+		ContractAddress:        tw.contractAddress.HexString(),
+		PreAssembly:            preAssemblyBytes,
+		StateLocks:             stateLocksJSON,
+		CoordinatorBlockHeight: coordinatorBlockHeight,
+		ExpiryTimeUnixMs:       expiryTime.UnixMilli(),
 	}
 
 	assembleRequestBytes, err := proto.Marshal(assembleRequest)
@@ -403,16 +376,16 @@ func (tw *transportWriter) SendAssembleRequest(ctx context.Context, assemblingNo
 	return err
 }
 
-func (tw *transportWriter) SendAssembleErrorResponse(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string) error {
+func (tw *transportWriter) SendAssembleError(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string) error {
 
 	log.L(ctx).Tracef("transport writer attempting to send assemble error response to node %s", recipient)
 
-	assembleResponse := &engineProto.AssembleError{
+	assembleError := &engineProto.AssembleError{
 		TransactionId:     txID.String(),
 		AssembleRequestId: assembleRequestId.String(),
 		ContractAddress:   tw.contractAddress.HexString(),
 	}
-	assembleResponseBytes, err := proto.Marshal(assembleResponse)
+	assembleErrorBytes, err := proto.Marshal(assembleError)
 	if err != nil {
 		return err
 	}
@@ -421,11 +394,41 @@ func (tw *transportWriter) SendAssembleErrorResponse(ctx context.Context, txID u
 		MessageType: MessageType_AssembleError,
 		Node:        recipient,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
-		Payload:     assembleResponseBytes,
+		Payload:     assembleErrorBytes,
 	})
 	if err != nil {
-		// Log the error but continue sending to the other recipients
-		log.L(ctx).Errorf("error sending assemble response to %s: %s", recipient, err)
+		log.L(ctx).Errorf("error sending assemble error response to %s: %s", recipient, err)
+	}
+
+	return err
+}
+
+func (tw *transportWriter) SendAssembleRejection(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string, coordinatorBlockHeight, assemblerBlockHeight, blockHeightTolerance int64) error {
+
+	log.L(ctx).Tracef("transport writer attempting to send assemble rejection to node %s", recipient)
+
+	rejection := &engineProto.AssembleRejection{
+		TransactionId:          txID.String(),
+		AssembleRequestId:      assembleRequestId.String(),
+		ContractAddress:        tw.contractAddress.HexString(),
+		RejectionReason:        engineProto.AssembleRejection_BLOCK_HEIGHT_TOLERANCE,
+		CoordinatorBlockHeight: coordinatorBlockHeight,
+		AssemblerBlockHeight:   assemblerBlockHeight,
+		BlockHeightTolerance:   blockHeightTolerance,
+	}
+	rejectionBytes, err := proto.Marshal(rejection)
+	if err != nil {
+		return err
+	}
+
+	err = tw.send(ctx, &components.FireAndForgetMessageSend{
+		MessageType: MessageType_AssembleRejection,
+		Node:        recipient,
+		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
+		Payload:     rejectionBytes,
+	})
+	if err != nil {
+		log.L(ctx).Errorf("error sending assemble rejection to %s: %s", recipient, err)
 	}
 
 	return err

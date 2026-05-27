@@ -137,18 +137,16 @@ func TestTransaction_HasDependenciesNotReady(t *testing.T) {
 	transaction1Builder := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
 		Grapher(grapher).
 		NumberOfOutputStates(1).
-		NumberOfRequiredEndorsers(3).
-		NumberOfEndorsements(2).
-		AddPendingEndorsementRequest(2).
+		NumberOfRequiredEndorsers(1).
+		AddPendingEndorsementRequest().
 		AddPendingPreDispatchRequest()
 	transaction1, _ := transaction1Builder.Build()
 
 	transaction2Builder := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
 		Grapher(grapher).
 		NumberOfOutputStates(1).
-		NumberOfRequiredEndorsers(3).
-		NumberOfEndorsements(2).
-		AddPendingEndorsementRequest(2).
+		NumberOfRequiredEndorsers(1).
+		AddPendingEndorsementRequest().
 		AddPendingPreDispatchRequest()
 
 	transaction2, _ := transaction2Builder.Build()
@@ -188,9 +186,9 @@ func TestTransaction_HasDependenciesNotReady(t *testing.T) {
 	assert.Equal(t, State_Endorsement_Gathering, transaction2.stateMachine.GetCurrentState())
 
 	//move both dependencies forward
-	err = transaction1.HandleEvent(ctx, transaction1Builder.BuildEndorsedEvent(2))
+	err = transaction1.HandleEvent(ctx, transaction1Builder.BuildEndorsedEvent(0))
 	require.NoError(t, err)
-	err = transaction2.HandleEvent(ctx, transaction2Builder.BuildEndorsedEvent(2))
+	err = transaction2.HandleEvent(ctx, transaction2Builder.BuildEndorsedEvent(0))
 	require.NoError(t, err)
 
 	//Should still be blocked because dependencies have not been confirmed for dispatch yet
@@ -265,6 +263,7 @@ func TestNewTransaction_Success_ReturnsTransaction(t *testing.T) {
 		func(ctx context.Context, id uuid.UUID) (State, bool) { return State(0), false },
 		func(context.Context, ...string) {}, // notifyEndorserCandidates
 		sequencercommonmocks.NewEngineIntegration(t),
+		func() int64 { return 0 },
 		&syncpointsmocks.SyncPoints{},
 		allComponents,
 		domainAPI,
@@ -313,6 +312,7 @@ func TestNewTransaction_PublicAPI_ReturnsTransaction(t *testing.T) {
 		func(ctx context.Context, id uuid.UUID) (State, bool) { return State(0), false },
 		func(context.Context, ...string) {}, // notifyEndorserCandidates
 		sequencercommonmocks.NewEngineIntegration(t),
+		func() int64 { return 0 },
 		&syncpointsmocks.SyncPoints{},
 		allComponents,
 		domainAPI,

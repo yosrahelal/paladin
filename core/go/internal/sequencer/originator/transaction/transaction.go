@@ -68,6 +68,8 @@ type originatorTransaction struct {
 	nonce                            *uint64
 	metrics                          metrics.DistributedSequencerMetrics
 	lastReceivedWillRetry            bool
+	blockHeightTolerance             uint64       // maximum allowed block height difference before rejecting assembly requests
+	getCurrentBlockHeight            func() int64 // returns the originator's tracked block height
 }
 
 func NewTransaction(
@@ -77,6 +79,8 @@ func NewTransaction(
 	queueEventForOriginator func(context.Context, common.Event),
 	engineIntegration common.EngineIntegration,
 	metrics metrics.DistributedSequencerMetrics,
+	blockHeightTolerance uint64,
+	getCurrentBlockHeight func() int64,
 ) (OriginatorTransaction, error) {
 	if pt == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgSequencerInternalError, "cannot create transaction without private tx")
@@ -88,6 +92,8 @@ func NewTransaction(
 		transportWriter,
 		queueEventForOriginator,
 		metrics,
+		blockHeightTolerance,
+		getCurrentBlockHeight,
 	), nil
 }
 
@@ -97,6 +103,8 @@ func newTransaction(
 	transportWriter transport.TransportWriter,
 	queueEventForOriginator func(context.Context, common.Event),
 	metrics metrics.DistributedSequencerMetrics,
+	blockHeightTolerance uint64,
+	getCurrentBlockHeight func() int64,
 ) *originatorTransaction {
 	txn := &originatorTransaction{
 		pt:                      pt,
@@ -104,6 +112,8 @@ func newTransaction(
 		transportWriter:         transportWriter,
 		queueEventForOriginator: queueEventForOriginator,
 		metrics:                 metrics,
+		blockHeightTolerance:    blockHeightTolerance,
+		getCurrentBlockHeight:   getCurrentBlockHeight,
 	}
 	txn.initializeStateMachine(State_Initial)
 	return txn
@@ -206,7 +216,6 @@ func (t *originatorTransaction) GetCurrentState() State {
 	defer t.RUnlock()
 	return t.stateMachine.GetCurrentState()
 }
-
 
 func (t *originatorTransaction) GetSignerAddress() *pldtypes.EthAddress {
 	t.RLock()

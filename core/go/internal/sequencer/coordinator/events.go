@@ -112,6 +112,7 @@ type EndorsementRequestReceivedEvent struct {
 	PrivateEndorsementRequest *components.PrivateTransactionEndorseRequest
 	AttestationRequest        *prototk.AttestationRequest
 	Expiry                    time.Time
+	CoordinatorBlockHeight    int64
 }
 
 func (*EndorsementRequestReceivedEvent) Type() EventType {

@@ -69,11 +69,11 @@ type AssembleCancelledEvent struct {
 }
 
 func (*AssembleCancelledEvent) Type() EventType {
-	return Event_Assemble_Cancelled
+	return Event_AssembleCancelled
 }
 
 func (*AssembleCancelledEvent) TypeString() string {
-	return "Event_Assemble_Cancelled"
+	return "Event_AssembleCancelled"
 }
 
 type AssembleRequestSentEvent struct {
@@ -96,38 +96,38 @@ type AssembleSuccessEvent struct {
 }
 
 func (*AssembleSuccessEvent) Type() EventType {
-	return Event_Assemble_Success
+	return Event_AssembleSuccess
 }
 
 func (*AssembleSuccessEvent) TypeString() string {
-	return "Event_Assemble_Success"
+	return "Event_AssembleSuccess"
 }
 
-type AssembleRevertResponseEvent struct {
+type AssembleRevertEvent struct {
 	BaseCoordinatorEvent
 	PostAssembly *components.TransactionPostAssembly
 	RequestID    uuid.UUID
 }
 
-func (*AssembleRevertResponseEvent) Type() EventType {
-	return Event_Assemble_Revert_Response
+func (*AssembleRevertEvent) Type() EventType {
+	return Event_AssembleRevert
 }
 
-func (*AssembleRevertResponseEvent) TypeString() string {
-	return "Event_Assemble_Revert_Response"
+func (*AssembleRevertEvent) TypeString() string {
+	return "Event_AssembleRevert"
 }
 
-type AssembleErrorResponseEvent struct {
+type AssembleErrorEvent struct {
 	BaseCoordinatorEvent
 	RequestID uuid.UUID
 }
 
-func (*AssembleErrorResponseEvent) Type() EventType {
-	return Event_Assemble_Error_Response
+func (*AssembleErrorEvent) Type() EventType {
+	return Event_AssembleError
 }
 
-func (*AssembleErrorResponseEvent) TypeString() string {
-	return "Event_Assemble_Error_Response"
+func (*AssembleErrorEvent) TypeString() string {
+	return "Event_AssembleError"
 }
 
 type EndorsedEvent struct {
@@ -144,20 +144,87 @@ func (*EndorsedEvent) TypeString() string {
 	return "Event_Endorsed"
 }
 
-type EndorsedRejectedEvent struct {
+type EndorseRevertEvent struct {
 	BaseCoordinatorEvent
-	RevertReason           string
 	Party                  string
+	RevertReason           string
 	AttestationRequestName string
 	RequestID              uuid.UUID
 }
 
-func (*EndorsedRejectedEvent) Type() EventType {
-	return Event_EndorsedRejected
+func (*EndorseRevertEvent) Type() EventType {
+	return Event_EndorseRevert
 }
 
-func (*EndorsedRejectedEvent) TypeString() string {
-	return "Event_EndorsedRejected"
+func (*EndorseRevertEvent) TypeString() string {
+	return "Event_EndorseRevert"
+}
+
+// EndorseErrorEvent is queued when an endorser encountered an unexpected error processing the
+// request (domain error, key resolution failure, etc.).
+type EndorseErrorEvent struct {
+	BaseCoordinatorEvent
+	RequestID              uuid.UUID
+	Party                  string
+	AttestationRequestName string
+}
+
+func (*EndorseErrorEvent) Type() EventType {
+	return Event_EndorseError
+}
+
+func (*EndorseErrorEvent) TypeString() string {
+	return "Event_EndorseError"
+}
+
+type EndorseRejectionReason int
+
+const (
+	EndorseRejectionReason_BlockHeightTolerance EndorseRejectionReason = iota // 0 — coodinator and endorser block heights differ by more than the configured tolerance
+)
+
+// EndorseRequestRejectedEvent is queued when an endorser rejected the request before even attempting
+// it — currently only block height tolerance.
+type EndorseRequestRejectedEvent struct {
+	BaseCoordinatorEvent
+	Party                  string
+	AttestationRequestName string
+	RequestID              uuid.UUID
+	RejectionReason        EndorseRejectionReason
+	CoordinatorBlockHeight int64
+	EndorserBlockHeight    int64
+	BlockHeightTolerance   int64
+}
+
+func (*EndorseRequestRejectedEvent) Type() EventType {
+	return Event_EndorseRequestRejected
+}
+
+func (*EndorseRequestRejectedEvent) TypeString() string {
+	return "Event_EndorseRequestRejected"
+}
+
+type AssembleRejectionReason int
+
+const (
+	AssembleRejectionReason_BlockHeightTolerance AssembleRejectionReason = iota // 0 — sender and receiver block heights differ by more than the configured tolerance
+)
+
+type AssembleRequestRejectedEvent struct {
+	BaseCoordinatorEvent
+	RequestID              uuid.UUID
+	RejectionReason        AssembleRejectionReason
+	CoordinatorBlockHeight int64
+	AssemblerBlockHeight   int64
+	BlockHeightTolerance   int64
+}
+
+func (*AssembleRequestRejectedEvent) Type() EventType {
+	return Event_AssembleRequestRejected
+}
+
+func (*AssembleRequestRejectedEvent) TypeString() string {
+	return "Event_AssembleRequestRejected"
 }
 
 type DispatchRequestApprovedEvent struct {

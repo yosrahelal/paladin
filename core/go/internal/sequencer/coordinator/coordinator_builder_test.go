@@ -287,6 +287,11 @@ func (b *CoordinatorBuilderForTesting) AssembleErrorRetryThreshold(n int) *Coord
 	return b
 }
 
+func (b *CoordinatorBuilderForTesting) BlockHeightTolerance(n uint64) *CoordinatorBuilderForTesting {
+	b.sequencerConfig.BlockHeightTolerance = confutil.P(n)
+	return b
+}
+
 func (b *CoordinatorBuilderForTesting) ClosingGracePeriod(n int) *CoordinatorBuilderForTesting {
 	b.sequencerConfig.ClosingGracePeriod = confutil.P(n)
 	return b

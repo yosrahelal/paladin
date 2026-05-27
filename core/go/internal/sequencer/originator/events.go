@@ -49,17 +49,26 @@ func (*OriginatorCreatedEvent) TypeString() string {
 	return "Event_OriginatorCreated"
 }
 
-// DelegationRejectedEvent carries the name of the coordinator that the rejecting node believes
-// is currently active so the originator can fast-redirect to a higher-priority coordinator.
-type DelegationRejectedEvent struct {
+type DelegationRejectionReason int
+
+const (
+	DelegationRejectionReason_NotActiveCoordinator DelegationRejectionReason = iota // 0 — rejecting node is not the active coordinator
+	DelegationRejectionReason_BlockHeightTolerance                                  // 1 — sender and receiver block heights differ by more than the configured tolerance
+)
+
+type DelegationRequestRejectedEvent struct {
 	common.BaseEvent
-	ActiveCoordinator string
+	RejectionReason        DelegationRejectionReason
+	ActiveCoordinator      string
+	OriginatorBlockHeight  int64
+	CoordinatorBlockHeight int64
+	BlockHeightTolerance   int64
 }
 
-func (*DelegationRejectedEvent) Type() EventType {
-	return Event_DelegationRejected
+func (*DelegationRequestRejectedEvent) Type() EventType {
+	return Event_DelegationRequestRejected
 }
 
-func (*DelegationRejectedEvent) TypeString() string {
-	return "Event_DelegationRejected"
+func (*DelegationRequestRejectedEvent) TypeString() string {
+	return "Event_DelegationRequestRejected"
 }

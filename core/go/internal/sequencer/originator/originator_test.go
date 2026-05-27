@@ -82,7 +82,7 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	o.QueueEvent(ctx, &transaction.AssembleRequestReceivedEvent{
 		BaseEvent: transaction.BaseEvent{TransactionID: txn.ID},
 		RequestID: assembleRequestIdempotencyKey, Coordinator: coordinatorNode,
-		CoordinatorsBlockHeight: 1000, StateLocksJSON: []byte("{}"),
+		CoordinatorsBlockHeight: 0, StateLocksJSON: []byte("{}"),
 	})
 	sync = statemachine.NewSyncEvent()
 	o.QueueEvent(ctx, sync)

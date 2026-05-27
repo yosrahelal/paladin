@@ -371,7 +371,7 @@ func Test_action_AssembleError_SetsLatestFulfilledAssembleRequestID(t *testing.T
 	assert.Equal(t, requestID, txn.latestFulfilledAssembleRequestID)
 }
 
-func Test_action_SendAssembleErrorResponse_Success(t *testing.T) {
+func Test_action_SendAssembleError_Success(t *testing.T) {
 	ctx := context.Background()
 	builder := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering)
 	txn, mocks := builder.BuildWithMocks()
@@ -383,12 +383,12 @@ func Test_action_SendAssembleErrorResponse_Success(t *testing.T) {
 
 	mocks.SentMessageRecorder.Reset(ctx)
 
-	err := action_SendAssembleErrorResponse(ctx, txn, nil)
+	err := action_SendAssembleError(ctx, txn, nil)
 	require.NoError(t, err)
-	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleErrorResponse(), "SendAssembleErrorResponse should have been called")
+	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleError(), "SendAssembleError should have been called")
 }
 
-func Test_action_SendAssembleErrorResponse_TransportError(t *testing.T) {
+func Test_action_SendAssembleError_TransportError(t *testing.T) {
 	ctx := context.Background()
 	builder := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).WithMockTransportWriter()
 	txn, mocks := builder.BuildWithMocks()
@@ -399,14 +399,14 @@ func Test_action_SendAssembleErrorResponse_TransportError(t *testing.T) {
 	txn.latestFulfilledAssembleRequestID = requestID
 
 	expectedError := errors.New("transport error")
-	mocks.TransportWriter.EXPECT().SendAssembleErrorResponse(
+	mocks.TransportWriter.EXPECT().SendAssembleError(
 		mock.Anything,
 		txn.GetID(),
 		requestID,
 		coordinator,
 	).Return(expectedError)
 
-	err := action_SendAssembleErrorResponse(ctx, txn, nil)
+	err := action_SendAssembleError(ctx, txn, nil)
 	assert.Error(t, err)
 	assert.Equal(t, expectedError, err)
 }

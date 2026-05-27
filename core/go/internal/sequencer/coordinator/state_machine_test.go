@@ -204,6 +204,31 @@ func TestCoordinator_WhenIdle_EndorsementRequestReceived_UpdatesActiveCoordinato
 	assert.Equal(t, "node2", c.currentActiveCoordinator)
 }
 
+func TestCoordinator_WhenIdle_EndorsementRequestReceived_BlockHeightToleranceExceeded_RejectsAndStaysIdle(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	// Block height difference (100 - 0 = 100) exceeds tolerance (10) → rejection.
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, int64(0), int64(100), mock.Anything,
+	).Return(nil)
+
+	event := newBlockHeightExceedingEndorsementEvent("node2")
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	// Rejection path: no state change, no active-coordinator update.
+	assert.Equal(t, State_Idle, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
 func TestCoordinator_WhenObserving_TransitionsToIdle_OnHeartbeatIntervalInactiveGrace(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
@@ -237,7 +262,7 @@ func TestCoordinator_WhenObserving_DelegatedTransactions_HigherPriority_Transiti
 		WithMockTransportWriter().
 		Build()
 	// action_ProcessDelegatedTransactions sends an acknowledgment.
-	mocks.TransportWriter.EXPECT().SendDelegationRequestAcknowledgment(mock.Anything, "originator-node", "del-1", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mocks.TransportWriter.EXPECT().SendDelegationResponse(mock.Anything, "originator-node", "del-1", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	// OnTransitionTo Elect fires action_SendHandoverRequest.
 	mocks.TransportWriter.EXPECT().SendHandoverRequest(mock.Anything, "node2", mock.Anything).Return(nil)
 
@@ -259,7 +284,7 @@ func TestCoordinator_WhenObserving_DelegatedTransactions_LowerPriority_RejectsAn
 		WithMockTransportWriter().
 		Build()
 	// action_RejectDelegationRequest sends a rejection naming the current active coordinator.
-	mocks.TransportWriter.EXPECT().SendDelegationRequestRejection(mock.Anything, "originator-node", "del-1", mock.Anything, "node1").Return(nil)
+	mocks.TransportWriter.EXPECT().SendDelegationRejection(mock.Anything, "originator-node", "del-1", mock.Anything, "node1", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &TransactionsDelegatedEvent{
 		FromNode:     "originator-node",
@@ -313,6 +338,30 @@ func TestCoordinator_WhenObserving_EndorsementRequestReceived_UpdatesActiveCoord
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Observing, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenObserving_EndorsementRequestReceived_BlockHeightToleranceExceeded_RejectsAndStaysObserving(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
+		NodeName("node2").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, int64(0), int64(100), mock.Anything,
+	).Return(nil)
+
+	event := newBlockHeightExceedingEndorsementEvent("node1")
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Observing, c.GetCurrentState())
+	// active coordinator must not be updated on rejection
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
@@ -678,6 +727,32 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_LowerPriority_Ignored(
 
 	assert.Equal(t, State_Elect, c.GetCurrentState())
 	assert.Equal(t, "node2", c.currentActiveCoordinator, "lower-priority sender must not update active coordinator")
+}
+
+func TestCoordinator_WhenElect_EndorsementRequestReceived_BlockHeightToleranceExceeded_RejectsAndStaysElect(t *testing.T) {
+	// Block height check is evaluated before the priority check — even a higher-priority sender
+	// is rejected if the height difference exceeds tolerance.
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node2").
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, int64(0), int64(100), mock.Anything,
+	).Return(nil)
+
+	event := newBlockHeightExceedingEndorsementEvent("node1") // node1 is higher priority
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	// Rejection path: stays in Elect, no step-down.
+	assert.Equal(t, State_Elect, c.GetCurrentState())
+	assert.Equal(t, "node2", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_WhenPrepared_HeartbeatInterval_WithinGrace_SendsHeartbeatAndStaysPrepared(t *testing.T) {
@@ -1051,6 +1126,29 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_LowerPriority_Ignor
 
 	assert.Equal(t, State_Prepared, c.GetCurrentState())
 	assert.Equal(t, "node2", c.currentActiveCoordinator, "lower-priority sender must not update active coordinator")
+}
+
+func TestCoordinator_WhenPrepared_EndorsementRequestReceived_BlockHeightToleranceExceeded_RejectsAndStaysPrepared(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
+		NodeName("node2").
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, int64(0), int64(100), mock.Anything,
+	).Return(nil)
+
+	event := newBlockHeightExceedingEndorsementEvent("node1") // higher priority — rejected before priority check
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Prepared, c.GetCurrentState())
+	assert.Equal(t, "node2", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_WhenActive_TransitionsToIdle_OnHeartbeatInterval_WhenNoInflight(t *testing.T) {
@@ -1481,6 +1579,29 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_LowerPriority_Ignored
 	assert.Equal(t, "node1", c.currentActiveCoordinator, "lower-priority sender must not update active coordinator or trigger step-down")
 }
 
+func TestCoordinator_WhenActive_EndorsementRequestReceived_BlockHeightToleranceExceeded_RejectsAndStaysActive(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, int64(0), int64(100), mock.Anything,
+	).Return(nil)
+
+	event := newBlockHeightExceedingEndorsementEvent("node2")
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Active, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
 func TestCoordinator_WhenActiveFLush_HeartbeatInterval_SendsHeartbeatAndStaysActiveFLush(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
@@ -1751,6 +1872,29 @@ func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_LowerPriority_Ig
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
+func TestCoordinator_WhenActiveFLush_EndorsementRequestReceived_BlockHeightToleranceExceeded_RejectsAndStaysActiveFLush(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, int64(0), int64(100), mock.Anything,
+	).Return(nil)
+
+	event := newBlockHeightExceedingEndorsementEvent("node2")
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
 func TestCoordinator_WhenEnteringClosingFlush_OnTransitionTo_SendsImmediateHeartbeat(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
@@ -1822,7 +1966,7 @@ func TestCoordinator_WhenClosingFlush_DelegatedTransactions_HigherPriority_Trans
 		WithMockTransportWriter().
 		Transactions(txDispatched).
 		Build()
-	mocks.TransportWriter.EXPECT().SendDelegationRequestAcknowledgment(mock.Anything, "originator-node", "del-1", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mocks.TransportWriter.EXPECT().SendDelegationResponse(mock.Anything, "originator-node", "del-1", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mocks.TransportWriter.EXPECT().SendHandoverRequest(mock.Anything, "node2", mock.Anything).Return(nil)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &TransactionsDelegatedEvent{
 		FromNode:     "originator-node",
@@ -1842,7 +1986,7 @@ func TestCoordinator_WhenClosingFlush_DelegatedTransactions_LowerPriority_Reject
 		WithMockTransportWriter().
 		Transactions(txDispatched).
 		Build()
-	mocks.TransportWriter.EXPECT().SendDelegationRequestRejection(mock.Anything, "originator-node", "del-2", mock.Anything, "node1").Return(nil)
+	mocks.TransportWriter.EXPECT().SendDelegationRejection(mock.Anything, "originator-node", "del-2", mock.Anything, "node1", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &TransactionsDelegatedEvent{
 		FromNode:     "originator-node",
 		Originator:   "sender@originator-node",
@@ -1961,6 +2105,30 @@ func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_UpdatesActiveCo
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
+func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_BlockHeightToleranceExceeded_RejectsAndStaysClosingFlush(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, int64(0), int64(100), mock.Anything,
+	).Return(nil)
+
+	event := newBlockHeightExceedingEndorsementEvent("node1")
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	// Rejection path: active coordinator must not be updated.
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	assert.Equal(t, "node3", c.currentActiveCoordinator)
+}
+
 func TestCoordinator_WhenClosingFlush_HeartbeatReceived_LiveSender_UpdatesActiveCoordinator(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
@@ -2055,7 +2223,7 @@ func TestCoordinator_WhenClosing_DelegationRequest_HigherPriorityThanCurrentActi
 		WithMockTransportWriter().
 		Build()
 	// action_ProcessDelegatedTransactions always sends an acknowledgment (even for empty transaction lists).
-	mocks.TransportWriter.EXPECT().SendDelegationRequestAcknowledgment(mock.Anything, "originator-node", "del-1", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mocks.TransportWriter.EXPECT().SendDelegationResponse(mock.Anything, "originator-node", "del-1", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mocks.TransportWriter.EXPECT().SendHandoverRequest(mock.Anything, "node2", mock.Anything).Return(nil)
 
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &TransactionsDelegatedEvent{
@@ -2078,7 +2246,7 @@ func TestCoordinator_WhenClosing_DelegatedTransactions_LowerPriority_ActiveCoord
 		InactiveGracePeriod(5). // 0 < 5 → not exceeded
 		WithMockTransportWriter().
 		Build()
-	mocks.TransportWriter.EXPECT().SendDelegationRequestRejection(mock.Anything, "originator-node", "del-3", mock.Anything, "node1").Return(nil)
+	mocks.TransportWriter.EXPECT().SendDelegationRejection(mock.Anything, "originator-node", "del-3", mock.Anything, "node1", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &TransactionsDelegatedEvent{
 		FromNode:     "originator-node",
 		Originator:   "sender@originator-node",
@@ -2161,6 +2329,30 @@ func TestCoordinator_WhenClosing_EndorsementRequestReceived_UpdatesActiveCoordin
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
+func TestCoordinator_WhenClosing_EndorsementRequestReceived_BlockHeightToleranceExceeded_RejectsAndStaysClosing(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, int64(0), int64(100), mock.Anything,
+	).Return(nil)
+
+	event := newBlockHeightExceedingEndorsementEvent("node1")
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	// Rejection path: active coordinator must not be updated.
+	assert.Equal(t, State_Closing, c.GetCurrentState())
+	assert.Equal(t, "node3", c.currentActiveCoordinator)
+}
+
 func TestCoordinator_PreProcessEvent_OwnHeartbeat_IsFilteredOut(t *testing.T) {
 	ctx := t.Context()
 	// The coordinator is in Observing state so a non-self heartbeat would normally update the
@@ -2183,6 +2375,23 @@ func TestCoordinator_PreProcessEvent_OwnHeartbeat_IsFilteredOut(t *testing.T) {
 	// and currentActiveCoordinator must not have been updated to "node1".
 	assert.Equal(t, State_Observing, c.GetCurrentState(), "own heartbeat must not trigger a state transition")
 	assert.Equal(t, "node2", c.currentActiveCoordinator, "own heartbeat must not update currentActiveCoordinator")
+}
+
+// newBlockHeightExceedingEndorsementEvent creates a minimal EndorsementRequestReceivedEvent
+// where CoordinatorBlockHeight=0. When the coordinator's currentBlockHeight is 100 and
+// blockHeightTolerance is 10, the difference (100) exceeds the tolerance, triggering
+// action_RejectEndorsementBlockHeight instead of action_HandleEndorsementRequest.
+// No key-manager mock is needed because the background goroutine never launches.
+func newBlockHeightExceedingEndorsementEvent(fromNode string) *EndorsementRequestReceivedEvent {
+	return &EndorsementRequestReceivedEvent{
+		FromNode:                  fromNode,
+		TransactionId:             "tx-bh-test",
+		IdempotencyKey:            "ik-bh-test",
+		Party:                     "party@" + fromNode,
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{},
+		AttestationRequest:        &prototk.AttestationRequest{Name: "att-bh"},
+		CoordinatorBlockHeight:    0, // far from the coordinator's currentBlockHeight of 100
+	}
 }
 
 // newEndorsementEventForStateMachineTest creates an EndorsementRequestReceivedEvent and

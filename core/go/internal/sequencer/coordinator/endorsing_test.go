@@ -200,37 +200,30 @@ func Test_action_HandleEndorsementRequest_SpawnsGoroutineThatCompletesEndorsemen
 	}
 }
 
-func Test_action_HandleEndorsementRequest_AbandonsSilently_WhenExpiryAlreadyElapsed(t *testing.T) {
+func Test_action_HandleEndorsementRequest_SendsEndorsementError_WhenExpiryAlreadyElapsed(t *testing.T) {
 	// When the EndorsementRequestReceivedEvent carries an already-elapsed expiry,
 	// action_HandleEndorsementRequest must spawn a goroutine whose context is already cancelled.
-	// The goroutine should exit (via the key-resolution or domain-call error) without sending a
-	// response — context cancellation propagates naturally through every blocking call.
+	// The goroutine should exit (via the key-resolution or domain-call error) and send an
+	// EndorsementError back to the coordinator.
 	ctx := t.Context()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
 		WithMockTransportWriter().
 		WithKeyManagerError(context.DeadlineExceeded).
 		Build()
 
-	// No SendEndorsementResponse expectation registered — the mock will fail if it is called.
-	doneCh := make(chan struct{})
+	errorSent := make(chan struct{})
+	mocks.TransportWriter.EXPECT().
+		SendEndorsementError(mock.Anything, "tx-1", "ik-1", mock.Anything, mock.Anything, mock.Anything, mock.Anything, "node2").
+		Run(func(_ context.Context, _, _, _, _, _, _, _ string) { close(errorSent) }).
+		Return(nil)
+
 	event := buildEndorsementEvent("node2")
 	event.Expiry = time.Now().Add(-time.Second) // already expired
 
 	err := action_HandleEndorsementRequest(ctx, c, event)
 	require.NoError(t, err)
 
-	// The goroutine should terminate without sending any response.  Signal quiescence after a
-	// short delay; the mock's AssertExpectations (auto-called at cleanup) would panic if
-	// SendEndorsementResponse were invoked unexpectedly.
-	go func() {
-		time.Sleep(200 * time.Millisecond)
-		close(doneCh)
-	}()
-	select {
-	case <-doneCh:
-	case <-ctx.Done():
-		t.Fatal("timed out waiting for goroutine quiescence")
-	}
+	<-errorSent
 }
 
 // --- handleEndorsementRequest goroutine tests ---
@@ -282,20 +275,23 @@ func Test_handleEndorsementRequest_Revert_NoRevertReason_UsesDefaultMessage(t *t
 	c.handleEndorsementRequest(ctx, event)
 }
 
-func Test_handleEndorsementRequest_PartyIdentityError_DoesNotSendResponse(t *testing.T) {
+func Test_handleEndorsementRequest_PartyIdentityError_SendsEndorsementError(t *testing.T) {
 	ctx := t.Context()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
 		WithMockTransportWriter().
 		Build()
+
+	mocks.TransportWriter.EXPECT().
+		SendEndorsementError(mock.Anything, "tx-1", "ik-1", mock.Anything, mock.Anything, mock.Anything, mock.Anything, "node2").
+		Return(nil)
 
 	// Party "@node2" has an empty identity part, causing PrivateIdentityLocator.Identity to fail.
 	event := buildEndorsementEvent("node2")
 	event.Party = "@node2"
 	c.handleEndorsementRequest(ctx, event)
-	// No SendEndorsementResponse expected and no KeyManager call.
 }
 
-func Test_handleEndorsementRequest_PartyKeyResolveError_DoesNotSendResponse(t *testing.T) {
+func Test_handleEndorsementRequest_PartyKeyResolveError_SendsEndorsementError(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
 		WithMockTransportWriter().
@@ -306,12 +302,15 @@ func Test_handleEndorsementRequest_PartyKeyResolveError_DoesNotSendResponse(t *t
 	mockKeyManager.EXPECT().ResolveKeyNewDatabaseTX(mock.Anything, "party1", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("key not found"))
 	mocks.AllComponents.On("KeyManager").Return(mockKeyManager).Maybe()
 
+	mocks.TransportWriter.EXPECT().
+		SendEndorsementError(mock.Anything, "tx-1", "ik-1", mock.Anything, mock.Anything, mock.Anything, mock.Anything, "node2").
+		Return(nil)
+
 	event := buildEndorsementEvent("node2")
 	c.handleEndorsementRequest(ctx, event)
-	// No SendEndorsementResponse expected.
 }
 
-func Test_handleEndorsementRequest_EndorseTransactionError_DoesNotSendResponse(t *testing.T) {
+func Test_handleEndorsementRequest_EndorseTransactionError_SendsEndorsementError(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
 		WithMockTransportWriter().
@@ -322,9 +321,12 @@ func Test_handleEndorsementRequest_EndorseTransactionError_DoesNotSendResponse(t
 
 	mocks.DomainAPI.EXPECT().EndorseTransaction(mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("domain error"))
 
+	mocks.TransportWriter.EXPECT().
+		SendEndorsementError(mock.Anything, "tx-1", "ik-1", mock.Anything, mock.Anything, mock.Anything, mock.Anything, "node2").
+		Return(nil)
+
 	event := buildEndorsementEvent("node2")
 	c.handleEndorsementRequest(ctx, event)
-	// SendEndorsementResponse should never be called — no EXPECT set, mock would fail if called.
 }
 
 func Test_handleEndorsementRequest_EndorserSubmit_SendsResponseWithConstraint(t *testing.T) {
@@ -401,7 +403,7 @@ func Test_handleEndorsementRequest_Sign_ThisNode_SignsAndSendsResponse(t *testin
 	assert.Equal(t, []byte("signature"), capturedAttResult.Payload)
 }
 
-func Test_handleEndorsementRequest_Sign_ResolveKeyError_DoesNotSendResponse(t *testing.T) {
+func Test_handleEndorsementRequest_Sign_ResolveKeyError_SendsEndorsementError(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
 		NodeName("node1").
@@ -420,12 +422,15 @@ func Test_handleEndorsementRequest_Sign_ResolveKeyError_DoesNotSendResponse(t *t
 	mocks.DomainAPI.EXPECT().EndorseTransaction(mock.Anything, mock.Anything, mock.Anything).Return(endorsementResult, nil)
 	km.EXPECT().ResolveKeyNewDatabaseTX(mock.Anything, "signer", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("key error"))
 
+	mocks.TransportWriter.EXPECT().
+		SendEndorsementError(mock.Anything, "tx-1", "ik-1", mock.Anything, mock.Anything, mock.Anything, mock.Anything, "node2").
+		Return(nil)
+
 	event := buildEndorsementEvent("node2")
 	c.handleEndorsementRequest(ctx, event)
-	// No SendEndorsementResponse expected.
 }
 
-func Test_handleEndorsementRequest_Sign_SignError_DoesNotSendResponse(t *testing.T) {
+func Test_handleEndorsementRequest_Sign_SignError_SendsEndorsementError(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
 		NodeName("node1").
@@ -449,9 +454,12 @@ func Test_handleEndorsementRequest_Sign_SignError_DoesNotSendResponse(t *testing
 	km.EXPECT().ResolveKeyNewDatabaseTX(mock.Anything, "signer", mock.Anything, mock.Anything).Return(resolvedKey, nil)
 	km.EXPECT().Sign(mock.Anything, resolvedKey, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("sign error"))
 
+	mocks.TransportWriter.EXPECT().
+		SendEndorsementError(mock.Anything, "tx-1", "ik-1", mock.Anything, mock.Anything, mock.Anything, mock.Anything, "node2").
+		Return(nil)
+
 	event := buildEndorsementEvent("node2")
 	c.handleEndorsementRequest(ctx, event)
-	// No SendEndorsementResponse expected.
 }
 
 func Test_handleEndorsementRequest_Sign_WrongNode_LogsErrorAndSendsResponseUnsigned(t *testing.T) {
@@ -587,7 +595,7 @@ func Test_handleEndorsementRequest_IncEndorsedTransactionsOnSuccess(t *testing.T
 	c.handleEndorsementRequest(ctx, event)
 }
 
-func Test_handleEndorsementRequest_Sign_ValidateEndorserError_DoesNotSendResponse(t *testing.T) {
+func Test_handleEndorsementRequest_Sign_ValidateEndorserError_SendsEndorsementError(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
 		NodeName("node1").
@@ -607,7 +615,10 @@ func Test_handleEndorsementRequest_Sign_ValidateEndorserError_DoesNotSendRespons
 	}
 	mocks.DomainAPI.EXPECT().EndorseTransaction(mock.Anything, mock.Anything, mock.Anything).Return(endorsementResult, nil)
 
+	mocks.TransportWriter.EXPECT().
+		SendEndorsementError(mock.Anything, "tx-1", "ik-1", mock.Anything, mock.Anything, mock.Anything, mock.Anything, "node2").
+		Return(nil)
+
 	event := buildEndorsementEvent("node2")
 	c.handleEndorsementRequest(ctx, event)
-	// No SendEndorsementResponse expected — Validate returns error for "@" with no identity part.
 }

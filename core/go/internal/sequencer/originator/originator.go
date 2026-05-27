@@ -72,10 +72,11 @@ type originator struct {
 	failoverIndex                      int      // COORDINATOR_ENDORSER mode:t he next position in coordinatorPriorityList to try when the current active coordinator exceeds the inactive grace period
 
 	/* Config */
-	nodeName            string
-	blockRange          uint64
-	contractAddress     *pldtypes.EthAddress
-	inactiveGracePeriod int // expressed as a multiple of heartbeat intervals
+	nodeName             string
+	blockRange           uint64
+	contractAddress      *pldtypes.EthAddress
+	inactiveGracePeriod  int    // expressed as a multiple of heartbeat intervals
+	blockHeightTolerance uint64 // maximum allowed block height difference before rejecting requests
 
 	/* Dependencies */
 	transportWriter   transport.TransportWriter
@@ -93,14 +94,15 @@ func NewOriginator(
 	selectionConfig *common.CoordinatorSelectionConfig,
 ) *originator {
 	o := &originator{
-		nodeName:            nodeName,
-		transactionsByID:    make(map[uuid.UUID]transaction.OriginatorTransaction),
-		transportWriter:     transportWriter,
-		blockRange:          confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
-		contractAddress:     contractAddress,
-		engineIntegration:   engineIntegration,
-		metrics:             metrics,
-		inactiveGracePeriod: confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod),
+		nodeName:             nodeName,
+		transactionsByID:     make(map[uuid.UUID]transaction.OriginatorTransaction),
+		transportWriter:      transportWriter,
+		blockRange:           confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
+		contractAddress:      contractAddress,
+		engineIntegration:    engineIntegration,
+		metrics:              metrics,
+		inactiveGracePeriod:  confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod),
+		blockHeightTolerance: confutil.Uint64Min(configuration.BlockHeightTolerance, pldconf.SequencerMinimum.BlockHeightTolerance, *pldconf.SequencerDefaults.BlockHeightTolerance),
 	}
 
 	switch selectionConfig.Mode {
