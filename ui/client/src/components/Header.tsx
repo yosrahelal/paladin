@@ -31,7 +31,7 @@ import {
 } from '@mui/material';
 import { useContext, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import logoDark from '../../public/paladin-title-dark.svg';
 import logoLight from '../../public/paladin-title-light.svg';
 import { ApplicationContext } from '../contexts/ApplicationContext';
@@ -55,8 +55,14 @@ export const Header: React.FC = () => {
   const theme = useTheme();
   const lessThanMedium = useMediaQuery(theme.breakpoints.down('md'));
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [searchParams] = useSearchParams();
 
   const getTabFromPath = (path: string) => {
+    switch (searchParams.get('back')) {
+      case 'transactions': return HeaderTab.Transactions;
+      case 'submissions': return HeaderTab.Submissions;
+      case 'domains': return HeaderTab.Domains;
+    }
     if (path.startsWith(AppRoutes.Transactions)) {
       return HeaderTab.Transactions;
     } else if (path.startsWith(AppRoutes.Submissions)) {
