@@ -308,3 +308,7 @@ func validator_IsHeartbeatSenderLive(_ context.Context, _ *originator, event com
 		s == common.CoordinatorState_Active ||
 		s == common.CoordinatorState_Active_Flush, nil
 }
+
+func guard_HasTransactions(ctx context.Context, o *originator) bool {
+	return len(o.transactionsByID) > 0
+}

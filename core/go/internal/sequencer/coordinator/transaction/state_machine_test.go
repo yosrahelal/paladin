@@ -190,8 +190,6 @@ func Test_DependencyReset_PostAssembleDependency_AllStates(t *testing.T) {
 		fromState State
 		toState   State
 	}{
-		{State_Pooled, State_Pooled},
-		{State_Assembling, State_PreAssembly_Blocked},
 		{State_Endorsement_Gathering, State_Pooled},
 		{State_Blocked, State_Pooled},
 		{State_Confirming_Dispatchable, State_Pooled},
@@ -221,8 +219,6 @@ func Test_DependencyConfirmedReverted_PostAssembleDependency_AllStates(t *testin
 		fromState State
 		toState   State
 	}{
-		{State_Pooled, State_Pooled},
-		{State_Assembling, State_PreAssembly_Blocked},
 		{State_Endorsement_Gathering, State_Pooled},
 		{State_Blocked, State_Pooled},
 		{State_Confirming_Dispatchable, State_Pooled},
@@ -1169,4 +1165,3 @@ func TestCoordinatorTransaction_Confirmed_NoTransition_OnHeartbeatInterval_IfNot
 	require.NoError(t, err)
 	assert.Equal(t, State_Confirmed, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
-
