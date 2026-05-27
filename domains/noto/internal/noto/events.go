@@ -98,7 +98,6 @@ func (n *Noto) handleV1Event(ctx context.Context, ev *prototk.OnChainEvent, res 
 				return err
 			}
 			n.recordTransactionInfo(ev, lockUpdated.TxId, txData.InfoStates, res)
-			res.ReadStates = append(res.ReadStates, n.parseStatesFromEvent(lockUpdated.TxId, lockUpdated.Contents)...)
 			res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(lockUpdated.TxId, []pldtypes.Bytes32{lockUpdated.OldLockState})...)
 			res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(lockUpdated.TxId, []pldtypes.Bytes32{lockUpdated.NewLockState})...)
 		} else {

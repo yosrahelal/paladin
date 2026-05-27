@@ -101,39 +101,6 @@ describe("Noto", function () {
     );
   });
 
-  it("getLockContent returns ERC-8074 encoded content", async function () {
-    const { noto, notary } = await loadFixture(deployNotoFixture);
-
-    const locked1 = fakeTXO();
-    const lockStateId = randomBytes32();
-    const lockId = await doLock(
-      notary,
-      noto,
-      {
-        txId: randomBytes32(),
-        inputs: [],
-        outputs: [],
-        contents: [locked1],
-        newLockState: lockStateId,
-        options: { spendTxId: ZeroHash },
-        proof: "0x",
-      },
-      ZeroHash,
-      ZeroHash,
-      "0x",
-    );
-
-    const content = await noto.getLockContent(lockId);
-    const expectedSelector = ethers.id("NotoLockContent(bytes32[] states)").slice(0, 10);
-    expect(content.slice(0, 10)).to.equal(expectedSelector);
-
-    const [states] = ethers.AbiCoder.defaultAbiCoder().decode(
-      ["bytes32[]"],
-      "0x" + content.slice(10),
-    );
-    expect(states).to.deep.equal([locked1]);
-  });
-
   it("lock and unlock", async function () {
     const { noto, notary } = await loadFixture(deployNotoFixture);
     const [_, delegate, other] = await ethers.getSigners();

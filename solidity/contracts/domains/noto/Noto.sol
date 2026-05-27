@@ -31,24 +31,18 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
         bytes data;
     }
 
-    // Extended from ILockableCapability.LockInfo with content/options
+    // Extended from ILockableCapability.LockInfo
     struct NotoLockInfo {
         address owner;
         address spender;
         bytes32 spendCommitment;
         bytes32 cancelCommitment;
-        bytes content;
+        uint256 lockedStateCount;
         NotoLockOptions options;
     }
 
     // Config follows the convention of a 4 byte type selector, followed by ABI encoded bytes
     bytes4 public constant NotoConfigID_V1 = 0x00020000;
-
-    // ERC-8074 type selector for the bytes returned by getLockContent.
-    // bytes4(keccak256("NotoLockContent(bytes32[] states)"))
-    string public constant NotoLockContentType = "NotoLockContent(bytes32[] states)";
-    bytes4 public constant NotoLockContentSelector =
-        bytes4(keccak256(bytes(NotoLockContentType)));
 
     uint64 public constant NotoVariant = 0x0002;
 
@@ -255,18 +249,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     }
 
     /**
-     * @dev Get the content of a lock.
-     *
-     * @param lockId The unique identifier for the lock.
-     * @return content The content of the lock.
-     */
-    function getLockContent(
-        bytes32 lockId
-    ) external view override lockActive(lockId) returns (bytes memory content) {
-        return bytes.concat(NotoLockContentSelector, _locks[lockId].content);
-    }
-
-    /**
      * @dev Get current lockState ID for a lock
      *
      * @param lockId The identifier of the lock.
@@ -439,10 +421,9 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
             revert NotoDuplicateLock(lockId);
         }
 
-        // Set the initial ownership, and immutable content of the lock
         lock.owner = msg.sender;
         lock.spender = msg.sender;
-        lock.content = abi.encode(args.content);
+        lock.lockedStateCount = args.content.length;
 
         _createLock(args, spendCommitment, cancelCommitment, lockId, lock);
 
@@ -508,13 +489,10 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
             data
         );
 
-        bytes32[] memory lockContent = abi.decode(lock.content, (bytes32[]));
-
         emit NotoLockUpdated(
             args.txId,
             lockId,
             msg.sender,
-            lockContent,
             args.oldLockState,
             args.newLockState,
             args.proof,
@@ -697,10 +675,9 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
 
         // The operation must unlock all the locked inputs.
         // Note only a length check here as _processLockedInputs checks the contents.
-        bytes32[] memory lockContent = abi.decode(lock.content, (bytes32[]));
-        if (lockContent.length != unlockOp.inputs.length) {
+        if (lock.lockedStateCount != unlockOp.inputs.length) {
             revert NotoInvalidUnlockInputs(
-                lockContent.length,
+                lock.lockedStateCount,
                 unlockOp.inputs.length
             );
         }

@@ -72,13 +72,10 @@ interface INoto is IConfidentialToken, ILockableCapability {
     );
 
     // The Noto event for updating of a lock (contains a lock state transition)
-    // Note: The contents cannot be changed in this operation, but they
-    // are emitted to allow preparing of the unlock operation.
     event NotoLockUpdated(
         bytes32 indexed txId,
         bytes32 indexed lockId,
         address indexed owner,
-        bytes32[] contents,
         bytes32 oldLockState,
         bytes32 newLockState,
         bytes proof,
