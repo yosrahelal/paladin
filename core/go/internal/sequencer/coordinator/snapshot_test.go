@@ -94,7 +94,7 @@ func TestSendHeartbeat_Success(t *testing.T) {
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	err := c.sendHeartbeat(ctx, c.contractAddress)
+	err := c.sendHeartbeat(ctx, false)
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat())
 }
@@ -106,7 +106,7 @@ func TestSendHeartbeat_IncludesCurrentNode(t *testing.T) {
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	err := c.sendHeartbeat(ctx, c.contractAddress)
+	err := c.sendHeartbeat(ctx, false)
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat())
 }
@@ -123,7 +123,7 @@ func TestSendHeartbeat_HandlesError(t *testing.T) {
 	mocks.TransportWriter.EXPECT().SendHeartbeat(mock.Anything, "node2", mock.Anything, mock.Anything).
 		Return(fmt.Errorf("transport error"))
 
-	err := c.sendHeartbeat(ctx, c.contractAddress)
+	err := c.sendHeartbeat(ctx, false)
 	// Should return the error but continue processing
 	assert.Error(t, err)
 	assert.Equal(t, "transport error", err.Error())
@@ -137,6 +137,25 @@ func TestAction_SendHeartbeat(t *testing.T) {
 		Build()
 
 	err := action_SendHeartbeat(ctx, c, nil)
+	assert.NoError(t, err)
+	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat())
+}
+
+func TestAction_SendHeartbeatWithLocks(t *testing.T) {
+	ctx := context.Background()
+	mockGrapher := graphermocks.NewGrapher(t)
+	mockGrapher.EXPECT().ExportStatesAndLocks(mock.Anything, "node1").
+		Return(grapher.ExportableStates{}, nil)
+	mockGrapher.EXPECT().ExportStatesAndLocks(mock.Anything, "node2").
+		Return(grapher.ExportableStates{}, nil)
+
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		EndorserCandidates("node1", "node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Grapher(mockGrapher).
+		Build()
+
+	err := action_SendHeartbeatWithLocks(ctx, c, nil)
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat())
 }
@@ -177,7 +196,7 @@ func TestSendHeartbeat_StaticMode_WithOriginatorActivity_SendsHeartbeats(t *test
 		OriginatorActivity(map[string]int{"remoteNode": 0}).
 		Build()
 
-	err := c.sendHeartbeat(ctx, c.contractAddress)
+	err := c.sendHeartbeat(ctx, false)
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat())
 }
@@ -189,14 +208,14 @@ func TestSendHeartbeat_ExportStatesAndLocksError_ReturnsError(t *testing.T) {
 	mockGrapher.EXPECT().ExportStatesAndLocks(mock.Anything, "node1").
 		Return(grapher.ExportableStates{}, fmt.Errorf("export error"))
 
-	// Closing_Flush state means includeLocks=true, which causes ExportStatesAndLocks to be called.
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
 		EndorserCandidates("node1").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Grapher(mockGrapher).
 		Build()
 
-	err := c.sendHeartbeat(ctx, c.contractAddress)
+	// includeLocks=true causes ExportStatesAndLocks to be called.
+	err := c.sendHeartbeat(ctx, true)
 	assert.Error(t, err)
 	assert.Equal(t, "export error", err.Error())
 }

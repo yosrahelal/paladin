@@ -114,14 +114,14 @@ func TestTransactionSuccessPrivacyGroupEndorsement(t *testing.T) {
 		transactionReceiptConditionExpectedPublicTXCount(t, ctx, aliceTx.ID(), alice.GetClient(), 1),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt with 1 public TX",
+		"Transaction did not receive a receipt with 1 public TX (txID: %s)", aliceTx.ID(),
 	)
 	// Check bob has a receipt (he is participating in the domain as an endorser)
 	require.Eventually(t,
 		transactionReceiptConditionReceiptOnly(t, ctx, aliceTx.ID(), bob.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Bob did not receive a receipt",
+		"Bob did not receive a receipt (txID: %s)", aliceTx.ID(),
 	)
 
 	// Check Alice and Bob both have the same view of the world
@@ -612,7 +612,7 @@ func TestTransactionResumesIfBothRequiredVerifiersAreStoppedBeforeCompletion(t *
 			transactionReceiptCondition(t, ctx, *tx.ID(), bob.GetClient(), false),
 			transactionLatencyThreshold(t),
 			100*time.Millisecond,
-			"Transaction did not receive a receipt",
+			"Transaction did not receive a receipt (txID: %s)", tx.ID(),
 		)
 	}
 }
@@ -682,7 +682,7 @@ func TestTransactionSuccessChainedTransaction(t *testing.T) {
 		transactionReceiptConditionReceiptOnly(t, ctx, aliceTx.ID(), bob.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt",
+		"Transaction did not receive a receipt (txID: %s)", aliceTx.ID(),
 	)
 }
 
@@ -756,7 +756,7 @@ func TestTransactionSuccessChainedTransactionSelfEndorsementThenPrivacyGroupEndo
 		transactionReceiptConditionReceiptOnly(t, ctx, aliceTx.ID(), bob.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt",
+		"Transaction did not receive a receipt (txID: %s)", aliceTx.ID(),
 	)
 
 	// Get the full transaction from Alice and check there is a chained transaction created on Alice's node
@@ -867,7 +867,7 @@ func TestTransactionSuccessChainedTransactionPrivacyGroupEndorsementThenSelfEndo
 		transactionReceiptConditionReceiptOnly(t, ctx, aliceTx.ID(), bob.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt",
+		"Transaction did not receive a receipt (txID: %s)", aliceTx.ID(),
 	)
 
 	// Now query the transaction in full and check that there is a sequencing activity record for the original tranasction
@@ -981,7 +981,7 @@ func TestTransactionSuccessChainedTransactionPrivacyGroupEndorsementThenPrivacyG
 		transactionReceiptConditionReceiptOnly(t, ctx, aliceTx.ID(), bob.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt",
+		"Transaction did not receive a receipt (txID: %s)", aliceTx.ID(),
 	)
 }
 
@@ -1115,7 +1115,7 @@ func TestTransactionErrorDuringAssembly(t *testing.T) {
 			transactionReceiptCondition(t, ctx, *tx.ID(), alice.GetClient(), false),
 			transactionLatencyThresholdCustom(t, &customThreshold),
 			100*time.Millisecond,
-			"Transaction did not receive a receipt",
+			"Transaction did not receive a receipt (txID: %s)", tx.ID(),
 		)
 	}
 }
@@ -1321,7 +1321,7 @@ func TestTransactionSuccessChainedTransactionStopNodesBeforeCompletion(t *testin
 		transactionReceiptCondition(t, ctx, aliceTx.ID(), alice.GetClient(), false),
 		transactionLatencyThresholdCustom(t, &customDuration),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt",
+		"Transaction did not receive a receipt (txID: %s)", aliceTx.ID(),
 	)
 }
 
@@ -1391,7 +1391,7 @@ func TestTransactionFailureWhenChainedTransactionAssembleReverts(t *testing.T) {
 		transactionReceiptConditionFailureReceiptOnly(t, ctx, aliceTx.ID(), alice.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt",
+		"Transaction did not receive a receipt (txID: %s)", aliceTx.ID(),
 	)
 
 	aliceTxFull, err := alice.GetClient().PTX().GetTransactionFull(ctx, aliceTx.ID())
@@ -1483,7 +1483,7 @@ func TestTransactionFailureChainedTransactionDifferentOriginators(t *testing.T) 
 		transactionReceiptConditionFailureReceiptOnly(t, ctx, aliceTx.ID(), alice.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt",
+		"Transaction did not receive a receipt (txID: %s)", aliceTx.ID(),
 	)
 
 	aliceTxFull, err := alice.GetClient().PTX().GetTransactionFull(ctx, aliceTx.ID())
@@ -1713,7 +1713,7 @@ func TestTransactionWithExplicitPrereqSuccessfulAfterRestart(t *testing.T) {
 		transactionReceiptConditionReceiptOnly(t, ctx, *aliceTx1.ID(), alice.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt or result was incorrect",
+		"Transaction did not receive a receipt or result was incorrect (txID: %s)", aliceTx1.ID(),
 	)
 	result2 := aliceTx2.Wait(transactionLatencyThreshold(t))
 	require.ErrorContains(t, result2.Error(), "timed out")
@@ -1742,7 +1742,7 @@ func TestTransactionWithExplicitPrereqSuccessfulAfterRestart(t *testing.T) {
 		transactionReceiptConditionReceiptOnly(t, ctx, *aliceTx2.ID(), alice.GetClient()),
 		transactionLatencyThresholdCustom(t, &customThreshold),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt or result was incorrect",
+		"Transaction did not receive a receipt or result was incorrect (txID: %s)", aliceTx2.ID(),
 	)
 }
 
@@ -1832,19 +1832,19 @@ func TestTransactionFailsIfExplicitPrereqTransactionFails(t *testing.T) {
 		transactionReceiptConditionFailureReceiptOnly(t, ctx, *aliceTx1.ID(), alice.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt or result was incorrect",
+		"Transaction did not receive a receipt or result was incorrect (txID: %s)", aliceTx1.ID(),
 	)
 	assert.Eventually(t,
 		transactionReceiptConditionFailureReceiptOnly(t, ctx, *aliceTx2.ID(), alice.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt or result was incorrect",
+		"Transaction did not receive a receipt or result was incorrect (txID: %s)", aliceTx2.ID(),
 	)
 	assert.Eventually(t,
 		transactionReceiptConditionFailureReceiptOnly(t, ctx, *aliceTx3.ID(), alice.GetClient()),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Transaction did not receive a receipt or result was incorrect",
+		"Transaction did not receive a receipt or result was incorrect (txID: %s)", aliceTx3.ID(),
 	)
 }
 

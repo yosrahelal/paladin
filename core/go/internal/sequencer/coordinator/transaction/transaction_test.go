@@ -23,6 +23,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibilitytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
@@ -39,7 +40,7 @@ import (
 
 func newTestGrapher() (grapher.Grapher, dependencytracker.DependencyTracker) {
 	dt := dependencytracker.NewDependencyTracker()
-	return grapher.NewGrapher(dt, 5), dt
+	return grapher.NewGrapher(dt, statevisibilitytracker.NewStore(), 5), dt
 }
 
 func TestTransaction_HasDependenciesNotReady_FalseIfNoDependencies(t *testing.T) {
@@ -274,6 +275,7 @@ func TestNewTransaction_Success_ReturnsTransaction(t *testing.T) {
 		0,
 		3,
 		nil,
+		statevisibilitytracker.NewStore(),
 		nil,
 		metrics.InitMetrics(ctx, reg),
 	)
@@ -323,6 +325,7 @@ func TestNewTransaction_PublicAPI_ReturnsTransaction(t *testing.T) {
 		0,
 		3,
 		nil,
+		statevisibilitytracker.NewStore(),
 		nil,
 		metrics.InitMetrics(ctx, reg),
 	)

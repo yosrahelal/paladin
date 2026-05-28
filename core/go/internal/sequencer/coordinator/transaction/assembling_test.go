@@ -28,6 +28,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
+	"github.com/LFDT-Paladin/paladin/core/mocks/statevisibilitytrackermocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -166,9 +167,13 @@ func Test_applyPostAssembly_Success_AddMinterError(t *testing.T) {
 	ctx := t.Context()
 	stateID := pldtypes.HexBytes(uuid.New().String())
 	mockGrapher := graphermocks.NewGrapher(t)
-	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("add minter error"))
+	mockVisibility := statevisibilitytrackermocks.NewStateVisibilityStore(t)
+	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(errors.New("add minter error"))
 
-	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).Grapher(mockGrapher).Build()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
+		Grapher(mockGrapher).
+		StateVisibility(mockVisibility).
+		Build()
 	postAssembly := &components.TransactionPostAssembly{
 		AssemblyResult: prototk.AssembleTransactionResponse_OK,
 		OutputStates: []*components.FullState{
@@ -181,12 +186,13 @@ func Test_applyPostAssembly_Success_AddMinterError(t *testing.T) {
 
 	err := txn.applyPostAssembly(ctx, postAssembly, uuid.New())
 	assert.Error(t, err)
+	// No RecordAssemblyOutput expectation registered — the mock will fail the test if it is called.
 }
 
 func Test_applyPostAssembly_Success_MapPotentialStatesError(t *testing.T) {
 	ctx := t.Context()
 	mockGrapher := graphermocks.NewGrapher(t)
-	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
 		Grapher(mockGrapher).
@@ -206,16 +212,18 @@ func Test_applyPostAssembly_Success_MapPotentialStatesError(t *testing.T) {
 
 func Test_applyPostAssembly_Success_Complete(t *testing.T) {
 	ctx := t.Context()
-	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).Build()
-
-	// Mock engine integration to succeed
-	mocks.EngineIntegration.EXPECT().WriteStatesForTransaction(mock.Anything, mock.Anything).Return(nil)
-	mocks.EngineIntegration.EXPECT().MapPotentialStates(mock.Anything, mock.Anything, txn.pt).Return(nil, nil)
+	mockVisibility := statevisibilitytrackermocks.NewStateVisibilityStore(t)
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).StateVisibility(mockVisibility).Build()
 
 	postAssembly := &components.TransactionPostAssembly{
 		AssemblyResult: prototk.AssembleTransactionResponse_OK,
 		OutputStates:   []*components.FullState{},
 	}
+
+	// Mock engine integration to succeed
+	mocks.EngineIntegration.EXPECT().WriteStatesForTransaction(mock.Anything, mock.Anything).Return(nil)
+	mocks.EngineIntegration.EXPECT().MapPotentialStates(mock.Anything, mock.Anything, txn.pt).Return(nil, nil)
+	mockVisibility.EXPECT().RecordAssemblyOutput(mock.Anything, postAssembly.OutputStates, postAssembly.OutputStatesPotential).Once()
 
 	err := txn.applyPostAssembly(ctx, postAssembly, uuid.New())
 	require.NoError(t, err)
@@ -870,40 +878,4 @@ func Test_action_NotifyPreAssembleDependentOfSelection_Success(t *testing.T) {
 
 	err := action_NotifyDependentsOfSelection(ctx, txn, nil)
 	require.NoError(t, err)
-}
-
-func Test_allowedNodesFromDistributionList_MoreStatesThanPotentials_Breaks(t *testing.T) {
-	ctx := t.Context()
-	// Two output states but only one potential: the second state must be silently skipped.
-	s1 := pldtypes.RandBytes32()
-	s2 := pldtypes.RandBytes32()
-	states := []*components.FullState{
-		{ID: pldtypes.HexBytes(s1[:])},
-		{ID: pldtypes.HexBytes(s2[:])},
-	}
-	potentials := []*prototk.NewState{
-		{DistributionList: []string{"node1@node1"}},
-		// no second potential — only one entry
-	}
-	// Slice potentials to length 1 to trigger the i >= len(potentials) break on the second state.
-	result := allowedNodesFromDistributionList(ctx, states, potentials[:1])
-	// First state should have a node; second state should have no entry because the loop broke.
-	assert.Len(t, result[s1.String()], 1)
-	assert.NotContains(t, result, s2.String())
-}
-
-func Test_allowedNodesFromDistributionList_InvalidLocator_WarnAndContinue(t *testing.T) {
-	ctx := t.Context()
-	s1 := pldtypes.RandBytes32()
-	states := []*components.FullState{
-		{ID: pldtypes.HexBytes(s1[:])},
-	}
-	// Mix of an invalid locator (no "@node" separator) and a valid one.
-	potentials := []*prototk.NewState{
-		{DistributionList: []string{"not-a-valid-locator", "valid@node2"}},
-	}
-	result := allowedNodesFromDistributionList(ctx, states, potentials)
-	// The invalid locator must have been skipped; the valid one must be present.
-	require.Contains(t, result, s1.String())
-	assert.Equal(t, []string{"node2"}, result[s1.String()])
 }
