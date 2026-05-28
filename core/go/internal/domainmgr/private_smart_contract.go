@@ -430,12 +430,6 @@ func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, read
 
 	if req == nil ||
 		req.TransactionSpecification == nil ||
-		req.Verifiers == nil ||
-		req.Signatures == nil ||
-		req.InputStates == nil ||
-		req.ReadStates == nil ||
-		req.OutputStates == nil ||
-		req.InfoStates == nil ||
 		req.Endorsement == nil ||
 		req.Endorser == nil {
 		return nil, i18n.NewError(dCtx.Ctx(), msgs.MsgDomainReqIncompleteEndorseTransaction)

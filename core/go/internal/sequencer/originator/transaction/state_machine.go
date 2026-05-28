@@ -80,44 +80,59 @@ type (
 var stateDefinitionsMap = StateDefinitions{
 	State_Initial: {
 		Events: map[EventType]EventHandlers{
-			Event_ConfirmedSuccess: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Confirmed,
+			Event_ConfirmedSuccess: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
+						To: State_Confirmed,
+					}},
 				}},
-			}}},
-			Event_Created: {Handlers: []EventHandler{{
-				Transitions: []Transition{
-					{
-						To: State_Pending,
+			},
+			Event_Created: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{
+						{
+							To: State_Pending,
+						},
 					},
-				},
-			}}},
+				}},
+			},
 		},
 	},
 	State_Pending: {
 		Events: map[EventType]EventHandlers{
-			Event_ConfirmedSuccess: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Confirmed,
+			Event_ConfirmedSuccess: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
+						To: State_Confirmed,
+					}},
 				}},
-			}}},
-			Event_Delegated: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{Action: action_Delegated}},
-				Transitions: []Transition{
-					{
-						To: State_Delegated,
+			},
+			Event_Delegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_Delegated}},
+					Transitions: []Transition{
+						{
+							To: State_Delegated,
+						},
 					},
-				},
-			}}},
+				}},
+			},
 		},
 	},
 	State_Delegated: {
 		Events: map[EventType]EventHandlers{
-			Event_ConfirmedSuccess: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Confirmed,
+			Event_ConfirmedSuccess: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
+						To: State_Confirmed,
+					}},
 				}},
-			}}},
+			},
 			Event_Delegated: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
@@ -146,74 +161,95 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				}},
 			},
-			Event_Dispatched: {Handlers: []EventHandler{{
-				Validator: validator_CoordinatorIsCurrentDelegate,
-				Actions:   []ActionRule{{Action: action_Dispatched}},
-				Transitions: []Transition{
-					{
-						To: State_Dispatched,
+			Event_Dispatched: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_CoordinatorIsCurrentDelegate,
+					Actions:   []ActionRule{{Action: action_Dispatched}},
+					Transitions: []Transition{
+						{
+							To: State_Dispatched,
+						},
 					},
-				},
-			}}},
+				}},
+			},
 		},
 	},
 	State_Assembling: {
 		OnTransitionTo: []ActionRule{{Action: action_AssembleAndSign}},
 		Events: map[EventType]EventHandlers{
-			Event_ConfirmedSuccess: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Confirmed,
+			Event_ConfirmedSuccess: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
+						To: State_Confirmed,
+					}},
 				}},
-			}}},
-			Event_Delegated: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
-				Actions: []ActionRule{
-					{Action: action_Delegated},
-					{Action: action_ResetDelegationState},
-				},
-				Transitions: []Transition{{
-					To: State_Delegated,
+			},
+			Event_Delegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
+					Actions: []ActionRule{
+						{Action: action_Delegated},
+						{Action: action_ResetDelegationState},
+					},
+					Transitions: []Transition{{
+						To: State_Delegated,
+					}},
 				}},
-			}}},
-			Event_AssembleAndSignSuccess: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{Action: action_AssembleAndSignSuccess}},
-				Transitions: []Transition{
-					{
-						To:      State_Endorsement_Gathering,
-						Actions: []ActionRule{{Action: action_SendAssembleSuccessResponse}},
+			},
+			Event_AssembleAndSignSuccess: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_AssembleAndSignSuccess}},
+					Transitions: []Transition{
+						{
+							To:      State_Endorsement_Gathering,
+							Actions: []ActionRule{{Action: action_SendAssembleSuccessResponse}},
+						},
 					},
-				},
-			}}},
-			Event_AssembleRevert: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{Action: action_AssembleRevert}},
-				Transitions: []Transition{
-					{
-						To:      State_Reverted,
-						Actions: []ActionRule{{Action: action_SendAssembleRevertResponse}},
+				}},
+			},
+			Event_AssembleRevert: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_AssembleRevert}},
+					Transitions: []Transition{
+						{
+							To:      State_Reverted,
+							Actions: []ActionRule{{Action: action_SendAssembleRevertResponse}},
+						},
 					},
-				},
-			}}},
-			Event_AssemblePark: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{Action: action_AssemblePark}},
-				Transitions: []Transition{
-					{
-						To:      State_Parked,
-						Actions: []ActionRule{{Action: action_SendAssembleParkResponse}},
+				}},
+			},
+			Event_AssemblePark: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_AssemblePark}},
+					Transitions: []Transition{
+						{
+							To:      State_Parked,
+							Actions: []ActionRule{{Action: action_SendAssembleParkResponse}},
+						},
 					},
-				},
-			}}},
-			Event_AssembleError: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{Action: action_AssembleError}},
-				Transitions: []Transition{
-					{
-						// We've been given opportunities by the coordinator to assemble without error. In the future we might insert a failure receipt
-						// for such cases, but for now we free up the state machine, allow other transactions to be delegated ahead, and will be allowed
-						// to retry on the TX resume interval (i.e. when we re-read from the DB)
-						To:      State_Delegated,
-						Actions: []ActionRule{{Action: action_SendAssembleError}},
+				}},
+			},
+			Event_AssembleError: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_AssembleError}},
+					Transitions: []Transition{
+						{
+							// We've been given opportunities by the coordinator to assemble without error. In the future we might insert a failure receipt
+							// for such cases, but for now we free up the state machine, allow other transactions to be delegated ahead, and will be allowed
+							// to retry on the TX resume interval (i.e. when we re-read from the DB)
+							To:      State_Delegated,
+							Actions: []ActionRule{{Action: action_SendAssembleError}},
+						},
 					},
-				},
-			}}},
+				}},
+			},
 			Event_AssembleRequestReceived: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -240,21 +276,27 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Endorsement_Gathering: {
 		Events: map[EventType]EventHandlers{
-			Event_ConfirmedSuccess: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Confirmed,
+			Event_ConfirmedSuccess: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
+						To: State_Confirmed,
+					}},
 				}},
-			}}},
-			Event_Delegated: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
-				Actions: []ActionRule{
-					{Action: action_Delegated},
-					{Action: action_ResetDelegationState},
-				},
-				Transitions: []Transition{{
-					To: State_Delegated,
+			},
+			Event_Delegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
+					Actions: []ActionRule{
+						{Action: action_Delegated},
+						{Action: action_ResetDelegationState},
+					},
+					Transitions: []Transition{{
+						To: State_Delegated,
+					}},
 				}},
-			}}},
+			},
 			Event_AssembleRequestReceived: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -278,48 +320,60 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				}},
 			},
-			Event_PreDispatchRequestReceived: {Handlers: []EventHandler{{
-				Validator: validator_PreDispatchRequestFromCurrentDelegate,
-				Actions:   []ActionRule{{Action: action_PreDispatchRequestReceived}},
-				Transitions: []Transition{
-					{
-						To:      State_Prepared,
-						Actions: []ActionRule{{Action: action_SendPreDispatchResponse}},
+			Event_PreDispatchRequestReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_PreDispatchRequestFromCurrentDelegate,
+					Actions:   []ActionRule{{Action: action_PreDispatchRequestReceived}},
+					Transitions: []Transition{
+						{
+							To:      State_Prepared,
+							Actions: []ActionRule{{Action: action_SendPreDispatchResponse}},
+						},
 					},
-				},
-			}}},
+				}},
+			},
 		},
 	},
 	State_Prepared: {
 		Events: map[EventType]EventHandlers{
-			Event_ConfirmedSuccess: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Confirmed,
+			Event_ConfirmedSuccess: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
+						To: State_Confirmed,
+					}},
 				}},
-			}}},
-			Event_Delegated: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
-				Actions: []ActionRule{
-					{Action: action_Delegated},
-					{Action: action_ResetDelegationState},
-				},
-				Transitions: []Transition{{
-					To: State_Delegated,
-				}},
-			}}},
-			Event_Dispatched: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{Action: action_Dispatched}},
-				//Note: no validator here although this event may or may not match the most recent dispatch confirmation response.
-				// It is possible that we timed out  on Prepared state, delegated to another coordinator, got as far as prepared again and now just learning that
-				// the original coordinator has dispatched the transaction.
-				// We can't do anything to stop that, but it is interesting to apply the information from event to our state machine because we don't know which of
-				// the many base ledger transactions will eventually be confirmed and we are actually not too fussy about which one does
-				Transitions: []Transition{
-					{
-						To: State_Dispatched,
+			},
+			Event_Delegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
+					Actions: []ActionRule{
+						{Action: action_Delegated},
+						{Action: action_ResetDelegationState},
 					},
-				},
-			}}},
+					Transitions: []Transition{{
+						To: State_Delegated,
+					}},
+				}},
+			},
+			Event_Dispatched: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_Dispatched}},
+					//Note: no validator here although this event may or may not match the most recent dispatch confirmation response.
+					// It is possible that we timed out  on Prepared state, delegated to another coordinator, got as far as prepared again and now just learning that
+					// the original coordinator has dispatched the transaction.
+					// We can't do anything to stop that, but it is interesting to apply the information from event to our state machine because we don't know which of
+					// the many base ledger transactions will eventually be confirmed and we are actually not too fussy about which one does
+					Transitions: []Transition{
+						{
+							To: State_Dispatched,
+						},
+					},
+				}},
+			},
 			Event_AssembleRequestReceived: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -369,53 +423,68 @@ var stateDefinitionsMap = StateDefinitions{
 		// the difference between each one is whether we have the signer address, or also the nonce or also the submission hash
 		// for now, we simply copy some event handler rules across dispatched , sequenced and submitted
 		Events: map[EventType]EventHandlers{
-			Event_ConfirmedSuccess: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Confirmed,
-				}},
-			}}},
-			Event_ConfirmedReverted: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{Action: action_RecordWillRetry}},
-				Transitions: []Transition{
-					{
-						If: guard_WillRetry,
-						To: State_Delegated,
-					},
-					{
-						If: statemachine.GuardNot(guard_WillRetry),
+			Event_ConfirmedSuccess: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
 						To: State_Confirmed,
-					},
-				},
-			}}},
-			Event_Delegated: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
-				Actions: []ActionRule{
-					{Action: action_Delegated},
-					{Action: action_ResetDelegationState},
-				},
-				Transitions: []Transition{{
-					To: State_Delegated,
+					}},
 				}},
-			}}},
-			Event_NonceAssigned: {Handlers: []EventHandler{{
-				Validator: validator_CoordinatorIsCurrentDelegate,
-				Actions:   []ActionRule{{Action: action_NonceAssigned}},
-				Transitions: []Transition{
-					{
-						To: State_Sequenced,
+			},
+			Event_ConfirmedReverted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_RecordWillRetry}},
+					Transitions: []Transition{
+						{
+							If: guard_WillRetry,
+							To: State_Delegated,
+						},
+						{
+							If: statemachine.GuardNot(guard_WillRetry),
+							To: State_Confirmed,
+						},
 					},
-				},
-			}}},
-			Event_Submitted: {Handlers: []EventHandler{{
-				Validator: validator_CoordinatorIsCurrentDelegate,
-				Actions:   []ActionRule{{Action: action_Submitted}},
-				//we can skip past sequenced and go straight to submitted.
-				Transitions: []Transition{
-					{
-						To: State_Submitted,
+				}},
+			},
+			Event_Delegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
+					Actions: []ActionRule{
+						{Action: action_Delegated},
+						{Action: action_ResetDelegationState},
 					},
-				},
-			}}},
+					Transitions: []Transition{{
+						To: State_Delegated,
+					}},
+				}},
+			},
+			Event_NonceAssigned: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_CoordinatorIsCurrentDelegate,
+					Actions:   []ActionRule{{Action: action_NonceAssigned}},
+					Transitions: []Transition{
+						{
+							To: State_Sequenced,
+						},
+					},
+				}},
+			},
+			Event_Submitted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_CoordinatorIsCurrentDelegate,
+					Actions:   []ActionRule{{Action: action_Submitted}},
+					//we can skip past sequenced and go straight to submitted.
+					Transitions: []Transition{
+						{
+							To: State_Submitted,
+						},
+					},
+				}},
+			},
 			Event_AssembleRequestReceived: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -439,43 +508,55 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Sequenced: {
 		Events: map[EventType]EventHandlers{
-			Event_ConfirmedSuccess: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Confirmed,
-				}},
-			}}},
-			Event_ConfirmedReverted: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{Action: action_RecordWillRetry}},
-				Transitions: []Transition{
-					{
-						If: guard_WillRetry,
-						To: State_Delegated,
-					},
-					{
-						If: statemachine.GuardNot(guard_WillRetry),
+			Event_ConfirmedSuccess: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
 						To: State_Confirmed,
-					},
-				},
-			}}},
-			Event_Delegated: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
-				Actions: []ActionRule{
-					{Action: action_Delegated},
-					{Action: action_ResetDelegationState},
-				},
-				Transitions: []Transition{{
-					To: State_Delegated,
+					}},
 				}},
-			}}},
-			Event_Submitted: {Handlers: []EventHandler{{
-				Validator: validator_CoordinatorIsCurrentDelegate,
-				Actions:   []ActionRule{{Action: action_Submitted}},
-				Transitions: []Transition{
-					{
-						To: State_Submitted,
+			},
+			Event_ConfirmedReverted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_RecordWillRetry}},
+					Transitions: []Transition{
+						{
+							If: guard_WillRetry,
+							To: State_Delegated,
+						},
+						{
+							If: statemachine.GuardNot(guard_WillRetry),
+							To: State_Confirmed,
+						},
 					},
-				},
-			}}},
+				}},
+			},
+			Event_Delegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
+					Actions: []ActionRule{
+						{Action: action_Delegated},
+						{Action: action_ResetDelegationState},
+					},
+					Transitions: []Transition{{
+						To: State_Delegated,
+					}},
+				}},
+			},
+			Event_Submitted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_CoordinatorIsCurrentDelegate,
+					Actions:   []ActionRule{{Action: action_Submitted}},
+					Transitions: []Transition{
+						{
+							To: State_Submitted,
+						},
+					},
+				}},
+			},
 			Event_AssembleRequestReceived: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -499,38 +580,50 @@ var stateDefinitionsMap = StateDefinitions{
 	},
 	State_Submitted: {
 		Events: map[EventType]EventHandlers{
-			Event_Submitted: {Handlers: []EventHandler{{
-				Validator: validator_CoordinatorIsCurrentDelegate,
-				Actions:   []ActionRule{{Action: action_Submitted}},
-			}}}, // continue to handle submitted events in this state in case the submission hash changes
-			Event_ConfirmedSuccess: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Confirmed,
+			Event_Submitted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_CoordinatorIsCurrentDelegate,
+					Actions:   []ActionRule{{Action: action_Submitted}},
 				}},
-			}}},
-			Event_ConfirmedReverted: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{Action: action_RecordWillRetry}},
-				Transitions: []Transition{
-					{
-						If: guard_WillRetry,
-						To: State_Delegated,
-					},
-					{
-						If: statemachine.GuardNot(guard_WillRetry),
+			}, // continue to handle submitted events in this state in case the submission hash changes
+			Event_ConfirmedSuccess: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
 						To: State_Confirmed,
-					},
-				},
-			}}},
-			Event_Delegated: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
-				Actions: []ActionRule{
-					{Action: action_Delegated},
-					{Action: action_ResetDelegationState},
-				},
-				Transitions: []Transition{{
-					To: State_Delegated,
+					}},
 				}},
-			}}},
+			},
+			Event_ConfirmedReverted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_RecordWillRetry}},
+					Transitions: []Transition{
+						{
+							If: guard_WillRetry,
+							To: State_Delegated,
+						},
+						{
+							If: statemachine.GuardNot(guard_WillRetry),
+							To: State_Confirmed,
+						},
+					},
+				}},
+			},
+			Event_Delegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
+					Actions: []ActionRule{
+						{Action: action_Delegated},
+						{Action: action_ResetDelegationState},
+					},
+					Transitions: []Transition{{
+						To: State_Delegated,
+					}},
+				}},
+			},
 			// After submission there's a race for us or the coordinator to find out that the base ledger transaction
 			// reverted. We need to accomodate the coordinator getting there first and sending a new assemble request
 			// before we receive the revert and moved back to delegated.
@@ -558,21 +651,27 @@ var stateDefinitionsMap = StateDefinitions{
 
 	State_Parked: {
 		Events: map[EventType]EventHandlers{
-			Event_ConfirmedSuccess: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Confirmed,
+			Event_ConfirmedSuccess: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
+						To: State_Confirmed,
+					}},
 				}},
-			}}},
-			Event_Delegated: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
-				Actions: []ActionRule{
-					{Action: action_Delegated},
-					{Action: action_ResetDelegationState},
-				},
-				Transitions: []Transition{{
-					To: State_Delegated,
+			},
+			Event_Delegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_CoordinatorIsCurrentDelegate),
+					Actions: []ActionRule{
+						{Action: action_Delegated},
+						{Action: action_ResetDelegationState},
+					},
+					Transitions: []Transition{{
+						To: State_Delegated,
+					}},
 				}},
-			}}},
+			},
 			Event_AssembleRequestReceived: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -595,50 +694,62 @@ var stateDefinitionsMap = StateDefinitions{
 						}},
 				}},
 			},
-			Event_Resumed: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Pending,
+			Event_Resumed: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
+						To: State_Pending,
+					}},
 				}},
-			}}},
+			},
 		},
 	},
 	State_Confirmed: {
 		OnTransitionTo: []ActionRule{{Action: action_QueueFinalizeEvent}},
 		Events: map[EventType]EventHandlers{
-			Event_Finalize: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Final,
+			Event_Finalize: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
+						To: State_Final,
+					}},
 				}},
-			}}},
+			},
 		},
 	},
 	State_Reverted: {
 		OnTransitionTo: []ActionRule{{Action: action_QueueFinalizeEvent}},
 		Events: map[EventType]EventHandlers{
-			Event_Finalize: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Final,
-				}},
-			}}},
-			Event_AssembleRequestReceived: {Handlers: []EventHandler{{
-				// Assemble request is not from the current delegate; reject without entering the assembly flow.
-				Validator: statemachine.ValidatorNot(validator_AssembleRequestFromCurrentDelegate),
-				Actions:   []ActionRule{{Action: action_SendAssembleRejectionNotCurrentDelegate}},
-			}, {
-				// Block height tolerance exceeded: reject without entering the assembly flow.
-				Validator: validator_AssembleBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
-			}, {
-				Actions: []ActionRule{
-					{Action: action_AssembleRequestReceived},
-					{
-						// It seems like the coordinator had not got the response in time and has resent the assemble request, we simply reply with the same response as before
-						// There is only a narrow window of time that this can occur before the transaction is cleaned up from memory. If this request is received again,
-						// the coordinator will receive a transaction unknown response which will tell it that it can remove the transaction from its memory also.
-						If:     guard_AssembleRequestMatchesPreviousResponse,
-						Action: action_ResendAssembleRevertResponse,
+			Event_Finalize: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Transitions: []Transition{{
+						To: State_Final,
 					}},
-			}}},
+				}},
+			},
+			Event_AssembleRequestReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					// Assemble request is not from the current delegate; reject without entering the assembly flow.
+					Validator: statemachine.ValidatorNot(validator_AssembleRequestFromCurrentDelegate),
+					Actions:   []ActionRule{{Action: action_SendAssembleRejectionNotCurrentDelegate}},
+				}, {
+					// Block height tolerance exceeded: reject without entering the assembly flow.
+					Validator: validator_AssembleBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
+				}, {
+					Actions: []ActionRule{
+						{Action: action_AssembleRequestReceived},
+						{
+							// It seems like the coordinator had not got the response in time and has resent the assemble request, we simply reply with the same response as before
+							// There is only a narrow window of time that this can occur before the transaction is cleaned up from memory. If this request is received again,
+							// the coordinator will receive a transaction unknown response which will tell it that it can remove the transaction from its memory also.
+							If:     guard_AssembleRequestMatchesPreviousResponse,
+							Action: action_ResendAssembleRevertResponse,
+						}},
+				}},
+			},
 		},
 	},
 	State_Final: {

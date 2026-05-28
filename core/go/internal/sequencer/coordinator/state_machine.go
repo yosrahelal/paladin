@@ -69,113 +69,143 @@ type (
 var stateDefinitionsMap = StateDefinitions{
 	State_Initial: {
 		Events: map[EventType]EventHandlers{
-			Event_CoordinatorCreated: {Handlers: []EventHandler{{
-				Actions:     []ActionRule{{Action: action_CalculateCoordinatorPriorities}},
-				Transitions: []Transition{{To: State_Idle}},
-			}}},
+			Event_CoordinatorCreated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions:     []ActionRule{{Action: action_CalculateCoordinatorPriorities}},
+					Transitions: []Transition{{To: State_Idle}},
+				}},
+			},
 		},
 	},
 	State_Idle: {
 		Events: map[EventType]EventHandlers{
-			common.Event_HeartbeatReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsHeartbeatSenderLive,
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinator},
-				},
-				Transitions: []Transition{{
-					To: State_Observing,
+			common.Event_HeartbeatReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsHeartbeatSenderLive,
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinator},
+					},
+					Transitions: []Transition{{
+						To: State_Observing,
+					}},
 				}},
-			}}},
-			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
-			}, {
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
-					{Action: action_HandleEndorsementRequest},
-				},
-				Transitions: []Transition{{To: State_Observing}},
-			}}},
-			Event_TransactionsDelegated: {Handlers: []EventHandler{{
-				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
-			}, {
-				// Any node in Idle accepts a delegation and becomes the active coordinator.
-				// A higher-priority node that later announces itself will trigger preemption from Active.
-				Actions:     []ActionRule{{Action: action_ProcessDelegatedTransactions}},
-				Transitions: []Transition{{To: State_Active}},
-			}}},
-			common.Event_NewBlock: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-				Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-			}, {
-				Validator: validator_IsOnEpochBoundary,
-				Actions: []ActionRule{
-					{Action: action_UpdateBlockHeight},
-					{Action: action_CalculateCoordinatorPriorities},
-				},
-			}}},
+			},
+			Event_EndorsementRequestReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+				}, {
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+						{Action: action_HandleEndorsementRequest},
+					},
+					Transitions: []Transition{{To: State_Observing}},
+				}},
+			},
+			Event_TransactionsDelegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+				}, {
+					// Any node in Idle accepts a delegation and becomes the active coordinator.
+					// A higher-priority node that later announces itself will trigger preemption from Active.
+					Actions:     []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+					Transitions: []Transition{{To: State_Active}},
+				}},
+			},
+			common.Event_NewBlock: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
+					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
+				}, {
+					Validator: validator_IsOnEpochBoundary,
+					Actions: []ActionRule{
+						{Action: action_UpdateBlockHeight},
+						{Action: action_CalculateCoordinatorPriorities},
+					},
+				}},
+			},
 		},
 	},
 	State_Observing: {
 		Events: map[EventType]EventHandlers{
-			common.Event_HeartbeatReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsHeartbeatSenderLive,
-				Actions: []ActionRule{
-					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
-					{Action: action_UpdateActiveCoordinator},
-				},
-			}}},
-			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
-			}, {
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
-					{Action: action_HandleEndorsementRequest},
-				},
-			}}},
-			common.Event_HeartbeatInterval: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{Action: action_UpdateOriginatorActivity},
-					{Action: action_IncrementHeartbeatIntervalCounts},
-				},
-				Transitions: []Transition{{
-					To: State_Idle,
-					If: guard_InactiveGracePeriodExceeded,
-				}},
-			}}},
-			Event_TransactionsDelegated: {Handlers: []EventHandler{{
-				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
-			}, {
-				Actions: []ActionRule{
-					{
-						// This node is higher-priority than the current active coordinator — initiate a handover.
-						If:     guard_IsHigherPriorityThanCurrentActive,
-						Action: action_ProcessDelegatedTransactions,
+			common.Event_HeartbeatReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsHeartbeatSenderLive,
+					Actions: []ActionRule{
+						{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
+						{Action: action_UpdateActiveCoordinator},
 					},
-					{
-						// This node is lower-priority — reject and include the current active coordinator's identity.
-						If:     statemachine.GuardNot(guard_IsHigherPriorityThanCurrentActive),
-						Action: action_RejectDelegationRequest,
-					},
-				},
-				Transitions: []Transition{{
-					To: State_Elect,
-					If: guard_IsHigherPriorityThanCurrentActive,
 				}},
-			}}},
-			common.Event_NewBlock: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-				Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-			}, {
-				Validator: validator_IsOnEpochBoundary,
-				Actions: []ActionRule{
-					{Action: action_UpdateBlockHeight},
-					{Action: action_CalculateCoordinatorPriorities},
-				},
-			}}},
+			},
+			Event_EndorsementRequestReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+				}, {
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+						{Action: action_HandleEndorsementRequest},
+					},
+				}},
+			},
+			common.Event_HeartbeatInterval: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{
+						{Action: action_UpdateOriginatorActivity},
+						{Action: action_IncrementHeartbeatIntervalCounts},
+					},
+					Transitions: []Transition{{
+						To: State_Idle,
+						If: guard_InactiveGracePeriodExceeded,
+					}},
+				}},
+			},
+			Event_TransactionsDelegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+				}, {
+					Actions: []ActionRule{
+						{
+							// This node is higher-priority than the current active coordinator — initiate a handover.
+							If:     guard_IsHigherPriorityThanCurrentActive,
+							Action: action_ProcessDelegatedTransactions,
+						},
+						{
+							// This node is lower-priority — reject and include the current active coordinator's identity.
+							If:     statemachine.GuardNot(guard_IsHigherPriorityThanCurrentActive),
+							Action: action_RejectDelegationRequest,
+						},
+					},
+					Transitions: []Transition{{
+						To: State_Elect,
+						If: guard_IsHigherPriorityThanCurrentActive,
+					}},
+				}},
+			},
+			common.Event_NewBlock: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
+					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
+				}, {
+					Validator: validator_IsOnEpochBoundary,
+					Actions: []ActionRule{
+						{Action: action_UpdateBlockHeight},
+						{Action: action_CalculateCoordinatorPriorities},
+					},
+				}},
+			},
 		},
 	},
 	State_Elect: {
@@ -184,85 +214,100 @@ var stateDefinitionsMap = StateDefinitions{
 			{Action: action_SendHandoverRequest},
 		},
 		Events: map[EventType]EventHandlers{
-			Event_RequestTimeoutInterval: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{Action: action_NudgeHandoverRequest}},
-			}}},
-			Event_StateTimeoutInterval: {Handlers: []EventHandler{{
-				// The active coordinator has not moved to flush; become active directly.
-				// This may result in state contention but the protocol allows for this while
-				// the system eventually normalises.
-				Transitions: []Transition{{
-					To:      State_Active,
-					Actions: []ActionRule{{Action: action_ClearTimeoutSchedules}},
+			Event_RequestTimeoutInterval: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_NudgeHandoverRequest}},
 				}},
-			}}},
-			common.Event_HeartbeatInterval: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{Action: action_UpdateOriginatorActivity},
-					{Action: action_PropagateHeartbeatIntervalToTransactions},
-					{Action: action_SendHeartbeat},
-				},
-			}}},
-			common.Event_HeartbeatReceived: {Handlers: []EventHandler{{
-				// We're not going to take over if see an active heartbeat from a higher priority coordinator.
-				// Clean up any delegations and choose an appropriate state to move back to.
-				Validator: statemachine.ValidatorAnd(
-					validator_IsHeartbeatFromHigherPriorityCoordinator,
-					validator_IsHeartbeatSenderLive,
-				),
-				Actions: []ActionRule{
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-					{Action: action_UpdateActiveCoordinator},
-					{Action: action_ClearTimeoutSchedules},
-				},
-				Transitions: []Transition{{
-					// Move to observing if we don't have any transactions in flight.
-					To: State_Observing,
-					If: statemachine.GuardNot(guard_HasTransactionsInflight),
-				}, {
-					// Flush if we still have unconfirmed transactions from when we were last active.
-					To: State_Closing_Flush,
-					If: statemachine.GuardAnd(guard_HasTransactionsInflight, guard_HasUnconfirmedDispatchedTransactions),
-				}, {
-					// Otherwise move back to closing while we wait for our previously confirmed
-					// transactions to be cleared from memory.
-					To: State_Closing,
-					If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
+			},
+			Event_StateTimeoutInterval: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					// The active coordinator has not moved to flush; become active directly.
+					// This may result in state contention but the protocol allows for this while
+					// the system eventually normalises.
+					Transitions: []Transition{{
+						To:      State_Active,
+						Actions: []ActionRule{{Action: action_ClearTimeoutSchedules}},
+					}},
 				}},
-			}, {
-				// The active coordinator has started flushing in response to our handover request.
-				Validator: statemachine.ValidatorAnd(
-					validator_IsHeartbeatFromCurrentActiveCoordinator,
-					validator_HeartBeatState(State_Closing_Flush),
-				),
-				Actions:     []ActionRule{{Action: action_ClearTimeoutSchedules}},
-				Transitions: []Transition{{To: State_Prepared}},
-			}, {
-				// The active coordinator has closed in response to our handover request.
-				Validator: statemachine.ValidatorAnd(
-					validator_IsHeartbeatFromCurrentActiveCoordinator,
-					validator_HeartBeatState(State_Closing),
-				),
-				Actions: []ActionRule{
-					{Action: action_ClearTimeoutSchedules},
-					{Action: action_ImportStatesAndLocks},
-				},
-				Transitions: []Transition{{To: State_Active}},
-			}}},
-			Event_HandoverRequest: {Handlers: []EventHandler{{
-				Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinator},
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-				},
-				Transitions: []Transition{{
-					To: State_Closing_Flush,
-					If: guard_HasUnconfirmedDispatchedTransactions,
-				}, {
-					To: State_Closing,
-					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+			},
+			common.Event_HeartbeatInterval: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{
+						{Action: action_UpdateOriginatorActivity},
+						{Action: action_PropagateHeartbeatIntervalToTransactions},
+						{Action: action_SendHeartbeat},
+					},
 				}},
-			}}},
+			},
+			common.Event_HeartbeatReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					// We're not going to take over if see an active heartbeat from a higher priority coordinator.
+					// Clean up any delegations and choose an appropriate state to move back to.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatFromHigherPriorityCoordinator,
+						validator_IsHeartbeatSenderLive,
+					),
+					Actions: []ActionRule{
+						{Action: action_CleanUpTransactionsNotYetDispatched},
+						{Action: action_UpdateActiveCoordinator},
+						{Action: action_ClearTimeoutSchedules},
+					},
+					Transitions: []Transition{{
+						// Move to observing if we don't have any transactions in flight.
+						To: State_Observing,
+						If: statemachine.GuardNot(guard_HasTransactionsInflight),
+					}, {
+						// Flush if we still have unconfirmed transactions from when we were last active.
+						To: State_Closing_Flush,
+						If: statemachine.GuardAnd(guard_HasTransactionsInflight, guard_HasUnconfirmedDispatchedTransactions),
+					}, {
+						// Otherwise move back to closing while we wait for our previously confirmed
+						// transactions to be cleared from memory.
+						To: State_Closing,
+						If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
+					}},
+				}, {
+					// The active coordinator has started flushing in response to our handover request.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatFromCurrentActiveCoordinator,
+						validator_HeartBeatState(State_Closing_Flush),
+					),
+					Actions:     []ActionRule{{Action: action_ClearTimeoutSchedules}},
+					Transitions: []Transition{{To: State_Prepared}},
+				}, {
+					// The active coordinator has closed in response to our handover request.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatFromCurrentActiveCoordinator,
+						validator_HeartBeatState(State_Closing),
+					),
+					Actions: []ActionRule{
+						{Action: action_ClearTimeoutSchedules},
+						{Action: action_ImportStatesAndLocks},
+					},
+					Transitions: []Transition{{To: State_Active}},
+				}},
+			},
+			Event_HandoverRequest: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinator},
+						{Action: action_CleanUpTransactionsNotYetDispatched},
+					},
+					Transitions: []Transition{{
+						To: State_Closing_Flush,
+						If: guard_HasUnconfirmedDispatchedTransactions,
+					}, {
+						To: State_Closing,
+						If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+					}},
+				}},
+			},
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -289,111 +334,133 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				}, {
 					// Lower-priority node — this coordinator is active (or becoming active)
+					// TODO: There isn't currently any handling of this rejection as it will require more
+					// complex routing of the event between the coordinator and transaction state machines.
+					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
+					// could speed up time to consistency in a network where there are multiple coordinators.
 					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
 			},
-			Event_TransactionsDelegated: {Handlers: []EventHandler{{
-				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
-			}, {
-				// Accept delegations while in Elect so originators are not bounced while we wait.
-				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
-			}}},
-			common.Event_NewBlock: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-				Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-			}, {
-				Validator: validator_IsOnEpochBoundary,
-				Actions: []ActionRule{
-					{Action: action_UpdateBlockHeight},
-					{Action: action_CalculateCoordinatorPriorities},
-				},
-			}}},
-			common.Event_TransactionStateTransition: {Handlers: []EventHandler{{
-				// There is a small chance we have come here from State_Closing and still have transactions in terminal
-				// states from a previous time of actively coordinating that we haven't cleaned up from memory yet,
-				// so we handle that here.
-				Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
-				Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
-			}}},
+			Event_TransactionsDelegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+				}, {
+					// Accept delegations while in Elect so originators are not bounced while we wait.
+					Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+				}},
+			},
+			common.Event_NewBlock: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
+					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
+				}, {
+					Validator: validator_IsOnEpochBoundary,
+					Actions: []ActionRule{
+						{Action: action_UpdateBlockHeight},
+						{Action: action_CalculateCoordinatorPriorities},
+					},
+				}},
+			},
+			common.Event_TransactionStateTransition: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					// There is a small chance we have come here from State_Closing and still have transactions in terminal
+					// states from a previous time of actively coordinating that we haven't cleaned up from memory yet,
+					// so we handle that here.
+					Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
+					Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
+				}},
+			},
 		},
 	},
 	State_Prepared: {
 		Events: map[EventType]EventHandlers{
-			common.Event_HeartbeatInterval: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{Action: action_UpdateOriginatorActivity},
-					{Action: action_IncrementHeartbeatIntervalCounts},
-					{Action: action_PropagateHeartbeatIntervalToTransactions},
-					{Action: action_SendHeartbeat},
-				},
-				Transitions: []Transition{{
-					To: State_Active,
-					If: guard_InactiveGracePeriodExceeded,
+			common.Event_HeartbeatInterval: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{
+						{Action: action_UpdateOriginatorActivity},
+						{Action: action_IncrementHeartbeatIntervalCounts},
+						{Action: action_PropagateHeartbeatIntervalToTransactions},
+						{Action: action_SendHeartbeat},
+					},
+					Transitions: []Transition{{
+						To: State_Active,
+						If: guard_InactiveGracePeriodExceeded,
+					}},
 				}},
-			}}},
-			common.Event_HeartbeatReceived: {Handlers: []EventHandler{{
-				// The current active coordinator is still flushing.
-				Validator: statemachine.ValidatorAnd(
-					validator_IsHeartbeatFromCurrentActiveCoordinator,
-					validator_HeartBeatState(common.CoordinatorState_Closing_Flush),
-				),
-				Actions: []ActionRule{
-					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
-					{Action: action_ProcessConfirmedTransactionsFromSnapshot},
-				},
-			}, {
-				// The current active coordinator has closed - we can take over.
-				Validator: statemachine.ValidatorAnd(
-					validator_IsHeartbeatFromCurrentActiveCoordinator,
-					validator_HeartBeatState(common.CoordinatorState_Closing),
-				),
-				Actions: []ActionRule{
-					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
-					{Action: action_ProcessConfirmedTransactionsFromSnapshot},
-					{Action: action_ImportStatesAndLocks},
-				},
-				Transitions: []Transition{{To: State_Active}},
-			}, {
-				// We're not going to take over if see an active heartbeat from a higher priority coordinator.
-				// Clean up any delegations and choose an appropriate state to move back to.
-				Validator: statemachine.ValidatorAnd(
-					validator_IsHeartbeatFromHigherPriorityCoordinator,
-					validator_IsHeartbeatSenderLive,
-				),
-				Actions: []ActionRule{
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-					{Action: action_UpdateActiveCoordinator},
-				},
-				Transitions: []Transition{{
-					// Move to observing if we don't have any transactions in flight.
-					To: State_Observing,
-					If: statemachine.GuardNot(guard_HasTransactionsInflight),
+			},
+			common.Event_HeartbeatReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					// The current active coordinator is still flushing.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatFromCurrentActiveCoordinator,
+						validator_HeartBeatState(common.CoordinatorState_Closing_Flush),
+					),
+					Actions: []ActionRule{
+						{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
+						{Action: action_ProcessConfirmedTransactionsFromSnapshot},
+					},
 				}, {
-					// Flush if we still have unconfirmed transactions from when we were last active.
-					To: State_Closing_Flush,
-					If: statemachine.GuardAnd(guard_HasTransactionsInflight, guard_HasUnconfirmedDispatchedTransactions),
+					// The current active coordinator has closed - we can take over.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatFromCurrentActiveCoordinator,
+						validator_HeartBeatState(common.CoordinatorState_Closing),
+					),
+					Actions: []ActionRule{
+						{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
+						{Action: action_ProcessConfirmedTransactionsFromSnapshot},
+						{Action: action_ImportStatesAndLocks},
+					},
+					Transitions: []Transition{{To: State_Active}},
 				}, {
-					// Otherwise move back to closing while we wait for our previously confirmed
-					// transactions to be cleared from memory.
-					To: State_Closing,
-					If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
+					// We're not going to take over if see an active heartbeat from a higher priority coordinator.
+					// Clean up any delegations and choose an appropriate state to move back to.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatFromHigherPriorityCoordinator,
+						validator_IsHeartbeatSenderLive,
+					),
+					Actions: []ActionRule{
+						{Action: action_CleanUpTransactionsNotYetDispatched},
+						{Action: action_UpdateActiveCoordinator},
+					},
+					Transitions: []Transition{{
+						// Move to observing if we don't have any transactions in flight.
+						To: State_Observing,
+						If: statemachine.GuardNot(guard_HasTransactionsInflight),
+					}, {
+						// Flush if we still have unconfirmed transactions from when we were last active.
+						To: State_Closing_Flush,
+						If: statemachine.GuardAnd(guard_HasTransactionsInflight, guard_HasUnconfirmedDispatchedTransactions),
+					}, {
+						// Otherwise move back to closing while we wait for our previously confirmed
+						// transactions to be cleared from memory.
+						To: State_Closing,
+						If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
+					}},
 				}},
-			}}},
-			Event_HandoverRequest: {Handlers: []EventHandler{{
-				Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinator},
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-				},
-				Transitions: []Transition{{
-					To: State_Closing_Flush,
-					If: guard_HasUnconfirmedDispatchedTransactions,
-				}, {
-					To: State_Closing,
-					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+			},
+			Event_HandoverRequest: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinator},
+						{Action: action_CleanUpTransactionsNotYetDispatched},
+					},
+					Transitions: []Transition{{
+						To: State_Closing_Flush,
+						If: guard_HasUnconfirmedDispatchedTransactions,
+					}, {
+						To: State_Closing,
+						If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+					}},
 				}},
-			}}},
+			},
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -419,32 +486,45 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				}, {
 					// Lower-priority — reject so the sender can re-route.
+					// TODO: There isn't currently any handling of this rejection as it will require more
+					// complex routing of the event between the coordinator and transaction state machines.
+					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
+					// could speed up time to consistency in a network where there are multiple coordinators.
 					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
 			},
-			Event_TransactionsDelegated: {Handlers: []EventHandler{{
-				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
-			}, {
-				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
-			}}},
-			common.Event_NewBlock: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-				Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-			}, {
-				Validator: validator_IsOnEpochBoundary,
-				Actions: []ActionRule{
-					{Action: action_UpdateBlockHeight},
-					{Action: action_CalculateCoordinatorPriorities},
-				},
-			}}},
-			common.Event_TransactionStateTransition: {Handlers: []EventHandler{{
-				// There is a small chance we have come here from State_Closing (via State_Elect) and still have transactions in terminal
-				// states from a previous time of actively coordinating that we haven't cleaned up from memory yet,
-				// so we handle that here.
-				Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
-				Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
-			}}},
+			Event_TransactionsDelegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+				}, {
+					Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+				}},
+			},
+			common.Event_NewBlock: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
+					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
+				}, {
+					Validator: validator_IsOnEpochBoundary,
+					Actions: []ActionRule{
+						{Action: action_UpdateBlockHeight},
+						{Action: action_CalculateCoordinatorPriorities},
+					},
+				}},
+			},
+			common.Event_TransactionStateTransition: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					// There is a small chance we have come here from State_Closing (via State_Elect) and still have transactions in terminal
+					// states from a previous time of actively coordinating that we haven't cleaned up from memory yet,
+					// so we handle that here.
+					Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
+					Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
+				}},
+			},
 		},
 	},
 	State_Active: {
@@ -463,57 +543,66 @@ var stateDefinitionsMap = StateDefinitions{
 			{Action: action_StopDispatchLoop},
 		},
 		Events: map[EventType]EventHandlers{
-			common.Event_HeartbeatInterval: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{Action: action_UpdateOriginatorActivity},
-					{Action: action_PropagateHeartbeatIntervalToTransactions},
-					{Action: action_SendHeartbeat},
-				},
-				Transitions: []Transition{{
-					To: State_Idle,
-					If: statemachine.GuardNot(guard_HasTransactionsInflight),
+			common.Event_HeartbeatInterval: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{
+						{Action: action_UpdateOriginatorActivity},
+						{Action: action_PropagateHeartbeatIntervalToTransactions},
+						{Action: action_SendHeartbeat},
+					},
+					Transitions: []Transition{{
+						To: State_Idle,
+						If: statemachine.GuardNot(guard_HasTransactionsInflight),
+					}},
 				}},
-			}}},
-			common.Event_HeartbeatReceived: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorAnd(
-					validator_IsHeartbeatFromHigherPriorityCoordinator,
-					validator_IsHeartbeatSenderLive,
-				),
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinator},
-					{Action: action_StopDispatchLoop},
-					// Once the dispatch loop is stopped we know there won't be anymore
-					// State_Ready_For_Dispatch to State_Dispatched transitions so it is safe to clean up
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-				},
-				// A higher-priority node live node is announcing itself; step down.
-				Transitions: []Transition{{
-					To: State_Closing_Flush,
-					If: guard_HasUnconfirmedDispatchedTransactions,
-				}, {
-					To: State_Closing,
-					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+			},
+			common.Event_HeartbeatReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatFromHigherPriorityCoordinator,
+						validator_IsHeartbeatSenderLive,
+					),
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinator},
+						{Action: action_StopDispatchLoop},
+						// Once the dispatch loop is stopped we know there won't be anymore
+						// State_Ready_For_Dispatch to State_Dispatched transitions so it is safe to clean up
+						{Action: action_CleanUpTransactionsNotYetDispatched},
+					},
+					// A higher-priority node live node is announcing itself; step down.
+					Transitions: []Transition{{
+						To: State_Closing_Flush,
+						If: guard_HasUnconfirmedDispatchedTransactions,
+					}, {
+						To: State_Closing,
+						If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+					}},
 				}},
-			}}},
-			Event_HandoverRequest: {Handlers: []EventHandler{{
-				// A higher-priority node has explicitly requested we step down; treat identically to a preemption heartbeat.
-				// The difference is that the other node will watch our flush and take over gracefully
-				Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinator},
-					{Action: action_StopDispatchLoop},
-					// Once the dispatch loop is stopped we know there won't be anymore
-					// State_Ready_For_Dispatch to State_Dispatched transitions so it is safe to clean up
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-				},
-				Transitions: []Transition{{
-					To: State_Closing_Flush,
-					If: guard_HasUnconfirmedDispatchedTransactions,
-				}, {
-					To: State_Closing,
-					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+			},
+			Event_HandoverRequest: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					// A higher-priority node has explicitly requested we step down; treat identically to a preemption heartbeat.
+					// The difference is that the other node will watch our flush and take over gracefully
+					Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinator},
+						{Action: action_StopDispatchLoop},
+						// Once the dispatch loop is stopped we know there won't be anymore
+						// State_Ready_For_Dispatch to State_Dispatched transitions so it is safe to clean up
+						{Action: action_CleanUpTransactionsNotYetDispatched},
+					},
+					Transitions: []Transition{{
+						To: State_Closing_Flush,
+						If: guard_HasUnconfirmedDispatchedTransactions,
+					}, {
+						To: State_Closing,
+						If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+					}},
 				}},
-			}}},
+			},
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -543,15 +632,22 @@ var stateDefinitionsMap = StateDefinitions{
 					Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
 				}, {
 					// Lower-priority node — reject so the sender knows this node is the active coordinator.
+					// TODO: There isn't currently any handling of this rejection as it will require more
+					// complex routing of the event between the coordinator and transaction state machines.
+					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
+					// could speed up time to consistency in a network where there are multiple coordinators.
 					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
 			},
-			Event_TransactionsDelegated: {Handlers: []EventHandler{{
-				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
-			}, {
-				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
-			}}},
+			Event_TransactionsDelegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+				}, {
+					Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+				}},
+			},
 			common.Event_TransactionStateTransition: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
@@ -582,79 +678,95 @@ var stateDefinitionsMap = StateDefinitions{
 				}, {
 					Validator: validator_TransactionStateTransitionTo(transaction.State_Final, transaction.State_Evicted),
 					Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
-				}}},
-			common.Event_NewBlock: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-				Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-			}, {
-				// We're at an epoch boundary we need to rotate the coordinator signing key
-				// If the key has been used AND we have unconfirmed dispatched transactions we need to
-				// take the more expensive route of flushing the dispatched transactions before we can
-				// start signing with the new key. The dispatch loop must be stopped in order to reliably
-				// make this decision. Otherwise we can rotate the key in place and restart the dispatch loop.
-				Validator: validator_IsOnEpochBoundary,
-				Actions: []ActionRule{
-					{Action: action_UpdateBlockHeight},
-					{Action: action_CalculateCoordinatorPriorities},
-					{Action: action_StopDispatchLoop},
-					{If: statemachine.GuardNot(guard_MustFlushToRotateSigningIdentity), Action: action_NewSigningIdentity},
-					// Queueing this event gives the coordinator a chance to process any state transition events before
-					// the loop restarts, meaning inflightTxns is guaranteed to be up to date.
-					{If: statemachine.GuardNot(guard_MustFlushToRotateSigningIdentity), Action: action_QueueRestartDispatchLoop},
-				},
-				// Transition to Active_Flush for a key-rotation drain: the signing identity has been used
-				// but there are still dispatched transactions in-flight that must be confirmed first.
-				Transitions: []Transition{{
-					To: State_Active_Flush,
-					If: guard_MustFlushToRotateSigningIdentity,
 				}},
-			}}},
-			Event_RestartDispatchLoop: {Handlers: []EventHandler{{
-				Actions: []ActionRule{{Action: action_StartDispatchLoop}},
-			}}},
+			},
+			common.Event_NewBlock: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
+					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
+				}, {
+					// We're at an epoch boundary we need to rotate the coordinator signing key
+					// If the key has been used AND we have unconfirmed dispatched transactions we need to
+					// take the more expensive route of flushing the dispatched transactions before we can
+					// start signing with the new key. The dispatch loop must be stopped in order to reliably
+					// make this decision. Otherwise we can rotate the key in place and restart the dispatch loop.
+					Validator: validator_IsOnEpochBoundary,
+					Actions: []ActionRule{
+						{Action: action_UpdateBlockHeight},
+						{Action: action_CalculateCoordinatorPriorities},
+						{Action: action_StopDispatchLoop},
+						{If: statemachine.GuardNot(guard_MustFlushToRotateSigningIdentity), Action: action_NewSigningIdentity},
+						// Queueing this event gives the coordinator a chance to process any state transition events before
+						// the loop restarts, meaning inflightTxns is guaranteed to be up to date.
+						{If: statemachine.GuardNot(guard_MustFlushToRotateSigningIdentity), Action: action_QueueRestartDispatchLoop},
+					},
+					// Transition to Active_Flush for a key-rotation drain: the signing identity has been used
+					// but there are still dispatched transactions in-flight that must be confirmed first.
+					Transitions: []Transition{{
+						To: State_Active_Flush,
+						If: guard_MustFlushToRotateSigningIdentity,
+					}},
+				}},
+			},
+			Event_RestartDispatchLoop: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_StartDispatchLoop}},
+				}},
+			},
 		},
 	},
 	State_Active_Flush: {
 		// Key-rotation flush: this node is still the active coordinator; it is draining dispatched
 		// transactions so the signing key can be rotated before the next dispatch.
 		Events: map[EventType]EventHandlers{
-			common.Event_HeartbeatInterval: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{Action: action_UpdateOriginatorActivity},
-					{Action: action_PropagateHeartbeatIntervalToTransactions},
-					{Action: action_SendHeartbeat},
-				},
-			}}},
-			common.Event_HeartbeatReceived: {Handlers: []EventHandler{{
-				// A higher-priority node live node is announcing itself; step down.
-				Validator: statemachine.ValidatorAnd(
-					validator_IsHeartbeatFromHigherPriorityCoordinator,
-					validator_IsHeartbeatSenderLive,
-				),
-				Transitions: []Transition{{
-					To: State_Closing_Flush,
+			common.Event_HeartbeatInterval: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
 					Actions: []ActionRule{
-						{Action: action_UpdateActiveCoordinator},
-						{Action: action_CleanUpTransactionsNotYetDispatched},
+						{Action: action_UpdateOriginatorActivity},
+						{Action: action_PropagateHeartbeatIntervalToTransactions},
+						{Action: action_SendHeartbeat},
 					},
 				}},
-			}}},
-			Event_HandoverRequest: {Handlers: []EventHandler{{
-				// A higher-priority node has explicitly requested we step down; treat identically to a preemption heartbeat.
-				// The difference is that the other node will watch our flush and take over gracefully
-				Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
-				Actions: []ActionRule{
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-					{Action: action_UpdateActiveCoordinator},
-				},
-				Transitions: []Transition{{
-					To: State_Closing_Flush,
-					If: guard_HasUnconfirmedDispatchedTransactions,
-				}, {
-					To: State_Closing,
-					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+			},
+			common.Event_HeartbeatReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					// A higher-priority node live node is announcing itself; step down.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatFromHigherPriorityCoordinator,
+						validator_IsHeartbeatSenderLive,
+					),
+					Transitions: []Transition{{
+						To: State_Closing_Flush,
+						Actions: []ActionRule{
+							{Action: action_UpdateActiveCoordinator},
+							{Action: action_CleanUpTransactionsNotYetDispatched},
+						},
+					}},
 				}},
-			}}},
+			},
+			Event_HandoverRequest: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					// A higher-priority node has explicitly requested we step down; treat identically to a preemption heartbeat.
+					// The difference is that the other node will watch our flush and take over gracefully
+					Validator: validator_IsHandoverRequestFromHigherPriorityCoordinator,
+					Actions: []ActionRule{
+						{Action: action_CleanUpTransactionsNotYetDispatched},
+						{Action: action_UpdateActiveCoordinator},
+					},
+					Transitions: []Transition{{
+						To: State_Closing_Flush,
+						If: guard_HasUnconfirmedDispatchedTransactions,
+					}, {
+						To: State_Closing,
+						If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+					}},
+				}},
+			},
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -677,16 +789,23 @@ var stateDefinitionsMap = StateDefinitions{
 					Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
 				}, {
 					// Lower-priority node — reject so the sender knows this node is the active coordinator.
+					// TODO: There isn't currently any handling of this rejection as it will require more
+					// complex routing of the event between the coordinator and transaction state machines.
+					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
+					// could speed up time to consistency in a network where there are multiple coordinators.
 					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
 			},
-			Event_TransactionsDelegated: {Handlers: []EventHandler{{
-				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
-			}, {
-				// Still the active coordinator — accept delegations normally- we can process transactions, just not dispatch them
-				Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
-			}}},
+			Event_TransactionsDelegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+				}, {
+					// Still the active coordinator — accept delegations normally- we can process transactions, just not dispatch them
+					Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+				}},
+			},
 			common.Event_TransactionStateTransition: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
@@ -717,17 +836,21 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Active,
 						If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
 					}},
-				}}},
-			common.Event_NewBlock: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-				Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-			}, {
-				Validator: validator_IsOnEpochBoundary,
-				Actions: []ActionRule{
-					{Action: action_UpdateBlockHeight},
-					{Action: action_CalculateCoordinatorPriorities},
-				},
-			}}},
+				}},
+			},
+			common.Event_NewBlock: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
+					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
+				}, {
+					Validator: validator_IsOnEpochBoundary,
+					Actions: []ActionRule{
+						{Action: action_UpdateBlockHeight},
+						{Action: action_CalculateCoordinatorPriorities},
+					},
+				}},
+			},
 		},
 	},
 	State_Closing_Flush: {
@@ -739,52 +862,64 @@ var stateDefinitionsMap = StateDefinitions{
 			{Action: action_SendHeartbeat},
 		},
 		Events: map[EventType]EventHandlers{
-			common.Event_HeartbeatInterval: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{Action: action_UpdateOriginatorActivity},
-					{Action: action_IncrementHeartbeatIntervalsSinceStateChange},
-					{Action: action_SendHeartbeat},
-					{Action: action_PropagateHeartbeatIntervalToTransactions},
-				},
-			}}},
-			common.Event_HeartbeatReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsHeartbeatSenderLive,
-				Actions: []ActionRule{
-					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
-					{Action: action_UpdateActiveCoordinator},
-				},
-			}}},
-			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
-			}, {
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
-					{Action: action_HandleEndorsementRequest},
-				},
-			}}},
-			Event_TransactionsDelegated: {Handlers: []EventHandler{{
-				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
-			}, {
-				Actions: []ActionRule{
-					{
-						// This node is now higher-priority than the current active coordinator we stepped down for
-						If:     guard_IsHigherPriorityThanCurrentActive,
-						Action: action_ProcessDelegatedTransactions,
+			common.Event_HeartbeatInterval: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{
+						{Action: action_UpdateOriginatorActivity},
+						{Action: action_IncrementHeartbeatIntervalsSinceStateChange},
+						{Action: action_SendHeartbeat},
+						{Action: action_PropagateHeartbeatIntervalToTransactions},
 					},
-					{
-						// This node is lower-priority — reject and include the current active coordinator's identity.
-						If:     statemachine.GuardNot(guard_IsHigherPriorityThanCurrentActive),
-						Action: action_RejectDelegationRequest,
-					},
-				},
-				Transitions: []Transition{{
-					// this is an edge case which would require disagreement within the network at a block range epoch boundary
-					To: State_Elect,
-					If: guard_IsHigherPriorityThanCurrentActive,
 				}},
-			}}},
+			},
+			common.Event_HeartbeatReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsHeartbeatSenderLive,
+					Actions: []ActionRule{
+						{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
+						{Action: action_UpdateActiveCoordinator},
+					},
+				}},
+			},
+			Event_EndorsementRequestReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+				}, {
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+						{Action: action_HandleEndorsementRequest},
+					},
+				}},
+			},
+			Event_TransactionsDelegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+				}, {
+					Actions: []ActionRule{
+						{
+							// This node is now higher-priority than the current active coordinator we stepped down for
+							If:     guard_IsHigherPriorityThanCurrentActive,
+							Action: action_ProcessDelegatedTransactions,
+						},
+						{
+							// This node is lower-priority — reject and include the current active coordinator's identity.
+							If:     statemachine.GuardNot(guard_IsHigherPriorityThanCurrentActive),
+							Action: action_RejectDelegationRequest,
+						},
+					},
+					Transitions: []Transition{{
+						// this is an edge case which would require disagreement within the network at a block range epoch boundary
+						To: State_Elect,
+						If: guard_IsHigherPriorityThanCurrentActive,
+					}},
+				}},
+			},
 			common.Event_TransactionStateTransition: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
@@ -808,16 +943,19 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				}},
 			},
-			common.Event_NewBlock: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-				Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-			}, {
-				Validator: validator_IsOnEpochBoundary,
-				Actions: []ActionRule{
-					{Action: action_UpdateBlockHeight},
-					{Action: action_CalculateCoordinatorPriorities},
-				},
-			}}},
+			common.Event_NewBlock: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
+					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
+				}, {
+					Validator: validator_IsOnEpochBoundary,
+					Actions: []ActionRule{
+						{Action: action_UpdateBlockHeight},
+						{Action: action_CalculateCoordinatorPriorities},
+					},
+				}},
+			},
 		},
 	},
 	State_Closing: {
@@ -825,93 +963,111 @@ var stateDefinitionsMap = StateDefinitions{
 		// the flush-complete signal without waiting for the next heartbeat interval.
 		OnTransitionTo: []ActionRule{{Action: action_SendHeartbeat}},
 		Events: map[EventType]EventHandlers{
-			common.Event_HeartbeatReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsHeartbeatSenderLive,
-				Actions: []ActionRule{
-					{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
-					{Action: action_UpdateActiveCoordinator},
-				},
-			}}},
-			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
-			}, {
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
-					{Action: action_HandleEndorsementRequest},
-				},
-			}}},
-			common.Event_HeartbeatInterval: {Handlers: []EventHandler{{
-				Actions: []ActionRule{
-					{Action: action_UpdateOriginatorActivity},
-					{Action: action_IncrementHeartbeatIntervalsSinceStateChange},
-					{Action: action_SendHeartbeat},
-					{Action: action_PropagateHeartbeatIntervalToTransactions},
-				},
-				Transitions: []Transition{
-					{
-						To: State_Idle,
-						If: statemachine.GuardAnd(
-							statemachine.GuardNot(guard_HasTransactionsInflight),
-							guard_ClosingGracePeriodExpired,
-							guard_InactiveGracePeriodExceeded,
-						),
+			common.Event_HeartbeatReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsHeartbeatSenderLive,
+					Actions: []ActionRule{
+						{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
+						{Action: action_UpdateActiveCoordinator},
 					},
-					{
-						To: State_Observing,
-						If: statemachine.GuardAnd(
-							statemachine.GuardNot(guard_HasTransactionsInflight),
-							guard_ClosingGracePeriodExpired,
-							statemachine.GuardNot(guard_InactiveGracePeriodExceeded),
-						),
-					},
-				},
-			}}},
-			Event_TransactionsDelegated: {Handlers: []EventHandler{{
-				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
-			}, {
-				Actions: []ActionRule{{
-					// Current active coordinator is still live and higher priority; redirect the originator.
-					If: statemachine.GuardAnd(
-						statemachine.GuardNot(guard_IsHigherPriorityThanCurrentActive),
-						statemachine.GuardNot(guard_InactiveGracePeriodExceeded),
-					),
-					Action: action_RejectDelegationRequest,
 				}},
-				Transitions: []Transition{
-					{
-						To: State_Elect,
-						If: statemachine.GuardAnd(
-							guard_IsHigherPriorityThanCurrentActive,
-							statemachine.GuardNot(guard_InactiveGracePeriodExceeded),
-						),
-						Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+			},
+			Event_EndorsementRequestReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+				}, {
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+						{Action: action_HandleEndorsementRequest},
 					},
-					{
-						// Move to active if the current active coordinator has gone idle regardless of priority
-						To: State_Active,
+				}},
+			},
+			common.Event_HeartbeatInterval: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{
+						{Action: action_UpdateOriginatorActivity},
+						{Action: action_IncrementHeartbeatIntervalsSinceStateChange},
+						{Action: action_SendHeartbeat},
+						{Action: action_PropagateHeartbeatIntervalToTransactions},
+					},
+					Transitions: []Transition{
+						{
+							To: State_Idle,
+							If: statemachine.GuardAnd(
+								statemachine.GuardNot(guard_HasTransactionsInflight),
+								guard_ClosingGracePeriodExpired,
+								guard_InactiveGracePeriodExceeded,
+							),
+						},
+						{
+							To: State_Observing,
+							If: statemachine.GuardAnd(
+								statemachine.GuardNot(guard_HasTransactionsInflight),
+								guard_ClosingGracePeriodExpired,
+								statemachine.GuardNot(guard_InactiveGracePeriodExceeded),
+							),
+						},
+					},
+				}},
+			},
+			Event_TransactionsDelegated: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
+				}, {
+					Actions: []ActionRule{{
+						// Current active coordinator is still live and higher priority; redirect the originator.
 						If: statemachine.GuardAnd(
 							statemachine.GuardNot(guard_IsHigherPriorityThanCurrentActive),
-							guard_InactiveGracePeriodExceeded,
+							statemachine.GuardNot(guard_InactiveGracePeriodExceeded),
 						),
+						Action: action_RejectDelegationRequest,
+					}},
+					Transitions: []Transition{
+						{
+							To: State_Elect,
+							If: statemachine.GuardAnd(
+								guard_IsHigherPriorityThanCurrentActive,
+								statemachine.GuardNot(guard_InactiveGracePeriodExceeded),
+							),
+							Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+						},
+						{
+							// Move to active if the current active coordinator has gone idle regardless of priority
+							To: State_Active,
+							If: statemachine.GuardAnd(
+								statemachine.GuardNot(guard_IsHigherPriorityThanCurrentActive),
+								guard_InactiveGracePeriodExceeded,
+							),
+						},
 					},
-				},
-			}}},
-			common.Event_TransactionStateTransition: {Handlers: []EventHandler{{
-				Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
-				Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
-			}}},
-			common.Event_NewBlock: {Handlers: []EventHandler{{
-				Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-				Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-			}, {
-				Validator: validator_IsOnEpochBoundary,
-				Actions: []ActionRule{
-					{Action: action_UpdateBlockHeight},
-					{Action: action_CalculateCoordinatorPriorities},
-				},
-			}}},
+				}},
+			},
+			common.Event_TransactionStateTransition: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
+					Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
+				}},
+			},
+			common.Event_NewBlock: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
+					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
+				}, {
+					Validator: validator_IsOnEpochBoundary,
+					Actions: []ActionRule{
+						{Action: action_UpdateBlockHeight},
+						{Action: action_CalculateCoordinatorPriorities},
+					},
+				}},
+			},
 		},
 	},
 }
