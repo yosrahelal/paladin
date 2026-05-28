@@ -128,6 +128,7 @@ var allSchemas = []*abi.Parameter{
 	types.NotoLockedCoinABI,
 	types.TransactionDataABI_V0,
 	types.TransactionDataABI_V1,
+	types.TransactionDataABI_V2,
 	types.NotoManifestABI,
 	smt.MerkleTreeRootABI,
 	smt.MerkleTreeNodeABI,
@@ -152,6 +153,7 @@ type Noto struct {
 	merkleTreeNodeSchema *prototk.StateSchema
 	dataSchemaV0         *prototk.StateSchema
 	dataSchemaV1         *prototk.StateSchema
+	dataSchemaV2         *prototk.StateSchema
 	lockInfoSchemaV0     *prototk.StateSchema
 	lockInfoSchemaV1     *prototk.StateSchema
 	manifestSchema       *prototk.StateSchema
@@ -325,14 +327,14 @@ type NotoLockUpdated_Event struct {
 
 // INoto.NotoLockDelegated event JSON schema
 type NotoLockDelegated_Event struct {
-	TxId         pldtypes.Bytes32     `json:"txId"`
-	LockID       pldtypes.Bytes32     `json:"lockId"`
-	From         *pldtypes.EthAddress `json:"from"`
-	To           *pldtypes.EthAddress `json:"to"`
-	OldLockState pldtypes.Bytes32     `json:"oldLockState"`
-	NewLockState pldtypes.Bytes32     `json:"newLockState"`
-	Proof        pldtypes.HexBytes    `json:"proof"`
-	Data         pldtypes.HexBytes    `json:"data"`
+	TxId            pldtypes.Bytes32     `json:"txId"`
+	LockID          pldtypes.Bytes32     `json:"lockId"`
+	PreviousSpender *pldtypes.EthAddress `json:"previousSpender"`
+	NewSpender      *pldtypes.EthAddress `json:"newSpender"`
+	OldLockState    pldtypes.Bytes32     `json:"oldLockState"`
+	NewLockState    pldtypes.Bytes32     `json:"newLockState"`
+	Proof           pldtypes.HexBytes    `json:"proof"`
+	Data            pldtypes.HexBytes    `json:"data"`
 }
 
 type parsedCoins struct {
@@ -495,7 +497,7 @@ func (n *Noto) LockInfoSchemaID() string {
 }
 
 func (n *Noto) DataSchemaID() string {
-	return n.dataSchemaV1.Id
+	return n.dataSchemaV2.Id
 }
 
 func (n *Noto) ManifestSchemaID() string {
@@ -539,6 +541,8 @@ func (n *Noto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (
 			n.dataSchemaV0 = req.AbiStateSchemas[i]
 		case types.TransactionDataABI_V1.Name:
 			n.dataSchemaV1 = req.AbiStateSchemas[i]
+		case types.TransactionDataABI_V2.Name:
+			n.dataSchemaV2 = req.AbiStateSchemas[i]
 		case types.NotoLockInfoABI_V0.Name:
 			n.lockInfoSchemaV0 = req.AbiStateSchemas[i]
 		case types.NotoLockInfoABI_V1.Name:
@@ -1464,4 +1468,3 @@ func (n *Noto) computeLockIDForLockTX(ctx context.Context, tx *types.ParsedTrans
 	}
 	return n.computeLockId(ctx, contractAddress, senderAddress, tx.Transaction.TransactionId)
 }
-

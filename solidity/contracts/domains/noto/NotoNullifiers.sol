@@ -75,7 +75,7 @@ contract NotoNullifiers is Noto {
 
         _processNullifiers(args.inputs);
         _processOutputs(args.outputs);
-        _processLockContent(lockId, args.content);
+        _processLockContents(lockId, args.contents);
 
         _processOutput(args.newLockState);
         _lockStates[lockId] = args.newLockState;
@@ -127,9 +127,7 @@ contract NotoNullifiers is Noto {
      */
     function _processOutput(bytes32 output) internal virtual override {
         uint256 outputUint = uint256(output);
-        if (
-            existsAsUnlocked(outputUint) || getLockId(output) != bytes32(0)
-        ) {
+        if (existsAsUnlocked(outputUint) || getLockId(output) != bytes32(0)) {
             revert NotoInvalidOutput(output);
         }
         _commitmentsTree.addLeaf(outputUint, outputUint);
