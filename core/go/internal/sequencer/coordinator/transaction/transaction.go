@@ -24,6 +24,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibilitytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
@@ -88,6 +89,7 @@ type coordinatorTransaction struct {
 	clock                             common.Clock
 	transportWriter                   transport.TransportWriter
 	grapher                           grapher.Grapher
+	stateVisibilityTracker            statevisibilitytracker.StateVisibilityStore
 	dependencyTracker                 dependencytracker.DependencyTracker
 	engineIntegration                 common.EngineIntegration
 	syncPoints                        syncpoints.SyncPoints
@@ -124,6 +126,7 @@ func NewTransaction(ctx context.Context,
 	baseLedgerRevertRetryThreshold int,
 	assembleErrorRetryThreshhold int,
 	grapher grapher.Grapher,
+	stateVisibilityTracker statevisibilitytracker.StateVisibilityStore,
 	dependencyTracker dependencytracker.DependencyTracker,
 	metrics metrics.DistributedSequencerMetrics,
 ) CoordinatorTransaction {
@@ -151,6 +154,7 @@ func NewTransaction(ctx context.Context,
 		baseLedgerRevertRetryThreshold,
 		assembleErrorRetryThreshhold,
 		grapher,
+		stateVisibilityTracker,
 		dependencyTracker,
 		metrics,
 	)
@@ -180,6 +184,7 @@ func newTransaction(
 	baseLedgerRevertRetryThreshold int,
 	assembleErrorRetryThreshhold int,
 	grapher grapher.Grapher,
+	stateVisibilityTracker statevisibilitytracker.StateVisibilityStore,
 	dependencyTracker dependencytracker.DependencyTracker,
 	metrics metrics.DistributedSequencerMetrics,
 ) *coordinatorTransaction {
@@ -210,6 +215,7 @@ func newTransaction(
 		baseLedgerRevertRetryThreshold:    baseLedgerRevertRetryThreshold,
 		assembleErrorRetryThreshhold:      assembleErrorRetryThreshhold,
 		grapher:                           grapher,
+		stateVisibilityTracker:            stateVisibilityTracker,
 		dependencyTracker:                 dependencyTracker,
 		metrics:                           metrics,
 	}

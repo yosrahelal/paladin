@@ -21,6 +21,7 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
+	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibilitytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
@@ -371,7 +372,7 @@ func TestCoordinator_WhenElect_ActiveCoordinatorClosing_TransitionsDirectlyToAct
 		State:            stateID,
 		ConfirmedAtBlock: &confirmedAtBlock,
 	}
-	outputState := &grapher.OutputState{
+	outputState := &statevisibilitytracker.OutputState{
 		AllowedNodes: []string{"node1"},
 	}
 	outputState.ID = stateID
@@ -381,7 +382,7 @@ func TestCoordinator_WhenElect_ActiveCoordinatorClosing_TransitionsDirectlyToAct
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing,
 			Locks:            []*grapher.StateLock{lock},
-			OutputStates:     []*grapher.OutputState{outputState},
+			OutputStates:     []*statevisibilitytracker.OutputState{outputState},
 		},
 	}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
@@ -621,7 +622,7 @@ func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_TransitionsToActiveAnd
 		State:            stateID,
 		ConfirmedAtBlock: &confirmedAtBlock,
 	}
-	outputState := &grapher.OutputState{
+	outputState := &statevisibilitytracker.OutputState{
 		AllowedNodes: []string{"node1"},
 	}
 	outputState.ID = stateID
@@ -631,7 +632,7 @@ func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_TransitionsToActiveAnd
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Closing,
 			Locks:            []*grapher.StateLock{lock},
-			OutputStates:     []*grapher.OutputState{outputState},
+			OutputStates:     []*statevisibilitytracker.OutputState{outputState},
 		},
 	}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))

@@ -390,7 +390,7 @@ func TestCoordinatorTransaction_Pooled_ToAssembling_OnSelected(t *testing.T) {
 func TestCoordinatorTransaction_Assembling_ToEndorsing_OnAssembleResponse(t *testing.T) {
 	ctx := context.Background()
 	mockGrapher := graphermocks.NewGrapher(t)
-	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockGrapher.EXPECT().LockMintsOnCreate(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	mockGrapher.EXPECT().LockMintsOnReadAndSpend(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
@@ -465,7 +465,7 @@ func TestCoordinatorTransaction_Assembling_ToBlocked_OnAssembleSuccess_IfAttesta
 	successEvent := txnBuilder.BuildAssembleSuccessEvent()
 	mocks.EngineIntegration.EXPECT().MapPotentialStates(mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 	mocks.EngineIntegration.EXPECT().WriteStatesForTransaction(mock.Anything, mock.Anything).Return(nil)
-	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockGrapher.EXPECT().AddMinter(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockGrapher.EXPECT().LockMintsOnCreate(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 	mockGrapher.EXPECT().LockMintsOnReadAndSpend(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 	mockGrapher.EXPECT().GetDependencies(mock.Anything, txn2.pt.ID).Return([]uuid.UUID{txn1.GetID()})
