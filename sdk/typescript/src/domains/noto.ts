@@ -190,13 +190,13 @@ export interface NotoUnlockPublicParams {
 
 export interface SpendLockPublicParams {
   lockId: string;
-  spendInputs: string;
+  spendArgs: string;
   data: string;
 }
 
 export interface CancelLockPublicParams {
   lockId: string;
-  cancelInputs: string;
+  cancelArgs: string;
   data: string;
 }
 
@@ -586,14 +586,14 @@ export class NotoInstance {
   encodeSpendLock(data: SpendLockPublicParams) {
     return new ethers.Interface(notoJSON.abi).encodeFunctionData(
       "spendLock",
-      [data.lockId, data.spendInputs, data.data]
+      [data.lockId, data.spendArgs, data.data]
     );
   }
 
   encodeCancelLock(data: CancelLockPublicParams) {
     return new ethers.Interface(notoJSON.abi).encodeFunctionData(
       "cancelLock",
-      [data.lockId, data.cancelInputs, data.data]
+      [data.lockId, data.cancelArgs, data.data]
     );
   }
 

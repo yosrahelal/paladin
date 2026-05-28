@@ -147,37 +147,34 @@ func (h *prepareBurnUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 		return nil, i18n.NewError(ctx, msgs.MsgInvalidAmount, "prepareBurnUnlock", params.Amount.Int().Text(10), lockedInputStates.total.Text(10))
 	}
 
+	// Build the cancel outputs before unlock data so they can be referenced in the cancel manifest
+	cancelOutputs, err := h.noto.prepareOutputs(fromID, (*pldtypes.HexUint256)(lockedInputStates.total), identityList{notaryID, fromID})
+	if err != nil {
+		return nil, err
+	}
+
 	// Build and encode the unlock data (separate to the data for this TX)
-	encodedUnlockData, infoStates, infoDistribution, err := h.buildUnlockData(ctx, notaryID, senderID, fromID, tx, nil, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData)
+	unlockResult, err := h.buildUnlockResult(ctx, notaryID, senderID, fromID, tx, nil /* no recipients */, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData, nil /* no spend outputs for burn */, cancelOutputs)
 	if err != nil {
 		return nil, err
 	}
 
 	// Build the data info for this prepare transaction
-	prepareDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
+	infoStates := unlockResult.infoStates
+	prepareDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, unlockResult.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 	infoStates = append(infoStates, prepareDataInfo...)
-
-	// We build the cancel outputs
-	cancelOutputs, err := h.noto.prepareOutputs(fromID, (*pldtypes.HexUint256)(lockedInputStates.total), identityList{notaryID, fromID})
-	if err == nil {
-		err = h.noto.allocateStateIDs(ctx, req.StateQueryContext, cancelOutputs.states, cancelOutputs.states)
-	}
-	if err != nil {
-		return nil, err
-	}
-	infoStates = append(infoStates, cancelOutputs.states...)
 
 	// Build the prepared lock
 	newLockInfo := *existingLock.lockInfo
 	newLockInfo.Replaces = existingLock.id
 	newLockInfo.Salt = pldtypes.RandBytes32()
 	newLockInfo.SpendOutputs = []pldtypes.Bytes32{} // no outputs from burn
-	newLockInfo.SpendData = encodedUnlockData
+	newLockInfo.SpendData = unlockResult.spendEncoded
 	newLockInfo.CancelOutputs = newStateAllocatedIDs(cancelOutputs.states)
-	newLockInfo.CancelData = encodedUnlockData
+	newLockInfo.CancelData = unlockResult.cancelEncoded
 	newLockInfo.SpendTxId = spendTxId
 	lock, err := h.noto.prepareLockInfo_V1(&newLockInfo, identityList{notaryID, senderID, fromID})
 	if err != nil {
@@ -193,13 +190,14 @@ func (h *prepareBurnUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	// Build the manifest
 	manifestState, err := h.noto.newManifestBuilder().
 		addOutputs(cancelOutputs).
-		addInfoStates(infoDistribution, infoStates...).
+		addInfoStates(unlockResult.infoDistribution, infoStates...).
 		addLockInfo(lock).
 		buildManifest(ctx, req.StateQueryContext)
 	if err != nil {
 		return nil, err
 	}
 	infoStates = append([]*prototk.NewState{manifestState} /* manifest first */, infoStates...)
+	infoStates = append(infoStates, cancelOutputs.states...)
 
 	assembledTransaction := &prototk.AssembledTransaction{
 		ReadStates:   lockedInputStates.states,

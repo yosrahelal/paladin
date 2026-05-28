@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"math/big"
+	"slices"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/domains/noto/internal/msgs"
@@ -98,50 +99,86 @@ func (h *unlockCommon) init(ctx context.Context, tx *types.ParsedTransaction, pa
 	}, nil
 }
 
-func (h *unlockCommon) buildUnlockData(ctx context.Context, notaryID, senderID, fromID *identityPair, tx *types.ParsedTransaction, recipients []*types.UnlockRecipient, resolvedVerifiers []*prototk.ResolvedVerifier, stateQueryContext string, unlockData []byte) (encodedUnlockData []byte, infoStates []*prototk.NewState, infoDistribution identityList, err error) {
-	infoDistribution, err = h.getAllRecipientsDistribution(ctx, tx, notaryID, senderID, fromID, recipients, resolvedVerifiers)
-	if err == nil {
-		infoStates, err = h.noto.prepareDataInfo(ctx, unlockData, tx.DomainConfig.Variant, infoDistribution.identities(), tx.Transaction, resolvedVerifiers)
-	}
-	if err == nil {
-		// We need to know the IDs of the states at this point
-		err = h.noto.allocateStateIDs(ctx, stateQueryContext, infoStates)
-	}
-	var manifestState *prototk.NewState
-	if tx.DomainConfig.IsV1() {
-		manifestState, err = h.noto.newManifestBuilder().addInfoStates(infoDistribution, infoStates...).buildManifest(ctx, stateQueryContext)
+// buildUnlockOperationData builds a manifest for one operation (spend or cancel) and encodes
+// the transaction data referencing the operation manifest + info states.
+// v1 Paladin always builds a manifest
+func (h *unlockCommon) buildUnlockOperationData(
+	ctx context.Context,
+	tx *types.ParsedTransaction,
+	stateQueryContext string,
+	outputs *preparedOutputs,
+	infoDistribution identityList,
+	infoStates []*prototk.NewState,
+) (encodedData []byte, manifestState *prototk.NewState, err error) {
+
+	operationInfoStates := slices.Clone(infoStates)
+
+	if !tx.DomainConfig.IsV0() {
+		manifestState, err = h.noto.newManifestBuilder().
+			addOutputs(outputs).
+			addInfoStates(infoDistribution, infoStates...).
+			buildManifest(ctx, stateQueryContext)
 		if err != nil {
-			return nil, nil, nil, err
-		}
-		err = h.noto.allocateStateIDs(ctx, stateQueryContext, []*prototk.NewState{manifestState})
-		if err != nil {
-			return nil, nil, nil, err
-		}
-	}
-	if err == nil {
-		endorsableInfoStates := make([]*prototk.EndorsableState, len(infoStates))
-		for i, s := range infoStates {
-			endorsableInfoStates[i] = &prototk.EndorsableState{
-				Id:            *s.Id,
-				SchemaId:      s.SchemaId,
-				StateDataJson: s.StateDataJson,
-			}
+			return nil, nil, err
 		}
 
-		if tx.DomainConfig.IsV1() {
-			// add the manifest state first
-			endorsableInfoStates = append([]*prototk.EndorsableState{{
-				Id:            *manifestState.Id,
-				SchemaId:      manifestState.SchemaId,
-				StateDataJson: manifestState.StateDataJson,
-			}}, endorsableInfoStates...)
-
-			// also append to info states being returned
-			infoStates = append([]*prototk.NewState{manifestState}, infoStates...)
+		if err = h.noto.allocateStateIDs(ctx, stateQueryContext, []*prototk.NewState{manifestState}); err != nil {
+			return nil, nil, err
 		}
-		encodedUnlockData, err = h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, endorsableInfoStates)
+
+		operationInfoStates = append([]*prototk.NewState{manifestState}, operationInfoStates...)
 	}
+
+	endorsableInfoStates := make([]*prototk.EndorsableState, len(operationInfoStates))
+	for i, s := range operationInfoStates {
+		endorsableInfoStates[i] = &prototk.EndorsableState{
+			Id:            *s.Id,
+			SchemaId:      s.SchemaId,
+			StateDataJson: s.StateDataJson,
+		}
+	}
+	encodedData, err = h.noto.encodeTransactionData(ctx, tx.DomainConfig, tx.Transaction, endorsableInfoStates)
 	return
+}
+
+// buildUnlockResult builds the encoded data for spend and cancel operations
+func (h *unlockCommon) buildUnlockResult(ctx context.Context, notaryID, senderID, fromID *identityPair, tx *types.ParsedTransaction, recipients []*types.UnlockRecipient, resolvedVerifiers []*prototk.ResolvedVerifier, stateQueryContext string, unlockData []byte, spendOutputs *preparedOutputs, cancelOutputs *preparedOutputs) (*unlockDataResult, error) {
+	infoDistribution, err := h.getAllRecipientsDistribution(ctx, tx, notaryID, senderID, fromID, recipients, resolvedVerifiers)
+	if err != nil {
+		return nil, err
+	}
+
+	infoStates, err := h.noto.prepareDataInfo(ctx, unlockData, tx.DomainConfig.Variant, infoDistribution.identities(), tx.Transaction, resolvedVerifiers)
+	if err != nil {
+		return nil, err
+	}
+
+	// we need to allocate the IDs of the states at this point
+	err = h.noto.allocateStateIDs(ctx, stateQueryContext, infoStates)
+	if err != nil {
+		return nil, err
+	}
+
+	spendEncoded, spendManifest, err := h.buildUnlockOperationData(ctx, tx, stateQueryContext, spendOutputs, infoDistribution, infoStates)
+	if err != nil {
+		return nil, err
+	}
+
+	cancelEncoded, cancelManifest, err := h.buildUnlockOperationData(ctx, tx, stateQueryContext, cancelOutputs, infoDistribution, infoStates)
+	if err != nil {
+		return nil, err
+	}
+
+	if tx.DomainConfig.IsV1() || tx.DomainConfig.IsV2() {
+		infoStates = append([]*prototk.NewState{spendManifest, cancelManifest}, infoStates...)
+	}
+
+	return &unlockDataResult{
+		spendEncoded:     spendEncoded,
+		cancelEncoded:    cancelEncoded,
+		infoStates:       infoStates,
+		infoDistribution: infoDistribution,
+	}, nil
 }
 
 func (h *unlockCommon) assembleStates(ctx context.Context, tx *types.ParsedTransaction, spendTxId *pldtypes.Bytes32, params *types.UnlockParams, req *prototk.AssembleTransactionRequest, unlockData []byte) (*prototk.AssembleTransactionResponse, *manifestBuilder, *unlockStates, error) {
@@ -207,11 +244,29 @@ func (h *unlockCommon) assembleStates(ctx context.Context, tx *types.ParsedTrans
 		return nil, nil, nil, err
 	}
 
-	// Prepare the data for the unlock - noting that when directly unlocking, this is the data from the unlock().
-	// However, when performing prepareUnlock()/prepareMintUnlock()/prepareBurnUnlock() this is the separate unlockData parameter.
-	encodedUnlockData, infoStates, infoDistribution, err := h.buildUnlockData(ctx, notaryID, senderID, fromID, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, unlockData)
+	infoDistribution, err := h.getAllRecipientsDistribution(ctx, tx, notaryID, senderID, fromID, params.Recipients, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+
+	infoStates, err := h.noto.prepareDataInfo(ctx, unlockData, tx.DomainConfig.Variant, infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// we need to allocate the IDs of the states at this point
+	err = h.noto.allocateStateIDs(ctx, req.StateQueryContext, infoStates)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	spendEncoded, spendManifest, err := h.buildUnlockOperationData(ctx, tx, req.StateQueryContext, unlockedOutputs, infoDistribution, infoStates)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if tx.DomainConfig.IsV1() || tx.DomainConfig.IsV2() {
+		infoStates = append([]*prototk.NewState{spendManifest}, infoStates...)
 	}
 
 	if tx.DomainConfig.IsV0() {
@@ -241,7 +296,7 @@ func (h *unlockCommon) assembleStates(ctx context.Context, tx *types.ParsedTrans
 			outputs:           unlockedOutputs,
 			info:              infoStates,
 			infoDistribution:  infoDistribution,
-			encodedUnlockData: encodedUnlockData,
+			encodedUnlockData: spendEncoded,
 		},
 		nil
 }

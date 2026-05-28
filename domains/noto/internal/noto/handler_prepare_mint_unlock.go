@@ -112,19 +112,6 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 		return nil, err
 	}
 
-	// Build and encode the unlock data (separate to the data for this TX)
-	encodedUnlockData, infoStates, infoDistribution, err := h.buildUnlockData(ctx, notaryID, senderID, nil, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData)
-	if err != nil {
-		return nil, err
-	}
-
-	// Build the data info for this prepare transaction
-	prepareDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
-	if err != nil {
-		return nil, err
-	}
-	infoStates = append(infoStates, prepareDataInfo...)
-
 	// Prepare the outputs to mint
 	outputs := &preparedOutputs{}
 	for _, entry := range params.Recipients {
@@ -140,21 +127,26 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 		outputs.coins = append(outputs.coins, recipientOutputs.coins...)
 		outputs.states = append(outputs.states, recipientOutputs.states...)
 	}
-	infoStates = append(infoStates, outputs.states...)
 
-	err = h.noto.allocateStateIDs(ctx, req.StateQueryContext, outputs.states)
+	unlockResult, err := h.buildUnlockResult(ctx, notaryID, senderID, nil, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData, outputs, nil /** no outputs for cancel */)
+	infoStates := unlockResult.infoStates
+
+	// build the data info for this prepare transaction
+	prepareDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, unlockResult.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
+
+	infoStates = append(infoStates, prepareDataInfo...)
 
 	// Build the prepared lock
 	newLockInfo := *existingLock.lockInfo
 	newLockInfo.Replaces = existingLock.id
 	newLockInfo.Salt = pldtypes.RandBytes32()
 	newLockInfo.SpendOutputs = newStateAllocatedIDs(outputs.states)
-	newLockInfo.SpendData = encodedUnlockData
+	newLockInfo.SpendData = unlockResult.spendEncoded
 	newLockInfo.CancelOutputs = []pldtypes.Bytes32{} // no cancel outputs
-	newLockInfo.CancelData = encodedUnlockData
+	newLockInfo.CancelData = unlockResult.cancelEncoded
 	newLockInfo.SpendTxId = spendTxId
 	lock, err := h.noto.prepareLockInfo_V1(&newLockInfo, identityList{notaryID, senderID})
 	if err != nil {
@@ -170,13 +162,14 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	// Build the manifest
 	manifestState, err := h.noto.newManifestBuilder().
 		addOutputs(outputs).
-		addInfoStates(infoDistribution, infoStates...).
+		addInfoStates(unlockResult.infoDistribution, infoStates...).
 		addLockInfo(lock).
 		buildManifest(ctx, req.StateQueryContext)
 	if err != nil {
 		return nil, err
 	}
 	infoStates = append([]*prototk.NewState{manifestState} /* manifest first */, infoStates...)
+	infoStates = append(infoStates, outputs.states...)
 
 	assembledTransaction := &prototk.AssembledTransaction{
 		ReadStates:   nil,

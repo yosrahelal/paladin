@@ -111,13 +111,14 @@ func (h *createMintLockHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 	}
 
 	// Build and encode the unlock data (separate to the data for this TX)
-	encodedUnlockData, infoStates, infoDistribution, err := h.buildUnlockData(ctx, notaryID, senderID, nil, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData)
+	unlockResult, err := h.buildUnlockResult(ctx, notaryID, senderID, nil, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData, spendOutputs, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	// Build the info for the initiating transaction
-	createDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
+	infoStates := unlockResult.infoStates
+	createDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, unlockResult.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -134,9 +135,9 @@ func (h *createMintLockHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 			Owner:         senderID.address,
 			Spender:       senderID.address,
 			SpendOutputs:  newStateAllocatedIDs(spendOutputs.states),
-			SpendData:     encodedUnlockData,
+			SpendData:     unlockResult.spendEncoded,
 			CancelOutputs: []pldtypes.Bytes32{ /* nothing to return */ },
-			CancelData:    encodedUnlockData,
+			CancelData:    unlockResult.cancelEncoded,
 			SpendTxId:     spendTxId,
 		}, identityList{notaryID, senderID})
 	}
@@ -146,7 +147,7 @@ func (h *createMintLockHandler) Assemble(ctx context.Context, tx *types.ParsedTr
 		manifestState, err = h.noto.newManifestBuilder().
 			addOutputs(spendOutputs).
 			addLockInfo(lock).
-			addInfoStates(infoDistribution, infoStates...).
+			addInfoStates(unlockResult.infoDistribution, infoStates...).
 			buildManifest(ctx, req.StateQueryContext)
 	}
 	if err != nil {
