@@ -767,24 +767,17 @@ func TestGetFullReceiptSharedReadInfoStates(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			// Expectations are consumed in order by sqlmock. Each GetTransactionReceiptByIDFull
-			// call produces: receipt query -> dispatches -> chained -> public txns.
-
 			// --- receipt 1 ---
 			mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(
 				sqlmock.NewRows([]string{"transaction", "sequence", "indexed", "domain", "success"}).
 					AddRow(txID1, 1, "2024-01-01T00:00:00Z", "domain1", true),
 			)
-			mc.db.ExpectQuery("SELECT.*dispatches").WillReturnRows(sqlmock.NewRows([]string{}))
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(sqlmock.NewRows([]string{}))
 
 			// --- receipt 2 ---
 			mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(
 				sqlmock.NewRows([]string{"transaction", "sequence", "indexed", "domain", "success"}).
 					AddRow(txID2, 2, "2024-01-01T00:00:00Z", "domain1", true),
 			)
-			mc.db.ExpectQuery("SELECT.*dispatches").WillReturnRows(sqlmock.NewRows([]string{}))
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(sqlmock.NewRows([]string{}))
 
 			// Both transactions return the same read and info states
 			mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, txID1).Return(
