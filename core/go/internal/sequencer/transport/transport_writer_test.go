@@ -459,7 +459,7 @@ func TestSendDelegationRejection_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendDelegationRejection(ctx, delegatingNodeName, delegationId, engineProto.DelegationRejection_NOT_ACTIVE_COORDINATOR, "active-coordinator", int64(blockHeight), int64(90), int64(0))
+	err := tw.SendDelegationRejection(ctx, delegatingNodeName, delegationId, common.RejectionReason_NotCurrentDelegate, "active-coordinator", int64(blockHeight), int64(90), int64(0))
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 }
@@ -484,7 +484,7 @@ func TestSendDelegationRejection_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendDelegationRejection(ctx, delegatingNodeName, delegationId, engineProto.DelegationRejection_NOT_ACTIVE_COORDINATOR, "node1", int64(100), int64(90), int64(0))
+	err := tw.SendDelegationRejection(ctx, delegatingNodeName, delegationId, common.RejectionReason_NotCurrentDelegate, "node1", int64(100), int64(90), int64(0))
 	require.Error(t, err)
 	assert.Equal(t, sendError, err)
 	mockTransportManager.AssertExpectations(t)
@@ -835,7 +835,7 @@ func TestSendEndorsementRejection_Success(t *testing.T) {
 			r.ContractAddress == contractAddress &&
 			r.AttestationRequestName == endorsementName &&
 			r.Party == party &&
-			r.RejectionReason == engineProto.EndorsementRejection_BLOCK_HEIGHT_TOLERANCE &&
+			r.RejectionReason == int32(common.RejectionReason_BlockHeightTolerance) && // reason passed explicitly
 			r.CoordinatorBlockHeight == coordinatorBlockHeight &&
 			r.EndorserBlockHeight == endorserBlockHeight &&
 			r.BlockHeightTolerance == blockHeightTolerance
@@ -848,7 +848,7 @@ func TestSendEndorsementRejection_Success(t *testing.T) {
 		contractAddress:   pldtypes.MustEthAddress(contractAddress),
 	}
 
-	err := tw.SendEndorsementRejection(ctx, transactionId, idempotencyKey, contractAddress, endorsementName, party, node, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance)
+	err := tw.SendEndorsementRejection(ctx, transactionId, idempotencyKey, contractAddress, endorsementName, party, node, common.RejectionReason_BlockHeightTolerance, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance)
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 }
@@ -870,7 +870,7 @@ func TestSendEndorsementRejection_SendError(t *testing.T) {
 		contractAddress:   pldtypes.MustEthAddress(contractAddress),
 	}
 
-	err := tw.SendEndorsementRejection(ctx, uuid.New().String(), uuid.New().String(), contractAddress, "att1", "party1@node2", "node2", 100, 95, 10)
+	err := tw.SendEndorsementRejection(ctx, uuid.New().String(), uuid.New().String(), contractAddress, "att1", "party1@node2", "node2", common.RejectionReason_BlockHeightTolerance, 100, 95, 10)
 	require.Error(t, err)
 	assert.Equal(t, sendError, err)
 	mockTransportManager.AssertExpectations(t)
@@ -1332,7 +1332,7 @@ func TestSendAssembleRejection_Success(t *testing.T) {
 		return r.TransactionId == txID.String() &&
 			r.AssembleRequestId == assembleRequestId.String() &&
 			r.ContractAddress == contractAddress.HexString() &&
-			r.RejectionReason == engineProto.AssembleRejection_BLOCK_HEIGHT_TOLERANCE &&
+			r.RejectionReason == int32(common.RejectionReason_BlockHeightTolerance) &&
 			r.CoordinatorBlockHeight == coordinatorBlockHeight &&
 			r.AssemblerBlockHeight == assemblerBlockHeight &&
 			r.BlockHeightTolerance == blockHeightTolerance
@@ -1346,7 +1346,7 @@ func TestSendAssembleRejection_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, coordinatorBlockHeight, assemblerBlockHeight, blockHeightTolerance)
+	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, common.RejectionReason_BlockHeightTolerance, coordinatorBlockHeight, assemblerBlockHeight, blockHeightTolerance)
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 }
@@ -1372,7 +1372,7 @@ func TestSendAssembleRejection_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, 100, 95, 10)
+	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, common.RejectionReason_BlockHeightTolerance, 100, 95, 10)
 	require.Error(t, err)
 	assert.Equal(t, sendError, err)
 	mockTransportManager.AssertExpectations(t)
@@ -2437,9 +2437,12 @@ func TestSendDispatched_Loopback(t *testing.T) {
 	mockLoopbackTransport.AssertExpectations(t)
 }
 
-func TestSendTransactionUnknown_Success(t *testing.T) {
+// ===== SendPreDispatchRejection Tests =====
+
+func TestSendPreDispatchRejection_Success(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
+	requestID := uuid.New()
 	coordinatorNode := "coordinator-node"
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
@@ -2447,47 +2450,39 @@ func TestSendTransactionUnknown_Success(t *testing.T) {
 	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
-		if msg.MessageType != MessageType_TransactionUnknown {
+		if msg.MessageType != MessageType_PreDispatchRejection {
 			return false
 		}
 		if msg.Node != coordinatorNode {
 			return false
 		}
-		if msg.Component.String() != "TRANSACTION_ENGINE" {
+		var r engineProto.PreDispatchRejection
+		if err := proto.Unmarshal(msg.Payload, &r); err != nil {
 			return false
 		}
-		var txUnknown engineProto.TransactionUnknown
-		err := proto.Unmarshal(msg.Payload, &txUnknown)
-		if err != nil {
-			return false
-		}
-		if txUnknown.TransactionId != txID.String() {
-			return false
-		}
-		if txUnknown.ContractAddress != contractAddress.HexString() {
-			return false
-		}
-		if txUnknown.Id == "" {
-			return false
-		}
-		return true
+		return r.TransactionId == txID.String() &&
+			r.RequestId == requestID.String() &&
+			r.ContractAddress == contractAddress.HexString() &&
+			r.RejectionReason == int32(common.RejectionReason_NotCurrentDelegate)
 	})).Return(nil)
 
 	tw := &transportWriter{
+		ctx:               ctx,
 		nodeID:            "local-node",
 		transportManager:  mockTransportManager,
 		loopbackTransport: mockLoopbackTransport,
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendTransactionUnknown(ctx, coordinatorNode, txID)
+	err := tw.SendPreDispatchRejection(ctx, txID, requestID, coordinatorNode, common.RejectionReason_NotCurrentDelegate)
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 }
 
-func TestSendTransactionUnknown_NilContractAddress(t *testing.T) {
+func TestSendPreDispatchRejection_NilContractAddress(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
+	requestID := uuid.New()
 	coordinatorNode := "coordinator-node"
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
@@ -2498,17 +2493,18 @@ func TestSendTransactionUnknown_NilContractAddress(t *testing.T) {
 		nodeID:            "local-node",
 		transportManager:  mockTransportManager,
 		loopbackTransport: mockLoopbackTransport,
-		contractAddress:   nil, // No contract address
+		contractAddress:   nil,
 	}
 
-	err := tw.SendTransactionUnknown(ctx, coordinatorNode, txID)
+	err := tw.SendPreDispatchRejection(ctx, txID, requestID, coordinatorNode, common.RejectionReason_NotCurrentDelegate)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "attempt to send transaction unknown without specifying contract address")
+	assert.Contains(t, err.Error(), "attempt to send pre-dispatch rejection without specifying contract address")
 }
 
-func TestSendTransactionUnknown_SendError(t *testing.T) {
+func TestSendPreDispatchRejection_SendError(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
+	requestID := uuid.New()
 	coordinatorNode := "coordinator-node"
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 
@@ -2524,50 +2520,8 @@ func TestSendTransactionUnknown_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendTransactionUnknown(ctx, coordinatorNode, txID)
+	err := tw.SendPreDispatchRejection(ctx, txID, requestID, coordinatorNode, common.RejectionReason_TransactionUnknown)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "send failed")
 	mockTransportManager.AssertExpectations(t)
-}
-
-func TestSendTransactionUnknown_Loopback(t *testing.T) {
-	ctx := context.Background()
-	txID := uuid.New()
-	coordinatorNode := "local-node" // Same as local node
-	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
-
-	mockTransportManager := componentsmocks.NewTransportManager(t)
-	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
-	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
-
-	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
-	mockLoopbackTransport.On("LoopbackQueue").Return(loopbackQueue).Maybe()
-
-	tw := &transportWriter{
-		ctx:               ctx,
-		nodeID:            "local-node",
-		transportManager:  mockTransportManager,
-		loopbackTransport: mockLoopbackTransport,
-		contractAddress:   contractAddress,
-	}
-
-	err := tw.SendTransactionUnknown(ctx, coordinatorNode, txID)
-	require.NoError(t, err)
-
-	select {
-	case msg := <-loopbackQueue:
-		assert.Equal(t, MessageType_TransactionUnknown, msg.MessageType)
-		assert.Equal(t, "local-node", msg.Node)
-		// Verify payload
-		var txUnknown engineProto.TransactionUnknown
-		err := proto.Unmarshal(msg.Payload, &txUnknown)
-		require.NoError(t, err)
-		assert.Equal(t, txID.String(), txUnknown.TransactionId)
-		assert.Equal(t, contractAddress.HexString(), txUnknown.ContractAddress)
-	default:
-		t.Fatal("Expected message in loopback queue")
-	}
-
-	mockTransportManager.AssertExpectations(t)
-	mockLoopbackTransport.AssertExpectations(t)
 }

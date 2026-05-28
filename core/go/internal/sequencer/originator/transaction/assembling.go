@@ -179,8 +179,8 @@ func validator_AssembleBlockHeightToleranceExceeded(ctx context.Context, t *orig
 	return diff > t.blockHeightTolerance, nil
 }
 
-// action_SendAssembleBlockHeightRejection sends a dedicated AssembleRejection message indicating
-// the block height difference between coordinator and originator exceeds the configured tolerance.
+// action_SendAssembleBlockHeightRejection sends an AssembleRejection indicating the block height
+// difference between coordinator and originator exceeds the configured tolerance.
 func action_SendAssembleBlockHeightRejection(ctx context.Context, t *originatorTransaction, event common.Event) error {
 	e := event.(*AssembleRequestReceivedEvent)
 	receiverBlockHeight := t.getCurrentBlockHeight()
@@ -191,8 +191,27 @@ func action_SendAssembleBlockHeightRejection(ctx context.Context, t *originatorT
 		t.pt.ID,
 		e.RequestID,
 		e.Coordinator,
+		common.RejectionReason_BlockHeightTolerance,
 		e.CoordinatorsBlockHeight,
 		receiverBlockHeight,
 		int64(t.blockHeightTolerance),
 	)
+}
+
+// action_SendAssembleRejectionNotCurrentDelegate sends an AssembleRejection indicating the
+// originator does not recognise the sender as its current active coordinator.
+func action_SendAssembleRejectionNotCurrentDelegate(ctx context.Context, txn *originatorTransaction, event common.Event) error {
+	assembleRequestEvent := event.(*AssembleRequestReceivedEvent)
+	log.L(ctx).Debugf("rejecting assemble request from %s: not current delegate (current=%s)", assembleRequestEvent.Coordinator, txn.currentDelegate)
+	if err := txn.transportWriter.SendAssembleRejection(
+		ctx,
+		txn.pt.ID,
+		assembleRequestEvent.RequestID,
+		assembleRequestEvent.Coordinator,
+		common.RejectionReason_NotCurrentDelegate,
+		0, 0, 0,
+	); err != nil {
+		log.L(ctx).Warnf("failed to send assemble rejection (not-current-delegate) to %s: %s", assembleRequestEvent.Coordinator, err)
+	}
+	return nil
 }

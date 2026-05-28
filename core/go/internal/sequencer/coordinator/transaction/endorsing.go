@@ -331,12 +331,3 @@ func action_ComputeEndorseTolerances(_ context.Context, t *coordinatorTransactio
 	return nil
 }
 
-func action_HandleAssembleBlockHeightRejection(ctx context.Context, _ *coordinatorTransaction, event common.Event) error {
-	e := event.(*AssembleRequestRejectedEvent)
-	log.L(ctx).Warnf("assemble request rejected due to block height tolerance: coordinator block height=%d, assembler block height=%d, assembler tolerance=%d", e.CoordinatorBlockHeight, e.AssemblerBlockHeight, e.BlockHeightTolerance)
-	return nil
-}
-
-func validator_IsAssembleBlockHeightRejection(_ context.Context, _ *coordinatorTransaction, event common.Event) (bool, error) {
-	return event.(*AssembleRequestRejectedEvent).RejectionReason == AssembleRejectionReason_BlockHeightTolerance, nil
-}

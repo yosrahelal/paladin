@@ -766,6 +766,7 @@ func TestStateMachine_Sending_DelegationRejected_HigherPriority_RedirectsAndRede
 		Return(nil).Once()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &DelegationRequestRejectedEvent{
+		RejectionReason:   common.RejectionReason_NotCurrentDelegate,
 		ActiveCoordinator: "node1",
 	}))
 
@@ -784,6 +785,7 @@ func TestStateMachine_Sending_DelegationRejected_LowerPriority_NoChange(t *testi
 		Build()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &DelegationRequestRejectedEvent{
+		RejectionReason:   common.RejectionReason_NotCurrentDelegate,
 		ActiveCoordinator: "node3",
 	}))
 
@@ -800,7 +802,7 @@ func TestStateMachine_Sending_DelegationRejected_BlockHeightTolerance_StaysSendi
 		Build()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &DelegationRequestRejectedEvent{
-		RejectionReason:       DelegationRejectionReason_BlockHeightTolerance,
+		RejectionReason:       common.RejectionReason_BlockHeightTolerance,
 		OriginatorBlockHeight: 50,
 		CoordinatorBlockHeight: 100,
 		BlockHeightTolerance:   10,

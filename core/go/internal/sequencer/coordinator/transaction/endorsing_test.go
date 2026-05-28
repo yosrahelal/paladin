@@ -150,6 +150,50 @@ func Test_sendEndorsementRequests_TwoAttestationNames_CreatesMapPerName(t *testi
 	assert.Contains(t, txn.pendingEndorsementRequests, "att2")
 }
 
+func Test_sendEndorsementRequests_PermanentlyFailedParty_IsSkipped(t *testing.T) {
+	// Covers the "nil sentinel" branch in sendEndorsementRequests: if a party was marked as
+	// permanently failed in a previous call (nil value in the pending map), subsequent calls
+	// must skip that party entirely and not send another endorsement request.
+	ctx := t.Context()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
+		PostAssembly(&components.TransactionPostAssembly{
+			AttestationPlan: []*prototk.AttestationRequest{{
+				Name: "att1", AttestationType: prototk.AttestationType_ENDORSE, Parties: []string{"party1"},
+			}},
+			Endorsements: []*prototk.AttestationResult{},
+		}).
+		UseMockTransportWriter().
+		WithCurrentBlockHeight(100).
+		Build()
+
+	// Pre-populate pendingEndorsementRequests so the nil check in the loop is reachable.
+	// The outer map key exists, and the party entry is nil — the permanently-failed sentinel.
+	txn.pendingEndorsementRequests = map[string]map[string]*common.IdempotentRequest{
+		"att1": {"party1": nil},
+	}
+
+	// No SendEndorsementRequest expectation registered: any call to it would fail the test.
+	_ = mocks
+
+	err := txn.sendEndorsementRequests(ctx)
+	require.NoError(t, err)
+	// The nil sentinel must be preserved — it was not overwritten.
+	assert.Nil(t, txn.pendingEndorsementRequests["att1"]["party1"])
+}
+
+func Test_action_RecordEndorseFailure_UnknownEventType_WarnsAndReturnsNil(t *testing.T) {
+	// Covers the defensive guard in action_RecordEndorseFailure that fires when the event type
+	// is not one of the three recognised failure event types.
+	ctx := t.Context()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
+		AddPendingEndorsementRequest().
+		Build()
+
+	// Pass an unrecognised event type — reqName and party remain empty, triggering the warning path.
+	err := action_RecordEndorseFailure(ctx, txn, &RequestTimeoutIntervalEvent{})
+	require.NoError(t, err)
+}
+
 func Test_applyEndorsement_NoPendingRequestForAttestationName_IgnoresAndReturnsNil(t *testing.T) {
 	ctx := t.Context()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).

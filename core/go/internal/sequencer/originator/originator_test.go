@@ -144,12 +144,11 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	require.Equal(t, State_Observing, o.GetCurrentState(), "Originator should transition to Observing when all transactions are confirmed")
 }
 
-func Test_propagateEventToTransaction_UnknownTransaction_AssembleRequestSendsUnknown(t *testing.T) {
+func Test_propagateEventToTransaction_UnknownTransaction_AssembleRequestSendsRejection(t *testing.T) {
 	ctx := t.Context()
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(t, State_Observing)
 	o, mocks := builder.Build()
-	// Create a transaction event with a transaction ID that doesn't exist in the originator
 	unknownTxID := uuid.New()
 	assembleRequestIdempotencyKey := uuid.New()
 	event := &transaction.AssembleRequestReceivedEvent{
@@ -162,11 +161,7 @@ func Test_propagateEventToTransaction_UnknownTransaction_AssembleRequestSendsUnk
 		StateLocksJSON:          []byte("{}"),
 	}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, event))
-	// State machine should call propagateEventToTransaction, which should send a TransactionUnknown response
-	assert.True(t, mocks.SentMessageRecorder.HasSentTransactionUnknown(), "SendTransactionUnknown should be called")
-	txID, coordinator := mocks.SentMessageRecorder.GetTransactionUnknownDetails()
-	assert.Equal(t, unknownTxID, txID, "TransactionUnknown should be sent for the correct transaction ID")
-	assert.Equal(t, coordinatorLocator, coordinator, "TransactionUnknown should be sent to the correct coordinator")
+	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "SendAssembleRejection should be called for unknown transaction")
 }
 
 func Test_propagateEventToTransaction_UnknownTransaction_NonRequestEventReturnsNil(t *testing.T) {
@@ -181,8 +176,9 @@ func Test_propagateEventToTransaction_UnknownTransaction_NonRequestEventReturnsN
 		},
 	}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, event))
-	// Verify that SendTransactionUnknown was NOT called
-	assert.False(t, mocks.SentMessageRecorder.HasSentTransactionUnknown(), "Expected SendTransactionUnknown to NOT be called for confirmation events")
+	// Verify that neither rejection was sent
+	assert.False(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "Expected SendAssembleRejection to NOT be called for confirmation events")
+	assert.False(t, mocks.SentMessageRecorder.HasSentPreDispatchRejection(), "Expected SendPreDispatchRejection to NOT be called for confirmation events")
 }
 
 func TestOriginator_CreateTransaction_ErrorFromNewTransaction(t *testing.T) {
@@ -250,7 +246,7 @@ func Test_getTransactionsInStates_EmptyStateListReturnsNoTransactions(t *testing
 	assert.Empty(t, o.getTransactionsInStates([]transaction.State{}))
 }
 
-func Test_propagateEventToTransaction_UnknownTransaction_PreDispatchRequestSendsUnknown(t *testing.T) {
+func Test_propagateEventToTransaction_UnknownTransaction_PreDispatchRequestSendsRejection(t *testing.T) {
 	ctx := t.Context()
 	coordinatorLocator := "coordinator@coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(t, State_Observing)
@@ -261,12 +257,11 @@ func Test_propagateEventToTransaction_UnknownTransaction_PreDispatchRequestSends
 		BaseEvent:        transaction.BaseEvent{TransactionID: unknownTxID},
 		Coordinator:      coordinatorLocator,
 		PostAssemblyHash: &postAssemblyHash,
+		RequestID:        uuid.New(),
 	}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, event))
-	assert.True(t, mocks.SentMessageRecorder.HasSentTransactionUnknown(), "SendTransactionUnknown should be called")
-	txID, coordinator := mocks.SentMessageRecorder.GetTransactionUnknownDetails()
-	assert.Equal(t, unknownTxID, txID)
-	assert.Equal(t, coordinatorLocator, coordinator)
+	assert.True(t, mocks.SentMessageRecorder.HasSentPreDispatchRejection(), "SendPreDispatchRejection should be called for unknown transaction")
+	assert.Equal(t, common.RejectionReason_TransactionUnknown, mocks.SentMessageRecorder.PreDispatchRejectionReason())
 }
 
 func Test_GetTxStatus_KnownTransactionReturnsStatus(t *testing.T) {

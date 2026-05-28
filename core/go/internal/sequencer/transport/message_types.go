@@ -32,12 +32,11 @@ const (
 	MessageType_EndorsementRejection             = "EndorsementRejection"
 	MessageType_HandoverRequest                  = "HandoverRequest"
 	MessageType_NonceAssigned                    = "NonceAssigned"
-	MessageType_NotActiveCoordinator             = "NotActiveCoordinator"
 	MessageType_PreDispatchRequest               = "PreDispatchRequest"
 	MessageType_PreDispatchResponse              = "PreDispatchResponse"
+	MessageType_PreDispatchRejection             = "PreDispatchRejection"
 	MessageType_TransactionRequest               = "TransactionRequest"
 	MessageType_TransactionSubmitted             = "TransactionSubmitted"
 	MessageType_TransactionConfirmed             = "TransactionConfirmed"
-	MessageType_TransactionUnknown               = "TransactionUnknown"
 )
 

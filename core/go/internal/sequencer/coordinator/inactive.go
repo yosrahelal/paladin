@@ -20,7 +20,6 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
-	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 )
 
 // validator_IsHeartbeatSenderLive returns true when the heartbeat sender reports being in one of
@@ -70,7 +69,7 @@ func action_RejectDelegationRequestBlockHeight(ctx context.Context, c *coordinat
 		ctx,
 		e.FromNode,
 		e.DelegationID,
-		engineProto.DelegationRejection_BLOCK_HEIGHT_TOLERANCE,
+		common.RejectionReason_BlockHeightTolerance,
 		"", // no active coordinator redirect for block height rejections
 		int64(e.OriginatorsBlockHeight),
 		int64(c.currentBlockHeight),
@@ -85,7 +84,7 @@ func action_RejectDelegationRequest(ctx context.Context, c *coordinator, event c
 		ctx,
 		e.FromNode,
 		e.DelegationID,
-		engineProto.DelegationRejection_NOT_ACTIVE_COORDINATOR,
+		common.RejectionReason_NotCurrentDelegate,
 		c.currentActiveCoordinator,
 		int64(e.OriginatorsBlockHeight),
 		int64(c.currentBlockHeight),

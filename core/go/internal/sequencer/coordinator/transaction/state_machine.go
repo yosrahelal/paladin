@@ -73,11 +73,10 @@ const (
 	Event_RequestTimeoutInterval                                                                // event emitted by the state machine on a regular period while we have pending requests
 	Event_StateTimeoutInterval                                                                  // event emitted when a state has exceeded its maximum allowed duration
 	Event_StateTransition                                                                       // event emitted by the state machine when a state transition occurs.  TODO should this be a separate enum?
-	Event_TransactionUnknownByOriginator                                                        // originator has reported that it doesn't recognize this transaction
+	Event_PreDispatchRequestRejected                                                            // originator has rejected the pre-dispatch request (NOT_CURRENT_DELEGATE or TRANSACTION_UNKNOWN)
 	Event_ChainedDependencyFailed                                                               // a chained (same-coordinator) dependency has been permanently finalized as failed
 	Event_ChainedDependencyEvicted                                                              // a chained (same-coordinator) dependency has been evicted (e.g. assembly failure threshold exceeded)
 	Event_PreAssembleDependencyTerminated                                                       // the pre-assemble (FIFO ordering) predecessor has reached a terminal state
-	Event_NotActiveCoordinator                                                                  // originator has reported that this node is not the active coordinator for the transaction
 )
 
 // Type aliases for the generic statemachine types, specialized for Transaction
@@ -276,14 +275,6 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			}}},
-			// Originator has informed us that no longer thinks we are the active coordinator for this transaction.
-			// Evict the transaction so it is cleaned up; State_Evicted.OnTransitionTo handles
-			// cascading eviction of dependents via action_CascadeChainedDependencyEviction.
-			Event_NotActiveCoordinator: {Handlers: []EventHandler{{
-				Transitions: []Transition{{
-					To: State_Evicted,
-				}},
-			}}},
 			Event_AssembleRevert: {Handlers: []EventHandler{{
 				Validator: validator_MatchesPendingAssembleRequest,
 				Actions:   []ActionRule{{Action: action_AssembleRevertResponse}},
@@ -313,12 +304,15 @@ var stateDefinitionsMap = StateDefinitions{
 					To:      State_Pooled,
 					Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
 				}},
-			}}},
-			// Handle response from originator indicating it doesn't recognize this transaction.
-			// The most likely cause is that the transaction reached a terminal state (e.g., reverted
-			// during assembly) but the response was lost, and the transaction has since been removed
-			// from memory on the originator after cleanup. The coordinator should clean up this transaction.
-			Event_TransactionUnknownByOriginator: {Handlers: []EventHandler{{
+			}, {
+				// Originator does not recognise this node as the active coordinator; evict.
+				Validator: validator_IsAssembleNotCurrentDelegateRejection,
+				Transitions: []Transition{{
+					To: State_Evicted,
+				}},
+			}, {
+				// Originator no longer holds this transaction in memory; finalize.
+				Validator: validator_IsAssembleTransactionUnknownRejection,
 				Transitions: []Transition{{
 					To:      State_Final,
 					Actions: []ActionRule{{Action: action_FinalizeAsUnknownByOriginator}},
@@ -566,12 +560,19 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				},
 			}}},
-			// Originator has informed us that no longer thinks we are the active coordinator for this transaction.
-			// Evict the transaction so it is cleaned up; State_Evicted.OnTransitionTo handles
-			// cascading eviction of dependents via action_CascadeChainedDependencyEviction.
-			Event_NotActiveCoordinator: {Handlers: []EventHandler{{
+			// Originator has rejected the pre-dispatch request.
+			// NOT_CURRENT_DELEGATE: originator no longer tracks us as coordinator; evict.
+			// TRANSACTION_UNKNOWN:  originator has cleaned up the transaction; finalize.
+			Event_PreDispatchRequestRejected: {Handlers: []EventHandler{{
+				Validator: validator_IsPreDispatchNotCurrentDelegateRejection,
 				Transitions: []Transition{{
 					To: State_Evicted,
+				}},
+			}, {
+				Validator: validator_IsPreDispatchTransactionUnknownRejection,
+				Transitions: []Transition{{
+					To:      State_Final,
+					Actions: []ActionRule{{Action: action_FinalizeAsUnknownByOriginator}},
 				}},
 			}}},
 			Event_RequestTimeoutInterval: {Handlers: []EventHandler{{

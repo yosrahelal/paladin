@@ -79,10 +79,8 @@ func (sMgr *sequencerManager) HandlePaladinMsg(ctx context.Context, message *com
 		go sMgr.handleTransactionSubmitted(sMgr.ctx, message)
 	case transport.MessageType_TransactionConfirmed:
 		go sMgr.handleTransactionConfirmed(sMgr.ctx, message)
-	case transport.MessageType_TransactionUnknown:
-		go sMgr.handleTransactionUnknown(sMgr.ctx, message)
-	case transport.MessageType_NotActiveCoordinator:
-		go sMgr.handleNotActiveCoordinator(sMgr.ctx, message)
+	case transport.MessageType_PreDispatchRejection:
+		go sMgr.handlePreDispatchRejection(sMgr.ctx, message)
 	case transport.MessageType_HandoverRequest:
 		go sMgr.handleHandoverRequest(sMgr.ctx, message)
 	default:
@@ -268,7 +266,7 @@ func (sMgr *sequencerManager) handleAssembleRejection(ctx context.Context, messa
 	assembleRejectedEvent.RequestID = uuid.MustParse(assembleRejection.AssembleRequestId)
 	assembleRejectedEvent.TransactionID = uuid.MustParse(assembleRejection.TransactionId)
 	assembleRejectedEvent.EventTime = time.Now()
-	assembleRejectedEvent.RejectionReason = coordTransaction.AssembleRejectionReason_BlockHeightTolerance
+	assembleRejectedEvent.RejectionReason = common.RejectionReason(assembleRejection.RejectionReason)
 	assembleRejectedEvent.CoordinatorBlockHeight = assembleRejection.CoordinatorBlockHeight
 	assembleRejectedEvent.AssemblerBlockHeight = assembleRejection.AssemblerBlockHeight
 	assembleRejectedEvent.BlockHeightTolerance = assembleRejection.BlockHeightTolerance
@@ -513,7 +511,7 @@ func (sMgr *sequencerManager) handleDelegationRejection(ctx context.Context, mes
 
 	rejectedEvent := &originator.DelegationRequestRejectedEvent{}
 	rejectedEvent.ActiveCoordinator = delegationRejection.ActiveCoordinator
-	rejectedEvent.RejectionReason = originator.DelegationRejectionReason(delegationRejection.RejectionReason)
+	rejectedEvent.RejectionReason = common.RejectionReason(delegationRejection.RejectionReason)
 	rejectedEvent.OriginatorBlockHeight = delegationRejection.OriginatorBlockHeight
 	rejectedEvent.CoordinatorBlockHeight = delegationRejection.CoordinatorBlockHeight
 	rejectedEvent.BlockHeightTolerance = delegationRejection.BlockHeightTolerance
@@ -667,7 +665,7 @@ func (sMgr *sequencerManager) handleEndorsementRejection(ctx context.Context, me
 	endorseRejectedEvent.EventTime = time.Now()
 	endorseRejectedEvent.Party = endorsementRejection.Party
 	endorseRejectedEvent.AttestationRequestName = endorsementRejection.AttestationRequestName
-	endorseRejectedEvent.RejectionReason = coordTransaction.EndorseRejectionReason(endorsementRejection.RejectionReason)
+	endorseRejectedEvent.RejectionReason = common.RejectionReason(endorsementRejection.RejectionReason)
 	endorseRejectedEvent.CoordinatorBlockHeight = endorsementRejection.CoordinatorBlockHeight
 	endorseRejectedEvent.EndorserBlockHeight = endorsementRejection.EndorserBlockHeight
 	endorseRejectedEvent.BlockHeightTolerance = endorsementRejection.BlockHeightTolerance
@@ -800,80 +798,46 @@ func (sMgr *sequencerManager) handleTransactionConfirmed(ctx context.Context, me
 	}
 }
 
-func (sMgr *sequencerManager) handleNotActiveCoordinator(ctx context.Context, message *components.ReceivedMessage) {
-	// Handle a response from an originator indicating that this node is not the active coordinator
-	// for the given transaction. The coordinator should evict the transaction.
-	notActiveMsg := &engineProto.NotActiveCoordinatorNotification{}
-	if err := proto.Unmarshal(message.Payload, notActiveMsg); err != nil {
+func (sMgr *sequencerManager) handlePreDispatchRejection(ctx context.Context, message *components.ReceivedMessage) {
+	rejection := &engineProto.PreDispatchRejection{}
+	if err := proto.Unmarshal(message.Payload, rejection); err != nil {
 		sMgr.logPaladinMessageUnmarshalError(ctx, message, err)
 		return
 	}
 
-	contractAddress := sMgr.parseContractAddressString(ctx, notActiveMsg.ContractAddress, message)
+	contractAddress := sMgr.parseContractAddressString(ctx, rejection.ContractAddress, message)
 	if contractAddress == nil {
 		return
 	}
 
-	txID, err := uuid.Parse(notActiveMsg.TransactionId)
+	txID, err := uuid.Parse(rejection.TransactionId)
 	if err != nil {
-		log.L(ctx).Errorf("handleNotActiveCoordinator: invalid transaction ID %q: %v", notActiveMsg.TransactionId, err)
+		log.L(ctx).Errorf("handlePreDispatchRejection: invalid transaction ID %q: %v", rejection.TransactionId, err)
 		return
 	}
 
-	// Get rather than load the sequencer- it must already have the coordinator in memory to process the not active coordinator event
+	requestID, err := uuid.Parse(rejection.RequestId)
+	if err != nil {
+		log.L(ctx).Errorf("handlePreDispatchRejection: invalid request ID %q: %v", rejection.RequestId, err)
+		return
+	}
+
 	seq := sMgr.GetSequencer(ctx, *contractAddress)
 	if seq == nil {
-		log.L(ctx).Warnf("sequencer for contract %s is not loaded: not active coordinator event for transaction %s cannot be processed unless already in memory",
-			contractAddress, notActiveMsg.TransactionId)
+		log.L(ctx).Warnf("sequencer for contract %s is not loaded: pre-dispatch rejection for transaction %s cannot be processed unless already in memory",
+			contractAddress, rejection.TransactionId)
 		return
 	}
 
-	log.L(ctx).Debugf("received not-active-coordinator notification for tx %s from originator %s, queuing eviction event", txID, message.FromNode)
+	log.L(ctx).Debugf("received pre-dispatch rejection for tx %s from originator %s (reason=%d)", txID, message.FromNode, rejection.RejectionReason)
 
-	notActiveEvent := &coordTransaction.NotActiveCoordinatorEvent{
+	rejectedEvent := &coordTransaction.PreDispatchRequestRejectedEvent{
 		BaseCoordinatorEvent: coordTransaction.BaseCoordinatorEvent{
 			TransactionID: txID,
 		},
+		RequestID:       requestID,
+		RejectionReason: common.RejectionReason(rejection.RejectionReason),
 	}
-	seq.GetCoordinator().QueueEvent(ctx, notActiveEvent)
-}
-
-func (sMgr *sequencerManager) handleTransactionUnknown(ctx context.Context, message *components.ReceivedMessage) {
-	// Handle a response from an originator indicating that it doesn't recognize a transaction.
-	// The most likely cause is that the transaction reverted during assembly but the response was lost,
-	// and the transaction has since been removed from memory on the originator after reaching a terminal state.
-	transactionUnknown := &engineProto.TransactionUnknown{}
-	err := proto.Unmarshal(message.Payload, transactionUnknown)
-	if err != nil {
-		sMgr.logPaladinMessageUnmarshalError(ctx, message, err)
-		return
-	}
-
-	contractAddress := sMgr.parseContractAddressString(ctx, transactionUnknown.ContractAddress, message)
-	if contractAddress == nil {
-		return
-	}
-
-	// Get rather than load the sequencer- it must already have the coordinator in memory to process the transaction unknown event
-	seq := sMgr.GetSequencer(ctx, *contractAddress)
-	if seq == nil {
-		log.L(ctx).Warnf("sequencer for contract %s is not loaded: transaction unknown event for transaction %s cannot be processed unless already in memory",
-			contractAddress, transactionUnknown.TransactionId)
-		return
-	}
-
-	txID, err := uuid.Parse(transactionUnknown.TransactionId)
-	if err != nil {
-		log.L(ctx).Errorf("handleTransactionUnknown failed to parse transaction ID: %v", err)
-		return
-	}
-
-	log.L(ctx).Warnf("received transaction unknown response for tx %s from originator, queuing cleanup event", txID)
-
-	unknownEvent := &coordTransaction.TransactionUnknownByOriginatorEvent{
-		BaseCoordinatorEvent: coordTransaction.BaseCoordinatorEvent{
-			TransactionID: txID,
-		},
-	}
-	seq.GetCoordinator().QueueEvent(ctx, unknownEvent)
+	rejectedEvent.EventTime = time.Now()
+	seq.GetCoordinator().QueueEvent(ctx, rejectedEvent)
 }

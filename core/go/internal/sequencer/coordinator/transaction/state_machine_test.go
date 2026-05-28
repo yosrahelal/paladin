@@ -530,12 +530,13 @@ func TestCoordinatorTransaction_Assembling_ToPooled_OnAssembleCancelled(t *testi
 	assert.Equal(t, State_Pooled, txn.GetCurrentState())
 }
 
-func TestCoordinatorTransaction_Assembling_ToEvicted_OnNotActiveCoordinator(t *testing.T) {
+func TestCoordinatorTransaction_Assembling_ToEvicted_OnAssembleRejected_NotCurrentDelegate(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
 
-	err := txn.HandleEvent(ctx, &NotActiveCoordinatorEvent{
+	err := txn.HandleEvent(ctx, &AssembleRequestRejectedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+		RejectionReason:      common.RejectionReason_NotCurrentDelegate,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_Evicted, txn.GetCurrentState())
@@ -614,17 +615,15 @@ func TestCoordinatorTransaction_Assembling_ToEvicted_OnAssembleError_IfAboveRetr
 	assert.Equal(t, State_Evicted, txn.GetCurrentState())
 }
 
-func TestCoordinatorTransaction_Assembling_ToFinal_OnTransactionUnknownByOriginator(t *testing.T) {
-	// Test that when an originator reports a transaction as unknown (most likely because
-	// it reverted during assembly but the response was lost and the transaction has since
-	// been cleaned up on the originator), the coordinator transitions to State_Final
+func TestCoordinatorTransaction_Assembling_ToFinal_OnAssembleRejected_TransactionUnknown(t *testing.T) {
+	// When the originator reports the transaction as unknown (it has been cleaned up),
+	// the coordinator transitions to State_Final.
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
 
-	err := txn.HandleEvent(ctx, &TransactionUnknownByOriginatorEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{
-			TransactionID: txn.GetID(),
-		},
+	err := txn.HandleEvent(ctx, &AssembleRequestRejectedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+		RejectionReason:      common.RejectionReason_TransactionUnknown,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_Final, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
@@ -642,7 +641,7 @@ func TestCoordinatorTransaction_Assembling_ToPooled_OnAssembleRequestRejected_Bl
 
 	err := txn.HandleEvent(ctx, &AssembleRequestRejectedEvent{
 		BaseCoordinatorEvent:   BaseCoordinatorEvent{TransactionID: txn.GetID()},
-		RejectionReason:        AssembleRejectionReason_BlockHeightTolerance,
+		RejectionReason:        common.RejectionReason_BlockHeightTolerance,
 		CoordinatorBlockHeight: 100,
 		AssemblerBlockHeight:   200,
 		BlockHeightTolerance:   5,
@@ -966,7 +965,7 @@ func TestCoordinatorTransaction_Endorsement_Gathering_StaysInState_OnEndorseRequ
 		BaseCoordinatorEvent:   BaseCoordinatorEvent{TransactionID: txn.pt.ID},
 		Party:                  party1,
 		AttestationRequestName: "endorse-multisig",
-		RejectionReason:        EndorseRejectionReason_BlockHeightTolerance,
+		RejectionReason:        common.RejectionReason_BlockHeightTolerance,
 		CoordinatorBlockHeight: 100,
 		EndorserBlockHeight:    200,
 		BlockHeightTolerance:   5,
@@ -1167,15 +1166,30 @@ func TestCoordinatorTransaction_ConfirmingDispatch_NoTransition_OnDispatchConfir
 	assert.Equal(t, State_Confirming_Dispatchable, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestCoordinatorTransaction_ConfirmingDispatch_ToEvicted_OnNotActiveCoordinator(t *testing.T) {
+func TestCoordinatorTransaction_ConfirmingDispatch_ToEvicted_OnPreDispatchRejected_NotCurrentDelegate(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).Build()
 
-	err := txn.HandleEvent(ctx, &NotActiveCoordinatorEvent{
+	err := txn.HandleEvent(ctx, &PreDispatchRequestRejectedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+		RequestID:            uuid.New(),
+		RejectionReason:      common.RejectionReason_NotCurrentDelegate,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_Evicted, txn.GetCurrentState())
+}
+
+func TestCoordinatorTransaction_ConfirmingDispatch_ToFinal_OnPreDispatchRejected_TransactionUnknown(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Confirming_Dispatchable).Build()
+
+	err := txn.HandleEvent(ctx, &PreDispatchRequestRejectedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+		RequestID:            uuid.New(),
+		RejectionReason:      common.RejectionReason_TransactionUnknown,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Final, txn.GetCurrentState())
 }
 
 func TestCoordinatorTransaction_ConfirmingDispatch_NudgeRequest_OnRequestTimeout(t *testing.T) {

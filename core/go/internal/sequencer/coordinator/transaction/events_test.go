@@ -351,7 +351,7 @@ func TestEndorseRequestRejectedEvent_Fields(t *testing.T) {
 		Party:                  "party1@node1",
 		AttestationRequestName: "endorse-0",
 		RequestID:              requestID,
-		RejectionReason:        EndorseRejectionReason_BlockHeightTolerance,
+		RejectionReason:        common.RejectionReason_BlockHeightTolerance,
 		CoordinatorBlockHeight: coordinatorBlockHeight,
 		EndorserBlockHeight:    endorserBlockHeight,
 	}
@@ -360,7 +360,7 @@ func TestEndorseRequestRejectedEvent_Fields(t *testing.T) {
 	assert.Equal(t, "party1@node1", event.Party)
 	assert.Equal(t, "endorse-0", event.AttestationRequestName)
 	assert.Equal(t, requestID, event.RequestID)
-	assert.Equal(t, EndorseRejectionReason_BlockHeightTolerance, event.RejectionReason)
+	assert.Equal(t, common.RejectionReason_BlockHeightTolerance, event.RejectionReason)
 	assert.Equal(t, coordinatorBlockHeight, event.CoordinatorBlockHeight)
 	assert.Equal(t, endorserBlockHeight, event.EndorserBlockHeight)
 }
@@ -399,14 +399,14 @@ func TestAssembleRequestRejectedEvent_Fields(t *testing.T) {
 			TransactionID: txID,
 		},
 		RequestID:              requestID,
-		RejectionReason:        AssembleRejectionReason_BlockHeightTolerance,
+		RejectionReason:        common.RejectionReason_BlockHeightTolerance,
 		CoordinatorBlockHeight: coordinatorBlockHeight,
 		AssemblerBlockHeight:   assemblerBlockHeight,
 	}
 
 	assert.Equal(t, txID, event.GetTransactionID())
 	assert.Equal(t, requestID, event.RequestID)
-	assert.Equal(t, AssembleRejectionReason_BlockHeightTolerance, event.RejectionReason)
+	assert.Equal(t, common.RejectionReason_BlockHeightTolerance, event.RejectionReason)
 	assert.Equal(t, coordinatorBlockHeight, event.CoordinatorBlockHeight)
 	assert.Equal(t, assemblerBlockHeight, event.AssemblerBlockHeight)
 }
@@ -1192,15 +1192,12 @@ func TestEvent_InterfaceCompliance(t *testing.T) {
 				TransactionID: txID,
 			},
 		},
-		&TransactionUnknownByOriginatorEvent{
+		&PreDispatchRequestRejectedEvent{
 			BaseCoordinatorEvent: BaseCoordinatorEvent{
 				TransactionID: txID,
 			},
-		},
-		&NotActiveCoordinatorEvent{
-			BaseCoordinatorEvent: BaseCoordinatorEvent{
-				TransactionID: txID,
-			},
+			RequestID:       txID,
+			RejectionReason: common.RejectionReason_NotCurrentDelegate,
 		},
 	}
 

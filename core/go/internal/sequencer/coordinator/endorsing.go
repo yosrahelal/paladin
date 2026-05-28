@@ -48,9 +48,30 @@ func action_RejectEndorsementBlockHeight(ctx context.Context, c *coordinator, ev
 		e.AttestationRequest.Name,
 		e.Party,
 		e.FromNode,
+		common.RejectionReason_BlockHeightTolerance,
 		e.CoordinatorBlockHeight,
 		int64(c.currentBlockHeight),
 		int64(c.blockHeightTolerance),
+	)
+}
+
+// action_RejectEndorsementEndorserIsActiveCoordinator sends an EndorsementRejection to the
+// requester with reason EndorserIsActiveCoordinator: this node is currently the active
+// coordinator (or becoming one) and therefore cannot act as an endorser. The sender should
+// re-route the request once a new active coordinator has been established.
+func action_RejectEndorsementEndorserIsActiveCoordinator(ctx context.Context, c *coordinator, event common.Event) error {
+	e := event.(*EndorsementRequestReceivedEvent)
+	log.L(ctx).Warnf("rejecting endorsement request from %s: this node is the active coordinator", e.FromNode)
+	return c.transportWriter.SendEndorsementRejection(
+		ctx,
+		e.TransactionId,
+		e.IdempotencyKey,
+		c.contractAddress.String(),
+		e.AttestationRequest.Name,
+		e.Party,
+		e.FromNode,
+		common.RejectionReason_EndorserIsActiveCoordinator,
+		0, 0, 0,
 	)
 }
 

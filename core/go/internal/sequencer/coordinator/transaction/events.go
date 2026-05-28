@@ -177,12 +177,6 @@ func (*EndorseErrorEvent) TypeString() string {
 	return "Event_EndorseError"
 }
 
-type EndorseRejectionReason int
-
-const (
-	EndorseRejectionReason_BlockHeightTolerance EndorseRejectionReason = iota // 0 — coodinator and endorser block heights differ by more than the configured tolerance
-)
-
 // EndorseRequestRejectedEvent is queued when an endorser rejected the request before even attempting
 // it — currently only block height tolerance.
 type EndorseRequestRejectedEvent struct {
@@ -190,7 +184,7 @@ type EndorseRequestRejectedEvent struct {
 	Party                  string
 	AttestationRequestName string
 	RequestID              uuid.UUID
-	RejectionReason        EndorseRejectionReason
+	RejectionReason        common.RejectionReason
 	CoordinatorBlockHeight int64
 	EndorserBlockHeight    int64
 	BlockHeightTolerance   int64
@@ -204,16 +198,10 @@ func (*EndorseRequestRejectedEvent) TypeString() string {
 	return "Event_EndorseRequestRejected"
 }
 
-type AssembleRejectionReason int
-
-const (
-	AssembleRejectionReason_BlockHeightTolerance AssembleRejectionReason = iota // 0 — sender and receiver block heights differ by more than the configured tolerance
-)
-
 type AssembleRequestRejectedEvent struct {
 	BaseCoordinatorEvent
 	RequestID              uuid.UUID
-	RejectionReason        AssembleRejectionReason
+	RejectionReason        common.RejectionReason
 	CoordinatorBlockHeight int64
 	AssemblerBlockHeight   int64
 	BlockHeightTolerance   int64
@@ -415,20 +403,18 @@ func (*StateTransitionEvent) TypeString() string {
 	return "Event_StateTransition"
 }
 
-// TransactionUnknownByOriginatorEvent is sent by an originator when it receives a message
-// for a transaction it doesn't recognize. The most likely cause is that the transaction reached
-// a terminal state (e.g. reverted during assembly) but the response was lost, and the transaction
-// has since been removed from memory on the originator after cleanup.
-type TransactionUnknownByOriginatorEvent struct {
+type PreDispatchRequestRejectedEvent struct {
 	BaseCoordinatorEvent
+	RequestID       uuid.UUID
+	RejectionReason common.RejectionReason
 }
 
-func (*TransactionUnknownByOriginatorEvent) Type() EventType {
-	return Event_TransactionUnknownByOriginator
+func (*PreDispatchRequestRejectedEvent) Type() EventType {
+	return Event_PreDispatchRequestRejected
 }
 
-func (*TransactionUnknownByOriginatorEvent) TypeString() string {
-	return "Event_TransactionUnknownByOriginator"
+func (*PreDispatchRequestRejectedEvent) TypeString() string {
+	return "Event_PreDispatchRequestRejected"
 }
 
 type ChainedDependencyFailedEvent struct {
@@ -467,20 +453,4 @@ func (*PreAssembleDependencyTerminatedEvent) Type() EventType {
 
 func (*PreAssembleDependencyTerminatedEvent) TypeString() string {
 	return "Event_PreAssembleDependencyTerminated"
-}
-
-// NotActiveCoordinatorEvent is received by the coordinator when the originator informs it
-// that this node is not the expected active coordinator for the given transaction. The coordinator
-// should evict the transaction on receipt of this event. The originator has already redelegated the
-// transaction to the new active coordinator.
-type NotActiveCoordinatorEvent struct {
-	BaseCoordinatorEvent
-}
-
-func (*NotActiveCoordinatorEvent) Type() EventType {
-	return Event_NotActiveCoordinator
-}
-
-func (*NotActiveCoordinatorEvent) TypeString() string {
-	return "Event_NotActiveCoordinator"
 }

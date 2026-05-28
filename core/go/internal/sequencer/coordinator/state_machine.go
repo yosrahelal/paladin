@@ -263,29 +263,35 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
 				}},
 			}}},
-			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
-			}, {
-				// A higher-priority node is sending endorsement requests; step down and handle.
-				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-					{Action: action_ClearTimeoutSchedules},
-					{Action: action_HandleEndorsementRequest},
-				},
-				Transitions: []Transition{{
-					To: State_Observing,
-					If: statemachine.GuardNot(guard_HasTransactionsInflight),
+			Event_EndorsementRequestReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
-					To: State_Closing_Flush,
-					If: statemachine.GuardAnd(guard_HasTransactionsInflight, guard_HasUnconfirmedDispatchedTransactions),
+					// A higher-priority node is sending endorsement requests; step down and handle.
+					Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+						{Action: action_CleanUpTransactionsNotYetDispatched},
+						{Action: action_ClearTimeoutSchedules},
+						{Action: action_HandleEndorsementRequest},
+					},
+					Transitions: []Transition{{
+						To: State_Observing,
+						If: statemachine.GuardNot(guard_HasTransactionsInflight),
+					}, {
+						To: State_Closing_Flush,
+						If: statemachine.GuardAnd(guard_HasTransactionsInflight, guard_HasUnconfirmedDispatchedTransactions),
+					}, {
+						To: State_Closing,
+						If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
+					}},
 				}, {
-					To: State_Closing,
-					If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
+					// Lower-priority node — this coordinator is active (or becoming active)
+					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
-			}}},
+			},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
 				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
@@ -388,28 +394,34 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
 				}},
 			}}},
-			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
-			}, {
-				// A higher-priority node is sending endorsement requests; step down and handle.
-				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-					{Action: action_HandleEndorsementRequest},
-				},
-				Transitions: []Transition{{
-					To: State_Observing,
-					If: statemachine.GuardNot(guard_HasTransactionsInflight),
+			Event_EndorsementRequestReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
-					To: State_Closing_Flush,
-					If: statemachine.GuardAnd(guard_HasTransactionsInflight, guard_HasUnconfirmedDispatchedTransactions),
+					// A higher-priority node is sending endorsement requests; step down and handle.
+					Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+						{Action: action_CleanUpTransactionsNotYetDispatched},
+						{Action: action_HandleEndorsementRequest},
+					},
+					Transitions: []Transition{{
+						To: State_Observing,
+						If: statemachine.GuardNot(guard_HasTransactionsInflight),
+					}, {
+						To: State_Closing_Flush,
+						If: statemachine.GuardAnd(guard_HasTransactionsInflight, guard_HasUnconfirmedDispatchedTransactions),
+					}, {
+						To: State_Closing,
+						If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
+					}},
 				}, {
-					To: State_Closing,
-					If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
+					// Lower-priority — reject so the sender can re-route.
+					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
-			}}},
+			},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
 				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
@@ -502,32 +514,38 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
 				}},
 			}}},
-			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
-			}, {
-				// A higher-priority node is sending endorsement requests; step down and handle.
-				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
-					{Action: action_StopDispatchLoop},
-					// Once the dispatch loop is stopped we know there won't be anymore
-					// State_Ready_For_Dispatch to State_Dispatched transitions so it is safe to clean up
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-					{Action: action_HandleEndorsementRequest},
-				},
-				Transitions: []Transition{{
-					To: State_Closing_Flush,
-					If: guard_HasUnconfirmedDispatchedTransactions,
+			Event_EndorsementRequestReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
-					To: State_Closing,
-					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+					// A higher-priority node is sending endorsement requests; step down and handle.
+					Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+						{Action: action_StopDispatchLoop},
+						// Once the dispatch loop is stopped we know there won't be anymore
+						// State_Ready_For_Dispatch to State_Dispatched transitions so it is safe to clean up
+						{Action: action_CleanUpTransactionsNotYetDispatched},
+						{Action: action_HandleEndorsementRequest},
+					},
+					Transitions: []Transition{{
+						To: State_Closing_Flush,
+						If: guard_HasUnconfirmedDispatchedTransactions,
+					}, {
+						To: State_Closing,
+						If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+					}},
+				}, {
+					// We are both the coordinator and the endorser; handle directly without stepping down.
+					Validator: validator_IsEndorsementRequestFromSelf,
+					Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
+				}, {
+					// Lower-priority node — reject so the sender knows this node is the active coordinator.
+					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
-			}, {
-				// We are both the coordinator and the endorser; handle directly without stepping down.
-				Validator: validator_IsEndorsementRequestFromSelf,
-				Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
-			}}},
+			},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
 				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
@@ -637,25 +655,31 @@ var stateDefinitionsMap = StateDefinitions{
 					If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
 				}},
 			}}},
-			Event_EndorsementRequestReceived: {Handlers: []EventHandler{{
-				Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
-				Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
-			}, {
-				// A higher-priority node is sending endorsement requests; step down to Closing_Flush and handle.
-				Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
-				Actions: []ActionRule{
-					{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
-					{Action: action_CleanUpTransactionsNotYetDispatched},
-					{Action: action_HandleEndorsementRequest},
-				},
-				Transitions: []Transition{{
-					To: State_Closing_Flush,
+			Event_EndorsementRequestReceived: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
+				}, {
+					// A higher-priority node is sending endorsement requests; step down to Closing_Flush and handle.
+					Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					Actions: []ActionRule{
+						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
+						{Action: action_CleanUpTransactionsNotYetDispatched},
+						{Action: action_HandleEndorsementRequest},
+					},
+					Transitions: []Transition{{
+						To: State_Closing_Flush,
+					}},
+				}, {
+					// We are both the coordinator and the endorser; handle directly without stepping down.
+					Validator: validator_IsEndorsementRequestFromSelf,
+					Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
+				}, {
+					// Lower-priority node — reject so the sender knows this node is the active coordinator.
+					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
-			}, {
-				// We are both the coordinator and the endorser; handle directly without stepping down.
-				Validator: validator_IsEndorsementRequestFromSelf,
-				Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
-			}}},
+			},
 			Event_TransactionsDelegated: {Handlers: []EventHandler{{
 				Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 				Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},

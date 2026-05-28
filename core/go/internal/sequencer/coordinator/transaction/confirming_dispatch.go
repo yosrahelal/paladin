@@ -117,3 +117,11 @@ func action_SendPreDispatchRequest(ctx context.Context, txn *coordinatorTransact
 func action_NudgePreDispatchRequest(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
 	return txn.nudgePreDispatchRequest(ctx)
 }
+
+func validator_IsPreDispatchNotCurrentDelegateRejection(_ context.Context, _ *coordinatorTransaction, event common.Event) (bool, error) {
+	return event.(*PreDispatchRequestRejectedEvent).RejectionReason == common.RejectionReason_NotCurrentDelegate, nil
+}
+
+func validator_IsPreDispatchTransactionUnknownRejection(_ context.Context, _ *coordinatorTransaction, event common.Event) (bool, error) {
+	return event.(*PreDispatchRequestRejectedEvent).RejectionReason == common.RejectionReason_TransactionUnknown, nil
+}

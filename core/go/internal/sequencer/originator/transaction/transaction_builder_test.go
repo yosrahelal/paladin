@@ -201,6 +201,7 @@ func (b *TransactionBuilderForTesting) Build() *originatorTransaction {
 		b.latestFulfilledAssembleRequestID = uuid.New()
 		txn.latestFulfilledAssembleRequestID = b.latestFulfilledAssembleRequestID
 	case State_Reverted:
+		txn.currentDelegate = b.currentDelegate
 		b.latestFulfilledAssembleRequestID = uuid.New()
 		txn.latestFulfilledAssembleRequestID = b.latestFulfilledAssembleRequestID
 
@@ -209,6 +210,7 @@ func (b *TransactionBuilderForTesting) Build() *originatorTransaction {
 			RevertReason:   ptrTo("test revert reason"),
 		}
 	case State_Parked:
+		txn.currentDelegate = b.currentDelegate
 		b.latestFulfilledAssembleRequestID = uuid.New()
 		txn.latestFulfilledAssembleRequestID = b.latestFulfilledAssembleRequestID
 

@@ -29,11 +29,11 @@ import (
 )
 
 func validator_IsDelegationBlockHeightRejection(_ context.Context, _ *originator, event common.Event) (bool, error) {
-	return event.(*DelegationRequestRejectedEvent).RejectionReason == DelegationRejectionReason_BlockHeightTolerance, nil
+	return event.(*DelegationRequestRejectedEvent).RejectionReason == common.RejectionReason_BlockHeightTolerance, nil
 }
 
 func validator_IsDelegationNotActiveCoordinatorRejection(_ context.Context, _ *originator, event common.Event) (bool, error) {
-	return event.(*DelegationRequestRejectedEvent).RejectionReason == DelegationRejectionReason_NotActiveCoordinator, nil
+	return event.(*DelegationRequestRejectedEvent).RejectionReason == common.RejectionReason_NotCurrentDelegate, nil
 }
 
 func action_LogDelegationBlockHeightRejection(ctx context.Context, _ *originator, event common.Event) error {

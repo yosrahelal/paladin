@@ -49,16 +49,9 @@ func (*OriginatorCreatedEvent) TypeString() string {
 	return "Event_OriginatorCreated"
 }
 
-type DelegationRejectionReason int
-
-const (
-	DelegationRejectionReason_NotActiveCoordinator DelegationRejectionReason = iota // 0 — rejecting node is not the active coordinator
-	DelegationRejectionReason_BlockHeightTolerance                                  // 1 — sender and receiver block heights differ by more than the configured tolerance
-)
-
 type DelegationRequestRejectedEvent struct {
 	common.BaseEvent
-	RejectionReason        DelegationRejectionReason
+	RejectionReason        common.RejectionReason
 	ActiveCoordinator      string
 	OriginatorBlockHeight  int64
 	CoordinatorBlockHeight int64
