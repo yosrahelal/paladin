@@ -154,14 +154,21 @@ func (h *prepareBurnUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	}
 
 	// Build and encode the unlock data (separate to the data for this TX)
-	unlockResult, err := h.buildUnlockResult(ctx, notaryID, senderID, fromID, tx, nil /* no recipients */, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData, nil /* no spend outputs for burn */, cancelOutputs)
+	unlockInfo, err := h.buildUnlockInfo(ctx, tx, req.ResolvedVerifiers, req.StateQueryContext, &unlockInfoInput{
+		notaryID:      notaryID,
+		senderID:      senderID,
+		fromID:        fromID,
+		unlockData:    params.UnlockData,
+		cancelOutputs: cancelOutputs,
+		// no recipients, no spend outputs for burn
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	// Build the data info for this prepare transaction
-	infoStates := unlockResult.infoStates
-	prepareDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, unlockResult.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
+	infoStates := unlockInfo.infoStates
+	prepareDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, unlockInfo.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -172,9 +179,9 @@ func (h *prepareBurnUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	newLockInfo.Replaces = existingLock.id
 	newLockInfo.Salt = pldtypes.RandBytes32()
 	newLockInfo.SpendOutputs = []pldtypes.Bytes32{} // no outputs from burn
-	newLockInfo.SpendData = unlockResult.spendEncoded
+	newLockInfo.SpendData = unlockInfo.spendData
 	newLockInfo.CancelOutputs = newStateAllocatedIDs(cancelOutputs.states)
-	newLockInfo.CancelData = unlockResult.cancelEncoded
+	newLockInfo.CancelData = unlockInfo.cancelData
 	newLockInfo.SpendTxId = spendTxId
 	lock, err := h.noto.prepareLockInfo_V1(&newLockInfo, identityList{notaryID, senderID, fromID})
 	if err != nil {
@@ -190,7 +197,7 @@ func (h *prepareBurnUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	// Build the manifest
 	manifestState, err := h.noto.newManifestBuilder().
 		addOutputs(cancelOutputs).
-		addInfoStates(unlockResult.infoDistribution, infoStates...).
+		addInfoStates(unlockInfo.infoDistribution, infoStates...).
 		addLockInfo(lock).
 		buildManifest(ctx, req.StateQueryContext)
 	if err != nil {

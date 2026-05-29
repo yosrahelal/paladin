@@ -128,11 +128,18 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 		outputs.states = append(outputs.states, recipientOutputs.states...)
 	}
 
-	unlockResult, err := h.buildUnlockResult(ctx, notaryID, senderID, nil, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData, outputs, nil /** no outputs for cancel */)
-	infoStates := unlockResult.infoStates
+	unlockInfo, err := h.buildUnlockInfo(ctx, tx, req.ResolvedVerifiers, req.StateQueryContext, &unlockInfoInput{
+		notaryID:     notaryID,
+		senderID:     senderID,
+		recipients:   params.Recipients,
+		unlockData:   params.UnlockData,
+		spendOutputs: outputs,
+		// no outputs for cancel
+	})
+	infoStates := unlockInfo.infoStates
 
 	// build the data info for this prepare transaction
-	prepareDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, unlockResult.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
+	prepareDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, unlockInfo.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -144,9 +151,9 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	newLockInfo.Replaces = existingLock.id
 	newLockInfo.Salt = pldtypes.RandBytes32()
 	newLockInfo.SpendOutputs = newStateAllocatedIDs(outputs.states)
-	newLockInfo.SpendData = unlockResult.spendEncoded
+	newLockInfo.SpendData = unlockInfo.spendData
 	newLockInfo.CancelOutputs = []pldtypes.Bytes32{} // no cancel outputs
-	newLockInfo.CancelData = unlockResult.cancelEncoded
+	newLockInfo.CancelData = unlockInfo.cancelData
 	newLockInfo.SpendTxId = spendTxId
 	lock, err := h.noto.prepareLockInfo_V1(&newLockInfo, identityList{notaryID, senderID})
 	if err != nil {
@@ -162,7 +169,7 @@ func (h *prepareMintUnlockHandler) Assemble(ctx context.Context, tx *types.Parse
 	// Build the manifest
 	manifestState, err := h.noto.newManifestBuilder().
 		addOutputs(outputs).
-		addInfoStates(unlockResult.infoDistribution, infoStates...).
+		addInfoStates(unlockInfo.infoDistribution, infoStates...).
 		addLockInfo(lock).
 		buildManifest(ctx, req.StateQueryContext)
 	if err != nil {

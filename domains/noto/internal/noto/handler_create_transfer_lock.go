@@ -148,14 +148,22 @@ func (h *createTransferLockHandler) Assemble(ctx context.Context, tx *types.Pars
 	}
 
 	// Build and encode the unlock data (separate to the data for this TX)
-	unlockResult, err := h.buildUnlockResult(ctx, notaryID, senderID, fromID, tx, params.Recipients, req.ResolvedVerifiers, req.StateQueryContext, params.UnlockData, spendOutputs, cancelOutputs)
+	unlockInfo, err := h.buildUnlockInfo(ctx, tx, req.ResolvedVerifiers, req.StateQueryContext, &unlockInfoInput{
+		notaryID:      notaryID,
+		senderID:      senderID,
+		fromID:        fromID,
+		recipients:    params.Recipients,
+		unlockData:    params.UnlockData,
+		spendOutputs:  spendOutputs,
+		cancelOutputs: cancelOutputs,
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	// Build the info for the initiating transaction
-	infoStates := unlockResult.infoStates
-	createDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, unlockResult.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
+	infoStates := unlockInfo.infoStates
+	createDataInfo, err := h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, unlockInfo.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -168,9 +176,9 @@ func (h *createTransferLockHandler) Assemble(ctx context.Context, tx *types.Pars
 		Owner:         senderID.address,
 		Spender:       senderID.address,
 		SpendOutputs:  newStateAllocatedIDs(spendOutputs.states),
-		SpendData:     unlockResult.spendEncoded,
+		SpendData:     unlockInfo.spendData,
 		CancelOutputs: newStateAllocatedIDs(cancelOutputs.states),
-		CancelData:    unlockResult.cancelEncoded,
+		CancelData:    unlockInfo.cancelData,
 		SpendTxId:     spendTxId,
 	}, identityList{notaryID, senderID, fromID})
 	if err != nil {
@@ -184,7 +192,7 @@ func (h *createTransferLockHandler) Assemble(ctx context.Context, tx *types.Pars
 		addOutputs(cancelOutputs).
 		addOutputs(&remainderOutputs).
 		addLockInfo(lock).
-		addInfoStates(unlockResult.infoDistribution, infoStates...).
+		addInfoStates(unlockInfo.infoDistribution, infoStates...).
 		buildManifest(ctx, req.StateQueryContext)
 	if err != nil {
 		return nil, err

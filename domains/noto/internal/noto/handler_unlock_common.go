@@ -32,9 +32,9 @@ type unlockCommon struct {
 	noto *Noto
 }
 
-type unlockDataResult struct {
-	spendEncoded     []byte
-	cancelEncoded    []byte
+type unlockInfo struct {
+	spendData        []byte
+	cancelData       []byte
 	infoStates       []*prototk.NewState
 	infoDistribution identityList
 }
@@ -141,14 +141,24 @@ func (h *unlockCommon) buildUnlockOperationData(
 	return
 }
 
-// buildUnlockResult builds the encoded data for spend and cancel operations
-func (h *unlockCommon) buildUnlockResult(ctx context.Context, notaryID, senderID, fromID *identityPair, tx *types.ParsedTransaction, recipients []*types.UnlockRecipient, resolvedVerifiers []*prototk.ResolvedVerifier, stateQueryContext string, unlockData []byte, spendOutputs *preparedOutputs, cancelOutputs *preparedOutputs) (*unlockDataResult, error) {
-	infoDistribution, err := h.getAllRecipientsDistribution(ctx, tx, notaryID, senderID, fromID, recipients, resolvedVerifiers)
+type unlockInfoInput struct {
+	notaryID      *identityPair
+	senderID      *identityPair
+	fromID        *identityPair
+	recipients    []*types.UnlockRecipient
+	unlockData    []byte
+	spendOutputs  *preparedOutputs
+	cancelOutputs *preparedOutputs
+}
+
+// buildUnlockInfo builds the encoded data for spend and cancel operations
+func (h *unlockCommon) buildUnlockInfo(ctx context.Context, tx *types.ParsedTransaction, resolvedVerifiers []*prototk.ResolvedVerifier, stateQueryContext string, in *unlockInfoInput) (*unlockInfo, error) {
+	infoDistribution, err := h.getAllRecipientsDistribution(ctx, tx, in.notaryID, in.senderID, in.fromID, in.recipients, resolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
 
-	infoStates, err := h.noto.prepareDataInfo(ctx, unlockData, tx.DomainConfig.Variant, infoDistribution.identities(), tx.Transaction, resolvedVerifiers)
+	infoStates, err := h.noto.prepareDataInfo(ctx, in.unlockData, tx.DomainConfig.Variant, infoDistribution.identities(), tx.Transaction, resolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -159,23 +169,23 @@ func (h *unlockCommon) buildUnlockResult(ctx context.Context, notaryID, senderID
 		return nil, err
 	}
 
-	spendEncoded, spendManifest, err := h.buildUnlockOperationData(ctx, tx, stateQueryContext, spendOutputs, infoDistribution, infoStates)
+	spendData, spendManifest, err := h.buildUnlockOperationData(ctx, tx, stateQueryContext, in.spendOutputs, infoDistribution, infoStates)
 	if err != nil {
 		return nil, err
 	}
 
-	cancelEncoded, cancelManifest, err := h.buildUnlockOperationData(ctx, tx, stateQueryContext, cancelOutputs, infoDistribution, infoStates)
+	cancelData, cancelManifest, err := h.buildUnlockOperationData(ctx, tx, stateQueryContext, in.cancelOutputs, infoDistribution, infoStates)
 	if err != nil {
 		return nil, err
 	}
 
-	if tx.DomainConfig.IsV1() || tx.DomainConfig.IsV2() {
+	if !tx.DomainConfig.IsV0() {
 		infoStates = append([]*prototk.NewState{spendManifest, cancelManifest}, infoStates...)
 	}
 
-	return &unlockDataResult{
-		spendEncoded:     spendEncoded,
-		cancelEncoded:    cancelEncoded,
+	return &unlockInfo{
+		spendData:        spendData,
+		cancelData:       cancelData,
 		infoStates:       infoStates,
 		infoDistribution: infoDistribution,
 	}, nil
@@ -265,7 +275,7 @@ func (h *unlockCommon) assembleStates(ctx context.Context, tx *types.ParsedTrans
 		return nil, nil, nil, err
 	}
 
-	if tx.DomainConfig.IsV1() || tx.DomainConfig.IsV2() {
+	if !tx.DomainConfig.IsV0() {
 		infoStates = append([]*prototk.NewState{spendManifest}, infoStates...)
 	}
 
