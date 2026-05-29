@@ -34,12 +34,6 @@ var NotoFactoryJSON []byte
 //go:embed abis/Noto_V0.json
 var NotoV0JSON []byte
 
-//go:embed abis/PoseidonUnit2L.json
-var PoseidonUnit2L []byte
-
-//go:embed abis/PoseidonUnit3L.json
-var PoseidonUnit3L []byte
-
 //go:embed abis/SmtLib.json
 var SmtLibJSON []byte
 

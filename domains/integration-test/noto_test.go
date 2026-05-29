@@ -65,16 +65,12 @@ func (s *notoTestSuite) SetupSuite() {
 	contractSource := map[string][]byte{
 		"factory":         helpers.NotoFactoryJSON,
 		"noto_v0":         helpers.NotoV0JSON,
-		"PoseidonUnit2L":  helpers.PoseidonUnit2L,
-		"PoseidonUnit3L":  helpers.PoseidonUnit3L,
 		"SmtLib":          helpers.SmtLibJSON,
 		"noto_nullifiers": helpers.NotoNullifiersJSON,
 	}
 	deployOrder := []string{
 		"factory",
 		"noto_v0",
-		"PoseidonUnit2L",
-		"PoseidonUnit3L",
 		"SmtLib",
 		"noto_nullifiers",
 	}
