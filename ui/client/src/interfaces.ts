@@ -244,3 +244,21 @@ export interface IDomainContract {
   }
   created: string
 }
+
+export interface IPrivacyGroup {
+  id: string
+  domain: string
+  created: string
+  name: string,
+  members: string[]
+  properties: any
+  configuration: {
+    endorsementType: string
+    evmVersion: string
+    externalCallsEnabled: boolean
+  },
+  genesisSalt: string
+  genesisSchema: string
+  genesisTransaction: string
+  contractAddress: string
+}

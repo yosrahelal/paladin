@@ -45,6 +45,7 @@ enum HeaderTab {
   Keys = 2,
   Registry = 3,
   Domains = 4,
+  PrivacyGroups = 5
 }
 
 export const Header: React.FC = () => {
@@ -53,7 +54,7 @@ export const Header: React.FC = () => {
   const navigate = useNavigate();
   const pathname = useLocation().pathname.toLowerCase();
   const theme = useTheme();
-  const lessThanMedium = useMediaQuery(theme.breakpoints.down('md'));
+  const lessThanLarge = useMediaQuery(theme.breakpoints.down('lg'));
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [searchParams] = useSearchParams();
 
@@ -73,6 +74,8 @@ export const Header: React.FC = () => {
       return HeaderTab.Registry;
     } else if (path.startsWith(AppRoutes.Domains)) {
       return HeaderTab.Domains;
+    } else if (path.startsWith(AppRoutes.PrivactGroups)) {
+      return HeaderTab.PrivacyGroups;
     }
     return HeaderTab.Transactions;
   };
@@ -95,8 +98,8 @@ export const Header: React.FC = () => {
           >
             <Grid2 container alignItems="center">
               <Grid2
-                size={{ xs: 12, sm: 12, md: 3 }}
-                textAlign={lessThanMedium ? 'center' : 'left'}
+                size={{ xs: 12, sm: 12, md: 12, lg: 2 }}
+                textAlign={lessThanLarge ? 'center' : 'left'}
               >
                 <ButtonBase
                   onClick={() => window.location.href = '/ui'}>
@@ -106,7 +109,7 @@ export const Header: React.FC = () => {
                   />
                 </ButtonBase>
               </Grid2>
-              <Grid2 size={{ xs: 12, sm: 12, md: 6 }} alignContent="center">
+              <Grid2 size={{ xs: 12, sm: 12, md: 12, lg: 8 }} alignContent="center">
                 <Tabs
                   TabIndicatorProps={{ style: { height: '4px' } }}
                   value={tab}
@@ -122,15 +125,16 @@ export const Header: React.FC = () => {
                   <Tab sx={{ minWidth: '120px' }} label={t('localKeys')} onClick={event => customNavigate(AppRoutes.Keys, event, navigate)} />
                   <Tab sx={{ minWidth: '120px' }} label={t('registry')} onClick={event => customNavigate(AppRoutes.Registry, event, navigate)} />
                   <Tab sx={{ minWidth: '120px' }} label={t('domains')} onClick={event => customNavigate(AppRoutes.Domains, event, navigate)} />
+                  <Tab sx={{ minWidth: '120px' }} label={t('privacyGroups')} onClick={event => customNavigate(AppRoutes.PrivactGroups, event, navigate)} />
                 </Tabs>
               </Grid2>
-              <Grid2 size={{ xs: 12, sm: 12, md: 3 }}>
+              <Grid2 size={{ xs: 12, sm: 12, md: 12, lg: 2 }}>
                 <Grid2
                   container
-                  justifyContent={lessThanMedium ? 'center' : 'right'}
+                  justifyContent={lessThanLarge ? 'center' : 'right'}
                   spacing={1}
                   alignItems="center"
-                  sx={{ padding: lessThanMedium ? '20px' : undefined }}
+                  sx={{ padding: lessThanLarge ? '20px' : undefined }}
                 >
                   {refreshRequired && (
                     <Grid2>
@@ -160,7 +164,7 @@ export const Header: React.FC = () => {
       </AppBar>
       <Box
         sx={{
-          height: (theme) => (lessThanMedium ? '190px' : theme.mixins.toolbar),
+          height: (theme) => (lessThanLarge ? '190px' : theme.mixins.toolbar),
         }}
       />
       <SettingsMenu anchorEl={anchorEl} setAnchorEl={setAnchorEl} />

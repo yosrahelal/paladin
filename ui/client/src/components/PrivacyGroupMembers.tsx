@@ -14,14 +14,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export const AppRoutes = {
-  Keys: '/ui/keys',
-  Submissions: '/ui/submissions',
-  Registry: '/ui/registry',
-  Domains: '/ui/domains',
-  Transactions: '/ui/transactions',
-  Transaction: '/ui/transactions/:hashOrId',
-  DomainContract: '/ui/domains/:address',
-  PrivactGroups: '/ui/privacy-groups',
-  PrivacyGroup: '/ui/privacy-groups/:idOrAddress'
+import { Box } from "@mui/material";
+
+type Props = {
+  members: string[]
 };
+
+export const PrivacyGroupMembers: React.FC<Props> = ({
+  members
+}) => {
+
+  return (
+    <Box sx={{
+      display: 'flex',
+      gap: '10px',
+      overflowX: 'auto',
+    }}>
+      {members.map(member =>
+        <Box key={member}
+          sx={{
+            paddingTop: '4px',
+            paddingBottom: '4px',
+            paddingLeft: '8px',
+            paddingRight: '8px',
+            borderRadius: '4px',
+            backgroundColor: theme => theme.palette.background.paper
+          }}
+        >
+          {member}
+        </Box>
+      )}
+    </Box>
+  );
+
+}

@@ -38,6 +38,8 @@ import { TransactionDetails } from "./views/TransactionDetails";
 import { IPaladinTransactionPagingReference, ITransactionPagingReference } from "./interfaces";
 import { Submissions } from "./views/Submissions";
 import { DomainContract } from "./views/DomainContract";
+import { PrivacyGroups } from "./views/PrivacyGroups";
+import { PrivacyGroup } from "./views/PrivacyGroup";
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({}),
@@ -59,6 +61,10 @@ function App() {
   const [submissionsPage, setSubmissionsPage] = useState(0);
   const [submissionsRowsPerPage, setSubmissionsRowsPerPage] = useState(10);
   const [selectedDomain, setSelectedDomain] = useState<string>();
+  const [privacyGroupsPage, setPrivacyGroupsPage] = useState(0);
+  const [privacyGroupsRowsPerPage, setPrivacyGroupsRowsPerPage] = useState(10);
+  const [privacyGroupsRefTimestamps, sePrivacyGroupsRefTimestamps] = useState<string[]>([]);
+  const [privacyGroupsSortAscending, setPrivacyGroupsSortAscending] = useState(false);
 
   const [systemTheme, setSystemTheme] = useState(
     window.matchMedia &&
@@ -155,6 +161,17 @@ function App() {
                   setSelectedDomain={setSelectedDomain}
                 />} />
                 <Route path={AppRoutes.DomainContract} element={<DomainContract />} />
+                <Route path={AppRoutes.PrivactGroups} element={<PrivacyGroups
+                  sortAscending={privacyGroupsSortAscending}
+                  setSortAscending={setPrivacyGroupsSortAscending}
+                  refTimestamps={privacyGroupsRefTimestamps}
+                  setRefTimestamps={sePrivacyGroupsRefTimestamps}
+                  page={privacyGroupsPage}
+                  setPage={setPrivacyGroupsPage}
+                  rowsPerPage={privacyGroupsRowsPerPage}
+                  setRowsPerPage={setPrivacyGroupsRowsPerPage}
+                />} />
+                <Route path={AppRoutes.PrivacyGroup} element={<PrivacyGroup />} />
                 <Route path="*" element={<Navigate to={AppRoutes.Transactions} replace />} />
               </Routes>
             </BrowserRouter>

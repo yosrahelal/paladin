@@ -42,6 +42,7 @@ import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useNavigate } from 'react-router-dom';
 import { customNavigate } from '../utils';
+import { Captions } from 'lucide-react';
 
 type Props = {
   domainAddress: string
@@ -78,7 +79,7 @@ export const SmartContractsTable: React.FC<Props> = ({
     data: contracts,
     error
   } = useQuery({
-    queryKey: ['contracts', domainAddress, sortAscending, page, rowsPerPage, refTimestamps],
+    queryKey: ['contracts', domainAddress, sortAscending, page, rowsPerPage],
     queryFn: () => querySmartContractsByDomain(domainAddress, sortAscending, rowsPerPage, refTimestamps[refTimestamps.length - 1]),
   });
 
@@ -248,7 +249,7 @@ export const SmartContractsTable: React.FC<Props> = ({
                   {contract.config.contractConfig.tokenName.length > 0 ? contract.config.contractConfig.tokenName : '--'}
                 </TableCell>}
               <TableCell>
-                <Hash title={t('address')} hash={contract.address} />
+                <Hash Icon={<Captions size="18px" />} title={t('address')} hash={contract.address} />
               </TableCell>
               <TableCell>
                 <DomainButtons
