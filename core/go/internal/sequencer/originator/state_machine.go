@@ -76,8 +76,10 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 		Events: map[EventType]EventHandlers{
 			common.Event_HeartbeatReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromHeartbeat}},
+				}, {
 					Validator: validator_IsHeartbeatSenderLive,
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromHeartbeat},
@@ -135,8 +137,10 @@ var stateDefinitionsMap = StateDefinitions{
 	State_Observing: {
 		Events: map[EventType]EventHandlers{
 			common.Event_HeartbeatReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromHeartbeat}},
+				}, {
 					Validator: validator_IsHeartbeatSenderLive,
 					Actions: []ActionRule{
 						{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
@@ -215,6 +219,8 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_HeartbeatReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromHeartbeat}},
+				}, {
 					// Process confirmed transactions from every heartbeat regardless of sender state or identity.
 					Actions: []ActionRule{{Action: action_ProcessConfirmedTransactions}},
 				}, {

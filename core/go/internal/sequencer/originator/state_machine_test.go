@@ -172,6 +172,25 @@ func TestStateMachine_Idle_HeartbeatReceived_NonLiveState_StaysIdle(t *testing.T
 	assert.Equal(t, "existing-coordinator", o.currentActiveCoordinator, "coordinator must not change on non-live heartbeat in Idle")
 }
 
+// HeartbeatReceived in Idle from a new node → endorser pool grows and priority list is recomputed.
+func TestStateMachine_Idle_HeartbeatReceived_NewSender_UpdatesEndorserCandidates(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		NodeName("node1").
+		WithEndorserCandidates("node1").
+		CoordinatorPriorityList("node1").
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Idle},
+	}))
+
+	assert.Equal(t, State_Idle, o.GetCurrentState())
+	assert.Contains(t, o.endorserCandidates, "node2")
+	assert.Len(t, o.coordinatorPriorityList, 2)
+}
+
 // TransactionCreated in Idle → Sending; delegation request sent.
 func TestStateMachine_Idle_TransactionCreated_TransitionsToSending_SendsDelegationRequest(t *testing.T) {
 	ctx := context.Background()
@@ -381,6 +400,25 @@ func TestStateMachine_Observing_HeartbeatReceived_ClosingState_NoTimerResetAndNo
 	assert.Equal(t, State_Observing, o.GetCurrentState())
 	assert.Equal(t, "existing-coordinator", o.currentActiveCoordinator, "Closing heartbeat must not update coordinator")
 	assert.Equal(t, 3, o.heartbeatIntervalsSinceLastReceive, "timer must not be reset for Closing heartbeat")
+}
+
+// HeartbeatReceived in Observing from a new node → endorser pool grows.
+func TestStateMachine_Observing_HeartbeatReceived_NewSender_UpdatesEndorserCandidates(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
+		NodeName("node1").
+		WithEndorserCandidates("node1").
+		CoordinatorPriorityList("node1").
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Idle},
+	}))
+
+	assert.Equal(t, State_Observing, o.GetCurrentState())
+	assert.Contains(t, o.endorserCandidates, "node2")
+	assert.Len(t, o.coordinatorPriorityList, 2)
 }
 
 // HeartbeatInterval in Observing within grace period → increments counter; stays Observing.
@@ -889,6 +927,26 @@ func TestStateMachine_Sending_NewBlock_UpdatesBlockHeight_StaysSending(t *testin
 
 	assert.Equal(t, State_Sending, o.GetCurrentState())
 	assert.Equal(t, uint64(100), o.currentBlockHeight)
+}
+
+// HeartbeatReceived in Sending from a new node → endorser pool grows and priority list is recomputed.
+func TestStateMachine_Sending_HeartbeatReceived_NewSender_UpdatesEndorserCandidates(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+		NodeName("node1").
+		WithEndorserCandidates("node1").
+		CoordinatorPriorityList("node1").
+		CurrentActiveCoordinator("node1").
+		Build()
+
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Idle},
+	}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Contains(t, o.endorserCandidates, "node2")
+	assert.Len(t, o.coordinatorPriorityList, 2)
 }
 
 // HeartbeatReceived in Sending from a live non-current node when the inactive grace period has NOT

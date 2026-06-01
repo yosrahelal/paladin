@@ -81,8 +81,13 @@ var stateDefinitionsMap = StateDefinitions{
 	State_Idle: {
 		Events: map[EventType]EventHandlers{
 			common.Event_HeartbeatReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{
+						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
+				}, {
 					Validator: validator_IsHeartbeatSenderLive,
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinator},
@@ -95,7 +100,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+					Actions: []ActionRule{{
+						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
 				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
@@ -138,8 +146,12 @@ var stateDefinitionsMap = StateDefinitions{
 	State_Observing: {
 		Events: map[EventType]EventHandlers{
 			common.Event_HeartbeatReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{
+						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode}},
+				}, {
 					Validator: validator_IsHeartbeatSenderLive,
 					Actions: []ActionRule{
 						{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
@@ -150,7 +162,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+					Actions: []ActionRule{{
+						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
 				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
@@ -249,8 +264,13 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			common.Event_HeartbeatReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{
+						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
+				}, {
 					// We're not going to take over if see an active heartbeat from a higher priority coordinator.
 					// Clean up any delegations and choose an appropriate state to move back to.
 					Validator: statemachine.ValidatorAnd(
@@ -275,6 +295,17 @@ var stateDefinitionsMap = StateDefinitions{
 						// transactions to be cleared from memory.
 						To: State_Closing,
 						If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
+					}},
+				}, {
+					// A live heartbeat from a lower-priority coordinator: reassert that we are the active
+					// coordinator so the sender can update its priority view.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatSenderLive,
+						statemachine.ValidatorNot(validator_IsHeartbeatFromHigherPriorityCoordinator),
+					),
+					Actions: []ActionRule{{
+						Action: action_SendHeartbeat,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
 					}},
 				}, {
 					// The active coordinator has started flushing in response to our handover request.
@@ -317,7 +348,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+					Actions: []ActionRule{{
+						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
 				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
@@ -349,11 +383,18 @@ var stateDefinitionsMap = StateDefinitions{
 					// complex routing of the event between the coordinator and transaction state machines.
 					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
 					// could speed up time to consistency in a network where there are multiple coordinators.
+					// Sending an additional heartbeat at this point achieves a largely similar effect.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
 					),
-					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
+					Actions: []ActionRule{
+						{Action: action_RejectEndorsementEndorserIsActiveCoordinator},
+						{
+							Action: action_SendHeartbeat,
+							If:     guard_IsCoordinatorEndorserSelectionMode,
+						},
+					},
 				}},
 			},
 			Event_TransactionsDelegated: {
@@ -409,8 +450,13 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			common.Event_HeartbeatReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{
+						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
+				}, {
 					// The current active coordinator is still flushing.
 					Validator: statemachine.ValidatorAnd(
 						validator_IsHeartbeatFromCurrentActiveCoordinator,
@@ -457,6 +503,17 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Closing,
 						If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
 					}},
+				}, {
+					// A live heartbeat from a lower-priority coordinator: reassert that we are the active
+					// coordinator so the sender can update its priority view.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatSenderLive,
+						statemachine.ValidatorNot(validator_IsHeartbeatFromHigherPriorityCoordinator),
+					),
+					Actions: []ActionRule{{
+						Action: action_SendHeartbeat,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
 				}},
 			},
 			Event_HandoverRequest: {
@@ -479,7 +536,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+					Actions: []ActionRule{{
+						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
 				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
@@ -510,11 +570,15 @@ var stateDefinitionsMap = StateDefinitions{
 					// complex routing of the event between the coordinator and transaction state machines.
 					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
 					// could speed up time to consistency in a network where there are multiple coordinators.
+					// Sending an additional heartbeat at this point achieves a largely similar effect.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
 					),
-					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
+					Actions: []ActionRule{
+						{Action: action_RejectEndorsementEndorserIsActiveCoordinator},
+						{Action: action_SendHeartbeat, If: guard_IsCoordinatorEndorserSelectionMode},
+					},
 				}},
 			},
 			Event_TransactionsDelegated: {
@@ -582,8 +646,13 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			common.Event_HeartbeatReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{
+						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
+				}, {
 					Validator: statemachine.ValidatorAnd(
 						validator_IsHeartbeatFromHigherPriorityCoordinator,
 						validator_IsHeartbeatSenderLive,
@@ -602,6 +671,17 @@ var stateDefinitionsMap = StateDefinitions{
 					}, {
 						To: State_Closing,
 						If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
+					}},
+				}, {
+					// A live heartbeat from a lower-priority coordinator: reassert that we are the active
+					// coordinator so the sender can update its priority view.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatSenderLive,
+						statemachine.ValidatorNot(validator_IsHeartbeatFromHigherPriorityCoordinator),
+					),
+					Actions: []ActionRule{{
+						Action: action_SendHeartbeat,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
 					}},
 				}},
 			},
@@ -630,7 +710,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+					Actions: []ActionRule{{
+						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
 				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
@@ -668,12 +751,16 @@ var stateDefinitionsMap = StateDefinitions{
 					// complex routing of the event between the coordinator and transaction state machines.
 					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
 					// could speed up time to consistency in a network where there are multiple coordinators.
+					// Sending an additional heartbeat at this point achieves a largely similar effect.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromSelf),
 					),
-					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
+					Actions: []ActionRule{
+						{Action: action_RejectEndorsementEndorserIsActiveCoordinator},
+						{Action: action_SendHeartbeat, If: guard_IsCoordinatorEndorserSelectionMode},
+					},
 				}},
 			},
 			Event_TransactionsDelegated: {
@@ -769,8 +856,13 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			common.Event_HeartbeatReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{
+						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
+				}, {
 					// A higher-priority node live node is announcing itself; step down.
 					Validator: statemachine.ValidatorAnd(
 						validator_IsHeartbeatFromHigherPriorityCoordinator,
@@ -783,6 +875,14 @@ var stateDefinitionsMap = StateDefinitions{
 							{Action: action_CleanUpTransactionsNotYetDispatched},
 						},
 					}},
+				}, {
+					// A live heartbeat from a lower-priority coordinator: reassert that we are the active
+					// coordinator so the sender can update its priority view.
+					Validator: statemachine.ValidatorAnd(
+						validator_IsHeartbeatSenderLive,
+						statemachine.ValidatorNot(validator_IsHeartbeatFromHigherPriorityCoordinator),
+					),
+					Actions: []ActionRule{{Action: action_SendHeartbeat, If: guard_IsCoordinatorEndorserSelectionMode}},
 				}},
 			},
 			Event_HandoverRequest: {
@@ -807,7 +907,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+					Actions: []ActionRule{{
+						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
 				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
@@ -838,12 +941,16 @@ var stateDefinitionsMap = StateDefinitions{
 					// complex routing of the event between the coordinator and transaction state machines.
 					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
 					// could speed up time to consistency in a network where there are multiple coordinators.
+					// Sending an additional heartbeat at this point achieves a largely similar effect.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromSelf),
 					),
-					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
+					Actions: []ActionRule{
+						{Action: action_RejectEndorsementEndorserIsActiveCoordinator},
+						{Action: action_SendHeartbeat, If: guard_IsCoordinatorEndorserSelectionMode},
+					},
 				}},
 			},
 			Event_TransactionsDelegated: {
@@ -923,8 +1030,13 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				}}},
 			common.Event_HeartbeatReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{
+						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
+				}, {
 					Validator: validator_IsHeartbeatSenderLive,
 					Actions: []ActionRule{
 						{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
@@ -935,7 +1047,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+					Actions: []ActionRule{{
+						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
 				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
@@ -1016,8 +1131,10 @@ var stateDefinitionsMap = StateDefinitions{
 		OnTransitionTo: []ActionRule{{Action: action_SendHeartbeatWithLocks}},
 		Events: map[EventType]EventHandlers{
 			common.Event_HeartbeatReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_AddHeartbeatSenderToEndorserCandidates, If: guard_IsCoordinatorEndorserSelectionMode}},
+				}, {
 					Validator: validator_IsHeartbeatSenderLive,
 					Actions: []ActionRule{
 						{Action: action_ResetHeartbeatIntervalsSinceLastReceive},
@@ -1027,7 +1144,7 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+					Actions: []ActionRule{{Action: action_AddEndorsementRequestSenderToEndorserCandidates, If: guard_IsCoordinatorEndorserSelectionMode}},
 				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},

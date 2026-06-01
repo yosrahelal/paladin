@@ -163,13 +163,19 @@ func (c *coordinator) recordOriginatorActivity(node string) {
 	c.originatorActivity[node] = 0
 }
 
+// guard_IsCoordinatorEndorserSelectionMode returns true when the coordinator is
+// configured for COORDINATOR_ENDORSER mode, where all endorsers are also coordinator candidates.
+func guard_IsCoordinatorEndorserSelectionMode(_ context.Context, c *coordinator) bool {
+	return c.coordinatorSelection == prototk.ContractConfig_COORDINATOR_ENDORSER
+}
+
 // updateEndorserCandidates adds newly-discovered endorser nodes to the candidate pool.
 // Only operates in ENDORSER mode; no-op in STATIC/SENDER. When new nodes are actually added
 // both the coordinator's own priority list is recomputed and the co-located originator is
 // notified with the updated candidates so it can recompute its own list independently.
-func (c *coordinator) updateEndorserCandidates(ctx context.Context, nodes ...string) {
+func (c *coordinator) updateEndorserCandidates(ctx context.Context, nodes ...string) bool {
 	if c.coordinatorSelection != prototk.ContractConfig_COORDINATOR_ENDORSER {
-		return
+		return false
 	}
 	before := len(c.endorserCandidates)
 	for _, node := range nodes {
@@ -192,7 +198,9 @@ func (c *coordinator) updateEndorserCandidates(ctx context.Context, nodes ...str
 			// Put a copy of the candidates in the event so the originator can't modify the coordinator's internal state.
 			Nodes: slices.Clone(c.endorserCandidates),
 		})
+		return true
 	}
+	return false
 }
 
 func (c *coordinator) coordinatorTransactionHandleEvent(ctx context.Context, txID uuid.UUID, event common.Event) error {
@@ -233,7 +241,7 @@ func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator 
 		c.queueEventInternal,
 		c.coordinatorTransactionHandleEvent,
 		c.getCoordinatorTransactionState,
-		c.updateEndorserCandidates,
+		func(ctx context.Context, nodes ...string) { c.updateEndorserCandidates(ctx, nodes...) },
 		c.engineIntegration,
 		c.getCurrentBlockHeight,
 		c.syncPoints,

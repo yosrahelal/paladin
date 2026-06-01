@@ -138,6 +138,24 @@ func TestCoordinator_WhenIdle_StaysIdle_OnHeartbeatFromNodeInNonActiveState(t *t
 	assert.Equal(t, "node1", c.currentActiveCoordinator, "non-live heartbeat must leave currentActiveCoordinator unchanged")
 }
 
+func TestCoordinator_WhenIdle_HeartbeatReceived_UpdatesEndorserCandidates(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodeName("node1").
+		EndorserCandidates("node1").
+		CoordinatorPriorityList("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Idle},
+	}))
+
+	assert.Equal(t, State_Idle, c.GetCurrentState())
+	assert.Contains(t, c.endorserCandidates, "node2")
+}
+
 func TestCoordinator_WhenIdleAndTransactionsDelegatedToSelf_TransitionsToActive(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
@@ -230,7 +248,7 @@ func TestCoordinator_WhenIdle_EndorsementRequestReceived_BlockHeightToleranceExc
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
-func TestCoordinator_WhenIdle_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+func TestCoordinator_WhenIdle_EndorsementRequestReceived_UpdatesEndorserCandidatesFromSender(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
 		NodeName("node1").
@@ -239,7 +257,6 @@ func TestCoordinator_WhenIdle_EndorsementRequestReceived_UpdatesEndorserCandidat
 		Build()
 
 	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
-	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
@@ -381,7 +398,7 @@ func TestCoordinator_WhenObserving_EndorsementRequestReceived_BlockHeightToleran
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
-func TestCoordinator_WhenObserving_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+func TestCoordinator_WhenObserving_EndorsementRequestReceived_UpdatesEndorserCandidatesFromSender(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
 		NodeName("node2").
@@ -390,10 +407,27 @@ func TestCoordinator_WhenObserving_EndorsementRequestReceived_UpdatesEndorserCan
 		Build()
 
 	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
-	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
+func TestCoordinator_WhenObserving_HeartbeatReceived_UpdatesEndorserCandidates(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
+		NodeName("node1").
+		EndorserCandidates("node1").
+		CoordinatorPriorityList("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Idle},
+	}))
+
+	assert.Equal(t, State_Observing, c.GetCurrentState())
+	assert.Contains(t, c.endorserCandidates, "node2")
 }
 
 func TestCoordinator_WhenElectRequestTimeoutFires_NudgesHandoverRequest(t *testing.T) {
@@ -598,6 +632,25 @@ func TestCoordinator_WhenElect_HigherPriorityHeartbeat_HasInflightAndDispatched_
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
 }
 
+func TestCoordinator_WhenElect_HeartbeatReceived_LiveLowerPriority_ReassertsByHeartbeat(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		EndorserCandidates("node1", "node2").
+		CoordinatorPriorityList("node1", "node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
+	}))
+
+	assert.Equal(t, State_Elect, c.GetCurrentState())
+	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "live lower-priority heartbeat in Elect triggers reassertion heartbeat")
+}
+
 func TestCoordinator_WhenElect_HandoverRequest_HigherPriority_HasDispatched_TransitionsToClosingFlush(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
@@ -793,7 +846,7 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_BlockHeightToleranceEx
 	assert.Equal(t, "node2", c.currentActiveCoordinator)
 }
 
-func TestCoordinator_WhenElect_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+func TestCoordinator_WhenElect_EndorsementRequestReceived_UpdatesEndorserCandidatesFromSender(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
 		NodeName("node1").
@@ -802,7 +855,6 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_UpdatesEndorserCandida
 		Build()
 
 	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
-	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
@@ -998,6 +1050,25 @@ func TestCoordinator_WhenPrepared_HeartbeatReceived_HigherPriority_HasInflightAn
 	}))
 	// guard_HasTransactionsInflight = true, guard_HasUnconfirmedDispatchedTransactions = true → Closing_Flush.
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+}
+
+func TestCoordinator_WhenPrepared_HeartbeatReceived_LiveLowerPriority_ReassertsByHeartbeat(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		EndorserCandidates("node1", "node2").
+		CoordinatorPriorityList("node1", "node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
+	}))
+
+	assert.Equal(t, State_Prepared, c.GetCurrentState())
+	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "live lower-priority heartbeat in Prepared triggers reassertion heartbeat")
 }
 
 func TestCoordinator_WhenPrepared_HandoverRequest_HigherPriority_HasDispatched_TransitionsToClosingFlush(t *testing.T) {
@@ -1211,7 +1282,7 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_BlockHeightToleranc
 	assert.Equal(t, "node2", c.currentActiveCoordinator)
 }
 
-func TestCoordinator_WhenPrepared_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+func TestCoordinator_WhenPrepared_EndorsementRequestReceived_UpdatesEndorserCandidatesFromSender(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
 		NodeName("node1").
@@ -1220,7 +1291,6 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_UpdatesEndorserCand
 		Build()
 
 	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
-	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
@@ -1330,6 +1400,25 @@ func TestCoordinator_WhenActive_HeartbeatReceived_NotHigherPriority_IgnoresAndSt
 		},
 	}))
 	assert.Equal(t, State_Active, c.GetCurrentState())
+}
+
+func TestCoordinator_WhenActive_HeartbeatReceived_LiveLowerPriority_ReassertsByHeartbeat(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		EndorserCandidates("node1", "node2").
+		CoordinatorPriorityList("node1", "node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
+	}))
+
+	assert.Equal(t, State_Active, c.GetCurrentState())
+	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "live lower-priority heartbeat in Active triggers reassertion heartbeat")
 }
 
 func TestCoordinator_WhenActive_HandoverRequest_HigherPriority_HasDispatched_TransitionsToClosingFlush(t *testing.T) {
@@ -1643,7 +1732,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_LowerPriority_Rejects
 		NodeName("node1").
 		CurrentActiveCoordinator("node1").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		EndorserCandidates("node2", "node3").
+		EndorserCandidates("node1", "node2", "node3").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		WithMockTransportWriter().
 		Build()
@@ -1653,6 +1742,10 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_LowerPriority_Rejects
 		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_EndorserIsActiveCoordinator,
 		int64(0), int64(0), int64(0),
 	).Return(nil)
+	// After rejecting a lower-priority sender, Active reasserts its coordinator status to all candidates.
+	mocks.TransportWriter.EXPECT().SendHeartbeat(mock.Anything, "node1", mock.Anything, mock.Anything).Return(nil)
+	mocks.TransportWriter.EXPECT().SendHeartbeat(mock.Anything, "node2", mock.Anything, mock.Anything).Return(nil)
+	mocks.TransportWriter.EXPECT().SendHeartbeat(mock.Anything, "node3", mock.Anything, mock.Anything).Return(nil)
 
 	event := newLowerPriorityEndorsementEvent("node3")
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
@@ -1684,7 +1777,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_BlockHeightToleranceE
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
-func TestCoordinator_WhenActive_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+func TestCoordinator_WhenActive_EndorsementRequestReceived_UpdatesEndorserCandidatesFromSender(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node1").
@@ -1693,7 +1786,6 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_UpdatesEndorserCandid
 		Build()
 
 	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
-	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
@@ -1721,7 +1813,7 @@ func TestCoordinator_WhenActiveFLush_HigherPriorityHeartbeat_TransitionsToClosin
 		NodeName("node2").
 		CurrentActiveCoordinator("node2").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		EndorserCandidates("node1"). // for OnTransitionTo Closing_Flush heartbeat
+		EndorserCandidates("node1", "node2"). // for OnTransitionTo Closing_Flush heartbeat
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
@@ -1733,6 +1825,25 @@ func TestCoordinator_WhenActiveFLush_HigherPriorityHeartbeat_TransitionsToClosin
 	}))
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
 	assert.Equal(t, "node1", c.currentActiveCoordinator, "action_UpdateActiveCoordinator must record the new active node")
+}
+
+func TestCoordinator_WhenActiveFLush_HeartbeatReceived_LiveLowerPriority_ReassertsByHeartbeat(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		EndorserCandidates("node1", "node2").
+		CoordinatorPriorityList("node1", "node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
+	}))
+
+	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
+	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "live lower-priority heartbeat in Active_Flush triggers reassertion heartbeat")
 }
 
 func TestCoordinator_WhenActiveFLush_HandoverRequest_HigherPriority_HasDispatched_TransitionsToClosingFlush(t *testing.T) {
@@ -1999,7 +2110,7 @@ func TestCoordinator_WhenActiveFLush_EndorsementRequestReceived_BlockHeightToler
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
-func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_UpdatesEndorserCandidatesFromSender(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
 		NodeName("node1").
@@ -2008,7 +2119,6 @@ func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_UpdatesEndorserC
 		Build()
 
 	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
-	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
@@ -2021,7 +2131,7 @@ func TestCoordinator_WhenEnteringClosingFlush_OnTransitionTo_SendsImmediateHeart
 		NodeName("node2").
 		CurrentActiveCoordinator("node2").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		EndorserCandidates("node1").
+		EndorserCandidates("node1", "node2").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
@@ -2248,7 +2358,7 @@ func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_BlockHeightTole
 	assert.Equal(t, "node3", c.currentActiveCoordinator)
 }
 
-func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_UpdatesEndorserCandidatesFromSender(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
 		NodeName("node2").
@@ -2257,7 +2367,6 @@ func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_UpdatesEndorser
 		Build()
 
 	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
-	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
@@ -2284,6 +2393,24 @@ func TestCoordinator_WhenClosingFlush_HeartbeatReceived_LiveSender_UpdatesActive
 	assert.Equal(t, 0, c.heartbeatIntervalsSinceLastReceive, "liveness counter must be reset")
 }
 
+func TestCoordinator_WhenClosingFlush_HeartbeatReceived_UpdatesEndorserCandidates(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
+		NodeName("node1").
+		EndorserCandidates("node1").
+		CoordinatorPriorityList("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Idle},
+	}))
+
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	assert.Contains(t, c.endorserCandidates, "node2")
+}
+
 func TestCoordinator_WhenClosing_HeartbeatReceived_FromLiveSender_ResetsCounterAndUpdatesCoordinator(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
@@ -2300,6 +2427,24 @@ func TestCoordinator_WhenClosing_HeartbeatReceived_FromLiveSender_ResetsCounterA
 	assert.Equal(t, State_Closing, c.GetCurrentState())
 	assert.Equal(t, 0, c.heartbeatIntervalsSinceLastReceive, "action_ResetHeartbeatIntervalsSinceLastReceive must clear the counter")
 	assert.Equal(t, "node2", c.currentActiveCoordinator, "action_UpdateActiveCoordinator must record the sender")
+}
+
+func TestCoordinator_WhenClosing_HeartbeatReceived_UpdatesEndorserCandidates(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
+		NodeName("node1").
+		EndorserCandidates("node1").
+		CoordinatorPriorityList("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Idle},
+	}))
+
+	assert.Equal(t, State_Closing, c.GetCurrentState())
+	assert.Contains(t, c.endorserCandidates, "node2")
 }
 
 func TestCoordinator_WhenClosingGraceExpires_WithNewActiveHeartbeatSeen_TransitionsToObserving(t *testing.T) {
@@ -2487,7 +2632,7 @@ func TestCoordinator_WhenClosing_EndorsementRequestReceived_BlockHeightTolerance
 	assert.Equal(t, "node3", c.currentActiveCoordinator)
 }
 
-func TestCoordinator_WhenClosing_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+func TestCoordinator_WhenClosing_EndorsementRequestReceived_UpdatesEndorserCandidatesFromSender(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing).
 		NodeName("node2").
@@ -2496,7 +2641,6 @@ func TestCoordinator_WhenClosing_EndorsementRequestReceived_UpdatesEndorserCandi
 		Build()
 
 	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
-	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")

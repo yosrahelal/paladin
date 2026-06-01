@@ -17,7 +17,6 @@ package coordinator
 
 import (
 	"context"
-
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 )
@@ -125,4 +124,10 @@ func action_IncrementHeartbeatIntervalCounts(_ context.Context, c *coordinator, 
 func validator_IsHeartbeatFromCurrentActiveCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*common.HeartbeatReceivedEvent)
 	return c.currentActiveCoordinator == e.FromNode, nil
+}
+
+func action_AddHeartbeatSenderToEndorserCandidates(ctx context.Context, c *coordinator, event common.Event) error {
+	e := event.(*common.HeartbeatReceivedEvent)
+	c.updateEndorserCandidates(ctx, e.FromNode)
+	return nil
 }

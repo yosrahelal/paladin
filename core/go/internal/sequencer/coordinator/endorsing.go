@@ -17,7 +17,6 @@ package coordinator
 
 import (
 	"context"
-
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -104,22 +103,11 @@ func action_UpdateActiveCoordinatorFromEndorsementRequest(_ context.Context, c *
 	return nil
 }
 
-// action_UpdateEndorserCandidatesFromEndorsementRequest extracts node names from the
-// verifiers list carried in the incoming endorsement request and adds any newly-discovered
-// nodes to the endorser candidate pool. This runs unconditionally so that the coordinator
-// priority list is current before any subsequent priority-based validators are evaluated.
-func action_UpdateEndorserCandidatesFromEndorsementRequest(ctx context.Context, c *coordinator, event common.Event) error {
+// action_AddEndorsementRequestSenderToEndorserCandidates adds the sender of an incoming
+// endorsement request to the endorser candidate pool when it is not already known.
+func action_AddEndorsementRequestSenderToEndorserCandidates(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*EndorsementRequestReceivedEvent)
-	nodes := make([]string, 0, len(e.PrivateEndorsementRequest.Verifiers))
-	for _, v := range e.PrivateEndorsementRequest.Verifiers {
-		node, err := pldtypes.PrivateIdentityLocator(v.Lookup).Node(ctx, false)
-		if err != nil {
-			log.L(ctx).Warnf("could not extract node from endorsement verifier %q: %v", v.Lookup, err)
-			continue
-		}
-		nodes = append(nodes, node)
-	}
-	c.updateEndorserCandidates(ctx, nodes...)
+	c.updateEndorserCandidates(ctx, e.FromNode)
 	return nil
 }
 

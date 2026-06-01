@@ -421,6 +421,56 @@ func Test_action_UpdateEndorserCandidates_DoesNotChangeCurrentActiveCoordinator(
 	assert.Equal(t, "node2", o.currentActiveCoordinator, "action_UpdateEndorserCandidates must not change currentActiveCoordinator")
 }
 
+func Test_action_UpdateEndorserCandidatesFromHeartbeat_AddsNewSenderAndRecomputesPriorityList(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		WithEndorserCandidates("node1").
+		CoordinatorPriorityList("node1").
+		CurrentActiveCoordinator("node1").
+		Build()
+
+	err := action_UpdateEndorserCandidatesFromHeartbeat(ctx, o, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, o.endorserCandidates, "node2")
+	assert.Len(t, o.coordinatorPriorityList, 2, "priority list must reflect the grown pool")
+}
+
+func Test_action_UpdateEndorserCandidatesFromHeartbeat_NoOpWhenSenderAlreadyKnown(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		WithEndorserCandidates("node1", "node2").
+		CoordinatorPriorityList("node1", "node2").
+		CurrentActiveCoordinator("node1").
+		Build()
+
+	before := len(o.coordinatorPriorityList)
+	err := action_UpdateEndorserCandidatesFromHeartbeat(ctx, o, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
+	})
+	require.NoError(t, err)
+
+	assert.Len(t, o.endorserCandidates, 2, "duplicate must not be added")
+	assert.Len(t, o.coordinatorPriorityList, before, "priority list must be unchanged when pool does not grow")
+}
+
+func Test_action_UpdateEndorserCandidatesFromHeartbeat_NoOpInSenderMode(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build() // empty endorserCandidates = SENDER mode
+
+	err := action_UpdateEndorserCandidatesFromHeartbeat(ctx, o, &common.HeartbeatReceivedEvent{
+		FromNode:            "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
+	})
+	require.NoError(t, err)
+
+	assert.Empty(t, o.endorserCandidates, "endorserCandidates must remain empty in SENDER mode")
+}
+
 // action_CalculateCoordinatorPriorities sets currentActiveCoordinator to priorityList[0] on startup
 // (the empty-string guard path), and recalibrates failoverIndex.
 func Test_action_CalculateCoordinatorPriorities_EmptyActiveCoordinator_SetsTopPriorityAndRecalibrates(t *testing.T) {

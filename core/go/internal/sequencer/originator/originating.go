@@ -26,6 +26,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/google/uuid"
+	"slices"
 )
 
 func validator_IsDelegationBlockHeightRejection(_ context.Context, _ *originator, event common.Event) (bool, error) {
@@ -300,6 +301,32 @@ func action_CalculateCoordinatorPriorities(ctx context.Context, o *originator, _
 func action_UpdateEndorserCandidates(_ context.Context, o *originator, event common.Event) error {
 	e := event.(*common.EndorserNodesDiscoveredEvent)
 	o.endorserCandidates = e.Nodes
+	return nil
+}
+
+// action_UpdateEndorserCandidatesFromHeartbeat adds the heartbeat sender to the endorser
+// candidate pool if not already present, then recomputes the priority list. This runs as
+// handler 0 for all HeartbeatReceived events so that subsequent handlers (e.g.
+// validator_IsSenderHigherPriorityThanCurrentCoordinator) see an up-to-date list — important
+// because the heartbeat is queued to the originator before the coordinator's
+// EndorserNodesDiscoveredEvent notification arrives.
+func action_UpdateEndorserCandidatesFromHeartbeat(ctx context.Context, o *originator, event common.Event) error {
+	if len(o.endorserCandidates) == 0 {
+		return nil // STATIC/SENDER mode: endorserCandidates is empty
+	}
+	e := event.(*common.HeartbeatReceivedEvent)
+	if slices.Contains(o.endorserCandidates, e.FromNode) {
+		return nil
+	}
+	o.endorserCandidates = append(o.endorserCandidates, e.FromNode)
+	slices.Sort(o.endorserCandidates)
+	o.coordinatorPriorityList = common.ComputeCoordinatorPriorityList(
+		ctx,
+		o.endorserCandidates,
+		o.currentBlockHeight,
+		o.blockRange,
+	)
+	o.resetFailoverIndex()
 	return nil
 }
 
