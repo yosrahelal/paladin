@@ -128,6 +128,11 @@ export const Navigation: React.FC<Props> = ({
           display: { md: 'block', lg: 'none' },
           '& .MuiDrawer-paper': { width: CONSTANTS.NAVIGATION_DRAWER_WIDTH }
         }}
+        PaperProps={{
+          sx: {
+            backgroundColor: theme => theme.palette.background.default
+          }
+        }}
         onClose={() => setNavigationVisible(false)}
       >
         {drawerContent}
@@ -142,7 +147,7 @@ export const Navigation: React.FC<Props> = ({
         sx={{
           display: { lg: 'block', md: 'none', sm: 'none', xs: 'none' },
           width: CONSTANTS.NAVIGATION_DRAWER_WIDTH,
-          '& .MuiDrawer-paper': { width: CONSTANTS.NAVIGATION_DRAWER_WIDTH }
+          '& .MuiDrawer-paper': { width: CONSTANTS.NAVIGATION_DRAWER_WIDTH },
         }}
       >
         {drawerContent}
