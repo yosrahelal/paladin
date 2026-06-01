@@ -18,6 +18,10 @@ import { NavigateOptions, To } from 'react-router-dom';
 import React from 'react';
 import { IFilter } from './interfaces';
 
+export const CONSTANTS = {
+  NAVIGATION_DRAWER_WIDTH: 240
+}
+
 export const formatJSONWhenApplicable = (value: any) => {
   if (typeof value === 'object') {
     try {

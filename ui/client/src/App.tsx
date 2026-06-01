@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { CssBaseline } from "@mui/material";
+import { Box, CssBaseline, useMediaQuery } from "@mui/material";
 import { createTheme, PaletteMode, ThemeProvider } from "@mui/material/styles";
 import {
   MutationCache,
@@ -40,6 +40,7 @@ import { Submissions } from "./views/Submissions";
 import { DomainContract } from "./views/DomainContract";
 import { PrivacyGroups } from "./views/PrivacyGroups";
 import { PrivacyGroup } from "./views/PrivacyGroup";
+import { Navigation } from "./components/Navigation";
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({}),
@@ -65,6 +66,7 @@ function App() {
   const [privacyGroupsRowsPerPage, setPrivacyGroupsRowsPerPage] = useState(10);
   const [privacyGroupsRefTimestamps, sePrivacyGroupsRefTimestamps] = useState<string[]>([]);
   const [privacyGroupsSortAscending, setPrivacyGroupsSortAscending] = useState(false);
+  const [navigationVisible, setNavigationVisible] = useState(false);
 
   const [systemTheme, setSystemTheme] = useState(
     window.matchMedia &&
@@ -114,6 +116,8 @@ function App() {
 
   const basePath = getBasePath();
 
+  const lessThanLarge = useMediaQuery(theme.breakpoints.down('lg'));
+
   return (
     <>
       <QueryClientProvider client={queryClient}>
@@ -123,57 +127,70 @@ function App() {
             <BrowserRouter basename={basePath}
               future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
             >
-              <Header />
-              <Routes>
-                <Route path={AppRoutes.Transactions} element={<Transactions
-                  refEntries={txRefEntries}
-                  setRefEntries={setTxRefEntries}
-                  page={txPage}
-                  setPage={txSetPage}
-                  rowsPerPage={txRowsPerPage}
-                  setRowsPerPage={setTxRowsPerPage}
-                  fromBlock={txFromBlock}
-                  setFromBlock={setTxFromBlock}
-                />} />
-                <Route path={AppRoutes.Submissions} element={<Submissions
-                  section={submissionsSection}
-                  setSection={setSubmissionsSection}
-                  page={submissionsPage}
-                  setPage={setSubmissionsPage}
-                  rowsPerPage={submissionsRowsPerPage}
-                  setRowsPerPage={setSubmissionsRowsPerPage}
-                  refEntries={submissionsRefEntries}
-                  setRefEntries={setSubmissionsSetRefEntries}
-                />} />
-                <Route path={AppRoutes.Transaction} element={<TransactionDetails />} />
-                <Route path={AppRoutes.Keys} element={<Keys />} />
-                <Route path={AppRoutes.Registry} element={<Registries />} />
-                <Route path={AppRoutes.Domains} element={<Domains
-                  sortAscending={domainSortAscending}
-                  setSortAscending={setDomainSortAscending}
-                  page={domainsPage}
-                  setPage={txSetDomainsPage}
-                  rowsPerPage={domainsRowsPerPage}
-                  setRowsPerPage={SetDomainsRowsPerPage}
-                  refTimestamps={domainsRefTimestamps}
-                  setRefTimestamps={setDomainsRefTimestamps}
-                  selectedDomain={selectedDomain}
-                  setSelectedDomain={setSelectedDomain}
-                />} />
-                <Route path={AppRoutes.DomainContract} element={<DomainContract />} />
-                <Route path={AppRoutes.PrivactGroups} element={<PrivacyGroups
-                  sortAscending={privacyGroupsSortAscending}
-                  setSortAscending={setPrivacyGroupsSortAscending}
-                  refTimestamps={privacyGroupsRefTimestamps}
-                  setRefTimestamps={sePrivacyGroupsRefTimestamps}
-                  page={privacyGroupsPage}
-                  setPage={setPrivacyGroupsPage}
-                  rowsPerPage={privacyGroupsRowsPerPage}
-                  setRowsPerPage={setPrivacyGroupsRowsPerPage}
-                />} />
-                <Route path={AppRoutes.PrivacyGroup} element={<PrivacyGroup />} />
-                <Route path="*" element={<Navigate to={AppRoutes.Transactions} replace />} />
-              </Routes>
+              {lessThanLarge &&
+              <Header
+                navigationVisible={navigationVisible}
+                setNavigationVisible={setNavigationVisible}
+              />}
+              <Box sx={{ display: 'flex' }}>
+                <Navigation
+                  navigationVisible={navigationVisible}
+                  setNavigationVisible={setNavigationVisible}
+                />
+
+                <Box sx={{ flexGrow: 1, maxWidth: '100vw', minWidth: 0 }}>
+                  <Routes>
+                    <Route path={AppRoutes.Transactions} element={<Transactions
+                      refEntries={txRefEntries}
+                      setRefEntries={setTxRefEntries}
+                      page={txPage}
+                      setPage={txSetPage}
+                      rowsPerPage={txRowsPerPage}
+                      setRowsPerPage={setTxRowsPerPage}
+                      fromBlock={txFromBlock}
+                      setFromBlock={setTxFromBlock}
+                    />} />
+                    <Route path={AppRoutes.Submissions} element={<Submissions
+                      section={submissionsSection}
+                      setSection={setSubmissionsSection}
+                      page={submissionsPage}
+                      setPage={setSubmissionsPage}
+                      rowsPerPage={submissionsRowsPerPage}
+                      setRowsPerPage={setSubmissionsRowsPerPage}
+                      refEntries={submissionsRefEntries}
+                      setRefEntries={setSubmissionsSetRefEntries}
+                    />} />
+                    <Route path={AppRoutes.Transaction} element={<TransactionDetails />} />
+                    <Route path={AppRoutes.Keys} element={<Keys />} />
+                    <Route path={AppRoutes.Registry} element={<Registries />} />
+                    <Route path={AppRoutes.Domains} element={<Domains
+                      sortAscending={domainSortAscending}
+                      setSortAscending={setDomainSortAscending}
+                      page={domainsPage}
+                      setPage={txSetDomainsPage}
+                      rowsPerPage={domainsRowsPerPage}
+                      setRowsPerPage={SetDomainsRowsPerPage}
+                      refTimestamps={domainsRefTimestamps}
+                      setRefTimestamps={setDomainsRefTimestamps}
+                      selectedDomain={selectedDomain}
+                      setSelectedDomain={setSelectedDomain}
+                    />} />
+                    <Route path={AppRoutes.DomainContract} element={<DomainContract />} />
+                    <Route path={AppRoutes.PrivactGroups} element={<PrivacyGroups
+                      sortAscending={privacyGroupsSortAscending}
+                      setSortAscending={setPrivacyGroupsSortAscending}
+                      refTimestamps={privacyGroupsRefTimestamps}
+                      setRefTimestamps={sePrivacyGroupsRefTimestamps}
+                      page={privacyGroupsPage}
+                      setPage={setPrivacyGroupsPage}
+                      rowsPerPage={privacyGroupsRowsPerPage}
+                      setRowsPerPage={setPrivacyGroupsRowsPerPage}
+                    />} />
+                    <Route path={AppRoutes.PrivacyGroup} element={<PrivacyGroup />} />
+                    <Route path="*" element={<Navigate to={AppRoutes.Transactions} replace />} />
+                  </Routes>
+                </Box>
+              </Box>
             </BrowserRouter>
           </ThemeProvider>
         </ApplicationContextProvider>
