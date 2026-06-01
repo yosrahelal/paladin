@@ -93,11 +93,14 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_EndorsementRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
+					Validator: statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_HandleEndorsementRequest},
@@ -145,11 +148,14 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_EndorsementRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
+					Validator: statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_HandleEndorsementRequest},
@@ -309,13 +315,18 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_EndorsementRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
 					// A higher-priority node is sending endorsement requests; step down and handle.
-					Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_CleanUpTransactionsNotYetDispatched},
@@ -338,6 +349,10 @@ var stateDefinitionsMap = StateDefinitions{
 					// complex routing of the event between the coordinator and transaction state machines.
 					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
 					// could speed up time to consistency in a network where there are multiple coordinators.
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
+					),
 					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
 			},
@@ -462,13 +477,18 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_EndorsementRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
 					// A higher-priority node is sending endorsement requests; step down and handle.
-					Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_CleanUpTransactionsNotYetDispatched},
@@ -490,6 +510,10 @@ var stateDefinitionsMap = StateDefinitions{
 					// complex routing of the event between the coordinator and transaction state machines.
 					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
 					// could speed up time to consistency in a network where there are multiple coordinators.
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
+					),
 					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
 			},
@@ -604,13 +628,18 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_EndorsementRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
 					// A higher-priority node is sending endorsement requests; step down and handle.
-					Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_StopDispatchLoop},
@@ -628,14 +657,22 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				}, {
 					// We are both the coordinator and the endorser; handle directly without stepping down.
-					Validator: validator_IsEndorsementRequestFromSelf,
-					Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						validator_IsEndorsementRequestFromSelf,
+					),
+					Actions: []ActionRule{{Action: action_HandleEndorsementRequest}},
 				}, {
 					// Lower-priority node — reject so the sender knows this node is the active coordinator.
 					// TODO: There isn't currently any handling of this rejection as it will require more
 					// complex routing of the event between the coordinator and transaction state machines.
 					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
 					// could speed up time to consistency in a network where there are multiple coordinators.
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
+						statemachine.ValidatorNot(validator_IsEndorsementRequestFromSelf),
+					),
 					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
 			},
@@ -768,13 +805,18 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_EndorsementRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
 					// A higher-priority node is sending endorsement requests; step down to Closing_Flush and handle.
-					Validator: validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						validator_IsEndorsementRequestFromHigherPriorityCoordinator,
+					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_CleanUpTransactionsNotYetDispatched},
@@ -785,14 +827,22 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				}, {
 					// We are both the coordinator and the endorser; handle directly without stepping down.
-					Validator: validator_IsEndorsementRequestFromSelf,
-					Actions:   []ActionRule{{Action: action_HandleEndorsementRequest}},
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						validator_IsEndorsementRequestFromSelf,
+					),
+					Actions: []ActionRule{{Action: action_HandleEndorsementRequest}},
 				}, {
 					// Lower-priority node — reject so the sender knows this node is the active coordinator.
 					// TODO: There isn't currently any handling of this rejection as it will require more
 					// complex routing of the event between the coordinator and transaction state machines.
 					// Handling it as a sign for a coordinator to step down for a higher priority coordinator
 					// could speed up time to consistency in a network where there are multiple coordinators.
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
+						statemachine.ValidatorNot(validator_IsEndorsementRequestFromSelf),
+					),
 					Actions: []ActionRule{{Action: action_RejectEndorsementEndorserIsActiveCoordinator}},
 				}},
 			},
@@ -883,11 +933,14 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_EndorsementRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
+					Validator: statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_HandleEndorsementRequest},
@@ -972,11 +1025,14 @@ var stateDefinitionsMap = StateDefinitions{
 					},
 				}}},
 			Event_EndorsementRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_UpdateEndorserCandidatesFromEndorsementRequest}},
+				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
+					Validator: statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_HandleEndorsementRequest},

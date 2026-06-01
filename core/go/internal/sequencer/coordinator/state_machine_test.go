@@ -230,6 +230,21 @@ func TestCoordinator_WhenIdle_EndorsementRequestReceived_BlockHeightToleranceExc
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
+func TestCoordinator_WhenIdle_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodeName("node1").
+		EndorserCandidates("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
 func TestCoordinator_WhenObserving_TransitionsToIdle_OnHeartbeatIntervalInactiveGrace(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
@@ -364,6 +379,21 @@ func TestCoordinator_WhenObserving_EndorsementRequestReceived_BlockHeightToleran
 	assert.Equal(t, State_Observing, c.GetCurrentState())
 	// active coordinator must not be updated on rejection
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenObserving_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
+		NodeName("node2").
+		EndorserCandidates("node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
 func TestCoordinator_WhenElectRequestTimeoutFires_NudgesHandoverRequest(t *testing.T) {
@@ -761,6 +791,21 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_BlockHeightToleranceEx
 	// Rejection path: stays in Elect, no step-down.
 	assert.Equal(t, State_Elect, c.GetCurrentState())
 	assert.Equal(t, "node2", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenElect_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node1").
+		EndorserCandidates("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
 func TestCoordinator_WhenPrepared_HeartbeatInterval_WithinGrace_SendsHeartbeatAndStaysPrepared(t *testing.T) {
@@ -1164,6 +1209,21 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_BlockHeightToleranc
 
 	assert.Equal(t, State_Prepared, c.GetCurrentState())
 	assert.Equal(t, "node2", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenPrepared_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
+		NodeName("node1").
+		EndorserCandidates("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
 func TestCoordinator_WhenActive_TransitionsToIdle_OnHeartbeatInterval_WhenNoInflight(t *testing.T) {
@@ -1624,6 +1684,21 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_BlockHeightToleranceE
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
+func TestCoordinator_WhenActive_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
+		NodeName("node1").
+		EndorserCandidates("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
 func TestCoordinator_WhenActiveFLush_HeartbeatInterval_SendsHeartbeatAndStaysActiveFLush(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
@@ -1924,6 +1999,21 @@ func TestCoordinator_WhenActiveFLush_EndorsementRequestReceived_BlockHeightToler
 	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
+func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
+		NodeName("node1").
+		EndorserCandidates("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
 func TestCoordinator_WhenEnteringClosingFlush_OnTransitionTo_SendsImmediateHeartbeat(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
@@ -2158,6 +2248,21 @@ func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_BlockHeightTole
 	assert.Equal(t, "node3", c.currentActiveCoordinator)
 }
 
+func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
+		NodeName("node2").
+		EndorserCandidates("node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
 func TestCoordinator_WhenClosingFlush_HeartbeatReceived_LiveSender_UpdatesActiveCoordinator(t *testing.T) {
 	ctx := t.Context()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
@@ -2380,6 +2485,21 @@ func TestCoordinator_WhenClosing_EndorsementRequestReceived_BlockHeightTolerance
 	// Rejection path: active coordinator must not be updated.
 	assert.Equal(t, State_Closing, c.GetCurrentState())
 	assert.Equal(t, "node3", c.currentActiveCoordinator)
+}
+
+func TestCoordinator_WhenClosing_EndorsementRequestReceived_UpdatesEndorserCandidatesFromVerifiers(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing).
+		NodeName("node2").
+		EndorserCandidates("node2").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event.PrivateEndorsementRequest.Verifiers = []*prototk.ResolvedVerifier{{Lookup: "alice@node3"}}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
 func TestCoordinator_PreProcessEvent_OwnHeartbeat_IsFilteredOut(t *testing.T) {

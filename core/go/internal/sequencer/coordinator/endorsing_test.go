@@ -622,3 +622,47 @@ func Test_handleEndorsementRequest_Sign_ValidateEndorserError_SendsEndorsementEr
 	event := buildEndorsementEvent("node2")
 	c.handleEndorsementRequest(ctx, event)
 }
+
+func Test_action_UpdateEndorserCandidatesFromEndorsementRequest_AddsVerifierNodes(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
+		NodeName("node1").
+		EndorserCandidates("node1").
+		CoordinatorPriorityList("node1").
+		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
+		Build()
+
+	event := &EndorsementRequestReceivedEvent{
+		FromNode: "node2",
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{
+			Verifiers: []*prototk.ResolvedVerifier{
+				{Lookup: "alice@node2"},
+				{Lookup: "bob@node3"},
+			},
+		},
+	}
+
+	require.NoError(t, action_UpdateEndorserCandidatesFromEndorsementRequest(ctx, c, event))
+
+	assert.ElementsMatch(t, []string{"node1", "node2", "node3"}, c.endorserCandidates)
+	assert.Len(t, c.coordinatorPriorityList, 3)
+}
+
+func Test_action_UpdateEndorserCandidatesFromEndorsementRequest_NoOpWhenVerifiersEmpty(t *testing.T) {
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Observing).
+		NodeName("node1").
+		EndorserCandidates("node1").
+		CoordinatorPriorityList("node1").
+		Build()
+
+	event := &EndorsementRequestReceivedEvent{
+		FromNode:                  "node2",
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{},
+	}
+
+	require.NoError(t, action_UpdateEndorserCandidatesFromEndorsementRequest(ctx, c, event))
+
+	assert.Equal(t, []string{"node1"}, c.endorserCandidates)
+	assert.Equal(t, []string{"node1"}, c.coordinatorPriorityList)
+}

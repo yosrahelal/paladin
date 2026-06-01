@@ -104,6 +104,25 @@ func action_UpdateActiveCoordinatorFromEndorsementRequest(_ context.Context, c *
 	return nil
 }
 
+// action_UpdateEndorserCandidatesFromEndorsementRequest extracts node names from the
+// verifiers list carried in the incoming endorsement request and adds any newly-discovered
+// nodes to the endorser candidate pool. This runs unconditionally so that the coordinator
+// priority list is current before any subsequent priority-based validators are evaluated.
+func action_UpdateEndorserCandidatesFromEndorsementRequest(ctx context.Context, c *coordinator, event common.Event) error {
+	e := event.(*EndorsementRequestReceivedEvent)
+	nodes := make([]string, 0, len(e.PrivateEndorsementRequest.Verifiers))
+	for _, v := range e.PrivateEndorsementRequest.Verifiers {
+		node, err := pldtypes.PrivateIdentityLocator(v.Lookup).Node(ctx, false)
+		if err != nil {
+			log.L(ctx).Warnf("could not extract node from endorsement verifier %q: %v", v.Lookup, err)
+			continue
+		}
+		nodes = append(nodes, node)
+	}
+	c.updateEndorserCandidates(ctx, nodes...)
+	return nil
+}
+
 // action_HandleEndorsementRequest spawns a background goroutine to perform the
 // domain-level endorsement work and send the response. This keeps the coordinator event loop
 // unblocked while allowing multiple endorsements to run concurrently.
