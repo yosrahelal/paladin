@@ -15,7 +15,7 @@
 // limitations under the License.
 
 import i18next from "i18next";
-import { IStateReceipt } from "../interfaces";
+import { ISchema, IState, IStateReceipt } from "../interfaces";
 import { generatePostReq, returnResponse } from "./common";
 import { RpcEndpoint, RpcMethods } from "./rpcMethods";
 
@@ -52,3 +52,43 @@ export const resolveVerifier = async (keyIdentifier: string, algorithm: string, 
     )
   );
 };
+
+export const listSchemas = async (domain: string): Promise<ISchema[]> => {
+  const requestPayload = {
+    jsonrpc: "2.0",
+    id: Date.now(),
+    method: RpcMethods.pstate_listSchemas,
+    params: [domain]
+  };
+  return <Promise<ISchema[]>>(
+    returnResponse(
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
+      i18next.t("errorFetchingSchemas"), []
+    )
+  );
+};
+
+export const queryStates = async (
+  domain: string,
+  schemaId: string,
+): Promise<IState[]> => {
+  const requestPayload = {
+    jsonrpc: "2.0",
+    id: Date.now(),
+    method: RpcMethods.pstate_queryStates,
+    params: [
+      domain,
+      schemaId,
+      {},
+      'all'
+    ]
+  };
+  return <Promise<IState[]>>(
+    returnResponse(
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
+      i18next.t("errorFetchingSchemas"), []
+    )
+  );
+};
+
+

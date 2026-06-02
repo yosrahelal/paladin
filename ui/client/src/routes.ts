@@ -23,5 +23,6 @@ export const AppRoutes = {
   Transaction: '/ui/transactions/:hashOrId',
   DomainContract: '/ui/domains/:address',
   PrivactGroups: '/ui/privacy-groups',
-  PrivacyGroup: '/ui/privacy-groups/:idOrAddress'
+  PrivacyGroup: '/ui/privacy-groups/:idOrAddress',
+  States: '/ui/states'
 };

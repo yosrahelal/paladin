@@ -41,6 +41,7 @@ import { DomainContract } from "./views/DomainContract";
 import { PrivacyGroups } from "./views/PrivacyGroups";
 import { PrivacyGroup } from "./views/PrivacyGroup";
 import { Navigation } from "./components/Navigation";
+import { States } from "./views/States";
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({}),
@@ -61,12 +62,18 @@ function App() {
   const [submissionsRefEntries, setSubmissionsSetRefEntries] = useState<IPaladinTransactionPagingReference[]>([]);
   const [submissionsPage, setSubmissionsPage] = useState(0);
   const [submissionsRowsPerPage, setSubmissionsRowsPerPage] = useState(10);
-  const [selectedDomain, setSelectedDomain] = useState<string>();
+  const [domainsSelectedDomain, setDomainsSelectedDomain] = useState<string>();
   const [privacyGroupsPage, setPrivacyGroupsPage] = useState(0);
   const [privacyGroupsRowsPerPage, setPrivacyGroupsRowsPerPage] = useState(10);
   const [privacyGroupsRefTimestamps, sePrivacyGroupsRefTimestamps] = useState<string[]>([]);
   const [privacyGroupsSortAscending, setPrivacyGroupsSortAscending] = useState(false);
   const [navigationVisible, setNavigationVisible] = useState(false);
+  const [statesSelectedDomain, setStatesSelectedDomain] = useState<string>();
+  const [statesSelectedSchemaId, setStatesSelectedSchemaId] = useState<string>();
+  const [statePage, setStatePage] = useState(0);
+  const [stateRowsPerPage, setStateRowsPerPage] = useState(10);
+  const [stateRefTimestamps, setStateRefTimestamps] = useState<string[]>([]);
+  const [stateSortAscending, setStateSortAscending] = useState(false);
 
   const [systemTheme, setSystemTheme] = useState(
     window.matchMedia &&
@@ -128,10 +135,10 @@ function App() {
               future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
             >
               {lessThanLarge &&
-              <Header
-                navigationVisible={navigationVisible}
-                setNavigationVisible={setNavigationVisible}
-              />}
+                <Header
+                  navigationVisible={navigationVisible}
+                  setNavigationVisible={setNavigationVisible}
+                />}
               <Box sx={{ display: 'flex' }}>
                 <Navigation
                   navigationVisible={navigationVisible}
@@ -172,8 +179,8 @@ function App() {
                       setRowsPerPage={SetDomainsRowsPerPage}
                       refTimestamps={domainsRefTimestamps}
                       setRefTimestamps={setDomainsRefTimestamps}
-                      selectedDomain={selectedDomain}
-                      setSelectedDomain={setSelectedDomain}
+                      selectedDomain={domainsSelectedDomain}
+                      setSelectedDomain={setDomainsSelectedDomain}
                     />} />
                     <Route path={AppRoutes.DomainContract} element={<DomainContract />} />
                     <Route path={AppRoutes.PrivactGroups} element={<PrivacyGroups
@@ -187,6 +194,20 @@ function App() {
                       setRowsPerPage={setPrivacyGroupsRowsPerPage}
                     />} />
                     <Route path={AppRoutes.PrivacyGroup} element={<PrivacyGroup />} />
+                    <Route path={AppRoutes.States} element={<States
+                      selectedDomain={statesSelectedDomain}
+                      setSelectedDomain={setStatesSelectedDomain}
+                      selectedSchemaId={statesSelectedSchemaId}
+                      setSelectedSchemaId={setStatesSelectedSchemaId}
+                      sortAscending={stateSortAscending}
+                      setSortAscending={setStateSortAscending}
+                      refTimestamps={stateRefTimestamps}
+                      setRefTimestamps={setStateRefTimestamps}
+                      page={statePage}
+                      setPage={setStatePage}
+                      rowsPerPage={stateRowsPerPage}
+                      setRowsPerPage={setStateRowsPerPage}
+                    />} />
                     <Route path="*" element={<Navigate to={AppRoutes.Transactions} replace />} />
                   </Routes>
                 </Box>

@@ -262,3 +262,26 @@ export interface IPrivacyGroup {
   genesisTransaction: string
   contractAddress: string
 }
+
+export interface ISchema {
+  id: string
+  domain: string
+  type: string
+  signature: string
+  definition: {
+    name: string
+    type: string
+    internalType: string
+    components: any
+  }
+  labels: string[]
+}
+
+export interface IState {
+  id: string
+  created: string
+  domain: string
+  schema: string
+  contractAddress: string
+  data: any
+}

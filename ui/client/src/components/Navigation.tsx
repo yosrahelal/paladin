@@ -100,6 +100,13 @@ export const Navigation: React.FC<Props> = ({
             <ListItemText primary={t('privacyGroups')} />
           </ListItemButton>
         </ListItem>
+        <ListItem>
+          <ListItemButton
+            onClick={event => customNavigate(AppRoutes.States, event, navigate)}
+            selected={pathname.startsWith(AppRoutes.States)}>
+            <ListItemText primary={t('states')} />
+          </ListItemButton>
+        </ListItem>
       </List>
 
       <IconButton
@@ -130,7 +137,7 @@ export const Navigation: React.FC<Props> = ({
         }}
         PaperProps={{
           sx: {
-            backgroundColor: theme => theme.palette.background.default
+            backgroundColor: theme.palette.mode === 'dark' ? theme => theme.palette.background.default : undefined
           }
         }}
         onClose={() => setNavigationVisible(false)}

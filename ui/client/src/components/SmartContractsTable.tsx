@@ -228,7 +228,7 @@ export const SmartContractsTable: React.FC<Props> = ({
         </TableHead>
         <TableBody>
           {contracts?.map((contract: IDomainContract) => (
-            <TableRow key={contract.address} sx={{ height: '70px' }}>
+            <TableRow key={contract.address} >
               <TableCell>
                 <Timestamp timestamp={contract.created} />
               </TableCell>
