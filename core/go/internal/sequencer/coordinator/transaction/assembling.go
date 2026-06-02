@@ -121,7 +121,7 @@ func (t *coordinatorTransaction) sendAssembleRequest(ctx context.Context) error 
 			return err
 		}
 
-		return t.transportWriter.SendAssembleRequest(ctx, t.originatorNode, t.pt.ID, idempotencyKey, t.pt.PreAssembly, grapherStatesAndLocks, t.getCurrentBlockHeight(), t.clock.Now().Add(t.stateTimeout))
+		return t.transportWriter.SendAssembleRequest(ctx, t.originatorNode, t.pt.ID, idempotencyKey, t.pt.PreAssembly, grapherStatesAndLocks, t.getCurrentBlockHeight(), t.clock.Now().Add(t.stateTimeout), int64(t.blockHeightTolerance))
 	})
 
 	t.scheduleRequestTimeout(ctx)
@@ -219,9 +219,9 @@ func action_NudgeAssembleRequest(ctx context.Context, txn *coordinatorTransactio
 	return txn.nudgeAssembleRequest(ctx)
 }
 
-func action_HandleAssembleBlockHeightRejection(ctx context.Context, _ *coordinatorTransaction, event common.Event) error {
+func action_HandleAssembleBlockHeightRejection(ctx context.Context, txn *coordinatorTransaction, event common.Event) error {
 	e := event.(*AssembleRequestRejectedEvent)
-	log.L(ctx).Warnf("assemble request rejected due to block height tolerance: coordinator block height=%d, assembler block height=%d, assembler tolerance=%d", e.CoordinatorBlockHeight, e.AssemblerBlockHeight, e.BlockHeightTolerance)
+	log.L(ctx).Warnf("assemble request rejected due to block height tolerance: coordinator block height=%d, assembler block height=%d, tolerance=%d", e.CoordinatorBlockHeight, e.AssemblerBlockHeight, txn.blockHeightTolerance)
 	return nil
 }
 

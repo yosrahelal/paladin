@@ -165,27 +165,22 @@ func action_SendAssembleError(ctx context.Context, txn *originatorTransaction, _
 
 // validator_AssembleBlockHeightToleranceExceeded returns true when the absolute difference between
 // the coordinator's block height (from the assemble request) and this originator's block height
-// exceeds the configured block height tolerance.
-func validator_AssembleBlockHeightToleranceExceeded(ctx context.Context, t *originatorTransaction, event common.Event) (bool, error) {
+// exceeds the tolerance carried on the event.
+func validator_AssembleBlockHeightToleranceExceeded(_ context.Context, t *originatorTransaction, event common.Event) (bool, error) {
 	e := event.(*AssembleRequestReceivedEvent)
-	receiverBlockHeight := t.getCurrentBlockHeight()
-	senderBH := e.CoordinatorsBlockHeight
-	var diff uint64
-	if receiverBlockHeight > senderBH {
-		diff = uint64(receiverBlockHeight - senderBH)
-	} else {
-		diff = uint64(senderBH - receiverBlockHeight)
-	}
-	return diff > t.blockHeightTolerance, nil
+	receiverBH := uint64(t.getCurrentBlockHeight())
+	coordinatorBH := uint64(e.CoordinatorsBlockHeight)
+	diff := max(receiverBH, coordinatorBH) - min(receiverBH, coordinatorBH)
+	return diff > uint64(e.BlockHeightTolerance), nil
 }
 
 // action_SendAssembleBlockHeightRejection sends an AssembleRejection indicating the block height
-// difference between coordinator and originator exceeds the configured tolerance.
+// difference between coordinator and originator exceeds the tolerance carried on the event.
 func action_SendAssembleBlockHeightRejection(ctx context.Context, t *originatorTransaction, event common.Event) error {
 	e := event.(*AssembleRequestReceivedEvent)
 	receiverBlockHeight := t.getCurrentBlockHeight()
 	log.L(ctx).Warnf("rejecting assemble request from coordinator due to block height tolerance (coordinator=%d, assembler=%d, tolerance=%d)",
-		e.CoordinatorsBlockHeight, receiverBlockHeight, t.blockHeightTolerance)
+		e.CoordinatorsBlockHeight, receiverBlockHeight, e.BlockHeightTolerance)
 	return t.transportWriter.SendAssembleRejection(
 		ctx,
 		t.pt.ID,
@@ -194,7 +189,6 @@ func action_SendAssembleBlockHeightRejection(ctx context.Context, t *originatorT
 		common.RejectionReason_BlockHeightTolerance,
 		e.CoordinatorsBlockHeight,
 		receiverBlockHeight,
-		int64(t.blockHeightTolerance),
 	)
 }
 
@@ -209,7 +203,7 @@ func action_SendAssembleRejectionNotCurrentDelegate(ctx context.Context, txn *or
 		assembleRequestEvent.RequestID,
 		assembleRequestEvent.Coordinator,
 		common.RejectionReason_NotCurrentDelegate,
-		0, 0, 0,
+		0, 0,
 	); err != nil {
 		log.L(ctx).Warnf("failed to send assemble rejection (not-current-delegate) to %s: %s", assembleRequestEvent.Coordinator, err)
 	}

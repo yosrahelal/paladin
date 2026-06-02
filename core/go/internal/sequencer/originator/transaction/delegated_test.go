@@ -448,7 +448,7 @@ func TestAction_SendAssembleRejectionNotCurrentDelegate_Success(t *testing.T) {
 	}
 
 	mocks.TransportWriter.EXPECT().
-		SendAssembleRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", common.RejectionReason_NotCurrentDelegate, int64(0), int64(0), int64(0)).
+		SendAssembleRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", common.RejectionReason_NotCurrentDelegate, int64(0), int64(0)).
 		Return(nil)
 
 	err := action_SendAssembleRejectionNotCurrentDelegate(ctx, txn, event)
@@ -469,7 +469,7 @@ func TestAction_SendAssembleRejectionNotCurrentDelegate_TransportError_LogsWarnA
 	}
 
 	mocks.TransportWriter.EXPECT().
-		SendAssembleRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", common.RejectionReason_NotCurrentDelegate, int64(0), int64(0), int64(0)).
+		SendAssembleRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", common.RejectionReason_NotCurrentDelegate, int64(0), int64(0)).
 		Return(errors.New("transport error"))
 
 	err := action_SendAssembleRejectionNotCurrentDelegate(ctx, txn, event)

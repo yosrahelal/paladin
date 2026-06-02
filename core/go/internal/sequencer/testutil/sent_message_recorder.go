@@ -171,6 +171,7 @@ func (r *SentMessageRecorder) SendAssembleRequest(
 	stateLocks grapher.ExportableStates,
 	coordinatorBlockHeight int64,
 	expiryTime time.Time,
+	blockHeightTolerance int64,
 ) error {
 	r.hasSentAssembleRequest = true
 	r.sentAssembleRequestIdempotencyKey = idempotencyKey
@@ -194,6 +195,7 @@ func (r *SentMessageRecorder) SendEndorsementRequest(
 	infoStates []*prototk.EndorsableState,
 	expiryTime time.Time,
 	coordinatorBlockHeight int64,
+	blockHeightTolerance int64,
 ) error {
 	r.numberOfSentEndorsementRequests++
 	if _, ok := r.numberOfEndorsementRequestsForParty[party]; ok {
@@ -261,7 +263,7 @@ func (r *SentMessageRecorder) SendAssembleError(ctx context.Context, txID uuid.U
 	return nil
 }
 
-func (r *SentMessageRecorder) SendAssembleRejection(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string, reason common.RejectionReason, coordinatorBlockHeight, assemblerBlockHeight, blockHeightTolerance int64) error {
+func (r *SentMessageRecorder) SendAssembleRejection(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string, reason common.RejectionReason, coordinatorBlockHeight, assemblerBlockHeight int64) error {
 	r.hasSentAssembleRejection = true
 	return nil
 }
@@ -308,7 +310,6 @@ func (r *SentMessageRecorder) SendTransactionSubmitted(ctx context.Context, txID
 func (r *SentMessageRecorder) SendTransactionConfirmed(ctx context.Context, txID uuid.UUID, transactionOriginator string, contractAddress *pldtypes.EthAddress, nonce *pldtypes.HexUint64, outcome engineProto.TransactionConfirmed_Outcome, revertReason pldtypes.HexBytes, failureMessage string, willRetry bool) error {
 	return nil
 }
-
 
 func (r *SentMessageRecorder) SendDelegationRequest(ctx context.Context, coordinatorLocator string, transactions []*components.PrivateTransaction, blockHeight uint64) error {
 	r.hasSentDelegationRequest = true

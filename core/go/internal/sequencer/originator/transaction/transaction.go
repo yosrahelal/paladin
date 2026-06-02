@@ -68,7 +68,6 @@ type originatorTransaction struct {
 	nonce                            *uint64
 	metrics                          metrics.DistributedSequencerMetrics
 	lastReceivedWillRetry            bool
-	blockHeightTolerance             uint64       // maximum allowed block height difference before rejecting assembly requests
 	getCurrentBlockHeight            func() int64 // returns the originator's tracked block height
 }
 
@@ -79,7 +78,6 @@ func NewTransaction(
 	queueEventForOriginator func(context.Context, common.Event),
 	engineIntegration common.EngineIntegration,
 	metrics metrics.DistributedSequencerMetrics,
-	blockHeightTolerance uint64,
 	getCurrentBlockHeight func() int64,
 ) (OriginatorTransaction, error) {
 	if pt == nil {
@@ -92,7 +90,6 @@ func NewTransaction(
 		transportWriter,
 		queueEventForOriginator,
 		metrics,
-		blockHeightTolerance,
 		getCurrentBlockHeight,
 	), nil
 }
@@ -103,7 +100,6 @@ func newTransaction(
 	transportWriter transport.TransportWriter,
 	queueEventForOriginator func(context.Context, common.Event),
 	metrics metrics.DistributedSequencerMetrics,
-	blockHeightTolerance uint64,
 	getCurrentBlockHeight func() int64,
 ) *originatorTransaction {
 	txn := &originatorTransaction{
@@ -112,7 +108,6 @@ func newTransaction(
 		transportWriter:         transportWriter,
 		queueEventForOriginator: queueEventForOriginator,
 		metrics:                 metrics,
-		blockHeightTolerance:    blockHeightTolerance,
 		getCurrentBlockHeight:   getCurrentBlockHeight,
 	}
 	txn.initializeStateMachine(State_Initial)

@@ -100,6 +100,7 @@ type AssembleRequestReceivedEvent struct {
 	RequestID               uuid.UUID
 	Coordinator             string
 	CoordinatorsBlockHeight int64
+	BlockHeightTolerance    int64
 	StateLocksJSON          []byte
 	PreAssembly             []byte
 	Expiry                  time.Time

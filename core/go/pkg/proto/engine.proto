@@ -72,6 +72,7 @@ message EndorsementRequest {
     repeated io.kaleido.paladin.toolkit.EndorsableState infoStates = 12;
     int64 expiry_time_unix_ms = 13;
     int64 coordinator_block_height = 14;
+    int64 block_height_tolerance = 15;
 }
 
 message EndorsementResponse {
@@ -136,6 +137,7 @@ message AssembleRequest {
     bytes state_locks = 6;
     int64 coordinator_block_height = 7;
     int64 expiry_time_unix_ms = 8;
+    int64 block_height_tolerance = 9;
 }
 
 message AssembleResponse {
@@ -169,7 +171,6 @@ message AssembleRejection {
     int32 rejection_reason = 4;
     int64 coordinator_block_height = 5;
     int64 assembler_block_height = 6;
-    int64 block_height_tolerance = 7;   // the tolerance the assembler was configured with, for diagnostic logging
 }
 
 // Sent by an originator to reject a pre-dispatch request. The rejection_reason field indicates why.

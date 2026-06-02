@@ -239,7 +239,7 @@ func Test_sendAssembleRequest_Success(t *testing.T) {
 
 	// Mock transport writer - use mock.Anything for idempotency key since it's generated dynamically
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err := txn.sendAssembleRequest(ctx)
@@ -270,7 +270,7 @@ func Test_sendAssembleRequest_SendAssembleRequestError(t *testing.T) {
 
 	// Mock transport writer to return error - use mock.Anything for idempotency key
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(errors.New("send error"))
 
 	err := txn.sendAssembleRequest(ctx)
@@ -295,7 +295,7 @@ func Test_nudgeAssembleRequest_WithPendingRequest(t *testing.T) {
 
 	// Create a pending request first
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err := txn.sendAssembleRequest(ctx)
@@ -303,7 +303,7 @@ func Test_nudgeAssembleRequest_WithPendingRequest(t *testing.T) {
 
 	// Now nudge it - should succeed since request exists
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err = txn.nudgeAssembleRequest(ctx)
@@ -339,7 +339,7 @@ func Test_validator_MatchesPendingAssembleRequest_AssembleSuccessEvent_Match(t *
 
 	// Create a pending request
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err := txn.sendAssembleRequest(ctx)
@@ -364,7 +364,7 @@ func Test_validator_MatchesPendingAssembleRequest_AssembleSuccessEvent_NoMatch(t
 
 	// Create a pending request
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err := txn.sendAssembleRequest(ctx)
@@ -401,7 +401,7 @@ func Test_validator_MatchesPendingAssembleRequest_AssembleRevertEvent_Match(t *t
 
 	// Create a pending request
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err := txn.sendAssembleRequest(ctx)
@@ -426,7 +426,7 @@ func Test_validator_MatchesPendingAssembleRequest_AssembleErrorEvent_Match(t *te
 
 	// Create a pending request
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err := txn.sendAssembleRequest(ctx)
@@ -452,7 +452,7 @@ func Test_validator_MatchesPendingAssembleRequest_AssembleErrorEvent_NoMatch(t *
 
 	// Create a pending request
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err := txn.sendAssembleRequest(ctx)
@@ -501,7 +501,7 @@ func Test_action_SendAssembleRequest_Success(t *testing.T) {
 		Build()
 
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err := action_SendAssembleRequest(ctx, txn, nil)
@@ -520,7 +520,7 @@ func Test_action_NudgeAssembleRequest_Success(t *testing.T) {
 
 	// Create a pending request first
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err := txn.sendAssembleRequest(ctx)
@@ -528,7 +528,7 @@ func Test_action_NudgeAssembleRequest_Success(t *testing.T) {
 
 	// Now nudge it
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, txn.pendingAssembleRequest.IdempotencyKey(), txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, txn.pendingAssembleRequest.IdempotencyKey(), txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err = action_NudgeAssembleRequest(ctx, txn, nil)
@@ -606,7 +606,7 @@ func Test_sendAssembleRequest_schedulesTimer(t *testing.T) {
 	})
 
 	mocks.TransportWriter.EXPECT().SendAssembleRequest(
-		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything,
+		ctx, txn.originatorNode, txn.pt.ID, mock.Anything, txn.pt.PreAssembly, mock.Anything, int64(100), mock.Anything, mock.Anything,
 	).Return(nil)
 
 	err := txn.sendAssembleRequest(ctx)

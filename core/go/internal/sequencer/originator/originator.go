@@ -72,11 +72,10 @@ type originator struct {
 	failoverIndex                      int      // COORDINATOR_ENDORSER mode:t he next position in coordinatorPriorityList to try when the current active coordinator exceeds the inactive grace period
 
 	/* Config */
-	nodeName             string
-	blockRange           uint64
-	contractAddress      *pldtypes.EthAddress
-	inactiveGracePeriod  int    // expressed as a multiple of heartbeat intervals
-	blockHeightTolerance uint64 // maximum allowed block height difference before rejecting requests
+	nodeName            string
+	blockRange          uint64
+	contractAddress     *pldtypes.EthAddress
+	inactiveGracePeriod int // expressed as a multiple of heartbeat intervals
 
 	/* Dependencies */
 	transportWriter   transport.TransportWriter
@@ -94,15 +93,14 @@ func NewOriginator(
 	selectionConfig *common.CoordinatorSelectionConfig,
 ) *originator {
 	o := &originator{
-		nodeName:             nodeName,
-		transactionsByID:     make(map[uuid.UUID]transaction.OriginatorTransaction),
-		transportWriter:      transportWriter,
-		blockRange:           confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
-		contractAddress:      contractAddress,
-		engineIntegration:    engineIntegration,
-		metrics:              metrics,
-		inactiveGracePeriod:  confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod),
-		blockHeightTolerance: confutil.Uint64Min(configuration.BlockHeightTolerance, pldconf.SequencerMinimum.BlockHeightTolerance, *pldconf.SequencerDefaults.BlockHeightTolerance),
+		nodeName:            nodeName,
+		transactionsByID:    make(map[uuid.UUID]transaction.OriginatorTransaction),
+		transportWriter:     transportWriter,
+		blockRange:          confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
+		contractAddress:     contractAddress,
+		engineIntegration:   engineIntegration,
+		metrics:             metrics,
+		inactiveGracePeriod: confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod),
 	}
 
 	switch selectionConfig.Mode {
@@ -180,7 +178,7 @@ func (o *originator) propagateEventToTransaction(ctx context.Context, event tran
 	switch e := event.(type) {
 	case *transaction.AssembleRequestReceivedEvent:
 		return o.transportWriter.SendAssembleRejection(ctx, e.GetTransactionID(), e.RequestID, e.Coordinator,
-			common.RejectionReason_TransactionUnknown, 0, 0, 0)
+			common.RejectionReason_TransactionUnknown, 0, 0)
 	case *transaction.PreDispatchRequestReceivedEvent:
 		return o.transportWriter.SendPreDispatchRejection(ctx, e.GetTransactionID(), e.RequestID, e.Coordinator,
 			common.RejectionReason_TransactionUnknown)

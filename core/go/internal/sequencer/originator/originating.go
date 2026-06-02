@@ -61,7 +61,6 @@ func (o *originator) newOriginatorTransaction(ctx context.Context, pt *component
 		o.queueEventInternal,
 		o.engineIntegration,
 		o.metrics,
-		o.blockHeightTolerance,
 		o.getCurrentBlockHeight,
 	)
 }

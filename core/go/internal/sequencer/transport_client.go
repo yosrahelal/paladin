@@ -144,6 +144,7 @@ func (sMgr *sequencerManager) handleAssembleRequest(ctx context.Context, message
 	assembleRequestEvent.RequestID = uuid.MustParse(assembleRequest.AssembleRequestId)
 	assembleRequestEvent.Coordinator = message.FromNode
 	assembleRequestEvent.CoordinatorsBlockHeight = assembleRequest.CoordinatorBlockHeight
+	assembleRequestEvent.BlockHeightTolerance = assembleRequest.BlockHeightTolerance
 	assembleRequestEvent.StateLocksJSON = assembleRequest.StateLocks
 	assembleRequestEvent.PreAssembly = assembleRequest.PreAssembly
 	assembleRequestEvent.EventTime = time.Now()
@@ -269,7 +270,6 @@ func (sMgr *sequencerManager) handleAssembleRejection(ctx context.Context, messa
 	assembleRejectedEvent.RejectionReason = common.RejectionReason(assembleRejection.RejectionReason)
 	assembleRejectedEvent.CoordinatorBlockHeight = assembleRejection.CoordinatorBlockHeight
 	assembleRejectedEvent.AssemblerBlockHeight = assembleRejection.AssemblerBlockHeight
-	assembleRejectedEvent.BlockHeightTolerance = assembleRejection.BlockHeightTolerance
 	seq.GetCoordinator().QueueEvent(ctx, assembleRejectedEvent)
 }
 
@@ -587,6 +587,7 @@ func (sMgr *sequencerManager) handleEndorsementRequest(ctx context.Context, mess
 		PrivateEndorsementRequest: privateEndorsementRequest,
 		AttestationRequest:        endorsementRequest.AttestationRequest,
 		CoordinatorBlockHeight:    endorsementRequest.CoordinatorBlockHeight,
+		BlockHeightTolerance:      endorsementRequest.BlockHeightTolerance,
 	}
 	if endorsementRequest.ExpiryTimeUnixMs != 0 {
 		endorsementRequestReceivedEvent.Expiry = time.UnixMilli(endorsementRequest.ExpiryTimeUnixMs)

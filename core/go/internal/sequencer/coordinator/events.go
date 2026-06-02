@@ -113,6 +113,7 @@ type EndorsementRequestReceivedEvent struct {
 	AttestationRequest        *prototk.AttestationRequest
 	Expiry                    time.Time
 	CoordinatorBlockHeight    int64
+	BlockHeightTolerance      int64
 }
 
 func (*EndorsementRequestReceivedEvent) Type() EventType {

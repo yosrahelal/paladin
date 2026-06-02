@@ -93,6 +93,7 @@ type TransactionBuilderForTesting struct {
 	endorseToleranceByRequirement      map[string]int
 	revertCount                        int
 	currentBlockHeight                 int64
+	blockHeightTolerance               uint64
 }
 
 // Function NewTransactionBuilderForTesting creates a TransactionBuilderForTesting with random values for all fields
@@ -541,6 +542,7 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		func(context.Context, ...string) {}, // notifyEndorserCandidates
 		mocks.EngineIntegration,
 		func() int64 { return b.currentBlockHeight },
+		b.blockHeightTolerance,
 		mocks.SyncPoints,
 		mocks.AllComponents,
 		mocks.DomainAPI,

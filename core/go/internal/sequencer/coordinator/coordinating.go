@@ -244,6 +244,7 @@ func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator 
 		func(ctx context.Context, nodes ...string) { c.updateEndorserCandidates(ctx, nodes...) },
 		c.engineIntegration,
 		c.getCurrentBlockHeight,
+		c.blockHeightTolerance,
 		c.syncPoints,
 		c.components,
 		c.domainAPI,

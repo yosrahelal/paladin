@@ -95,6 +95,7 @@ type coordinatorTransaction struct {
 	dependencyTracker                 dependencytracker.DependencyTracker
 	engineIntegration                 common.EngineIntegration
 	getCurrentBlockHeight             func() int64 // returns the coordinator's tracked block height
+	blockHeightTolerance              uint64
 	syncPoints                        syncpoints.SyncPoints
 	components                        components.AllComponents
 	domainAPI                         components.DomainSmartContract
@@ -120,6 +121,7 @@ func NewTransaction(ctx context.Context,
 	notifyEndorserCandidates func(context.Context, ...string),
 	engineIntegration common.EngineIntegration,
 	getCurrentBlockHeight func() int64,
+	blockHeightTolerance uint64,
 	syncPoints syncpoints.SyncPoints,
 	allComponents components.AllComponents,
 	domainAPI components.DomainSmartContract,
@@ -149,6 +151,7 @@ func NewTransaction(ctx context.Context,
 		notifyEndorserCandidates,
 		engineIntegration,
 		getCurrentBlockHeight,
+		blockHeightTolerance,
 		syncPoints,
 		allComponents,
 		domainAPI,
@@ -180,6 +183,7 @@ func newTransaction(
 	notifyEndorserCandidates func(context.Context, ...string),
 	engineIntegration common.EngineIntegration,
 	getCurrentBlockHeight func() int64,
+	blockHeightTolerance uint64,
 	syncPoints syncpoints.SyncPoints,
 	allComponents components.AllComponents,
 	domainAPI components.DomainSmartContract,
@@ -209,6 +213,7 @@ func newTransaction(
 		notifyEndorserCandidates:          notifyEndorserCandidates,
 		engineIntegration:                 engineIntegration,
 		getCurrentBlockHeight:             getCurrentBlockHeight,
+		blockHeightTolerance:              blockHeightTolerance,
 		syncPoints:                        syncPoints,
 		components:                        allComponents,
 		domainAPI:                         domainAPI,

@@ -265,6 +265,7 @@ func TestNewTransaction_Success_ReturnsTransaction(t *testing.T) {
 		func(context.Context, ...string) {}, // notifyEndorserCandidates
 		sequencercommonmocks.NewEngineIntegration(t),
 		func() int64 { return 0 },
+		0,
 		&syncpointsmocks.SyncPoints{},
 		allComponents,
 		domainAPI,
@@ -315,6 +316,7 @@ func TestNewTransaction_PublicAPI_ReturnsTransaction(t *testing.T) {
 		func(context.Context, ...string) {}, // notifyEndorserCandidates
 		sequencercommonmocks.NewEngineIntegration(t),
 		func() int64 { return 0 },
+		0,
 		&syncpointsmocks.SyncPoints{},
 		allComponents,
 		domainAPI,

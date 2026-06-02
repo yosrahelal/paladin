@@ -575,7 +575,7 @@ func TestSendEndorsementRequest_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, attRequest, transactionSpecification, verifiers, signatures, inputStates, readStates, outputStates, infoStates, time.Time{}, 0)
+	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, attRequest, transactionSpecification, verifiers, signatures, inputStates, readStates, outputStates, infoStates, time.Time{}, 0, 0)
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 }
@@ -612,7 +612,7 @@ func TestSendEndorsementRequest_SerialisesExpiryTimeIntoProto(t *testing.T) {
 		loopbackTransport: mockLoopbackTransport,
 		contractAddress:   contractAddress,
 	}
-	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, nil, transactionSpecification, nil, nil, nil, nil, nil, nil, expiry, 0)
+	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, nil, transactionSpecification, nil, nil, nil, nil, nil, nil, expiry, 0, 0)
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 	assert.Equal(t, expiry.UnixMilli(), capturedExpiry, "ExpiryTimeUnixMs should match expiry.UnixMilli()")
@@ -647,7 +647,7 @@ func TestSendEndorsementRequest_NodeLookupError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, attRequest, transactionSpecification, nil, nil, nil, nil, nil, nil, time.Time{}, 0)
+	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, attRequest, transactionSpecification, nil, nil, nil, nil, nil, nil, time.Time{}, 0, 0)
 	require.Error(t, err)
 	mockTransportManager.AssertNotCalled(t, "Send")
 }
@@ -1004,7 +1004,7 @@ func TestSendAssembleRequest_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendAssembleRequest(ctx, assemblingNode, txID, idempotencyId, preAssembly, stateLocks, blockHeight, time.Time{})
+	err := tw.SendAssembleRequest(ctx, assemblingNode, txID, idempotencyId, preAssembly, stateLocks, blockHeight, time.Time{}, 0)
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 }
@@ -1042,7 +1042,7 @@ func TestSendAssembleRequest_SerialisesExpiryTimeIntoProto(t *testing.T) {
 		loopbackTransport: mockLoopbackTransport,
 		contractAddress:   contractAddress,
 	}
-	err := tw.SendAssembleRequest(ctx, assemblingNode, txID, idempotencyId, preAssembly, stateLocks, blockHeight, expiry)
+	err := tw.SendAssembleRequest(ctx, assemblingNode, txID, idempotencyId, preAssembly, stateLocks, blockHeight, expiry, 0)
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 	assert.Equal(t, expiry.UnixMilli(), capturedExpiry, "ExpiryTimeUnixMs should match expiry.UnixMilli()")
@@ -1078,7 +1078,7 @@ func TestSendAssembleRequest_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendAssembleRequest(ctx, assemblingNode, txID, idempotencyId, preAssembly, stateLocks, blockHeight, time.Time{})
+	err := tw.SendAssembleRequest(ctx, assemblingNode, txID, idempotencyId, preAssembly, stateLocks, blockHeight, time.Time{}, 0)
 	require.Error(t, err)
 	assert.Equal(t, sendError, err)
 	mockTransportManager.AssertExpectations(t)
@@ -1313,7 +1313,6 @@ func TestSendAssembleRejection_Success(t *testing.T) {
 	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
 	coordinatorBlockHeight := int64(100)
 	assemblerBlockHeight := int64(95)
-	blockHeightTolerance := int64(10)
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
 	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
@@ -1334,8 +1333,7 @@ func TestSendAssembleRejection_Success(t *testing.T) {
 			r.ContractAddress == contractAddress.HexString() &&
 			r.RejectionReason == int32(common.RejectionReason_BlockHeightTolerance) &&
 			r.CoordinatorBlockHeight == coordinatorBlockHeight &&
-			r.AssemblerBlockHeight == assemblerBlockHeight &&
-			r.BlockHeightTolerance == blockHeightTolerance
+			r.AssemblerBlockHeight == assemblerBlockHeight
 	})).Return(nil)
 
 	tw := &transportWriter{
@@ -1346,7 +1344,7 @@ func TestSendAssembleRejection_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, common.RejectionReason_BlockHeightTolerance, coordinatorBlockHeight, assemblerBlockHeight, blockHeightTolerance)
+	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, common.RejectionReason_BlockHeightTolerance, coordinatorBlockHeight, assemblerBlockHeight)
 	require.NoError(t, err)
 	mockTransportManager.AssertExpectations(t)
 }
@@ -1372,7 +1370,7 @@ func TestSendAssembleRejection_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, common.RejectionReason_BlockHeightTolerance, 100, 95, 10)
+	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, common.RejectionReason_BlockHeightTolerance, 100, 95)
 	require.Error(t, err)
 	assert.Equal(t, sendError, err)
 	mockTransportManager.AssertExpectations(t)
