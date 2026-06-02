@@ -220,6 +220,7 @@ func (ss *stateManager) GetStatesByID(ctx context.Context, dbTX persistence.DBTX
 var baseStateFields = map[string]filters.FieldResolver{
 	".id":      filters.HexBytesField(`"states"."id"`),
 	".created": filters.TimestampField(`"states"."created"`),
+	"contractAddress": filters.HexBytesField(`"states"."contract_address"`),
 }
 
 func addStateBaseLabels(labelValues filters.PassthroughValueSet, id pldtypes.HexBytes, createdAt pldtypes.Timestamp) filters.PassthroughValueSet {
