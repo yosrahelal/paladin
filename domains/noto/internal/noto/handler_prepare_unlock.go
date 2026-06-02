@@ -96,12 +96,20 @@ func (h *prepareUnlockHandler) Assemble(ctx context.Context, tx *types.ParsedTra
 		return nil, err
 	}
 
+	var cancelOutputs *preparedOutputs
+	if !tx.DomainConfig.IsV0() {
+		cancelOutputs, err = h.noto.prepareOutputs(fromID, (*pldtypes.HexUint256)(lockedInputs.total), identityList{notaryID, fromID})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	unlockInfo, err := h.buildUnlockInfo(ctx, tx, req.ResolvedVerifiers, req.StateQueryContext, &unlockInfoInput{
 		resolvedIdentities: ids,
 		recipients:         unlockParams.Recipients,
 		unlockData:         unlockData,
 		spendOutputs:       outputs,
-		omitCancelManifest: true,
+		cancelOutputs:      cancelOutputs,
 	})
 	if err != nil {
 		return nil, err
@@ -116,23 +124,11 @@ func (h *prepareUnlockHandler) Assemble(ctx context.Context, tx *types.ParsedTra
 		infoStates = append(infoStates, lock.state)
 	}
 
-	mb := h.noto.newManifestBuilder().
-		addOutputs(outputs).
-		addInfoStates(unlockInfo.infoDistribution, infoStates...)
-
-	var cancelOutputs *preparedOutputs
 	var lock *preparedLockInfo
 	if !tx.DomainConfig.IsV0() {
-		// We build the cancel outputs
-		cancelOutputs, err = h.noto.prepareOutputs(fromID, (*pldtypes.HexUint256)(lockedInputs.total), identityList{notaryID, fromID})
-		if err == nil {
-			err = h.noto.allocateStateIDs(ctx, req.StateQueryContext, outputs.states, cancelOutputs.states)
-		}
 		// The tx data for the prepareUnlock itself needs to be distributed (separate to the unlockData)
 		var prepareInfoStates []*prototk.NewState
-		if err == nil {
-			prepareInfoStates, err = h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, unlockInfo.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
-		}
+		prepareInfoStates, err = h.noto.prepareDataInfo(ctx, params.Data, tx.DomainConfig.Variant, unlockInfo.infoDistribution.identities(), tx.Transaction, req.ResolvedVerifiers)
 		if err == nil {
 			infoStates = append(infoStates, prepareInfoStates...)
 
@@ -143,7 +139,7 @@ func (h *prepareUnlockHandler) Assemble(ctx context.Context, tx *types.ParsedTra
 			newLockInfo.SpendOutputs = newStateAllocatedIDs(outputs.states)
 			newLockInfo.SpendData = unlockInfo.spendData
 			newLockInfo.CancelOutputs = newStateAllocatedIDs(cancelOutputs.states)
-			newLockInfo.CancelData = unlockInfo.spendData
+			newLockInfo.CancelData = unlockInfo.cancelData
 			newLockInfo.SpendTxId = spendTxId
 			lock, err = h.noto.prepareLockInfo_V1(&newLockInfo, identityList{notaryID, senderID, fromID})
 		}
@@ -151,7 +147,9 @@ func (h *prepareUnlockHandler) Assemble(ctx context.Context, tx *types.ParsedTra
 		// .. and then the manifest
 		var manifestState *prototk.NewState
 		if err == nil {
-			manifestState, err = mb.
+			manifestState, err = h.noto.newManifestBuilder().
+				addOutputs(outputs).
+				addInfoStates(unlockInfo.infoDistribution, infoStates...).
 				addOutputs(cancelOutputs).
 				addLockInfo(lock).
 				addInfoStates(unlockInfo.infoDistribution, prepareInfoStates...).
