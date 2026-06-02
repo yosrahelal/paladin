@@ -67,7 +67,7 @@ export const Messages: React.FC<Props> = ({
   const { t } = useTranslation();
 
   const { data: messages, error } = useQuery({
-    queryKey: ['messages', page, rowsPerPage, sortAscending, filters, refTimestamps],
+    queryKey: ['messages', page, rowsPerPage, sortAscending, filters],
     queryFn: () => queryMessages(rowsPerPage, sortAscending, filters, refTimestamps[refTimestamps.length - 1]),
   });
 

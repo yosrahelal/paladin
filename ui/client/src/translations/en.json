@@ -235,6 +235,7 @@
 	"signature": "Signature",
 	"smartContracts": "Smart Contracts",
 	"state": "State",
+	"statesEmptyState": "There are no states",
 	"stateNotFound": "State not found",
 	"stateReceipt": "State Receipt",
 	"states": "States",

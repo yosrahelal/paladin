@@ -15,9 +15,10 @@
 // limitations under the License.
 
 import i18next from "i18next";
-import { ISchema, IState, IStateReceipt } from "../interfaces";
+import { IFilter, ISchema, IState, IStateReceipt } from "../interfaces";
 import { generatePostReq, returnResponse } from "./common";
 import { RpcEndpoint, RpcMethods } from "./rpcMethods";
+import { translateFilters } from "../utils";
 
 export const fetchStateReceipt = async (
   transactionId: string
@@ -73,8 +74,12 @@ export const queryStates = async (
   schemaId: string,
   limit: number,
   sortAscending: boolean,
+  filters: IFilter[],
   refTimestamp?: string
 ): Promise<IState[]> => {
+
+  let translatedFilters = translateFilters(filters);
+
   const requestPayload = {
     jsonrpc: "2.0",
     id: Date.now(),
@@ -83,6 +88,7 @@ export const queryStates = async (
       domain,
       schemaId,
       {
+        ...translatedFilters,
         limit,
         sort: [`.created ${sortAscending ? 'ASC' : 'DESC'}`],
         greaterThan: refTimestamp !== undefined && sortAscending ? [

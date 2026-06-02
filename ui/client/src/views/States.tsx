@@ -26,6 +26,10 @@ import { Captions, Tag } from "lucide-react";
 import { customNavigate } from "../utils";
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { Hash } from "../components/Hash";
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import { IFilter } from "../interfaces";
+import { constants } from "../components/config";
+import { Filters } from "../components/Filters";
 
 type Props = {
   sortAscending: boolean
@@ -57,6 +61,17 @@ export const States: React.FC<Props> = ({
   setSelectedSchemaId
 }) => {
 
+  const getFiltersFromStorage = () => {
+    const value = window.localStorage.getItem(constants.STATE_FILTERS);
+    if (value !== null) {
+      try {
+        return JSON.parse(value);
+      } catch (_err) { }
+    }
+    return [];
+  };
+
+  const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
   const [count, setCount] = useState(-1);
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -73,8 +88,8 @@ export const States: React.FC<Props> = ({
   });
 
   const { data: states, error: statesError } = useQuery({
-    queryKey: ['states', selectedDomain, selectedSchemaId, page, rowsPerPage, sortAscending],
-    queryFn: () => queryStates(selectedDomain!, selectedSchemaId!, rowsPerPage, sortAscending, refTimestamps[refTimestamps.length - 1]),
+    queryKey: ['states', selectedDomain, selectedSchemaId, page, rowsPerPage, sortAscending, filters],
+    queryFn: () => queryStates(selectedDomain!, selectedSchemaId!, rowsPerPage, sortAscending, filters, refTimestamps[refTimestamps.length - 1]),
     enabled: selectedSchemaId !== undefined
   });
 
@@ -198,111 +213,139 @@ export const States: React.FC<Props> = ({
               </Grid2>
             </Box>
             {states !== undefined && states.length > 0 &&
-              <TableContainer
-                component={Paper}
-              >
-                <Table stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell
-                        width={1}
-                        sx={{
-                          backgroundColor: (theme) => theme.palette.background.paper,
-                        }}>
-                        <TableSortLabel
-                          active={true}
-                          direction={sortAscending ? 'asc' : 'desc'}
-                          onClick={() => {
-                            setSortAscending(!sortAscending);
-                            setRefTimestamps([]);
-                            setPage(0);
+              <>
+                <Box>
+                  <Filters
+                    filterFields={[
+                      {
+                        label: t('id'),
+                        name: '.id',
+                        type: 'string',
+                        isHexValue: true
+                      },
+                      {
+                        label: t('contractAddress'),
+                        name: 'contractAddress',
+                        type: 'string',
+                        isHexValue: true
+                      }
+                    ]}
+                    filters={filters}
+                    setFilters={setFilters}
+                  />
+                </Box>
+                <TableContainer
+                  component={Paper}
+                >
+                  <Table stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell
+                          width={1}
+                          sx={{
+                            backgroundColor: (theme) => theme.palette.background.paper,
+                          }}>
+                          <TableSortLabel
+                            active={true}
+                            direction={sortAscending ? 'asc' : 'desc'}
+                            onClick={() => {
+                              setSortAscending(!sortAscending);
+                              setRefTimestamps([]);
+                              setPage(0);
+                            }}
+                          >
+                            {t('created')}
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell
+                          width={1}
+                          sx={{
+                            backgroundColor: (theme) => theme.palette.background.paper,
+                            whiteSpace: 'nowrap'
                           }}
                         >
-                          {t('created')}
-                        </TableSortLabel>
-                      </TableCell>
-                      <TableCell
-                        width={1}
-                        sx={{
-                          backgroundColor: (theme) => theme.palette.background.paper,
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        {t('id')}
-                      </TableCell>
-                      <TableCell
-                        width={1}
-                        sx={{
-                          backgroundColor: (theme) => theme.palette.background.paper,
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        {t('contractAddress')}
-                      </TableCell>
-                      <TableCell
-                        width={1}
-                        sx={{
-                          backgroundColor: (theme) => theme.palette.background.paper,
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        {t('actions')}
-                      </TableCell>
-                      <TableCell
-                        width={1}
-                        sx={{
-                          backgroundColor: (theme) => theme.palette.background.paper,
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {states.map(state =>
-                      <TableRow key={state.id}>
-                        <TableCell >
-                          <Timestamp timestamp={state.created} />
+                          {t('id')}
                         </TableCell>
-                        <TableCell>
-                          <Hash Icon={<Tag size="18px" />} title={t('id')} hash={state.id} />
+                        <TableCell
+                          width={1}
+                          sx={{
+                            backgroundColor: (theme) => theme.palette.background.paper,
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {t('contractAddress')}
                         </TableCell>
-                        <TableCell>
-                          <Hash Icon={<Captions size="18px" />} title={t('address')} hash={state.contractAddress} />
+                        <TableCell
+                          width={1}
+                          sx={{
+                            backgroundColor: (theme) => theme.palette.background.paper,
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {t('actions')}
                         </TableCell>
-                        <TableCell>
-                          
-                        </TableCell>
-                        <TableCell align="right" sx={{ padding: '8px' }}>
-                          <Tooltip title={t('open')} arrow>
-                            <IconButton
-                              onClick={mouseEvent => customNavigate(`/ui/states/${state.domain}/${state.schema}/${state.id}`, mouseEvent, navigate)}>
-                              <OpenInNewIcon color="secondary" fontSize="medium" />
-                            </IconButton>
-                          </Tooltip>
+                        <TableCell
+                          width={1}
+                          sx={{
+                            backgroundColor: (theme) => theme.palette.background.paper,
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
                         </TableCell>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-                <TablePagination
-                  slotProps={{
-                    actions: {
-                      lastButton: {
-                        disabled: true
+                    </TableHead>
+                    <TableBody>
+                      {states.map(state =>
+                        <TableRow key={state.id}>
+                          <TableCell >
+                            <Timestamp timestamp={state.created} />
+                          </TableCell>
+                          <TableCell>
+                            <Hash Icon={<Tag size="18px" />} title={t('id')} hash={state.id} />
+                          </TableCell>
+                          <TableCell>
+                            <Hash Icon={<Captions size="18px" />} title={t('address')} hash={state.contractAddress} />
+                          </TableCell>
+                          <TableCell>
+
+                          </TableCell>
+                          <TableCell align="right" sx={{ padding: '8px' }}>
+                            <Tooltip title={t('open')} arrow>
+                              <IconButton
+                                onClick={mouseEvent => customNavigate(`/ui/states/${state.domain}/${state.schema}/${state.id}`, mouseEvent, navigate)}>
+                                <OpenInNewIcon color="secondary" fontSize="medium" />
+                              </IconButton>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                  <TablePagination
+                    slotProps={{
+                      actions: {
+                        lastButton: {
+                          disabled: true
+                        }
                       }
-                    }
-                  }}
-                  component="div"
-                  showFirstButton
-                  showLastButton
-                  count={count}
-                  page={page}
-                  onPageChange={handleChangePage}
-                  rowsPerPage={rowsPerPage}
-                  onRowsPerPageChange={handleChangeRowsPerPage}
-                />
-              </TableContainer>}
+                    }}
+                    component="div"
+                    showFirstButton
+                    showLastButton
+                    count={count}
+                    page={page}
+                    onPageChange={handleChangePage}
+                    rowsPerPage={rowsPerPage}
+                    onRowsPerPageChange={handleChangeRowsPerPage}
+                  />
+                </TableContainer>
+              </>}
+            {states !== undefined && states.length === 0 &&
+              <Box sx={{ marginTop: '60px', textAlign: 'center', color: theme => theme.palette.text.secondary }}>
+                <InfoOutlinedIcon sx={{ fontSize: '50px' }} />
+                <Typography>{t('statesEmptyState')}</Typography>
+              </Box>
+            }
           </Box>
         </Box>
       </Fade>
