@@ -148,8 +148,11 @@ func TestCoordinator_WhenIdle_HeartbeatReceived_UpdatesEndorserCandidates(t *tes
 		Build()
 
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		FromNode:            "node2",
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Idle},
+		FromNode: "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState:   common.CoordinatorState_Idle,
+			EndorserCandidates: []string{"node1", "node2"},
+		},
 	}))
 
 	assert.Equal(t, State_Idle, c.GetCurrentState())
@@ -422,8 +425,11 @@ func TestCoordinator_WhenObserving_HeartbeatReceived_UpdatesEndorserCandidates(t
 		Build()
 
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		FromNode:            "node2",
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Idle},
+		FromNode: "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState:   common.CoordinatorState_Idle,
+			EndorserCandidates: []string{"node1", "node2"},
+		},
 	}))
 
 	assert.Equal(t, State_Observing, c.GetCurrentState())
@@ -596,8 +602,6 @@ func TestCoordinator_WhenElect_HigherPriorityHeartbeat_HasInflightNoDispatched_T
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		EndorserCandidates("node3"). // for OnTransitionTo Closing heartbeat
-		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txConfirmed).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
@@ -618,8 +622,6 @@ func TestCoordinator_WhenElect_HigherPriorityHeartbeat_HasInflightAndDispatched_
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		EndorserCandidates("node3"). // for OnTransitionTo Closing_Flush heartbeat
-		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
@@ -1038,8 +1040,6 @@ func TestCoordinator_WhenPrepared_HeartbeatReceived_HigherPriority_HasInflightNo
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		EndorserCandidates("node3"). // for OnTransitionTo Closing heartbeat
-		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txConfirmed).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
@@ -1060,8 +1060,6 @@ func TestCoordinator_WhenPrepared_HeartbeatReceived_HigherPriority_HasInflightAn
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		EndorserCandidates("node3"). // for OnTransitionTo Closing_Flush heartbeat
-		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
@@ -2409,8 +2407,11 @@ func TestCoordinator_WhenClosingFlush_HeartbeatReceived_UpdatesEndorserCandidate
 		Build()
 
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		FromNode:            "node2",
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Idle},
+		FromNode: "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState:   common.CoordinatorState_Idle,
+			EndorserCandidates: []string{"node1", "node2"},
+		},
 	}))
 
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
@@ -2445,8 +2446,11 @@ func TestCoordinator_WhenClosing_HeartbeatReceived_UpdatesEndorserCandidates(t *
 		Build()
 
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		FromNode:            "node2",
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Idle},
+		FromNode: "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState:   common.CoordinatorState_Idle,
+			EndorserCandidates: []string{"node1", "node2"},
+		},
 	}))
 
 	assert.Equal(t, State_Closing, c.GetCurrentState())

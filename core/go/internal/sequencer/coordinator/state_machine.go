@@ -84,7 +84,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
 					Actions: []ActionRule{{
-						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						Action: action_AddEndorsersFromSnapshot,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
 					}},
 				}, {
@@ -149,7 +149,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
 					Actions: []ActionRule{{
-						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						Action: action_AddEndorsersFromSnapshot,
 						If:     guard_IsCoordinatorEndorserSelectionMode}},
 				}, {
 					Validator: validator_IsHeartbeatSenderLive,
@@ -267,7 +267,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
 					Actions: []ActionRule{{
-						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						Action: action_AddEndorsersFromSnapshot,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
 					}},
 				}, {
@@ -448,7 +448,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
 					Actions: []ActionRule{{
-						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						Action: action_AddEndorsersFromSnapshot,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
 					}},
 				}, {
@@ -639,7 +639,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
 					Actions: []ActionRule{{
-						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						Action: action_AddEndorsersFromSnapshot,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
 					}},
 				}, {
@@ -838,7 +838,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
 					Actions: []ActionRule{{
-						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						Action: action_AddEndorsersFromSnapshot,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
 					}},
 				}, {
@@ -1004,7 +1004,7 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
 					Actions: []ActionRule{{
-						Action: action_AddHeartbeatSenderToEndorserCandidates,
+						Action: action_AddEndorsersFromSnapshot,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
 					}},
 				}, {
@@ -1104,7 +1104,10 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_HeartbeatReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_AddHeartbeatSenderToEndorserCandidates, If: guard_IsCoordinatorEndorserSelectionMode}},
+					Actions: []ActionRule{{
+						Action: action_AddEndorsersFromSnapshot,
+						If:     guard_IsCoordinatorEndorserSelectionMode,
+					}},
 				}, {
 					Validator: validator_IsHeartbeatSenderLive,
 					Actions: []ActionRule{

@@ -304,9 +304,9 @@ func action_UpdateEndorserCandidates(_ context.Context, o *originator, event com
 	return nil
 }
 
-// action_UpdateEndorserCandidatesFromHeartbeat adds the heartbeat sender to the endorser
-// candidate pool if not already present, then recomputes the priority list. This runs as
-// handler 0 for all HeartbeatReceived events so that subsequent handlers (e.g.
+// action_UpdateEndorserCandidatesFromHeartbeat merges the heartbeat sender's known endorser pool
+// into the local candidate pool, then recomputes the priority list. This runs as handler 0 for
+// all HeartbeatReceived events so that subsequent handlers (e.g.
 // validator_IsSenderHigherPriorityThanCurrentCoordinator) see an up-to-date list — important
 // because the heartbeat is queued to the originator before the coordinator's
 // EndorserNodesDiscoveredEvent notification arrives.
@@ -315,10 +315,20 @@ func action_UpdateEndorserCandidatesFromHeartbeat(ctx context.Context, o *origin
 		return nil // STATIC/SENDER mode: endorserCandidates is empty
 	}
 	e := event.(*common.HeartbeatReceivedEvent)
-	if slices.Contains(o.endorserCandidates, e.FromNode) {
+	candidates := []string{e.FromNode}
+	if e.CoordinatorSnapshot != nil && len(e.CoordinatorSnapshot.EndorserCandidates) > 0 {
+		candidates = e.CoordinatorSnapshot.EndorserCandidates
+	}
+	changed := false
+	for _, node := range candidates {
+		if !slices.Contains(o.endorserCandidates, node) {
+			o.endorserCandidates = append(o.endorserCandidates, node)
+			changed = true
+		}
+	}
+	if !changed {
 		return nil
 	}
-	o.endorserCandidates = append(o.endorserCandidates, e.FromNode)
 	slices.Sort(o.endorserCandidates)
 	o.coordinatorPriorityList = common.ComputeCoordinatorPriorityList(
 		ctx,

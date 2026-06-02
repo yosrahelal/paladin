@@ -17,6 +17,7 @@ package coordinator
 
 import (
 	"context"
+
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 )
@@ -31,7 +32,6 @@ func validator_IsHeartbeatSenderLive(_ context.Context, _ *coordinator, event co
 		state == common.CoordinatorState_Active ||
 		state == common.CoordinatorState_Active_Flush, nil
 }
-
 
 // validator_IsHandoverRequestFromHigherPriorityCoordinator returns true when a HandoverRequest is from
 // a node that has strictly higher priority (lower index) than this node.
@@ -120,8 +120,8 @@ func validator_IsHeartbeatFromCurrentActiveCoordinator(_ context.Context, c *coo
 	return c.currentActiveCoordinator == e.FromNode, nil
 }
 
-func action_AddHeartbeatSenderToEndorserCandidates(ctx context.Context, c *coordinator, event common.Event) error {
+func action_AddEndorsersFromSnapshot(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*common.HeartbeatReceivedEvent)
-	c.updateEndorserCandidates(ctx, e.FromNode)
+	c.updateEndorserCandidates(ctx, e.CoordinatorSnapshot.EndorserCandidates...)
 	return nil
 }
