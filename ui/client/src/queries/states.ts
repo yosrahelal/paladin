@@ -71,6 +71,9 @@ export const listSchemas = async (domain: string): Promise<ISchema[]> => {
 export const queryStates = async (
   domain: string,
   schemaId: string,
+  limit: number,
+  sortAscending: boolean,
+  refTimestamp?: string
 ): Promise<IState[]> => {
   const requestPayload = {
     jsonrpc: "2.0",
@@ -79,7 +82,22 @@ export const queryStates = async (
     params: [
       domain,
       schemaId,
-      {},
+      {
+        limit,
+        sort: [`.created ${sortAscending ? 'ASC' : 'DESC'}`],
+        greaterThan: refTimestamp !== undefined && sortAscending ? [
+          {
+            field: '.created',
+            value: refTimestamp
+          }
+        ] : undefined,
+        lessThan: refTimestamp !== undefined && !sortAscending ? [
+          {
+            field: '.created',
+            value: refTimestamp
+          }
+        ] : undefined
+      },
       'all'
     ]
   };

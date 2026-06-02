@@ -76,8 +76,8 @@ export const States: React.FC<Props> = ({
   });
 
   const { data: states, error: statesError } = useQuery({
-    queryKey: ['states', selectedDomain, selectedSchemaId],
-    queryFn: () => queryStates(selectedDomain!, selectedSchemaId!),
+    queryKey: ['states', selectedDomain, selectedSchemaId, page, rowsPerPage, sortAscending],
+    queryFn: () => queryStates(selectedDomain!, selectedSchemaId!, rowsPerPage, sortAscending, refTimestamps[refTimestamps.length - 1]),
     enabled: selectedSchemaId !== undefined
   });
 
