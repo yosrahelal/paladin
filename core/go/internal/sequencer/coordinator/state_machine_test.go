@@ -632,25 +632,6 @@ func TestCoordinator_WhenElect_HigherPriorityHeartbeat_HasInflightAndDispatched_
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
 }
 
-func TestCoordinator_WhenElect_HeartbeatReceived_LiveLowerPriority_ReassertsByHeartbeat(t *testing.T) {
-	ctx := t.Context()
-	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
-		NodeName("node1").
-		CurrentActiveCoordinator("node1").
-		EndorserCandidates("node1", "node2").
-		CoordinatorPriorityList("node1", "node2").
-		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
-		Build()
-
-	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		FromNode:            "node2",
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
-	}))
-
-	assert.Equal(t, State_Elect, c.GetCurrentState())
-	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "live lower-priority heartbeat in Elect triggers reassertion heartbeat")
-}
-
 func TestCoordinator_WhenElect_HandoverRequest_HigherPriority_HasDispatched_TransitionsToClosingFlush(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
@@ -1052,25 +1033,6 @@ func TestCoordinator_WhenPrepared_HeartbeatReceived_HigherPriority_HasInflightAn
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
 }
 
-func TestCoordinator_WhenPrepared_HeartbeatReceived_LiveLowerPriority_ReassertsByHeartbeat(t *testing.T) {
-	ctx := t.Context()
-	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
-		NodeName("node1").
-		CurrentActiveCoordinator("node1").
-		EndorserCandidates("node1", "node2").
-		CoordinatorPriorityList("node1", "node2").
-		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
-		Build()
-
-	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		FromNode:            "node2",
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
-	}))
-
-	assert.Equal(t, State_Prepared, c.GetCurrentState())
-	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "live lower-priority heartbeat in Prepared triggers reassertion heartbeat")
-}
-
 func TestCoordinator_WhenPrepared_HandoverRequest_HigherPriority_HasDispatched_TransitionsToClosingFlush(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
@@ -1400,25 +1362,6 @@ func TestCoordinator_WhenActive_HeartbeatReceived_NotHigherPriority_IgnoresAndSt
 		},
 	}))
 	assert.Equal(t, State_Active, c.GetCurrentState())
-}
-
-func TestCoordinator_WhenActive_HeartbeatReceived_LiveLowerPriority_ReassertsByHeartbeat(t *testing.T) {
-	ctx := t.Context()
-	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
-		NodeName("node1").
-		CurrentActiveCoordinator("node1").
-		EndorserCandidates("node1", "node2").
-		CoordinatorPriorityList("node1", "node2").
-		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
-		Build()
-
-	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		FromNode:            "node2",
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
-	}))
-
-	assert.Equal(t, State_Active, c.GetCurrentState())
-	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "live lower-priority heartbeat in Active triggers reassertion heartbeat")
 }
 
 func TestCoordinator_WhenActive_HandoverRequest_HigherPriority_HasDispatched_TransitionsToClosingFlush(t *testing.T) {
@@ -1825,25 +1768,6 @@ func TestCoordinator_WhenActiveFLush_HigherPriorityHeartbeat_TransitionsToClosin
 	}))
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
 	assert.Equal(t, "node1", c.currentActiveCoordinator, "action_UpdateActiveCoordinator must record the new active node")
-}
-
-func TestCoordinator_WhenActiveFLush_HeartbeatReceived_LiveLowerPriority_ReassertsByHeartbeat(t *testing.T) {
-	ctx := t.Context()
-	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
-		NodeName("node1").
-		CurrentActiveCoordinator("node1").
-		EndorserCandidates("node1", "node2").
-		CoordinatorPriorityList("node1", "node2").
-		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
-		Build()
-
-	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
-		FromNode:            "node2",
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{CoordinatorState: common.CoordinatorState_Active},
-	}))
-
-	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
-	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "live lower-priority heartbeat in Active_Flush triggers reassertion heartbeat")
 }
 
 func TestCoordinator_WhenActiveFLush_HandoverRequest_HigherPriority_HasDispatched_TransitionsToClosingFlush(t *testing.T) {

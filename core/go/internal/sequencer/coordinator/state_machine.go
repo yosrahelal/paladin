@@ -297,17 +297,6 @@ var stateDefinitionsMap = StateDefinitions{
 						If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
 					}},
 				}, {
-					// A live heartbeat from a lower-priority coordinator: reassert that we are the active
-					// coordinator so the sender can update its priority view.
-					Validator: statemachine.ValidatorAnd(
-						validator_IsHeartbeatSenderLive,
-						statemachine.ValidatorNot(validator_IsHeartbeatFromHigherPriorityCoordinator),
-					),
-					Actions: []ActionRule{{
-						Action: action_SendHeartbeat,
-						If:     guard_IsCoordinatorEndorserSelectionMode,
-					}},
-				}, {
 					// The active coordinator has started flushing in response to our handover request.
 					Validator: statemachine.ValidatorAnd(
 						validator_IsHeartbeatFromCurrentActiveCoordinator,
@@ -503,17 +492,6 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Closing,
 						If: statemachine.GuardAnd(guard_HasTransactionsInflight, statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions)),
 					}},
-				}, {
-					// A live heartbeat from a lower-priority coordinator: reassert that we are the active
-					// coordinator so the sender can update its priority view.
-					Validator: statemachine.ValidatorAnd(
-						validator_IsHeartbeatSenderLive,
-						statemachine.ValidatorNot(validator_IsHeartbeatFromHigherPriorityCoordinator),
-					),
-					Actions: []ActionRule{{
-						Action: action_SendHeartbeat,
-						If:     guard_IsCoordinatorEndorserSelectionMode,
-					}},
 				}},
 			},
 			Event_HandoverRequest: {
@@ -671,17 +649,6 @@ var stateDefinitionsMap = StateDefinitions{
 					}, {
 						To: State_Closing,
 						If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
-					}},
-				}, {
-					// A live heartbeat from a lower-priority coordinator: reassert that we are the active
-					// coordinator so the sender can update its priority view.
-					Validator: statemachine.ValidatorAnd(
-						validator_IsHeartbeatSenderLive,
-						statemachine.ValidatorNot(validator_IsHeartbeatFromHigherPriorityCoordinator),
-					),
-					Actions: []ActionRule{{
-						Action: action_SendHeartbeat,
-						If:     guard_IsCoordinatorEndorserSelectionMode,
 					}},
 				}},
 			},
@@ -875,14 +842,6 @@ var stateDefinitionsMap = StateDefinitions{
 							{Action: action_CleanUpTransactionsNotYetDispatched},
 						},
 					}},
-				}, {
-					// A live heartbeat from a lower-priority coordinator: reassert that we are the active
-					// coordinator so the sender can update its priority view.
-					Validator: statemachine.ValidatorAnd(
-						validator_IsHeartbeatSenderLive,
-						statemachine.ValidatorNot(validator_IsHeartbeatFromHigherPriorityCoordinator),
-					),
-					Actions: []ActionRule{{Action: action_SendHeartbeat, If: guard_IsCoordinatorEndorserSelectionMode}},
 				}},
 			},
 			Event_HandoverRequest: {
