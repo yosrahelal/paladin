@@ -17,6 +17,7 @@
 package statemgr
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -350,4 +351,73 @@ func TestFindStatesWithNilOptions(t *testing.T) {
 	_, err := ss.FindStates(ctx, ss.p.NOTX(), "domain1", pldtypes.RandBytes32(), query.NewQueryBuilder().Query(), nil)
 	assert.Regexp(t, "called", err)
 
+}
+
+func TestWritePreVerifiedStates_UpdateStateCompletion_CalledWithArrivedStateIDs(t *testing.T) {
+	ctx, ss, m, done := newDBTestStateManager(t)
+	defer done()
+
+	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
+	require.NoError(t, err)
+	err = ss.persistSchemas(ctx, ss.p.NOTX(), []*pldapi.Schema{schema.Schema})
+	require.NoError(t, err)
+
+	_ = mockDomain(t, m, "domain1", false)
+	m.txManager.On("NotifyStatesDBChanged", mock.Anything).Return()
+
+	var capturedIDs []pldtypes.HexBytes
+	m.domainManager.On("UpdateStateCompletion", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { capturedIDs = args.Get(2).([]pldtypes.HexBytes) }).
+		Return(nil).Once()
+
+	contractAddr := pldtypes.RandAddress()
+	var states []*pldapi.State
+	err = ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		states, err = ss.WritePreVerifiedStates(ctx, dbTX, "domain1", []*components.StateUpsertOutsideContext{
+			{
+				SchemaID:        schema.ID(),
+				Data:            pldtypes.RawJSON(fmt.Sprintf(`{"amount":10,"owner":"0x615dD09124271D8008225054d85Ffe720E7a447A","salt":"%s"}`, pldtypes.RandHex(32))),
+				ContractAddress: contractAddr,
+			},
+			{
+				SchemaID:        schema.ID(),
+				Data:            pldtypes.RawJSON(fmt.Sprintf(`{"amount":20,"owner":"0x615dD09124271D8008225054d85Ffe720E7a447A","salt":"%s"}`, pldtypes.RandHex(32))),
+				ContractAddress: contractAddr,
+			},
+		})
+		return err
+	})
+	require.NoError(t, err)
+	require.Len(t, states, 2)
+	require.Len(t, capturedIDs, 2)
+	assert.Equal(t, states[0].ID, capturedIDs[0])
+	assert.Equal(t, states[1].ID, capturedIDs[1])
+}
+
+func TestWriteReceivedStates_UpdateStateCompletion_ErrorPropagates(t *testing.T) {
+	ctx, ss, m, done := newDBTestStateManager(t)
+	defer done()
+
+	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
+	require.NoError(t, err)
+	err = ss.persistSchemas(ctx, ss.p.NOTX(), []*pldapi.Schema{schema.Schema})
+	require.NoError(t, err)
+
+	_ = mockDomain(t, m, "domain1", false)
+
+	m.domainManager.On("UpdateStateCompletion", mock.Anything, mock.Anything, mock.Anything).
+		Return(fmt.Errorf("completion index failure")).Once()
+
+	contractAddr := pldtypes.RandAddress()
+	err = ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		_, err = ss.WriteReceivedStates(ctx, dbTX, "domain1", []*components.StateUpsertOutsideContext{
+			{
+				SchemaID:        schema.ID(),
+				Data:            pldtypes.RawJSON(fmt.Sprintf(`{"amount":10,"owner":"0x615dD09124271D8008225054d85Ffe720E7a447A","salt":"%s"}`, pldtypes.RandHex(32))),
+				ContractAddress: contractAddr,
+			},
+		})
+		return err
+	})
+	assert.Regexp(t, "completion index failure", err)
 }

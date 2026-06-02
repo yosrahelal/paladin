@@ -112,7 +112,13 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
-					Validator: statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+					Validator: validator_IsPrivateStateIncompleteForEndorsement,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementPrivateStateIncomplete}},
+				}, {
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement), // TODO AM: invert this?
+					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_HandleEndorsementRequest},
@@ -168,7 +174,13 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
-					Validator: statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+					Validator: validator_IsPrivateStateIncompleteForEndorsement,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementPrivateStateIncomplete}},
+				}, {
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement), // TODO AM: invert this?
+					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_HandleEndorsementRequest},
@@ -337,9 +349,13 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
+					Validator: validator_IsPrivateStateIncompleteForEndorsement,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementPrivateStateIncomplete}},
+				}, {
 					// A higher-priority node is sending endorsement requests; step down and handle.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 						validator_IsEndorsementRequestFromHigherPriorityCoordinator,
 					),
 					Actions: []ActionRule{
@@ -367,6 +383,7 @@ var stateDefinitionsMap = StateDefinitions{
 					// Sending an additional heartbeat at this point achieves a largely similar effect.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
 					),
 					Actions: []ActionRule{
@@ -514,9 +531,13 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
+					Validator: validator_IsPrivateStateIncompleteForEndorsement,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementPrivateStateIncomplete}},
+				}, {
 					// A higher-priority node is sending endorsement requests; step down and handle.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 						validator_IsEndorsementRequestFromHigherPriorityCoordinator,
 					),
 					Actions: []ActionRule{
@@ -543,6 +564,7 @@ var stateDefinitionsMap = StateDefinitions{
 					// Sending an additional heartbeat at this point achieves a largely similar effect.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
 					),
 					Actions: []ActionRule{
@@ -677,9 +699,13 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
+					Validator: validator_IsPrivateStateIncompleteForEndorsement,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementPrivateStateIncomplete}},
+				}, {
 					// A higher-priority node is sending endorsement requests; step down and handle.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 						validator_IsEndorsementRequestFromHigherPriorityCoordinator,
 					),
 					Actions: []ActionRule{
@@ -701,6 +727,7 @@ var stateDefinitionsMap = StateDefinitions{
 					// We are both the coordinator and the endorser; handle directly without stepping down.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 						validator_IsEndorsementRequestFromSelf,
 					),
 					Actions: []ActionRule{{Action: action_HandleEndorsementRequest}},
@@ -713,6 +740,7 @@ var stateDefinitionsMap = StateDefinitions{
 					// Sending an additional heartbeat at this point achieves a largely similar effect.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromSelf),
 					),
@@ -868,9 +896,13 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
+					Validator: validator_IsPrivateStateIncompleteForEndorsement,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementPrivateStateIncomplete}},
+				}, {
 					// A higher-priority node is sending endorsement requests; step down to Closing_Flush and handle.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 						validator_IsEndorsementRequestFromHigherPriorityCoordinator,
 					),
 					Actions: []ActionRule{
@@ -885,6 +917,7 @@ var stateDefinitionsMap = StateDefinitions{
 					// We are both the coordinator and the endorser; handle directly without stepping down.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 						validator_IsEndorsementRequestFromSelf,
 					),
 					Actions: []ActionRule{{Action: action_HandleEndorsementRequest}},
@@ -897,6 +930,7 @@ var stateDefinitionsMap = StateDefinitions{
 					// Sending an additional heartbeat at this point achieves a largely similar effect.
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromHigherPriorityCoordinator),
 						statemachine.ValidatorNot(validator_IsEndorsementRequestFromSelf),
 					),
@@ -1002,7 +1036,13 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
-					Validator: statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+					Validator: validator_IsPrivateStateIncompleteForEndorsement,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementPrivateStateIncomplete}},
+				}, {
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement), // TODO AM: invert this?
+					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_HandleEndorsementRequest},
@@ -1093,7 +1133,13 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectEndorsementBlockHeight}},
 				}, {
-					Validator: statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+					Validator: validator_IsPrivateStateIncompleteForEndorsement,
+					Actions:   []ActionRule{{Action: action_RejectEndorsementPrivateStateIncomplete}},
+				}, {
+					Validator: statemachine.ValidatorAnd(
+						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement), // TODO AM: invert this?
+					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
 						{Action: action_HandleEndorsementRequest},

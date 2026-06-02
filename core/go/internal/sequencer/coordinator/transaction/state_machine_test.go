@@ -645,7 +645,6 @@ func TestCoordinatorTransaction_Assembling_ToPooled_OnAssembleRequestRejected_Bl
 		RejectionReason:        engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		CoordinatorBlockHeight: 100,
 		AssemblerBlockHeight:   200,
-		BlockHeightTolerance:   5,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_Pooled, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())

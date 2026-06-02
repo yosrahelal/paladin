@@ -45,6 +45,7 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	builder := NewOriginatorBuilderForTesting(t, State_Idle).CurrentActiveCoordinator(coordinatorNode)
 	o, mocks := builder.Build()
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, mock.Anything).Return(true, nil)
 	require.NoError(t, o.Start(ctx))
 	defer func() {
 		cancel()
@@ -302,7 +303,6 @@ func TestOriginator_Start_Idempotent(t *testing.T) {
 	// Second call should be a no-op (idempotent).
 	require.NoError(t, o.Start(ctx))
 }
-
 
 func TestOriginator_WaitForDone_NotStarted_ReturnsImmediately(t *testing.T) {
 	ctx := t.Context()

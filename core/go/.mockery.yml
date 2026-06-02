@@ -55,7 +55,8 @@ packages:
   github.com/LFDT-Paladin/paladin/core/internal/sequencer/common:
     interfaces:
       EngineIntegration:
-      Clock: 
+      Clock:
+      Hooks:
     config:
       pkgname: sequencercommonmocks
       dir: mocks/sequencercommonmocks

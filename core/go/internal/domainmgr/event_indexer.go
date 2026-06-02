@@ -252,6 +252,21 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX persistence.DBTX, ba
 		if err != nil {
 			return err
 		}
+
+		// Update the global private state completion index for domains that opt in.
+		// This runs inside the same DB transaction as the checkpoint so the row is written
+		// atomically with block progress.
+		for _, txc := range txCompletions {
+			if txc.PSC == nil || txc.ReceiptType != components.RT_Success {
+				continue
+			}
+			if !txc.PSC.Domain().SupportsCompletionIndex() {
+				continue
+			}
+			if err := d.dm.WriteStateCompletionForTx(ctx, dbTX, txc.PSC, txc.TransactionID, txc.OnChain.BlockNumber); err != nil {
+				return err
+			}
+		}
 	}
 
 	dbTX.AddPostCommit(func(txCtx context.Context) {

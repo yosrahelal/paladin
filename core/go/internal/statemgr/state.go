@@ -146,6 +146,17 @@ func (ss *stateManager) processInsertStates(ctx context.Context, dbTX persistenc
 		return nil, err
 	}
 
+	// Update the completion index for any opted-in domain transactions that were
+	// waiting for one of the just-written states. Runs inside the same DB transaction as
+	// the state write so the update is atomic.
+	arrivedIDs := make([]pldtypes.HexBytes, len(processedStates))
+	for i, s := range processedStates {
+		arrivedIDs[i] = s.ID
+	}
+	if err = ss.domainManager.UpdateStateCompletion(ctx, dbTX, arrivedIDs); err != nil {
+		return nil, err
+	}
+
 	dbTX.AddPostCommit(ss.txManager.NotifyStatesDBChanged)
 	return processedStates, nil
 }

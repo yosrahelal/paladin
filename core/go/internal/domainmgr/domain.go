@@ -771,6 +771,11 @@ func (d *domain) CustomHashFunction() bool {
 	return d.config.CustomHashFunction
 }
 
+func (d *domain) SupportsCompletionIndex() bool {
+	// note config assured to be non-nil by GetDomainByName() not returning a domain until init complete
+	return d.config.SupportsCompletionIndex
+}
+
 func (d *domain) ValidateStateHashes(ctx context.Context, states []*components.FullState) ([]pldtypes.HexBytes, error) {
 	ctx = log.WithComponent(ctx, log.Component(fmt.Sprintf("domain-%s", d.Name())))
 	if len(states) == 0 {

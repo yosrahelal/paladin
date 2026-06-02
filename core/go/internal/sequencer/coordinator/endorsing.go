@@ -24,6 +24,37 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
 
+// validator_IsPrivateStateIncompleteForEndorsement returns true when the node is missing private
+// state data it is entitled to up to the coordinator's low watermark (coordinatorBlockHeight - tolerance).
+func validator_IsPrivateStateIncompleteForEndorsement(ctx context.Context, c *coordinator, event common.Event) (bool, error) {
+	e := event.(*EndorsementRequestReceivedEvent)
+	lowWatermark := e.CoordinatorBlockHeight - e.BlockHeightTolerance
+	complete, err := c.engineIntegration.CheckStateCompletion(ctx, lowWatermark)
+	return !complete, err
+}
+
+// action_RejectEndorsementPrivateStateIncomplete sends an EndorsementRejection with reason
+// PrivateStateIncomplete to the requester. The endorser stays in its current state; the
+// coordinator will retry once private state has caught up.
+func action_RejectEndorsementPrivateStateIncomplete(ctx context.Context, c *coordinator, event common.Event) error {
+	e := event.(*EndorsementRequestReceivedEvent)
+	log.L(ctx).Warnf("rejecting endorsement request from %s due to incomplete private state (coordinator=%d, endorser=%d, tolerance=%d)",
+		e.FromNode, e.CoordinatorBlockHeight, c.currentBlockHeight, e.BlockHeightTolerance)
+	return c.transportWriter.SendEndorsementRejection(
+		ctx,
+		e.TransactionId,
+		e.IdempotencyKey,
+		c.contractAddress.String(),
+		e.AttestationRequest.Name,
+		e.Party,
+		e.FromNode,
+		engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		e.CoordinatorBlockHeight,
+		int64(c.currentBlockHeight),
+		e.BlockHeightTolerance,
+	)
+}
+
 // validator_IsEndorsementBlockHeightToleranceExceeded returns true when the absolute difference
 // between this coordinator's stored block height (refreshed by action_RefreshBlockHeight)
 // and the requesting coordinator's block height exceeds the configured block height tolerance.

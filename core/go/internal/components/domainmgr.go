@@ -45,6 +45,9 @@ type DomainManager interface {
 	ExecDeployAndWait(ctx context.Context, txID uuid.UUID, call func() error) (dc DomainSmartContract, err error)
 	ExecAndWaitTransaction(ctx context.Context, txID uuid.UUID, call func() error) error
 	GetSigner() signerapi.InMemorySigner
+	WriteStateCompletionForTx(ctx context.Context, dbTX persistence.DBTX, psc DomainSmartContract, txID uuid.UUID, blockNumber int64) error
+	UpdateStateCompletion(ctx context.Context, dbTX persistence.DBTX, arrivedStateIDs []pldtypes.HexBytes) error
+	CheckStateCompletionForContract(ctx context.Context, dbTX persistence.DBTX, contract string, block int64) (complete bool, err error)
 }
 
 // External interface for other components (engine, testbed) to call against a domain
@@ -54,6 +57,7 @@ type Domain interface {
 	RegistryAddress() *pldtypes.EthAddress
 	Configuration() *prototk.DomainConfig
 	CustomHashFunction() bool
+	SupportsCompletionIndex() bool
 	FixedSigningIdentity() string
 
 	// Specific to domains that support privacy groups (domain should return error if it does not).

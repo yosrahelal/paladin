@@ -212,7 +212,7 @@ func TestCoordinator_WhenIdle_EndorsementRequestReceived_UpdatesActiveCoordinato
 		CoordinatorPriorityList("node1", "node2").
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node2", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node2", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Observing, c.GetCurrentState())
@@ -237,7 +237,7 @@ func TestCoordinator_WhenIdle_EndorsementRequestReceived_BlockHeightToleranceExc
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
-	event := newBlockHeightExceedingEndorsementEvent("node2")
+	event := newBlockHeightExceedingEndorsementEvent("node2", mocks)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	// Rejection path: no state change, no active-coordinator update.
@@ -253,10 +253,44 @@ func TestCoordinator_WhenIdle_EndorsementRequestReceived_UpdatesEndorserCandidat
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
+func TestCoordinator_WhenIdle_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysIdle(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		BlockHeightTolerance(1000). // prevent block-height check from firing first
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		int64(100), int64(0), int64(10),
+	).Return(nil)
+
+	event := &EndorsementRequestReceivedEvent{
+		FromNode:                  "node2",
+		TransactionId:             "tx-1",
+		IdempotencyKey:            "ik-1",
+		Party:                     "party1@node2",
+		CoordinatorBlockHeight:    100,
+		BlockHeightTolerance:      10, // lowWatermark = 90
+		AttestationRequest:        &prototk.AttestationRequest{Name: "att1"},
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{},
+	}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Idle, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_WhenObserving_TransitionsToIdle_OnHeartbeatIntervalInactiveGrace(t *testing.T) {
@@ -359,7 +393,7 @@ func TestCoordinator_WhenObserving_EndorsementRequestReceived_UpdatesActiveCoord
 		CoordinatorPriorityList("node1", "node2").
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Observing, c.GetCurrentState())
@@ -383,7 +417,7 @@ func TestCoordinator_WhenObserving_EndorsementRequestReceived_BlockHeightToleran
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
-	event := newBlockHeightExceedingEndorsementEvent("node1")
+	event := newBlockHeightExceedingEndorsementEvent("node1", mocks)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Observing, c.GetCurrentState())
@@ -399,10 +433,45 @@ func TestCoordinator_WhenObserving_EndorsementRequestReceived_UpdatesEndorserCan
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
+func TestCoordinator_WhenObserving_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysObserving(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
+		NodeName("node2").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		BlockHeightTolerance(1000). // prevent block-height check from firing first
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		int64(100), int64(0), int64(10),
+	).Return(nil)
+
+	event := &EndorsementRequestReceivedEvent{
+		FromNode:                  "node1",
+		TransactionId:             "tx-1",
+		IdempotencyKey:            "ik-1",
+		Party:                     "party1@node1",
+		CoordinatorBlockHeight:    100,
+		BlockHeightTolerance:      10, // lowWatermark = 90
+		AttestationRequest:        &prototk.AttestationRequest{Name: "att1"},
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{},
+	}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	// Rejection path: active coordinator must not be updated.
+	assert.Equal(t, State_Observing, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_WhenObserving_HeartbeatReceived_UpdatesEndorserCandidates(t *testing.T) {
@@ -770,7 +839,7 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_HigherPriority_NoInfli
 		Build()
 	// No transactions in memory: guard_HasTransactionsInflight = false → Observing.
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Observing, c.GetCurrentState())
@@ -788,7 +857,7 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_HigherPriority_Infligh
 		Build()
 	c.inFlightTxns[txID] = tx // mark as unconfirmed dispatched
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
@@ -812,7 +881,7 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_HigherPriority_Infligh
 		Build()
 	// Tx is inflight (in memory) but NOT in inFlightTxns (no unconfirmed dispatched).
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Closing, c.GetCurrentState())
@@ -835,7 +904,7 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_LowerPriority_RejectsA
 		int64(0), int64(0), int64(0),
 	).Return(nil)
 
-	event := newLowerPriorityEndorsementEvent("node3") // node3 < node1 in priority
+	event := newLowerPriorityEndorsementEvent(t, "node3", mocks, true) // node3 < node1 in priority
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Elect, c.GetCurrentState())
@@ -861,7 +930,7 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_BlockHeightToleranceEx
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
-	event := newBlockHeightExceedingEndorsementEvent("node1") // node1 is higher priority
+	event := newBlockHeightExceedingEndorsementEvent("node1", mocks) // node1 is higher priority
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	// Rejection path: stays in Elect, no step-down.
@@ -877,10 +946,47 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_UpdatesEndorserCandida
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
+func TestCoordinator_WhenElect_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysElect(t *testing.T) {
+	// Private state check is evaluated before the priority check — even a higher-priority sender
+	// is rejected if private state is incomplete.
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node2").
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		BlockHeightTolerance(1000). // prevent block-height check from firing first
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		int64(100), int64(0), int64(10),
+	).Return(nil)
+
+	event := &EndorsementRequestReceivedEvent{
+		FromNode:                  "node1", // higher priority — rejected before priority check
+		TransactionId:             "tx-1",
+		IdempotencyKey:            "ik-1",
+		Party:                     "party1@node1",
+		CoordinatorBlockHeight:    100,
+		BlockHeightTolerance:      10, // lowWatermark = 90
+		AttestationRequest:        &prototk.AttestationRequest{Name: "att1"},
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{},
+	}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	// Rejection path: stays in Elect, no step-down.
+	assert.Equal(t, State_Elect, c.GetCurrentState())
+	assert.Equal(t, "node2", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_WhenPrepared_HeartbeatInterval_WithinGrace_SendsHeartbeatAndStaysPrepared(t *testing.T) {
@@ -1240,7 +1346,7 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_HigherPriority_NoIn
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Observing, c.GetCurrentState())
@@ -1258,7 +1364,7 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_HigherPriority_Infl
 		Build()
 	c.inFlightTxns[txID] = tx // mark as unconfirmed dispatched
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
@@ -1278,7 +1384,7 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_HigherPriority_Infl
 		Transactions(tx).
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Closing, c.GetCurrentState())
@@ -1301,7 +1407,7 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_LowerPriority_Rejec
 		int64(0), int64(0), int64(0),
 	).Return(nil)
 
-	event := newLowerPriorityEndorsementEvent("node3")
+	event := newLowerPriorityEndorsementEvent(t, "node3", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Prepared, c.GetCurrentState())
@@ -1325,7 +1431,7 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_BlockHeightToleranc
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
-	event := newBlockHeightExceedingEndorsementEvent("node1") // higher priority — rejected before priority check
+	event := newBlockHeightExceedingEndorsementEvent("node1", mocks) // higher priority — rejected before priority check
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Prepared, c.GetCurrentState())
@@ -1340,10 +1446,46 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_UpdatesEndorserCand
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
+func TestCoordinator_WhenPrepared_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysPrepared(t *testing.T) {
+	// Private state check is evaluated before the priority check — even a higher-priority sender
+	// is rejected if private state is incomplete.
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
+		NodeName("node2").
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		BlockHeightTolerance(1000). // prevent block-height check from firing first
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		int64(100), int64(0), int64(10),
+	).Return(nil)
+
+	event := &EndorsementRequestReceivedEvent{
+		FromNode:                  "node1", // higher priority — rejected before priority check
+		TransactionId:             "tx-1",
+		IdempotencyKey:            "ik-1",
+		Party:                     "party1@node1",
+		CoordinatorBlockHeight:    100,
+		BlockHeightTolerance:      10, // lowWatermark = 90
+		AttestationRequest:        &prototk.AttestationRequest{Name: "att1"},
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{},
+	}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Prepared, c.GetCurrentState())
+	assert.Equal(t, "node2", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_WhenActive_TransitionsToIdle_OnHeartbeatInterval_WhenNoInflight(t *testing.T) {
@@ -1729,7 +1871,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_HigherPriority_Unconf
 		Build()
 	c.inFlightTxns[txID] = tx
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
@@ -1744,7 +1886,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_HigherPriority_NoUnco
 		CoordinatorPriorityList("node1", "node2").
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Closing, c.GetCurrentState())
@@ -1759,7 +1901,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_FromSelf_HandlesWitho
 		CoordinatorPriorityList("node1", "node2").
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Active, c.GetCurrentState())
@@ -1788,7 +1930,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_LowerPriority_Rejects
 	mocks.TransportWriter.EXPECT().SendHeartbeat(mock.Anything, "node2", mock.Anything, mock.Anything).Return(nil)
 	mocks.TransportWriter.EXPECT().SendHeartbeat(mock.Anything, "node3", mock.Anything, mock.Anything).Return(nil)
 
-	event := newLowerPriorityEndorsementEvent("node3")
+	event := newLowerPriorityEndorsementEvent(t, "node3", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Active, c.GetCurrentState())
@@ -1812,7 +1954,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_BlockHeightToleranceE
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
-	event := newBlockHeightExceedingEndorsementEvent("node2")
+	event := newBlockHeightExceedingEndorsementEvent("node2", mocks)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Active, c.GetCurrentState())
@@ -1827,10 +1969,44 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_UpdatesEndorserCandid
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
+func TestCoordinator_WhenActive_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysActive(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		BlockHeightTolerance(1000). // prevent block-height check from firing first
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		int64(100), int64(0), int64(10),
+	).Return(nil)
+
+	event := &EndorsementRequestReceivedEvent{
+		FromNode:                  "node2",
+		TransactionId:             "tx-1",
+		IdempotencyKey:            "ik-1",
+		Party:                     "party1@node2",
+		CoordinatorBlockHeight:    100,
+		BlockHeightTolerance:      10, // lowWatermark = 90
+		AttestationRequest:        &prototk.AttestationRequest{Name: "att1"},
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{},
+	}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Active, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_WhenActiveFLush_HeartbeatInterval_SendsHeartbeatAndStaysActiveFLush(t *testing.T) {
@@ -2052,7 +2228,7 @@ func TestCoordinator_WhenActiveFLush_EndorsementRequestReceived_HigherPriority_T
 		Build()
 	c.inFlightTxns[txID] = tx
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
@@ -2067,7 +2243,7 @@ func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_FromSelf_Handles
 		CoordinatorPriorityList("node1", "node2").
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
@@ -2090,7 +2266,7 @@ func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_LowerPriority_Re
 		int64(0), int64(0), int64(0),
 	).Return(nil)
 
-	event := newLowerPriorityEndorsementEvent("node2")
+	event := newLowerPriorityEndorsementEvent(t, "node2", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
@@ -2114,7 +2290,7 @@ func TestCoordinator_WhenActiveFLush_EndorsementRequestReceived_BlockHeightToler
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
-	event := newBlockHeightExceedingEndorsementEvent("node2")
+	event := newBlockHeightExceedingEndorsementEvent("node2", mocks)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
@@ -2129,10 +2305,44 @@ func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_UpdatesEndorserC
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
+func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysActiveFlush(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		BlockHeightTolerance(1000). // prevent block-height check from firing first
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		int64(100), int64(0), int64(10),
+	).Return(nil)
+
+	event := &EndorsementRequestReceivedEvent{
+		FromNode:                  "node2",
+		TransactionId:             "tx-1",
+		IdempotencyKey:            "ik-1",
+		Party:                     "party1@node2",
+		CoordinatorBlockHeight:    100,
+		BlockHeightTolerance:      10, // lowWatermark = 90
+		AttestationRequest:        &prototk.AttestationRequest{Name: "att1"},
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{},
+	}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_WhenEnteringClosingFlush_OnTransitionTo_SendsImmediateHeartbeat(t *testing.T) {
@@ -2346,7 +2556,7 @@ func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_UpdatesActiveCo
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
@@ -2370,7 +2580,7 @@ func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_BlockHeightTole
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
-	event := newBlockHeightExceedingEndorsementEvent("node1")
+	event := newBlockHeightExceedingEndorsementEvent("node1", mocks)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	// Rejection path: active coordinator must not be updated.
@@ -2386,10 +2596,45 @@ func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_UpdatesEndorser
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
+func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysClosingFlush(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		BlockHeightTolerance(1000). // prevent block-height check from firing first
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		int64(100), int64(0), int64(10),
+	).Return(nil)
+
+	event := &EndorsementRequestReceivedEvent{
+		FromNode:                  "node1",
+		TransactionId:             "tx-1",
+		IdempotencyKey:            "ik-1",
+		Party:                     "party1@node1",
+		CoordinatorBlockHeight:    100,
+		BlockHeightTolerance:      10, // lowWatermark = 90
+		AttestationRequest:        &prototk.AttestationRequest{Name: "att1"},
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{},
+	}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	// Rejection path: active coordinator must not be updated.
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	assert.Equal(t, "node3", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_WhenClosingFlush_HeartbeatReceived_LiveSender_UpdatesActiveCoordinator(t *testing.T) {
@@ -2636,7 +2881,7 @@ func TestCoordinator_WhenClosing_EndorsementRequestReceived_UpdatesActiveCoordin
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node1", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node1", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Equal(t, State_Closing, c.GetCurrentState())
@@ -2660,7 +2905,7 @@ func TestCoordinator_WhenClosing_EndorsementRequestReceived_BlockHeightTolerance
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
-	event := newBlockHeightExceedingEndorsementEvent("node1")
+	event := newBlockHeightExceedingEndorsementEvent("node1", mocks)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	// Rejection path: active coordinator must not be updated.
@@ -2676,10 +2921,45 @@ func TestCoordinator_WhenClosing_EndorsementRequestReceived_UpdatesEndorserCandi
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	event := newEndorsementEventForStateMachineTest(t, "node3", mocks)
+	event := newEndorsementEventForStateMachineTest(t, "node3", mocks, true)
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
 
 	assert.Contains(t, c.endorserCandidates, "node3")
+}
+
+func TestCoordinator_WhenClosing_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysClosing(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing).
+		NodeName("node2").
+		CurrentActiveCoordinator("node3").
+		CoordinatorPriorityList("node1", "node2", "node3").
+		BlockHeightTolerance(1000). // prevent block-height check from firing first
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		int64(100), int64(0), int64(10),
+	).Return(nil)
+
+	event := &EndorsementRequestReceivedEvent{
+		FromNode:                  "node1",
+		TransactionId:             "tx-1",
+		IdempotencyKey:            "ik-1",
+		Party:                     "party1@node1",
+		CoordinatorBlockHeight:    100,
+		BlockHeightTolerance:      10, // lowWatermark = 90
+		AttestationRequest:        &prototk.AttestationRequest{Name: "att1"},
+		PrivateEndorsementRequest: &components.PrivateTransactionEndorseRequest{},
+	}
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, event))
+
+	// Rejection path: active coordinator must not be updated.
+	assert.Equal(t, State_Closing, c.GetCurrentState())
+	assert.Equal(t, "node3", c.currentActiveCoordinator)
 }
 
 func TestCoordinator_PreProcessEvent_OwnHeartbeat_IsFilteredOut(t *testing.T) {
@@ -2709,7 +2989,9 @@ func TestCoordinator_PreProcessEvent_OwnHeartbeat_IsFilteredOut(t *testing.T) {
 // newLowerPriorityEndorsementEvent creates a minimal EndorsementRequestReceivedEvent that passes
 // the block height check (CoordinatorBlockHeight=0 is within tolerance of the live height=0) but
 // fails the higher-priority check, triggering action_RejectEndorsementEndorserIsActiveCoordinator.
-func newLowerPriorityEndorsementEvent(fromNode string) *EndorsementRequestReceivedEvent {
+func newLowerPriorityEndorsementEvent(t *testing.T, fromNode string, mocks *CoordinatorDependencyMocks, stateComplete bool) *EndorsementRequestReceivedEvent {
+	t.Helper()
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, mock.Anything).Return(stateComplete, nil).Maybe()
 	return &EndorsementRequestReceivedEvent{
 		FromNode:                  fromNode,
 		TransactionId:             "tx-lp-test",
@@ -2722,11 +3004,13 @@ func newLowerPriorityEndorsementEvent(fromNode string) *EndorsementRequestReceiv
 }
 
 // newBlockHeightExceedingEndorsementEvent creates a minimal EndorsementRequestReceivedEvent
-// where CoordinatorBlockHeight=0. When the coordinator's live block height is 100 and
-// blockHeightTolerance is 10, the difference (100) exceeds the tolerance, triggering
-// action_RejectEndorsementBlockHeight instead of action_HandleEndorsementRequest.
-// No key-manager mock is needed because the background goroutine never launches.
-func newBlockHeightExceedingEndorsementEvent(fromNode string) *EndorsementRequestReceivedEvent {
+// with CoordinatorBlockHeight=0 (far from the coordinator's currentBlockHeight of 100).
+// The block-height difference (100) exceeds the configured tolerance (10), triggering
+// action_RejectEndorsementBlockHeight. Because the state machine uses MatchAll, the
+// private-state validator is also evaluated; CheckStateCompletion is mocked to return true
+// so that handler does not fire a second rejection.
+func newBlockHeightExceedingEndorsementEvent(fromNode string, mocks *CoordinatorDependencyMocks) *EndorsementRequestReceivedEvent {
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, mock.Anything).Return(true, nil).Maybe()
 	return &EndorsementRequestReceivedEvent{
 		FromNode:                  fromNode,
 		TransactionId:             "tx-bh-test",
@@ -2755,8 +3039,11 @@ func newDelegationBlockHeightExceedingEvent(fromNode string) *TransactionsDelega
 // wires the coordinator's mocks so the background endorsement goroutine exits immediately
 // (at party key resolution) without touching SendEndorsementResponse.  All mock expectations
 // use .Maybe() so they tolerate asynchronous execution after the test's synchronous assertions.
-func newEndorsementEventForStateMachineTest(t *testing.T, fromNode string, mocks *CoordinatorDependencyMocks) *EndorsementRequestReceivedEvent {
+// stateComplete controls whether CheckStateCompletion returns true (state ready) or false (incomplete).
+func newEndorsementEventForStateMachineTest(t *testing.T, fromNode string, mocks *CoordinatorDependencyMocks, stateComplete bool) *EndorsementRequestReceivedEvent {
 	t.Helper()
+
+	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, mock.Anything).Return(stateComplete, nil).Maybe()
 
 	// Fail at party key resolution so the goroutine exits as early as possible.
 	mockKeyManager := componentsmocks.NewKeyManager(t)

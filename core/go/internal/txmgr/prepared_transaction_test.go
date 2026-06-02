@@ -97,6 +97,7 @@ func TestPreparedTransactionRealDB(t *testing.T) {
 			md.On("Name").Return("domain1")
 			md.On("CustomHashFunction").Return(false)
 			mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
+			mc.domainManager.On("UpdateStateCompletion", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		})
 	defer done()
 
